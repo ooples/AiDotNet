@@ -1,3 +1,6 @@
+using System.IO;
+using AiDotNet.Helpers;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -166,6 +169,19 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             0, 0, 0,
             null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
+        if (generatorArchitecture is null)
+            throw new ArgumentNullException(nameof(generatorArchitecture));
+        if (discriminatorArchitecture is null)
+            throw new ArgumentNullException(nameof(discriminatorArchitecture));
+        if (qNetworkArchitecture is null)
+            throw new ArgumentNullException(nameof(qNetworkArchitecture));
+        if (latentCodeSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(latentCodeSize), latentCodeSize, "Latent code size must be positive.");
+        if (initialLearningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(initialLearningRate), initialLearningRate, "Initial learning rate must be positive.");
+        if (mutualInfoCoefficient < 0)
+            throw new ArgumentOutOfRangeException(nameof(mutualInfoCoefficient), mutualInfoCoefficient, "Mutual information coefficient must be non-negative.");
+
         _latentCodeSize = latentCodeSize;
         _mutualInfoCoefficient = mutualInfoCoefficient;
         _initialLearningRate = initialLearningRate;
@@ -465,31 +481,23 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Generates random noise tensor.
+    /// Generates random noise tensor using vectorized Gaussian noise generation with CPU/GPU acceleration.
     /// </summary>
+    /// <param name="batchSize">The number of noise samples in the batch.</param>
+    /// <param name="noiseSize">The size of each noise sample.</param>
+    /// <returns>A tensor of shape [batchSize, noiseSize] filled with Gaussian noise.</returns>
     public Tensor<T> GenerateRandomNoiseTensor(int batchSize, int noiseSize)
     {
-        var random = new Random();
-        var noise = new Tensor<T>(new int[] { batchSize, noiseSize });
+        if (batchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
+        if (noiseSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(noiseSize), noiseSize, "Noise size must be positive.");
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < noiseSize; i += 2)
-            {
-                double u1 = random.NextDouble();
-                double u2 = random.NextDouble();
-                double radius = Math.Sqrt(-2.0 * Math.Log(u1));
-                double theta = 2.0 * Math.PI * u2;
-
-                noise[b, i] = NumOps.FromDouble(radius * Math.Cos(theta));
-                if (i + 1 < noiseSize)
-                {
-                    noise[b, i + 1] = NumOps.FromDouble(radius * Math.Sin(theta));
-                }
-            }
-        }
-
-        return noise;
+        var totalElements = batchSize * noiseSize;
+        var mean = NumOps.Zero;
+        var stddev = NumOps.One;
+        var noiseVector = Engine.GenerateGaussianNoise<T>(totalElements, mean, stddev);
+        return Tensor<T>.FromVector(noiseVector, [batchSize, noiseSize]);
     }
 
     /// <summary>
@@ -512,20 +520,20 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates Generator parameters using Adam optimizer.
+    /// Updates Generator parameters using vectorized Adam optimizer with CPU/GPU acceleration.
     /// </summary>
     private void UpdateGeneratorParameters()
     {
         var parameters = Generator.GetParameters();
         var gradients = Generator.GetParameterGradients();
 
-        if (_genMomentum == null || _genMomentum.Length != parameters.Length)
+        if (_genMomentum.Length != parameters.Length)
         {
             _genMomentum = new Vector<T>(parameters.Length);
             _genMomentum.Fill(NumOps.Zero);
         }
 
-        if (_genSecondMoment == null || _genSecondMoment.Length != parameters.Length)
+        if (_genSecondMoment.Length != parameters.Length)
         {
             _genSecondMoment = new Vector<T>(parameters.Length);
             _genSecondMoment.Fill(NumOps.Zero);
@@ -535,37 +543,33 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         var beta1 = NumOps.FromDouble(0.5);
         var beta2 = NumOps.FromDouble(0.999);
         var epsilon = NumOps.FromDouble(1e-8);
+        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
+        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
 
-        var updatedParameters = new Vector<T>(parameters.Length);
+        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
+        var mScaled = (Vector<T>)Engine.Multiply(_genMomentum, beta1);
+        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
+        _genMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _genMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _genMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
-            );
+        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
+        var vScaled = (Vector<T>)Engine.Multiply(_genSecondMoment, beta2);
+        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
+        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
+        _genSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
 
-            _genSecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _genSecondMoment[i]),
-                NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, beta2),
-                    NumOps.Multiply(gradients[i], gradients[i])
-                )
-            );
+        // Bias correction
+        var beta1Correction = NumOps.Subtract(NumOps.One, _genBeta1Power);
+        var beta2Correction = NumOps.Subtract(NumOps.One, _genBeta2Power);
+        var mCorrected = (Vector<T>)Engine.Divide(_genMomentum, beta1Correction);
+        var vCorrected = (Vector<T>)Engine.Divide(_genSecondMoment, beta2Correction);
 
-            var momentumCorrected = NumOps.Divide(_genMomentum[i], NumOps.Subtract(NumOps.One, _genBeta1Power));
-            var secondMomentCorrected = NumOps.Divide(_genSecondMoment[i], NumOps.Subtract(NumOps.One, _genBeta2Power));
-
-            var adaptiveLR = NumOps.Divide(
-                learningRate,
-                NumOps.Add(NumOps.Sqrt(secondMomentCorrected), epsilon)
-            );
-
-            updatedParameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(adaptiveLR, momentumCorrected)
-            );
-        }
+        // Vectorized parameter update: p = p - lr * m_corrected / (sqrt(v_corrected) + epsilon)
+        var sqrtV = (Vector<T>)Engine.Sqrt(vCorrected);
+        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
+        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
+        var lrTimesM = (Vector<T>)Engine.Multiply(mCorrected, learningRate);
+        var update = (Vector<T>)Engine.Divide(lrTimesM, sqrtVPlusEps);
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
 
         _genBeta1Power = NumOps.Multiply(_genBeta1Power, beta1);
         _genBeta2Power = NumOps.Multiply(_genBeta2Power, beta2);
@@ -575,20 +579,20 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates Discriminator parameters using Adam optimizer.
+    /// Updates Discriminator parameters using vectorized Adam optimizer with CPU/GPU acceleration.
     /// </summary>
     private void UpdateDiscriminatorParameters()
     {
         var parameters = Discriminator.GetParameters();
         var gradients = Discriminator.GetParameterGradients();
 
-        if (_discMomentum == null || _discMomentum.Length != parameters.Length)
+        if (_discMomentum.Length != parameters.Length)
         {
             _discMomentum = new Vector<T>(parameters.Length);
             _discMomentum.Fill(NumOps.Zero);
         }
 
-        if (_discSecondMoment == null || _discSecondMoment.Length != parameters.Length)
+        if (_discSecondMoment.Length != parameters.Length)
         {
             _discSecondMoment = new Vector<T>(parameters.Length);
             _discSecondMoment.Fill(NumOps.Zero);
@@ -598,37 +602,33 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         var beta1 = NumOps.FromDouble(0.5);
         var beta2 = NumOps.FromDouble(0.999);
         var epsilon = NumOps.FromDouble(1e-8);
+        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
+        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
 
-        var updatedParameters = new Vector<T>(parameters.Length);
+        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
+        var mScaled = (Vector<T>)Engine.Multiply(_discMomentum, beta1);
+        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
+        _discMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _discMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _discMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
-            );
+        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
+        var vScaled = (Vector<T>)Engine.Multiply(_discSecondMoment, beta2);
+        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
+        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
+        _discSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
 
-            _discSecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _discSecondMoment[i]),
-                NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, beta2),
-                    NumOps.Multiply(gradients[i], gradients[i])
-                )
-            );
+        // Bias correction
+        var beta1Correction = NumOps.Subtract(NumOps.One, _discBeta1Power);
+        var beta2Correction = NumOps.Subtract(NumOps.One, _discBeta2Power);
+        var mCorrected = (Vector<T>)Engine.Divide(_discMomentum, beta1Correction);
+        var vCorrected = (Vector<T>)Engine.Divide(_discSecondMoment, beta2Correction);
 
-            var momentumCorrected = NumOps.Divide(_discMomentum[i], NumOps.Subtract(NumOps.One, _discBeta1Power));
-            var secondMomentCorrected = NumOps.Divide(_discSecondMoment[i], NumOps.Subtract(NumOps.One, _discBeta2Power));
-
-            var adaptiveLR = NumOps.Divide(
-                learningRate,
-                NumOps.Add(NumOps.Sqrt(secondMomentCorrected), epsilon)
-            );
-
-            updatedParameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(adaptiveLR, momentumCorrected)
-            );
-        }
+        // Vectorized parameter update: p = p - lr * m_corrected / (sqrt(v_corrected) + epsilon)
+        var sqrtV = (Vector<T>)Engine.Sqrt(vCorrected);
+        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
+        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
+        var lrTimesM = (Vector<T>)Engine.Multiply(mCorrected, learningRate);
+        var update = (Vector<T>)Engine.Divide(lrTimesM, sqrtVPlusEps);
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
 
         _discBeta1Power = NumOps.Multiply(_discBeta1Power, beta1);
         _discBeta2Power = NumOps.Multiply(_discBeta2Power, beta2);
@@ -638,20 +638,20 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates QNetwork parameters using Adam optimizer.
+    /// Updates QNetwork parameters using vectorized Adam optimizer with CPU/GPU acceleration.
     /// </summary>
     private void UpdateQNetworkParameters()
     {
         var parameters = QNetwork.GetParameters();
         var gradients = QNetwork.GetParameterGradients();
 
-        if (_qMomentum == null || _qMomentum.Length != parameters.Length)
+        if (_qMomentum.Length != parameters.Length)
         {
             _qMomentum = new Vector<T>(parameters.Length);
             _qMomentum.Fill(NumOps.Zero);
         }
 
-        if (_qSecondMoment == null || _qSecondMoment.Length != parameters.Length)
+        if (_qSecondMoment.Length != parameters.Length)
         {
             _qSecondMoment = new Vector<T>(parameters.Length);
             _qSecondMoment.Fill(NumOps.Zero);
@@ -661,37 +661,33 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         var beta1 = NumOps.FromDouble(0.5);
         var beta2 = NumOps.FromDouble(0.999);
         var epsilon = NumOps.FromDouble(1e-8);
+        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
+        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
 
-        var updatedParameters = new Vector<T>(parameters.Length);
+        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
+        var mScaled = (Vector<T>)Engine.Multiply(_qMomentum, beta1);
+        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
+        _qMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _qMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _qMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
-            );
+        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
+        var vScaled = (Vector<T>)Engine.Multiply(_qSecondMoment, beta2);
+        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
+        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
+        _qSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
 
-            _qSecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _qSecondMoment[i]),
-                NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, beta2),
-                    NumOps.Multiply(gradients[i], gradients[i])
-                )
-            );
+        // Bias correction
+        var beta1Correction = NumOps.Subtract(NumOps.One, _qBeta1Power);
+        var beta2Correction = NumOps.Subtract(NumOps.One, _qBeta2Power);
+        var mCorrected = (Vector<T>)Engine.Divide(_qMomentum, beta1Correction);
+        var vCorrected = (Vector<T>)Engine.Divide(_qSecondMoment, beta2Correction);
 
-            var momentumCorrected = NumOps.Divide(_qMomentum[i], NumOps.Subtract(NumOps.One, _qBeta1Power));
-            var secondMomentCorrected = NumOps.Divide(_qSecondMoment[i], NumOps.Subtract(NumOps.One, _qBeta2Power));
-
-            var adaptiveLR = NumOps.Divide(
-                learningRate,
-                NumOps.Add(NumOps.Sqrt(secondMomentCorrected), epsilon)
-            );
-
-            updatedParameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(adaptiveLR, momentumCorrected)
-            );
-        }
+        // Vectorized parameter update: p = p - lr * m_corrected / (sqrt(v_corrected) + epsilon)
+        var sqrtV = (Vector<T>)Engine.Sqrt(vCorrected);
+        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
+        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
+        var lrTimesM = (Vector<T>)Engine.Multiply(mCorrected, learningRate);
+        var update = (Vector<T>)Engine.Divide(lrTimesM, sqrtVPlusEps);
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
 
         _qBeta1Power = NumOps.Multiply(_qBeta1Power, beta1);
         _qBeta2Power = NumOps.Multiply(_qBeta2Power, beta2);
@@ -742,6 +738,20 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         writer.Write(_qCurrentLearningRate);
         writer.Write(_latentCodeSize);
         writer.Write(_mutualInfoCoefficient);
+        writer.Write(_initialLearningRate);
+        writer.Write(_learningRateDecay);
+
+        // Serialize generator optimizer state
+        SerializationHelper<T>.SerializeVector(writer, _genMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _genSecondMoment);
+
+        // Serialize discriminator optimizer state
+        SerializationHelper<T>.SerializeVector(writer, _discMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _discSecondMoment);
+
+        // Serialize Q network optimizer state
+        SerializationHelper<T>.SerializeVector(writer, _qMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _qSecondMoment);
 
         var generatorBytes = Generator.Serialize();
         writer.Write(generatorBytes.Length);
@@ -764,6 +774,20 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         _qCurrentLearningRate = reader.ReadDouble();
         _latentCodeSize = reader.ReadInt32();
         _mutualInfoCoefficient = reader.ReadDouble();
+        _initialLearningRate = reader.ReadDouble();
+        _learningRateDecay = reader.ReadDouble();
+
+        // Deserialize generator optimizer state
+        _genMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _genSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+
+        // Deserialize discriminator optimizer state
+        _discMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _discSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+
+        // Deserialize Q network optimizer state
+        _qMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _qSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
 
         int generatorDataLength = reader.ReadInt32();
         byte[] generatorData = reader.ReadBytes(generatorDataLength);

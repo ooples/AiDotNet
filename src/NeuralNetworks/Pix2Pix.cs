@@ -1,3 +1,6 @@
+using System.IO;
+using AiDotNet.Helpers;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -122,6 +125,15 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
             0, 0, 0,
             null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
+        if (generatorArchitecture is null)
+            throw new ArgumentNullException(nameof(generatorArchitecture));
+        if (discriminatorArchitecture is null)
+            throw new ArgumentNullException(nameof(discriminatorArchitecture));
+        if (initialLearningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(initialLearningRate), initialLearningRate, "Initial learning rate must be positive.");
+        if (l1Lambda < 0)
+            throw new ArgumentOutOfRangeException(nameof(l1Lambda), l1Lambda, "L1 lambda must be non-negative.");
+
         _l1Lambda = l1Lambda;
         _initialLearningRate = initialLearningRate;
         _learningRateDecay = 0.0001;
@@ -376,17 +388,21 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         return tensor;
     }
 
+    /// <summary>
+    /// Updates Generator parameters using vectorized Adam optimizer with CPU/GPU acceleration.
+    /// </summary>
     private void UpdateGeneratorParameters()
     {
         var gradients = Generator.GetParameterGradients();
         var parameters = Generator.GetParameters();
-        int paramCount = parameters.Length;
 
         // Adam hyperparameters - beta1=0.5 for Pix2Pix (paper recommendation)
         T beta1 = NumOps.FromDouble(0.5);
         T beta2 = NumOps.FromDouble(0.999);
         T epsilon = NumOps.FromDouble(1e-8);
         T lr = NumOps.FromDouble(_genCurrentLearningRate);
+        T oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
+        T oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
 
         // Update beta powers
         _genBeta1Power = NumOps.Multiply(_genBeta1Power, beta1);
@@ -396,59 +412,64 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         T beta1Correction = NumOps.Subtract(NumOps.One, _genBeta1Power);
         T beta2Correction = NumOps.Subtract(NumOps.One, _genBeta2Power);
 
-        // Clip gradients
+        // Vectorized gradient clipping
         T maxGradNorm = NumOps.FromDouble(5.0);
+        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
         T gradNormSq = NumOps.Zero;
-        for (int i = 0; i < paramCount; i++)
-            gradNormSq = NumOps.Add(gradNormSq, NumOps.Multiply(gradients[i], gradients[i]));
+        for (int i = 0; i < gSquared.Length; i++)
+            gradNormSq = NumOps.Add(gradNormSq, gSquared[i]);
         T gradNorm = NumOps.Sqrt(gradNormSq);
 
         T scale = NumOps.One;
         if (NumOps.GreaterThan(gradNorm, maxGradNorm))
             scale = NumOps.Divide(maxGradNorm, NumOps.Add(gradNorm, epsilon));
 
-        for (int i = 0; i < paramCount; i++)
-        {
-            T g = NumOps.Multiply(gradients[i], scale);
+        var clippedGradients = (Vector<T>)Engine.Multiply(gradients, scale);
 
-            // Update biased first moment estimate
-            _genMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _genMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), g)
-            );
+        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
+        var mScaled = (Vector<T>)Engine.Multiply(_genMomentum, beta1);
+        var gScaled = (Vector<T>)Engine.Multiply(clippedGradients, oneMinusBeta1);
+        _genMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
 
-            // Update biased second raw moment estimate
-            _genSecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _genSecondMoment[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta2), NumOps.Multiply(g, g))
-            );
+        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
+        var vScaled = (Vector<T>)Engine.Multiply(_genSecondMoment, beta2);
+        var gSquaredClipped = (Vector<T>)Engine.Multiply(clippedGradients, clippedGradients);
+        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquaredClipped, oneMinusBeta2);
+        _genSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
 
-            // Compute bias-corrected estimates
-            T mHat = NumOps.Divide(_genMomentum[i], beta1Correction);
-            T vHat = NumOps.Divide(_genSecondMoment[i], beta2Correction);
+        // Bias correction
+        var mCorrected = (Vector<T>)Engine.Divide(_genMomentum, beta1Correction);
+        var vCorrected = (Vector<T>)Engine.Divide(_genSecondMoment, beta2Correction);
 
-            // Update parameters
-            T update = NumOps.Divide(NumOps.Multiply(lr, mHat), NumOps.Add(NumOps.Sqrt(vHat), epsilon));
-            parameters[i] = NumOps.Subtract(parameters[i], update);
-        }
+        // Vectorized parameter update: p = p - lr * m_corrected / (sqrt(v_corrected) + epsilon)
+        var sqrtV = (Vector<T>)Engine.Sqrt(vCorrected);
+        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
+        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
+        var lrTimesM = (Vector<T>)Engine.Multiply(mCorrected, lr);
+        var update = (Vector<T>)Engine.Divide(lrTimesM, sqrtVPlusEps);
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
 
-        Generator.UpdateParameters(parameters);
+        Generator.UpdateParameters(updatedParameters);
 
         // Learning rate decay
         _genCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_genBeta1Power));
     }
 
+    /// <summary>
+    /// Updates Discriminator parameters using vectorized Adam optimizer with CPU/GPU acceleration.
+    /// </summary>
     private void UpdateDiscriminatorParameters()
     {
         var gradients = Discriminator.GetParameterGradients();
         var parameters = Discriminator.GetParameters();
-        int paramCount = parameters.Length;
 
         // Adam hyperparameters - beta1=0.5 for Pix2Pix (paper recommendation)
         T beta1 = NumOps.FromDouble(0.5);
         T beta2 = NumOps.FromDouble(0.999);
         T epsilon = NumOps.FromDouble(1e-8);
         T lr = NumOps.FromDouble(_discCurrentLearningRate);
+        T oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
+        T oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
 
         // Update beta powers
         _discBeta1Power = NumOps.Multiply(_discBeta1Power, beta1);
@@ -458,39 +479,44 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         T beta1Correction = NumOps.Subtract(NumOps.One, _discBeta1Power);
         T beta2Correction = NumOps.Subtract(NumOps.One, _discBeta2Power);
 
-        // Clip gradients
+        // Vectorized gradient clipping
         T maxGradNorm = NumOps.FromDouble(5.0);
+        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
         T gradNormSq = NumOps.Zero;
-        for (int i = 0; i < paramCount; i++)
-            gradNormSq = NumOps.Add(gradNormSq, NumOps.Multiply(gradients[i], gradients[i]));
+        for (int i = 0; i < gSquared.Length; i++)
+            gradNormSq = NumOps.Add(gradNormSq, gSquared[i]);
         T gradNorm = NumOps.Sqrt(gradNormSq);
 
         T scale = NumOps.One;
         if (NumOps.GreaterThan(gradNorm, maxGradNorm))
             scale = NumOps.Divide(maxGradNorm, NumOps.Add(gradNorm, epsilon));
 
-        for (int i = 0; i < paramCount; i++)
-        {
-            T g = NumOps.Multiply(gradients[i], scale);
+        var clippedGradients = (Vector<T>)Engine.Multiply(gradients, scale);
 
-            _discMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _discMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), g)
-            );
+        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
+        var mScaled = (Vector<T>)Engine.Multiply(_discMomentum, beta1);
+        var gScaled = (Vector<T>)Engine.Multiply(clippedGradients, oneMinusBeta1);
+        _discMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
 
-            _discSecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _discSecondMoment[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta2), NumOps.Multiply(g, g))
-            );
+        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
+        var vScaled = (Vector<T>)Engine.Multiply(_discSecondMoment, beta2);
+        var gSquaredClipped = (Vector<T>)Engine.Multiply(clippedGradients, clippedGradients);
+        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquaredClipped, oneMinusBeta2);
+        _discSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
 
-            T mHat = NumOps.Divide(_discMomentum[i], beta1Correction);
-            T vHat = NumOps.Divide(_discSecondMoment[i], beta2Correction);
+        // Bias correction
+        var mCorrected = (Vector<T>)Engine.Divide(_discMomentum, beta1Correction);
+        var vCorrected = (Vector<T>)Engine.Divide(_discSecondMoment, beta2Correction);
 
-            T update = NumOps.Divide(NumOps.Multiply(lr, mHat), NumOps.Add(NumOps.Sqrt(vHat), epsilon));
-            parameters[i] = NumOps.Subtract(parameters[i], update);
-        }
+        // Vectorized parameter update: p = p - lr * m_corrected / (sqrt(v_corrected) + epsilon)
+        var sqrtV = (Vector<T>)Engine.Sqrt(vCorrected);
+        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
+        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
+        var lrTimesM = (Vector<T>)Engine.Multiply(mCorrected, lr);
+        var update = (Vector<T>)Engine.Divide(lrTimesM, sqrtVPlusEps);
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
 
-        Discriminator.UpdateParameters(parameters);
+        Discriminator.UpdateParameters(updatedParameters);
         _discCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_discBeta1Power));
     }
 
@@ -528,6 +554,18 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         writer.Write(_genCurrentLearningRate);
         writer.Write(_discCurrentLearningRate);
 
+        // Serialize generator optimizer state
+        SerializationHelper<T>.SerializeVector(writer, _genMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _genSecondMoment);
+        writer.Write(NumOps.ToDouble(_genBeta1Power));
+        writer.Write(NumOps.ToDouble(_genBeta2Power));
+
+        // Serialize discriminator optimizer state
+        SerializationHelper<T>.SerializeVector(writer, _discMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _discSecondMoment);
+        writer.Write(NumOps.ToDouble(_discBeta1Power));
+        writer.Write(NumOps.ToDouble(_discBeta2Power));
+
         var generatorBytes = Generator.Serialize();
         writer.Write(generatorBytes.Length);
         writer.Write(generatorBytes);
@@ -546,6 +584,18 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         // Read per-network learning rates
         _genCurrentLearningRate = reader.ReadDouble();
         _discCurrentLearningRate = reader.ReadDouble();
+
+        // Deserialize generator optimizer state
+        _genMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _genSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        _genBeta1Power = NumOps.FromDouble(reader.ReadDouble());
+        _genBeta2Power = NumOps.FromDouble(reader.ReadDouble());
+
+        // Deserialize discriminator optimizer state
+        _discMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _discSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        _discBeta1Power = NumOps.FromDouble(reader.ReadDouble());
+        _discBeta2Power = NumOps.FromDouble(reader.ReadDouble());
 
         int generatorDataLength = reader.ReadInt32();
         byte[] generatorData = reader.ReadBytes(generatorDataLength);

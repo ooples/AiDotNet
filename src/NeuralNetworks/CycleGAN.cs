@@ -1,3 +1,6 @@
+using System.IO;
+using AiDotNet.Helpers;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -126,6 +129,36 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
             0, 0, 0,
             null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
+        // Validate constructor inputs
+        if (generatorAtoB is null)
+        {
+            throw new ArgumentNullException(nameof(generatorAtoB), "Generator A to B architecture cannot be null.");
+        }
+        if (generatorBtoA is null)
+        {
+            throw new ArgumentNullException(nameof(generatorBtoA), "Generator B to A architecture cannot be null.");
+        }
+        if (discriminatorA is null)
+        {
+            throw new ArgumentNullException(nameof(discriminatorA), "Discriminator A architecture cannot be null.");
+        }
+        if (discriminatorB is null)
+        {
+            throw new ArgumentNullException(nameof(discriminatorB), "Discriminator B architecture cannot be null.");
+        }
+        if (initialLearningRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(initialLearningRate), initialLearningRate, "Initial learning rate must be positive.");
+        }
+        if (cycleConsistencyLambda < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(cycleConsistencyLambda), cycleConsistencyLambda, "Cycle consistency lambda must be non-negative.");
+        }
+        if (identityLambda < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(identityLambda), identityLambda, "Identity lambda must be non-negative.");
+        }
+
         _cycleConsistencyLambda = cycleConsistencyLambda;
         _identityLambda = identityLambda;
         _initialLearningRate = initialLearningRate;
@@ -432,222 +465,142 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         return gradients;
     }
 
-    private void UpdateGeneratorAtoBParameters()
+    /// <summary>
+    /// Applies vectorized Adam update using Engine operations for SIMD/GPU acceleration.
+    /// This follows the gold-standard pattern from the codebase's production-ready models.
+    /// </summary>
+    private Vector<T> ApplyVectorizedAdamUpdate(
+        Vector<T> parameters,
+        Vector<T> gradient,
+        ref Vector<T> momentum,
+        ref Vector<T> secondMoment,
+        ref T beta1Power,
+        ref T beta2Power,
+        double learningRate)
     {
-        var gradients = GeneratorAtoB.GetParameterGradients();
-        var parameters = GeneratorAtoB.GetParameters();
-        int paramCount = parameters.Length;
-
-        // Adam hyperparameters
         T beta1 = NumOps.FromDouble(0.0); // GANs often use beta1=0
         T beta2 = NumOps.FromDouble(0.999);
+        T oneMinusBeta1 = NumOps.FromDouble(1.0); // 1.0 - 0.0 = 1.0
+        T oneMinusBeta2 = NumOps.FromDouble(0.001); // 1.0 - 0.999 = 0.001
         T epsilon = NumOps.FromDouble(1e-8);
-        T lr = NumOps.FromDouble(_genAtoBCurrentLearningRate);
+        T lr = NumOps.FromDouble(learningRate);
 
-        // Update beta powers
-        _genAtoBBeta1Power = NumOps.Multiply(_genAtoBBeta1Power, beta1);
-        _genAtoBBeta2Power = NumOps.Multiply(_genAtoBBeta2Power, beta2);
-
-        // Bias correction factors
-        T beta1Correction = NumOps.Subtract(NumOps.One, _genAtoBBeta1Power);
-        T beta2Correction = NumOps.Subtract(NumOps.One, _genAtoBBeta2Power);
-
-        // Clip gradients
+        // Gradient clipping using vectorized L2 norm
         T maxGradNorm = NumOps.FromDouble(5.0);
-        T gradNormSq = NumOps.Zero;
-        for (int i = 0; i < paramCount; i++)
-            gradNormSq = NumOps.Add(gradNormSq, NumOps.Multiply(gradients[i], gradients[i]));
-        T gradNorm = NumOps.Sqrt(gradNormSq);
+        T gradientNorm = gradient.L2Norm();
 
-        T scale = NumOps.One;
-        if (NumOps.GreaterThan(gradNorm, maxGradNorm))
-            scale = NumOps.Divide(maxGradNorm, NumOps.Add(gradNorm, epsilon));
-
-        for (int i = 0; i < paramCount; i++)
+        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
         {
-            T g = NumOps.Multiply(gradients[i], scale);
-
-            // Update biased first moment estimate
-            _genAtoBMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _genAtoBMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), g)
-            );
-
-            // Update biased second raw moment estimate
-            _genAtoBSecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _genAtoBSecondMoment[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta2), NumOps.Multiply(g, g))
-            );
-
-            // Compute bias-corrected estimates
-            T mHat = NumOps.Divide(_genAtoBMomentum[i], beta1Correction);
-            T vHat = NumOps.Divide(_genAtoBSecondMoment[i], beta2Correction);
-
-            // Update parameters
-            T update = NumOps.Divide(NumOps.Multiply(lr, mHat), NumOps.Add(NumOps.Sqrt(vHat), epsilon));
-            parameters[i] = NumOps.Subtract(parameters[i], update);
+            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
+            gradient = (Vector<T>)Engine.Multiply(gradient, scaleFactor);
         }
 
-        GeneratorAtoB.UpdateParameters(parameters);
+        // Update beta powers
+        beta1Power = NumOps.Multiply(beta1Power, beta1);
+        beta2Power = NumOps.Multiply(beta2Power, beta2);
 
-        // Learning rate decay
+        // Compute bias correction factors
+        T biasCorrection1 = NumOps.Subtract(NumOps.One, beta1Power);
+        T biasCorrection2 = NumOps.Subtract(NumOps.One, beta2Power);
+
+        // Update biased first moment: m = beta1 * m + (1 - beta1) * gradient
+        var mScaled = (Vector<T>)Engine.Multiply(momentum, beta1);
+        var gradScaled = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
+        momentum = (Vector<T>)Engine.Add(mScaled, gradScaled);
+
+        // Update biased second moment: v = beta2 * v + (1 - beta2) * gradient^2
+        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
+        var vScaled = (Vector<T>)Engine.Multiply(secondMoment, beta2);
+        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
+        secondMoment = (Vector<T>)Engine.Add(vScaled, gradSquaredScaled);
+
+        // Compute bias-corrected first moment: mHat = m / (1 - beta1^t)
+        var mHat = (Vector<T>)Engine.Divide(momentum, biasCorrection1);
+
+        // Compute bias-corrected second moment: vHat = v / (1 - beta2^t)
+        var vHat = (Vector<T>)Engine.Divide(secondMoment, biasCorrection2);
+
+        // Compute update: update = lr * mHat / (sqrt(vHat) + epsilon)
+        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
+        var epsilonVec = Vector<T>.CreateDefault(vHatSqrt.Length, epsilon);
+        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
+        var updateDiv = (Vector<T>)Engine.Divide(mHat, denominator);
+        var update = (Vector<T>)Engine.Multiply(updateDiv, lr);
+
+        // Apply update: parameters = parameters - update
+        return (Vector<T>)Engine.Subtract(parameters, update);
+    }
+
+    private void UpdateGeneratorAtoBParameters()
+    {
+        var parameters = GeneratorAtoB.GetParameters();
+        var gradients = GeneratorAtoB.GetParameterGradients();
+
+        // Vectorized Adam update using Engine operations
+        var updatedParams = ApplyVectorizedAdamUpdate(
+            parameters, gradients,
+            ref _genAtoBMomentum, ref _genAtoBSecondMoment,
+            ref _genAtoBBeta1Power, ref _genAtoBBeta2Power,
+            _genAtoBCurrentLearningRate);
+
+        // Apply learning rate decay
         _genAtoBCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_genAtoBBeta1Power));
+
+        GeneratorAtoB.UpdateParameters(updatedParams);
     }
 
     private void UpdateGeneratorBtoAParameters()
     {
-        var gradients = GeneratorBtoA.GetParameterGradients();
         var parameters = GeneratorBtoA.GetParameters();
-        int paramCount = parameters.Length;
+        var gradients = GeneratorBtoA.GetParameterGradients();
 
-        T beta1 = NumOps.FromDouble(0.0);
-        T beta2 = NumOps.FromDouble(0.999);
-        T epsilon = NumOps.FromDouble(1e-8);
-        T lr = NumOps.FromDouble(_genBtoACurrentLearningRate);
+        // Vectorized Adam update using Engine operations
+        var updatedParams = ApplyVectorizedAdamUpdate(
+            parameters, gradients,
+            ref _genBtoAMomentum, ref _genBtoASecondMoment,
+            ref _genBtoABeta1Power, ref _genBtoABeta2Power,
+            _genBtoACurrentLearningRate);
 
-        _genBtoABeta1Power = NumOps.Multiply(_genBtoABeta1Power, beta1);
-        _genBtoABeta2Power = NumOps.Multiply(_genBtoABeta2Power, beta2);
-
-        T beta1Correction = NumOps.Subtract(NumOps.One, _genBtoABeta1Power);
-        T beta2Correction = NumOps.Subtract(NumOps.One, _genBtoABeta2Power);
-
-        T maxGradNorm = NumOps.FromDouble(5.0);
-        T gradNormSq = NumOps.Zero;
-        for (int i = 0; i < paramCount; i++)
-            gradNormSq = NumOps.Add(gradNormSq, NumOps.Multiply(gradients[i], gradients[i]));
-        T gradNorm = NumOps.Sqrt(gradNormSq);
-
-        T scale = NumOps.One;
-        if (NumOps.GreaterThan(gradNorm, maxGradNorm))
-            scale = NumOps.Divide(maxGradNorm, NumOps.Add(gradNorm, epsilon));
-
-        for (int i = 0; i < paramCount; i++)
-        {
-            T g = NumOps.Multiply(gradients[i], scale);
-
-            _genBtoAMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _genBtoAMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), g)
-            );
-
-            _genBtoASecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _genBtoASecondMoment[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta2), NumOps.Multiply(g, g))
-            );
-
-            T mHat = NumOps.Divide(_genBtoAMomentum[i], beta1Correction);
-            T vHat = NumOps.Divide(_genBtoASecondMoment[i], beta2Correction);
-
-            T update = NumOps.Divide(NumOps.Multiply(lr, mHat), NumOps.Add(NumOps.Sqrt(vHat), epsilon));
-            parameters[i] = NumOps.Subtract(parameters[i], update);
-        }
-
-        GeneratorBtoA.UpdateParameters(parameters);
+        // Apply learning rate decay
         _genBtoACurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_genBtoABeta1Power));
+
+        GeneratorBtoA.UpdateParameters(updatedParams);
     }
 
     private void UpdateDiscriminatorAParameters()
     {
-        var gradients = DiscriminatorA.GetParameterGradients();
         var parameters = DiscriminatorA.GetParameters();
-        int paramCount = parameters.Length;
+        var gradients = DiscriminatorA.GetParameterGradients();
 
-        T beta1 = NumOps.FromDouble(0.0);
-        T beta2 = NumOps.FromDouble(0.999);
-        T epsilon = NumOps.FromDouble(1e-8);
-        T lr = NumOps.FromDouble(_discACurrentLearningRate);
+        // Vectorized Adam update using Engine operations
+        var updatedParams = ApplyVectorizedAdamUpdate(
+            parameters, gradients,
+            ref _discAMomentum, ref _discASecondMoment,
+            ref _discABeta1Power, ref _discABeta2Power,
+            _discACurrentLearningRate);
 
-        _discABeta1Power = NumOps.Multiply(_discABeta1Power, beta1);
-        _discABeta2Power = NumOps.Multiply(_discABeta2Power, beta2);
-
-        T beta1Correction = NumOps.Subtract(NumOps.One, _discABeta1Power);
-        T beta2Correction = NumOps.Subtract(NumOps.One, _discABeta2Power);
-
-        T maxGradNorm = NumOps.FromDouble(5.0);
-        T gradNormSq = NumOps.Zero;
-        for (int i = 0; i < paramCount; i++)
-            gradNormSq = NumOps.Add(gradNormSq, NumOps.Multiply(gradients[i], gradients[i]));
-        T gradNorm = NumOps.Sqrt(gradNormSq);
-
-        T scale = NumOps.One;
-        if (NumOps.GreaterThan(gradNorm, maxGradNorm))
-            scale = NumOps.Divide(maxGradNorm, NumOps.Add(gradNorm, epsilon));
-
-        for (int i = 0; i < paramCount; i++)
-        {
-            T g = NumOps.Multiply(gradients[i], scale);
-
-            _discAMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _discAMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), g)
-            );
-
-            _discASecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _discASecondMoment[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta2), NumOps.Multiply(g, g))
-            );
-
-            T mHat = NumOps.Divide(_discAMomentum[i], beta1Correction);
-            T vHat = NumOps.Divide(_discASecondMoment[i], beta2Correction);
-
-            T update = NumOps.Divide(NumOps.Multiply(lr, mHat), NumOps.Add(NumOps.Sqrt(vHat), epsilon));
-            parameters[i] = NumOps.Subtract(parameters[i], update);
-        }
-
-        DiscriminatorA.UpdateParameters(parameters);
+        // Apply learning rate decay
         _discACurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_discABeta1Power));
+
+        DiscriminatorA.UpdateParameters(updatedParams);
     }
 
     private void UpdateDiscriminatorBParameters()
     {
-        var gradients = DiscriminatorB.GetParameterGradients();
         var parameters = DiscriminatorB.GetParameters();
-        int paramCount = parameters.Length;
+        var gradients = DiscriminatorB.GetParameterGradients();
 
-        T beta1 = NumOps.FromDouble(0.0);
-        T beta2 = NumOps.FromDouble(0.999);
-        T epsilon = NumOps.FromDouble(1e-8);
-        T lr = NumOps.FromDouble(_discBCurrentLearningRate);
+        // Vectorized Adam update using Engine operations
+        var updatedParams = ApplyVectorizedAdamUpdate(
+            parameters, gradients,
+            ref _discBMomentum, ref _discBSecondMoment,
+            ref _discBBeta1Power, ref _discBBeta2Power,
+            _discBCurrentLearningRate);
 
-        _discBBeta1Power = NumOps.Multiply(_discBBeta1Power, beta1);
-        _discBBeta2Power = NumOps.Multiply(_discBBeta2Power, beta2);
-
-        T beta1Correction = NumOps.Subtract(NumOps.One, _discBBeta1Power);
-        T beta2Correction = NumOps.Subtract(NumOps.One, _discBBeta2Power);
-
-        T maxGradNorm = NumOps.FromDouble(5.0);
-        T gradNormSq = NumOps.Zero;
-        for (int i = 0; i < paramCount; i++)
-            gradNormSq = NumOps.Add(gradNormSq, NumOps.Multiply(gradients[i], gradients[i]));
-        T gradNorm = NumOps.Sqrt(gradNormSq);
-
-        T scale = NumOps.One;
-        if (NumOps.GreaterThan(gradNorm, maxGradNorm))
-            scale = NumOps.Divide(maxGradNorm, NumOps.Add(gradNorm, epsilon));
-
-        for (int i = 0; i < paramCount; i++)
-        {
-            T g = NumOps.Multiply(gradients[i], scale);
-
-            _discBMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _discBMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), g)
-            );
-
-            _discBSecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _discBSecondMoment[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta2), NumOps.Multiply(g, g))
-            );
-
-            T mHat = NumOps.Divide(_discBMomentum[i], beta1Correction);
-            T vHat = NumOps.Divide(_discBSecondMoment[i], beta2Correction);
-
-            T update = NumOps.Divide(NumOps.Multiply(lr, mHat), NumOps.Add(NumOps.Sqrt(vHat), epsilon));
-            parameters[i] = NumOps.Subtract(parameters[i], update);
-        }
-
-        DiscriminatorB.UpdateParameters(parameters);
+        // Apply learning rate decay
         _discBCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_discBBeta1Power));
+
+        DiscriminatorB.UpdateParameters(updatedParams);
     }
 
     protected override void InitializeLayers() { }
@@ -690,6 +643,30 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         writer.Write(_discACurrentLearningRate);
         writer.Write(_discBCurrentLearningRate);
 
+        // Serialize GeneratorAtoB optimizer state
+        SerializationHelper<T>.SerializeVector(writer, _genAtoBMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _genAtoBSecondMoment);
+        SerializationHelper<T>.WriteValue(writer, _genAtoBBeta1Power);
+        SerializationHelper<T>.WriteValue(writer, _genAtoBBeta2Power);
+
+        // Serialize GeneratorBtoA optimizer state
+        SerializationHelper<T>.SerializeVector(writer, _genBtoAMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _genBtoASecondMoment);
+        SerializationHelper<T>.WriteValue(writer, _genBtoABeta1Power);
+        SerializationHelper<T>.WriteValue(writer, _genBtoABeta2Power);
+
+        // Serialize DiscriminatorA optimizer state
+        SerializationHelper<T>.SerializeVector(writer, _discAMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _discASecondMoment);
+        SerializationHelper<T>.WriteValue(writer, _discABeta1Power);
+        SerializationHelper<T>.WriteValue(writer, _discABeta2Power);
+
+        // Serialize DiscriminatorB optimizer state
+        SerializationHelper<T>.SerializeVector(writer, _discBMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _discBSecondMoment);
+        SerializationHelper<T>.WriteValue(writer, _discBBeta1Power);
+        SerializationHelper<T>.WriteValue(writer, _discBBeta2Power);
+
         var genAtoB = GeneratorAtoB.Serialize();
         writer.Write(genAtoB.Length);
         writer.Write(genAtoB);
@@ -719,6 +696,30 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         _genBtoACurrentLearningRate = reader.ReadDouble();
         _discACurrentLearningRate = reader.ReadDouble();
         _discBCurrentLearningRate = reader.ReadDouble();
+
+        // Deserialize GeneratorAtoB optimizer state
+        _genAtoBMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _genAtoBSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        _genAtoBBeta1Power = SerializationHelper<T>.ReadValue(reader);
+        _genAtoBBeta2Power = SerializationHelper<T>.ReadValue(reader);
+
+        // Deserialize GeneratorBtoA optimizer state
+        _genBtoAMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _genBtoASecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        _genBtoABeta1Power = SerializationHelper<T>.ReadValue(reader);
+        _genBtoABeta2Power = SerializationHelper<T>.ReadValue(reader);
+
+        // Deserialize DiscriminatorA optimizer state
+        _discAMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _discASecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        _discABeta1Power = SerializationHelper<T>.ReadValue(reader);
+        _discABeta2Power = SerializationHelper<T>.ReadValue(reader);
+
+        // Deserialize DiscriminatorB optimizer state
+        _discBMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _discBSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        _discBBeta1Power = SerializationHelper<T>.ReadValue(reader);
+        _discBBeta2Power = SerializationHelper<T>.ReadValue(reader);
 
         int genAtoB_Length = reader.ReadInt32();
         GeneratorAtoB.Deserialize(reader.ReadBytes(genAtoB_Length));

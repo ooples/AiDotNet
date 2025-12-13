@@ -1,3 +1,6 @@
+using System.IO;
+using AiDotNet.Helpers;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -106,6 +109,28 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             0, 0, 0,
             null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
+        // Input validation
+        if (generatorArchitecture is null)
+        {
+            throw new ArgumentNullException(nameof(generatorArchitecture));
+        }
+        if (criticArchitecture is null)
+        {
+            throw new ArgumentNullException(nameof(criticArchitecture));
+        }
+        if (initialLearningRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(initialLearningRate), initialLearningRate, "Initial learning rate must be positive.");
+        }
+        if (gradientPenaltyCoefficient <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(gradientPenaltyCoefficient), gradientPenaltyCoefficient, "Gradient penalty coefficient must be positive.");
+        }
+        if (criticIterations <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(criticIterations), criticIterations, "Critic iterations must be positive.");
+        }
+
         _initialLearningRate = initialLearningRate;
         _currentLearningRate = initialLearningRate;
         _gradientPenaltyCoefficient = gradientPenaltyCoefficient;
@@ -368,7 +393,8 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates critic parameters with pre-computed combined gradients.
+    /// Updates critic parameters with pre-computed combined gradients using vectorized operations.
+    /// Follows the production-ready pattern for SIMD/GPU acceleration.
     /// </summary>
     private void UpdateCriticParametersWithGradients(Vector<T> gradients)
     {
@@ -386,52 +412,44 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             _criticSecondMoment.Fill(NumOps.Zero);
         }
 
-        // Gradient clipping
+        // Gradient clipping using vectorized operations
         var gradientNorm = gradients.L2Norm();
         var clipThreshold = NumOps.FromDouble(5.0);
 
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
             var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
-            }
+            gradients = (Vector<T>)Engine.Multiply(gradients, scaleFactor);
         }
 
-        // Adam optimizer with beta1=0 (paper recommendation)
-        var learningRate = NumOps.FromDouble(_currentLearningRate);
-        var beta1 = NumOps.FromDouble(0.0);
-        var beta2 = NumOps.FromDouble(0.9);
-        var epsilon = NumOps.FromDouble(1e-8);
+        // Vectorized Adam optimizer with beta1=0 (paper recommendation)
+        T learningRate = NumOps.FromDouble(_currentLearningRate);
+        T beta1 = NumOps.FromDouble(0.0);
+        T beta2 = NumOps.FromDouble(0.9);
+        T oneMinusBeta1 = NumOps.FromDouble(1.0);
+        T oneMinusBeta2 = NumOps.FromDouble(0.1);
+        T epsilon = NumOps.FromDouble(1e-8);
 
-        var updatedParameters = new Vector<T>(parameters.Length);
+        // Update biased first moment: m = beta1 * m + (1 - beta1) * gradient
+        var mScaled = (Vector<T>)Engine.Multiply(_criticMomentum, beta1);
+        var gradScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
+        _criticMomentum = (Vector<T>)Engine.Add(mScaled, gradScaled);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _criticMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _criticMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
-            );
+        // Update biased second moment: v = beta2 * v + (1 - beta2) * gradient^2
+        var gradSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
+        var vScaled = (Vector<T>)Engine.Multiply(_criticSecondMoment, beta2);
+        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
+        _criticSecondMoment = (Vector<T>)Engine.Add(vScaled, gradSquaredScaled);
 
-            _criticSecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _criticSecondMoment[i]),
-                NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, beta2),
-                    NumOps.Multiply(gradients[i], gradients[i])
-                )
-            );
+        // Compute update: update = lr * m / (sqrt(v) + epsilon)
+        var vSqrt = (Vector<T>)Engine.Sqrt(_criticSecondMoment);
+        var epsilonVec = Vector<T>.CreateDefault(vSqrt.Length, epsilon);
+        var denominator = (Vector<T>)Engine.Add(vSqrt, epsilonVec);
+        var updateDiv = (Vector<T>)Engine.Divide(_criticMomentum, denominator);
+        var update = (Vector<T>)Engine.Multiply(updateDiv, learningRate);
 
-            var adaptiveLR = NumOps.Divide(
-                learningRate,
-                NumOps.Add(NumOps.Sqrt(_criticSecondMoment[i]), epsilon)
-            );
-
-            updatedParameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(adaptiveLR, _criticMomentum[i])
-            );
-        }
+        // Apply update: parameters = parameters - update
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
 
         Critic.UpdateParameters(updatedParameters);
     }
@@ -483,7 +501,8 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates generator parameters using Adam optimizer.
+    /// Updates generator parameters using vectorized Adam optimizer with Engine operations.
+    /// Follows the production-ready pattern for SIMD/GPU acceleration.
     /// </summary>
     private void UpdateGeneratorParameters()
     {
@@ -503,47 +522,41 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             _generatorSecondMoment.Fill(NumOps.Zero);
         }
 
-        // Adam optimizer
-        var learningRate = NumOps.FromDouble(_currentLearningRate);
-        var beta1 = NumOps.FromDouble(0.0); // Use beta1=0 for WGAN-GP (paper recommendation)
-        var beta2 = NumOps.FromDouble(0.9);
-        var epsilon = NumOps.FromDouble(1e-8);
+        // Vectorized Adam optimizer with beta1=0 (paper recommendation)
+        T learningRate = NumOps.FromDouble(_currentLearningRate);
+        T beta1 = NumOps.FromDouble(0.0);
+        T beta2 = NumOps.FromDouble(0.9);
+        T oneMinusBeta1 = NumOps.FromDouble(1.0);
+        T oneMinusBeta2 = NumOps.FromDouble(0.1);
+        T epsilon = NumOps.FromDouble(1e-8);
 
-        var updatedParameters = new Vector<T>(parameters.Length);
+        // Update biased first moment: m = beta1 * m + (1 - beta1) * gradient
+        var mScaled = (Vector<T>)Engine.Multiply(_generatorMomentum, beta1);
+        var gradScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
+        _generatorMomentum = (Vector<T>)Engine.Add(mScaled, gradScaled);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            // Update moments
-            _generatorMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _generatorMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
-            );
+        // Update biased second moment: v = beta2 * v + (1 - beta2) * gradient^2
+        var gradSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
+        var vScaled = (Vector<T>)Engine.Multiply(_generatorSecondMoment, beta2);
+        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
+        _generatorSecondMoment = (Vector<T>)Engine.Add(vScaled, gradSquaredScaled);
 
-            _generatorSecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _generatorSecondMoment[i]),
-                NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, beta2),
-                    NumOps.Multiply(gradients[i], gradients[i])
-                )
-            );
+        // Compute update: update = lr * m / (sqrt(v) + epsilon)
+        var vSqrt = (Vector<T>)Engine.Sqrt(_generatorSecondMoment);
+        var epsilonVec = Vector<T>.CreateDefault(vSqrt.Length, epsilon);
+        var denominator = (Vector<T>)Engine.Add(vSqrt, epsilonVec);
+        var updateDiv = (Vector<T>)Engine.Divide(_generatorMomentum, denominator);
+        var update = (Vector<T>)Engine.Multiply(updateDiv, learningRate);
 
-            // Adam update
-            var adaptiveLR = NumOps.Divide(
-                learningRate,
-                NumOps.Add(NumOps.Sqrt(_generatorSecondMoment[i]), epsilon)
-            );
-
-            updatedParameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(adaptiveLR, _generatorMomentum[i])
-            );
-        }
+        // Apply update: parameters = parameters - update
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
 
         Generator.UpdateParameters(updatedParameters);
     }
 
     /// <summary>
-    /// Updates critic parameters using Adam optimizer.
+    /// Updates critic parameters using vectorized Adam optimizer with Engine operations.
+    /// Follows the production-ready pattern for SIMD/GPU acceleration.
     /// </summary>
     private void UpdateCriticParameters()
     {
@@ -563,39 +576,34 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             _criticSecondMoment.Fill(NumOps.Zero);
         }
 
-        // Adam optimizer with beta1=0 (paper recommendation)
-        var learningRate = NumOps.FromDouble(_currentLearningRate);
-        var beta1 = NumOps.FromDouble(0.0);
-        var beta2 = NumOps.FromDouble(0.9);
-        var epsilon = NumOps.FromDouble(1e-8);
+        // Vectorized Adam optimizer with beta1=0 (paper recommendation)
+        T learningRate = NumOps.FromDouble(_currentLearningRate);
+        T beta1 = NumOps.FromDouble(0.0);
+        T beta2 = NumOps.FromDouble(0.9);
+        T oneMinusBeta1 = NumOps.FromDouble(1.0);
+        T oneMinusBeta2 = NumOps.FromDouble(0.1);
+        T epsilon = NumOps.FromDouble(1e-8);
 
-        var updatedParameters = new Vector<T>(parameters.Length);
+        // Update biased first moment: m = beta1 * m + (1 - beta1) * gradient
+        var mScaled = (Vector<T>)Engine.Multiply(_criticMomentum, beta1);
+        var gradScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
+        _criticMomentum = (Vector<T>)Engine.Add(mScaled, gradScaled);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _criticMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _criticMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
-            );
+        // Update biased second moment: v = beta2 * v + (1 - beta2) * gradient^2
+        var gradSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
+        var vScaled = (Vector<T>)Engine.Multiply(_criticSecondMoment, beta2);
+        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
+        _criticSecondMoment = (Vector<T>)Engine.Add(vScaled, gradSquaredScaled);
 
-            _criticSecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _criticSecondMoment[i]),
-                NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, beta2),
-                    NumOps.Multiply(gradients[i], gradients[i])
-                )
-            );
+        // Compute update: update = lr * m / (sqrt(v) + epsilon)
+        var vSqrt = (Vector<T>)Engine.Sqrt(_criticSecondMoment);
+        var epsilonVec = Vector<T>.CreateDefault(vSqrt.Length, epsilon);
+        var denominator = (Vector<T>)Engine.Add(vSqrt, epsilonVec);
+        var updateDiv = (Vector<T>)Engine.Divide(_criticMomentum, denominator);
+        var update = (Vector<T>)Engine.Multiply(updateDiv, learningRate);
 
-            var adaptiveLR = NumOps.Divide(
-                learningRate,
-                NumOps.Add(NumOps.Sqrt(_criticSecondMoment[i]), epsilon)
-            );
-
-            updatedParameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(adaptiveLR, _criticMomentum[i])
-            );
-        }
+        // Apply update: parameters = parameters - update
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
 
         Critic.UpdateParameters(updatedParameters);
     }
@@ -610,33 +618,32 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Generates a tensor of random noise.
+    /// Generates a tensor of random noise using vectorized Engine operations.
+    /// Uses Engine.GenerateGaussianNoise for SIMD/GPU acceleration.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method uses vectorized Gaussian noise generation for optimal performance.
+    /// The generated noise has mean 0 and standard deviation 1, following the standard
+    /// normal distribution recommended for GAN training.
+    /// </para>
+    /// </remarks>
     public Tensor<T> GenerateRandomNoiseTensor(int batchSize, int noiseSize)
     {
-        var random = new Random();
         var shape = new int[] { batchSize, noiseSize };
         var noise = new Tensor<T>(shape);
 
-        for (int b = 0; b < batchSize; b++)
+        // Generate Gaussian noise with mean=0, stddev=1 using Engine for vectorization
+        T mean = NumOps.Zero;
+        T stddev = NumOps.One;
+        int totalElements = batchSize * noiseSize;
+
+        var noiseVector = Engine.GenerateGaussianNoise<T>(totalElements, mean, stddev);
+
+        // Copy vectorized noise into tensor
+        for (int i = 0; i < totalElements; i++)
         {
-            for (int i = 0; i < noiseSize; i += 2)
-            {
-                double u1 = random.NextDouble();
-                double u2 = random.NextDouble();
-
-                double radius = Math.Sqrt(-2.0 * Math.Log(u1));
-                double theta = 2.0 * Math.PI * u2;
-
-                double z1 = radius * Math.Cos(theta);
-                noise[b, i] = NumOps.FromDouble(z1);
-
-                if (i + 1 < noiseSize)
-                {
-                    double z2 = radius * Math.Sin(theta);
-                    noise[b, i + 1] = NumOps.FromDouble(z2);
-                }
-            }
+            noise.SetFlat(i, noiseVector[i]);
         }
 
         return noise;
@@ -714,10 +721,20 @@ public class WGANGP<T> : NeuralNetworkBase<T>
 
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
+        // Configuration and hyperparameters
         writer.Write(_currentLearningRate);
         writer.Write(_gradientPenaltyCoefficient);
         writer.Write(_criticIterations);
 
+        // Generator optimizer state using SerializationHelper
+        SerializationHelper<T>.SerializeVector(writer, _generatorMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _generatorSecondMoment);
+
+        // Critic optimizer state using SerializationHelper
+        SerializationHelper<T>.SerializeVector(writer, _criticMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _criticSecondMoment);
+
+        // Serialize networks
         var generatorBytes = Generator.Serialize();
         writer.Write(generatorBytes.Length);
         writer.Write(generatorBytes);
@@ -729,10 +746,20 @@ public class WGANGP<T> : NeuralNetworkBase<T>
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
+        // Configuration and hyperparameters
         _currentLearningRate = reader.ReadDouble();
         _gradientPenaltyCoefficient = reader.ReadDouble();
         _criticIterations = reader.ReadInt32();
 
+        // Generator optimizer state using SerializationHelper
+        _generatorMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _generatorSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+
+        // Critic optimizer state using SerializationHelper
+        _criticMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _criticSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+
+        // Deserialize networks
         int generatorDataLength = reader.ReadInt32();
         byte[] generatorData = reader.ReadBytes(generatorDataLength);
         Generator.Deserialize(generatorData);

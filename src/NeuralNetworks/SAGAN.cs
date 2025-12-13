@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
@@ -211,27 +212,22 @@ public class SAGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Generates random noise from a standard normal distribution.
     /// </summary>
+    /// <remarks>
+    /// Uses vectorized Engine.GenerateGaussianNoise for CPU/GPU accelerated generation.
+    /// </remarks>
     private Tensor<T> GenerateNoise(int batchSize)
     {
-        var noise = new Tensor<T>([batchSize, LatentSize]);
+        if (batchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
 
-        // Box-Muller transform for Gaussian sampling
-        for (int i = 0; i < noise.Length; i += 2)
-        {
-            var u1 = Random.NextDouble();
-            var u2 = Random.NextDouble();
+        var totalElements = batchSize * LatentSize;
+        var mean = NumOps.Zero;
+        var stddev = NumOps.One;
 
-            var z1 = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            noise.SetFlat(i, NumOps.FromDouble(z1));
+        // Vectorized Gaussian noise generation using Engine (SIMD/GPU accelerated)
+        var noiseVector = Engine.GenerateGaussianNoise<T>(totalElements, mean, stddev);
 
-            if (i + 1 < noise.Length)
-            {
-                var z2 = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                noise.SetFlat(i + 1, NumOps.FromDouble(z2));
-            }
-        }
-
-        return noise;
+        return Tensor<T>.FromVector(noiseVector, [batchSize, LatentSize]);
     }
 
     /// <summary>
@@ -542,6 +538,14 @@ public class SAGAN<T> : NeuralNetworkBase<T>
             writer.Write(layer);
         }
 
+        // Serialize optimizer state
+        writer.Write(_initialLearningRate);
+        writer.Write(_currentLearningRate);
+        SerializationHelper<T>.SerializeVector(writer, _momentum);
+        SerializationHelper<T>.SerializeVector(writer, _secondMoment);
+        writer.Write(NumOps.ToDouble(_beta1Power));
+        writer.Write(NumOps.ToDouble(_beta2Power));
+
         // Serialize networks
         byte[] generatorData = Generator.Serialize();
         writer.Write(generatorData.Length);
@@ -570,6 +574,14 @@ public class SAGAN<T> : NeuralNetworkBase<T>
         {
             AttentionLayers[i] = reader.ReadInt32();
         }
+
+        // Deserialize optimizer state
+        _initialLearningRate = reader.ReadDouble();
+        _currentLearningRate = reader.ReadDouble();
+        _momentum = SerializationHelper<T>.DeserializeVector(reader);
+        _secondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        _beta1Power = NumOps.FromDouble(reader.ReadDouble());
+        _beta2Power = NumOps.FromDouble(reader.ReadDouble());
 
         // Deserialize networks
         int generatorLength = reader.ReadInt32();

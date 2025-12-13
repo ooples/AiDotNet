@@ -1,3 +1,6 @@
+using System.IO;
+using AiDotNet.Helpers;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -189,6 +192,42 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
             0, 0, 0,
             null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
+        // Input validation
+        if (mappingNetworkArchitecture is null)
+        {
+            throw new ArgumentNullException(nameof(mappingNetworkArchitecture), "Mapping network architecture cannot be null.");
+        }
+
+        if (synthesisNetworkArchitecture is null)
+        {
+            throw new ArgumentNullException(nameof(synthesisNetworkArchitecture), "Synthesis network architecture cannot be null.");
+        }
+
+        if (discriminatorArchitecture is null)
+        {
+            throw new ArgumentNullException(nameof(discriminatorArchitecture), "Discriminator architecture cannot be null.");
+        }
+
+        if (latentSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(latentSize), latentSize, "Latent size must be positive.");
+        }
+
+        if (intermediateLatentSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(intermediateLatentSize), intermediateLatentSize, "Intermediate latent size must be positive.");
+        }
+
+        if (initialLearningRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(initialLearningRate), initialLearningRate, "Initial learning rate must be positive.");
+        }
+
+        if (styleMixingProbability < 0 || styleMixingProbability > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(styleMixingProbability), styleMixingProbability, "Style mixing probability must be in range [0, 1].");
+        }
+
         _latentSize = latentSize;
         _intermediateLatentSize = intermediateLatentSize;
         _enableStyleMixing = enableStyleMixing;
@@ -383,31 +422,20 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Generates random latent codes.
+    /// Generates random latent codes using vectorized Gaussian noise generation.
+    /// Uses Engine.GenerateGaussianNoise for SIMD/GPU acceleration.
     /// </summary>
     public Tensor<T> GenerateRandomLatentCodes(int batchSize)
     {
-        var random = new Random();
-        var codes = new Tensor<T>(new int[] { batchSize, _latentSize });
+        var totalElements = batchSize * _latentSize;
+        var mean = NumOps.Zero;
+        var stddev = NumOps.One;
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < _latentSize; i += 2)
-            {
-                double u1 = random.NextDouble();
-                double u2 = random.NextDouble();
-                double radius = Math.Sqrt(-2.0 * Math.Log(u1));
-                double theta = 2.0 * Math.PI * u2;
+        // Use Engine's vectorized Gaussian noise generation
+        var noiseVector = Engine.GenerateGaussianNoise<T>(totalElements, mean, stddev);
 
-                codes[b, i] = NumOps.FromDouble(radius * Math.Cos(theta));
-                if (i + 1 < _latentSize)
-                {
-                    codes[b, i + 1] = NumOps.FromDouble(radius * Math.Sin(theta));
-                }
-            }
-        }
-
-        return codes;
+        // Reshape to [batchSize, latentSize]
+        return Tensor<T>.FromVector(noiseVector, [batchSize, _latentSize]);
     }
 
     private T CalculateBinaryLoss(Tensor<T> predictions, Tensor<T> targets, int batchSize)
@@ -480,169 +508,157 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates MappingNetwork parameters using Adam optimizer.
+    /// Updates MappingNetwork parameters using vectorized Adam optimizer.
+    /// Uses Engine operations for SIMD/GPU acceleration.
     /// </summary>
     private void UpdateMappingNetworkParameters()
     {
         var parameters = MappingNetwork.GetParameters();
         var gradients = MappingNetwork.GetParameterGradients();
 
-        if (_mappingMomentum == null || _mappingMomentum.Length != parameters.Length)
+        // Initialize mapping network optimizer state if needed
+        if (_mappingMomentum.Length != parameters.Length)
         {
             _mappingMomentum = new Vector<T>(parameters.Length);
             _mappingMomentum.Fill(NumOps.Zero);
         }
 
-        if (_mappingSecondMoment == null || _mappingSecondMoment.Length != parameters.Length)
+        if (_mappingSecondMoment.Length != parameters.Length)
         {
             _mappingSecondMoment = new Vector<T>(parameters.Length);
             _mappingSecondMoment.Fill(NumOps.Zero);
         }
 
-        var learningRate = NumOps.FromDouble(_initialLearningRate);
-        var beta1 = NumOps.FromDouble(0.0);  // StyleGAN uses beta1=0
+        // Adam optimizer parameters (beta1=0 for StyleGAN)
+        var beta1 = NumOps.FromDouble(0.0);
         var beta2 = NumOps.FromDouble(0.99);
+        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
+        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
         var epsilon = NumOps.FromDouble(1e-8);
+        var learningRate = NumOps.FromDouble(_initialLearningRate);
 
-        var updatedParameters = new Vector<T>(parameters.Length);
+        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
+        var mScaled = (Vector<T>)Engine.Multiply(_mappingMomentum, beta1);
+        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
+        _mappingMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _mappingMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _mappingMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
-            );
+        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
+        var vScaled = (Vector<T>)Engine.Multiply(_mappingSecondMoment, beta2);
+        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
+        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
+        _mappingSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
 
-            _mappingSecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _mappingSecondMoment[i]),
-                NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, beta2),
-                    NumOps.Multiply(gradients[i], gradients[i])
-                )
-            );
-
-            var adaptiveLR = NumOps.Divide(
-                learningRate,
-                NumOps.Add(NumOps.Sqrt(_mappingSecondMoment[i]), epsilon)
-            );
-
-            updatedParameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(adaptiveLR, _mappingMomentum[i])
-            );
-        }
+        // Vectorized parameter update: p = p - lr * m / (sqrt(v) + epsilon)
+        var sqrtV = (Vector<T>)Engine.Sqrt(_mappingSecondMoment);
+        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
+        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
+        var adaptiveGradient = (Vector<T>)Engine.Divide(_mappingMomentum, sqrtVPlusEps);
+        var update = (Vector<T>)Engine.Multiply(adaptiveGradient, learningRate);
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
 
         MappingNetwork.UpdateParameters(updatedParameters);
     }
 
     /// <summary>
-    /// Updates SynthesisNetwork parameters using Adam optimizer.
+    /// Updates SynthesisNetwork parameters using vectorized Adam optimizer.
+    /// Uses Engine operations for SIMD/GPU acceleration.
     /// </summary>
     private void UpdateSynthesisNetworkParameters()
     {
         var parameters = SynthesisNetwork.GetParameters();
         var gradients = SynthesisNetwork.GetParameterGradients();
 
-        if (_synthesisMomentum == null || _synthesisMomentum.Length != parameters.Length)
+        // Initialize synthesis network optimizer state if needed
+        if (_synthesisMomentum.Length != parameters.Length)
         {
             _synthesisMomentum = new Vector<T>(parameters.Length);
             _synthesisMomentum.Fill(NumOps.Zero);
         }
 
-        if (_synthesisSecondMoment == null || _synthesisSecondMoment.Length != parameters.Length)
+        if (_synthesisSecondMoment.Length != parameters.Length)
         {
             _synthesisSecondMoment = new Vector<T>(parameters.Length);
             _synthesisSecondMoment.Fill(NumOps.Zero);
         }
 
-        var learningRate = NumOps.FromDouble(_initialLearningRate);
-        var beta1 = NumOps.FromDouble(0.0);  // StyleGAN uses beta1=0
+        // Adam optimizer parameters (beta1=0 for StyleGAN)
+        var beta1 = NumOps.FromDouble(0.0);
         var beta2 = NumOps.FromDouble(0.99);
+        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
+        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
         var epsilon = NumOps.FromDouble(1e-8);
+        var learningRate = NumOps.FromDouble(_initialLearningRate);
 
-        var updatedParameters = new Vector<T>(parameters.Length);
+        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
+        var mScaled = (Vector<T>)Engine.Multiply(_synthesisMomentum, beta1);
+        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
+        _synthesisMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _synthesisMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _synthesisMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
-            );
+        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
+        var vScaled = (Vector<T>)Engine.Multiply(_synthesisSecondMoment, beta2);
+        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
+        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
+        _synthesisSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
 
-            _synthesisSecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _synthesisSecondMoment[i]),
-                NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, beta2),
-                    NumOps.Multiply(gradients[i], gradients[i])
-                )
-            );
-
-            var adaptiveLR = NumOps.Divide(
-                learningRate,
-                NumOps.Add(NumOps.Sqrt(_synthesisSecondMoment[i]), epsilon)
-            );
-
-            updatedParameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(adaptiveLR, _synthesisMomentum[i])
-            );
-        }
+        // Vectorized parameter update: p = p - lr * m / (sqrt(v) + epsilon)
+        var sqrtV = (Vector<T>)Engine.Sqrt(_synthesisSecondMoment);
+        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
+        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
+        var adaptiveGradient = (Vector<T>)Engine.Divide(_synthesisMomentum, sqrtVPlusEps);
+        var update = (Vector<T>)Engine.Multiply(adaptiveGradient, learningRate);
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
 
         SynthesisNetwork.UpdateParameters(updatedParameters);
     }
 
     /// <summary>
-    /// Updates Discriminator parameters using Adam optimizer.
+    /// Updates Discriminator parameters using vectorized Adam optimizer.
+    /// Uses Engine operations for SIMD/GPU acceleration.
     /// </summary>
     private void UpdateDiscriminatorParameters()
     {
         var parameters = Discriminator.GetParameters();
         var gradients = Discriminator.GetParameterGradients();
 
-        if (_discMomentum == null || _discMomentum.Length != parameters.Length)
+        // Initialize discriminator optimizer state if needed
+        if (_discMomentum.Length != parameters.Length)
         {
             _discMomentum = new Vector<T>(parameters.Length);
             _discMomentum.Fill(NumOps.Zero);
         }
 
-        if (_discSecondMoment == null || _discSecondMoment.Length != parameters.Length)
+        if (_discSecondMoment.Length != parameters.Length)
         {
             _discSecondMoment = new Vector<T>(parameters.Length);
             _discSecondMoment.Fill(NumOps.Zero);
         }
 
-        var learningRate = NumOps.FromDouble(_initialLearningRate);
-        var beta1 = NumOps.FromDouble(0.0);  // StyleGAN uses beta1=0
+        // Adam optimizer parameters (beta1=0 for StyleGAN)
+        var beta1 = NumOps.FromDouble(0.0);
         var beta2 = NumOps.FromDouble(0.99);
+        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
+        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
         var epsilon = NumOps.FromDouble(1e-8);
+        var learningRate = NumOps.FromDouble(_initialLearningRate);
 
-        var updatedParameters = new Vector<T>(parameters.Length);
+        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
+        var mScaled = (Vector<T>)Engine.Multiply(_discMomentum, beta1);
+        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
+        _discMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _discMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _discMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
-            );
+        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
+        var vScaled = (Vector<T>)Engine.Multiply(_discSecondMoment, beta2);
+        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
+        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
+        _discSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
 
-            _discSecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _discSecondMoment[i]),
-                NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, beta2),
-                    NumOps.Multiply(gradients[i], gradients[i])
-                )
-            );
-
-            var adaptiveLR = NumOps.Divide(
-                learningRate,
-                NumOps.Add(NumOps.Sqrt(_discSecondMoment[i]), epsilon)
-            );
-
-            updatedParameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(adaptiveLR, _discMomentum[i])
-            );
-        }
+        // Vectorized parameter update: p = p - lr * m / (sqrt(v) + epsilon)
+        var sqrtV = (Vector<T>)Engine.Sqrt(_discSecondMoment);
+        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
+        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
+        var adaptiveGradient = (Vector<T>)Engine.Divide(_discMomentum, sqrtVPlusEps);
+        var update = (Vector<T>)Engine.Multiply(adaptiveGradient, learningRate);
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
 
         Discriminator.UpdateParameters(updatedParameters);
     }
@@ -693,6 +709,16 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         var discriminatorBytes = Discriminator.Serialize();
         writer.Write(discriminatorBytes.Length);
         writer.Write(discriminatorBytes);
+
+        // Serialize optimizer state for complete training state preservation
+        SerializationHelper<T>.SerializeVector(writer, _mappingMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _mappingSecondMoment);
+
+        SerializationHelper<T>.SerializeVector(writer, _synthesisMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _synthesisSecondMoment);
+
+        SerializationHelper<T>.SerializeVector(writer, _discMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _discSecondMoment);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -714,6 +740,16 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
 
         int discriminatorLength = reader.ReadInt32();
         Discriminator.Deserialize(reader.ReadBytes(discriminatorLength));
+
+        // Deserialize optimizer state
+        _mappingMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _mappingSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+
+        _synthesisMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _synthesisSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+
+        _discMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _discSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
