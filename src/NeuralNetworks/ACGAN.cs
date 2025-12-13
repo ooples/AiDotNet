@@ -1,3 +1,6 @@
+using System.IO;
+using AiDotNet.Helpers;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -47,7 +50,7 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     private double _discCurrentLearningRate;
 
     private readonly double _initialLearningRate;
-    private readonly double _learningRateDecay;
+    private double _learningRateDecay;
     private readonly List<T> _generatorLosses = [];
     private readonly List<T> _discriminatorLosses = [];
 
@@ -109,10 +112,33 @@ public class ACGAN<T> : NeuralNetworkBase<T>
             0, 0, 0,
             null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
+        // Input validation
+        if (generatorArchitecture is null)
+        {
+            throw new ArgumentNullException(nameof(generatorArchitecture), "Generator architecture cannot be null.");
+        }
+
+        if (discriminatorArchitecture is null)
+        {
+            throw new ArgumentNullException(nameof(discriminatorArchitecture), "Discriminator architecture cannot be null.");
+        }
+
         if (numClasses <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");
+        {
+            throw new ArgumentOutOfRangeException(nameof(numClasses), numClasses, "Number of classes must be positive.");
+        }
+
         if (discriminatorArchitecture.OutputSize != 1 + numClasses)
-            throw new ArgumentException($"Discriminator output size must be 1 + numClasses ({1 + numClasses}), but was {discriminatorArchitecture.OutputSize}.", nameof(discriminatorArchitecture));
+        {
+            throw new ArgumentException(
+                $"Discriminator output size must be 1 + numClasses ({1 + numClasses}), but was {discriminatorArchitecture.OutputSize}.",
+                nameof(discriminatorArchitecture));
+        }
+
+        if (initialLearningRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(initialLearningRate), initialLearningRate, "Initial learning rate must be positive.");
+        }
 
         _numClasses = numClasses;
         _initialLearningRate = initialLearningRate;
@@ -163,16 +189,60 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     /// 4. Train generator to create realistic images of the requested class
     /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when any input tensor is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes are incompatible.</exception>
     public (T discriminatorLoss, T generatorLoss) TrainStep(
         Tensor<T> realImages,
         Tensor<T> realLabels,
         Tensor<T> noise,
         Tensor<T> fakeLabels)
     {
-        Generator.SetTrainingMode(true);
-        Discriminator.SetTrainingMode(true);
+        // Input validation
+        if (realImages is null)
+        {
+            throw new ArgumentNullException(nameof(realImages), "Real images tensor cannot be null.");
+        }
+
+        if (realLabels is null)
+        {
+            throw new ArgumentNullException(nameof(realLabels), "Real labels tensor cannot be null.");
+        }
+
+        if (noise is null)
+        {
+            throw new ArgumentNullException(nameof(noise), "Noise tensor cannot be null.");
+        }
+
+        if (fakeLabels is null)
+        {
+            throw new ArgumentNullException(nameof(fakeLabels), "Fake labels tensor cannot be null.");
+        }
 
         int batchSize = realImages.Shape[0];
+
+        if (realLabels.Shape[0] != batchSize)
+        {
+            throw new ArgumentException(
+                $"Real labels batch size ({realLabels.Shape[0]}) must match real images batch size ({batchSize}).",
+                nameof(realLabels));
+        }
+
+        if (noise.Shape[0] != batchSize)
+        {
+            throw new ArgumentException(
+                $"Noise batch size ({noise.Shape[0]}) must match real images batch size ({batchSize}).",
+                nameof(noise));
+        }
+
+        if (fakeLabels.Shape[0] != batchSize)
+        {
+            throw new ArgumentException(
+                $"Fake labels batch size ({fakeLabels.Shape[0]}) must match real images batch size ({batchSize}).",
+                nameof(fakeLabels));
+        }
+
+        Generator.SetTrainingMode(true);
+        Discriminator.SetTrainingMode(true);
 
         // ----- Train Discriminator -----
 
@@ -407,159 +477,159 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Generates random noise tensor.
+    /// Generates random noise tensor using vectorized Gaussian noise generation.
+    /// Uses Engine.GenerateGaussianNoise for SIMD/GPU acceleration.
     /// </summary>
+    /// <param name="batchSize">Number of noise samples in the batch.</param>
+    /// <param name="noiseSize">Dimension of each noise vector.</param>
+    /// <returns>Tensor of shape [batchSize, noiseSize] filled with standard Gaussian noise.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when batchSize or noiseSize is not positive.</exception>
     public Tensor<T> GenerateRandomNoiseTensor(int batchSize, int noiseSize)
     {
-        var random = RandomHelper.CreateSecureRandom();
-        var shape = new int[] { batchSize, noiseSize };
-        var noise = new Tensor<T>(shape);
-
-        for (int b = 0; b < batchSize; b++)
+        if (batchSize <= 0)
         {
-            for (int i = 0; i < noiseSize; i += 2)
-            {
-                double u1 = random.NextDouble();
-                double u2 = random.NextDouble();
-
-                double radius = Math.Sqrt(-2.0 * Math.Log(u1));
-                double theta = 2.0 * Math.PI * u2;
-
-                double z1 = radius * Math.Cos(theta);
-                noise[b, i] = NumOps.FromDouble(z1);
-
-                if (i + 1 < noiseSize)
-                {
-                    double z2 = radius * Math.Sin(theta);
-                    noise[b, i + 1] = NumOps.FromDouble(z2);
-                }
-            }
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
         }
 
-        return noise;
+        if (noiseSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(noiseSize), noiseSize, "Noise size must be positive.");
+        }
+
+        var totalElements = batchSize * noiseSize;
+        var mean = NumOps.Zero;
+        var stddev = NumOps.One;
+
+        // Use Engine's vectorized Gaussian noise generation for SIMD/GPU acceleration
+        var noiseVector = Engine.GenerateGaussianNoise<T>(totalElements, mean, stddev);
+
+        // Reshape to [batchSize, noiseSize]
+        return Tensor<T>.FromVector(noiseVector, [batchSize, noiseSize]);
     }
 
     /// <summary>
-    /// Updates generator parameters using Adam optimizer with generator-specific state.
+    /// Updates generator parameters using vectorized Adam optimizer.
+    /// Uses Engine operations for SIMD/GPU acceleration.
     /// </summary>
     private void UpdateGeneratorParameters()
     {
         var parameters = Generator.GetParameters();
         var gradients = Generator.GetParameterGradients();
 
-        if (_genMomentum == null || _genMomentum.Length != parameters.Length)
+        // Initialize generator optimizer state if needed
+        if (_genMomentum.Length != parameters.Length)
         {
             _genMomentum = new Vector<T>(parameters.Length);
             _genMomentum.Fill(NumOps.Zero);
         }
 
-        if (_genSecondMoment == null || _genSecondMoment.Length != parameters.Length)
+        if (_genSecondMoment.Length != parameters.Length)
         {
             _genSecondMoment = new Vector<T>(parameters.Length);
             _genSecondMoment.Fill(NumOps.Zero);
         }
 
-        var learningRate = NumOps.FromDouble(_genCurrentLearningRate);
+        // Adam optimizer parameters (beta1=0.5 for AC-GAN as per typical practice)
         var beta1 = NumOps.FromDouble(0.5);
         var beta2 = NumOps.FromDouble(0.999);
+        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
+        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
         var epsilon = NumOps.FromDouble(1e-8);
+        var learningRate = NumOps.FromDouble(_genCurrentLearningRate);
 
-        var updatedParameters = new Vector<T>(parameters.Length);
-
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _genMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _genMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
-            );
-
-            _genSecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _genSecondMoment[i]),
-                NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, beta2),
-                    NumOps.Multiply(gradients[i], gradients[i])
-                )
-            );
-
-            var momentumCorrected = NumOps.Divide(_genMomentum[i], NumOps.Subtract(NumOps.One, _genBeta1Power));
-            var secondMomentCorrected = NumOps.Divide(_genSecondMoment[i], NumOps.Subtract(NumOps.One, _genBeta2Power));
-
-            var adaptiveLR = NumOps.Divide(
-                learningRate,
-                NumOps.Add(NumOps.Sqrt(secondMomentCorrected), epsilon)
-            );
-
-            updatedParameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(adaptiveLR, momentumCorrected)
-            );
-        }
-
+        // Update beta powers for bias correction
         _genBeta1Power = NumOps.Multiply(_genBeta1Power, beta1);
         _genBeta2Power = NumOps.Multiply(_genBeta2Power, beta2);
+
+        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
+        var mScaled = (Vector<T>)Engine.Multiply(_genMomentum, beta1);
+        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
+        _genMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
+
+        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
+        var vScaled = (Vector<T>)Engine.Multiply(_genSecondMoment, beta2);
+        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
+        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
+        _genSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
+
+        // Bias correction
+        var biasCorrection1 = NumOps.Subtract(NumOps.One, _genBeta1Power);
+        var biasCorrection2 = NumOps.Subtract(NumOps.One, _genBeta2Power);
+        var mCorrected = (Vector<T>)Engine.Divide(_genMomentum, biasCorrection1);
+        var vCorrected = (Vector<T>)Engine.Divide(_genSecondMoment, biasCorrection2);
+
+        // Vectorized parameter update: p = p - lr * m_corrected / (sqrt(v_corrected) + epsilon)
+        var sqrtV = (Vector<T>)Engine.Sqrt(vCorrected);
+        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
+        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
+        var adaptiveGradient = (Vector<T>)Engine.Divide(mCorrected, sqrtVPlusEps);
+        var update = (Vector<T>)Engine.Multiply(adaptiveGradient, learningRate);
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
+
         _genCurrentLearningRate *= _learningRateDecay;
 
         Generator.UpdateParameters(updatedParameters);
     }
 
     /// <summary>
-    /// Updates discriminator parameters using Adam optimizer with discriminator-specific state.
+    /// Updates discriminator parameters using vectorized Adam optimizer.
+    /// Uses Engine operations for SIMD/GPU acceleration.
     /// </summary>
     private void UpdateDiscriminatorParameters()
     {
         var parameters = Discriminator.GetParameters();
         var gradients = Discriminator.GetParameterGradients();
 
-        if (_discMomentum == null || _discMomentum.Length != parameters.Length)
+        // Initialize discriminator optimizer state if needed
+        if (_discMomentum.Length != parameters.Length)
         {
             _discMomentum = new Vector<T>(parameters.Length);
             _discMomentum.Fill(NumOps.Zero);
         }
 
-        if (_discSecondMoment == null || _discSecondMoment.Length != parameters.Length)
+        if (_discSecondMoment.Length != parameters.Length)
         {
             _discSecondMoment = new Vector<T>(parameters.Length);
             _discSecondMoment.Fill(NumOps.Zero);
         }
 
-        var learningRate = NumOps.FromDouble(_discCurrentLearningRate);
+        // Adam optimizer parameters (beta1=0.5 for AC-GAN as per typical practice)
         var beta1 = NumOps.FromDouble(0.5);
         var beta2 = NumOps.FromDouble(0.999);
+        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
+        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
         var epsilon = NumOps.FromDouble(1e-8);
+        var learningRate = NumOps.FromDouble(_discCurrentLearningRate);
 
-        var updatedParameters = new Vector<T>(parameters.Length);
-
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _discMomentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _discMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
-            );
-
-            _discSecondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _discSecondMoment[i]),
-                NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, beta2),
-                    NumOps.Multiply(gradients[i], gradients[i])
-                )
-            );
-
-            var momentumCorrected = NumOps.Divide(_discMomentum[i], NumOps.Subtract(NumOps.One, _discBeta1Power));
-            var secondMomentCorrected = NumOps.Divide(_discSecondMoment[i], NumOps.Subtract(NumOps.One, _discBeta2Power));
-
-            var adaptiveLR = NumOps.Divide(
-                learningRate,
-                NumOps.Add(NumOps.Sqrt(secondMomentCorrected), epsilon)
-            );
-
-            updatedParameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(adaptiveLR, momentumCorrected)
-            );
-        }
-
+        // Update beta powers for bias correction
         _discBeta1Power = NumOps.Multiply(_discBeta1Power, beta1);
         _discBeta2Power = NumOps.Multiply(_discBeta2Power, beta2);
+
+        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
+        var mScaled = (Vector<T>)Engine.Multiply(_discMomentum, beta1);
+        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
+        _discMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
+
+        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
+        var vScaled = (Vector<T>)Engine.Multiply(_discSecondMoment, beta2);
+        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
+        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
+        _discSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
+
+        // Bias correction
+        var biasCorrection1 = NumOps.Subtract(NumOps.One, _discBeta1Power);
+        var biasCorrection2 = NumOps.Subtract(NumOps.One, _discBeta2Power);
+        var mCorrected = (Vector<T>)Engine.Divide(_discMomentum, biasCorrection1);
+        var vCorrected = (Vector<T>)Engine.Divide(_discSecondMoment, biasCorrection2);
+
+        // Vectorized parameter update: p = p - lr * m_corrected / (sqrt(v_corrected) + epsilon)
+        var sqrtV = (Vector<T>)Engine.Sqrt(vCorrected);
+        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
+        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
+        var adaptiveGradient = (Vector<T>)Engine.Divide(mCorrected, sqrtVPlusEps);
+        var update = (Vector<T>)Engine.Multiply(adaptiveGradient, learningRate);
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
+
         _discCurrentLearningRate *= _learningRateDecay;
 
         Discriminator.UpdateParameters(updatedParameters);
@@ -612,6 +682,22 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         writer.Write(_genCurrentLearningRate);
         writer.Write(_discCurrentLearningRate);
         writer.Write(_numClasses);
+        writer.Write(_learningRateDecay);
+
+        // Serialize generator optimizer state
+        SerializeOptimizerState(writer, _genMomentum, _genSecondMoment, _genBeta1Power, _genBeta2Power);
+
+        // Serialize discriminator optimizer state
+        SerializeOptimizerState(writer, _discMomentum, _discSecondMoment, _discBeta1Power, _discBeta2Power);
+
+        // Serialize loss histories
+        writer.Write(_generatorLosses.Count);
+        foreach (var loss in _generatorLosses)
+            writer.Write(NumOps.ToDouble(loss));
+
+        writer.Write(_discriminatorLosses.Count);
+        foreach (var loss in _discriminatorLosses)
+            writer.Write(NumOps.ToDouble(loss));
 
         var generatorBytes = Generator.Serialize();
         writer.Write(generatorBytes.Length);
@@ -622,11 +708,56 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         writer.Write(discriminatorBytes);
     }
 
+    private void SerializeOptimizerState(BinaryWriter writer, Vector<T> momentum, Vector<T> secondMoment, T beta1Power, T beta2Power)
+    {
+        // Write momentum vector
+        bool hasMomentum = momentum.Length > 0;
+        writer.Write(hasMomentum);
+        if (hasMomentum)
+        {
+            writer.Write(momentum.Length);
+            for (int i = 0; i < momentum.Length; i++)
+                writer.Write(NumOps.ToDouble(momentum[i]));
+        }
+
+        // Write second moment vector
+        bool hasSecondMoment = secondMoment.Length > 0;
+        writer.Write(hasSecondMoment);
+        if (hasSecondMoment)
+        {
+            writer.Write(secondMoment.Length);
+            for (int i = 0; i < secondMoment.Length; i++)
+                writer.Write(NumOps.ToDouble(secondMoment[i]));
+        }
+
+        // Write beta powers
+        writer.Write(NumOps.ToDouble(beta1Power));
+        writer.Write(NumOps.ToDouble(beta2Power));
+    }
+
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         _genCurrentLearningRate = reader.ReadDouble();
         _discCurrentLearningRate = reader.ReadDouble();
         _numClasses = reader.ReadInt32();
+        _learningRateDecay = reader.ReadDouble();
+
+        // Deserialize generator optimizer state
+        (_genMomentum, _genSecondMoment, _genBeta1Power, _genBeta2Power) = DeserializeOptimizerState(reader);
+
+        // Deserialize discriminator optimizer state
+        (_discMomentum, _discSecondMoment, _discBeta1Power, _discBeta2Power) = DeserializeOptimizerState(reader);
+
+        // Deserialize loss histories
+        _generatorLosses.Clear();
+        int genLossCount = reader.ReadInt32();
+        for (int i = 0; i < genLossCount; i++)
+            _generatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
+
+        _discriminatorLosses.Clear();
+        int discLossCount = reader.ReadInt32();
+        for (int i = 0; i < discLossCount; i++)
+            _discriminatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
 
         int generatorDataLength = reader.ReadInt32();
         byte[] generatorData = reader.ReadBytes(generatorDataLength);
@@ -635,6 +766,45 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         int discriminatorDataLength = reader.ReadInt32();
         byte[] discriminatorData = reader.ReadBytes(discriminatorDataLength);
         Discriminator.Deserialize(discriminatorData);
+    }
+
+    private (Vector<T> momentum, Vector<T> secondMoment, T beta1Power, T beta2Power) DeserializeOptimizerState(BinaryReader reader)
+    {
+        // Read momentum vector
+        Vector<T> momentum;
+        bool hasMomentum = reader.ReadBoolean();
+        if (hasMomentum)
+        {
+            int length = reader.ReadInt32();
+            momentum = new Vector<T>(length);
+            for (int i = 0; i < length; i++)
+                momentum[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        else
+        {
+            momentum = Vector<T>.Empty();
+        }
+
+        // Read second moment vector
+        Vector<T> secondMoment;
+        bool hasSecondMoment = reader.ReadBoolean();
+        if (hasSecondMoment)
+        {
+            int length = reader.ReadInt32();
+            secondMoment = new Vector<T>(length);
+            for (int i = 0; i < length; i++)
+                secondMoment[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        else
+        {
+            secondMoment = Vector<T>.Empty();
+        }
+
+        // Read beta powers
+        T beta1Power = NumOps.FromDouble(reader.ReadDouble());
+        T beta2Power = NumOps.FromDouble(reader.ReadDouble());
+
+        return (momentum, secondMoment, beta1Power, beta2Power);
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
