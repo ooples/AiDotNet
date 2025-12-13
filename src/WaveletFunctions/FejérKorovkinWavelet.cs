@@ -359,9 +359,18 @@ public class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
             coefficients.Add(coeff);
         }
 
-        // Normalize the coefficients
+        // Normalize the coefficients - guard against division by zero
         double sum = coefficients.Sum();
-        coefficients = [.. coefficients.Select(c => c / sum)];
+        if (Math.Abs(sum) > 1e-15)
+        {
+            coefficients = [.. coefficients.Select(c => c / sum)];
+        }
+        else
+        {
+            // If sum is zero, use uniform distribution to avoid NaN
+            int count = coefficients.Count;
+            coefficients = [.. Enumerable.Repeat(1.0 / count, count)];
+        }
 
         // Convert to type T and return as Vector<T>
         return new Vector<T>([.. coefficients.Select(c => NumOps.FromDouble(c))]);
@@ -438,6 +447,12 @@ public class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
         for (int i = 0; i < coefficients.Length; i++)
         {
             sum = NumOps.Add(sum, NumOps.Square(coefficients[i]));
+        }
+
+        // If sum is zero or very small, skip normalization to avoid NaN
+        if (NumOps.LessThanOrEquals(sum, NumOps.FromDouble(1e-15)))
+        {
+            return;
         }
 
         T normalizationFactor = NumOps.Sqrt(NumOps.Divide(NumOps.One, sum));

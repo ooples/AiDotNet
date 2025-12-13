@@ -186,7 +186,10 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
                 if (i > j)
                     L[i, j] = A[i, j];
                 else if (i == j)
+                {
                     L[i, j] = NumOps.One;
+                    U[i, j] = A[i, j];  // Also copy diagonal to U
+                }
                 else
                     U[i, j] = A[i, j];
             }
@@ -275,7 +278,10 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
                 if (i > j)
                     L[i, j] = A[i, j];
                 else if (i == j)
+                {
                     L[i, j] = NumOps.One;
+                    U[i, j] = A[i, j];  // Also copy diagonal to U
+                }
                 else
                     U[i, j] = A[i, j];
             }
