@@ -634,7 +634,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
         var scoresList = new List<double>(sampleSize);
         for (int i = 0; i < sampleSize; i++)
         {
-            scoresList.Add(Convert.ToDouble(criticScores[i, 0]));
+            scoresList.Add(NumOps.ToDouble(criticScores[i, 0]));
         }
 
         metrics["AverageCriticScore"] = scoresList.Average();
@@ -646,12 +646,12 @@ public class WGAN<T> : NeuralNetworkBase<T>
 
         if (_generatorLosses.Count > 0)
         {
-            metrics["RecentGeneratorLoss"] = Convert.ToDouble(_generatorLosses[_generatorLosses.Count - 1]);
+            metrics["RecentGeneratorLoss"] = NumOps.ToDouble(_generatorLosses[_generatorLosses.Count - 1]);
         }
 
         if (_criticLosses.Count > 0)
         {
-            metrics["RecentCriticLoss"] = Convert.ToDouble(_criticLosses[_criticLosses.Count - 1]);
+            metrics["RecentCriticLoss"] = NumOps.ToDouble(_criticLosses[_criticLosses.Count - 1]);
         }
 
         return metrics;
