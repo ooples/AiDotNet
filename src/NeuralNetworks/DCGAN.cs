@@ -72,7 +72,7 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
         : base(
             CreateDCGANGeneratorArchitecture(latentSize, imageChannels, imageHeight, imageWidth, generatorFeatureMaps),
             CreateDCGANDiscriminatorArchitecture(imageChannels, imageHeight, imageWidth, discriminatorFeatureMaps),
-            InputType.TwoDimensional,
+            InputType.ThreeDimensional,
             lossFunction,
             initialLearningRate)
     {
@@ -113,11 +113,20 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
         int imageWidth,
         int featureMaps)
     {
+        // For DCGAN generator, the latent vector is first projected and reshaped to an initial
+        // 3D feature map. The typical starting spatial size is 4x4 which gets upsampled through
+        // transposed convolutions. The depth represents the number of feature channels.
+        // Note: The actual latent vector (1D) handling is done by the first projection layer.
+        int initialSpatialSize = 4;
+        int initialChannels = featureMaps * 8;  // Standard DCGAN uses 8x feature maps initially
+
         return new NeuralNetworkArchitecture<T>(
-            InputType.OneDimensional,
+            InputType.ThreeDimensional,
             NeuralNetworkTaskType.Generative,
             NetworkComplexity.Medium,
-            inputSize: latentSize,
+            inputDepth: initialChannels,
+            inputHeight: initialSpatialSize,
+            inputWidth: initialSpatialSize,
             outputSize: imageChannels * imageHeight * imageWidth);
     }
 
@@ -154,12 +163,15 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
         int imageWidth,
         int featureMaps)
     {
+        // DCGAN discriminator takes 3D images as input (channels x height x width)
+        // and outputs a single probability value for real/fake classification
         return new NeuralNetworkArchitecture<T>(
-            InputType.TwoDimensional,
+            InputType.ThreeDimensional,
             NeuralNetworkTaskType.BinaryClassification,
             NetworkComplexity.Medium,
+            inputDepth: imageChannels,
             inputHeight: imageHeight,
-            inputWidth: imageWidth * imageChannels,
+            inputWidth: imageWidth,
             outputSize: 1);
     }
 }

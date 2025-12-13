@@ -30,11 +30,20 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class WGAN<T> : NeuralNetworkBase<T>
 {
-    private Vector<T> _momentum;
-    private Vector<T> _secondMoment;
-    private T _beta1Power;
-    private T _beta2Power;
-    private double _currentLearningRate;
+    // Generator optimizer state
+    private Vector<T> _genMomentum;
+    private Vector<T> _genSecondMoment;
+    private T _genBeta1Power;
+    private T _genBeta2Power;
+    private double _genCurrentLearningRate;
+
+    // Critic optimizer state
+    private Vector<T> _criticMomentum;
+    private Vector<T> _criticSecondMoment;
+    private T _criticBeta1Power;
+    private T _criticBeta2Power;
+    private double _criticCurrentLearningRate;
+
     private double _initialLearningRate;
     private double _learningRateDecay;
     private readonly List<T> _criticLosses = [];
@@ -134,19 +143,26 @@ public class WGAN<T> : NeuralNetworkBase<T>
             null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
         _initialLearningRate = initialLearningRate;
-        _currentLearningRate = initialLearningRate;
         _weightClipValue = weightClipValue;
         _criticIterations = criticIterations;
         _learningRateDecay = 0.9999;
 
-        // Initialize optimizer parameters
-        _beta1Power = NumOps.One;
-        _beta2Power = NumOps.One;
+        // Initialize Generator optimizer state
+        _genBeta1Power = NumOps.One;
+        _genBeta2Power = NumOps.One;
+        _genCurrentLearningRate = initialLearningRate;
+        _genMomentum = Vector<T>.Empty();
+        _genSecondMoment = Vector<T>.Empty();
+
+        // Initialize Critic optimizer state
+        _criticBeta1Power = NumOps.One;
+        _criticBeta2Power = NumOps.One;
+        _criticCurrentLearningRate = initialLearningRate;
+        _criticMomentum = Vector<T>.Empty();
+        _criticSecondMoment = Vector<T>.Empty();
 
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Critic = new ConvolutionalNeuralNetwork<T>(criticArchitecture);
-        _momentum = Vector<T>.Empty();
-        _secondMoment = Vector<T>.Empty();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
         InitializeLayers();
@@ -308,7 +324,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
         Critic.Backpropagate(gradients);
 
         // Update parameters
-        UpdateNetworkParameters(Critic);
+        UpdateCriticParameters();
 
         return avgScore;
     }
@@ -358,7 +374,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
         Generator.Backpropagate(criticInputGradients);
 
         // Update generator parameters
-        UpdateNetworkParameters(Generator);
+        UpdateGeneratorParameters();
 
         Critic.SetTrainingMode(true);
 
@@ -366,24 +382,24 @@ public class WGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates network parameters using RMSprop optimizer (recommended for WGAN).
+    /// Updates Generator parameters using RMSprop optimizer.
     /// </summary>
-    private void UpdateNetworkParameters(ConvolutionalNeuralNetwork<T> network)
+    private void UpdateGeneratorParameters()
     {
-        var parameters = network.GetParameters();
-        var gradients = network.GetParameterGradients();
+        var parameters = Generator.GetParameters();
+        var gradients = Generator.GetParameterGradients();
 
         // Initialize optimizer state if needed
-        if (_momentum == null || _momentum.Length != parameters.Length)
+        if (_genMomentum == null || _genMomentum.Length != parameters.Length)
         {
-            _momentum = new Vector<T>(parameters.Length);
-            _momentum.Fill(NumOps.Zero);
+            _genMomentum = new Vector<T>(parameters.Length);
+            _genMomentum.Fill(NumOps.Zero);
         }
 
-        if (_secondMoment == null || _secondMoment.Length != parameters.Length)
+        if (_genSecondMoment == null || _genSecondMoment.Length != parameters.Length)
         {
-            _secondMoment = new Vector<T>(parameters.Length);
-            _secondMoment.Fill(NumOps.Zero);
+            _genSecondMoment = new Vector<T>(parameters.Length);
+            _genSecondMoment.Fill(NumOps.Zero);
         }
 
         // Gradient clipping
@@ -400,7 +416,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
         }
 
         // RMSprop parameters (recommended for WGAN)
-        var learningRate = NumOps.FromDouble(_currentLearningRate);
+        var learningRate = NumOps.FromDouble(_genCurrentLearningRate);
         var decay = NumOps.FromDouble(0.9);
         var epsilon = NumOps.FromDouble(1e-8);
 
@@ -409,8 +425,8 @@ public class WGAN<T> : NeuralNetworkBase<T>
         for (int i = 0; i < parameters.Length; i++)
         {
             // Update second moment (RMSprop)
-            _secondMoment[i] = NumOps.Add(
-                NumOps.Multiply(decay, _secondMoment[i]),
+            _genSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(decay, _genSecondMoment[i]),
                 NumOps.Multiply(
                     NumOps.Subtract(NumOps.One, decay),
                     NumOps.Multiply(gradients[i], gradients[i])
@@ -420,7 +436,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
             // RMSprop update
             var adaptiveLR = NumOps.Divide(
                 learningRate,
-                NumOps.Add(NumOps.Sqrt(_secondMoment[i]), epsilon)
+                NumOps.Add(NumOps.Sqrt(_genSecondMoment[i]), epsilon)
             );
 
             updatedParameters[i] = NumOps.Subtract(
@@ -430,9 +446,79 @@ public class WGAN<T> : NeuralNetworkBase<T>
         }
 
         // Apply learning rate decay
-        _currentLearningRate *= _learningRateDecay;
+        _genCurrentLearningRate *= _learningRateDecay;
 
-        network.UpdateParameters(updatedParameters);
+        Generator.UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Updates Critic parameters using RMSprop optimizer.
+    /// </summary>
+    private void UpdateCriticParameters()
+    {
+        var parameters = Critic.GetParameters();
+        var gradients = Critic.GetParameterGradients();
+
+        // Initialize optimizer state if needed
+        if (_criticMomentum == null || _criticMomentum.Length != parameters.Length)
+        {
+            _criticMomentum = new Vector<T>(parameters.Length);
+            _criticMomentum.Fill(NumOps.Zero);
+        }
+
+        if (_criticSecondMoment == null || _criticSecondMoment.Length != parameters.Length)
+        {
+            _criticSecondMoment = new Vector<T>(parameters.Length);
+            _criticSecondMoment.Fill(NumOps.Zero);
+        }
+
+        // Gradient clipping
+        var gradientNorm = gradients.L2Norm();
+        var clipThreshold = NumOps.FromDouble(5.0);
+
+        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
+        {
+            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
+            for (int i = 0; i < gradients.Length; i++)
+            {
+                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
+            }
+        }
+
+        // RMSprop parameters (recommended for WGAN)
+        var learningRate = NumOps.FromDouble(_criticCurrentLearningRate);
+        var decay = NumOps.FromDouble(0.9);
+        var epsilon = NumOps.FromDouble(1e-8);
+
+        var updatedParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Update second moment (RMSprop)
+            _criticSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(decay, _criticSecondMoment[i]),
+                NumOps.Multiply(
+                    NumOps.Subtract(NumOps.One, decay),
+                    NumOps.Multiply(gradients[i], gradients[i])
+                )
+            );
+
+            // RMSprop update
+            var adaptiveLR = NumOps.Divide(
+                learningRate,
+                NumOps.Add(NumOps.Sqrt(_criticSecondMoment[i]), epsilon)
+            );
+
+            updatedParameters[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(adaptiveLR, gradients[i])
+            );
+        }
+
+        // Apply learning rate decay
+        _criticCurrentLearningRate *= _learningRateDecay;
+
+        Critic.UpdateParameters(updatedParameters);
     }
 
     /// <summary>
@@ -502,7 +588,8 @@ public class WGAN<T> : NeuralNetworkBase<T>
         metrics["MinCriticScore"] = scoresList.Min();
         metrics["MaxCriticScore"] = scoresList.Max();
         metrics["CriticScoreStdDev"] = StatisticsHelper<double>.CalculateStandardDeviation(scoresList);
-        metrics["CurrentLearningRate"] = _currentLearningRate;
+        metrics["GeneratorLearningRate"] = _genCurrentLearningRate;
+        metrics["CriticLearningRate"] = _criticCurrentLearningRate;
 
         if (_generatorLosses.Count > 0)
         {
@@ -550,7 +637,9 @@ public class WGAN<T> : NeuralNetworkBase<T>
 
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_currentLearningRate);
+        // Save both learning rates
+        writer.Write(_genCurrentLearningRate);
+        writer.Write(_criticCurrentLearningRate);
         writer.Write(_weightClipValue);
         writer.Write(_criticIterations);
 
@@ -565,7 +654,9 @@ public class WGAN<T> : NeuralNetworkBase<T>
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _currentLearningRate = reader.ReadDouble();
+        // Read both learning rates
+        _genCurrentLearningRate = reader.ReadDouble();
+        _criticCurrentLearningRate = reader.ReadDouble();
         _weightClipValue = reader.ReadDouble();
         _criticIterations = reader.ReadInt32();
 

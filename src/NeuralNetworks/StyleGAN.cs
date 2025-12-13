@@ -47,12 +47,19 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class StyleGAN<T> : NeuralNetworkBase<T>
 {
-    private Vector<T> _momentum;
-    private Vector<T> _secondMoment;
-    private T _beta1Power;
-    private T _beta2Power;
-    private double _currentLearningRate;
-    private double _initialLearningRate;
+    // MappingNetwork optimizer state
+    private Vector<T> _mappingMomentum;
+    private Vector<T> _mappingSecondMoment;
+
+    // SynthesisNetwork optimizer state
+    private Vector<T> _synthesisMomentum;
+    private Vector<T> _synthesisSecondMoment;
+
+    // Discriminator optimizer state
+    private Vector<T> _discMomentum;
+    private Vector<T> _discSecondMoment;
+
+    private readonly double _initialLearningRate;
 
     /// <summary>
     /// The size of the latent code Z.
@@ -187,17 +194,23 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         _enableStyleMixing = enableStyleMixing;
         _styleMixingProbability = styleMixingProbability;
         _initialLearningRate = initialLearningRate;
-        _currentLearningRate = initialLearningRate;
 
-        _beta1Power = NumOps.One;
-        _beta2Power = NumOps.One;
+        // Initialize MappingNetwork optimizer state
+        _mappingMomentum = Vector<T>.Empty();
+        _mappingSecondMoment = Vector<T>.Empty();
+
+        // Initialize SynthesisNetwork optimizer state
+        _synthesisMomentum = Vector<T>.Empty();
+        _synthesisSecondMoment = Vector<T>.Empty();
+
+        // Initialize Discriminator optimizer state
+        _discMomentum = Vector<T>.Empty();
+        _discSecondMoment = Vector<T>.Empty();
 
         MappingNetwork = new ConvolutionalNeuralNetwork<T>(mappingNetworkArchitecture);
         SynthesisNetwork = new ConvolutionalNeuralNetwork<T>(synthesisNetworkArchitecture);
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
 
-        _momentum = Vector<T>.Empty();
-        _secondMoment = Vector<T>.Empty();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
 
         InitializeLayers();
@@ -260,14 +273,14 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         T realLoss = CalculateBinaryLoss(realPredictions, realLabels, batchSize);
         var realGradients = CalculateBinaryGradients(realPredictions, realLabels, batchSize);
         Discriminator.Backpropagate(realGradients);
-        UpdateNetworkParameters(Discriminator);
+        UpdateDiscriminatorParameters();
 
         // Train on fake images
         var fakePredictions = Discriminator.Predict(fakeImages);
         T fakeLoss = CalculateBinaryLoss(fakePredictions, fakeLabels, batchSize);
         var fakeGradients = CalculateBinaryGradients(fakePredictions, fakeLabels, batchSize);
         Discriminator.Backpropagate(fakeGradients);
-        UpdateNetworkParameters(Discriminator);
+        UpdateDiscriminatorParameters();
 
         T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
 
@@ -298,8 +311,8 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         MappingNetwork.Backpropagate(styleGradients);
 
         // Update both generator networks
-        UpdateNetworkParameters(SynthesisNetwork);
-        UpdateNetworkParameters(MappingNetwork);
+        UpdateSynthesisNetworkParameters();
+        UpdateMappingNetworkParameters();
 
         Discriminator.SetTrainingMode(true);
 
@@ -447,24 +460,27 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         return tensor;
     }
 
-    private void UpdateNetworkParameters(ConvolutionalNeuralNetwork<T> network)
+    /// <summary>
+    /// Updates MappingNetwork parameters using Adam optimizer.
+    /// </summary>
+    private void UpdateMappingNetworkParameters()
     {
-        var parameters = network.GetParameters();
-        var gradients = network.GetParameterGradients();
+        var parameters = MappingNetwork.GetParameters();
+        var gradients = MappingNetwork.GetParameterGradients();
 
-        if (_momentum == null || _momentum.Length != parameters.Length)
+        if (_mappingMomentum == null || _mappingMomentum.Length != parameters.Length)
         {
-            _momentum = new Vector<T>(parameters.Length);
-            _momentum.Fill(NumOps.Zero);
+            _mappingMomentum = new Vector<T>(parameters.Length);
+            _mappingMomentum.Fill(NumOps.Zero);
         }
 
-        if (_secondMoment == null || _secondMoment.Length != parameters.Length)
+        if (_mappingSecondMoment == null || _mappingSecondMoment.Length != parameters.Length)
         {
-            _secondMoment = new Vector<T>(parameters.Length);
-            _secondMoment.Fill(NumOps.Zero);
+            _mappingSecondMoment = new Vector<T>(parameters.Length);
+            _mappingSecondMoment.Fill(NumOps.Zero);
         }
 
-        var learningRate = NumOps.FromDouble(_currentLearningRate);
+        var learningRate = NumOps.FromDouble(_initialLearningRate);
         var beta1 = NumOps.FromDouble(0.0);  // StyleGAN uses beta1=0
         var beta2 = NumOps.FromDouble(0.99);
         var epsilon = NumOps.FromDouble(1e-8);
@@ -473,13 +489,13 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < parameters.Length; i++)
         {
-            _momentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _momentum[i]),
+            _mappingMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _mappingMomentum[i]),
                 NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
             );
 
-            _secondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _secondMoment[i]),
+            _mappingSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _mappingSecondMoment[i]),
                 NumOps.Multiply(
                     NumOps.Subtract(NumOps.One, beta2),
                     NumOps.Multiply(gradients[i], gradients[i])
@@ -488,16 +504,128 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
 
             var adaptiveLR = NumOps.Divide(
                 learningRate,
-                NumOps.Add(NumOps.Sqrt(_secondMoment[i]), epsilon)
+                NumOps.Add(NumOps.Sqrt(_mappingSecondMoment[i]), epsilon)
             );
 
             updatedParameters[i] = NumOps.Subtract(
                 parameters[i],
-                NumOps.Multiply(adaptiveLR, _momentum[i])
+                NumOps.Multiply(adaptiveLR, _mappingMomentum[i])
             );
         }
 
-        network.UpdateParameters(updatedParameters);
+        MappingNetwork.UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Updates SynthesisNetwork parameters using Adam optimizer.
+    /// </summary>
+    private void UpdateSynthesisNetworkParameters()
+    {
+        var parameters = SynthesisNetwork.GetParameters();
+        var gradients = SynthesisNetwork.GetParameterGradients();
+
+        if (_synthesisMomentum == null || _synthesisMomentum.Length != parameters.Length)
+        {
+            _synthesisMomentum = new Vector<T>(parameters.Length);
+            _synthesisMomentum.Fill(NumOps.Zero);
+        }
+
+        if (_synthesisSecondMoment == null || _synthesisSecondMoment.Length != parameters.Length)
+        {
+            _synthesisSecondMoment = new Vector<T>(parameters.Length);
+            _synthesisSecondMoment.Fill(NumOps.Zero);
+        }
+
+        var learningRate = NumOps.FromDouble(_initialLearningRate);
+        var beta1 = NumOps.FromDouble(0.0);  // StyleGAN uses beta1=0
+        var beta2 = NumOps.FromDouble(0.99);
+        var epsilon = NumOps.FromDouble(1e-8);
+
+        var updatedParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _synthesisMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _synthesisMomentum[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
+            );
+
+            _synthesisSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _synthesisSecondMoment[i]),
+                NumOps.Multiply(
+                    NumOps.Subtract(NumOps.One, beta2),
+                    NumOps.Multiply(gradients[i], gradients[i])
+                )
+            );
+
+            var adaptiveLR = NumOps.Divide(
+                learningRate,
+                NumOps.Add(NumOps.Sqrt(_synthesisSecondMoment[i]), epsilon)
+            );
+
+            updatedParameters[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(adaptiveLR, _synthesisMomentum[i])
+            );
+        }
+
+        SynthesisNetwork.UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Updates Discriminator parameters using Adam optimizer.
+    /// </summary>
+    private void UpdateDiscriminatorParameters()
+    {
+        var parameters = Discriminator.GetParameters();
+        var gradients = Discriminator.GetParameterGradients();
+
+        if (_discMomentum == null || _discMomentum.Length != parameters.Length)
+        {
+            _discMomentum = new Vector<T>(parameters.Length);
+            _discMomentum.Fill(NumOps.Zero);
+        }
+
+        if (_discSecondMoment == null || _discSecondMoment.Length != parameters.Length)
+        {
+            _discSecondMoment = new Vector<T>(parameters.Length);
+            _discSecondMoment.Fill(NumOps.Zero);
+        }
+
+        var learningRate = NumOps.FromDouble(_initialLearningRate);
+        var beta1 = NumOps.FromDouble(0.0);  // StyleGAN uses beta1=0
+        var beta2 = NumOps.FromDouble(0.99);
+        var epsilon = NumOps.FromDouble(1e-8);
+
+        var updatedParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _discMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _discMomentum[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
+            );
+
+            _discSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _discSecondMoment[i]),
+                NumOps.Multiply(
+                    NumOps.Subtract(NumOps.One, beta2),
+                    NumOps.Multiply(gradients[i], gradients[i])
+                )
+            );
+
+            var adaptiveLR = NumOps.Divide(
+                learningRate,
+                NumOps.Add(NumOps.Sqrt(_discSecondMoment[i]), epsilon)
+            );
+
+            updatedParameters[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(adaptiveLR, _discMomentum[i])
+            );
+        }
+
+        Discriminator.UpdateParameters(updatedParameters);
     }
 
     protected override void InitializeLayers() { }
@@ -529,7 +657,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
 
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_currentLearningRate);
+        writer.Write(_initialLearningRate);
         writer.Write(_latentSize);
         writer.Write(_intermediateLatentSize);
         writer.Write(_enableStyleMixing);
@@ -550,7 +678,8 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _currentLearningRate = reader.ReadDouble();
+        // Read learning rate (backwards compatibility - was stored as _currentLearningRate)
+        reader.ReadDouble();
         _latentSize = reader.ReadInt32();
         _intermediateLatentSize = reader.ReadInt32();
         _enableStyleMixing = reader.ReadBoolean();

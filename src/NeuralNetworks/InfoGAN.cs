@@ -45,15 +45,31 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class InfoGAN<T> : NeuralNetworkBase<T>
 {
-    private Vector<T> _momentum;
-    private Vector<T> _secondMoment;
-    private T _beta1Power;
-    private T _beta2Power;
-    private double _currentLearningRate;
+    // Generator optimizer state
+    private Vector<T> _genMomentum;
+    private Vector<T> _genSecondMoment;
+    private T _genBeta1Power;
+    private T _genBeta2Power;
+    private double _genCurrentLearningRate;
+
+    // Discriminator optimizer state
+    private Vector<T> _discMomentum;
+    private Vector<T> _discSecondMoment;
+    private T _discBeta1Power;
+    private T _discBeta2Power;
+    private double _discCurrentLearningRate;
+
+    // QNetwork optimizer state
+    private Vector<T> _qMomentum;
+    private Vector<T> _qSecondMoment;
+    private T _qBeta1Power;
+    private T _qBeta2Power;
+    private double _qCurrentLearningRate;
+
     private double _initialLearningRate;
     private double _learningRateDecay;
-    private List<T> _generatorLosses = [];
-    private List<T> _discriminatorLosses = [];
+    private readonly List<T> _generatorLosses = [];
+    private readonly List<T> _discriminatorLosses = [];
 
     /// <summary>
     /// The size of the latent code c.
@@ -153,18 +169,33 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         _latentCodeSize = latentCodeSize;
         _mutualInfoCoefficient = mutualInfoCoefficient;
         _initialLearningRate = initialLearningRate;
-        _currentLearningRate = initialLearningRate;
         _learningRateDecay = 0.9999;
 
-        _beta1Power = NumOps.One;
-        _beta2Power = NumOps.One;
+        // Initialize Generator optimizer state
+        _genBeta1Power = NumOps.One;
+        _genBeta2Power = NumOps.One;
+        _genCurrentLearningRate = initialLearningRate;
+        _genMomentum = Vector<T>.Empty();
+        _genSecondMoment = Vector<T>.Empty();
+
+        // Initialize Discriminator optimizer state
+        _discBeta1Power = NumOps.One;
+        _discBeta2Power = NumOps.One;
+        _discCurrentLearningRate = initialLearningRate;
+        _discMomentum = Vector<T>.Empty();
+        _discSecondMoment = Vector<T>.Empty();
+
+        // Initialize QNetwork optimizer state
+        _qBeta1Power = NumOps.One;
+        _qBeta2Power = NumOps.One;
+        _qCurrentLearningRate = initialLearningRate;
+        _qMomentum = Vector<T>.Empty();
+        _qSecondMoment = Vector<T>.Empty();
 
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
         QNetwork = new ConvolutionalNeuralNetwork<T>(qNetworkArchitecture);
 
-        _momentum = Vector<T>.Empty();
-        _secondMoment = Vector<T>.Empty();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
         InitializeLayers();
@@ -223,7 +254,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
 
         var realGradients = CalculateBinaryGradients(realPredictions, realLabels, batchSize);
         Discriminator.Backpropagate(realGradients);
-        UpdateNetworkParameters(Discriminator);
+        UpdateDiscriminatorParameters();
 
         // Train on fake images
         var fakePredictions = Discriminator.Predict(fakeImages);
@@ -231,7 +262,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
 
         var fakeGradients = CalculateBinaryGradients(fakePredictions, fakeLabels, batchSize);
         Discriminator.Backpropagate(fakeGradients);
-        UpdateNetworkParameters(Discriminator);
+        UpdateDiscriminatorParameters();
 
         T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
 
@@ -279,8 +310,8 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
 
         // Backpropagate through generator
         Generator.Backpropagate(combinedGradients);
-        UpdateNetworkParameters(Generator);
-        UpdateNetworkParameters(QNetwork);
+        UpdateGeneratorParameters();
+        UpdateQNetworkParameters();
 
         Discriminator.SetTrainingMode(true);
 
@@ -482,26 +513,26 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates network parameters using Adam optimizer.
+    /// Updates Generator parameters using Adam optimizer.
     /// </summary>
-    private void UpdateNetworkParameters(ConvolutionalNeuralNetwork<T> network)
+    private void UpdateGeneratorParameters()
     {
-        var parameters = network.GetParameters();
-        var gradients = network.GetParameterGradients();
+        var parameters = Generator.GetParameters();
+        var gradients = Generator.GetParameterGradients();
 
-        if (_momentum == null || _momentum.Length != parameters.Length)
+        if (_genMomentum == null || _genMomentum.Length != parameters.Length)
         {
-            _momentum = new Vector<T>(parameters.Length);
-            _momentum.Fill(NumOps.Zero);
+            _genMomentum = new Vector<T>(parameters.Length);
+            _genMomentum.Fill(NumOps.Zero);
         }
 
-        if (_secondMoment == null || _secondMoment.Length != parameters.Length)
+        if (_genSecondMoment == null || _genSecondMoment.Length != parameters.Length)
         {
-            _secondMoment = new Vector<T>(parameters.Length);
-            _secondMoment.Fill(NumOps.Zero);
+            _genSecondMoment = new Vector<T>(parameters.Length);
+            _genSecondMoment.Fill(NumOps.Zero);
         }
 
-        var learningRate = NumOps.FromDouble(_currentLearningRate);
+        var learningRate = NumOps.FromDouble(_genCurrentLearningRate);
         var beta1 = NumOps.FromDouble(0.5);
         var beta2 = NumOps.FromDouble(0.999);
         var epsilon = NumOps.FromDouble(1e-8);
@@ -510,21 +541,21 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < parameters.Length; i++)
         {
-            _momentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _momentum[i]),
+            _genMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _genMomentum[i]),
                 NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
             );
 
-            _secondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _secondMoment[i]),
+            _genSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _genSecondMoment[i]),
                 NumOps.Multiply(
                     NumOps.Subtract(NumOps.One, beta2),
                     NumOps.Multiply(gradients[i], gradients[i])
                 )
             );
 
-            var momentumCorrected = NumOps.Divide(_momentum[i], NumOps.Subtract(NumOps.One, _beta1Power));
-            var secondMomentCorrected = NumOps.Divide(_secondMoment[i], NumOps.Subtract(NumOps.One, _beta2Power));
+            var momentumCorrected = NumOps.Divide(_genMomentum[i], NumOps.Subtract(NumOps.One, _genBeta1Power));
+            var secondMomentCorrected = NumOps.Divide(_genSecondMoment[i], NumOps.Subtract(NumOps.One, _genBeta2Power));
 
             var adaptiveLR = NumOps.Divide(
                 learningRate,
@@ -537,11 +568,137 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             );
         }
 
-        _beta1Power = NumOps.Multiply(_beta1Power, beta1);
-        _beta2Power = NumOps.Multiply(_beta2Power, beta2);
-        _currentLearningRate *= _learningRateDecay;
+        _genBeta1Power = NumOps.Multiply(_genBeta1Power, beta1);
+        _genBeta2Power = NumOps.Multiply(_genBeta2Power, beta2);
+        _genCurrentLearningRate *= _learningRateDecay;
 
-        network.UpdateParameters(updatedParameters);
+        Generator.UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Updates Discriminator parameters using Adam optimizer.
+    /// </summary>
+    private void UpdateDiscriminatorParameters()
+    {
+        var parameters = Discriminator.GetParameters();
+        var gradients = Discriminator.GetParameterGradients();
+
+        if (_discMomentum == null || _discMomentum.Length != parameters.Length)
+        {
+            _discMomentum = new Vector<T>(parameters.Length);
+            _discMomentum.Fill(NumOps.Zero);
+        }
+
+        if (_discSecondMoment == null || _discSecondMoment.Length != parameters.Length)
+        {
+            _discSecondMoment = new Vector<T>(parameters.Length);
+            _discSecondMoment.Fill(NumOps.Zero);
+        }
+
+        var learningRate = NumOps.FromDouble(_discCurrentLearningRate);
+        var beta1 = NumOps.FromDouble(0.5);
+        var beta2 = NumOps.FromDouble(0.999);
+        var epsilon = NumOps.FromDouble(1e-8);
+
+        var updatedParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _discMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _discMomentum[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
+            );
+
+            _discSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _discSecondMoment[i]),
+                NumOps.Multiply(
+                    NumOps.Subtract(NumOps.One, beta2),
+                    NumOps.Multiply(gradients[i], gradients[i])
+                )
+            );
+
+            var momentumCorrected = NumOps.Divide(_discMomentum[i], NumOps.Subtract(NumOps.One, _discBeta1Power));
+            var secondMomentCorrected = NumOps.Divide(_discSecondMoment[i], NumOps.Subtract(NumOps.One, _discBeta2Power));
+
+            var adaptiveLR = NumOps.Divide(
+                learningRate,
+                NumOps.Add(NumOps.Sqrt(secondMomentCorrected), epsilon)
+            );
+
+            updatedParameters[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(adaptiveLR, momentumCorrected)
+            );
+        }
+
+        _discBeta1Power = NumOps.Multiply(_discBeta1Power, beta1);
+        _discBeta2Power = NumOps.Multiply(_discBeta2Power, beta2);
+        _discCurrentLearningRate *= _learningRateDecay;
+
+        Discriminator.UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Updates QNetwork parameters using Adam optimizer.
+    /// </summary>
+    private void UpdateQNetworkParameters()
+    {
+        var parameters = QNetwork.GetParameters();
+        var gradients = QNetwork.GetParameterGradients();
+
+        if (_qMomentum == null || _qMomentum.Length != parameters.Length)
+        {
+            _qMomentum = new Vector<T>(parameters.Length);
+            _qMomentum.Fill(NumOps.Zero);
+        }
+
+        if (_qSecondMoment == null || _qSecondMoment.Length != parameters.Length)
+        {
+            _qSecondMoment = new Vector<T>(parameters.Length);
+            _qSecondMoment.Fill(NumOps.Zero);
+        }
+
+        var learningRate = NumOps.FromDouble(_qCurrentLearningRate);
+        var beta1 = NumOps.FromDouble(0.5);
+        var beta2 = NumOps.FromDouble(0.999);
+        var epsilon = NumOps.FromDouble(1e-8);
+
+        var updatedParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _qMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _qMomentum[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
+            );
+
+            _qSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _qSecondMoment[i]),
+                NumOps.Multiply(
+                    NumOps.Subtract(NumOps.One, beta2),
+                    NumOps.Multiply(gradients[i], gradients[i])
+                )
+            );
+
+            var momentumCorrected = NumOps.Divide(_qMomentum[i], NumOps.Subtract(NumOps.One, _qBeta1Power));
+            var secondMomentCorrected = NumOps.Divide(_qSecondMoment[i], NumOps.Subtract(NumOps.One, _qBeta2Power));
+
+            var adaptiveLR = NumOps.Divide(
+                learningRate,
+                NumOps.Add(NumOps.Sqrt(secondMomentCorrected), epsilon)
+            );
+
+            updatedParameters[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(adaptiveLR, momentumCorrected)
+            );
+        }
+
+        _qBeta1Power = NumOps.Multiply(_qBeta1Power, beta1);
+        _qBeta2Power = NumOps.Multiply(_qBeta2Power, beta2);
+        _qCurrentLearningRate *= _learningRateDecay;
+
+        QNetwork.UpdateParameters(updatedParameters);
     }
 
     protected override void InitializeLayers()
@@ -580,7 +737,10 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
 
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_currentLearningRate);
+        // Save all three learning rates
+        writer.Write(_genCurrentLearningRate);
+        writer.Write(_discCurrentLearningRate);
+        writer.Write(_qCurrentLearningRate);
         writer.Write(_latentCodeSize);
         writer.Write(_mutualInfoCoefficient);
 
@@ -599,7 +759,10 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _currentLearningRate = reader.ReadDouble();
+        // Read all three learning rates
+        _genCurrentLearningRate = reader.ReadDouble();
+        _discCurrentLearningRate = reader.ReadDouble();
+        _qCurrentLearningRate = reader.ReadDouble();
         _latentCodeSize = reader.ReadInt32();
         _mutualInfoCoefficient = reader.ReadDouble();
 

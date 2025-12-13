@@ -369,7 +369,9 @@ public class ConditionalGAN<T> : NeuralNetworkBase<T>
     private T TrainGeneratorBatch(Tensor<T> generatorInput, Tensor<T> fakeImagesWithConditions, Tensor<T> targetLabels)
     {
         Generator.SetTrainingMode(true);
-        Discriminator.SetTrainingMode(false);
+        // Keep Discriminator in training mode for backpropagation (required for Backpropagate to work)
+        // We just won't update its parameters
+        Discriminator.SetTrainingMode(true);
 
         // Get discriminator output
         var discriminatorOutput = Discriminator.Predict(fakeImagesWithConditions);
@@ -380,7 +382,7 @@ public class ConditionalGAN<T> : NeuralNetworkBase<T>
         // Calculate gradients
         var outputGradients = CalculateBatchGradients(discriminatorOutput, targetLabels);
 
-        // Backpropagate through discriminator
+        // Backpropagate through discriminator to get input gradients (but don't update discriminator weights)
         var discriminatorInputGradients = Discriminator.Backpropagate(outputGradients);
 
         // Extract gradients for the image part (not the condition part)

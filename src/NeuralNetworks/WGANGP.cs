@@ -240,8 +240,8 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         }
         fakeScore = NumOps.Divide(fakeScore, NumOps.FromDouble(batchSize));
 
-        // Compute gradient penalty
-        T gradientPenalty = ComputeGradientPenalty(realImages, fakeImages, batchSize);
+        // Compute gradient penalty (this also computes gradients for the GP term)
+        var (gradientPenalty, gpParameterGradients) = ComputeGradientPenaltyWithGradients(realImages, fakeImages, batchSize);
 
         // Wasserstein loss with gradient penalty: -E[D(real)] + E[D(fake)] + lambda * GP
         T wassersteinDistance = NumOps.Subtract(realScore, fakeScore);
@@ -255,8 +255,9 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             realGradients[i, 0] = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
         }
 
-        // Backpropagate through critic for real images
+        // Backpropagate through critic for real images and capture gradients
         Critic.Backpropagate(realGradients);
+        var realParameterGradients = Critic.GetParameterGradients().Clone();
 
         // Create gradients for fake images (minimize score)
         var fakeGradients = new Tensor<T>(fakeScores.Shape);
@@ -265,13 +266,165 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             fakeGradients[i, 0] = NumOps.Divide(NumOps.Negate(NumOps.One), NumOps.FromDouble(batchSize));
         }
 
-        // Backpropagate through critic for fake images
+        // Backpropagate through critic for fake images and capture gradients
         Critic.Backpropagate(fakeGradients);
+        var fakeParameterGradients = Critic.GetParameterGradients().Clone();
 
-        // Update critic parameters
-        UpdateCriticParameters();
+        // Combine all gradients: real gradients + fake gradients + scaled GP gradients
+        var combinedGradients = new Vector<T>(realParameterGradients.Length);
+        T gpScale = NumOps.FromDouble(_gradientPenaltyCoefficient);
+        for (int i = 0; i < combinedGradients.Length; i++)
+        {
+            // Sum all gradient contributions
+            T realGrad = realParameterGradients[i];
+            T fakeGrad = fakeParameterGradients[i];
+            T gpGrad = NumOps.Multiply(gpScale, gpParameterGradients[i]);
+            combinedGradients[i] = NumOps.Add(NumOps.Add(realGrad, fakeGrad), gpGrad);
+        }
+
+        // Update critic parameters with combined gradients
+        UpdateCriticParametersWithGradients(combinedGradients);
 
         return (criticLoss, gradientPenalty);
+    }
+
+    /// <summary>
+    /// Computes the gradient penalty and returns both the penalty value and the parameter gradients.
+    /// </summary>
+    private (T penalty, Vector<T> parameterGradients) ComputeGradientPenaltyWithGradients(
+        Tensor<T> realImages,
+        Tensor<T> fakeImages,
+        int batchSize)
+    {
+        var random = new Random();
+
+        // Create interpolated images
+        var interpolatedImages = new Tensor<T>(realImages.Shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            T epsilon = NumOps.FromDouble(random.NextDouble());
+
+            for (int i = 1; i < realImages.Shape.Length; i++)
+            {
+                T realValue = realImages[b, i - 1];
+                T fakeValue = fakeImages[b, i - 1];
+
+                T interpolated = NumOps.Add(
+                    NumOps.Multiply(epsilon, realValue),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, epsilon), fakeValue)
+                );
+
+                interpolatedImages[b, i - 1] = interpolated;
+            }
+        }
+
+        // Forward pass through critic
+        var interpolatedScores = Critic.Predict(interpolatedImages);
+
+        // Create gradients of all ones (we want to compute d(score)/d(input))
+        var ones = new Tensor<T>(interpolatedScores.Shape);
+        for (int i = 0; i < batchSize; i++)
+        {
+            ones[i, 0] = NumOps.One;
+        }
+
+        // Backpropagate to get gradients with respect to input
+        var inputGradients = Critic.Backpropagate(ones);
+
+        // Capture the parameter gradients from this backprop
+        var gpParameterGradients = Critic.GetParameterGradients().Clone();
+
+        // Compute L2 norm of gradients for each sample
+        T totalPenalty = NumOps.Zero;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            T gradNormSquared = NumOps.Zero;
+
+            for (int i = 1; i < inputGradients.Shape.Length; i++)
+            {
+                T gradValue = inputGradients[b, i - 1];
+                gradNormSquared = NumOps.Add(gradNormSquared, NumOps.Multiply(gradValue, gradValue));
+            }
+
+            T gradNorm = NumOps.Sqrt(gradNormSquared);
+            T deviation = NumOps.Subtract(gradNorm, NumOps.One);
+            T penalty = NumOps.Multiply(deviation, deviation);
+
+            totalPenalty = NumOps.Add(totalPenalty, penalty);
+        }
+
+        return (NumOps.Divide(totalPenalty, NumOps.FromDouble(batchSize)), gpParameterGradients);
+    }
+
+    /// <summary>
+    /// Updates critic parameters with pre-computed combined gradients.
+    /// </summary>
+    private void UpdateCriticParametersWithGradients(Vector<T> gradients)
+    {
+        var parameters = Critic.GetParameters();
+
+        if (_criticMomentum == null || _criticMomentum.Length != parameters.Length)
+        {
+            _criticMomentum = new Vector<T>(parameters.Length);
+            _criticMomentum.Fill(NumOps.Zero);
+        }
+
+        if (_criticSecondMoment == null || _criticSecondMoment.Length != parameters.Length)
+        {
+            _criticSecondMoment = new Vector<T>(parameters.Length);
+            _criticSecondMoment.Fill(NumOps.Zero);
+        }
+
+        // Gradient clipping
+        var gradientNorm = gradients.L2Norm();
+        var clipThreshold = NumOps.FromDouble(5.0);
+
+        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
+        {
+            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
+            for (int i = 0; i < gradients.Length; i++)
+            {
+                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
+            }
+        }
+
+        // Adam optimizer with beta1=0 (paper recommendation)
+        var learningRate = NumOps.FromDouble(_currentLearningRate);
+        var beta1 = NumOps.FromDouble(0.0);
+        var beta2 = NumOps.FromDouble(0.9);
+        var epsilon = NumOps.FromDouble(1e-8);
+
+        var updatedParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _criticMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _criticMomentum[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
+            );
+
+            _criticSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _criticSecondMoment[i]),
+                NumOps.Multiply(
+                    NumOps.Subtract(NumOps.One, beta2),
+                    NumOps.Multiply(gradients[i], gradients[i])
+                )
+            );
+
+            var adaptiveLR = NumOps.Divide(
+                learningRate,
+                NumOps.Add(NumOps.Sqrt(_criticSecondMoment[i]), epsilon)
+            );
+
+            updatedParameters[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(adaptiveLR, _criticMomentum[i])
+            );
+        }
+
+        Critic.UpdateParameters(updatedParameters);
     }
 
     /// <summary>
