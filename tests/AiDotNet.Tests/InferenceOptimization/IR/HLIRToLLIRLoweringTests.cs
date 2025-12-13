@@ -39,7 +39,8 @@ public class HLIRToLLIRLoweringTests
         var llirGraph = lowering.Lower(hlirGraph);
 
         Assert.Single(llirGraph.InputIds);
-        Assert.Contains(inputNode.Id, llirGraph.BufferShapes.Keys);
+        // BufferShapes is keyed by LLIR buffer IDs, not HLIR node IDs
+        Assert.Contains(llirGraph.InputIds[0], llirGraph.BufferShapes.Keys);
     }
 
     [Fact]

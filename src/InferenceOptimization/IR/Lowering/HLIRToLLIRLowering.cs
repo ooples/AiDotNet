@@ -208,12 +208,14 @@ public class HLIRToLLIRLowering<T> where T : struct
     {
         var inputIds = GetLLIRInputIds(node);
         var (m, n, k) = InferMatMulDims(node);
+        var bufferId = _llirGraph.AllocateBufferId();
 
         var transposeA = node.Attributes.TryGetValue("transposeA", out var ta) && (bool)ta;
         var transposeB = node.Attributes.TryGetValue("transposeB", out var tb) && (bool)tb;
 
         return new MatMulOp
         {
+            OutputId = bufferId,
             Name = node.Name,
             InputIds = inputIds,
             OutputShape = node.OutputType.Shape,
@@ -230,6 +232,7 @@ public class HLIRToLLIRLowering<T> where T : struct
 
     private LLIROp LowerElementwise(HLIRNode<T> node)
     {
+        var bufferId = _llirGraph.AllocateBufferId();
         var opType = node.Operation switch
         {
             OperationType.Add => ElementwiseOpType.Add,
@@ -241,6 +244,7 @@ public class HLIRToLLIRLowering<T> where T : struct
 
         return new ElementwiseOp
         {
+            OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
             OutputShape = node.OutputType.Shape,
@@ -254,6 +258,7 @@ public class HLIRToLLIRLowering<T> where T : struct
     private LLIROp LowerConv2D(HLIRNode<T> node)
     {
         var inputIds = GetLLIRInputIds(node);
+        var bufferId = _llirGraph.AllocateBufferId();
 
         // Extract convolution parameters
         var strideH = GetAttributeInt(node, "strideH", 1);
@@ -268,6 +273,7 @@ public class HLIRToLLIRLowering<T> where T : struct
 
         var op = new Conv2DOp
         {
+            OutputId = bufferId,
             Name = node.Name,
             InputIds = inputIds,
             OutputShape = node.OutputType.Shape,
@@ -296,19 +302,21 @@ public class HLIRToLLIRLowering<T> where T : struct
 
     private LLIROp LowerActivation(HLIRNode<T> node)
     {
+        var bufferId = _llirGraph.AllocateBufferId();
         var opType = node.Operation switch
         {
             OperationType.ReLU => ElementwiseOpType.ReLU,
             OperationType.Sigmoid => ElementwiseOpType.Sigmoid,
             OperationType.Tanh => ElementwiseOpType.Tanh,
             OperationType.GELU => ElementwiseOpType.GELU,
-            OperationType.Softmax => ElementwiseOpType.Exp, // Simplified
-            OperationType.LogSoftmax => ElementwiseOpType.Log,
+            OperationType.Softmax => ElementwiseOpType.Softmax,
+            OperationType.LogSoftmax => ElementwiseOpType.LogSoftmax,
             _ => ElementwiseOpType.ReLU
         };
 
         return new ElementwiseOp
         {
+            OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
             OutputShape = node.OutputType.Shape,
@@ -321,10 +329,11 @@ public class HLIRToLLIRLowering<T> where T : struct
 
     private LLIROp LowerNormalization(HLIRNode<T> node)
     {
-        // Normalization is lowered to a sequence of operations
-        // For now, create a fused op
+        var bufferId = _llirGraph.AllocateBufferId();
+
         var fusedOp = new FusedOp
         {
+            OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
             OutputShape = node.OutputType.Shape,
@@ -341,6 +350,7 @@ public class HLIRToLLIRLowering<T> where T : struct
 
     private LLIROp LowerPooling(HLIRNode<T> node)
     {
+        var bufferId = _llirGraph.AllocateBufferId();
         var reduceType = node.Operation switch
         {
             OperationType.MaxPool2D => ReduceType.Max,
@@ -350,6 +360,7 @@ public class HLIRToLLIRLowering<T> where T : struct
 
         return new ReduceOp
         {
+            OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
             OutputShape = node.OutputType.Shape,
@@ -362,6 +373,7 @@ public class HLIRToLLIRLowering<T> where T : struct
 
     private LLIROp LowerMemoryOp(HLIRNode<T> node)
     {
+        var bufferId = _llirGraph.AllocateBufferId();
         var memOpType = node.Operation switch
         {
             OperationType.Reshape => MemoryOpType.Reshape,
@@ -375,6 +387,7 @@ public class HLIRToLLIRLowering<T> where T : struct
 
         var op = new MemoryOp
         {
+            OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
             OutputShape = node.OutputType.Shape,
@@ -427,6 +440,7 @@ public class HLIRToLLIRLowering<T> where T : struct
 
     private LLIROp LowerReduction(HLIRNode<T> node)
     {
+        var bufferId = _llirGraph.AllocateBufferId();
         var reduceType = node.Operation switch
         {
             OperationType.ReduceSum => ReduceType.Sum,
@@ -441,6 +455,7 @@ public class HLIRToLLIRLowering<T> where T : struct
 
         return new ReduceOp
         {
+            OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
             OutputShape = node.OutputType.Shape,
@@ -461,8 +476,10 @@ public class HLIRToLLIRLowering<T> where T : struct
 
     private LLIROp LowerEmbedding(HLIRNode<T> node)
     {
+        var bufferId = _llirGraph.AllocateBufferId();
         return new MemoryOp
         {
+            OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
             OutputShape = node.OutputType.Shape,
@@ -475,8 +492,10 @@ public class HLIRToLLIRLowering<T> where T : struct
 
     private LLIROp LowerAttention(HLIRNode<T> node)
     {
+        var bufferId = _llirGraph.AllocateBufferId();
         return new FusedOp
         {
+            OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
             OutputShape = node.OutputType.Shape,
@@ -499,6 +518,7 @@ public class HLIRToLLIRLowering<T> where T : struct
 
     private LLIROp LowerFusedOperation(HLIRNode<T> node)
     {
+        var bufferId = _llirGraph.AllocateBufferId();
         var pattern = node.Operation switch
         {
             OperationType.FusedConvBatchNormReLU => "ConvBNReLU",
@@ -512,6 +532,7 @@ public class HLIRToLLIRLowering<T> where T : struct
 
         return new FusedOp
         {
+            OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
             OutputShape = node.OutputType.Shape,
@@ -524,15 +545,16 @@ public class HLIRToLLIRLowering<T> where T : struct
 
     private LLIROp LowerGeneric(HLIRNode<T> node)
     {
-        // Generic fallback
+        var bufferId = _llirGraph.AllocateBufferId();
         return new ElementwiseOp
         {
+            OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
             OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
-            ElementwiseType = ElementwiseOpType.Add, // Placeholder
+            ElementwiseType = ElementwiseOpType.Identity,
             SourceHLIRNodeId = node.Id
         };
     }
@@ -545,11 +567,14 @@ public class HLIRToLLIRLowering<T> where T : struct
             return;
         }
 
+        var bufferId = _llirGraph.AllocateBufferId();
+
         // Create a FusedOp that captures the fusion pattern
         var pattern = string.Join("_", fusedFrom.Select(n => n.Operation.ToString()));
 
         var fusedOp = new FusedOp
         {
+            OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
             OutputShape = node.OutputType.Shape,
@@ -570,7 +595,7 @@ public class HLIRToLLIRLowering<T> where T : struct
         }
 
         _llirGraph.AddOperation(fusedOp);
-        _hlirToLlirBufferMap[node.Id] = fusedOp.OutputId;
+        _hlirToLlirBufferMap[node.Id] = bufferId;
     }
 
     private LLIROp? LowerNodeToOp(HLIRNode<T> node)

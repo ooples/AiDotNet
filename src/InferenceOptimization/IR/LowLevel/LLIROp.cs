@@ -419,7 +419,9 @@ public enum ElementwiseOpType
     ReLU, Sigmoid, Tanh, GELU, SiLU, Swish,
     Max, Min, Abs, Neg,
     FusedMultiplyAdd,
-    Compare, Select
+    Compare, Select,
+    Softmax, LogSoftmax,
+    Identity
 }
 
 /// <summary>

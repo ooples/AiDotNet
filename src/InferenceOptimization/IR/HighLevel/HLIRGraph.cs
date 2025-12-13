@@ -180,11 +180,36 @@ public class HLIRGraph<T> where T : struct
     /// <summary>
     /// Replaces a node with another, updating all connections.
     /// </summary>
+    /// <param name="oldNode">The existing node to replace.</param>
+    /// <param name="newNode">The new node to insert in its place.</param>
+    /// <exception cref="InvalidOperationException">Thrown when oldNode is not in the graph.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs a complete replacement by:
+    /// <list type="number">
+    /// <item><description>Copying all input connections from oldNode to newNode</description></item>
+    /// <item><description>Redirecting all output connections from oldNode to newNode</description></item>
+    /// <item><description>Adding newNode to the graph</description></item>
+    /// <item><description>Removing oldNode from the graph</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// If newNode has the same ID as oldNode, a new ID will be automatically assigned
+    /// to avoid conflicts during the replacement process.
+    /// </para>
+    /// </remarks>
     public void ReplaceNode(HLIRNode<T> oldNode, HLIRNode<T> newNode)
     {
         if (!_nodeMap.ContainsKey(oldNode.Id))
         {
             throw new InvalidOperationException($"Node {oldNode.Id} not in graph");
+        }
+
+        // Handle case where new node has same ID as old node
+        // This prevents AddNode from failing when oldNode hasn't been removed yet
+        if (newNode.Id == oldNode.Id)
+        {
+            newNode.Id = -1; // Force new ID assignment during AddNode
         }
 
         // Copy connections
@@ -198,7 +223,7 @@ public class HLIRGraph<T> where T : struct
             output.ReplaceInput(oldNode, newNode);
         }
 
-        // Update graph
+        // Update graph - order matters: add new node first, then remove old
         AddNode(newNode);
         RemoveNode(oldNode);
 
@@ -267,11 +292,13 @@ public class HLIRGraph<T> where T : struct
     /// <summary>
     /// Gets nodes in reverse topological order (outputs before inputs).
     /// </summary>
+    /// <returns>A new list containing nodes in reverse topological order (does not modify cached order).</returns>
     public List<HLIRNode<T>> GetReverseTopologicalOrder()
     {
         var order = GetTopologicalOrder();
-        order.Reverse();
-        return order;
+        var reversed = new List<HLIRNode<T>>(order);
+        reversed.Reverse();
+        return reversed;
     }
 
     /// <summary>

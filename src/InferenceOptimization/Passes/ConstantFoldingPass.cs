@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.InferenceOptimization.Core;
 using AiDotNet.LinearAlgebra;
@@ -54,6 +55,32 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         return modified;
     }
 
+    /// <summary>
+    /// Attempts to fold a constant expression node into a single constant value.
+    /// </summary>
+    /// <param name="graph">The optimization graph containing the node.</param>
+    /// <param name="node">The operation node whose inputs are all constants.</param>
+    /// <returns>
+    /// True if the operation was successfully folded into a constant node;
+    /// false if folding could not be performed.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes the result of the operation at optimization time and replaces
+    /// the operation node with a constant node containing the precomputed result. This
+    /// eliminates runtime computation for operations involving only constants.
+    /// </para>
+    /// <para>
+    /// The folding process:
+    /// <list type="number">
+    /// <item><description>Compute the operation result using vectorized Engine operations</description></item>
+    /// <item><description>Create a new constant node with the computed result</description></item>
+    /// <item><description>Update all output connections to reference the new constant</description></item>
+    /// <item><description>Remove the original operation node from the graph</description></item>
+    /// </list>
+    /// </para>
+    /// <para><b>Thread Safety:</b> This method modifies the graph structure and is not thread-safe.</para>
+    /// </remarks>
     private bool TryFoldConstant(IOptimizationGraph<T> graph, OptimizationNode<T> node)
     {
         try
@@ -108,6 +135,22 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         }
     }
 
+    /// <summary>
+    /// Folds an addition operation by computing the elementwise sum of two constant tensors.
+    /// </summary>
+    /// <param name="node">The optimization node representing the addition operation.</param>
+    /// <returns>
+    /// A tensor containing the elementwise sum of the two input tensors,
+    /// or null if the operation cannot be folded.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the Engine's vectorized TensorAdd operation for optimal performance.
+    /// The operation requires both input tensors to have identical shapes since broadcasting
+    /// is not supported during constant folding.
+    /// </para>
+    /// <para><b>Performance:</b> Uses hardware-accelerated SIMD operations when available.</para>
+    /// </remarks>
     private Tensor<T>? FoldAdd(OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return null;
@@ -117,12 +160,43 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
 
         if (left == null || right == null) return null;
 
-        // In a real implementation, you would use tensor arithmetic here
-        // For now, we mark that folding is possible
-        node.Metadata["FoldingResult"] = "Add";
-        return left; // Placeholder
+        // Perform vectorized tensor addition using Engine operations
+        try
+        {
+            // Use elementwise addition - tensors must have compatible shapes
+            if (!left.Shape.SequenceEqual(right.Shape))
+            {
+                // Shape mismatch - cannot fold without broadcasting support
+                return null;
+            }
+
+            // Use Engine's vectorized addition for optimal performance
+            var engine = AiDotNetEngine.Current;
+            return engine.TensorAdd(left, right);
+        }
+        catch
+        {
+            // If tensor arithmetic fails, don't fold
+            return null;
+        }
     }
 
+    /// <summary>
+    /// Folds a subtraction operation by computing the elementwise difference of two constant tensors.
+    /// </summary>
+    /// <param name="node">The optimization node representing the subtraction operation.</param>
+    /// <returns>
+    /// A tensor containing the elementwise difference of the two input tensors (left - right),
+    /// or null if the operation cannot be folded.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the Engine's vectorized TensorSubtract operation for optimal performance.
+    /// The operation requires both input tensors to have identical shapes since broadcasting
+    /// is not supported during constant folding.
+    /// </para>
+    /// <para><b>Performance:</b> Uses hardware-accelerated SIMD operations when available.</para>
+    /// </remarks>
     private Tensor<T>? FoldSubtract(OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return null;
@@ -132,10 +206,44 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
 
         if (left == null || right == null) return null;
 
-        node.Metadata["FoldingResult"] = "Subtract";
-        return left; // Placeholder
+        // Perform vectorized tensor subtraction using Engine operations
+        try
+        {
+            if (!left.Shape.SequenceEqual(right.Shape))
+            {
+                // Shape mismatch - cannot fold without broadcasting support
+                return null;
+            }
+
+            // Use Engine's vectorized subtraction for optimal performance
+            var engine = AiDotNetEngine.Current;
+            return engine.TensorSubtract(left, right);
+        }
+        catch
+        {
+            // If tensor arithmetic fails, don't fold
+            return null;
+        }
     }
 
+    /// <summary>
+    /// Folds a multiplication operation by computing the elementwise product of two constant tensors.
+    /// </summary>
+    /// <param name="node">The optimization node representing the multiplication operation.</param>
+    /// <returns>
+    /// A tensor containing the elementwise product (Hadamard product) of the two input tensors,
+    /// or null if the operation cannot be folded.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the Engine's vectorized TensorMultiply operation for optimal performance.
+    /// The operation requires both input tensors to have identical shapes since broadcasting
+    /// is not supported during constant folding.
+    /// </para>
+    /// <para><b>Note:</b> This performs elementwise multiplication (Hadamard product), not
+    /// matrix multiplication. For matrix multiplication, use <see cref="FoldMatMul"/>.</para>
+    /// <para><b>Performance:</b> Uses hardware-accelerated SIMD operations when available.</para>
+    /// </remarks>
     private Tensor<T>? FoldMultiply(OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return null;
@@ -145,10 +253,42 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
 
         if (left == null || right == null) return null;
 
-        node.Metadata["FoldingResult"] = "Multiply";
-        return left; // Placeholder
+        // Perform vectorized tensor multiplication (elementwise) using Engine operations
+        try
+        {
+            if (!left.Shape.SequenceEqual(right.Shape))
+            {
+                // Shape mismatch - cannot fold without broadcasting support
+                return null;
+            }
+
+            // Use Engine's vectorized multiplication for optimal performance
+            var engine = AiDotNetEngine.Current;
+            return engine.TensorMultiply(left, right);
+        }
+        catch
+        {
+            // If tensor arithmetic fails, don't fold
+            return null;
+        }
     }
 
+    /// <summary>
+    /// Folds a division operation by computing the elementwise quotient of two constant tensors.
+    /// </summary>
+    /// <param name="node">The optimization node representing the division operation.</param>
+    /// <returns>
+    /// A tensor containing the elementwise quotient of the two input tensors,
+    /// or null if the operation cannot be folded.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the Engine's vectorized TensorDivide operation for optimal performance.
+    /// The operation requires both input tensors to have identical shapes since broadcasting
+    /// is not supported during constant folding.
+    /// </para>
+    /// <para><b>Performance:</b> Uses hardware-accelerated SIMD operations when available.</para>
+    /// </remarks>
     private Tensor<T>? FoldDivide(OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return null;
@@ -158,10 +298,43 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
 
         if (left == null || right == null) return null;
 
-        node.Metadata["FoldingResult"] = "Divide";
-        return left; // Placeholder
+        // Perform vectorized tensor division using Engine operations
+        try
+        {
+            if (!left.Shape.SequenceEqual(right.Shape))
+            {
+                // Shape mismatch - cannot fold without broadcasting support
+                return null;
+            }
+
+            // Use Engine's vectorized division for optimal performance
+            var engine = AiDotNetEngine.Current;
+            return engine.TensorDivide(left, right);
+        }
+        catch
+        {
+            // If tensor arithmetic fails (e.g., division by zero), don't fold
+            return null;
+        }
     }
 
+    /// <summary>
+    /// Folds a matrix multiplication operation by computing the product of two constant tensors.
+    /// </summary>
+    /// <param name="node">The optimization node representing the matrix multiplication operation.</param>
+    /// <returns>
+    /// A tensor containing the matrix product of the two input tensors,
+    /// or null if the operation cannot be folded.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the Engine's vectorized TensorMatMul operation for optimal performance.
+    /// Matrix multiplication requires 2D tensors with compatible dimensions:
+    /// left[M,K] × right[K,N] = result[M,N].
+    /// </para>
+    /// <para><b>Performance:</b> Uses optimized BLAS-like operations when available,
+    /// with cache-friendly memory access patterns and potential GPU acceleration.</para>
+    /// </remarks>
     private Tensor<T>? FoldMatMul(OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return null;
@@ -171,8 +344,31 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
 
         if (left == null || right == null) return null;
 
-        node.Metadata["FoldingResult"] = "MatMul";
-        return left; // Placeholder
+        // Matrix multiplication requires 2D tensors with compatible dimensions
+        try
+        {
+            if (left.Shape.Length != 2 || right.Shape.Length != 2)
+            {
+                return null;
+            }
+
+            int k = left.Shape[1];
+
+            // Check dimension compatibility: left[m,k] @ right[k,n] = result[m,n]
+            if (k != right.Shape[0])
+            {
+                return null;
+            }
+
+            // Use Engine's vectorized matrix multiplication for optimal performance
+            var engine = AiDotNetEngine.Current;
+            return engine.TensorMatMul(left, right);
+        }
+        catch
+        {
+            // If matrix multiplication fails, don't fold
+            return null;
+        }
     }
 
     public override bool CanApply(IOptimizationGraph<T> graph)
