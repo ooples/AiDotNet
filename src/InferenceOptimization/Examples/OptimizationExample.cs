@@ -26,7 +26,7 @@ public class OptimizationExample
             // Output Dense
         };
 
-        // Build computation graph
+        // Build optimization graph
         var graphBuilder = new GraphBuilder<double>();
         var graph = graphBuilder.BuildFromLayers(layers);
 

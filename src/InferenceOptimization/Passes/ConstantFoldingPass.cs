@@ -28,7 +28,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         OperationType.MatMul
     };
 
-    public override bool Apply(IComputationGraph<T> graph)
+    public override bool Apply(IOptimizationGraph<T> graph)
     {
         bool modified = false;
         bool changed;
@@ -54,7 +54,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         return modified;
     }
 
-    private bool TryFoldConstant(IComputationGraph<T> graph, ComputationNode<T> node)
+    private bool TryFoldConstant(IOptimizationGraph<T> graph, OptimizationNode<T> node)
     {
         try
         {
@@ -75,7 +75,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
             }
 
             // Create a new constant node with the result
-            var constantNode = new ComputationNode<T>
+            var constantNode = new OptimizationNode<T>
             {
                 OperationType = OperationType.Constant,
                 Name = $"{node.Name}_folded",
@@ -108,7 +108,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         }
     }
 
-    private Tensor<T>? FoldAdd(ComputationNode<T> node)
+    private Tensor<T>? FoldAdd(OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return null;
 
@@ -123,7 +123,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         return left; // Placeholder
     }
 
-    private Tensor<T>? FoldSubtract(ComputationNode<T> node)
+    private Tensor<T>? FoldSubtract(OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return null;
 
@@ -136,7 +136,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         return left; // Placeholder
     }
 
-    private Tensor<T>? FoldMultiply(ComputationNode<T> node)
+    private Tensor<T>? FoldMultiply(OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return null;
 
@@ -149,7 +149,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         return left; // Placeholder
     }
 
-    private Tensor<T>? FoldDivide(ComputationNode<T> node)
+    private Tensor<T>? FoldDivide(OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return null;
 
@@ -162,7 +162,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         return left; // Placeholder
     }
 
-    private Tensor<T>? FoldMatMul(ComputationNode<T> node)
+    private Tensor<T>? FoldMatMul(OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return null;
 
@@ -175,7 +175,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         return left; // Placeholder
     }
 
-    public override bool CanApply(IComputationGraph<T> graph)
+    public override bool CanApply(IOptimizationGraph<T> graph)
     {
         return base.CanApply(graph) &&
                graph.Nodes.Any(n => n.OperationType == OperationType.Constant);

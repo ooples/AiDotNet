@@ -28,7 +28,7 @@ public class InPlaceOptimizationPass<T> : OptimizationPassBase<T> where T : stru
         OperationType.Clip
     };
 
-    public override bool Apply(IComputationGraph<T> graph)
+    public override bool Apply(IOptimizationGraph<T> graph)
     {
         bool modified = false;
 
@@ -42,7 +42,7 @@ public class InPlaceOptimizationPass<T> : OptimizationPassBase<T> where T : stru
         return modified;
     }
 
-    private bool CanBeInPlace(ComputationNode<T> node)
+    private bool CanBeInPlace(OptimizationNode<T> node)
     {
         // Check if this operation can safely be performed in-place
         // An operation can be in-place if:
@@ -87,7 +87,7 @@ public class InPlaceOptimizationPass<T> : OptimizationPassBase<T> where T : stru
                opType == OperationType.Divide;
     }
 
-    public override bool CanApply(IComputationGraph<T> graph)
+    public override bool CanApply(IOptimizationGraph<T> graph)
     {
         return base.CanApply(graph) &&
                graph.Nodes.Any(n => InPlaceCandidates.Contains(n.OperationType));

@@ -14,7 +14,7 @@ public class ConvBatchNormReLUFusionPass<T> : OptimizationPassBase<T> where T : 
     public override OptimizationPassType PassType => OptimizationPassType.ConvBatchNormReLUFusion;
     public override string Name => "Conv + BatchNorm + ReLU Fusion";
 
-    public override bool Apply(IComputationGraph<T> graph)
+    public override bool Apply(IOptimizationGraph<T> graph)
     {
         bool modified = false;
 
@@ -51,7 +51,7 @@ public class ConvBatchNormReLUFusionPass<T> : OptimizationPassBase<T> where T : 
         return modified;
     }
 
-    private void FuseConvBatchNormReLU(IComputationGraph<T> graph, List<ComputationNode<T>> nodes)
+    private void FuseConvBatchNormReLU(IOptimizationGraph<T> graph, List<OptimizationNode<T>> nodes)
     {
         // Create fused node
         var fusedNode = FuseNodes(graph, nodes, OperationType.FusedConvBatchNormReLU);
@@ -64,7 +64,7 @@ public class ConvBatchNormReLUFusionPass<T> : OptimizationPassBase<T> where T : 
         fusedNode.CanOperateInPlace = true; // ReLU can be in-place
     }
 
-    public override bool CanApply(IComputationGraph<T> graph)
+    public override bool CanApply(IOptimizationGraph<T> graph)
     {
         return base.CanApply(graph) &&
                graph.Nodes.Any(n => n.OperationType == OperationType.Convolution ||

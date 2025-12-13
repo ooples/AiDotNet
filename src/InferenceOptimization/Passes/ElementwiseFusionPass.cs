@@ -29,7 +29,7 @@ public class ElementwiseFusionPass<T> : OptimizationPassBase<T> where T : struct
         OperationType.Tanh
     };
 
-    public override bool Apply(IComputationGraph<T> graph)
+    public override bool Apply(IOptimizationGraph<T> graph)
     {
         bool modified = false;
 
@@ -49,9 +49,9 @@ public class ElementwiseFusionPass<T> : OptimizationPassBase<T> where T : struct
         return modified;
     }
 
-    private List<ComputationNode<T>> FindElementwiseChain(ComputationNode<T> startNode)
+    private List<OptimizationNode<T>> FindElementwiseChain(OptimizationNode<T> startNode)
     {
-        var chain = new List<ComputationNode<T>> { startNode };
+        var chain = new List<OptimizationNode<T>> { startNode };
         var current = startNode;
 
         // Follow the chain forward
@@ -78,27 +78,27 @@ public class ElementwiseFusionPass<T> : OptimizationPassBase<T> where T : struct
         return chain;
     }
 
-    private void FuseElementwiseChain(IComputationGraph<T> graph, List<ComputationNode<T>> chain)
+    private void FuseElementwiseChain(IOptimizationGraph<T> graph, List<OptimizationNode<T>> chain)
     {
         var firstNode = chain[0];
         var lastNode = chain[chain.Count - 1];
 
         // Create fused elementwise node
-        var fusedNode = new ComputationNode<T>
+        var fusedNode = new OptimizationNode<T>
         {
             OperationType = OperationType.Custom,
             Name = $"{firstNode.Name}_elementwise_fused",
             OutputShape = lastNode.OutputShape,
             IsFused = true,
             CanOperateInPlace = chain.All(n => n.CanOperateInPlace),
-            FusedFrom = new List<ComputationNode<T>>(chain)
+            FusedFrom = new List<OptimizationNode<T>>(chain)
         };
 
         // Store the operation sequence for code generation
         fusedNode.Metadata["OperationSequence"] = chain.Select(n => n.OperationType).ToList();
 
         // Collect all unique inputs from the chain
-        var allInputs = new HashSet<ComputationNode<T>>(chain
+        var allInputs = new HashSet<OptimizationNode<T>>(chain
             .SelectMany(node => node.Inputs)
             .Where(input => !chain.Contains(input)));
 
@@ -130,7 +130,7 @@ public class ElementwiseFusionPass<T> : OptimizationPassBase<T> where T : struct
         }
     }
 
-    public override bool CanApply(IComputationGraph<T> graph)
+    public override bool CanApply(IOptimizationGraph<T> graph)
     {
         return base.CanApply(graph) &&
                graph.Nodes.Any(n => ElementwiseOps.Contains(n.OperationType));

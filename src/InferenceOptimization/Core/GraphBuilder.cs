@@ -9,24 +9,24 @@ namespace AiDotNet.InferenceOptimization.Core;
 /// <typeparam name="T">The numeric type (double, float, decimal)</typeparam>
 public class GraphBuilder<T> where T : struct
 {
-    private readonly ComputationGraph<T> _graph;
-    private readonly Dictionary<object, ComputationNode<T>> _layerToNode;
+    private readonly OptimizationGraph<T> _graph;
+    private readonly Dictionary<object, OptimizationNode<T>> _layerToNode;
 
     public GraphBuilder()
     {
-        _graph = new ComputationGraph<T>();
-        _layerToNode = new Dictionary<object, ComputationNode<T>>();
+        _graph = new OptimizationGraph<T>();
+        _layerToNode = new Dictionary<object, OptimizationNode<T>>();
     }
 
     /// <summary>
     /// Creates a graph from a list of layers.
     /// </summary>
-    public IComputationGraph<T> BuildFromLayers(IEnumerable<ILayer<T>> layers)
+    public IOptimizationGraph<T> BuildFromLayers(IEnumerable<ILayer<T>> layers)
     {
-        ComputationNode<T>? previousNode = null;
+        OptimizationNode<T>? previousNode = null;
 
         // Create input node
-        var inputNode = new ComputationNode<T>
+        var inputNode = new OptimizationNode<T>
         {
             OperationType = OperationType.Input,
             Name = "input"
@@ -51,7 +51,7 @@ public class GraphBuilder<T> where T : struct
         }
 
         // Create output node
-        var outputNode = new ComputationNode<T>
+        var outputNode = new OptimizationNode<T>
         {
             OperationType = OperationType.Output,
             Name = "output"
@@ -70,12 +70,12 @@ public class GraphBuilder<T> where T : struct
     /// <summary>
     /// Converts a layer to a computation node.
     /// </summary>
-    private ComputationNode<T> LayerToNode(ILayer<T> layer)
+    private OptimizationNode<T> LayerToNode(ILayer<T> layer)
     {
         var layerType = layer.GetType();
         var operationType = InferOperationType(layerType.Name);
 
-        var node = new ComputationNode<T>
+        var node = new OptimizationNode<T>
         {
             OperationType = operationType,
             Name = layerType.Name,
@@ -159,7 +159,7 @@ public class GraphBuilder<T> where T : struct
     /// <summary>
     /// Gets the computation graph.
     /// </summary>
-    public IComputationGraph<T> GetGraph()
+    public IOptimizationGraph<T> GetGraph()
     {
         return _graph;
     }

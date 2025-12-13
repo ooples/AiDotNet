@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -421,5 +423,122 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new LocallyWeightedRegression<T>(_options, Regularization);
+    }
+
+    /// <summary>
+    /// Gets or sets whether to use soft (differentiable) mode for JIT compilation support.
+    /// </summary>
+    /// <value><c>true</c> to enable soft mode; <c>false</c> (default) for traditional LWR behavior.</value>
+    /// <remarks>
+    /// <para>
+    /// When enabled, LocallyWeightedRegression uses a differentiable approximation that embeds
+    /// all training data as constants in the computation graph and computes attention-weighted
+    /// predictions using the softmax of negative squared distances.
+    /// </para>
+    /// <para><b>For Beginners:</b> Soft mode allows this model to be JIT compiled for faster inference.
+    /// Traditional LWR solves a new weighted least squares problem for each prediction, which
+    /// cannot be represented as a static computation graph. Soft mode uses a simplified approach
+    /// that enables JIT compilation while giving similar results for smooth data.
+    /// </para>
+    /// </remarks>
+    public bool UseSoftMode
+    {
+        get => _options.UseSoftMode;
+        set => _options.UseSoftMode = value;
+    }
+
+    /// <summary>
+    /// Gets whether this model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> when <see cref="UseSoftMode"/> is enabled and training data is available;
+    /// <c>false</c> otherwise.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// When <see cref="UseSoftMode"/> is enabled, LWR can be exported as a differentiable
+    /// computation graph using attention-weighted averaging. The training data is embedded
+    /// as constants in the computation graph.
+    /// </para>
+    /// <para>
+    /// When <see cref="UseSoftMode"/> is disabled, JIT compilation is not supported because
+    /// traditional LWR requires solving a weighted least squares problem for each query point,
+    /// which cannot be represented as a static computation graph.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => UseSoftMode && _xTrain.Rows > 0;
+
+    /// <summary>
+    /// Exports the model's computation as a graph of operations.
+    /// </summary>
+    /// <param name="inputNodes">The input nodes for the computation graph.</param>
+    /// <returns>The root node of the exported computation graph.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when <see cref="UseSoftMode"/> is false.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no training data is available.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// When soft mode is enabled, this exports the LWR model as a differentiable computation
+    /// graph using <see cref="TensorOperations{T}.SoftLocallyWeighted"/> operations. The training data
+    /// (features and targets) are embedded as constants in the graph.
+    /// </para>
+    /// <para>
+    /// The soft LWR approximation computes:
+    /// - distances[i] = ||input - xTrain[i]||²
+    /// - weights = softmax(-distances / bandwidth)
+    /// - output = Σ weights[i] * yTrain[i]
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (!UseSoftMode)
+        {
+            throw new NotSupportedException(
+                "LocallyWeightedRegression does not support JIT compilation in traditional mode because it " +
+                "solves a new weighted least squares problem for each query point.\n\n" +
+                "To enable JIT compilation, set UseSoftMode = true to use soft (differentiable) LWR " +
+                "with attention-weighted outputs.");
+        }
+
+        if (_xTrain.Rows == 0)
+        {
+            throw new InvalidOperationException(
+                "Cannot export computation graph: the LWR model has not been trained. " +
+                "Call Train() first to store the training data.");
+        }
+
+        int numFeatures = _xTrain.Columns;
+        int numSamples = _xTrain.Rows;
+
+        // Create input variable node
+        var inputTensor = new Tensor<T>(new[] { numFeatures });
+        var input = TensorOperations<T>.Variable(inputTensor, "input");
+        inputNodes.Add(input);
+
+        // Create constants for training features
+        var xTrainTensor = new Tensor<T>(new[] { numSamples, numFeatures });
+        for (int i = 0; i < numSamples; i++)
+        {
+            for (int j = 0; j < numFeatures; j++)
+            {
+                xTrainTensor[i * numFeatures + j] = _xTrain[i, j];
+            }
+        }
+        var xTrainNode = TensorOperations<T>.Constant(xTrainTensor, "x_train");
+
+        // Create constants for training targets
+        var yTrainTensor = new Tensor<T>(new[] { numSamples });
+        for (int i = 0; i < numSamples; i++)
+        {
+            yTrainTensor[i] = _yTrain[i];
+        }
+        var yTrainNode = TensorOperations<T>.Constant(yTrainTensor, "y_train");
+
+        // Use SoftLocallyWeighted operation with bandwidth parameter
+        var bandwidth = NumOps.FromDouble(_options.Bandwidth);
+        return TensorOperations<T>.SoftLocallyWeighted(input, xTrainNode, yTrainNode, bandwidth);
     }
 }

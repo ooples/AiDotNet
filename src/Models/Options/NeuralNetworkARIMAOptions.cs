@@ -90,8 +90,8 @@ public class NeuralNetworkARIMAOptions<T> : TimeSeriesRegressionOptions<T>
     /// Imagine you're tracking daily temperatures:
     /// - If temperatures are steadily rising over time (a trend), it's harder to predict exact values
     /// - Differencing transforms the data to focus on changes rather than absolute values
-    /// - For example, instead of predicting "it will be 75캟 tomorrow," the model might work with 
-    ///   "it will be 2캟 warmer than today"
+    /// - For example, instead of predicting "it will be 75째F tomorrow," the model might work with 
+    ///   "it will be 2째F warmer than today"
     /// 
     /// The differencing order tells the model how many times to apply this transformation:
     /// - Order 0: Use the original values (no differencing)
@@ -120,7 +120,7 @@ public class NeuralNetworkARIMAOptions<T> : TimeSeriesRegressionOptions<T>
     /// the model considers.
     /// 
     /// Continuing with our temperature example:
-    /// - Suppose yesterday the model predicted 75캟 but it was actually 78캟 (an error of +3캟)
+    /// - Suppose yesterday the model predicted 75째F but it was actually 78째F (an error of +3째F)
     /// - The MA part lets the model learn from this error
     /// 
     /// The default value of 1 means:

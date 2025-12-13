@@ -23,30 +23,8 @@ namespace AiDotNet.WaveletFunctions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class MexicanHatWavelet<T> : IWaveletFunction<T>
+public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
 {
-    /// <summary>
-    /// Provides mathematical operations for the generic type T.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field holds an implementation of numeric operations that can work with the generic type T.
-    /// It provides methods for basic arithmetic operations, exponentials, comparisons, and conversions
-    /// that are used throughout the wavelet calculations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a helper that lets us do math with different number types.
-    /// 
-    /// Because this class can work with different types of numbers (like float, double, or decimal),
-    /// we need a special helper that knows how to:
-    /// - Perform addition, subtraction, multiplication, and division
-    /// - Calculate exponential functions and squares
-    /// - Convert between different number formats
-    /// 
-    /// This allows the wavelet code to work with whatever number type you choose,
-    /// without having to write separate code for each number type.
-    /// </para>
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// The standard deviation parameter that controls the width of the Mexican Hat wavelet.
@@ -95,8 +73,7 @@ public class MexicanHatWavelet<T> : IWaveletFunction<T>
     /// </remarks>
     public MexicanHatWavelet(double sigma = 1.0)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        _sigma = _numOps.FromDouble(sigma);
+        _sigma = NumOps.FromDouble(sigma);
     }
 
     /// <summary>
@@ -107,7 +84,7 @@ public class MexicanHatWavelet<T> : IWaveletFunction<T>
     /// <remarks>
     /// <para>
     /// This method computes the value of the Mexican Hat wavelet function at the given input point.
-    /// The Mexican Hat wavelet is defined as (2 - x²/s²) * e^(-x²/2s²), which is proportional to
+    /// The Mexican Hat wavelet is defined as (2 - xÂ²/sÂ²) * e^(-xÂ²/2sÂ²), which is proportional to
     /// the second derivative of a Gaussian function. This wavelet has a distinctive shape with a
     /// central peak flanked by two symmetric valleys.
     /// </para>
@@ -123,13 +100,13 @@ public class MexicanHatWavelet<T> : IWaveletFunction<T>
     /// that have a transition from one state to another and back again.
     /// </para>
     /// </remarks>
-    public T Calculate(T x)
+    public override T Calculate(T x)
     {
-        T x2 = _numOps.Square(x);
-        T sigma2 = _numOps.Square(_sigma);
-        T term1 = _numOps.Subtract(_numOps.FromDouble(2.0), _numOps.Divide(x2, sigma2));
-        T term2 = _numOps.Exp(_numOps.Negate(_numOps.Divide(x2, _numOps.Multiply(_numOps.FromDouble(2.0), sigma2))));
-        return _numOps.Multiply(term1, term2);
+        T x2 = NumOps.Square(x);
+        T sigma2 = NumOps.Square(_sigma);
+        T term1 = NumOps.Subtract(NumOps.FromDouble(2.0), NumOps.Divide(x2, sigma2));
+        T term2 = NumOps.Exp(NumOps.Negate(NumOps.Divide(x2, NumOps.Multiply(NumOps.FromDouble(2.0), sigma2))));
+        return NumOps.Multiply(term1, term2);
     }
 
     /// <summary>
@@ -157,18 +134,18 @@ public class MexicanHatWavelet<T> : IWaveletFunction<T>
     /// Together, they give you complementary information about the features in your data.
     /// </para>
     /// </remarks>
-    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int size = input.Length;
         var approximation = new Vector<T>(size);
         var detail = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T x = _numOps.FromDouble(i - size / 2);
+            T x = NumOps.FromDouble(i - size / 2);
             T waveletValue = Calculate(x);
             T derivativeValue = CalculateDerivative(x);
-            approximation[i] = _numOps.Multiply(waveletValue, input[i]);
-            detail[i] = _numOps.Multiply(derivativeValue, input[i]);
+            approximation[i] = NumOps.Multiply(waveletValue, input[i]);
+            detail[i] = NumOps.Multiply(derivativeValue, input[i]);
         }
 
         return (approximation, detail);
@@ -196,13 +173,13 @@ public class MexicanHatWavelet<T> : IWaveletFunction<T>
     /// a center point exactly at zero.
     /// </para>
     /// </remarks>
-    public Vector<T> GetScalingCoefficients()
+    public override Vector<T> GetScalingCoefficients()
     {
         int size = 101; // Odd number to have a center point
         var coefficients = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T x = _numOps.Divide(_numOps.FromDouble(i - size / 2), _numOps.FromDouble(size / 4));
+            T x = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size / 4));
             coefficients[i] = Calculate(x);
         }
 
@@ -231,13 +208,13 @@ public class MexicanHatWavelet<T> : IWaveletFunction<T>
     /// these coefficients detect places where those patterns are starting to form or dissolve.
     /// </para>
     /// </remarks>
-    public Vector<T> GetWaveletCoefficients()
+    public override Vector<T> GetWaveletCoefficients()
     {
         int size = 101; // Odd number to have a center point
         var coefficients = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T x = _numOps.Divide(_numOps.FromDouble(i - size / 2), _numOps.FromDouble(size / 4));
+            T x = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size / 4));
             coefficients[i] = CalculateDerivative(x);
         }
 
@@ -269,12 +246,12 @@ public class MexicanHatWavelet<T> : IWaveletFunction<T>
     /// </remarks>
     private T CalculateDerivative(T x)
     {
-        T x2 = _numOps.Square(x);
-        T sigma2 = _numOps.Square(_sigma);
-        T term1 = _numOps.Multiply(x, _numOps.Divide(_numOps.FromDouble(3.0), sigma2));
-        T term2 = _numOps.Subtract(_numOps.FromDouble(1.0), _numOps.Divide(x2, sigma2));
-        T term3 = _numOps.Exp(_numOps.Negate(_numOps.Divide(x2, _numOps.Multiply(_numOps.FromDouble(2.0), sigma2))));
+        T x2 = NumOps.Square(x);
+        T sigma2 = NumOps.Square(_sigma);
+        T term1 = NumOps.Multiply(x, NumOps.Divide(NumOps.FromDouble(3.0), sigma2));
+        T term2 = NumOps.Subtract(NumOps.FromDouble(1.0), NumOps.Divide(x2, sigma2));
+        T term3 = NumOps.Exp(NumOps.Negate(NumOps.Divide(x2, NumOps.Multiply(NumOps.FromDouble(2.0), sigma2))));
 
-        return _numOps.Multiply(_numOps.Multiply(term1, term2), term3);
+        return NumOps.Multiply(NumOps.Multiply(term1, term2), term3);
     }
 }

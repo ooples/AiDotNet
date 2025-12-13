@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Helpers;
+
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
@@ -109,16 +109,24 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
             var sentences = SplitIntoSentences(text);
             var importantSentences = ExtractImportantSentences(sentences, queryTerms);
 
+            const string ellipsis = "...";
+            int ellipsisLength = ellipsis.Length;
+
             var summary = new System.Text.StringBuilder();
             foreach (var sentence in importantSentences)
             {
                 if (summary.Length + sentence.Length > _maxSummaryLength)
                 {
                     // If we haven't added anything yet and the first sentence is too long,
-                    // truncate it to fit
+                    // truncate it to fit within maxSummaryLength (accounting for ellipsis)
                     if (summary.Length == 0 && sentence.Length > _maxSummaryLength)
                     {
-                        return sentence.Substring(0, _maxSummaryLength).Trim() + "...";
+                        // For very small limits, just truncate without ellipsis
+                        if (_maxSummaryLength <= ellipsisLength)
+                        {
+                            return sentence.Substring(0, _maxSummaryLength);
+                        }
+                        return sentence.Substring(0, _maxSummaryLength - ellipsisLength).Trim() + ellipsis;
                     }
                     break;
                 }
@@ -127,9 +135,18 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
 
             var result = summary.ToString().Trim();
             // If result is empty (all sentences too long), return truncated first sentence
-            return string.IsNullOrEmpty(result) && importantSentences.Any()
-                ? importantSentences.First().Substring(0, Math.Min(importantSentences.First().Length, _maxSummaryLength)).Trim() + "..."
-                : result;
+            if (string.IsNullOrEmpty(result) && importantSentences.Any())
+            {
+                var firstSentence = importantSentences.First();
+                // For very small limits, just truncate without ellipsis
+                if (_maxSummaryLength <= ellipsisLength)
+                {
+                    return firstSentence.Substring(0, Math.Min(firstSentence.Length, _maxSummaryLength));
+                }
+                int truncateLength = Math.Min(firstSentence.Length, _maxSummaryLength - ellipsisLength);
+                return firstSentence.Substring(0, truncateLength).Trim() + ellipsis;
+            }
+            return result;
         }
 
         private List<string> ExtractImportantSentences(List<string> sentences, List<string>? queryTerms = null)

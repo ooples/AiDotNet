@@ -47,7 +47,8 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// <param name="model">The model to optimize.</param>
     public MiniBatchGradientDescentOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        MiniBatchGradientDescentOptions<T, TInput, TOutput>? options = null)
+        MiniBatchGradientDescentOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
         : base(model, options ?? new())
     {
         _options = options ?? new MiniBatchGradientDescentOptions<T, TInput, TOutput>();
@@ -165,12 +166,12 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// <returns>An updated symbolic model with improved coefficients.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        // === Vectorized Mini-Batch GD Update using IEngine (Phase B: US-GPU-015) ===
+        // params = params - learningRate * gradient
+
         var parameters = currentSolution.GetParameters();
-        var newCoefficients = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            newCoefficients[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(CurrentLearningRate, gradient[i]));
-        }
+        var scaledGradient = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
+        var newCoefficients = (Vector<T>)Engine.Subtract(parameters, scaledGradient);
 
         return currentSolution.WithParameters(newCoefficients);
     }
@@ -205,16 +206,11 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
                 nameof(appliedGradients));
         }
 
-        var original = new T[updatedParameters.Length];
-
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            // Reverse: original = updated + lr * gradient
-            var gradientStep = NumOps.Multiply(CurrentLearningRate, appliedGradients[i]);
-            original[i] = NumOps.Add(updatedParameters[i], gradientStep);
-        }
-
-        return new Vector<T>(original);
+        // === Vectorized Reverse Mini-Batch GD Update (Phase B: US-GPU-015) ===
+        // Reverse: original = updated + lr * gradient
+        var currentLrVec = Vector<T>.CreateDefault(appliedGradients.Length, CurrentLearningRate);
+        var gradientStep = (Vector<T>)Engine.Multiply(currentLrVec, appliedGradients);
+        return (Vector<T>)Engine.Add(updatedParameters, gradientStep);
     }
 
     /// <summary>

@@ -13,7 +13,7 @@ public class DeadCodeEliminationPass<T> : OptimizationPassBase<T> where T : stru
     public override OptimizationPassType PassType => OptimizationPassType.DeadCodeElimination;
     public override string Name => "Dead Code Elimination";
 
-    public override bool Apply(IComputationGraph<T> graph)
+    public override bool Apply(IOptimizationGraph<T> graph)
     {
         bool modified = false;
 
@@ -50,10 +50,10 @@ public class DeadCodeEliminationPass<T> : OptimizationPassBase<T> where T : stru
         return modified;
     }
 
-    private HashSet<ComputationNode<T>> MarkReachableNodes(IComputationGraph<T> graph)
+    private HashSet<OptimizationNode<T>> MarkReachableNodes(IOptimizationGraph<T> graph)
     {
-        var reachable = new HashSet<ComputationNode<T>>();
-        var queue = new Queue<ComputationNode<T>>();
+        var reachable = new HashSet<OptimizationNode<T>>();
+        var queue = new Queue<OptimizationNode<T>>();
 
         // Start from output nodes and work backwards
         foreach (var output in graph.OutputNodes)
@@ -82,7 +82,7 @@ public class DeadCodeEliminationPass<T> : OptimizationPassBase<T> where T : stru
         return reachable;
     }
 
-    public override bool CanApply(IComputationGraph<T> graph)
+    public override bool CanApply(IOptimizationGraph<T> graph)
     {
         return base.CanApply(graph) && graph.OutputNodes.Count > 0;
     }

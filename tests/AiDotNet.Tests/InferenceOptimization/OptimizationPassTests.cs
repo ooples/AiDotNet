@@ -11,12 +11,12 @@ public class OptimizationPassTests
     public void ConvBatchNormFusionPass_ShouldFuseConvAndBatchNorm()
     {
         // Arrange
-        var graph = new ComputationGraph<double>();
+        var graph = new OptimizationGraph<double>();
 
-        var input = new ComputationNode<double> { OperationType = OperationType.Input, Name = "input" };
-        var conv = new ComputationNode<double> { OperationType = OperationType.Convolution, Name = "conv" };
-        var bn = new ComputationNode<double> { OperationType = OperationType.BatchNormalization, Name = "bn" };
-        var output = new ComputationNode<double> { OperationType = OperationType.Output, Name = "output" };
+        var input = new OptimizationNode<double> { OperationType = OperationType.Input, Name = "input" };
+        var conv = new OptimizationNode<double> { OperationType = OperationType.Convolution, Name = "conv" };
+        var bn = new OptimizationNode<double> { OperationType = OperationType.BatchNormalization, Name = "bn" };
+        var output = new OptimizationNode<double> { OperationType = OperationType.Output, Name = "output" };
 
         conv.AddInput(input);
         bn.AddInput(conv);
@@ -43,13 +43,13 @@ public class OptimizationPassTests
     public void ConvBatchNormReLUFusionPass_ShouldFuseThreeOperations()
     {
         // Arrange
-        var graph = new ComputationGraph<double>();
+        var graph = new OptimizationGraph<double>();
 
-        var input = new ComputationNode<double> { OperationType = OperationType.Input, Name = "input" };
-        var conv = new ComputationNode<double> { OperationType = OperationType.Convolution, Name = "conv" };
-        var bn = new ComputationNode<double> { OperationType = OperationType.BatchNormalization, Name = "bn" };
-        var relu = new ComputationNode<double> { OperationType = OperationType.ReLU, Name = "relu" };
-        var output = new ComputationNode<double> { OperationType = OperationType.Output, Name = "output" };
+        var input = new OptimizationNode<double> { OperationType = OperationType.Input, Name = "input" };
+        var conv = new OptimizationNode<double> { OperationType = OperationType.Convolution, Name = "conv" };
+        var bn = new OptimizationNode<double> { OperationType = OperationType.BatchNormalization, Name = "bn" };
+        var relu = new OptimizationNode<double> { OperationType = OperationType.ReLU, Name = "relu" };
+        var output = new OptimizationNode<double> { OperationType = OperationType.Output, Name = "output" };
 
         conv.AddInput(input);
         bn.AddInput(conv);
@@ -76,12 +76,12 @@ public class OptimizationPassTests
     public void DeadCodeEliminationPass_ShouldRemoveUnusedNodes()
     {
         // Arrange
-        var graph = new ComputationGraph<double>();
+        var graph = new OptimizationGraph<double>();
 
-        var input = new ComputationNode<double> { OperationType = OperationType.Input, Name = "input" };
-        var relu1 = new ComputationNode<double> { OperationType = OperationType.ReLU, Name = "relu1" };
-        var relu2 = new ComputationNode<double> { OperationType = OperationType.ReLU, Name = "relu2" }; // Dead code
-        var output = new ComputationNode<double> { OperationType = OperationType.Output, Name = "output" };
+        var input = new OptimizationNode<double> { OperationType = OperationType.Input, Name = "input" };
+        var relu1 = new OptimizationNode<double> { OperationType = OperationType.ReLU, Name = "relu1" };
+        var relu2 = new OptimizationNode<double> { OperationType = OperationType.ReLU, Name = "relu2" }; // Dead code
+        var output = new OptimizationNode<double> { OperationType = OperationType.Output, Name = "output" };
 
         relu1.AddInput(input);
         relu2.AddInput(input); // Not connected to output
@@ -107,23 +107,23 @@ public class OptimizationPassTests
     public void ConstantFoldingPass_ShouldFoldConstants()
     {
         // Arrange
-        var graph = new ComputationGraph<double>();
+        var graph = new OptimizationGraph<double>();
 
-        var const1 = new ComputationNode<double>
+        var const1 = new OptimizationNode<double>
         {
             OperationType = OperationType.Constant,
             Name = "const1",
             ConstantValue = null // Would be actual tensor
         };
 
-        var const2 = new ComputationNode<double>
+        var const2 = new OptimizationNode<double>
         {
             OperationType = OperationType.Constant,
             Name = "const2",
             ConstantValue = null // Would be actual tensor
         };
 
-        var add = new ComputationNode<double>
+        var add = new OptimizationNode<double>
         {
             OperationType = OperationType.Add,
             Name = "add"
@@ -150,11 +150,11 @@ public class OptimizationPassTests
     public void InPlaceOptimizationPass_ShouldMarkEligibleOperations()
     {
         // Arrange
-        var graph = new ComputationGraph<double>();
+        var graph = new OptimizationGraph<double>();
 
-        var input = new ComputationNode<double> { OperationType = OperationType.Input, Name = "input" };
-        var relu = new ComputationNode<double> { OperationType = OperationType.ReLU, Name = "relu" };
-        var output = new ComputationNode<double> { OperationType = OperationType.Output, Name = "output" };
+        var input = new OptimizationNode<double> { OperationType = OperationType.Input, Name = "input" };
+        var relu = new OptimizationNode<double> { OperationType = OperationType.ReLU, Name = "relu" };
+        var output = new OptimizationNode<double> { OperationType = OperationType.Output, Name = "output" };
 
         relu.AddInput(input);
         output.AddInput(relu);
@@ -177,19 +177,19 @@ public class OptimizationPassTests
     public void AlgebraicSimplificationPass_ShouldSimplifyIdentities()
     {
         // Arrange
-        var graph = new ComputationGraph<double>();
+        var graph = new OptimizationGraph<double>();
 
-        var input = new ComputationNode<double> { OperationType = OperationType.Input, Name = "input" };
+        var input = new OptimizationNode<double> { OperationType = OperationType.Input, Name = "input" };
 
-        var zero = new ComputationNode<double>
+        var zero = new OptimizationNode<double>
         {
             OperationType = OperationType.Constant,
             Name = "zero",
             Metadata = new Dictionary<string, object> { ["IsZero"] = true }
         };
 
-        var add = new ComputationNode<double> { OperationType = OperationType.Add, Name = "add" };
-        var output = new ComputationNode<double> { OperationType = OperationType.Output, Name = "output" };
+        var add = new OptimizationNode<double> { OperationType = OperationType.Add, Name = "add" };
+        var output = new OptimizationNode<double> { OperationType = OperationType.Output, Name = "output" };
 
         add.AddInput(input);
         add.AddInput(zero);
@@ -215,13 +215,13 @@ public class OptimizationPassTests
     public void GraphOptimizer_ShouldApplyMultiplePasses()
     {
         // Arrange
-        var graph = new ComputationGraph<double>();
+        var graph = new OptimizationGraph<double>();
 
-        var input = new ComputationNode<double> { OperationType = OperationType.Input, Name = "input" };
-        var conv = new ComputationNode<double> { OperationType = OperationType.Convolution, Name = "conv" };
-        var bn = new ComputationNode<double> { OperationType = OperationType.BatchNormalization, Name = "bn" };
-        var relu = new ComputationNode<double> { OperationType = OperationType.ReLU, Name = "relu" };
-        var output = new ComputationNode<double> { OperationType = OperationType.Output, Name = "output" };
+        var input = new OptimizationNode<double> { OperationType = OperationType.Input, Name = "input" };
+        var conv = new OptimizationNode<double> { OperationType = OperationType.Convolution, Name = "conv" };
+        var bn = new OptimizationNode<double> { OperationType = OperationType.BatchNormalization, Name = "bn" };
+        var relu = new OptimizationNode<double> { OperationType = OperationType.ReLU, Name = "relu" };
+        var output = new OptimizationNode<double> { OperationType = OperationType.Output, Name = "output" };
 
         conv.AddInput(input);
         bn.AddInput(conv);

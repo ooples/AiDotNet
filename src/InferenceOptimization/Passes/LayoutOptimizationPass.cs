@@ -22,7 +22,7 @@ public class LayoutOptimizationPass<T> : OptimizationPassBase<T> where T : struc
         _targetLayout = targetLayout;
     }
 
-    public override bool Apply(IComputationGraph<T> graph)
+    public override bool Apply(IOptimizationGraph<T> graph)
     {
         bool modified = false;
 
@@ -39,9 +39,9 @@ public class LayoutOptimizationPass<T> : OptimizationPassBase<T> where T : struc
         return modified;
     }
 
-    private Dictionary<ComputationNode<T>, string> AnalyzeLayouts(IComputationGraph<T> graph)
+    private Dictionary<OptimizationNode<T>, string> AnalyzeLayouts(IOptimizationGraph<T> graph)
     {
-        var layouts = new Dictionary<ComputationNode<T>, string>();
+        var layouts = new Dictionary<OptimizationNode<T>, string>();
 
         foreach (var node in graph.Nodes)
         {
@@ -73,7 +73,7 @@ public class LayoutOptimizationPass<T> : OptimizationPassBase<T> where T : struc
         return "AGNOSTIC";
     }
 
-    private bool RequiresLayoutConversion(ComputationNode<T> node, Dictionary<ComputationNode<T>, string> layoutInfo)
+    private bool RequiresLayoutConversion(OptimizationNode<T> node, Dictionary<OptimizationNode<T>, string> layoutInfo)
     {
         // Check if this node's layout differs from its inputs
         if (!layoutInfo.TryGetValue(node, out var nodeLayout) || nodeLayout == "AGNOSTIC")
@@ -87,10 +87,10 @@ public class LayoutOptimizationPass<T> : OptimizationPassBase<T> where T : struc
             inputLayout != nodeLayout);
     }
 
-    private void InsertLayoutConversion(IComputationGraph<T> graph, ComputationNode<T> node)
+    private void InsertLayoutConversion(IOptimizationGraph<T> graph, OptimizationNode<T> node)
     {
         // Insert a transpose operation to convert layout
-        var transposeNode = new ComputationNode<T>
+        var transposeNode = new OptimizationNode<T>
         {
             OperationType = OperationType.Transpose,
             Name = $"{node.Name}_layout_convert",
@@ -106,7 +106,7 @@ public class LayoutOptimizationPass<T> : OptimizationPassBase<T> where T : struc
         transposeNode.Metadata["ConversionInserted"] = true;
     }
 
-    public override bool CanApply(IComputationGraph<T> graph)
+    public override bool CanApply(IOptimizationGraph<T> graph)
     {
         return base.CanApply(graph) &&
                graph.Nodes.Any(n => n.OperationType == OperationType.Convolution ||

@@ -17,7 +17,7 @@ public class StrengthReductionPass<T> : OptimizationPassBase<T> where T : struct
     public override OptimizationPassType PassType => OptimizationPassType.StrengthReduction;
     public override string Name => "Strength Reduction";
 
-    public override bool Apply(IComputationGraph<T> graph)
+    public override bool Apply(IOptimizationGraph<T> graph)
     {
         bool modified = false;
 
@@ -36,7 +36,7 @@ public class StrengthReductionPass<T> : OptimizationPassBase<T> where T : struct
         return modified;
     }
 
-    private bool TryReduceStrength(IComputationGraph<T> graph, ComputationNode<T> node)
+    private bool TryReduceStrength(IOptimizationGraph<T> graph, OptimizationNode<T> node)
     {
         return node.OperationType switch
         {
@@ -47,7 +47,7 @@ public class StrengthReductionPass<T> : OptimizationPassBase<T> where T : struct
         };
     }
 
-    private bool ReducePower(IComputationGraph<T> graph, ComputationNode<T> node)
+    private bool ReducePower(IOptimizationGraph<T> graph, OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return false;
 
@@ -56,7 +56,7 @@ public class StrengthReductionPass<T> : OptimizationPassBase<T> where T : struct
         // x^2 -> x * x (multiplication is faster than power)
         if (IsConstantWithValue(exponent, 2))
         {
-            var multiplyNode = new ComputationNode<T>
+            var multiplyNode = new OptimizationNode<T>
             {
                 OperationType = OperationType.Multiply,
                 Name = $"{node.Name}_strength_reduced",
@@ -74,7 +74,7 @@ public class StrengthReductionPass<T> : OptimizationPassBase<T> where T : struct
         return false;
     }
 
-    private bool ReduceDivide(IComputationGraph<T> graph, ComputationNode<T> node)
+    private bool ReduceDivide(IOptimizationGraph<T> graph, OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return false;
 
@@ -83,7 +83,7 @@ public class StrengthReductionPass<T> : OptimizationPassBase<T> where T : struct
         // x / constant -> x * (1/constant) (multiplication is faster than division)
         if (divisor.OperationType == OperationType.Constant)
         {
-            var multiplyNode = new ComputationNode<T>
+            var multiplyNode = new OptimizationNode<T>
             {
                 OperationType = OperationType.Multiply,
                 Name = $"{node.Name}_strength_reduced",
@@ -91,7 +91,7 @@ public class StrengthReductionPass<T> : OptimizationPassBase<T> where T : struct
             };
 
             // Create reciprocal constant
-            var reciprocalNode = new ComputationNode<T>
+            var reciprocalNode = new OptimizationNode<T>
             {
                 OperationType = OperationType.Constant,
                 Name = $"{divisor.Name}_reciprocal",
@@ -115,7 +115,7 @@ public class StrengthReductionPass<T> : OptimizationPassBase<T> where T : struct
         return false;
     }
 
-    private bool ReduceMultiply(IComputationGraph<T> graph, ComputationNode<T> node)
+    private bool ReduceMultiply(IOptimizationGraph<T> graph, OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return false;
 
@@ -125,7 +125,7 @@ public class StrengthReductionPass<T> : OptimizationPassBase<T> where T : struct
 
         if (IsConstantWithValue(right, 2))
         {
-            var addNode = new ComputationNode<T>
+            var addNode = new OptimizationNode<T>
             {
                 OperationType = OperationType.Add,
                 Name = $"{node.Name}_strength_reduced",
@@ -146,7 +146,7 @@ public class StrengthReductionPass<T> : OptimizationPassBase<T> where T : struct
         return false;
     }
 
-    private bool IsConstantWithValue(ComputationNode<T> node, double value)
+    private bool IsConstantWithValue(OptimizationNode<T> node, double value)
     {
         if (node.OperationType != OperationType.Constant)
         {
@@ -166,7 +166,7 @@ public class StrengthReductionPass<T> : OptimizationPassBase<T> where T : struct
         return false;
     }
 
-    private void ReplaceNode(IComputationGraph<T> graph, ComputationNode<T> oldNode, ComputationNode<T> newNode)
+    private void ReplaceNode(IOptimizationGraph<T> graph, OptimizationNode<T> oldNode, OptimizationNode<T> newNode)
     {
         // Replace all outputs
         foreach (var output in oldNode.Outputs.ToList())
@@ -179,7 +179,7 @@ public class StrengthReductionPass<T> : OptimizationPassBase<T> where T : struct
         graph.RemoveNode(oldNode);
     }
 
-    public override bool CanApply(IComputationGraph<T> graph)
+    public override bool CanApply(IOptimizationGraph<T> graph)
     {
         return base.CanApply(graph) &&
                (graph.Nodes.Any(n => n.OperationType == OperationType.Power) ||

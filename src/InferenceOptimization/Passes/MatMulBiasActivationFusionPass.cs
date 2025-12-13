@@ -24,7 +24,7 @@ public class MatMulBiasActivationFusionPass<T> : OptimizationPassBase<T> where T
         OperationType.Mish
     };
 
-    public override bool Apply(IComputationGraph<T> graph)
+    public override bool Apply(IOptimizationGraph<T> graph)
     {
         bool modified = false;
 
@@ -86,9 +86,9 @@ public class MatMulBiasActivationFusionPass<T> : OptimizationPassBase<T> where T
     }
 
     private void FuseMatMulBiasActivation(
-        IComputationGraph<T> graph,
-        ComputationNode<T> fusedMatMulBias,
-        ComputationNode<T> activation)
+        IOptimizationGraph<T> graph,
+        OptimizationNode<T> fusedMatMulBias,
+        OptimizationNode<T> activation)
     {
         // Determine the fused operation type based on activation
         var fusedType = activation.OperationType switch
@@ -99,14 +99,14 @@ public class MatMulBiasActivationFusionPass<T> : OptimizationPassBase<T> where T
         };
 
         // Create new fused node
-        var newFusedNode = new ComputationNode<T>
+        var newFusedNode = new OptimizationNode<T>
         {
             OperationType = fusedType,
             Name = $"{fusedMatMulBias.Name}_{activation.OperationType.ToString().ToLower()}",
             OutputShape = activation.OutputShape,
             IsFused = true,
             CanOperateInPlace = true,
-            FusedFrom = new List<ComputationNode<T>> { fusedMatMulBias, activation }
+            FusedFrom = new List<OptimizationNode<T>> { fusedMatMulBias, activation }
         };
 
         // Copy all parameters from fused MatMulBias
@@ -141,11 +141,11 @@ public class MatMulBiasActivationFusionPass<T> : OptimizationPassBase<T> where T
     }
 
     private void FuseMatMulBiasActivationFromScratch(
-        IComputationGraph<T> graph,
-        ComputationNode<T> matmul,
-        ComputationNode<T> add,
-        ComputationNode<T> bias,
-        ComputationNode<T> activation)
+        IOptimizationGraph<T> graph,
+        OptimizationNode<T> matmul,
+        OptimizationNode<T> add,
+        OptimizationNode<T> bias,
+        OptimizationNode<T> activation)
     {
         var fusedType = activation.OperationType switch
         {
@@ -154,14 +154,14 @@ public class MatMulBiasActivationFusionPass<T> : OptimizationPassBase<T> where T
             _ => OperationType.FusedMatMulBias
         };
 
-        var fusedNode = new ComputationNode<T>
+        var fusedNode = new OptimizationNode<T>
         {
             OperationType = fusedType,
             Name = $"{matmul.Name}_fused",
             OutputShape = activation.OutputShape,
             IsFused = true,
             CanOperateInPlace = true,
-            FusedFrom = new List<ComputationNode<T>> { matmul, add, activation }
+            FusedFrom = new List<OptimizationNode<T>> { matmul, add, activation }
         };
 
         // Copy matmul parameters
@@ -200,7 +200,7 @@ public class MatMulBiasActivationFusionPass<T> : OptimizationPassBase<T> where T
         graph.RemoveNode(activation);
     }
 
-    public override bool CanApply(IComputationGraph<T> graph)
+    public override bool CanApply(IOptimizationGraph<T> graph)
     {
         return base.CanApply(graph) &&
                graph.Nodes.Any(n => n.OperationType == OperationType.MatMul ||

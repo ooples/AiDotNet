@@ -13,7 +13,7 @@ public class MatMulBiasFusionPass<T> : OptimizationPassBase<T> where T : struct
     public override OptimizationPassType PassType => OptimizationPassType.MatMulBiasFusion;
     public override string Name => "MatMul + Bias Fusion";
 
-    public override bool Apply(IComputationGraph<T> graph)
+    public override bool Apply(IOptimizationGraph<T> graph)
     {
         bool modified = false;
 
@@ -35,7 +35,7 @@ public class MatMulBiasFusionPass<T> : OptimizationPassBase<T> where T : struct
 
                 if (otherInput != null && otherInput.OperationType == OperationType.Constant)
                 {
-                    FuseMatMulBias(graph, new List<ComputationNode<T>> { matmulNode, addNode, otherInput });
+                    FuseMatMulBias(graph, new List<OptimizationNode<T>> { matmulNode, addNode, otherInput });
                     modified = true;
                 }
             }
@@ -44,20 +44,20 @@ public class MatMulBiasFusionPass<T> : OptimizationPassBase<T> where T : struct
         return modified;
     }
 
-    private void FuseMatMulBias(IComputationGraph<T> graph, List<ComputationNode<T>> nodes)
+    private void FuseMatMulBias(IOptimizationGraph<T> graph, List<OptimizationNode<T>> nodes)
     {
         var matmulNode = nodes[0];
         var addNode = nodes[1];
         var biasNode = nodes[2];
 
         // Create fused Gemm node (General Matrix Multiplication with bias)
-        var fusedNode = new ComputationNode<T>
+        var fusedNode = new OptimizationNode<T>
         {
             OperationType = OperationType.FusedMatMulBias,
             Name = $"{matmulNode.Name}_gemm",
             OutputShape = addNode.OutputShape,
             IsFused = true,
-            FusedFrom = new List<ComputationNode<T>> { matmulNode, addNode }
+            FusedFrom = new List<OptimizationNode<T>> { matmulNode, addNode }
         };
 
         // Copy parameters
@@ -91,7 +91,7 @@ public class MatMulBiasFusionPass<T> : OptimizationPassBase<T> where T : struct
         graph.RemoveNode(biasNode);
     }
 
-    public override bool CanApply(IComputationGraph<T> graph)
+    public override bool CanApply(IOptimizationGraph<T> graph)
     {
         return base.CanApply(graph) &&
                graph.Nodes.Any(n => n.OperationType == OperationType.MatMul ||

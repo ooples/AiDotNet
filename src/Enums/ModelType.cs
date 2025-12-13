@@ -722,6 +722,48 @@ public enum ModelType
 
     DeepQNetwork,
 
+    /// <summary>
+    /// Double Deep Q-Network - addresses overestimation bias in DQN.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Double DQN fixes a problem in standard DQN where Q-values are often
+    /// too optimistic. It uses two networks to make more realistic value estimates - one picks
+    /// the best action, another evaluates it. This leads to more stable and accurate learning.
+    ///
+    /// Strengths: More accurate Q-values, better final performance, same complexity as DQN
+    /// </para>
+    /// </remarks>
+    DoubleDQN,
+
+    /// <summary>
+    /// Dueling Deep Q-Network - separates value and advantage estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Dueling DQN splits Q-values into two parts: the value of being in a state
+    /// (how good is this situation?) and the advantage of each action (how much better is this action
+    /// than average?). This makes learning more efficient, especially when many actions have similar values.
+    ///
+    /// Strengths: Faster learning, better performance, especially useful when actions don't always matter
+    /// </para>
+    /// </remarks>
+    DuelingDQN,
+
+    /// <summary>
+    /// Rainbow DQN - combines six DQN improvements into one powerful algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Rainbow combines Double DQN, Dueling DQN, Prioritized Replay,
+    /// Multi-step Learning, Distributional RL, and Noisy Networks. It's like taking the best features
+    /// from six different DQN variants and putting them together. Currently the strongest DQN variant.
+    ///
+    /// Strengths: State-of-the-art performance, combines multiple improvements, excellent sample efficiency
+    /// </para>
+    /// </remarks>
+    RainbowDQN,
+
     GenerativeAdversarialNetwork,
 
     NeuralTuringMachine,
@@ -819,5 +861,286 @@ public enum ModelType
     /// - Efficient through sparse expert activation
     /// </para>
     /// </remarks>
-    MixtureOfExperts
+    MixtureOfExperts,
+
+    /// <summary>
+    /// A general reinforcement learning model type.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Reinforcement Learning models learn through trial and error by interacting
+    /// with an environment. Unlike supervised learning (which learns from labeled examples), RL agents
+    /// learn from rewards and punishments. Think of training a dog - you give treats for good behavior
+    /// and corrections for bad behavior, and the dog learns what actions lead to rewards.
+    ///
+    /// RL has achieved remarkable successes:
+    /// - Playing games at superhuman level (AlphaGo, Atari games, Dota 2)
+    /// - Robotic control (walking, manipulation, assembly)
+    /// - Resource optimization (data center cooling, traffic control)
+    /// - Recommendation systems and personalization
+    /// </para>
+    /// </remarks>
+    ReinforcementLearning,
+
+    /// <summary>
+    /// Proximal Policy Optimization - a state-of-the-art policy gradient RL algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> PPO is one of the most popular RL algorithms today. It learns a policy
+    /// (strategy for choosing actions) by making small, safe updates to avoid catastrophic performance drops.
+    /// Think of it like making small course corrections while driving rather than sudden jerky turns.
+    ///
+    /// Used by: OpenAI's ChatGPT (RLHF), robotics systems, game AI
+    /// Strengths: Stable, sample-efficient, works well for continuous control
+    /// </para>
+    /// </remarks>
+    PPOAgent,
+
+    /// <summary>
+    /// Soft Actor-Critic - an off-policy algorithm combining maximum entropy RL with actor-critic.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SAC encourages exploration by maximizing both reward and "entropy"
+    /// (randomness/exploration). It's like learning to play a game while also maintaining variety
+    /// in your strategies. This makes it very robust and sample-efficient for continuous control tasks.
+    ///
+    /// Used by: Robotic manipulation, autonomous vehicles, industrial control
+    /// Strengths: Very stable, excellent for continuous actions, sample-efficient
+    /// </para>
+    /// </remarks>
+    SACAgent,
+
+    /// <summary>
+    /// Deep Deterministic Policy Gradient - an actor-critic algorithm for continuous action spaces.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DDPG learns policies for continuous control (like adjusting steering angle
+    /// or motor torque) rather than discrete choices (like "left" or "right"). It's the RL equivalent
+    /// of precision control versus binary decisions.
+    ///
+    /// Used by: Robotic control, autonomous vehicles, continuous resource allocation
+    /// Strengths: Handles continuous actions well, deterministic policies
+    /// </para>
+    /// </remarks>
+    DDPGAgent,
+
+    /// <summary>
+    /// Twin Delayed Deep Deterministic Policy Gradient - improved version of DDPG.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TD3 improves DDPG by addressing overestimation bias (being too optimistic
+    /// about action values). It uses twin networks and delayed updates for more stable learning.
+    /// Think of it as DDPG with better safety checks and more conservative estimates.
+    ///
+    /// Used by: Advanced robotic control, simulated physics environments
+    /// Strengths: More stable than DDPG, reduced overestimation, better final performance
+    /// </para>
+    /// </remarks>
+    TD3Agent,
+
+    /// <summary>
+    /// Advantage Actor-Critic - a foundational policy gradient algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A2C learns both a policy (actor) and a value function (critic).
+    /// The critic helps the actor learn more efficiently by providing better feedback.
+    /// It's like having a coach (critic) give you targeted advice rather than just "good" or "bad".
+    ///
+    /// Strengths: Foundation for many modern RL algorithms, good for parallel training
+    /// </para>
+    /// </remarks>
+    A2CAgent,
+
+    /// <summary>
+    /// Asynchronous Advantage Actor-Critic - parallel version of A2C.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A3C runs multiple agents in parallel, each learning from different
+    /// experiences simultaneously. It's like having multiple students learn the same subject
+    /// independently, then sharing their knowledge. This speeds up learning significantly.
+    ///
+    /// Used by: Early DeepMind research, parallel game playing
+    /// Strengths: Efficient parallel training, works on CPU without GPUs
+    /// </para>
+    /// </remarks>
+    A3CAgent,
+
+    /// <summary>
+    /// Trust Region Policy Optimization - ensures safe, monotonic policy improvements.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TRPO guarantees that each policy update improves performance (monotonic improvement)
+    /// by limiting how much the policy can change. It's like taking safe, guaranteed steps forward rather than
+    /// potentially risky big leaps. PPO was developed as a simpler alternative to TRPO.
+    ///
+    /// Strengths: Guaranteed improvement, very stable, excellent for continuous control
+    /// </para>
+    /// </remarks>
+    TRPOAgent,
+
+    /// <summary>
+    /// REINFORCE (Monte Carlo Policy Gradient) - the foundational policy gradient algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> REINFORCE is the simplest policy gradient method. It plays full episodes,
+    /// then updates the policy to make good actions more likely. Simple but can be slow and high-variance.
+    ///
+    /// Strengths: Simple to understand and implement, works for any differentiable policy
+    /// </para>
+    /// </remarks>
+    REINFORCEAgent,
+
+    /// <summary>
+    /// Conservative Q-Learning - offline RL algorithm that avoids out-of-distribution actions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> CQL is designed for offline RL (learning from fixed datasets without interaction).
+    /// It penalizes Q-values for actions not seen in the dataset, preventing the agent from being overconfident
+    /// about unfamiliar actions. Useful for learning from historical data.
+    ///
+    /// Strengths: Safe offline learning, works with fixed datasets, prevents distributional shift
+    /// </para>
+    /// </remarks>
+    CQLAgent,
+
+    /// <summary>
+    /// Implicit Q-Learning - another offline RL approach using expectile regression.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> IQL avoids explicitly computing policy constraints, making it simpler and
+    /// more stable than some other offline RL methods. It learns Q-values and policies separately,
+    /// which can be more robust.
+    ///
+    /// Strengths: Simple, stable, good offline RL performance
+    /// </para>
+    /// </remarks>
+    IQLAgent,
+
+    /// <summary>
+    /// Decision Transformer - treats RL as a sequence modeling problem using transformers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Decision Transformer uses the transformer architecture (from language models)
+    /// to predict actions conditioned on desired returns. Instead of learning values or policies directly,
+    /// it learns to generate action sequences that lead to target rewards.
+    ///
+    /// Strengths: Leverages powerful transformer architecture, good offline performance, can condition on returns
+    /// </para>
+    /// </remarks>
+    DecisionTransformer,
+
+    /// <summary>
+    /// Multi-Agent DDPG - extends DDPG to multi-agent cooperative/competitive settings.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> MADDPG allows multiple agents to learn simultaneously in shared environments.
+    /// Each agent has its own policy but can observe others during training. Used for cooperative tasks
+    /// (team coordination) or competitive tasks (games, negotiations).
+    ///
+    /// Strengths: Handles multi-agent scenarios, centralized training with decentralized execution
+    /// </para>
+    /// </remarks>
+    MADDPGAgent,
+
+    /// <summary>
+    /// QMIX - value-based multi-agent RL that factorizes joint action-values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> QMIX learns how to coordinate multiple agents by factorizing the joint
+    /// Q-function into individual agent Q-functions. It's particularly good for cooperative multi-agent
+    /// tasks where agents need to work together.
+    ///
+    /// Strengths: Efficient multi-agent coordination, monotonic value factorization
+    /// </para>
+    /// </remarks>
+    QMIXAgent,
+
+    /// <summary>
+    /// Dreamer - model-based RL that learns a world model and plans in latent space.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Dreamer learns a model of the environment (how the world works), then
+    /// "dreams" about possible futures to plan actions. This allows learning from imagined experiences,
+    /// making it very sample-efficient.
+    ///
+    /// Strengths: Very sample-efficient, learns world models, can plan ahead
+    /// </para>
+    /// </remarks>
+    DreamerAgent,
+
+    /// <summary>
+    /// MuZero - combines tree search with learned models, mastering games without knowing rules.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> MuZero (from DeepMind) learns to play games at superhuman levels without
+    /// being told the rules. It learns a model of the game dynamics and uses tree search (like AlphaZero)
+    /// to plan. Famous for mastering Chess, Go, Shogi, and Atari.
+    ///
+    /// Strengths: State-of-the-art game playing, model-based planning, no need for known dynamics
+    /// </para>
+    /// </remarks>
+    MuZeroAgent,
+
+    /// <summary>
+    /// World Models - learns compressed spatial and temporal representations for model-based RL.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> World Models learns a compact representation of the environment and trains
+    /// agents entirely inside this learned "world model". It can train much faster by learning in
+    /// simulation rather than real environments.
+    ///
+    /// Strengths: Fast training in learned models, good for visual environments, interpretable latent space
+    /// </para>
+    /// </remarks>
+    WorldModelsAgent,
+
+    /// <summary>
+    /// A model trained through knowledge distillation - compressing a larger teacher model into a smaller student.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Knowledge Distillation is like having a student learn from an expert teacher.
+    /// The "teacher" is a large, accurate model, and the "student" is a smaller, faster model that learns
+    /// to mimic the teacher's behavior while being much more efficient to deploy.
+    ///
+    /// Real-world analogy: An expert chef (teacher) trains an apprentice (student). The apprentice learns
+    /// not just the recipes (hard labels), but also the chef's intuitions, techniques, and reasoning process
+    /// (soft targets). This deeper knowledge transfer helps the apprentice become highly skilled.
+    ///
+    /// How it works:
+    /// - Teacher model provides "soft" predictions (probabilities) that reveal relationships between classes
+    /// - Student learns from both soft predictions and true labels
+    /// - Result: Student model that's 40-90% smaller but retains 90-97% of teacher's accuracy
+    ///
+    /// Key benefits:
+    /// - **Model Compression**: Deploy on mobile, edge devices, browsers
+    /// - **Faster Inference**: 2-10x speedup with minimal accuracy loss
+    /// - **Lower Costs**: Reduced compute and memory requirements
+    /// - **Better Calibration**: Improved confidence estimates
+    ///
+    /// Success stories:
+    /// - DistilBERT: 40% smaller than BERT, 97% performance, 60% faster
+    /// - MobileNet: Distilled from ResNet, runs on smartphones
+    /// - TinyBERT: 7.5x smaller, suitable for edge deployment
+    ///
+    /// Use ConfigureKnowledgeDistillation() on PredictionModelBuilder to enable this technique.
+    /// </para>
+    /// </remarks>
+    KnowledgeDistillation
 }

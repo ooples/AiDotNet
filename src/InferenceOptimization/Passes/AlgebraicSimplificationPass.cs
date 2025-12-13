@@ -19,7 +19,7 @@ public class AlgebraicSimplificationPass<T> : OptimizationPassBase<T> where T : 
     public override OptimizationPassType PassType => OptimizationPassType.AlgebraicSimplification;
     public override string Name => "Algebraic Simplification";
 
-    public override bool Apply(IComputationGraph<T> graph)
+    public override bool Apply(IOptimizationGraph<T> graph)
     {
         bool modified = false;
         bool changed;
@@ -46,7 +46,7 @@ public class AlgebraicSimplificationPass<T> : OptimizationPassBase<T> where T : 
         return modified;
     }
 
-    private bool TrySimplifyNode(IComputationGraph<T> graph, ComputationNode<T> node)
+    private bool TrySimplifyNode(IOptimizationGraph<T> graph, OptimizationNode<T> node)
     {
         return node.OperationType switch
         {
@@ -59,7 +59,7 @@ public class AlgebraicSimplificationPass<T> : OptimizationPassBase<T> where T : 
         };
     }
 
-    private bool SimplifyMultiply(IComputationGraph<T> graph, ComputationNode<T> node)
+    private bool SimplifyMultiply(IOptimizationGraph<T> graph, OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return false;
 
@@ -89,7 +89,7 @@ public class AlgebraicSimplificationPass<T> : OptimizationPassBase<T> where T : 
         return false;
     }
 
-    private bool SimplifyAdd(IComputationGraph<T> graph, ComputationNode<T> node)
+    private bool SimplifyAdd(IOptimizationGraph<T> graph, OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return false;
 
@@ -112,7 +112,7 @@ public class AlgebraicSimplificationPass<T> : OptimizationPassBase<T> where T : 
         return false;
     }
 
-    private bool SimplifySubtract(IComputationGraph<T> graph, ComputationNode<T> node)
+    private bool SimplifySubtract(IOptimizationGraph<T> graph, OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return false;
 
@@ -135,7 +135,7 @@ public class AlgebraicSimplificationPass<T> : OptimizationPassBase<T> where T : 
         return false;
     }
 
-    private bool SimplifyDivide(IComputationGraph<T> graph, ComputationNode<T> node)
+    private bool SimplifyDivide(IOptimizationGraph<T> graph, OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return false;
 
@@ -151,7 +151,7 @@ public class AlgebraicSimplificationPass<T> : OptimizationPassBase<T> where T : 
         return false;
     }
 
-    private bool SimplifyPower(IComputationGraph<T> graph, ComputationNode<T> node)
+    private bool SimplifyPower(IOptimizationGraph<T> graph, OptimizationNode<T> node)
     {
         if (node.Inputs.Count != 2) return false;
 
@@ -174,23 +174,23 @@ public class AlgebraicSimplificationPass<T> : OptimizationPassBase<T> where T : 
         return false;
     }
 
-    private bool IsZeroConstant(ComputationNode<T> node)
+    private bool IsZeroConstant(OptimizationNode<T> node)
     {
         return node.OperationType == OperationType.Constant &&
                node.Metadata.TryGetValue("IsZero", out var isZero) &&
                (bool)isZero;
     }
 
-    private bool IsOneConstant(ComputationNode<T> node)
+    private bool IsOneConstant(OptimizationNode<T> node)
     {
         return node.OperationType == OperationType.Constant &&
                node.Metadata.TryGetValue("IsOne", out var isOne) &&
                (bool)isOne;
     }
 
-    private ComputationNode<T> CreateZeroConstant(ComputationNode<T> templateNode)
+    private OptimizationNode<T> CreateZeroConstant(OptimizationNode<T> templateNode)
     {
-        return new ComputationNode<T>
+        return new OptimizationNode<T>
         {
             OperationType = OperationType.Constant,
             Name = "const_zero",
@@ -199,9 +199,9 @@ public class AlgebraicSimplificationPass<T> : OptimizationPassBase<T> where T : 
         };
     }
 
-    private ComputationNode<T> CreateOneConstant(ComputationNode<T> templateNode)
+    private OptimizationNode<T> CreateOneConstant(OptimizationNode<T> templateNode)
     {
-        return new ComputationNode<T>
+        return new OptimizationNode<T>
         {
             OperationType = OperationType.Constant,
             Name = "const_one",
@@ -210,7 +210,7 @@ public class AlgebraicSimplificationPass<T> : OptimizationPassBase<T> where T : 
         };
     }
 
-    private void ReplaceWithNode(IComputationGraph<T> graph, ComputationNode<T> oldNode, ComputationNode<T> newNode)
+    private void ReplaceWithNode(IOptimizationGraph<T> graph, OptimizationNode<T> oldNode, OptimizationNode<T> newNode)
     {
         // Replace all uses of oldNode with newNode
         foreach (var output in oldNode.Outputs.ToList())
@@ -221,7 +221,7 @@ public class AlgebraicSimplificationPass<T> : OptimizationPassBase<T> where T : 
         graph.RemoveNode(oldNode);
     }
 
-    private void ReplaceWithConstant(IComputationGraph<T> graph, ComputationNode<T> oldNode, ComputationNode<T> constantNode)
+    private void ReplaceWithConstant(IOptimizationGraph<T> graph, OptimizationNode<T> oldNode, OptimizationNode<T> constantNode)
     {
         // Add constant to graph
         graph.AddNode(constantNode);
@@ -235,7 +235,7 @@ public class AlgebraicSimplificationPass<T> : OptimizationPassBase<T> where T : 
         graph.RemoveNode(oldNode);
     }
 
-    public override bool CanApply(IComputationGraph<T> graph)
+    public override bool CanApply(IOptimizationGraph<T> graph)
     {
         return base.CanApply(graph);
     }

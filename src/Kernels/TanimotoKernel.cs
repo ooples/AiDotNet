@@ -23,11 +23,11 @@ namespace AiDotNet.Kernels;
 /// </para>
 /// <para>
 /// The formula for the Tanimoto kernel is:
-/// k(x, y) = (x · y) / (||x||² + ||y||² - x · y)
+/// k(x, y) = (x Â· y) / (||x||Â² + ||y||Â² - x Â· y)
 /// where:
-/// - x · y is the dot product between vectors x and y
-/// - ||x||² is the squared norm of vector x (dot product of x with itself)
-/// - ||y||² is the squared norm of vector y (dot product of y with itself)
+/// - x Â· y is the dot product between vectors x and y
+/// - ||x||Â² is the squared norm of vector x (dot product of x with itself)
+/// - ||y||Â² is the squared norm of vector y (dot product of y with itself)
 /// </para>
 /// <para>
 /// Common uses include:
@@ -103,7 +103,7 @@ public class TanimotoKernel<T> : IKernelFunction<T>
     /// <para>
     /// What is a dot product? It's a way to multiply two vectors together. For each position in the vectors,
     /// you multiply the corresponding values and then add all these products together. For example, the dot
-    /// product of [1, 2, 3] and [4, 5, 6] is (1×4) + (2×5) + (3×6) = 4 + 10 + 18 = 32.
+    /// product of [1, 2, 3] and [4, 5, 6] is (1Ã—4) + (2Ã—5) + (3Ã—6) = 4 + 10 + 18 = 32.
     /// </para>
     /// <para>
     /// What makes this kernel special is its focus on the ratio of shared information to total information,

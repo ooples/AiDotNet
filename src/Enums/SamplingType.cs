@@ -66,7 +66,7 @@ public enum SamplingType
     /// 3. Taking the square root of the sum
     /// 
     /// For example, if you have these numbers: [2, 5, 1, 3], L2Norm sampling would give you:
-    /// v(2² + 5² + 1² + 3²) = v(4 + 25 + 1 + 9) = v39 ˜ 6.24
+    /// v(2Â² + 5Â² + 1Â² + 3Â²) = v(4 + 25 + 1 + 9) = v39 Ëœ 6.24
     /// 
     /// This is useful for:
     /// - Measuring the overall "energy" or "strength" of a signal

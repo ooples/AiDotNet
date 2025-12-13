@@ -36,19 +36,32 @@ public static class ConversionsHelper
         }
         else if (input is Tensor<T> tensor)
         {
+            // Handle empty or scalar tensors
+            if (tensor.Rank == 0 || tensor.Length == 0)
+            {
+                return Matrix<T>.Empty();
+            }
+
             // Use the built-in ToMatrix method if it's a 2D tensor
             if (tensor.Rank == 2)
             {
                 return tensor.ToMatrix();
             }
+            else if (tensor.Rank == 1)
+            {
+                // For 1D tensors, create a row matrix (1 x Length)
+                var reshapedTensor = tensor.Reshape(1, tensor.Length);
+                return reshapedTensor.ToMatrix();
+            }
             else
             {
-                // For higher-dimensional tensors, reshape to 2D first
+                // For higher-dimensional tensors (3D+), reshape to 2D first
+                // Flatten all dimensions except the last into rows
                 var reshapedTensor = tensor.Reshape(tensor.Length / tensor.Shape[tensor.Rank - 1], tensor.Shape[tensor.Rank - 1]);
                 return reshapedTensor.ToMatrix();
             }
         }
-        
+
         throw new InvalidOperationException($"Cannot convert {typeof(TInput).Name} to Matrix<{typeof(T).Name}>. Expected Matrix<T> or Tensor<T>.");
     }
 
@@ -75,10 +88,16 @@ public static class ConversionsHelper
         }
         else if (output is Tensor<T> tensor)
         {
+            // Handle empty tensors
+            if (tensor.Rank == 0 || tensor.Length == 0)
+            {
+                return Vector<T>.Empty();
+            }
+
             // Use the built-in Flatten method to convert tensor to vector
             return tensor.ToVector();
         }
-        
+
         throw new InvalidOperationException($"Cannot convert {typeof(TOutput).Name} to Vector<{typeof(T).Name}>. Expected Vector<T> or Tensor<T>.");
     }
 
@@ -125,7 +144,9 @@ public static class ConversionsHelper
             {
                 throw new InvalidOperationException("Cannot extract scalar from empty tensor.");
             }
-            return tensor[0];
+            // Create zero indices for all dimensions to get the first element
+            var indices = new int[tensor.Rank];
+            return tensor[indices];
         }
 
         throw new InvalidOperationException($"Cannot convert {typeof(TOutput).Name} to scalar of type {typeof(T).Name}. Expected T, Vector<T>, Matrix<T>, or Tensor<T>.");
@@ -150,17 +171,23 @@ public static class ConversionsHelper
         {
             return null;
         }
-        
+
         if (obj is Vector<T> vector)
         {
             return vector;
         }
         else if (obj is Tensor<T> tensor)
         {
+            // Handle empty tensors
+            if (tensor.Rank == 0 || tensor.Length == 0)
+            {
+                return Vector<T>.Empty();
+            }
+
             // Use the built-in Flatten method
             return tensor.ToVector();
         }
-        
+
         throw new InvalidOperationException($"Cannot convert {obj.GetType().Name} to Vector<{typeof(T).Name}>. Expected Vector<T> or Tensor<T>.");
     }
 
@@ -193,7 +220,8 @@ public static class ConversionsHelper
             else if (typeof(TInput) == typeof(Tensor<T>))
             {
                 // Use Tensor.FromMatrix instead of manual conversion
-                convertedInput = (TInput)(object)Tensor<T>.FromMatrix(matrix);
+                var tensor = Tensor<T>.FromRowMatrix(matrix);
+                convertedInput = (TInput)(object)tensor;
             }
             else
             {
@@ -263,7 +291,7 @@ public static class ConversionsHelper
         }
 
         // Use Tensor.FromMatrix and then reshape
-        Tensor<T> tensor = Tensor<T>.FromMatrix(matrix);
+        Tensor<T> tensor = Tensor<T>.FromRowMatrix(matrix);
         return tensor.Reshape(shape);
     }
 
@@ -322,7 +350,7 @@ public static class ConversionsHelper
         }
         else if (input is Matrix<T> matrix)
         {
-            return Tensor<T>.FromMatrix(matrix);
+            return Tensor<T>.FromRowMatrix(matrix);
         }
         else if (input is Vector<T> vector)
         {

@@ -24,7 +24,7 @@ public class GraphOptimizer<T> where T : struct
     /// <summary>
     /// Optimizes the given computation graph.
     /// </summary>
-    public IComputationGraph<T> Optimize(IComputationGraph<T> graph)
+    public IOptimizationGraph<T> Optimize(IOptimizationGraph<T> graph)
     {
         if (_options.Level == OptimizationLevel.None)
         {

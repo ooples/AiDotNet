@@ -24,10 +24,10 @@ public interface IOptimizationPass<T> where T : struct
     /// </summary>
     /// <param name="graph">The computation graph to optimize</param>
     /// <returns>True if the graph was modified, false otherwise</returns>
-    bool Apply(IComputationGraph<T> graph);
+    bool Apply(IOptimizationGraph<T> graph);
 
     /// <summary>
     /// Checks if this pass can be applied to the graph.
     /// </summary>
-    bool CanApply(IComputationGraph<T> graph);
+    bool CanApply(IOptimizationGraph<T> graph);
 }

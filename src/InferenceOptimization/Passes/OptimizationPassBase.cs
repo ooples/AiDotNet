@@ -12,9 +12,9 @@ public abstract class OptimizationPassBase<T> : IOptimizationPass<T> where T : s
     public abstract OptimizationPassType PassType { get; }
     public abstract string Name { get; }
 
-    public abstract bool Apply(IComputationGraph<T> graph);
+    public abstract bool Apply(IOptimizationGraph<T> graph);
 
-    public virtual bool CanApply(IComputationGraph<T> graph)
+    public virtual bool CanApply(IOptimizationGraph<T> graph)
     {
         return graph != null && graph.Nodes.Count > 0;
     }
@@ -22,11 +22,11 @@ public abstract class OptimizationPassBase<T> : IOptimizationPass<T> where T : s
     /// <summary>
     /// Helper method to find fusion candidates in the graph.
     /// </summary>
-    protected List<List<ComputationNode<T>>> FindFusionCandidates(
-        IComputationGraph<T> graph,
+    protected List<List<OptimizationNode<T>>> FindFusionCandidates(
+        IOptimizationGraph<T> graph,
         params OperationType[] pattern)
     {
-        var candidates = new List<List<ComputationNode<T>>>();
+        var candidates = new List<List<OptimizationNode<T>>>();
 
         foreach (var node in graph.Nodes.Where(n => n.OperationType == pattern[0] && !n.IsFused))
         {
@@ -43,11 +43,11 @@ public abstract class OptimizationPassBase<T> : IOptimizationPass<T> where T : s
     /// <summary>
     /// Tries to match a pattern starting from a given node.
     /// </summary>
-    protected List<ComputationNode<T>>? TryMatchPattern(
-        ComputationNode<T> startNode,
+    protected List<OptimizationNode<T>>? TryMatchPattern(
+        OptimizationNode<T> startNode,
         OperationType[] pattern)
     {
-        var sequence = new List<ComputationNode<T>> { startNode };
+        var sequence = new List<OptimizationNode<T>> { startNode };
         var currentNode = startNode;
 
         for (int i = 1; i < pattern.Length; i++)
@@ -82,9 +82,9 @@ public abstract class OptimizationPassBase<T> : IOptimizationPass<T> where T : s
     /// <summary>
     /// Replaces a sequence of nodes with a fused node.
     /// </summary>
-    protected ComputationNode<T> FuseNodes(
-        IComputationGraph<T> graph,
-        List<ComputationNode<T>> nodesToFuse,
+    protected OptimizationNode<T> FuseNodes(
+        IOptimizationGraph<T> graph,
+        List<OptimizationNode<T>> nodesToFuse,
         OperationType fusedOperationType)
     {
         if (nodesToFuse.Count == 0)
@@ -96,13 +96,13 @@ public abstract class OptimizationPassBase<T> : IOptimizationPass<T> where T : s
         var lastNode = nodesToFuse[nodesToFuse.Count - 1];
 
         // Create fused node
-        var fusedNode = new ComputationNode<T>
+        var fusedNode = new OptimizationNode<T>
         {
             OperationType = fusedOperationType,
             Name = $"{firstNode.Name}_fused",
             OutputShape = lastNode.OutputShape,
             IsFused = true,
-            FusedFrom = new List<ComputationNode<T>>(nodesToFuse)
+            FusedFrom = new List<OptimizationNode<T>>(nodesToFuse)
         };
 
         // Copy parameters from all nodes

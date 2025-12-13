@@ -13,7 +13,7 @@ public class ConvBatchNormFusionPass<T> : OptimizationPassBase<T> where T : stru
     public override OptimizationPassType PassType => OptimizationPassType.ConvBatchNormFusion;
     public override string Name => "Conv + BatchNorm Fusion";
 
-    public override bool Apply(IComputationGraph<T> graph)
+    public override bool Apply(IOptimizationGraph<T> graph)
     {
         bool modified = false;
 
@@ -40,7 +40,7 @@ public class ConvBatchNormFusionPass<T> : OptimizationPassBase<T> where T : stru
         return modified;
     }
 
-    private void FuseConvBatchNorm(IComputationGraph<T> graph, List<ComputationNode<T>> nodes)
+    private void FuseConvBatchNorm(IOptimizationGraph<T> graph, List<OptimizationNode<T>> nodes)
     {
         // Create fused node
         var fusedNode = FuseNodes(graph, nodes, OperationType.FusedConvBatchNorm);
@@ -53,7 +53,7 @@ public class ConvBatchNormFusionPass<T> : OptimizationPassBase<T> where T : stru
         fusedNode.Metadata["RequiresWeightFolding"] = true;
     }
 
-    public override bool CanApply(IComputationGraph<T> graph)
+    public override bool CanApply(IOptimizationGraph<T> graph)
     {
         return base.CanApply(graph) &&
                graph.Nodes.Any(n => n.OperationType == OperationType.Convolution ||

@@ -14,7 +14,7 @@ public class MultiHeadAttentionFusionPass<T> : OptimizationPassBase<T> where T :
     public override OptimizationPassType PassType => OptimizationPassType.AttentionFusion;
     public override string Name => "Multi-Head Attention Fusion";
 
-    public override bool Apply(IComputationGraph<T> graph)
+    public override bool Apply(IOptimizationGraph<T> graph)
     {
         bool modified = false;
 
@@ -31,7 +31,7 @@ public class MultiHeadAttentionFusionPass<T> : OptimizationPassBase<T> where T :
         return modified;
     }
 
-    private bool CanFuseAttention(ComputationNode<T> attentionNode)
+    private bool CanFuseAttention(OptimizationNode<T> attentionNode)
     {
         // Check if the attention pattern is suitable for fusion
         // In a real implementation, we'd check for:
@@ -41,16 +41,16 @@ public class MultiHeadAttentionFusionPass<T> : OptimizationPassBase<T> where T :
         return attentionNode.Outputs.Count > 0;
     }
 
-    private void FuseAttention(IComputationGraph<T> graph, ComputationNode<T> attentionNode)
+    private void FuseAttention(IOptimizationGraph<T> graph, OptimizationNode<T> attentionNode)
     {
         // Create a fused multi-head attention node
-        var fusedNode = new ComputationNode<T>
+        var fusedNode = new OptimizationNode<T>
         {
             OperationType = OperationType.FusedMultiHeadAttention,
             Name = $"{attentionNode.Name}_fused",
             OutputShape = attentionNode.OutputShape,
             IsFused = true,
-            FusedFrom = new List<ComputationNode<T>> { attentionNode }
+            FusedFrom = new List<OptimizationNode<T>> { attentionNode }
         };
 
         // Copy all parameters
@@ -81,7 +81,7 @@ public class MultiHeadAttentionFusionPass<T> : OptimizationPassBase<T> where T :
         graph.RemoveNode(attentionNode);
     }
 
-    public override bool CanApply(IComputationGraph<T> graph)
+    public override bool CanApply(IOptimizationGraph<T> graph)
     {
         return base.CanApply(graph) &&
                graph.Nodes.Any(n => n.OperationType == OperationType.MultiHeadAttention ||

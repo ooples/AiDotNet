@@ -14,7 +14,7 @@ public class MemoryReuseOptimizationPass<T> : OptimizationPassBase<T> where T : 
     public override OptimizationPassType PassType => OptimizationPassType.MemoryReuseOptimization;
     public override string Name => "Memory Reuse Optimization";
 
-    public override bool Apply(IComputationGraph<T> graph)
+    public override bool Apply(IOptimizationGraph<T> graph)
     {
         bool modified = false;
 
@@ -34,10 +34,10 @@ public class MemoryReuseOptimizationPass<T> : OptimizationPassBase<T> where T : 
         return modified;
     }
 
-    private Dictionary<ComputationNode<T>, (int firstUse, int lastUse)> PerformLivenessAnalysis(
-        IComputationGraph<T> graph)
+    private Dictionary<OptimizationNode<T>, (int firstUse, int lastUse)> PerformLivenessAnalysis(
+        IOptimizationGraph<T> graph)
     {
-        var liveness = new Dictionary<ComputationNode<T>, (int, int)>();
+        var liveness = new Dictionary<OptimizationNode<T>, (int, int)>();
         var topologicalOrder = graph.GetTopologicalOrder();
 
         for (int i = 0; i < topologicalOrder.Count; i++)
@@ -65,11 +65,11 @@ public class MemoryReuseOptimizationPass<T> : OptimizationPassBase<T> where T : 
         return liveness;
     }
 
-    private Dictionary<ComputationNode<T>, int> AssignMemoryPools(
-        List<ComputationNode<T>> nodes,
-        Dictionary<ComputationNode<T>, (int firstUse, int lastUse)> liveness)
+    private Dictionary<OptimizationNode<T>, int> AssignMemoryPools(
+        List<OptimizationNode<T>> nodes,
+        Dictionary<OptimizationNode<T>, (int firstUse, int lastUse)> liveness)
     {
-        var poolAssignments = new Dictionary<ComputationNode<T>, int>();
+        var poolAssignments = new Dictionary<OptimizationNode<T>, int>();
         var pools = new List<(int lastUse, long size)>();
 
         // Sort nodes by first use
@@ -112,7 +112,7 @@ public class MemoryReuseOptimizationPass<T> : OptimizationPassBase<T> where T : 
         return poolAssignments;
     }
 
-    private long EstimateTensorSize(ComputationNode<T> node)
+    private long EstimateTensorSize(OptimizationNode<T> node)
     {
         // Estimate the memory size of the output tensor
         if (node.OutputShape.Length == 0)
@@ -134,7 +134,7 @@ public class MemoryReuseOptimizationPass<T> : OptimizationPassBase<T> where T : 
         return size * typeSize;
     }
 
-    public override bool CanApply(IComputationGraph<T> graph)
+    public override bool CanApply(IOptimizationGraph<T> graph)
     {
         return base.CanApply(graph) && graph.Nodes.Count > 2;
     }

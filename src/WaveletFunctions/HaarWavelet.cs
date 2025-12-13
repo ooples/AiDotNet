@@ -23,30 +23,8 @@ namespace AiDotNet.WaveletFunctions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class HaarWavelet<T> : IWaveletFunction<T>
+public class HaarWavelet<T> : WaveletFunctionBase<T>
 {
-    /// <summary>
-    /// Provides mathematical operations for the generic type T.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field holds an implementation of numeric operations that can work with the generic type T.
-    /// It provides methods for basic arithmetic operations, comparisons, and conversions that are used
-    /// throughout the wavelet calculations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a helper that lets us do math with different number types.
-    /// 
-    /// Because this class can work with different types of numbers (like float, double, or decimal),
-    /// we need a special helper that knows how to:
-    /// - Add, subtract, multiply, and divide these numbers
-    /// - Compare them (greater than, less than, etc.)
-    /// - Convert between different number formats
-    /// 
-    /// This allows the wavelet code to work with whatever number type you choose,
-    /// without having to write separate code for each number type.
-    /// </para>
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HaarWavelet{T}"/> class.
@@ -70,7 +48,6 @@ public class HaarWavelet<T> : IWaveletFunction<T>
     /// </remarks>
     public HaarWavelet()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
@@ -95,13 +72,13 @@ public class HaarWavelet<T> : IWaveletFunction<T>
     /// This shape is particularly good at detecting sudden changes or edges in your data.
     /// </para>
     /// </remarks>
-    public T Calculate(T x)
+    public override T Calculate(T x)
     {
-        if (_numOps.GreaterThanOrEquals(x, _numOps.Zero) && _numOps.LessThan(x, _numOps.FromDouble(0.5)))
-            return _numOps.One;
-        if (_numOps.GreaterThanOrEquals(x, _numOps.FromDouble(0.5)) && _numOps.LessThan(x, _numOps.One))
-            return _numOps.FromDouble(-1);
-        return _numOps.Zero;
+        if (NumOps.GreaterThanOrEquals(x, NumOps.Zero) && NumOps.LessThan(x, NumOps.FromDouble(0.5)))
+            return NumOps.One;
+        if (NumOps.GreaterThanOrEquals(x, NumOps.FromDouble(0.5)) && NumOps.LessThan(x, NumOps.One))
+            return NumOps.FromDouble(-1);
+        return NumOps.Zero;
     }
 
     /// <summary>
@@ -131,7 +108,7 @@ public class HaarWavelet<T> : IWaveletFunction<T>
     /// This process reduces your data to half its original size while preserving its essential information.
     /// </para>
     /// </remarks>
-    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         if (input.Length % 2 != 0)
             throw new ArgumentException("Input length must be even for Haar wavelet decomposition.");
@@ -140,10 +117,10 @@ public class HaarWavelet<T> : IWaveletFunction<T>
         var detail = new Vector<T>(halfLength);
         for (int i = 0; i < halfLength; i++)
         {
-            T sum = _numOps.Add(input[2 * i], input[2 * i + 1]);
-            T diff = _numOps.Subtract(input[2 * i], input[2 * i + 1]);
-            approximation[i] = _numOps.Multiply(_numOps.FromDouble(1.0 / Math.Sqrt(2)), sum);
-            detail[i] = _numOps.Multiply(_numOps.FromDouble(1.0 / Math.Sqrt(2)), diff);
+            T sum = NumOps.Add(input[2 * i], input[2 * i + 1]);
+            T diff = NumOps.Subtract(input[2 * i], input[2 * i + 1]);
+            approximation[i] = NumOps.Multiply(NumOps.FromDouble(1.0 / Math.Sqrt(2)), sum);
+            detail[i] = NumOps.Multiply(NumOps.FromDouble(1.0 / Math.Sqrt(2)), diff);
         }
         return (approximation, detail);
     }
@@ -171,12 +148,12 @@ public class HaarWavelet<T> : IWaveletFunction<T>
     /// which makes the transform reversible and maintains correct signal properties.
     /// </para>
     /// </remarks>
-    public Vector<T> GetScalingCoefficients()
+    public override Vector<T> GetScalingCoefficients()
     {
         return new Vector<T>(new T[]
         {
-            _numOps.FromDouble(1.0 / Math.Sqrt(2)),
-            _numOps.FromDouble(1.0 / Math.Sqrt(2))
+            NumOps.FromDouble(1.0 / Math.Sqrt(2)),
+            NumOps.FromDouble(1.0 / Math.Sqrt(2))
         });
     }
 
@@ -204,12 +181,12 @@ public class HaarWavelet<T> : IWaveletFunction<T>
     /// with the scaling coefficients.
     /// </para>
     /// </remarks>
-    public Vector<T> GetWaveletCoefficients()
+    public override Vector<T> GetWaveletCoefficients()
     {
         return new Vector<T>(new T[]
         {
-            _numOps.FromDouble(1.0 / Math.Sqrt(2)),
-            _numOps.FromDouble(-1.0 / Math.Sqrt(2))
+            NumOps.FromDouble(1.0 / Math.Sqrt(2)),
+            NumOps.FromDouble(-1.0 / Math.Sqrt(2))
         });
     }
 }

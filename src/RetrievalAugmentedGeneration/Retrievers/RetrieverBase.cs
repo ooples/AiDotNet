@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -135,7 +135,7 @@ public abstract class RetrieverBase<T> : IRetriever<T>
     protected virtual void ValidateTopK(int topK)
     {
         if (topK <= 0)
-            throw new ArgumentException("TopK must be greater than zero", nameof(topK));
+            throw new ArgumentOutOfRangeException(nameof(topK), "TopK must be greater than zero");
     }
 
     /// <summary>

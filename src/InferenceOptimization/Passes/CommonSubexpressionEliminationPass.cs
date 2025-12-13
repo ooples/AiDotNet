@@ -14,12 +14,12 @@ public class CommonSubexpressionEliminationPass<T> : OptimizationPassBase<T> whe
     public override OptimizationPassType PassType => OptimizationPassType.CommonSubexpressionElimination;
     public override string Name => "Common Subexpression Elimination";
 
-    public override bool Apply(IComputationGraph<T> graph)
+    public override bool Apply(IOptimizationGraph<T> graph)
     {
         bool modified = false;
 
         // Build a signature for each node based on its operation and inputs
-        var signatureToNode = new Dictionary<string, ComputationNode<T>>();
+        var signatureToNode = new Dictionary<string, OptimizationNode<T>>();
 
         foreach (var node in graph.GetTopologicalOrder())
         {
@@ -55,7 +55,7 @@ public class CommonSubexpressionEliminationPass<T> : OptimizationPassBase<T> whe
         return modified;
     }
 
-    private string ComputeSignature(ComputationNode<T> node)
+    private string ComputeSignature(OptimizationNode<T> node)
     {
         // Create a signature based on:
         // 1. Operation type
@@ -105,7 +105,7 @@ public class CommonSubexpressionEliminationPass<T> : OptimizationPassBase<T> whe
         return computationalKeys.Contains(key.ToLower());
     }
 
-    public override bool CanApply(IComputationGraph<T> graph)
+    public override bool CanApply(IOptimizationGraph<T> graph)
     {
         return base.CanApply(graph) && graph.Nodes.Count > 1;
     }

@@ -8,7 +8,7 @@ namespace AiDotNet.Enums.AlgorithmTypes;
 /// <b>For Beginners:</b> A tridiagonal matrix is a special type of square matrix where non-zero values appear only 
 /// on the main diagonal and the diagonals directly above and below it. All other elements are zero.
 /// 
-/// For example, a 5×5 tridiagonal matrix looks like this (where * represents non-zero values):
+/// For example, a 5Ã—5 tridiagonal matrix looks like this (where * represents non-zero values):
 /// 
 /// * * 0 0 0
 /// * * * 0 0

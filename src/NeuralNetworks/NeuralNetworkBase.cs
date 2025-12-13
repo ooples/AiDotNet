@@ -1,5 +1,7 @@
 using AiDotNet.Interpretability;
 using AiDotNet.Interfaces;
+using AiDotNet.MixedPrecision;
+using AiDotNet.Autodiff;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -14,7 +16,7 @@ namespace AiDotNet.NeuralNetworks;
 /// This class provides the foundation for building different types of neural networks.
 /// </para>
 /// </remarks>
-public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>
+public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IDisposable
 {
     /// <summary>
     /// The internal collection of layers that make up this neural network.
@@ -37,7 +39,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Use AddLayerToCollection() or RemoveLayerFromCollection() instead to ensure proper cache invalidation.
     /// </para>
     /// </remarks>
-    protected List<ILayer<T>> Layers => _layers;
+    public List<ILayer<T>> Layers => _layers;
 
     /// <summary>
     /// Gets the number of layers in this neural network.
@@ -78,7 +80,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Mathematical operations for the numeric type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps;
-    
+
+    /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Stores the input values for each layer during forward pass.
     /// </summary>
@@ -98,9 +105,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected Dictionary<int, Tensor<T>> _layerOutputs = [];
 
     /// <summary>
-    /// Random number generator for initialization.
+    /// Gets the thread-safe random number generator for initialization.
     /// </summary>
-    protected readonly Random Random = new();
+    /// <remarks>
+    /// Uses the centralized RandomHelper which is thread-safe and avoids creating multiple instances per thread.
+    /// </remarks>
+    protected static Random Random => RandomHelper.ThreadSafeRandom;
 
     /// <summary>
     /// The loss function used to calculate error during training.
@@ -159,6 +169,29 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Null when invalid (layers modified).
     /// </summary>
     private int? _cachedParameterCount;
+
+    /// <summary>
+    /// Mixed-precision training context (null if mixed-precision is disabled).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixed-precision training uses both 16-bit (FP16) and 32-bit (FP32) floating-point
+    /// numbers to speed up training while maintaining accuracy. When enabled, this context manages the conversion
+    /// between different precisions and handles loss scaling to prevent numerical issues.
+    /// </para>
+    /// </remarks>
+    protected MixedPrecisionContext? _mixedPrecisionContext;
+
+    /// <summary>
+    /// Gets whether mixed-precision training is enabled.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This property tells you if the network is using mixed-precision training.
+    /// Mixed-precision can provide 2-3x faster training on modern GPUs with Tensor Cores.
+    /// </para>
+    /// </remarks>
+    public bool IsMixedPrecisionEnabled => _mixedPrecisionContext != null;
 
     /// <summary>
     /// Creates a new neural network with the specified architecture.
@@ -896,6 +929,113 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             IsTrainingMode = isTraining;
         }
+    }
+
+    /// <summary>
+    /// Enables mixed-precision training for the neural network.
+    /// </summary>
+    /// <param name="config">Configuration for mixed-precision training (optional, uses defaults if null).</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixed-precision training is a technique that uses a mix of 16-bit (FP16) and
+    /// 32-bit (FP32) floating-point numbers to train neural networks faster while maintaining accuracy.
+    ///
+    /// Benefits:
+    /// - **2-3x faster training** on modern GPUs with Tensor Cores (e.g., NVIDIA V100, A100, RTX 3000+)
+    /// - **~50% memory reduction** allows training larger models or using bigger batch sizes
+    /// - **Maintained accuracy** through careful use of FP32 for critical operations
+    ///
+    /// How it works:
+    /// 1. Forward pass: Computations done in FP16 (faster, less memory)
+    /// 2. Loss calculation: Done in FP32 (maintains numerical stability)
+    /// 3. Backward pass: Gradients computed in FP16
+    /// 4. Loss scaling: Prevents small gradients from becoming zero
+    /// 5. Parameter updates: Done in FP32 master weights (maintains precision)
+    ///
+    /// When to use:
+    /// - ✅ Training large models (>100M parameters)
+    /// - ✅ Using modern GPUs with Tensor Core support
+    /// - ✅ Memory-constrained scenarios
+    /// - ❌ CPU-only training (minimal benefit)
+    /// - ❌ Very small models (<1M parameters)
+    ///
+    /// Note: This feature requires that the network's numeric type T is float.
+    /// Mixed-precision training with Half or double is not supported.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Enable with default settings (recommended for most cases)
+    /// network.EnableMixedPrecision();
+    ///
+    /// // Enable with custom configuration
+    /// var config = new MixedPrecisionConfig
+    /// {
+    ///     InitialLossScale = 4096.0,
+    ///     ScaleGrowthInterval = 2000
+    /// };
+    /// network.EnableMixedPrecision(config);
+    ///
+    /// // Enable with conservative settings for sensitive models
+    /// network.EnableMixedPrecision(MixedPrecisionConfig.Conservative());
+    /// </code>
+    /// </example>
+    /// <exception cref="NotSupportedException">Thrown when T is not float.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when mixed-precision is already enabled.</exception>
+    internal virtual void EnableMixedPrecision(MixedPrecisionConfig? config = null)
+    {
+        // Check that T is float
+        if (typeof(T) != typeof(float))
+        {
+            throw new NotSupportedException(
+                $"Mixed-precision training is only supported for neural networks with type parameter float. " +
+                $"Current type: {typeof(T).Name}. " +
+                $"Create your network as NeuralNetwork<float> to use mixed-precision training.");
+        }
+
+        if (_mixedPrecisionContext != null)
+        {
+            throw new InvalidOperationException(
+                "Mixed-precision training is already enabled. Call DisableMixedPrecision() first if you want to change the configuration.");
+        }
+
+        _mixedPrecisionContext = new MixedPrecisionContext(config);
+    }
+
+    /// <summary>
+    /// Disables mixed-precision training and releases associated resources.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This turns off mixed-precision training and returns the network to
+    /// standard FP32 training. This is useful for:
+    /// - Comparing performance with/without mixed-precision
+    /// - Debugging numerical issues
+    /// - Switching to FP32 training for the final epochs
+    /// </para>
+    /// </remarks>
+    internal virtual void DisableMixedPrecision()
+    {
+        if (_mixedPrecisionContext != null)
+        {
+            _mixedPrecisionContext.Dispose();
+            _mixedPrecisionContext = null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the mixed-precision training context (if enabled).
+    /// </summary>
+    /// <returns>The mixed-precision context, or null if mixed-precision is disabled.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This provides access to the mixed-precision training internals,
+    /// such as the current loss scale and overflow statistics. Useful for monitoring and debugging.
+    /// </para>
+    /// </remarks>
+    internal virtual MixedPrecisionContext? GetMixedPrecisionContext()
+    {
+        return _mixedPrecisionContext;
     }
 
     /// <summary>
@@ -2133,4 +2273,171 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             offset += layerParams.Length;
         }
     }
+
+    /// <summary>
+    /// Saves the model's current state to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the model state to.</param>
+    public virtual void SaveState(Stream stream)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+        if (!stream.CanWrite) throw new ArgumentException("Stream must be writable.", nameof(stream));
+        var data = Serialize();
+        stream.Write(data, 0, data.Length);
+        stream.Flush();
+    }
+
+    /// <summary>
+    /// Loads the model's state from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the model state from.</param>
+    public virtual void LoadState(Stream stream)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+        if (!stream.CanRead) throw new ArgumentException("Stream must be readable.", nameof(stream));
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        var data = ms.ToArray();
+        if (data.Length == 0) throw new InvalidOperationException("Stream contains no data.");
+        Deserialize(data);
+    }
+
+    /// <summary>
+    /// Disposes resources used by the neural network.
+    /// </summary>
+    /// <remarks>
+    /// Ensures that the mixed-precision context is properly disposed if it was enabled.
+    /// </remarks>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Protected Dispose pattern implementation.
+    /// </summary>
+    /// <param name="disposing">True if called from Dispose(), false if called from finalizer.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            // Dispose managed resources
+            DisableMixedPrecision();
+        }
+    }
+
+    #region IJitCompilable Implementation
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Neural networks support JIT compilation for accelerated inference.
+    /// The computation graph represents the forward pass through all layers.
+    /// </para>
+    /// <para><b>For Beginners:</b> JIT (Just-In-Time) compilation optimizes neural networks for faster predictions.
+    ///
+    /// Instead of executing each layer one by one at runtime, JIT compilation:
+    /// - Analyzes the entire network structure
+    /// - Combines and optimizes operations
+    /// - Generates specialized native code
+    /// - Results in 5-10x faster predictions
+    ///
+    /// This is especially beneficial for:
+    /// - Production deployment (real-time predictions)
+    /// - Batch inference (processing many examples)
+    /// - Edge devices (mobile, embedded systems)
+    ///
+    /// Note: Not all layer types support JIT compilation yet. The SupportsJitCompilation
+    /// property indicates whether this specific network configuration can be JIT compiled.
+    /// </para>
+    /// </remarks>
+    public virtual bool SupportsJitCompilation => Layers.Count == 0 || Layers.All(layer => layer.SupportsJitCompilation);
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Exports the neural network as a computation graph for JIT compilation.
+    /// The graph represents the forward pass through all layers in sequence.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method converts the neural network into a computation graph.
+    ///
+    /// A computation graph is like a flowchart that describes:
+    /// 1. How data flows through each layer
+    /// 2. What operations each layer performs
+    /// 3. How layer outputs connect to the next layer's inputs
+    ///
+    /// The JIT compiler uses this graph to:
+    /// - Optimize the operations (remove redundancy)
+    /// - Fuse operations together (combine multiple steps)
+    /// - Generate fast native code
+    ///
+    /// For example, a simple network:
+    /// Input → Dense Layer → ReLU → Dense Layer → Output
+    ///
+    /// Becomes a graph:
+    /// input_node → matmul_node → add_bias_node → relu_node → matmul_node → add_bias_node
+    ///
+    /// The JIT compiler can then optimize this graph (e.g., fuse bias addition with matmul)
+    /// to create highly efficient code.
+    /// </para>
+    /// </remarks>
+    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        // Validation: Ensure network has layers
+        if (Layers == null || Layers.Count == 0)
+        {
+            throw new InvalidOperationException("Cannot export computation graph: Network has no layers.");
+        }
+
+        // Create input node (placeholder for input data)
+        // For neural networks, input shape is typically [batch_size, input_features]
+        // We use [1, Architecture.InputSize] as a placeholder
+        var inputShape = new int[] { 1, Architecture.InputSize };
+        var inputTensor = new Tensor<T>(inputShape);
+        var inputNode = new ComputationNode<T>(inputTensor);
+        inputNodes.Add(inputNode);
+
+        // Build computation graph by chaining layers
+        var currentNode = inputNode;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            var layer = Layers[i];
+            try
+            {
+                currentNode = ConvertLayerToGraph(layer, currentNode);
+            }
+            catch (NotSupportedException ex)
+            {
+                throw new NotSupportedException(
+                    $"JIT compilation failed at layer {i} ({layer.GetType().Name}): {ex.Message}. " +
+                    $"This layer type is not yet supported for JIT compilation.", ex);
+            }
+        }
+
+        return currentNode;
+    }
+
+    /// <summary>
+    /// Converts a single layer to computation graph nodes by delegating to the layer's ExportComputationGraph method.
+    /// </summary>
+    /// <param name="layer">The layer to convert.</param>
+    /// <param name="input">The input node to the layer.</param>
+    /// <returns>The output node from the layer.</returns>
+    /// <exception cref="NotSupportedException">Thrown when the layer does not support JIT compilation.</exception>
+    /// <remarks>
+    /// This method follows the Open/Closed Principle by delegating to each layer's own ExportComputationGraph implementation.
+    /// New layers can be added without modifying this base class.
+    /// </remarks>
+    protected virtual ComputationNode<T> ConvertLayerToGraph(ILayer<T> layer, ComputationNode<T> input)
+    {
+        // Delegate to the layer's ExportComputationGraph implementation
+        // Each layer is responsible for converting itself to a computation graph
+        var layerInputs = new List<ComputationNode<T>> { input };
+        return layer.ExportComputationGraph(layerInputs);
+    }
+
+
+    #endregion
+
 }
