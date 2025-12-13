@@ -348,7 +348,7 @@ internal class LSTMEncoderTensor<T>
         _latentDim = latentDim;
         _hiddenSize = hiddenSize;
 
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         double stddev = Math.Sqrt(2.0 / inputSize);
 
         _weights = InitTensor(new[] { hiddenSize, inputSize }, stddev, random);
@@ -605,7 +605,7 @@ internal class LSTMDecoderTensor<T>
         _outputSize = outputSize;
         _hiddenSize = hiddenSize;
 
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         double stddev = Math.Sqrt(2.0 / latentDim);
 
         _weights = InitTensor(new[] { hiddenSize, latentDim }, stddev, random);

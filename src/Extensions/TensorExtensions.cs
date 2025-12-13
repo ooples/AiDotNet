@@ -253,4 +253,71 @@ public static class TensorExtensions
 
         return result;
     }
+
+    /// <summary>
+    /// Creates and initializes a tensor with Xavier/Glorot initialization using random values.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the tensor elements.</typeparam>
+    /// <param name="shape">The shape of the tensor to create.</param>
+    /// <param name="stddev">Standard deviation for the random initialization.</param>
+    /// <param name="random">The random number generator to use.</param>
+    /// <returns>A new tensor initialized with random values scaled by stddev.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements Xavier/Glorot initialization, which helps neural networks
+    /// train more effectively by keeping the variance of activations consistent across layers.
+    /// </para>
+    /// <para><b>For Beginners:</b> When training neural networks, the initial values of weights
+    /// matter a lot. Xavier initialization chooses random values that aren't too big or too small,
+    /// helping the network learn faster and more reliably.
+    /// </para>
+    /// </remarks>
+    public static Tensor<T> CreateXavierInitializedTensor<T>(int[] shape, double stddev, Random random)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var tensor = new Tensor<T>(shape);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Creates a tensor initialized with all ones.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the tensor elements.</typeparam>
+    /// <param name="size">The size of the 1D tensor to create.</param>
+    /// <returns>A new 1D tensor filled with ones.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is commonly used for initializing layer normalization gamma parameters.
+    /// </para>
+    /// </remarks>
+    public static Tensor<T> CreateOnesTensor<T>(int size)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var tensor = new Tensor<T>(new[] { size });
+        for (int i = 0; i < size; i++)
+        {
+            tensor[i] = numOps.One;
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Calculates the Xavier/Glorot standard deviation for weight initialization.
+    /// </summary>
+    /// <param name="fanIn">The number of input units.</param>
+    /// <returns>The standard deviation to use for initialization.</returns>
+    /// <remarks>
+    /// <para>
+    /// Xavier initialization sets the standard deviation to sqrt(2 / fanIn),
+    /// which helps maintain consistent gradient flow during training.
+    /// </para>
+    /// </remarks>
+    public static double XavierStddev(int fanIn)
+    {
+        return Math.Sqrt(2.0 / fanIn);
+    }
 }

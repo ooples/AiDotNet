@@ -54,7 +54,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
     {
         _options = options ?? new NHiTSOptions<T>();
         _stacks = new List<NHiTSStackTensor<T>>();
-        _random = new Random(42);
+        _random = RandomHelper.CreateSeededRandom(42);
 
         ValidateNHiTSOptions();
         InitializeStacks();
@@ -496,7 +496,7 @@ internal class NHiTSStackTensor<T>
         _hiddenSize = hiddenSize;
         _numLayers = numLayers;
         PoolingSize = poolingSize;
-        _random = new Random(seed);
+        _random = RandomHelper.CreateSeededRandom(seed);
 
         _weights = new List<Tensor<T>>();
         _biases = new List<Tensor<T>>();

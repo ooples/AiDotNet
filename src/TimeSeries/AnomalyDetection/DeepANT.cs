@@ -78,7 +78,7 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
 
     private void InitializeModel()
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         int numChannels = 32;
 
         // Initialize convolutional layers (fixed random features)
@@ -501,7 +501,7 @@ internal class ConvLayerTensor<T>
         _outputChannels = outputChannels;
         _kernelSize = kernelSize;
 
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         double stddev = Math.Sqrt(2.0 / kernelSize);
 
         _kernels = new Tensor<T>(new[] { outputChannels, kernelSize });

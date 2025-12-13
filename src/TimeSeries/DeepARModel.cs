@@ -68,7 +68,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         : base(options ?? new DeepAROptions<T>())
     {
         _options = options ?? new DeepAROptions<T>();
-        _random = new Random(42);
+        _random = RandomHelper.CreateSeededRandom(42);
         _lstmLayers = new List<DeepARLstmCellTensor<T>>();
         _meanWeights = new Tensor<T>([1, 1]);
         _meanBias = new Tensor<T>([1]);
@@ -611,7 +611,7 @@ internal class DeepARLstmCellTensor<T>
         _inputSize = inputSize;
         _hiddenSize = hiddenSize;
 
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         double stddev = Math.Sqrt(2.0 / (inputSize + hiddenSize));
 
         // Initialize weights for all 4 gates

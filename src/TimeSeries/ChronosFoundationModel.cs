@@ -97,7 +97,7 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     {
         _options = options;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _random = new Random(42);
+        _random = RandomHelper.CreateSeededRandom(42);
 
         ValidateOptions(options);
 

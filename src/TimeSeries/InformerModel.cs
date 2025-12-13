@@ -65,7 +65,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         : base(options)
     {
         _options = options;
-        _random = new Random(42);
+        _random = RandomHelper.CreateSeededRandom(42);
         _encoderLayers = new List<InformerEncoderLayerTensor<T>>();
         _distillingLayers = new List<DistillingConvTensor<T>>();
         _decoderLayers = new List<InformerDecoderLayerTensor<T>>();
@@ -85,7 +85,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     private void InitializeModel()
     {
         double stddev = Math.Sqrt(2.0 / _options.EmbeddingDim);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         // Input projection: maps single time step values to embedding dimension
         _inputProjection = InitTensor(new[] { _options.EmbeddingDim, 1 }, stddev, random);
