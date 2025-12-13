@@ -150,8 +150,6 @@ namespace AiDotNetTests.UnitTests.FitDetectors
 
             // Act
             var result = detector.DetectFit(evaluationData);
-            var residualResult = residualAnalyzer.DetectFit(evaluationData);
-            var learningResult = learningCurveDetector.DetectFit(evaluationData);
 
             // Assert
             Assert.NotNull(result);

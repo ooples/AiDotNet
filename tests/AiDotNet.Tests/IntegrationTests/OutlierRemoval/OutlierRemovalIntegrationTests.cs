@@ -58,8 +58,10 @@ public class OutlierRemovalIntegrationTests
         // Act
         var (cleanedInputs, cleanedOutputs) = outlierRemoval.RemoveOutliers(inputs, outputs);
 
-        // Assert - outlier should be removed
-        Assert.True(cleanedOutputs.Length < 8);
+        // Assert - exactly the outlier row should be removed (7 remaining from 8)
+        Assert.Equal(7, cleanedOutputs.Length);
+        // Verify the removed row was the outlier (100.0 should not be present)
+        Assert.DoesNotContain(100.0, cleanedOutputs.ToArray());
     }
 
     [Fact]
@@ -429,8 +431,10 @@ public class OutlierRemovalIntegrationTests
         // Act
         var (cleanedInputs, cleanedOutputs) = outlierRemoval.RemoveOutliers(inputs, outputs);
 
-        // Assert - row with outlier in any feature should be removed
-        Assert.True(cleanedOutputs.Length < 8);
+        // Assert - exactly the outlier row should be removed (7 remaining from 8)
+        Assert.Equal(7, cleanedOutputs.Length);
+        // Verify the removed row was the outlier (100.0 output should not be present)
+        Assert.DoesNotContain(100.0, cleanedOutputs.ToArray());
     }
 
     [Fact]

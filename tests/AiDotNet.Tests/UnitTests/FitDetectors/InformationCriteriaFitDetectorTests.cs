@@ -411,23 +411,31 @@ namespace AiDotNetTests.UnitTests.FitDetectors
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
-            var evaluationData = CreateMockEvaluationData(
+            var consistentData = CreateMockEvaluationData(
                 trainMse: 0.1,
                 validationMse: 0.101,  // Very small difference
                 testMse: 0.102);
+            var inconsistentData = CreateMockEvaluationData(
+                trainMse: 0.1,
+                validationMse: 1.5,  // Large difference
+                testMse: 0.8);
 
             // Act
-            var result = detector.DetectFit(evaluationData);
+            var consistentResult = detector.DetectFit(consistentData);
+            var inconsistentResult = detector.DetectFit(inconsistentData);
 
-            // Assert
-            Assert.NotNull(result.ConfidenceLevel);
-            // Confidence should be reasonable for consistent data
-            Assert.True(result.ConfidenceLevel >= 0.0);
-            Assert.True(result.ConfidenceLevel <= 1.0);
+            // Assert - Both should have valid confidence levels in [0, 1]
+            Assert.True(consistentResult.ConfidenceLevel >= 0.0 && consistentResult.ConfidenceLevel <= 1.0);
+            Assert.True(inconsistentResult.ConfidenceLevel >= 0.0 && inconsistentResult.ConfidenceLevel <= 1.0);
+
+            // Consistent metrics should produce higher or equal confidence than inconsistent ones
+            Assert.True(consistentResult.ConfidenceLevel >= inconsistentResult.ConfidenceLevel,
+                $"Expected consistent data confidence ({consistentResult.ConfidenceLevel:F4}) >= " +
+                $"inconsistent data confidence ({inconsistentResult.ConfidenceLevel:F4})");
         }
 
         [Fact]
-        public void DetectFit_WithInconsistentMetrics_ReturnsLowerConfidence()
+        public void DetectFit_WithInconsistentMetrics_ReturnsValidResult()
         {
             // Arrange
             var detector = new InformationCriteriaFitDetector<double, Matrix<double>, Vector<double>>();
@@ -439,10 +447,11 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             // Act
             var result = detector.DetectFit(evaluationData);
 
-            // Assert
-            Assert.NotNull(result.ConfidenceLevel);
-            Assert.True(result.ConfidenceLevel >= 0.0);
-            Assert.True(result.ConfidenceLevel <= 1.0);
+            // Assert - Should still produce a valid result
+            Assert.NotNull(result);
+            Assert.True(Enum.IsDefined(typeof(FitType), result.FitType));
+            Assert.True(result.ConfidenceLevel >= 0.0 && result.ConfidenceLevel <= 1.0);
+            Assert.NotEmpty(result.Recommendations);
         }
 
         [Fact]
@@ -451,7 +460,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             // Arrange
             var detector = new InformationCriteriaFitDetector<float, Matrix<float>, Vector<float>>();
 
-            // Create float-typed evaluation data manually
+            // Create distinct float-typed data for each dataset
             var trainActual = new Vector<float>(new float[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f,
                 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f, 17.0f, 18.0f, 19.0f, 20.0f,
                 21.0f, 22.0f, 23.0f, 24.0f, 25.0f, 26.0f, 27.0f, 28.0f, 29.0f, 30.0f });
@@ -459,13 +468,15 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 11.0f, 12.1f, 12.9f, 14.1f, 15.0f, 16.1f, 17.0f, 18.1f, 19.0f, 20.1f,
                 21.0f, 22.1f, 22.9f, 24.1f, 25.0f, 26.1f, 27.0f, 28.1f, 29.0f, 30.1f });
 
-            var featureMatrix = new Matrix<float>(30, 3);
-            for (int i = 0; i < 30; i++)
-            {
-                featureMatrix[i, 0] = (float)(i * 0.1);
-                featureMatrix[i, 1] = (float)(i * 0.2);
-                featureMatrix[i, 2] = (float)(i * 0.3);
-            }
+            // Validation data - slightly different predictions (simulating validation error)
+            var validPredicted = new Vector<float>(new float[] { 1.15f, 2.05f, 3.1f, 4.0f, 5.1f, 6.0f, 7.1f, 8.0f, 9.1f, 10.0f,
+                11.1f, 12.0f, 13.1f, 14.0f, 15.1f, 16.0f, 17.1f, 18.0f, 19.1f, 20.0f,
+                21.1f, 22.0f, 23.1f, 24.0f, 25.1f, 26.0f, 27.1f, 28.0f, 29.1f, 30.0f });
+
+            // Test data - slightly different predictions (simulating test error)
+            var testPredicted = new Vector<float>(new float[] { 1.2f, 2.0f, 3.0f, 4.2f, 5.0f, 6.2f, 7.0f, 8.0f, 9.0f, 10.2f,
+                11.0f, 12.2f, 13.0f, 14.0f, 15.0f, 16.2f, 17.0f, 18.2f, 19.0f, 20.0f,
+                21.0f, 22.2f, 23.0f, 24.0f, 25.0f, 26.2f, 27.0f, 28.2f, 29.0f, 30.0f });
 
             var trainErrorStats = new ErrorStats<float>(new AiDotNet.Models.Inputs.ErrorStatsInputs<float>
             {
@@ -484,6 +495,40 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 PredictionType = PredictionType.Regression
             });
 
+            var validErrorStats = new ErrorStats<float>(new AiDotNet.Models.Inputs.ErrorStatsInputs<float>
+            {
+                Actual = trainActual,
+                Predicted = validPredicted,
+                FeatureCount = 3,
+                PredictionType = PredictionType.Regression
+            });
+            var validPredictionStats = new PredictionStats<float>(new AiDotNet.Models.Inputs.PredictionStatsInputs<float>
+            {
+                Actual = trainActual,
+                Predicted = validPredicted,
+                NumberOfParameters = 3,
+                ConfidenceLevel = 0.95,
+                LearningCurveSteps = 10,
+                PredictionType = PredictionType.Regression
+            });
+
+            var testErrorStats = new ErrorStats<float>(new AiDotNet.Models.Inputs.ErrorStatsInputs<float>
+            {
+                Actual = trainActual,
+                Predicted = testPredicted,
+                FeatureCount = 3,
+                PredictionType = PredictionType.Regression
+            });
+            var testPredictionStats = new PredictionStats<float>(new AiDotNet.Models.Inputs.PredictionStatsInputs<float>
+            {
+                Actual = trainActual,
+                Predicted = testPredicted,
+                NumberOfParameters = 3,
+                ConfidenceLevel = 0.95,
+                LearningCurveSteps = 10,
+                PredictionType = PredictionType.Regression
+            });
+
             var evaluationData = new ModelEvaluationData<float, Matrix<float>, Vector<float>>
             {
                 TrainingSet = new DataSetStats<float, Matrix<float>, Vector<float>>
@@ -493,13 +538,13 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 },
                 ValidationSet = new DataSetStats<float, Matrix<float>, Vector<float>>
                 {
-                    ErrorStats = trainErrorStats,
-                    PredictionStats = trainPredictionStats
+                    ErrorStats = validErrorStats,
+                    PredictionStats = validPredictionStats
                 },
                 TestSet = new DataSetStats<float, Matrix<float>, Vector<float>>
                 {
-                    ErrorStats = trainErrorStats,
-                    PredictionStats = trainPredictionStats
+                    ErrorStats = testErrorStats,
+                    PredictionStats = testPredictionStats
                 }
             };
 
@@ -508,7 +553,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
 
             // Assert
             Assert.NotNull(result);
-            Assert.NotNull(result.FitType);
+            Assert.True(Enum.IsDefined(typeof(FitType), result.FitType));
+            Assert.True(result.ConfidenceLevel >= 0.0 && result.ConfidenceLevel <= 1.0);
         }
     }
 }
