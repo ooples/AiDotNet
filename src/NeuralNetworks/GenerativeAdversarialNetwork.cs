@@ -394,6 +394,44 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
+    /// Creates the combined GAN architecture from generator and discriminator architectures.
+    /// </summary>
+    private static NeuralNetworkArchitecture<T> CreateGANArchitecture(
+        NeuralNetworkArchitecture<T> generatorArchitecture,
+        NeuralNetworkArchitecture<T> discriminatorArchitecture,
+        InputType inputType)
+    {
+        // For 3D input (images), use the discriminator's dimensions since it takes the image input
+        // The GAN's combined architecture represents the data flow from image to output
+        if (inputType == InputType.ThreeDimensional)
+        {
+            // Don't pass inputSize - let the validation calculate it from dimensions
+            return new NeuralNetworkArchitecture<T>(
+                inputType: inputType,
+                taskType: NeuralNetworkTaskType.Generative,
+                complexity: NetworkComplexity.Medium,
+                inputSize: 0, // Let validation calculate from dimensions
+                inputHeight: discriminatorArchitecture.InputHeight,
+                inputWidth: discriminatorArchitecture.InputWidth,
+                inputDepth: discriminatorArchitecture.InputDepth,
+                outputSize: discriminatorArchitecture.OutputSize,
+                layers: null);
+        }
+
+        // For 1D input, use the generator's input size
+        return new NeuralNetworkArchitecture<T>(
+            inputType: inputType,
+            taskType: NeuralNetworkTaskType.Generative,
+            complexity: NetworkComplexity.Medium,
+            inputSize: generatorArchitecture.InputSize,
+            inputHeight: 0,
+            inputWidth: 0,
+            inputDepth: 1,
+            outputSize: discriminatorArchitecture.OutputSize,
+            layers: null);
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GenerativeAdversarialNetwork{T}"/> class.
     /// </summary>
     /// <param name="generatorArchitecture">The neural network architecture for the generator.</param>
@@ -419,19 +457,13 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// before their competition begins.
     /// </para>
     /// </remarks>
-    public GenerativeAdversarialNetwork(NeuralNetworkArchitecture<T> generatorArchitecture, 
+    public GenerativeAdversarialNetwork(NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
         InputType inputType,
         ILossFunction<T>? lossFunction = null,
         double initialLearningRate = 0.001)
-        : base(new NeuralNetworkArchitecture<T>(
-            inputType,
-            NeuralNetworkTaskType.Generative, 
-            NetworkComplexity.Medium, 
-            generatorArchitecture.InputSize, 
-            discriminatorArchitecture.OutputSize, 
-            0, 0, 0, 
-            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
+        : base(CreateGANArchitecture(generatorArchitecture, discriminatorArchitecture, inputType),
+            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
         _initialLearningRate = initialLearningRate;
         _currentLearningRate = initialLearningRate;
