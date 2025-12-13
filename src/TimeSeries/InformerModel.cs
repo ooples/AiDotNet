@@ -65,6 +65,17 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         : base(options)
     {
         _options = options;
+
+        // Validate options
+        if (_options.EmbeddingDim <= 0)
+            throw new ArgumentException("EmbeddingDim must be positive.", nameof(options));
+        if (_options.NumEncoderLayers <= 0)
+            throw new ArgumentException("NumEncoderLayers must be positive.", nameof(options));
+        if (_options.NumDecoderLayers <= 0)
+            throw new ArgumentException("NumDecoderLayers must be positive.", nameof(options));
+        if (_options.NumAttentionHeads <= 0)
+            throw new ArgumentException("NumAttentionHeads must be positive.", nameof(options));
+
         _random = RandomHelper.CreateSeededRandom(42);
         _encoderLayers = new List<InformerEncoderLayerTensor<T>>();
         _distillingLayers = new List<DistillingConvTensor<T>>();
@@ -625,7 +636,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         writer.Write(_options.BatchSize);
         writer.Write(_options.DistillingFactor);
 
-        // Write tensors
+        // Write main tensors
         WriteTensor(writer, _inputProjection);
         WriteTensor(writer, _positionalEncoding);
         WriteTensor(writer, _decoderStartToken);
@@ -636,6 +647,24 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         writer.Write(_encoderLayers.Count);
         writer.Write(_distillingLayers.Count);
         writer.Write(_decoderLayers.Count);
+
+        // Write encoder layer weights
+        foreach (var layer in _encoderLayers)
+        {
+            layer.Serialize(writer, WriteTensor);
+        }
+
+        // Write distilling layer weights
+        foreach (var layer in _distillingLayers)
+        {
+            layer.Serialize(writer, WriteTensor);
+        }
+
+        // Write decoder layer weights
+        foreach (var layer in _decoderLayers)
+        {
+            layer.Serialize(writer, WriteTensor);
+        }
     }
 
     /// <summary>
@@ -656,20 +685,74 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         _ = reader.ReadInt32();  // batch
         _ = reader.ReadInt32();  // distill
 
-        // Read tensors
+        // Read main tensors
         _inputProjection = ReadTensor(reader);
         _positionalEncoding = ReadTensor(reader);
         _decoderStartToken = ReadTensor(reader);
         _outputProjection = ReadTensor(reader);
         _outputBias = ReadTensor(reader);
 
-        // Read layer counts (skip them)
-        _ = reader.ReadInt32();  // encCount
-        _ = reader.ReadInt32();  // distillCount
-        _ = reader.ReadInt32();  // decCount
+        // Read layer counts
+        int encCount = reader.ReadInt32();
+        int distillCount = reader.ReadInt32();
+        int decCount = reader.ReadInt32();
 
-        // Reinitialize layers with the correct count
-        InitializeModel();
+        // Clear and recreate layers with proper structure (but with placeholder weights)
+        _encoderLayers.Clear();
+        _distillingLayers.Clear();
+        _decoderLayers.Clear();
+
+        int currentSeqLen = _options.LookbackWindow;
+        for (int i = 0; i < encCount; i++)
+        {
+            _encoderLayers.Add(new InformerEncoderLayerTensor<T>(
+                _options.EmbeddingDim,
+                _options.NumAttentionHeads,
+                SparsityFactor,
+                _options.DropoutRate,
+                42 + i));
+
+            if (i < encCount - 1)
+            {
+                _distillingLayers.Add(new DistillingConvTensor<T>(
+                    _options.EmbeddingDim,
+                    currentSeqLen,
+                    _options.DistillingFactor,
+                    42 + i));
+                currentSeqLen = (currentSeqLen + _options.DistillingFactor - 1) / _options.DistillingFactor;
+            }
+        }
+
+        for (int i = 0; i < decCount; i++)
+        {
+            _decoderLayers.Add(new InformerDecoderLayerTensor<T>(
+                _options.EmbeddingDim,
+                _options.NumAttentionHeads,
+                SparsityFactor,
+                _options.DropoutRate,
+                42 + encCount + i));
+        }
+
+        // Deserialize encoder layer weights (overwrite the initialized values)
+        foreach (var layer in _encoderLayers)
+        {
+            layer.Deserialize(reader, ReadTensor);
+        }
+
+        // Deserialize distilling layer weights
+        foreach (var layer in _distillingLayers)
+        {
+            layer.Deserialize(reader, ReadTensor);
+        }
+
+        // Deserialize decoder layer weights
+        foreach (var layer in _decoderLayers)
+        {
+            layer.Deserialize(reader, ReadTensor);
+        }
+
+        // Initialize gradient accumulators
+        InitializeGradientAccumulators();
     }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
@@ -989,6 +1072,74 @@ internal class InformerEncoderLayerTensor<T>
         return dInput;
     }
 
+    /// <summary>
+    /// Serializes the encoder layer weights to a binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    /// <param name="writeTensor">A delegate that writes a tensor to the binary writer.</param>
+    /// <remarks>
+    /// Writes all attention projection weights (Q, K, V, O), feed-forward network weights and biases,
+    /// and layer normalization parameters to preserve the trained state of the encoder layer.
+    /// </remarks>
+    public void Serialize(BinaryWriter writer, Action<BinaryWriter, Tensor<T>> writeTensor)
+    {
+        writeTensor(writer, _queryProj);
+        writeTensor(writer, _keyProj);
+        writeTensor(writer, _valueProj);
+        writeTensor(writer, _outputProj);
+        writeTensor(writer, _ffn1);
+        writeTensor(writer, _ffn1Bias);
+        writeTensor(writer, _ffn2);
+        writeTensor(writer, _ffn2Bias);
+        writeTensor(writer, _layerNorm1Gamma);
+        writeTensor(writer, _layerNorm1Beta);
+        writeTensor(writer, _layerNorm2Gamma);
+        writeTensor(writer, _layerNorm2Beta);
+    }
+
+    /// <summary>
+    /// Deserializes the encoder layer weights from a binary reader.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    /// <param name="readTensor">A delegate that reads a tensor from the binary reader.</param>
+    /// <remarks>
+    /// Restores all attention projection weights, feed-forward network weights and biases,
+    /// and layer normalization parameters from serialized data. The deserialized values
+    /// are copied into the existing tensors to preserve the layer structure.
+    /// </remarks>
+    public void Deserialize(BinaryReader reader, Func<BinaryReader, Tensor<T>> readTensor)
+    {
+        CopyTensorData(readTensor(reader), _queryProj);
+        CopyTensorData(readTensor(reader), _keyProj);
+        CopyTensorData(readTensor(reader), _valueProj);
+        CopyTensorData(readTensor(reader), _outputProj);
+        CopyTensorData(readTensor(reader), _ffn1);
+        CopyTensorData(readTensor(reader), _ffn1Bias);
+        CopyTensorData(readTensor(reader), _ffn2);
+        CopyTensorData(readTensor(reader), _ffn2Bias);
+        CopyTensorData(readTensor(reader), _layerNorm1Gamma);
+        CopyTensorData(readTensor(reader), _layerNorm1Beta);
+        CopyTensorData(readTensor(reader), _layerNorm2Gamma);
+        CopyTensorData(readTensor(reader), _layerNorm2Beta);
+    }
+
+    /// <summary>
+    /// Copies tensor data from a source tensor to a destination tensor.
+    /// </summary>
+    /// <param name="source">The source tensor containing the data to copy.</param>
+    /// <param name="dest">The destination tensor to copy data into.</param>
+    /// <remarks>
+    /// Copies element-by-element up to the minimum length of both tensors.
+    /// This preserves the destination tensor's memory allocation while updating its values.
+    /// </remarks>
+    private void CopyTensorData(Tensor<T> source, Tensor<T> dest)
+    {
+        for (int i = 0; i < Math.Min(source.Length, dest.Length); i++)
+        {
+            dest[i] = source[i];
+        }
+    }
+
     public void AccumulateGradients(Dictionary<string, Tensor<T>> gradients, int layerIndex)
     {
         // Gradients are accumulated during backward pass
@@ -1148,11 +1299,70 @@ internal class DistillingConvTensor<T>
         return dInput;
     }
 
+    /// <summary>
+    /// Serializes the distilling convolution layer weights to a binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    /// <param name="writeTensor">A delegate that writes a tensor to the binary writer.</param>
+    /// <remarks>
+    /// Writes the 1D convolution weights and biases used for sequence compression
+    /// during the distilling process.
+    /// </remarks>
+    public void Serialize(BinaryWriter writer, Action<BinaryWriter, Tensor<T>> writeTensor)
+    {
+        writeTensor(writer, _convWeights);
+        writeTensor(writer, _convBias);
+    }
+
+    /// <summary>
+    /// Deserializes the distilling convolution layer weights from a binary reader.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    /// <param name="readTensor">A delegate that reads a tensor from the binary reader.</param>
+    /// <remarks>
+    /// Restores the convolution weights and biases from serialized data. The deserialized
+    /// values are copied into the existing tensors to preserve the layer structure.
+    /// </remarks>
+    public void Deserialize(BinaryReader reader, Func<BinaryReader, Tensor<T>> readTensor)
+    {
+        CopyTensorData(readTensor(reader), _convWeights);
+        CopyTensorData(readTensor(reader), _convBias);
+    }
+
+    /// <summary>
+    /// Copies tensor data from a source tensor to a destination tensor.
+    /// </summary>
+    /// <param name="source">The source tensor containing the data to copy.</param>
+    /// <param name="dest">The destination tensor to copy data into.</param>
+    /// <remarks>
+    /// Copies element-by-element up to the minimum length of both tensors.
+    /// This preserves the destination tensor's memory allocation while updating its values.
+    /// </remarks>
+    private void CopyTensorData(Tensor<T> source, Tensor<T> dest)
+    {
+        for (int i = 0; i < Math.Min(source.Length, dest.Length); i++)
+        {
+            dest[i] = source[i];
+        }
+    }
+
+    /// <summary>
+    /// Accumulates gradients during the backward pass for the distilling layer.
+    /// </summary>
+    /// <param name="gradients">Dictionary to accumulate gradients into.</param>
+    /// <param name="layerIndex">The index of this layer in the model.</param>
     public void AccumulateGradients(Dictionary<string, Tensor<T>> gradients, int layerIndex)
     {
         // Gradients accumulated during backward
     }
 
+    /// <summary>
+    /// Applies accumulated gradients to update the layer weights.
+    /// </summary>
+    /// <param name="accumulators">Dictionary containing accumulated gradients.</param>
+    /// <param name="learningRate">The learning rate for weight updates.</param>
+    /// <param name="batchSize">The batch size for averaging gradients.</param>
+    /// <param name="layerIndex">The index of this layer in the model.</param>
     public void ApplyGradients(Dictionary<string, Tensor<T>> accumulators, T learningRate, T batchSize, int layerIndex)
     {
         string prefix = $"distill_{layerIndex}_";
@@ -1552,11 +1762,124 @@ internal class InformerDecoderLayerTensor<T>
         return (dInput, dEncoderOutput);
     }
 
+    /// <summary>
+    /// Serializes the decoder layer weights to a binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    /// <param name="writeTensor">A delegate that writes a tensor to the binary writer.</param>
+    /// <remarks>
+    /// <para>
+    /// Writes all decoder layer weights in the following order:
+    /// <list type="number">
+    /// <item>Self-attention projection weights (Q, K, V, O)</item>
+    /// <item>Cross-attention projection weights (Q, K, V, O)</item>
+    /// <item>Feed-forward network weights and biases</item>
+    /// <item>Layer normalization parameters (gamma and beta for all 3 layer norms)</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public void Serialize(BinaryWriter writer, Action<BinaryWriter, Tensor<T>> writeTensor)
+    {
+        // Self-attention
+        writeTensor(writer, _selfQueryProj);
+        writeTensor(writer, _selfKeyProj);
+        writeTensor(writer, _selfValueProj);
+        writeTensor(writer, _selfOutputProj);
+        // Cross-attention
+        writeTensor(writer, _crossQueryProj);
+        writeTensor(writer, _crossKeyProj);
+        writeTensor(writer, _crossValueProj);
+        writeTensor(writer, _crossOutputProj);
+        // FFN
+        writeTensor(writer, _ffn1);
+        writeTensor(writer, _ffn1Bias);
+        writeTensor(writer, _ffn2);
+        writeTensor(writer, _ffn2Bias);
+        // Layer norms
+        writeTensor(writer, _layerNorm1Gamma);
+        writeTensor(writer, _layerNorm1Beta);
+        writeTensor(writer, _layerNorm2Gamma);
+        writeTensor(writer, _layerNorm2Beta);
+        writeTensor(writer, _layerNorm3Gamma);
+        writeTensor(writer, _layerNorm3Beta);
+    }
+
+    /// <summary>
+    /// Deserializes the decoder layer weights from a binary reader.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    /// <param name="readTensor">A delegate that reads a tensor from the binary reader.</param>
+    /// <remarks>
+    /// <para>
+    /// Restores all decoder layer weights in the same order they were serialized:
+    /// self-attention, cross-attention, FFN, and layer normalization parameters.
+    /// The deserialized values are copied into the existing tensors to preserve the layer structure.
+    /// </para>
+    /// </remarks>
+    public void Deserialize(BinaryReader reader, Func<BinaryReader, Tensor<T>> readTensor)
+    {
+        // Self-attention
+        CopyTensorData(readTensor(reader), _selfQueryProj);
+        CopyTensorData(readTensor(reader), _selfKeyProj);
+        CopyTensorData(readTensor(reader), _selfValueProj);
+        CopyTensorData(readTensor(reader), _selfOutputProj);
+        // Cross-attention
+        CopyTensorData(readTensor(reader), _crossQueryProj);
+        CopyTensorData(readTensor(reader), _crossKeyProj);
+        CopyTensorData(readTensor(reader), _crossValueProj);
+        CopyTensorData(readTensor(reader), _crossOutputProj);
+        // FFN
+        CopyTensorData(readTensor(reader), _ffn1);
+        CopyTensorData(readTensor(reader), _ffn1Bias);
+        CopyTensorData(readTensor(reader), _ffn2);
+        CopyTensorData(readTensor(reader), _ffn2Bias);
+        // Layer norms
+        CopyTensorData(readTensor(reader), _layerNorm1Gamma);
+        CopyTensorData(readTensor(reader), _layerNorm1Beta);
+        CopyTensorData(readTensor(reader), _layerNorm2Gamma);
+        CopyTensorData(readTensor(reader), _layerNorm2Beta);
+        CopyTensorData(readTensor(reader), _layerNorm3Gamma);
+        CopyTensorData(readTensor(reader), _layerNorm3Beta);
+    }
+
+    /// <summary>
+    /// Copies tensor data from a source tensor to a destination tensor.
+    /// </summary>
+    /// <param name="source">The source tensor containing the data to copy.</param>
+    /// <param name="dest">The destination tensor to copy data into.</param>
+    /// <remarks>
+    /// Copies element-by-element up to the minimum length of both tensors.
+    /// This preserves the destination tensor's memory allocation while updating its values.
+    /// </remarks>
+    private void CopyTensorData(Tensor<T> source, Tensor<T> dest)
+    {
+        for (int i = 0; i < Math.Min(source.Length, dest.Length); i++)
+        {
+            dest[i] = source[i];
+        }
+    }
+
+    /// <summary>
+    /// Accumulates gradients during the backward pass for the decoder layer.
+    /// </summary>
+    /// <param name="gradients">Dictionary to accumulate gradients into.</param>
+    /// <param name="layerIndex">The index of this layer in the model.</param>
     public void AccumulateGradients(Dictionary<string, Tensor<T>> gradients, int layerIndex)
     {
         // Gradients accumulated during backward
     }
 
+    /// <summary>
+    /// Applies accumulated gradients to update the layer weights.
+    /// </summary>
+    /// <param name="accumulators">Dictionary containing accumulated gradients.</param>
+    /// <param name="learningRate">The learning rate for weight updates.</param>
+    /// <param name="batchSize">The batch size for averaging gradients.</param>
+    /// <param name="layerIndex">The index of this layer in the model.</param>
+    /// <remarks>
+    /// Updates all trainable parameters including self-attention, cross-attention,
+    /// feed-forward network, and layer normalization weights using gradient descent.
+    /// </remarks>
     public void ApplyGradients(Dictionary<string, Tensor<T>> accumulators, T learningRate, T batchSize, int layerIndex)
     {
         string prefix = $"decoder_{layerIndex}_";
