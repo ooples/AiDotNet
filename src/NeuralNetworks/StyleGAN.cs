@@ -160,6 +160,36 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     private ILossFunction<T> _lossFunction;
 
     /// <summary>
+    /// Creates the combined StyleGAN architecture with correct dimension handling.
+    /// </summary>
+    private static NeuralNetworkArchitecture<T> CreateStyleGANArchitecture(
+        int latentSize,
+        NeuralNetworkArchitecture<T> discriminatorArchitecture,
+        InputType inputType)
+    {
+        if (inputType == InputType.ThreeDimensional)
+        {
+            return new NeuralNetworkArchitecture<T>(
+                inputType: inputType,
+                taskType: NeuralNetworkTaskType.Generative,
+                complexity: NetworkComplexity.VeryDeep,
+                inputSize: 0,
+                inputHeight: discriminatorArchitecture.InputHeight,
+                inputWidth: discriminatorArchitecture.InputWidth,
+                inputDepth: discriminatorArchitecture.InputDepth,
+                outputSize: discriminatorArchitecture.OutputSize,
+                layers: null);
+        }
+
+        return new NeuralNetworkArchitecture<T>(
+            inputType: inputType,
+            taskType: NeuralNetworkTaskType.Generative,
+            complexity: NetworkComplexity.VeryDeep,
+            inputSize: latentSize,
+            outputSize: discriminatorArchitecture.OutputSize);
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="StyleGAN{T}"/> class.
     /// </summary>
     /// <param name="mappingNetworkArchitecture">Architecture for the mapping network (Z → W).</param>
@@ -183,14 +213,8 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         double initialLearningRate = 0.001,
         bool enableStyleMixing = true,
         double styleMixingProbability = 0.9)
-        : base(new NeuralNetworkArchitecture<T>(
-            inputType,
-            NeuralNetworkTaskType.Generative,
-            NetworkComplexity.VeryDeep,
-            latentSize,
-            discriminatorArchitecture.OutputSize,
-            0, 0, 0,
-            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
+        : base(CreateStyleGANArchitecture(latentSize, discriminatorArchitecture, inputType),
+               lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
         // Input validation
         if (mappingNetworkArchitecture is null)

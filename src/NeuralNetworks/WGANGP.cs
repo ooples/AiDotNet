@@ -83,6 +83,37 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     private readonly ILossFunction<T> _lossFunction;
 
     /// <summary>
+    /// Creates the combined WGAN-GP architecture with correct dimension handling.
+    /// </summary>
+    private static NeuralNetworkArchitecture<T> CreateWGANGPArchitecture(
+        NeuralNetworkArchitecture<T> generatorArchitecture,
+        NeuralNetworkArchitecture<T> criticArchitecture,
+        InputType inputType)
+    {
+        if (inputType == InputType.ThreeDimensional)
+        {
+            return new NeuralNetworkArchitecture<T>(
+                inputType: inputType,
+                taskType: NeuralNetworkTaskType.Generative,
+                complexity: NetworkComplexity.Medium,
+                inputSize: 0,
+                inputHeight: criticArchitecture.InputHeight,
+                inputWidth: criticArchitecture.InputWidth,
+                inputDepth: criticArchitecture.InputDepth,
+                outputSize: criticArchitecture.OutputSize,
+                layers: null);
+        }
+
+        // For OneDimensional and TwoDimensional, use simple constructor
+        return new NeuralNetworkArchitecture<T>(
+            inputType: inputType,
+            taskType: NeuralNetworkTaskType.Generative,
+            complexity: NetworkComplexity.Medium,
+            inputSize: generatorArchitecture.InputSize,
+            outputSize: criticArchitecture.OutputSize);
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="WGANGP{T}"/> class.
     /// </summary>
     /// <param name="generatorArchitecture">The neural network architecture for the generator.</param>
@@ -100,14 +131,8 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         double initialLearningRate = 0.0001,
         double gradientPenaltyCoefficient = 10.0,
         int criticIterations = 5)
-        : base(new NeuralNetworkArchitecture<T>(
-            inputType,
-            NeuralNetworkTaskType.Generative,
-            NetworkComplexity.Medium,
-            generatorArchitecture.InputSize,
-            criticArchitecture.OutputSize,
-            0, 0, 0,
-            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
+        : base(CreateWGANGPArchitecture(generatorArchitecture, criticArchitecture, inputType),
+               lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
         // Input validation
         if (generatorArchitecture is null)

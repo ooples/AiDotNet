@@ -110,6 +110,35 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     private ILossFunction<T> _lossFunction;
 
+    /// <summary>
+    /// Creates the combined CycleGAN architecture with correct dimension handling.
+    /// </summary>
+    private static NeuralNetworkArchitecture<T> CreateCycleGANArchitecture(
+        NeuralNetworkArchitecture<T> generatorAtoB,
+        InputType inputType)
+    {
+        if (inputType == InputType.ThreeDimensional)
+        {
+            return new NeuralNetworkArchitecture<T>(
+                inputType: inputType,
+                taskType: NeuralNetworkTaskType.Generative,
+                complexity: NetworkComplexity.Deep,
+                inputSize: 0,
+                inputHeight: generatorAtoB.InputHeight,
+                inputWidth: generatorAtoB.InputWidth,
+                inputDepth: generatorAtoB.InputDepth,
+                outputSize: generatorAtoB.OutputSize,
+                layers: null);
+        }
+
+        return new NeuralNetworkArchitecture<T>(
+            inputType: inputType,
+            taskType: NeuralNetworkTaskType.Generative,
+            complexity: NetworkComplexity.Deep,
+            inputSize: generatorAtoB.InputSize,
+            outputSize: generatorAtoB.OutputSize);
+    }
+
     public CycleGAN(
         NeuralNetworkArchitecture<T> generatorAtoB,
         NeuralNetworkArchitecture<T> generatorBtoA,
@@ -120,14 +149,8 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         double initialLearningRate = 0.0002,
         double cycleConsistencyLambda = 10.0,
         double identityLambda = 5.0)
-        : base(new NeuralNetworkArchitecture<T>(
-            inputType,
-            NeuralNetworkTaskType.Generative,
-            NetworkComplexity.Deep,
-            generatorAtoB.InputSize,
-            generatorAtoB.OutputSize,
-            0, 0, 0,
-            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
+        : base(CreateCycleGANArchitecture(generatorAtoB, inputType),
+               lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
         // Validate constructor inputs
         if (generatorAtoB is null)

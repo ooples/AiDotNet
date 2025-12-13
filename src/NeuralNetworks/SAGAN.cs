@@ -89,6 +89,57 @@ public class SAGAN<T> : NeuralNetworkBase<T>
     private ILossFunction<T> _lossFunction;
 
     /// <summary>
+    /// Creates the combined SAGAN architecture with correct dimension handling.
+    /// </summary>
+    private static NeuralNetworkArchitecture<T> CreateSAGANArchitecture(
+        int latentSize,
+        int numClasses,
+        int imageChannels,
+        int imageHeight,
+        int imageWidth,
+        InputType inputType)
+    {
+        int inputSize = latentSize + (numClasses > 0 ? 128 : 0);
+        int outputSize = imageChannels * imageHeight * imageWidth;
+
+        if (inputType == InputType.ThreeDimensional)
+        {
+            return new NeuralNetworkArchitecture<T>(
+                inputType: inputType,
+                taskType: NeuralNetworkTaskType.Generative,
+                complexity: NetworkComplexity.Deep,
+                inputSize: 0,
+                inputHeight: imageHeight,
+                inputWidth: imageWidth,
+                inputDepth: imageChannels,
+                outputSize: outputSize,
+                layers: null);
+        }
+
+        if (inputType == InputType.TwoDimensional)
+        {
+            return new NeuralNetworkArchitecture<T>(
+                inputType: inputType,
+                taskType: NeuralNetworkTaskType.Generative,
+                complexity: NetworkComplexity.Deep,
+                inputSize: 0,
+                inputHeight: imageHeight,
+                inputWidth: imageWidth,
+                inputDepth: 1,
+                outputSize: outputSize,
+                layers: null);
+        }
+
+        // OneDimensional
+        return new NeuralNetworkArchitecture<T>(
+            inputType: inputType,
+            taskType: NeuralNetworkTaskType.Generative,
+            complexity: NetworkComplexity.Deep,
+            inputSize: inputSize,
+            outputSize: outputSize);
+    }
+
+    /// <summary>
     /// Initializes a new instance of Self-Attention GAN.
     /// </summary>
     /// <param name="generatorArchitecture">Architecture for the generator network.</param>
@@ -118,14 +169,8 @@ public class SAGAN<T> : NeuralNetworkBase<T>
         InputType inputType = InputType.TwoDimensional,
         ILossFunction<T>? lossFunction = null,
         double initialLearningRate = 0.0001)
-        : base(new NeuralNetworkArchitecture<T>(
-            inputType,
-            NeuralNetworkTaskType.Generative,
-            NetworkComplexity.Deep,
-            latentSize + (numClasses > 0 ? 128 : 0),
-            imageChannels * imageHeight * imageWidth,
-            0, 0, 0,
-            null), lossFunction ?? new HingeLoss<T>())
+        : base(CreateSAGANArchitecture(latentSize, numClasses, imageChannels, imageHeight, imageWidth, inputType),
+               lossFunction ?? new HingeLoss<T>())
     {
         LatentSize = latentSize;
         NumClasses = numClasses;

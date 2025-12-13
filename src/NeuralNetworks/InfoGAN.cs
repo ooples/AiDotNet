@@ -141,6 +141,36 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     private ILossFunction<T> _lossFunction;
 
     /// <summary>
+    /// Creates the combined InfoGAN architecture with correct dimension handling.
+    /// </summary>
+    private static NeuralNetworkArchitecture<T> CreateInfoGANArchitecture(
+        NeuralNetworkArchitecture<T> generatorArchitecture,
+        NeuralNetworkArchitecture<T> discriminatorArchitecture,
+        InputType inputType)
+    {
+        if (inputType == InputType.ThreeDimensional)
+        {
+            return new NeuralNetworkArchitecture<T>(
+                inputType: inputType,
+                taskType: NeuralNetworkTaskType.Generative,
+                complexity: NetworkComplexity.Deep,
+                inputSize: 0,
+                inputHeight: discriminatorArchitecture.InputHeight,
+                inputWidth: discriminatorArchitecture.InputWidth,
+                inputDepth: discriminatorArchitecture.InputDepth,
+                outputSize: discriminatorArchitecture.OutputSize,
+                layers: null);
+        }
+
+        return new NeuralNetworkArchitecture<T>(
+            inputType: inputType,
+            taskType: NeuralNetworkTaskType.Generative,
+            complexity: NetworkComplexity.Deep,
+            inputSize: generatorArchitecture.InputSize,
+            outputSize: discriminatorArchitecture.OutputSize);
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="InfoGAN{T}"/> class.
     /// </summary>
     /// <param name="generatorArchitecture">The generator architecture.</param>
@@ -160,14 +190,8 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         double initialLearningRate = 0.0002,
         double mutualInfoCoefficient = 1.0)
-        : base(new NeuralNetworkArchitecture<T>(
-            inputType,
-            NeuralNetworkTaskType.Generative,
-            NetworkComplexity.Deep,
-            generatorArchitecture.InputSize,
-            discriminatorArchitecture.OutputSize,
-            0, 0, 0,
-            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
+        : base(CreateInfoGANArchitecture(generatorArchitecture, discriminatorArchitecture, inputType),
+               lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
         if (generatorArchitecture is null)
             throw new ArgumentNullException(nameof(generatorArchitecture));

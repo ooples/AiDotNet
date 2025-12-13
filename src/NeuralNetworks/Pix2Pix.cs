@@ -101,6 +101,35 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     private ILossFunction<T> _lossFunction;
 
     /// <summary>
+    /// Creates the combined Pix2Pix architecture with correct dimension handling.
+    /// </summary>
+    private static NeuralNetworkArchitecture<T> CreatePix2PixArchitecture(
+        NeuralNetworkArchitecture<T> generatorArchitecture,
+        InputType inputType)
+    {
+        if (inputType == InputType.ThreeDimensional)
+        {
+            return new NeuralNetworkArchitecture<T>(
+                inputType: inputType,
+                taskType: NeuralNetworkTaskType.Generative,
+                complexity: NetworkComplexity.Deep,
+                inputSize: 0,
+                inputHeight: generatorArchitecture.InputHeight,
+                inputWidth: generatorArchitecture.InputWidth,
+                inputDepth: generatorArchitecture.InputDepth,
+                outputSize: generatorArchitecture.OutputSize,
+                layers: null);
+        }
+
+        return new NeuralNetworkArchitecture<T>(
+            inputType: inputType,
+            taskType: NeuralNetworkTaskType.Generative,
+            complexity: NetworkComplexity.Deep,
+            inputSize: generatorArchitecture.InputSize,
+            outputSize: generatorArchitecture.OutputSize);
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="Pix2Pix{T}"/> class.
     /// </summary>
     /// <param name="generatorArchitecture">U-Net generator architecture.</param>
@@ -116,14 +145,8 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         double initialLearningRate = 0.0002,
         double l1Lambda = 100.0)
-        : base(new NeuralNetworkArchitecture<T>(
-            inputType,
-            NeuralNetworkTaskType.Generative,
-            NetworkComplexity.Deep,
-            generatorArchitecture.InputSize,
-            generatorArchitecture.OutputSize,
-            0, 0, 0,
-            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
+        : base(CreatePix2PixArchitecture(generatorArchitecture, inputType),
+               lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
         if (generatorArchitecture is null)
             throw new ArgumentNullException(nameof(generatorArchitecture));

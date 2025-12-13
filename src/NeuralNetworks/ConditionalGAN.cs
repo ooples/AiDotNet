@@ -85,6 +85,37 @@ public class ConditionalGAN<T> : NeuralNetworkBase<T>
     private ILossFunction<T> _lossFunction;
 
     /// <summary>
+    /// Creates the combined ConditionalGAN architecture with correct dimension handling.
+    /// </summary>
+    private static NeuralNetworkArchitecture<T> CreateConditionalGANArchitecture(
+        NeuralNetworkArchitecture<T> generatorArchitecture,
+        NeuralNetworkArchitecture<T> discriminatorArchitecture,
+        int numConditionClasses,
+        InputType inputType)
+    {
+        if (inputType == InputType.ThreeDimensional)
+        {
+            return new NeuralNetworkArchitecture<T>(
+                inputType: inputType,
+                taskType: NeuralNetworkTaskType.Generative,
+                complexity: NetworkComplexity.Medium,
+                inputSize: 0,
+                inputHeight: discriminatorArchitecture.InputHeight,
+                inputWidth: discriminatorArchitecture.InputWidth,
+                inputDepth: discriminatorArchitecture.InputDepth,
+                outputSize: discriminatorArchitecture.OutputSize,
+                layers: null);
+        }
+
+        return new NeuralNetworkArchitecture<T>(
+            inputType: inputType,
+            taskType: NeuralNetworkTaskType.Generative,
+            complexity: NetworkComplexity.Medium,
+            inputSize: generatorArchitecture.InputSize + numConditionClasses,
+            outputSize: discriminatorArchitecture.OutputSize);
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ConditionalGAN{T}"/> class.
     /// </summary>
     /// <param name="generatorArchitecture">The neural network architecture for the generator.</param>
@@ -117,14 +148,8 @@ public class ConditionalGAN<T> : NeuralNetworkBase<T>
         InputType inputType,
         ILossFunction<T>? lossFunction = null,
         double initialLearningRate = 0.0002)
-        : base(new NeuralNetworkArchitecture<T>(
-            inputType,
-            NeuralNetworkTaskType.Generative,
-            NetworkComplexity.Medium,
-            generatorArchitecture.InputSize + numConditionClasses, // Add condition size
-            discriminatorArchitecture.OutputSize,
-            0, 0, 0,
-            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
+        : base(CreateConditionalGANArchitecture(generatorArchitecture, discriminatorArchitecture, numConditionClasses, inputType),
+               lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
         // Input validation
         if (generatorArchitecture is null)
