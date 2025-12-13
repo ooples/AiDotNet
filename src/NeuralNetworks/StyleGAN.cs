@@ -397,14 +397,34 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<T> MixStyles(Tensor<T> styles1, Tensor<T> styles2)
     {
+        // Validate inputs
+        if (styles1.Shape[0] != styles2.Shape[0])
+        {
+            throw new ArgumentException(
+                $"Batch size mismatch: styles1 has {styles1.Shape[0]} samples, styles2 has {styles2.Shape[0]} samples.");
+        }
+
         var random = RandomHelper.ThreadSafeRandom;
-        int mixingLayer = random.Next(1, styles1.Shape[1] / 2); // Mix in middle layers
+        int styleSize = styles1.Shape[1];
+
+        // Handle edge cases where style size is too small for meaningful mixing
+        // Need at least 3 elements to mix (1 for coarse, 1 for mixing point, 1 for fine)
+        if (styleSize < 3)
+        {
+            // If too small to mix, just return styles1
+            return styles1;
+        }
+
+        // Mix in middle layers: pick a layer between 1 and styleSize/2
+        // random.Next(minInclusive, maxExclusive) requires maxExclusive > minInclusive
+        int maxMixingLayer = Math.Max(2, styleSize / 2);
+        int mixingLayer = random.Next(1, maxMixingLayer);
 
         var mixedStyles = new Tensor<T>(styles1.Shape);
 
         for (int b = 0; b < styles1.Shape[0]; b++)
         {
-            for (int i = 0; i < styles1.Shape[1]; i++)
+            for (int i = 0; i < styleSize; i++)
             {
                 // Use styles1 for coarse features, styles2 for fine features
                 mixedStyles[b, i] = i < mixingLayer ? styles1[b, i] : styles2[b, i];
@@ -796,11 +816,26 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     /// Updates the parameters of all networks in the StyleGAN.
     /// </summary>
     /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
+    /// <exception cref="ArgumentNullException">Thrown when parameters is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when parameters length doesn't match expected total.</exception>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        if (parameters is null)
+        {
+            throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
+        }
+
         int mappingCount = MappingNetwork.GetParameterCount();
         int synthesisCount = SynthesisNetwork.GetParameterCount();
         int discriminatorCount = Discriminator.GetParameterCount();
+        int expectedTotal = mappingCount + synthesisCount + discriminatorCount;
+
+        if (parameters.Length != expectedTotal)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedTotal} parameters (mapping: {mappingCount}, synthesis: {synthesisCount}, discriminator: {discriminatorCount}), got {parameters.Length}.",
+                nameof(parameters));
+        }
 
         int offset = 0;
 
