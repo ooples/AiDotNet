@@ -56,4 +56,9 @@ public interface IComputationGraph<T> where T : struct
     /// Creates a deep copy of the graph.
     /// </summary>
     IComputationGraph<T> Clone();
+
+    /// <summary>
+    /// Gets statistics about the graph.
+    /// </summary>
+    GraphStatistics GetStatistics();
 }

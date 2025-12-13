@@ -28,7 +28,12 @@ public class AlgebraicSimplificationPass<T> : OptimizationPassBase<T> where T : 
         {
             changed = false;
 
-            foreach (var node in graph.Nodes.ToList())
+            var simplifiableOps = new HashSet<OperationType>
+            {
+                OperationType.Multiply, OperationType.Add, OperationType.Subtract,
+                OperationType.Divide, OperationType.Power
+            };
+            foreach (var node in graph.Nodes.Where(n => simplifiableOps.Contains(n.OperationType)).ToList())
             {
                 if (TrySimplifyNode(graph, node))
                 {
@@ -172,15 +177,15 @@ public class AlgebraicSimplificationPass<T> : OptimizationPassBase<T> where T : 
     private bool IsZeroConstant(ComputationNode<T> node)
     {
         return node.OperationType == OperationType.Constant &&
-               node.Metadata.ContainsKey("IsZero") &&
-               (bool)node.Metadata["IsZero"];
+               node.Metadata.TryGetValue("IsZero", out var isZero) &&
+               (bool)isZero;
     }
 
     private bool IsOneConstant(ComputationNode<T> node)
     {
         return node.OperationType == OperationType.Constant &&
-               node.Metadata.ContainsKey("IsOne") &&
-               (bool)node.Metadata["IsOne"];
+               node.Metadata.TryGetValue("IsOne", out var isOne) &&
+               (bool)isOne;
     }
 
     private ComputationNode<T> CreateZeroConstant(ComputationNode<T> templateNode)

@@ -18,18 +18,14 @@ public class MultiHeadAttentionFusionPass<T> : OptimizationPassBase<T> where T :
     {
         bool modified = false;
 
-        // Find multi-head attention layers
+        // Find multi-head attention layers that can be fused
         var attentionNodes = graph.Nodes.Where(n =>
-            n.OperationType == OperationType.MultiHeadAttention && !n.IsFused).ToList();
+            n.OperationType == OperationType.MultiHeadAttention && !n.IsFused && CanFuseAttention(n)).ToList();
 
         foreach (var attentionNode in attentionNodes)
         {
-            // Check if this attention node is followed by operations that can be fused
-            if (CanFuseAttention(attentionNode))
-            {
-                FuseAttention(graph, attentionNode);
-                modified = true;
-            }
+            FuseAttention(graph, attentionNode);
+            modified = true;
         }
 
         return modified;

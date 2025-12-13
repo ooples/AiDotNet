@@ -42,9 +42,6 @@ public class ConvBatchNormFusionPass<T> : OptimizationPassBase<T> where T : stru
 
     private void FuseConvBatchNorm(IComputationGraph<T> graph, List<ComputationNode<T>> nodes)
     {
-        var convNode = nodes[0];
-        var bnNode = nodes[1];
-
         // Create fused node
         var fusedNode = FuseNodes(graph, nodes, OperationType.FusedConvBatchNorm);
 

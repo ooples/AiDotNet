@@ -34,16 +34,16 @@ public class ElementwiseFusionPass<T> : OptimizationPassBase<T> where T : struct
         bool modified = false;
 
         // Find chains of elementwise operations
-        foreach (var node in graph.Nodes.Where(n => ElementwiseOps.Contains(n.OperationType) && !n.IsFused).ToList())
-        {
-            var chain = FindElementwiseChain(node);
+        var chains = graph.Nodes
+            .Where(n => ElementwiseOps.Contains(n.OperationType) && !n.IsFused)
+            .Select(FindElementwiseChain)
+            .Where(chain => chain.Count >= 2)
+            .ToList();
 
-            // Only fuse if we have at least 2 operations
-            if (chain.Count >= 2)
-            {
-                FuseElementwiseChain(graph, chain);
-                modified = true;
-            }
+        foreach (var chain in chains)
+        {
+            FuseElementwiseChain(graph, chain);
+            modified = true;
         }
 
         return modified;
@@ -98,17 +98,9 @@ public class ElementwiseFusionPass<T> : OptimizationPassBase<T> where T : struct
         fusedNode.Metadata["OperationSequence"] = chain.Select(n => n.OperationType).ToList();
 
         // Collect all unique inputs from the chain
-        var allInputs = new HashSet<ComputationNode<T>>();
-        foreach (var node in chain)
-        {
-            foreach (var input in node.Inputs)
-            {
-                if (!chain.Contains(input))
-                {
-                    allInputs.Add(input);
-                }
-            }
-        }
+        var allInputs = new HashSet<ComputationNode<T>>(chain
+            .SelectMany(node => node.Inputs)
+            .Where(input => !chain.Contains(input)));
 
         // Connect inputs
         foreach (var input in allInputs)

@@ -38,16 +38,15 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         {
             changed = false;
 
-            foreach (var node in graph.Nodes.Where(n => FoldableOps.Contains(n.OperationType) && !n.IsFused).ToList())
+            foreach (var node in graph.Nodes
+                .Where(n => FoldableOps.Contains(n.OperationType) && !n.IsFused)
+                .Where(n => n.Inputs.All(input => input.OperationType == OperationType.Constant))
+                .ToList())
             {
-                // Check if all inputs are constants
-                if (node.Inputs.All(input => input.OperationType == OperationType.Constant))
+                if (TryFoldConstant(graph, node))
                 {
-                    if (TryFoldConstant(graph, node))
-                    {
-                        changed = true;
-                        modified = true;
-                    }
+                    changed = true;
+                    modified = true;
                 }
             }
         } while (changed);
@@ -97,9 +96,14 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
 
             return true;
         }
-        catch
+        catch (InvalidOperationException)
         {
-            // If folding fails for any reason, leave the node as is
+            // If folding fails due to invalid graph state, leave the node as is
+            return false;
+        }
+        catch (ArgumentException)
+        {
+            // If folding fails due to invalid arguments, leave the node as is
             return false;
         }
     }

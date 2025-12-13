@@ -30,13 +30,10 @@ public class LayoutOptimizationPass<T> : OptimizationPassBase<T> where T : struc
         var layoutInfo = AnalyzeLayouts(graph);
 
         // Insert transpose operations where needed
-        foreach (var node in graph.Nodes.ToList())
+        foreach (var node in graph.Nodes.Where(n => RequiresLayoutConversion(n, layoutInfo)).ToList())
         {
-            if (RequiresLayoutConversion(node, layoutInfo))
-            {
-                InsertLayoutConversion(graph, node);
-                modified = true;
-            }
+            InsertLayoutConversion(graph, node);
+            modified = true;
         }
 
         return modified;
@@ -68,15 +65,6 @@ public class LayoutOptimizationPass<T> : OptimizationPassBase<T> where T : struc
             OperationType.AveragePooling
         };
 
-        // Operations that are layout-agnostic
-        var agnosticOps = new HashSet<OperationType>
-        {
-            OperationType.ReLU,
-            OperationType.Sigmoid,
-            OperationType.Tanh,
-            OperationType.Dropout
-        };
-
         if (channelFirstOps.Contains(opType))
         {
             return _targetLayout;
@@ -93,17 +81,10 @@ public class LayoutOptimizationPass<T> : OptimizationPassBase<T> where T : struc
             return false;
         }
 
-        foreach (var input in node.Inputs)
-        {
-            if (layoutInfo.TryGetValue(input, out var inputLayout) &&
-                inputLayout != "AGNOSTIC" &&
-                inputLayout != nodeLayout)
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return node.Inputs.Any(input =>
+            layoutInfo.TryGetValue(input, out var inputLayout) &&
+            inputLayout != "AGNOSTIC" &&
+            inputLayout != nodeLayout);
     }
 
     private void InsertLayoutConversion(IComputationGraph<T> graph, ComputationNode<T> node)

@@ -78,13 +78,10 @@ public class CommonSubexpressionEliminationPass<T> : OptimizationPassBase<T> whe
         }
 
         // Add key metadata (if any)
-        foreach (var meta in node.Metadata.OrderBy(kv => kv.Key))
+        // Only include metadata that affects computation
+        foreach (var meta in node.Metadata.Where(kv => IsComputationalMetadata(kv.Key)).OrderBy(kv => kv.Key))
         {
-            // Only include metadata that affects computation
-            if (IsComputationalMetadata(meta.Key))
-            {
-                parts.Add($"{meta.Key}={meta.Value}");
-            }
+            parts.Add($"{meta.Key}={meta.Value}");
         }
 
         return string.Join("|", parts);

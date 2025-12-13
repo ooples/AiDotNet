@@ -28,15 +28,12 @@ public abstract class OptimizationPassBase<T> : IOptimizationPass<T> where T : s
     {
         var candidates = new List<List<ComputationNode<T>>>();
 
-        foreach (var node in graph.Nodes)
+        foreach (var node in graph.Nodes.Where(n => n.OperationType == pattern[0] && !n.IsFused))
         {
-            if (node.OperationType == pattern[0] && !node.IsFused)
+            var sequence = TryMatchPattern(node, pattern);
+            if (sequence != null)
             {
-                var sequence = TryMatchPattern(node, pattern);
-                if (sequence != null)
-                {
-                    candidates.Add(sequence);
-                }
+                candidates.Add(sequence);
             }
         }
 

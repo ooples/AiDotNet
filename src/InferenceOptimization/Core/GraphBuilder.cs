@@ -143,7 +143,11 @@ public class GraphBuilder<T> where T : struct
                     parameters[prop.Name] = value;
                 }
             }
-            catch
+            catch (System.Reflection.TargetInvocationException)
+            {
+                // Skip properties whose getter throws
+            }
+            catch (InvalidOperationException)
             {
                 // Skip properties that can't be read
             }

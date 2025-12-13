@@ -30,7 +30,7 @@ public class MatMulBiasActivationFusionPass<T> : OptimizationPassBase<T> where T
 
         // Look for already fused MatMulBias nodes followed by activation
         foreach (var fusedNode in graph.Nodes.Where(n =>
-            n.OperationType == OperationType.FusedMatMulBias && !n.IsFused).ToList())
+            n.OperationType == OperationType.FusedMatMulBias).ToList())
         {
             if (fusedNode.Outputs.Count == 1)
             {

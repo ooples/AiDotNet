@@ -21,7 +21,11 @@ public class StrengthReductionPass<T> : OptimizationPassBase<T> where T : struct
     {
         bool modified = false;
 
-        foreach (var node in graph.Nodes.ToList())
+        var reducibleOps = new HashSet<OperationType>
+        {
+            OperationType.Power, OperationType.Divide, OperationType.Multiply
+        };
+        foreach (var node in graph.Nodes.Where(n => reducibleOps.Contains(n.OperationType)).ToList())
         {
             if (TryReduceStrength(graph, node))
             {
@@ -150,8 +154,8 @@ public class StrengthReductionPass<T> : OptimizationPassBase<T> where T : struct
         }
 
         // In a real implementation, check the actual constant value
-        return node.Metadata.ContainsKey("Value") &&
-               Math.Abs((double)node.Metadata["Value"] - value) < 1e-6;
+        return node.Metadata.TryGetValue("Value", out var val) &&
+               Math.Abs((double)val - value) < 1e-6;
     }
 
     private bool IsAdditionFasterThanMultiplication()

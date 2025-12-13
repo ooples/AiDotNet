@@ -69,12 +69,9 @@ public class GraphOptimizer<T> where T : struct
                         Console.WriteLine($"[Iteration {iteration}] {pass.Name}: Modified graph in {passStopwatch.ElapsedMilliseconds}ms");
                     }
 
-                    if (_options.ValidateAfterEachPass)
+                    if (_options.ValidateAfterEachPass && !optimizedGraph.Validate())
                     {
-                        if (!optimizedGraph.Validate())
-                        {
-                            throw new InvalidOperationException($"Graph validation failed after {pass.Name}");
-                        }
+                        throw new InvalidOperationException($"Graph validation failed after {pass.Name}");
                     }
                 }
             }

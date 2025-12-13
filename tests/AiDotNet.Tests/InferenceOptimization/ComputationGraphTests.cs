@@ -135,12 +135,16 @@ public class ComputationGraphTests
         graph.AddNode(relu);
 
         // Act
-        var cloned = graph.Clone() as ComputationGraph<double>;
+        var clonedResult = graph.Clone();
+        var cloned = clonedResult as ComputationGraph<double>;
 
         // Assert
         Assert.NotNull(cloned);
-        Assert.Equal(graph.Nodes.Count, cloned.Nodes.Count);
-        Assert.NotSame(graph.Nodes[0], cloned.Nodes[0]);
+        if (cloned != null)
+        {
+            Assert.Equal(graph.Nodes.Count, cloned.Nodes.Count);
+            Assert.NotSame(graph.Nodes[0], cloned.Nodes[0]);
+        }
     }
 
     [Fact]

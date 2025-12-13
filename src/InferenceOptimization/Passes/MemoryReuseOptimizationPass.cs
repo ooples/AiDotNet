@@ -25,9 +25,9 @@ public class MemoryReuseOptimizationPass<T> : OptimizationPassBase<T> where T : 
         var memoryPools = AssignMemoryPools(graph.Nodes, liveness);
 
         // Mark nodes with their memory pool assignments
-        foreach (var (node, poolId) in memoryPools)
+        foreach (var kvp in memoryPools)
         {
-            node.Metadata["MemoryPoolId"] = poolId;
+            kvp.Key.Metadata["MemoryPoolId"] = kvp.Value;
             modified = true;
         }
 

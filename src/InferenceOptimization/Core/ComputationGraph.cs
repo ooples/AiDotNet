@@ -85,14 +85,11 @@ public class ComputationGraph<T> : IComputationGraph<T> where T : struct
         var result = new List<ComputationNode<T>>();
         var inStack = new HashSet<ComputationNode<T>>();
 
-        foreach (var node in Nodes)
+        foreach (var node in Nodes.Where(node => !visited.Contains(node)))
         {
-            if (!visited.Contains(node))
+            if (!TopologicalSortUtil(node, visited, inStack, result))
             {
-                if (!TopologicalSortUtil(node, visited, inStack, result))
-                {
-                    throw new InvalidOperationException("Graph contains a cycle");
-                }
+                throw new InvalidOperationException("Graph contains a cycle");
             }
         }
 
@@ -136,8 +133,8 @@ public class ComputationGraph<T> : IComputationGraph<T> where T : struct
     {
         try
         {
-            // Check for cycles
-            var topologicalOrder = GetTopologicalOrder();
+            // Check for cycles (GetTopologicalOrder throws if there's a cycle)
+            GetTopologicalOrder();
 
             // Check that all nodes are reachable from inputs
             var reachable = new HashSet<ComputationNode<T>>();
@@ -165,8 +162,9 @@ public class ComputationGraph<T> : IComputationGraph<T> where T : struct
 
             return true;
         }
-        catch
+        catch (InvalidOperationException)
         {
+            // Graph contains a cycle or other structural issue
             return false;
         }
     }

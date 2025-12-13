@@ -21,26 +21,22 @@ public class MatMulBiasFusionPass<T> : OptimizationPassBase<T> where T : struct
         foreach (var matmulNode in graph.Nodes.Where(n =>
             (n.OperationType == OperationType.MatMul ||
              n.OperationType == OperationType.Dense ||
-             n.OperationType == OperationType.FullyConnected) && !n.IsFused).ToList())
+             n.OperationType == OperationType.FullyConnected) && !n.IsFused && n.Outputs.Count == 1).ToList())
         {
-            // Check if output goes to an Add operation
-            if (matmulNode.Outputs.Count == 1)
+            var addNode = matmulNode.Outputs[0];
+
+            // Check if it's an Add with a constant bias
+            if (addNode.OperationType == OperationType.Add &&
+                addNode.Inputs.Count == 2 &&
+                !addNode.IsFused)
             {
-                var addNode = matmulNode.Outputs[0];
+                // One input should be matmul, other should be constant
+                var otherInput = addNode.Inputs.FirstOrDefault(n => n != matmulNode);
 
-                // Check if it's an Add with a constant bias
-                if (addNode.OperationType == OperationType.Add &&
-                    addNode.Inputs.Count == 2 &&
-                    !addNode.IsFused)
+                if (otherInput != null && otherInput.OperationType == OperationType.Constant)
                 {
-                    // One input should be matmul, other should be constant
-                    var otherInput = addNode.Inputs.FirstOrDefault(n => n != matmulNode);
-
-                    if (otherInput != null && otherInput.OperationType == OperationType.Constant)
-                    {
-                        FuseMatMulBias(graph, new List<ComputationNode<T>> { matmulNode, addNode, otherInput });
-                        modified = true;
-                    }
+                    FuseMatMulBias(graph, new List<ComputationNode<T>> { matmulNode, addNode, otherInput });
+                    modified = true;
                 }
             }
         }

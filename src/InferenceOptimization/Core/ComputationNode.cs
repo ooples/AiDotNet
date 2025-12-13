@@ -63,7 +63,7 @@ public class ComputationNode<T> where T : struct
     /// <summary>
     /// Indicates if this node can perform in-place operations.
     /// </summary>
-    public bool CanOperate InPlace { get; set; }
+    public bool CanOperateInPlace { get; set; }
 
     /// <summary>
     /// Reference to the original layer (if applicable).

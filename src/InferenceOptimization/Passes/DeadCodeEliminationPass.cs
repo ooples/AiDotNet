@@ -73,12 +73,9 @@ public class DeadCodeEliminationPass<T> : OptimizationPassBase<T> where T : stru
             reachable.Add(node);
 
             // Add all inputs to the queue
-            foreach (var input in node.Inputs)
+            foreach (var input in node.Inputs.Where(i => !reachable.Contains(i)))
             {
-                if (!reachable.Contains(input))
-                {
-                    queue.Enqueue(input);
-                }
+                queue.Enqueue(input);
             }
         }
 

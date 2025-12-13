@@ -32,14 +32,11 @@ public class InPlaceOptimizationPass<T> : OptimizationPassBase<T> where T : stru
     {
         bool modified = false;
 
-        foreach (var node in graph.Nodes)
+        foreach (var node in graph.Nodes.Where(n => InPlaceCandidates.Contains(n.OperationType) && CanBeInPlace(n)))
         {
-            if (InPlaceCandidates.Contains(node.OperationType) && CanBeInPlace(node))
-            {
-                node.CanOperateInPlace = true;
-                node.Metadata["InPlaceOptimized"] = true;
-                modified = true;
-            }
+            node.CanOperateInPlace = true;
+            node.Metadata["InPlaceOptimized"] = true;
+            modified = true;
         }
 
         return modified;

@@ -314,7 +314,8 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         int mu = lambda / 2;
 
         // Sort and select the best individuals
-        var sortedIndices = fitnessValues.Argsort().Reverse().ToArray();
+        var argsorted = fitnessValues.Argsort();
+        var sortedIndices = argsorted.AsEnumerable().Reverse().ToArray();
         var selectedPopulation = new Matrix<T>(mu, dimensions);
         for (int i = 0; i < mu; i++)
         {

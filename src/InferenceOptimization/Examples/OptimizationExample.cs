@@ -37,7 +37,7 @@ public class OptimizationExample
         options.PrintStatistics = true;
 
         var optimizer = new GraphOptimizer<double>(options);
-        var optimizedGraph = optimizer.Optimize(graph);
+        optimizer.Optimize(graph);
 
         Console.WriteLine("\nOptimization complete!");
     }
@@ -69,7 +69,7 @@ public class OptimizationExample
         };
 
         var optimizer = new GraphOptimizer<double>(options);
-        var optimizedGraph = optimizer.Optimize(graph);
+        optimizer.Optimize(graph);
 
         Console.WriteLine("\nProduction-ready optimized graph created!");
     }
@@ -91,7 +91,7 @@ public class OptimizationExample
         // Add custom pass (implement your own IOptimizationPass<T>)
         // optimizer.AddPass(new MyCustomPass<double>());
 
-        var optimizedGraph = optimizer.Optimize(graph);
+        optimizer.Optimize(graph);
 
         Console.WriteLine("Custom optimization applied!");
     }
@@ -124,7 +124,7 @@ public class OptimizationExample
             options.PrintStatistics = true;
 
             var optimizer = new GraphOptimizer<double>(options);
-            var optimizedGraph = optimizer.Optimize(originalGraph.Clone());
+            optimizer.Optimize(originalGraph.Clone());
 
             Console.WriteLine($"Level {level} complete\n");
         }
@@ -161,7 +161,7 @@ public class OptimizationExample
         };
 
         var optimizer = new GraphOptimizer<double>(options);
-        var optimizedGraph = optimizer.Optimize(graph);
+        optimizer.Optimize(graph);
 
         Console.WriteLine("\nTransformer optimized!");
         Console.WriteLine("Expected speedup: 2-3x");
@@ -189,7 +189,7 @@ public class OptimizationExample
         };
 
         var optimizer = new GraphOptimizer<double>(options);
-        var optimizedGraph = optimizer.Optimize(graph);
+        optimizer.Optimize(graph);
 
         Console.WriteLine("\nMemory-optimized graph created!");
         Console.WriteLine("Expected memory reduction: 30-50%");
