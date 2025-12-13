@@ -438,13 +438,33 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
         var gradients = new Tensor<T>(predictions.Shape);
+        T epsilon = NumOps.FromDouble(1e-10);
+        T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
 
         for (int i = 0; i < batchSize; i++)
         {
-            gradients[i, 0] = NumOps.Divide(
-                NumOps.Subtract(predictions[i, 0], targets[i, 0]),
-                NumOps.FromDouble(batchSize)
+            T p = predictions[i, 0];
+            T t = targets[i, 0];
+
+            // Clamp p to [epsilon, 1-epsilon] to avoid division by zero
+            if (NumOps.LessThan(p, epsilon))
+            {
+                p = epsilon;
+            }
+            else if (NumOps.GreaterThan(p, oneMinusEpsilon))
+            {
+                p = oneMinusEpsilon;
+            }
+
+            // BCE gradient w.r.t. probability: dL/dp = (p - t) / (p * (1 - p))
+            T oneMinusP = NumOps.Subtract(NumOps.One, p);
+            T pTimesOneMinusP = NumOps.Multiply(p, oneMinusP);
+            T gradient = NumOps.Divide(
+                NumOps.Subtract(p, t),
+                NumOps.Add(pTimesOneMinusP, epsilon)
             );
+
+            gradients[i, 0] = NumOps.Divide(gradient, NumOps.FromDouble(batchSize));
         }
 
         return gradients;

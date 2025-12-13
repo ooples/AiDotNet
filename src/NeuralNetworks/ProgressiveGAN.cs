@@ -30,12 +30,22 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type for computations (e.g., double, float)</typeparam>
 public class ProgressiveGAN<T> : NeuralNetworkBase<T>
 {
-    private Vector<T> _momentum;
-    private Vector<T> _secondMoment;
-    private T _beta1Power;
-    private T _beta2Power;
-    private double _currentLearningRate;
+    // Generator optimizer state
+    private Vector<T> _genMomentum;
+    private Vector<T> _genSecondMoment;
+    private T _genBeta1Power;
+    private T _genBeta2Power;
+    private double _genCurrentLearningRate;
+
+    // Discriminator optimizer state
+    private Vector<T> _discMomentum;
+    private Vector<T> _discSecondMoment;
+    private T _discBeta1Power;
+    private T _discBeta2Power;
+    private double _discCurrentLearningRate;
+
     private double _initialLearningRate;
+    private double _learningRateDecay;
     private List<T> _generatorLosses = [];
     private List<T> _discriminatorLosses = [];
 
@@ -102,6 +112,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     /// <param name="inputType">The type of input.</param>
     /// <param name="lossFunction">Loss function for training (defaults to mean squared error for WGAN-GP style)</param>
     /// <param name="initialLearningRate">Initial learning rate (default 0.001)</param>
+    /// <param name="learningRateDecay">Learning rate decay factor per update (default 0.9999)</param>
     public ProgressiveGAN(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
@@ -111,7 +122,8 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         int baseFeatureMaps = 512,
         InputType inputType = InputType.TwoDimensional,
         ILossFunction<T>? lossFunction = null,
-        double initialLearningRate = 0.001)
+        double initialLearningRate = 0.001,
+        double learningRateDecay = 0.9999)
         : base(new NeuralNetworkArchitecture<T>(
             inputType,
             NeuralNetworkTaskType.Generative,
@@ -131,18 +143,26 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         _baseFeatureMaps = baseFeatureMaps;
         _driftPenaltyCoefficient = 0.001;
         _initialLearningRate = initialLearningRate;
-        _currentLearningRate = initialLearningRate;
+        _learningRateDecay = learningRateDecay;
 
-        // Initialize optimizer parameters
-        _beta1Power = NumOps.One;
-        _beta2Power = NumOps.One;
+        // Initialize Generator optimizer parameters
+        _genBeta1Power = NumOps.One;
+        _genBeta2Power = NumOps.One;
+        _genCurrentLearningRate = initialLearningRate;
+        _genMomentum = Vector<T>.Empty();
+        _genSecondMoment = Vector<T>.Empty();
+
+        // Initialize Discriminator optimizer parameters
+        _discBeta1Power = NumOps.One;
+        _discBeta2Power = NumOps.One;
+        _discCurrentLearningRate = initialLearningRate;
+        _discMomentum = Vector<T>.Empty();
+        _discSecondMoment = Vector<T>.Empty();
 
         // Initialize networks at lowest resolution
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
 
-        _momentum = Vector<T>.Empty();
-        _secondMoment = Vector<T>.Empty();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         InitializeLayers();
@@ -259,10 +279,28 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         _discriminatorLosses.Add(discriminatorLoss);
 
         // Backpropagate discriminator
-        var discGradient = new Tensor<T>([1]);
-        discGradient.SetFlat(0, one);
-        Discriminator.Backward(discGradient);
-        // TODO: Implement proper parameter updates using Adam optimizer like GenerativeAdversarialNetwork
+        // Gradient shape must match discriminator output shape
+        // For WGAN: dL/d(output) = -1/batchSize for real (maximize output), 1/batchSize for fake (minimize output)
+        var realGradient = new Tensor<T>(realOutput.Shape);
+        T negativeScale = NumOps.Negate(NumOps.Divide(one, NumOps.FromDouble(batchSize)));
+        for (int i = 0; i < realGradient.Length; i++)
+        {
+            realGradient.SetFlat(i, negativeScale);
+        }
+        Discriminator.Predict(realImages); // Ensure correct activations are cached
+        Discriminator.Backward(realGradient);
+
+        var fakeGradient = new Tensor<T>(fakeOutput.Shape);
+        T positiveScale = NumOps.Divide(one, NumOps.FromDouble(batchSize));
+        for (int i = 0; i < fakeGradient.Length; i++)
+        {
+            fakeGradient.SetFlat(i, positiveScale);
+        }
+        Discriminator.Predict(fakeImages); // Ensure correct activations are cached
+        Discriminator.Backward(fakeGradient);
+
+        // Update discriminator parameters using Adam optimizer
+        UpdateDiscriminatorParameters();
 
         // === Train Generator ===
         Generator.SetTrainingMode(true);
@@ -280,11 +318,23 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         generatorLoss = NumOps.Negate(NumOps.Divide(generatorLoss, NumOps.FromDouble(batchSize)));
         _generatorLosses.Add(generatorLoss);
 
-        // Backpropagate generator
-        var genGradient = new Tensor<T>([1]);
-        genGradient.SetFlat(0, one);
-        Generator.Backward(genGradient);
-        // TODO: Implement proper parameter updates using Adam optimizer like GenerativeAdversarialNetwork
+        // Backpropagate generator - gradient shape must match discriminator output
+        // For WGAN: dL/d(output) = -1/batchSize (maximize discriminator output for generated images)
+        var genGradient = new Tensor<T>(generatorOutput.Shape);
+        T genScale = NumOps.Negate(NumOps.Divide(one, NumOps.FromDouble(batchSize)));
+        for (int i = 0; i < genGradient.Length; i++)
+        {
+            genGradient.SetFlat(i, genScale);
+        }
+
+        // Backprop through discriminator to get input gradient for generator
+        var discInputGradient = Discriminator.BackwardWithInputGradient(genGradient);
+
+        // Then backprop through generator
+        Generator.Backward(discInputGradient);
+
+        // Update generator parameters using Adam optimizer
+        UpdateGeneratorParameters();
 
         return (discriminatorLoss, generatorLoss);
     }
@@ -459,9 +509,194 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     protected override void InitializeLayers()
     {
         // Layers are initialized in the constructor via the Generator and Discriminator CNNs
-        var paramCount = Generator.GetParameterCount() + Discriminator.GetParameterCount();
-        _momentum = new Vector<T>(paramCount);
-        _secondMoment = new Vector<T>(paramCount);
+        var genParamCount = Generator.GetParameterCount();
+        var discParamCount = Discriminator.GetParameterCount();
+
+        // Initialize Generator optimizer state
+        _genMomentum = new Vector<T>(genParamCount);
+        _genMomentum.Fill(NumOps.Zero);
+        _genSecondMoment = new Vector<T>(genParamCount);
+        _genSecondMoment.Fill(NumOps.Zero);
+
+        // Initialize Discriminator optimizer state
+        _discMomentum = new Vector<T>(discParamCount);
+        _discMomentum.Fill(NumOps.Zero);
+        _discSecondMoment = new Vector<T>(discParamCount);
+        _discSecondMoment.Fill(NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Updates Generator parameters using Adam optimizer.
+    /// </summary>
+    private void UpdateGeneratorParameters()
+    {
+        var parameters = Generator.GetParameters();
+        var gradients = Generator.GetParameterGradients();
+
+        // Initialize optimizer state if needed
+        if (_genMomentum == null || _genMomentum.Length != parameters.Length)
+        {
+            _genMomentum = new Vector<T>(parameters.Length);
+            _genMomentum.Fill(NumOps.Zero);
+        }
+
+        if (_genSecondMoment == null || _genSecondMoment.Length != parameters.Length)
+        {
+            _genSecondMoment = new Vector<T>(parameters.Length);
+            _genSecondMoment.Fill(NumOps.Zero);
+        }
+
+        // Gradient clipping
+        var gradientNorm = gradients.L2Norm();
+        var clipThreshold = NumOps.FromDouble(5.0);
+
+        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
+        {
+            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
+            for (int i = 0; i < gradients.Length; i++)
+            {
+                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
+            }
+        }
+
+        // Adam optimizer parameters
+        var learningRate = NumOps.FromDouble(_genCurrentLearningRate);
+        var beta1 = NumOps.FromDouble(0.0); // beta1=0 recommended for GANs
+        var beta2 = NumOps.FromDouble(0.999);
+        var epsilon = NumOps.FromDouble(1e-8);
+
+        // Update beta powers
+        _genBeta1Power = NumOps.Multiply(_genBeta1Power, beta1);
+        _genBeta2Power = NumOps.Multiply(_genBeta2Power, beta2);
+
+        // Bias correction
+        var biasCorrection1 = NumOps.Subtract(NumOps.One, _genBeta1Power);
+        var biasCorrection2 = NumOps.Subtract(NumOps.One, _genBeta2Power);
+
+        var updatedParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Update momentum (first moment)
+            _genMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _genMomentum[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
+            );
+
+            // Update second moment
+            _genSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _genSecondMoment[i]),
+                NumOps.Multiply(
+                    NumOps.Subtract(NumOps.One, beta2),
+                    NumOps.Multiply(gradients[i], gradients[i])
+                )
+            );
+
+            // Bias-corrected estimates
+            var mHat = NumOps.Divide(_genMomentum[i], biasCorrection1);
+            var vHat = NumOps.Divide(_genSecondMoment[i], biasCorrection2);
+
+            // Adam update
+            updatedParameters[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(
+                    learningRate,
+                    NumOps.Divide(mHat, NumOps.Add(NumOps.Sqrt(vHat), epsilon))
+                )
+            );
+        }
+
+        // Apply learning rate decay
+        _genCurrentLearningRate *= _learningRateDecay;
+
+        Generator.UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Updates Discriminator parameters using Adam optimizer.
+    /// </summary>
+    private void UpdateDiscriminatorParameters()
+    {
+        var parameters = Discriminator.GetParameters();
+        var gradients = Discriminator.GetParameterGradients();
+
+        // Initialize optimizer state if needed
+        if (_discMomentum == null || _discMomentum.Length != parameters.Length)
+        {
+            _discMomentum = new Vector<T>(parameters.Length);
+            _discMomentum.Fill(NumOps.Zero);
+        }
+
+        if (_discSecondMoment == null || _discSecondMoment.Length != parameters.Length)
+        {
+            _discSecondMoment = new Vector<T>(parameters.Length);
+            _discSecondMoment.Fill(NumOps.Zero);
+        }
+
+        // Gradient clipping
+        var gradientNorm = gradients.L2Norm();
+        var clipThreshold = NumOps.FromDouble(5.0);
+
+        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
+        {
+            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
+            for (int i = 0; i < gradients.Length; i++)
+            {
+                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
+            }
+        }
+
+        // Adam optimizer parameters
+        var learningRate = NumOps.FromDouble(_discCurrentLearningRate);
+        var beta1 = NumOps.FromDouble(0.0); // beta1=0 recommended for GANs
+        var beta2 = NumOps.FromDouble(0.999);
+        var epsilon = NumOps.FromDouble(1e-8);
+
+        // Update beta powers
+        _discBeta1Power = NumOps.Multiply(_discBeta1Power, beta1);
+        _discBeta2Power = NumOps.Multiply(_discBeta2Power, beta2);
+
+        // Bias correction
+        var biasCorrection1 = NumOps.Subtract(NumOps.One, _discBeta1Power);
+        var biasCorrection2 = NumOps.Subtract(NumOps.One, _discBeta2Power);
+
+        var updatedParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Update momentum (first moment)
+            _discMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _discMomentum[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
+            );
+
+            // Update second moment
+            _discSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _discSecondMoment[i]),
+                NumOps.Multiply(
+                    NumOps.Subtract(NumOps.One, beta2),
+                    NumOps.Multiply(gradients[i], gradients[i])
+                )
+            );
+
+            // Bias-corrected estimates
+            var mHat = NumOps.Divide(_discMomentum[i], biasCorrection1);
+            var vHat = NumOps.Divide(_discSecondMoment[i], biasCorrection2);
+
+            // Adam update
+            updatedParameters[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(
+                    learningRate,
+                    NumOps.Divide(mHat, NumOps.Add(NumOps.Sqrt(vHat), epsilon))
+                )
+            );
+        }
+
+        // Apply learning rate decay
+        _discCurrentLearningRate *= _learningRateDecay;
+
+        Discriminator.UpdateParameters(updatedParameters);
     }
 
     /// <inheritdoc/>
@@ -476,6 +711,10 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         writer.Write(_imageChannels);
         writer.Write(_baseFeatureMaps);
         writer.Write(_driftPenaltyCoefficient);
+        writer.Write(_initialLearningRate);
+        writer.Write(_learningRateDecay);
+        writer.Write(_genCurrentLearningRate);
+        writer.Write(_discCurrentLearningRate);
 
         // Serialize networks
         byte[] generatorData = Generator.Serialize();
@@ -499,6 +738,10 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         _imageChannels = reader.ReadInt32();
         _baseFeatureMaps = reader.ReadInt32();
         _driftPenaltyCoefficient = reader.ReadDouble();
+        _initialLearningRate = reader.ReadDouble();
+        _learningRateDecay = reader.ReadDouble();
+        _genCurrentLearningRate = reader.ReadDouble();
+        _discCurrentLearningRate = reader.ReadDouble();
 
         // Deserialize networks
         int generatorLength = reader.ReadInt32();
@@ -520,6 +763,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
             _baseFeatureMaps,
             Architecture.InputType,
             _lossFunction,
-            _initialLearningRate);
+            _initialLearningRate,
+            _learningRateDecay);
     }
 }

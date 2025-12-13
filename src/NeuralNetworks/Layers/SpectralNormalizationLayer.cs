@@ -66,6 +66,16 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     private Tensor<T>? _lastOutput;
 
     /// <summary>
+    /// Original weights stored during Forward, to be restored after Backward.
+    /// </summary>
+    private Vector<T>? _originalParameters;
+
+    /// <summary>
+    /// Flag indicating that normalized weights are currently applied.
+    /// </summary>
+    private bool _normalizedWeightsApplied;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
@@ -205,13 +215,26 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         var parameters = _innerLayer.GetParameters();
         int outputSize = OutputShape.Aggregate(1, (a, b) => a * b);
         int inputSize = InputShape.Aggregate(1, (a, b) => a * b);
+        int expectedWeightCount = outputSize * inputSize;
+
+        // Validate that we have at least enough parameters for the weight matrix
+        if (parameters.Length < expectedWeightCount)
+        {
+            throw new NotSupportedException(
+                $"{nameof(SpectralNormalizationLayer<T>)} requires inner layer to have at least " +
+                $"{expectedWeightCount} parameters for a {outputSize}x{inputSize} weight matrix. " +
+                $"Got {parameters.Length} parameters.");
+        }
+
+        // Store original parameters to restore after Backward
+        _originalParameters = parameters.Clone();
 
         // Create weight tensor [outputSize, inputSize]
         var weights = new Tensor<T>([outputSize, inputSize]);
         int paramIdx = 0;
-        for (int i = 0; i < outputSize && paramIdx < parameters.Length; i++)
+        for (int i = 0; i < outputSize; i++)
         {
-            for (int j = 0; j < inputSize && paramIdx < parameters.Length; j++)
+            for (int j = 0; j < inputSize; j++)
             {
                 weights[new int[] { i, j }] = parameters[paramIdx++];
             }
@@ -235,9 +258,9 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         // Apply normalized weights to inner layer
         var normalizedParams = new Vector<T>(parameters.Length);
         paramIdx = 0;
-        for (int i = 0; i < outputSize && paramIdx < parameters.Length; i++)
+        for (int i = 0; i < outputSize; i++)
         {
-            for (int j = 0; j < inputSize && paramIdx < parameters.Length; j++)
+            for (int j = 0; j < inputSize; j++)
             {
                 normalizedParams[paramIdx] = normalizedWeights[new int[] { i, j }];
                 paramIdx++;
@@ -250,25 +273,57 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         }
 
         _innerLayer.SetParameters(normalizedParams);
+        _normalizedWeightsApplied = true;
 
-        // Forward through inner layer
-        _lastOutput = _innerLayer.Forward(input);
+        try
+        {
+            // Forward through inner layer with normalized weights
+            _lastOutput = _innerLayer.Forward(input);
+            return _lastOutput;
+        }
+        catch
+        {
+            // Restore original weights on exception
+            RestoreOriginalWeights();
+            throw;
+        }
+    }
 
-        // Restore original weights
-        _innerLayer.SetParameters(parameters);
-
-        return _lastOutput;
+    /// <summary>
+    /// Restores the original weights after Backward or on exception.
+    /// </summary>
+    private void RestoreOriginalWeights()
+    {
+        if (_normalizedWeightsApplied && _originalParameters != null)
+        {
+            _innerLayer.SetParameters(_originalParameters);
+            _normalizedWeightsApplied = false;
+            _originalParameters = null;
+        }
     }
 
     /// <summary>
     /// Performs backpropagation through the layer.
     /// </summary>
+    /// <remarks>
+    /// Backpropagation uses the normalized weights (applied during Forward) to ensure
+    /// gradients correspond to the actual weights used in the forward pass. After
+    /// computing gradients, the original weights are restored.
+    /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // Backpropagate through inner layer
-        // Note: For simplicity, we pass gradients directly through
-        // A more accurate implementation would compute the Jacobian of spectral normalization
-        return _innerLayer.Backward(outputGradient);
+        try
+        {
+            // Backpropagate through inner layer using normalized weights
+            // Note: For simplicity, we pass gradients directly through
+            // A more accurate implementation would compute the Jacobian of spectral normalization
+            return _innerLayer.Backward(outputGradient);
+        }
+        finally
+        {
+            // Always restore original weights after Backward
+            RestoreOriginalWeights();
+        }
     }
 
     /// <summary>
@@ -310,6 +365,7 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     {
         _lastInput = null;
         _lastOutput = null;
+        RestoreOriginalWeights(); // Ensure weights are restored when resetting
         _innerLayer.ResetState();
     }
 

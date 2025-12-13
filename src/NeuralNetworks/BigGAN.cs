@@ -537,6 +537,15 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     {
         int generatorCount = Generator.GetParameterCount();
         int discriminatorCount = Discriminator.GetParameterCount();
+        int embeddingCount = NumClasses * ClassEmbeddingDim;
+        int expectedCount = generatorCount + discriminatorCount + embeddingCount;
+
+        if (parameters.Length != expectedCount)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedCount} parameters (generator: {generatorCount}, discriminator: {discriminatorCount}, embeddings: {embeddingCount}), got {parameters.Length}.",
+                nameof(parameters));
+        }
 
         // Update Generator parameters
         var generatorParams = new Vector<T>(generatorCount);
@@ -549,6 +558,16 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         for (int i = 0; i < discriminatorCount; i++)
             discriminatorParams[i] = parameters[generatorCount + i];
         Discriminator.UpdateParameters(discriminatorParams);
+
+        // Update class embeddings
+        int idx = generatorCount + discriminatorCount;
+        for (int i = 0; i < NumClasses; i++)
+        {
+            for (int j = 0; j < ClassEmbeddingDim; j++)
+            {
+                _classEmbeddings[i, j] = parameters[idx++];
+            }
+        }
     }
 
     /// <inheritdoc/>

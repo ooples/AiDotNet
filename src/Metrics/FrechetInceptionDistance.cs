@@ -168,10 +168,18 @@ namespace AiDotNet.Metrics
         /// </summary>
         /// <param name="features">Feature matrix (num_samples × feature_dim)</param>
         /// <returns>Tuple of (mean vector, covariance matrix)</returns>
+        /// <exception cref="ArgumentException">Thrown when numSamples is less than 2.</exception>
         private (Vector<T> mean, Matrix<T> covariance) ComputeStatistics(Matrix<T> features)
         {
             var numSamples = features.Rows;
             var dim = features.Columns;
+
+            if (numSamples < 2)
+            {
+                throw new ArgumentException(
+                    $"Need at least 2 samples to compute covariance, got {numSamples}.",
+                    nameof(features));
+            }
 
             // Compute mean
             var mean = new Vector<T>(dim);

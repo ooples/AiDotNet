@@ -301,21 +301,25 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         // Create interpolated images
         var interpolatedImages = new Tensor<T>(realImages.Shape);
 
+        // Compute number of elements per sample (excludes batch dimension)
+        int sampleSize = realImages.Length / batchSize;
+
         for (int b = 0; b < batchSize; b++)
         {
             T epsilon = NumOps.FromDouble(random.NextDouble());
 
-            for (int i = 1; i < realImages.Shape.Length; i++)
+            for (int i = 0; i < sampleSize; i++)
             {
-                T realValue = realImages[b, i - 1];
-                T fakeValue = fakeImages[b, i - 1];
+                int flatIdx = b * sampleSize + i;
+                T realValue = realImages.GetFlat(flatIdx);
+                T fakeValue = fakeImages.GetFlat(flatIdx);
 
                 T interpolated = NumOps.Add(
                     NumOps.Multiply(epsilon, realValue),
                     NumOps.Multiply(NumOps.Subtract(NumOps.One, epsilon), fakeValue)
                 );
 
-                interpolatedImages[b, i - 1] = interpolated;
+                interpolatedImages.SetFlat(flatIdx, interpolated);
             }
         }
 
@@ -337,14 +341,16 @@ public class WGANGP<T> : NeuralNetworkBase<T>
 
         // Compute L2 norm of gradients for each sample
         T totalPenalty = NumOps.Zero;
+        int gradientSampleSize = inputGradients.Length / batchSize;
 
         for (int b = 0; b < batchSize; b++)
         {
             T gradNormSquared = NumOps.Zero;
 
-            for (int i = 1; i < inputGradients.Shape.Length; i++)
+            for (int i = 0; i < gradientSampleSize; i++)
             {
-                T gradValue = inputGradients[b, i - 1];
+                int flatIdx = b * gradientSampleSize + i;
+                T gradValue = inputGradients.GetFlat(flatIdx);
                 gradNormSquared = NumOps.Add(gradNormSquared, NumOps.Multiply(gradValue, gradValue));
             }
 
