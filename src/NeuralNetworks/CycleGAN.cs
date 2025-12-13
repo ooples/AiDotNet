@@ -193,35 +193,36 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         DiscriminatorB = new ConvolutionalNeuralNetwork<T>(discriminatorB);
 
         // Initialize GeneratorAtoB optimizer state
+        // Beta powers start at beta^1 so first iteration's bias correction is non-zero
         int genAtoBParamCount = GeneratorAtoB.GetParameterCount();
         _genAtoBMomentum = new Vector<T>(genAtoBParamCount);
         _genAtoBSecondMoment = new Vector<T>(genAtoBParamCount);
-        _genAtoBBeta1Power = NumOps.One;
-        _genAtoBBeta2Power = NumOps.One;
+        _genAtoBBeta1Power = NumOps.FromDouble(0.9);
+        _genAtoBBeta2Power = NumOps.FromDouble(0.999);
         _genAtoBCurrentLearningRate = initialLearningRate;
 
         // Initialize GeneratorBtoA optimizer state
         int genBtoAParamCount = GeneratorBtoA.GetParameterCount();
         _genBtoAMomentum = new Vector<T>(genBtoAParamCount);
         _genBtoASecondMoment = new Vector<T>(genBtoAParamCount);
-        _genBtoABeta1Power = NumOps.One;
-        _genBtoABeta2Power = NumOps.One;
+        _genBtoABeta1Power = NumOps.FromDouble(0.9);
+        _genBtoABeta2Power = NumOps.FromDouble(0.999);
         _genBtoACurrentLearningRate = initialLearningRate;
 
         // Initialize DiscriminatorA optimizer state
         int discAParamCount = DiscriminatorA.GetParameterCount();
         _discAMomentum = new Vector<T>(discAParamCount);
         _discASecondMoment = new Vector<T>(discAParamCount);
-        _discABeta1Power = NumOps.One;
-        _discABeta2Power = NumOps.One;
+        _discABeta1Power = NumOps.FromDouble(0.9);
+        _discABeta2Power = NumOps.FromDouble(0.999);
         _discACurrentLearningRate = initialLearningRate;
 
         // Initialize DiscriminatorB optimizer state
         int discBParamCount = DiscriminatorB.GetParameterCount();
         _discBMomentum = new Vector<T>(discBParamCount);
         _discBSecondMoment = new Vector<T>(discBParamCount);
-        _discBBeta1Power = NumOps.One;
-        _discBBeta2Power = NumOps.One;
+        _discBBeta1Power = NumOps.FromDouble(0.9);
+        _discBBeta2Power = NumOps.FromDouble(0.999);
         _discBCurrentLearningRate = initialLearningRate;
 
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
