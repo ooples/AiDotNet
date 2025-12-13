@@ -142,7 +142,7 @@ public class NHiTSModelTests
         };
 
         var model = new NHiTSModel<double>(options);
-        var trainingData = GenerateSyntheticData(20);
+        var trainingData = GenerateSyntheticData(20, options.LookbackWindow);
 
         var exception = Record.Exception(() => model.Train(trainingData.inputs, trainingData.targets));
 
@@ -312,10 +312,8 @@ public class NHiTSModelTests
 
     #region Helper Methods
 
-    private static (Matrix<double> inputs, Vector<double> targets) GenerateSyntheticData(int numSamples)
+    private static (Matrix<double> inputs, Vector<double> targets) GenerateSyntheticData(int numSamples, int lookback = 8)
     {
-        int lookback = 8;
-
         var inputs = new Matrix<double>(numSamples, lookback);
         var targets = new Vector<double>(numSamples);
 

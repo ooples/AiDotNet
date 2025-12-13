@@ -856,15 +856,25 @@ internal class DeepARLstmCellTensor<T>
         for (int d = 0; d < wRank; d++)
             wShape[d] = reader.ReadInt32();
         int wTotal = wShape.Aggregate(1, (a, b) => a * b);
-        for (int i = 0; i < wTotal && i < _weights.Length; i++)
-            _weights[i] = _numOps.FromDouble(reader.ReadDouble());
+        // Consume all serialized doubles to keep stream aligned
+        for (int i = 0; i < wTotal; i++)
+        {
+            double v = reader.ReadDouble();
+            if (i < _weights.Length)
+                _weights[i] = _numOps.FromDouble(v);
+        }
 
         int bRank = reader.ReadInt32();
         var bShape = new int[bRank];
         for (int d = 0; d < bRank; d++)
             bShape[d] = reader.ReadInt32();
         int bTotal = bShape.Aggregate(1, (a, b) => a * b);
-        for (int i = 0; i < bTotal && i < _bias.Length; i++)
-            _bias[i] = _numOps.FromDouble(reader.ReadDouble());
+        // Consume all serialized doubles to keep stream aligned
+        for (int i = 0; i < bTotal; i++)
+        {
+            double v = reader.ReadDouble();
+            if (i < _bias.Length)
+                _bias[i] = _numOps.FromDouble(v);
+        }
     }
 }

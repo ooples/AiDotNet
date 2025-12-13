@@ -760,37 +760,37 @@ internal class NHiTSStackTensor<T>
         reader.ReadInt32(); // poolingSize
 
         int weightCount = reader.ReadInt32();
-        for (int w = 0; w < weightCount && w < _weights.Count; w++)
+        // Consume ALL serialized tensors to keep stream aligned, even if counts differ
+        for (int w = 0; w < weightCount; w++)
         {
             int rank = reader.ReadInt32();
             var shape = new int[rank];
             for (int d = 0; d < rank; d++)
                 shape[d] = reader.ReadInt32();
 
-            // Always consume all serialized doubles to keep stream aligned
             int total = shape.Aggregate(1, (a, b) => a * b);
             for (int i = 0; i < total; i++)
             {
                 double v = reader.ReadDouble();
-                if (i < _weights[w].Length)
+                if (w < _weights.Count && i < _weights[w].Length)
                     _weights[w][i] = _numOps.FromDouble(v);
             }
         }
 
         int biasCount = reader.ReadInt32();
-        for (int b = 0; b < biasCount && b < _biases.Count; b++)
+        // Consume ALL serialized tensors to keep stream aligned, even if counts differ
+        for (int b = 0; b < biasCount; b++)
         {
             int rank = reader.ReadInt32();
             var shape = new int[rank];
             for (int d = 0; d < rank; d++)
                 shape[d] = reader.ReadInt32();
 
-            // Always consume all serialized doubles to keep stream aligned
             int total = shape.Aggregate(1, (a, b) => a * b);
             for (int i = 0; i < total; i++)
             {
                 double v = reader.ReadDouble();
-                if (i < _biases[b].Length)
+                if (b < _biases.Count && i < _biases[b].Length)
                     _biases[b][i] = _numOps.FromDouble(v);
             }
         }

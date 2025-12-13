@@ -84,8 +84,20 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
                     // Forward pass with caching
                     var (mean, logVar, hidden) = _encoder.EncodeWithCache(input);
 
-                    // Reparameterization trick (use mean for deterministic inference)
-                    var z = mean.Clone();
+                    // Reparameterization trick: z = mean + std * epsilon
+                    var z = new Tensor<T>(mean.Shape);
+                    var random = RandomHelper.CreateSeededRandom(42 + epoch * 10000 + i);
+                    for (int j = 0; j < mean.Length; j++)
+                    {
+                        // Sample from standard normal using Box-Muller transform
+                        double u1 = 1.0 - random.NextDouble();
+                        double u2 = 1.0 - random.NextDouble();
+                        double stdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+
+                        // z = mean + exp(0.5 * logVar) * epsilon
+                        T std = _numOps.Exp(_numOps.Multiply(_numOps.FromDouble(0.5), logVar[j]));
+                        z[j] = _numOps.Add(mean[j], _numOps.Multiply(std, _numOps.FromDouble(stdNormal)));
+                    }
 
                     // Decode with caching
                     var (reconstruction, decoderHidden) = _decoder.DecodeWithCache(z);
@@ -141,23 +153,39 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
         // Backpropagate through decoder (pass latent for weight gradient computation)
         var dLatent = _decoder.Backward(dReconstruction, decoderHidden, latent);
 
-        // Compute KL divergence gradient for mean and logVar
-        // KL = 0.5 * sum(mean^2 + exp(logVar) - logVar - 1)
-        // dKL/dMean = mean, dKL/dLogVar = 0.5 * (exp(logVar) - 1)
-        T klWeight = _numOps.FromDouble(0.001);
+        // Compute gradients through reparameterization trick
+        // z = mean + exp(0.5 * logVar) * epsilon
+        // dz/dmean = 1, dz/dlogVar = 0.5 * exp(0.5 * logVar) * epsilon = 0.5 * std * epsilon
+        // Where std = exp(0.5 * logVar) and z = mean + std * epsilon
+        // We can recover epsilon = (z - mean) / std
+        T klWeight = _numOps.FromDouble(_options.KLWeight);
         var dMean = new Tensor<T>(mean.Shape);
         var dLogVar = new Tensor<T>(logVar.Shape);
 
         for (int i = 0; i < mean.Length; i++)
         {
-            // Add gradient from latent (since z = mean in deterministic mode)
+            // Compute std and epsilon from stored latent and mean
+            T std = _numOps.Exp(_numOps.Multiply(_numOps.FromDouble(0.5), logVar[i]));
+            T stdEps = _numOps.FromDouble(1e-8);
+            T stdSafe = _numOps.Add(std, stdEps);
+            T epsilon = _numOps.Divide(_numOps.Subtract(latent[i], mean[i]), stdSafe);
+
+            // Gradient for mean: dL/dmean = dL/dz * dz/dmean + dKL/dmean
+            // dz/dmean = 1, dKL/dmean = mean
             dMean[i] = _numOps.Add(dLatent[i], _numOps.Multiply(klWeight, mean[i]));
 
-            // KL gradient for logVar
+            // Gradient for logVar: dL/dlogVar = dL/dz * dz/dlogVar + dKL/dlogVar
+            // dz/dlogVar = 0.5 * std * epsilon
+            // dKL/dlogVar = 0.5 * (exp(logVar) - 1)
+            T reparamGrad = _numOps.Multiply(dLatent[i],
+                _numOps.Multiply(_numOps.FromDouble(0.5),
+                    _numOps.Multiply(std, epsilon)));
+
             T expLogVar = _numOps.Exp(logVar[i]);
             T klGrad = _numOps.Multiply(_numOps.FromDouble(0.5),
                 _numOps.Subtract(expLogVar, _numOps.One));
-            dLogVar[i] = _numOps.Multiply(klWeight, klGrad);
+
+            dLogVar[i] = _numOps.Add(reparamGrad, _numOps.Multiply(klWeight, klGrad));
         }
 
         // Backpropagate through encoder (pass input for weight gradient computation)
@@ -294,6 +322,12 @@ public class LSTMVAEOptions<T> : TimeSeriesRegressionOptions<T>
     public int Epochs { get; set; } = 50;
     public int BatchSize { get; set; } = 32;
 
+    /// <summary>
+    /// Weight for KL divergence term in the loss function (beta in β-VAE).
+    /// Higher values encourage more regularized latent space.
+    /// </summary>
+    public double KLWeight { get; set; } = 0.001;
+
     public LSTMVAEOptions() { }
 
     public LSTMVAEOptions(LSTMVAEOptions<T> other)
@@ -305,6 +339,7 @@ public class LSTMVAEOptions<T> : TimeSeriesRegressionOptions<T>
         LearningRate = other.LearningRate;
         Epochs = other.Epochs;
         BatchSize = other.BatchSize;
+        KLWeight = other.KLWeight;
     }
 }
 
@@ -566,8 +601,13 @@ internal class LSTMEncoderTensor<T>
             shape[i] = reader.ReadInt32();
         int length = reader.ReadInt32();
         var tensor = new Tensor<T>(shape);
+        // Clamp by tensor length but consume all serialized values to keep stream aligned
         for (int i = 0; i < length; i++)
-            tensor[i] = _numOps.FromDouble(reader.ReadDouble());
+        {
+            double v = reader.ReadDouble();
+            if (i < tensor.Length)
+                tensor[i] = _numOps.FromDouble(v);
+        }
         return tensor;
     }
 }
@@ -798,8 +838,13 @@ internal class LSTMDecoderTensor<T>
             shape[i] = reader.ReadInt32();
         int length = reader.ReadInt32();
         var tensor = new Tensor<T>(shape);
+        // Clamp by tensor length but consume all serialized values to keep stream aligned
         for (int i = 0; i < length; i++)
-            tensor[i] = _numOps.FromDouble(reader.ReadDouble());
+        {
+            double v = reader.ReadDouble();
+            if (i < tensor.Length)
+                tensor[i] = _numOps.FromDouble(v);
+        }
         return tensor;
     }
 }

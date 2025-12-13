@@ -514,8 +514,8 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             dMean += dnorm * (-1.0 / cache.Stddev);
         }
 
-        dMean += dVar * (-2.0 / n) * (cache.Input.Length > 0 ?
-            Enumerable.Range(0, n).Sum(i => Convert.ToDouble(cache.Input[i]) - cache.Mean) : 0);
+        // Note: The term dVar * (-2.0 / n) * sum(x - mean) is always 0 by definition of mean
+        // since sum(x - mean) = 0, so this computation is omitted
 
         var dInput = new Tensor<T>(new[] { n });
         for (int i = 0; i < n; i++)

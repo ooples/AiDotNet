@@ -391,8 +391,13 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
             weightsShape[i] = reader.ReadInt32();
         int weightsLength = reader.ReadInt32();
         _fcWeights = new Tensor<T>(weightsShape);
+        // Clamp by tensor length but consume all serialized values to keep stream aligned
         for (int i = 0; i < weightsLength; i++)
-            _fcWeights[i] = _numOps.FromDouble(reader.ReadDouble());
+        {
+            double v = reader.ReadDouble();
+            if (i < _fcWeights.Length)
+                _fcWeights[i] = _numOps.FromDouble(v);
+        }
 
         // Deserialize FC bias tensor
         int biasRank = reader.ReadInt32();
@@ -401,8 +406,13 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
             biasShape[i] = reader.ReadInt32();
         int biasLength = reader.ReadInt32();
         _fcBias = new Tensor<T>(biasShape);
+        // Clamp by tensor length but consume all serialized values to keep stream aligned
         for (int i = 0; i < biasLength; i++)
-            _fcBias[i] = _numOps.FromDouble(reader.ReadDouble());
+        {
+            double v = reader.ReadDouble();
+            if (i < _fcBias.Length)
+                _fcBias[i] = _numOps.FromDouble(v);
+        }
 
         // Initialize gradient accumulators
         _fcWeightsGrad = new Tensor<T>(weightsShape);

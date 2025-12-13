@@ -306,18 +306,36 @@ public static class TensorExtensions
     }
 
     /// <summary>
-    /// Calculates the Xavier/Glorot standard deviation for weight initialization.
+    /// Calculates the He standard deviation for weight initialization with ReLU activations.
     /// </summary>
     /// <param name="fanIn">The number of input units.</param>
     /// <returns>The standard deviation to use for initialization.</returns>
     /// <remarks>
     /// <para>
-    /// Xavier initialization sets the standard deviation to sqrt(2 / fanIn),
-    /// which helps maintain consistent gradient flow during training.
+    /// He initialization (Kaiming initialization) uses sqrt(2 / fanIn), which is designed
+    /// for networks with ReLU activations. For sigmoid/tanh activations, consider using
+    /// Xavier/Glorot initialization with sqrt(1 / fanIn) or sqrt(2 / (fanIn + fanOut)).
     /// </para>
     /// </remarks>
-    public static double XavierStddev(int fanIn)
+    public static double HeStddev(int fanIn)
     {
         return Math.Sqrt(2.0 / fanIn);
+    }
+
+    /// <summary>
+    /// Calculates the Xavier/Glorot standard deviation for weight initialization.
+    /// </summary>
+    /// <param name="fanIn">The number of input units.</param>
+    /// <param name="fanOut">The number of output units.</param>
+    /// <returns>The standard deviation to use for initialization.</returns>
+    /// <remarks>
+    /// <para>
+    /// Xavier/Glorot initialization uses sqrt(2 / (fanIn + fanOut)), which is designed
+    /// to maintain gradient variance across layers with sigmoid/tanh activations.
+    /// </para>
+    /// </remarks>
+    public static double XavierStddev(int fanIn, int fanOut)
+    {
+        return Math.Sqrt(2.0 / (fanIn + fanOut));
     }
 }
