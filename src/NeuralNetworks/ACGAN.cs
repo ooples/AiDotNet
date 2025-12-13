@@ -146,15 +146,16 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         _discCurrentLearningRate = initialLearningRate;
         _learningRateDecay = 0.9999;
 
-        // Initialize generator optimizer state
-        _genBeta1Power = NumOps.One;
-        _genBeta2Power = NumOps.One;
+        // Initialize generator optimizer state (beta1=0.5, beta2=0.999 for AC-GAN)
+        // Initialize to actual beta values to avoid divide-by-zero on first iteration
+        _genBeta1Power = NumOps.FromDouble(0.5);
+        _genBeta2Power = NumOps.FromDouble(0.999);
         _genMomentum = Vector<T>.Empty();
         _genSecondMoment = Vector<T>.Empty();
 
-        // Initialize discriminator optimizer state
-        _discBeta1Power = NumOps.One;
-        _discBeta2Power = NumOps.One;
+        // Initialize discriminator optimizer state (beta1=0.5, beta2=0.999 for AC-GAN)
+        _discBeta1Power = NumOps.FromDouble(0.5);
+        _discBeta2Power = NumOps.FromDouble(0.999);
         _discMomentum = Vector<T>.Empty();
         _discSecondMoment = Vector<T>.Empty();
 
@@ -461,8 +462,24 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Creates one-hot encoded class labels.
     /// </summary>
+    /// <param name="batchSize">Number of samples in the batch.</param>
+    /// <param name="classIndex">Class index for all samples (0 to NumClasses-1).</param>
+    /// <returns>Tensor of shape [batchSize, NumClasses] with one-hot encoding.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when batchSize is not positive or classIndex is out of range.</exception>
     public Tensor<T> CreateOneHotLabels(int batchSize, int classIndex)
     {
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize,
+                "Batch size must be positive.");
+        }
+
+        if (classIndex < 0 || classIndex >= _numClasses)
+        {
+            throw new ArgumentOutOfRangeException(nameof(classIndex), classIndex,
+                $"Class index must be between 0 and {_numClasses - 1} (inclusive).");
+        }
+
         var labels = new Tensor<T>(new int[] { batchSize, _numClasses });
 
         for (int b = 0; b < batchSize; b++)
@@ -828,8 +845,13 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         int discriminatorCount = Discriminator.GetParameterCount();
         int totalCount = generatorCount + discriminatorCount;
 
-        if (parameters.Length < totalCount)
-            throw new ArgumentException($"parameters vector length ({parameters.Length}) must be at least {totalCount} (generator: {generatorCount} + discriminator: {discriminatorCount}).", nameof(parameters));
+        if (parameters.Length != totalCount)
+        {
+            throw new ArgumentException(
+                $"Parameters vector length ({parameters.Length}) must equal {totalCount} " +
+                $"(generator: {generatorCount} + discriminator: {discriminatorCount}).",
+                nameof(parameters));
+        }
 
         // Update Generator parameters
         var generatorParams = new Vector<T>(generatorCount);
