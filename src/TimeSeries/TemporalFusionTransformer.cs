@@ -550,7 +550,6 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         {
             int offset = h * headDim;
             T weight = attentionWeights[h];
-            T score = attentionScores[h];
 
             // dL/dV: gradient through value (attention_output = weight * value)
             for (int d = 0; d < headDim; d++)

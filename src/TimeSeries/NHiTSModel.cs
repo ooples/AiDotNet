@@ -189,14 +189,12 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         // Compute MSE loss averaged over all forecast steps
         // For single-target training, we use the first step's prediction
         // and distribute gradients to all steps proportionally
-        T totalLoss = NumOps.Zero;
         var outputGradients = new Tensor<T>([_options.ForecastHorizon]);
 
         // Primary loss on first step (where we have the target)
         T prediction = aggregatedForecast[0];
         T error = NumOps.Subtract(prediction, target);
         T loss = NumOps.Multiply(error, error);
-        totalLoss = loss;
 
         // Compute gradient for first step: dL/dy = 2 * (y - target)
         outputGradients[0] = NumOps.Multiply(NumOps.FromDouble(2.0), error);
@@ -478,10 +476,6 @@ internal class NHiTSStackTensor<T>
     private readonly List<Tensor<T>> _weights;
     private readonly List<Tensor<T>> _biases;
 
-    // Gradient storage for backpropagation (NOTE: Contents never accessed - consider removal if truly unused)
-    private readonly List<Tensor<T>> _weightsGradients;
-    private readonly List<Tensor<T>> _biasesGradients;
-
     // Cached activations for backprop
     private readonly List<Tensor<T>> _layerInputs;
     private readonly List<Tensor<T>> _layerOutputs;
@@ -513,8 +507,6 @@ internal class NHiTSStackTensor<T>
 
         _weights = new List<Tensor<T>>();
         _biases = new List<Tensor<T>>();
-        _weightsGradients = new List<Tensor<T>>();
-        _biasesGradients = new List<Tensor<T>>();
         _layerInputs = new List<Tensor<T>>();
         _layerOutputs = new List<Tensor<T>>();
 
@@ -527,8 +519,6 @@ internal class NHiTSStackTensor<T>
         double stddev = Math.Sqrt(2.0 / (_inputLength + _hiddenSize));
         _weights.Add(CreateRandomTensor([_hiddenSize, _inputLength], stddev));
         _biases.Add(new Tensor<T>([_hiddenSize]));
-        _weightsGradients.Add(new Tensor<T>([_hiddenSize, _inputLength]));
-        _biasesGradients.Add(new Tensor<T>([_hiddenSize]));
 
         // Hidden layers: [hiddenSize, hiddenSize]
         for (int i = 1; i < _numLayers; i++)
@@ -536,16 +526,12 @@ internal class NHiTSStackTensor<T>
             stddev = Math.Sqrt(2.0 / (_hiddenSize + _hiddenSize));
             _weights.Add(CreateRandomTensor([_hiddenSize, _hiddenSize], stddev));
             _biases.Add(new Tensor<T>([_hiddenSize]));
-            _weightsGradients.Add(new Tensor<T>([_hiddenSize, _hiddenSize]));
-            _biasesGradients.Add(new Tensor<T>([_hiddenSize]));
         }
 
         // Output layer: [outputLength, hiddenSize]
         stddev = Math.Sqrt(2.0 / (_hiddenSize + _outputLength));
         _weights.Add(CreateRandomTensor([_outputLength, _hiddenSize], stddev));
         _biases.Add(new Tensor<T>([_outputLength]));
-        _weightsGradients.Add(new Tensor<T>([_outputLength, _hiddenSize]));
-        _biasesGradients.Add(new Tensor<T>([_outputLength]));
     }
 
     private Tensor<T> CreateRandomTensor(int[] shape, double stddev)

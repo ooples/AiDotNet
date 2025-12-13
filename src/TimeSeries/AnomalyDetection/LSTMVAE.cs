@@ -85,7 +85,7 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
                     var (mean, logVar, hidden) = _encoder.EncodeWithCache(input);
 
                     // Reparameterization trick (use mean for deterministic inference)
-                    Tensor<T> z = mean.Clone() as Tensor<T> ?? new Tensor<T>(mean.Shape);
+                    Tensor<T> z = mean.Clone();
 
                     // Decode with caching
                     var (reconstruction, decoderHidden) = _decoder.DecodeWithCache(z);
