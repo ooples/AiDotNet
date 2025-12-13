@@ -52,7 +52,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     private readonly Random _random;
 
     // Tensor-based LSTM layers
-    private List<DeepARLstmCellTensor<T>> _lstmLayers;
+    private readonly List<DeepARLstmCellTensor<T>> _lstmLayers;
 
     // Distribution parameters using Tensors
     private Tensor<T> _meanWeights;
@@ -164,14 +164,9 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
                     // Accumulate gradients
                     foreach (var kvp in gradients)
                     {
-                        if (!batchGradients.ContainsKey(kvp.Key))
-                        {
-                            batchGradients[kvp.Key] = kvp.Value.Clone();
-                        }
-                        else
-                        {
-                            batchGradients[kvp.Key] = Engine.TensorAdd(batchGradients[kvp.Key], kvp.Value);
-                        }
+                        batchGradients[kvp.Key] = batchGradients.TryGetValue(kvp.Key, out var existing)
+                            ? Engine.TensorAdd(existing, kvp.Value)
+                            : kvp.Value.Clone();
                     }
                 }
 
@@ -204,14 +199,12 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
             lstm.ResetState();
         }
 
-        // Forward pass through LSTM layers with caching for backprop
+        // Forward pass through LSTM layers (cells cache internally for backprop)
         Tensor<T> hidden = input;
-        var layerOutputs = new List<Tensor<T>>();
 
         foreach (var lstm in _lstmLayers)
         {
             hidden = lstm.Forward(hidden);
-            layerOutputs.Add(hidden.Clone());
         }
 
         // Ensure hidden matches distribution weight dimensions
@@ -248,13 +241,15 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         // dL/d_mean = (mean - target) / variance
         T dLdMean = NumOps.Divide(error, varianceEps);
 
-        // dL/d_scale = -error^2/scale^3 + 1/scale (from NLL derivation)
+        // dL/d_scale = 1/scale - error^2/scale^3 (from NLL derivation for Gaussian)
+        // Use epsilon-adjusted scale consistently to avoid division by zero
         T errorSq = NumOps.Multiply(error, error);
         T scaleEps = NumOps.Add(scale, NumOps.FromDouble(1e-6));
-        T scaleCubed = NumOps.Multiply(scale, NumOps.Multiply(scale, scaleEps));
-        T dLdScale = NumOps.Add(
-            NumOps.Negate(NumOps.Divide(errorSq, scaleCubed)),
-            NumOps.Divide(NumOps.One, scaleEps)
+        // Use (scale + ε)³ to ensure denominator is never zero
+        T scaleCubed = NumOps.Multiply(scaleEps, NumOps.Multiply(scaleEps, scaleEps));
+        T dLdScale = NumOps.Subtract(
+            NumOps.Divide(NumOps.One, scaleEps),
+            NumOps.Divide(errorSq, scaleCubed)
         );
 
         // Backprop through softplus: d_softplus/dx = sigmoid(x)
@@ -594,8 +589,8 @@ internal class DeepARLstmCellTensor<T>
 
     // Weights for all gates: [4*hiddenSize, inputSize+hiddenSize]
     // Order: input gate (i), forget gate (f), cell gate (g), output gate (o)
-    private Tensor<T> _weights;
-    private Tensor<T> _bias;
+    private readonly Tensor<T> _weights;
+    private readonly Tensor<T> _bias;
 
     // States
     private Tensor<T> _hiddenState;

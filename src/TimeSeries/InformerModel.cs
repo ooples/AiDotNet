@@ -36,11 +36,11 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
 
     // Encoder components with distilling (Tensor-based)
-    private List<InformerEncoderLayerTensor<T>> _encoderLayers;
-    private List<DistillingConvTensor<T>> _distillingLayers;
+    private readonly List<InformerEncoderLayerTensor<T>> _encoderLayers;
+    private readonly List<DistillingConvTensor<T>> _distillingLayers;
 
     // Decoder components (Tensor-based)
-    private List<InformerDecoderLayerTensor<T>> _decoderLayers;
+    private readonly List<InformerDecoderLayerTensor<T>> _decoderLayers;
     private Tensor<T> _decoderStartToken;    // [embeddingDim]
 
     // Output projection (Tensor-based)
@@ -189,7 +189,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         {
             for (int i = 0; i < embeddingDim; i++)
             {
-                double angle = pos / Math.Pow(10000, (2.0 * (i / 2)) / embeddingDim);
+                double angle = pos / Math.Pow(10000, (2.0 * (i / 2.0)) / embeddingDim);
                 double value = (i % 2 == 0) ? Math.Sin(angle) : Math.Cos(angle);
                 encoding[pos * embeddingDim + i] = _numOps.FromDouble(value);
             }
@@ -236,9 +236,8 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
 
     private void ResetGradientAccumulators()
     {
-        foreach (var key in _gradientAccumulators.Keys.ToList())
+        foreach (var tensor in _gradientAccumulators.Values)
         {
-            var tensor = _gradientAccumulators[key];
             for (int i = 0; i < tensor.Length; i++)
             {
                 tensor[i] = _numOps.Zero;
@@ -644,18 +643,18 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     protected override void DeserializeCore(BinaryReader reader)
     {
-        // Read options (already set via constructor, but verify)
-        int lookback = reader.ReadInt32();
-        int horizon = reader.ReadInt32();
-        int embDim = reader.ReadInt32();
-        int numEncLayers = reader.ReadInt32();
-        int numDecLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        double dropout = reader.ReadDouble();
-        double lr = reader.ReadDouble();
-        int epochs = reader.ReadInt32();
-        int batch = reader.ReadInt32();
-        int distill = reader.ReadInt32();
+        // Read options (already set via constructor, skip them)
+        _ = reader.ReadInt32();  // lookback
+        _ = reader.ReadInt32();  // horizon
+        _ = reader.ReadInt32();  // embDim
+        _ = reader.ReadInt32();  // numEncLayers
+        _ = reader.ReadInt32();  // numDecLayers
+        _ = reader.ReadInt32();  // numHeads
+        _ = reader.ReadDouble();  // dropout
+        _ = reader.ReadDouble();  // lr
+        _ = reader.ReadInt32();  // epochs
+        _ = reader.ReadInt32();  // batch
+        _ = reader.ReadInt32();  // distill
 
         // Read tensors
         _inputProjection = ReadTensor(reader);
@@ -664,10 +663,10 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         _outputProjection = ReadTensor(reader);
         _outputBias = ReadTensor(reader);
 
-        // Read layer counts and reinitialize
-        int encCount = reader.ReadInt32();
-        int distillCount = reader.ReadInt32();
-        int decCount = reader.ReadInt32();
+        // Read layer counts (skip them)
+        _ = reader.ReadInt32();  // encCount
+        _ = reader.ReadInt32();  // distillCount
+        _ = reader.ReadInt32();  // decCount
 
         // Reinitialize layers with the correct count
         InitializeModel();
@@ -709,22 +708,22 @@ internal class InformerEncoderLayerTensor<T>
     private readonly int _sparsityFactor;
 
     // Multi-head attention weights (Tensor-based)
-    private Tensor<T> _queryProj;
-    private Tensor<T> _keyProj;
-    private Tensor<T> _valueProj;
-    private Tensor<T> _outputProj;
+    private readonly Tensor<T> _queryProj;
+    private readonly Tensor<T> _keyProj;
+    private readonly Tensor<T> _valueProj;
+    private readonly Tensor<T> _outputProj;
 
     // Feed-forward network (Tensor-based)
-    private Tensor<T> _ffn1;
-    private Tensor<T> _ffn1Bias;
-    private Tensor<T> _ffn2;
-    private Tensor<T> _ffn2Bias;
+    private readonly Tensor<T> _ffn1;
+    private readonly Tensor<T> _ffn1Bias;
+    private readonly Tensor<T> _ffn2;
+    private readonly Tensor<T> _ffn2Bias;
 
     // Layer normalization parameters (Tensor-based)
-    private Tensor<T> _layerNorm1Gamma;
-    private Tensor<T> _layerNorm1Beta;
-    private Tensor<T> _layerNorm2Gamma;
-    private Tensor<T> _layerNorm2Beta;
+    private readonly Tensor<T> _layerNorm1Gamma;
+    private readonly Tensor<T> _layerNorm1Beta;
+    private readonly Tensor<T> _layerNorm2Gamma;
+    private readonly Tensor<T> _layerNorm2Beta;
 
     // Cache for backward pass
     private List<Tensor<T>>? _cachedInput;
@@ -743,7 +742,7 @@ internal class InformerEncoderLayerTensor<T>
 
         var random = RandomHelper.CreateSeededRandom(seed);
         double attnStddev = Math.Sqrt(2.0 / embeddingDim);
-        double ffnStddev = Math.Sqrt(2.0 / (embeddingDim * 4));
+        double ffnStddev = Math.Sqrt(2.0 / ((double)embeddingDim * 4));
 
         // Initialize Q, K, V, O projections
         _queryProj = InitTensor(new[] { embeddingDim, embeddingDim }, attnStddev, random);
@@ -1035,8 +1034,8 @@ internal class DistillingConvTensor<T>
     private readonly int _embeddingDim;
     private readonly int _distillingFactor;
 
-    private Tensor<T> _convWeights;  // [embeddingDim, 3] for kernel size 3
-    private Tensor<T> _convBias;
+    private readonly Tensor<T> _convWeights;  // [embeddingDim, 3] for kernel size 3
+    private readonly Tensor<T> _convBias;
 
     private List<Tensor<T>>? _cachedInput;
 
@@ -1048,7 +1047,7 @@ internal class DistillingConvTensor<T>
         _distillingFactor = distillingFactor;
 
         var random = RandomHelper.CreateSeededRandom(seed);
-        double stddev = Math.Sqrt(2.0 / (embeddingDim * 3));
+        double stddev = Math.Sqrt(2.0 / ((double)embeddingDim * 3));
 
         _convWeights = new Tensor<T>(new[] { embeddingDim, 3 });
         for (int i = 0; i < _convWeights.Length; i++)
@@ -1186,30 +1185,30 @@ internal class InformerDecoderLayerTensor<T>
     private readonly int _headDim;
 
     // Self-attention weights
-    private Tensor<T> _selfQueryProj;
-    private Tensor<T> _selfKeyProj;
-    private Tensor<T> _selfValueProj;
-    private Tensor<T> _selfOutputProj;
+    private readonly Tensor<T> _selfQueryProj;
+    private readonly Tensor<T> _selfKeyProj;
+    private readonly Tensor<T> _selfValueProj;
+    private readonly Tensor<T> _selfOutputProj;
 
     // Cross-attention weights
-    private Tensor<T> _crossQueryProj;
-    private Tensor<T> _crossKeyProj;
-    private Tensor<T> _crossValueProj;
-    private Tensor<T> _crossOutputProj;
+    private readonly Tensor<T> _crossQueryProj;
+    private readonly Tensor<T> _crossKeyProj;
+    private readonly Tensor<T> _crossValueProj;
+    private readonly Tensor<T> _crossOutputProj;
 
     // FFN
-    private Tensor<T> _ffn1;
-    private Tensor<T> _ffn1Bias;
-    private Tensor<T> _ffn2;
-    private Tensor<T> _ffn2Bias;
+    private readonly Tensor<T> _ffn1;
+    private readonly Tensor<T> _ffn1Bias;
+    private readonly Tensor<T> _ffn2;
+    private readonly Tensor<T> _ffn2Bias;
 
     // Layer norms
-    private Tensor<T> _layerNorm1Gamma;
-    private Tensor<T> _layerNorm1Beta;
-    private Tensor<T> _layerNorm2Gamma;
-    private Tensor<T> _layerNorm2Beta;
-    private Tensor<T> _layerNorm3Gamma;
-    private Tensor<T> _layerNorm3Beta;
+    private readonly Tensor<T> _layerNorm1Gamma;
+    private readonly Tensor<T> _layerNorm1Beta;
+    private readonly Tensor<T> _layerNorm2Gamma;
+    private readonly Tensor<T> _layerNorm2Beta;
+    private readonly Tensor<T> _layerNorm3Gamma;
+    private readonly Tensor<T> _layerNorm3Beta;
 
     public int ParameterCount =>
         _selfQueryProj.Length + _selfKeyProj.Length + _selfValueProj.Length + _selfOutputProj.Length +
@@ -1225,7 +1224,7 @@ internal class InformerDecoderLayerTensor<T>
 
         var random = RandomHelper.CreateSeededRandom(seed);
         double attnStddev = Math.Sqrt(2.0 / embeddingDim);
-        double ffnStddev = Math.Sqrt(2.0 / (embeddingDim * 4));
+        double ffnStddev = Math.Sqrt(2.0 / ((double)embeddingDim * 4));
 
         // Self-attention
         _selfQueryProj = InitTensor(new[] { embeddingDim, embeddingDim }, attnStddev, random);

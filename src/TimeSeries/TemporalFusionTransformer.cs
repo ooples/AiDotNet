@@ -47,8 +47,8 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     private readonly Random _random;
 
     // Tensor-based weights
-    private List<Tensor<T>> _layerWeights;
-    private List<Tensor<T>> _layerBiases;
+    private readonly List<Tensor<T>> _layerWeights;
+    private readonly List<Tensor<T>> _layerBiases;
 
     // Multi-head attention weights
     private Tensor<T> _queryWeight;
@@ -57,8 +57,8 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     private Tensor<T> _outputWeight;
 
     // Cached values for backprop
-    private List<Tensor<T>> _layerInputs;
-    private List<Tensor<T>> _layerOutputs;
+    private readonly List<Tensor<T>> _layerInputs;
+    private readonly List<Tensor<T>> _layerOutputs;
     private Tensor<T> _attentionInput;
 
     /// <summary>
@@ -193,14 +193,9 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
                     foreach (var kvp in gradients)
                     {
-                        if (!batchGradients.ContainsKey(kvp.Key))
-                        {
-                            batchGradients[kvp.Key] = kvp.Value.Clone();
-                        }
-                        else
-                        {
-                            batchGradients[kvp.Key] = Engine.TensorAdd(batchGradients[kvp.Key], kvp.Value);
-                        }
+                        batchGradients[kvp.Key] = batchGradients.TryGetValue(kvp.Key, out var existing)
+                            ? Engine.TensorAdd(existing, kvp.Value)
+                            : kvp.Value.Clone();
                     }
                 }
 
@@ -464,41 +459,170 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
     private void ComputeAttentionGradients(Tensor<T> dOutput, Dictionary<string, Tensor<T>> gradients)
     {
-        // Simplified attention gradient computation
         var input = _attentionInput;
         int hiddenSize = _options.HiddenSize;
+        int numHeads = _options.NumAttentionHeads;
+        int headDim = hiddenSize / numHeads;
 
-        // Gradient for output projection weight
+        // Ensure input has correct size
+        if (input.Length != hiddenSize)
+        {
+            var resized = new Tensor<T>([hiddenSize]);
+            for (int i = 0; i < Math.Min(input.Length, hiddenSize); i++)
+            {
+                resized[i] = input[i];
+            }
+            input = resized;
+        }
+
+        // Recompute forward pass values for backprop
+        var query = ForwardLinear(input, _queryWeight, new Tensor<T>([hiddenSize]));
+        var key = ForwardLinear(input, _keyWeight, new Tensor<T>([hiddenSize]));
+        var value = ForwardLinear(input, _valueWeight, new Tensor<T>([hiddenSize]));
+
+        // Compute attention outputs for each head (needed for backprop)
+        var attentionOutput = new Tensor<T>([hiddenSize]);
+        var attentionWeights = new T[numHeads];
+        var attentionScores = new T[numHeads];
+
+        for (int h = 0; h < numHeads; h++)
+        {
+            int offset = h * headDim;
+            T score = NumOps.Zero;
+            for (int d = 0; d < headDim; d++)
+            {
+                int idx = offset + d;
+                if (idx < query.Length && idx < key.Length)
+                {
+                    score = NumOps.Add(score, NumOps.Multiply(query[idx], key[idx]));
+                }
+            }
+
+            T scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
+            score = NumOps.Multiply(score, scale);
+            attentionScores[h] = score;
+            attentionWeights[h] = Sigmoid(score);
+
+            for (int d = 0; d < headDim; d++)
+            {
+                int idx = offset + d;
+                if (idx < value.Length && idx < attentionOutput.Length)
+                {
+                    attentionOutput[idx] = NumOps.Multiply(attentionWeights[h], value[idx]);
+                }
+            }
+        }
+
+        // Backprop through output projection: dOutput_proj = dOutput (after residual)
+        // The residual adds input, so gradient flows directly through
         var dOutputWeight = new Tensor<T>(_outputWeight.Shape);
+        var dAttentionOutput = new Tensor<T>([hiddenSize]);
+
         for (int i = 0; i < hiddenSize && i < dOutput.Length; i++)
         {
-            for (int j = 0; j < hiddenSize && j < input.Length; j++)
+            for (int j = 0; j < hiddenSize && j < attentionOutput.Length; j++)
             {
                 int wIdx = i * hiddenSize + j;
                 if (wIdx < dOutputWeight.Length)
                 {
-                    dOutputWeight[wIdx] = NumOps.Multiply(dOutput[i], input[j]);
+                    dOutputWeight[wIdx] = NumOps.Multiply(dOutput[i], attentionOutput[j]);
+                }
+            }
+            // Backprop through output projection
+            for (int j = 0; j < hiddenSize; j++)
+            {
+                int wIdx = i * hiddenSize + j;
+                if (wIdx < _outputWeight.Length)
+                {
+                    dAttentionOutput[j] = NumOps.Add(dAttentionOutput[j],
+                        NumOps.Multiply(dOutput[i], _outputWeight[wIdx]));
                 }
             }
         }
         gradients["attention_output_weight"] = dOutputWeight;
 
-        // Simplified gradients for Q, K, V weights
+        // Backprop through attention mechanism
+        var dValue = new Tensor<T>([hiddenSize]);
+        var dQuery = new Tensor<T>([hiddenSize]);
+        var dKey = new Tensor<T>([hiddenSize]);
+
+        for (int h = 0; h < numHeads; h++)
+        {
+            int offset = h * headDim;
+            T weight = attentionWeights[h];
+            T score = attentionScores[h];
+
+            // dL/dV: gradient through value (attention_output = weight * value)
+            for (int d = 0; d < headDim; d++)
+            {
+                int idx = offset + d;
+                if (idx < dAttentionOutput.Length)
+                {
+                    dValue[idx] = NumOps.Multiply(dAttentionOutput[idx], weight);
+                }
+            }
+
+            // dL/d_weight: gradient w.r.t. attention weight
+            T dWeight = NumOps.Zero;
+            for (int d = 0; d < headDim; d++)
+            {
+                int idx = offset + d;
+                if (idx < dAttentionOutput.Length && idx < value.Length)
+                {
+                    dWeight = NumOps.Add(dWeight, NumOps.Multiply(dAttentionOutput[idx], value[idx]));
+                }
+            }
+
+            // dL/d_score: gradient through sigmoid: d_sigmoid/dx = sigmoid(x) * (1 - sigmoid(x))
+            T sigmoidDeriv = NumOps.Multiply(weight, NumOps.Subtract(NumOps.One, weight));
+            T dScore = NumOps.Multiply(dWeight, sigmoidDeriv);
+
+            // dL/d_score_scaled: account for scaling by 1/sqrt(headDim)
+            T scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
+            T dScoreUnscaled = NumOps.Multiply(dScore, scale);
+
+            // dL/dQ and dL/dK: score = sum(Q[i] * K[i])
+            // dL/dQ[i] = dL/d_score * K[i]
+            // dL/dK[i] = dL/d_score * Q[i]
+            for (int d = 0; d < headDim; d++)
+            {
+                int idx = offset + d;
+                if (idx < key.Length)
+                {
+                    dQuery[idx] = NumOps.Add(dQuery[idx], NumOps.Multiply(dScoreUnscaled, key[idx]));
+                }
+                if (idx < query.Length)
+                {
+                    dKey[idx] = NumOps.Add(dKey[idx], NumOps.Multiply(dScoreUnscaled, query[idx]));
+                }
+            }
+        }
+
+        // Compute weight gradients for Q, K, V projections
         var dQWeight = new Tensor<T>(_queryWeight.Shape);
         var dKWeight = new Tensor<T>(_keyWeight.Shape);
         var dVWeight = new Tensor<T>(_valueWeight.Shape);
 
-        for (int i = 0; i < hiddenSize && i < dOutput.Length; i++)
+        for (int i = 0; i < hiddenSize; i++)
         {
             for (int j = 0; j < hiddenSize && j < input.Length; j++)
             {
                 int wIdx = i * hiddenSize + j;
-                T grad = NumOps.Multiply(dOutput[i], input[j]);
-                if (wIdx < dQWeight.Length) dQWeight[wIdx] = grad;
-                if (wIdx < dKWeight.Length) dKWeight[wIdx] = grad;
-                if (wIdx < dVWeight.Length) dVWeight[wIdx] = grad;
+                if (wIdx < dQWeight.Length && i < dQuery.Length)
+                {
+                    dQWeight[wIdx] = NumOps.Multiply(dQuery[i], input[j]);
+                }
+                if (wIdx < dKWeight.Length && i < dKey.Length)
+                {
+                    dKWeight[wIdx] = NumOps.Multiply(dKey[i], input[j]);
+                }
+                if (wIdx < dVWeight.Length && i < dValue.Length)
+                {
+                    dVWeight[wIdx] = NumOps.Multiply(dValue[i], input[j]);
+                }
             }
         }
+
         gradients["attention_query_weight"] = dQWeight;
         gradients["attention_key_weight"] = dKWeight;
         gradients["attention_value_weight"] = dVWeight;

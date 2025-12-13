@@ -35,7 +35,7 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     // CNN layers (Tensor-based)
-    private List<ConvLayerTensor<T>> _convLayers = new List<ConvLayerTensor<T>>();
+    private readonly List<ConvLayerTensor<T>> _convLayers = new List<ConvLayerTensor<T>>();
 
     // Fully connected layer (Tensor-based)
     private Tensor<T> _fcWeights;      // [1, numChannels]
@@ -247,12 +247,11 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
         mean = _numOps.Divide(mean, _numOps.FromDouble(predictionErrors.Count));
 
         // Calculate variance and std
-        T variance = _numOps.Zero;
-        foreach (var error in predictionErrors)
+        T variance = predictionErrors.Select(error =>
         {
             T diff = _numOps.Subtract(error, mean);
-            variance = _numOps.Add(variance, _numOps.Multiply(diff, diff));
-        }
+            return _numOps.Multiply(diff, diff);
+        }).Aggregate(_numOps.Zero, (sum, val) => _numOps.Add(sum, val));
         variance = _numOps.Divide(variance, _numOps.FromDouble(predictionErrors.Count));
         T std = _numOps.Sqrt(variance);
 
