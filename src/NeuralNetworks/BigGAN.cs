@@ -973,13 +973,13 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     {
         int generatorCount = Generator.GetParameterCount();
         int discriminatorCount = Discriminator.GetParameterCount();
-        int embeddingCount = NumClasses * ClassEmbeddingDim;
-        int expectedCount = generatorCount + discriminatorCount + embeddingCount;
+        int conditioningMatrixCount = NumClasses * ClassEmbeddingDim * 2;
+        int expectedCount = generatorCount + discriminatorCount + conditioningMatrixCount;
 
         if (parameters.Length != expectedCount)
         {
             throw new ArgumentException(
-                $"Expected {expectedCount} parameters (generator: {generatorCount}, discriminator: {discriminatorCount}, embeddings: {embeddingCount}), got {parameters.Length}.",
+                $"Expected {expectedCount} parameters (generator: {generatorCount}, discriminator: {discriminatorCount}, conditioning: {conditioningMatrixCount}), got {parameters.Length}.",
                 nameof(parameters));
         }
 
@@ -1004,6 +1004,15 @@ public class BigGAN<T> : NeuralNetworkBase<T>
                 _classEmbeddings[i, j] = parameters[idx++];
             }
         }
+
+        // Update discriminator class projection
+        for (int i = 0; i < NumClasses; i++)
+        {
+            for (int j = 0; j < ClassEmbeddingDim; j++)
+            {
+                _discClassProjection[i, j] = parameters[idx++];
+            }
+        }
     }
 
     /// <inheritdoc/>
@@ -1012,7 +1021,8 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         var genParams = Generator.GetParameters();
         var discParams = Discriminator.GetParameters();
 
-        var totalLength = genParams.Length + discParams.Length + NumClasses * ClassEmbeddingDim;
+        int conditioningMatrixCount = NumClasses * ClassEmbeddingDim * 2;
+        var totalLength = genParams.Length + discParams.Length + conditioningMatrixCount;
         var parameters = new Vector<T>(totalLength);
 
         int idx = 0;
@@ -1027,6 +1037,15 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             for (int j = 0; j < ClassEmbeddingDim; j++)
             {
                 parameters[idx++] = _classEmbeddings[i, j];
+            }
+        }
+
+        // Add discriminator class projection as parameters
+        for (int i = 0; i < NumClasses; i++)
+        {
+            for (int j = 0; j < ClassEmbeddingDim; j++)
+            {
+                parameters[idx++] = _discClassProjection[i, j];
             }
         }
 
