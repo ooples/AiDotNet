@@ -34,12 +34,22 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class Pix2Pix<T> : NeuralNetworkBase<T>
 {
-    private Vector<T> _momentum;
-    private Vector<T> _secondMoment;
-    private T _beta1Power;
-    private T _beta2Power;
-    private double _currentLearningRate;
+    // Generator optimizer state
+    private Vector<T> _genMomentum;
+    private Vector<T> _genSecondMoment;
+    private T _genBeta1Power;
+    private T _genBeta2Power;
+    private double _genCurrentLearningRate;
+
+    // Discriminator optimizer state
+    private Vector<T> _discMomentum;
+    private Vector<T> _discSecondMoment;
+    private T _discBeta1Power;
+    private T _discBeta2Power;
+    private double _discCurrentLearningRate;
+
     private double _initialLearningRate;
+    private double _learningRateDecay;
 
     /// <summary>
     /// The coefficient for the L1 reconstruction loss.
@@ -114,15 +124,27 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     {
         _l1Lambda = l1Lambda;
         _initialLearningRate = initialLearningRate;
-        _currentLearningRate = initialLearningRate;
-
-        _beta1Power = NumOps.One;
-        _beta2Power = NumOps.One;
+        _learningRateDecay = 0.0001;
 
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
-        _momentum = Vector<T>.Empty();
-        _secondMoment = Vector<T>.Empty();
+
+        // Initialize Generator optimizer state
+        int genParamCount = Generator.GetParameterCount();
+        _genMomentum = new Vector<T>(genParamCount);
+        _genSecondMoment = new Vector<T>(genParamCount);
+        _genBeta1Power = NumOps.One;
+        _genBeta2Power = NumOps.One;
+        _genCurrentLearningRate = initialLearningRate;
+
+        // Initialize Discriminator optimizer state
+        int discParamCount = Discriminator.GetParameterCount();
+        _discMomentum = new Vector<T>(discParamCount);
+        _discSecondMoment = new Vector<T>(discParamCount);
+        _discBeta1Power = NumOps.One;
+        _discBeta2Power = NumOps.One;
+        _discCurrentLearningRate = initialLearningRate;
+
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
 
         InitializeLayers();
@@ -145,7 +167,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
 
         // ----- Train Discriminator -----
 
-        // Generate fake images
+        // Generate fake images (detached for discriminator training)
         var fakeImages = Generator.Predict(inputImages);
 
         // Concatenate input with real/fake images for discriminator
@@ -160,15 +182,14 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         var realPredictions = Discriminator.Predict(realPairs);
         T realLoss = CalculateBinaryLoss(realPredictions, realLabels, batchSize);
         var realGradients = CalculateBinaryGradients(realPredictions, realLabels, batchSize);
-        Discriminator.Backpropagate(realGradients);
-        UpdateNetworkParameters(Discriminator);
+        Discriminator.Backward(realGradients);
 
         // Train on fake pairs
         var fakePredictions = Discriminator.Predict(fakePairs);
         T fakeLossD = CalculateBinaryLoss(fakePredictions, fakeLabels, batchSize);
         var fakeGradients = CalculateBinaryGradients(fakePredictions, fakeLabels, batchSize);
-        Discriminator.Backpropagate(fakeGradients);
-        UpdateNetworkParameters(Discriminator);
+        Discriminator.Backward(fakeGradients);
+        UpdateDiscriminatorParameters();
 
         T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLossD), NumOps.FromDouble(2.0));
 
@@ -193,28 +214,46 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         T l1Coeff = NumOps.FromDouble(_l1Lambda);
         T generatorLoss = NumOps.Add(advLoss, NumOps.Multiply(l1Coeff, l1Loss));
 
-        // Backpropagate
+        // Backpropagate adversarial gradients through discriminator to get input gradients
         var advGradients = CalculateBinaryGradients(genPredictions, allRealLabels, batchSize);
-        var discInputGradients = Discriminator.Backpropagate(advGradients);
+        var discInputGradients = Discriminator.BackwardWithInputGradient(advGradients);
 
-        // Extract generator gradients (second half of the concatenated pair)
+        // Calculate L1 gradients
         var l1Gradients = CalculateL1Gradients(newFakeImages, targetImages);
 
+        // Extract generator gradients from discInputGradients
+        // discInputGradients contains gradients for [inputImages | newFakeImages]
+        // We need only the second half (newFakeImages part)
+        int inputTotalSize = inputImages.Length;
+        int genOutputSize = newFakeImages.Length;
+        int discInputTotalSize = discInputGradients.Length;
+
+        var combinedGradients = new Tensor<T>(newFakeImages.Shape);
+
         // Combine adversarial and L1 gradients
-        var combinedGradients = new Tensor<T>(l1Gradients.Shape);
-        int l1Length = l1Gradients.Shape.Aggregate(1, (a, b) => a * b);
-        int discLength = discInputGradients.Shape.Aggregate(1, (a, b) => a * b);
-        for (int i = 0; i < l1Length; i++)
+        for (int b = 0; b < batchSize; b++)
         {
-            // Note: discInputGradients needs to be split/processed appropriately
-            combinedGradients.SetFlat(i, NumOps.Add(
-                l1Gradients.GetFlat(i),
-                discInputGradients.GetFlat(i % discLength)
-            ));
+            int genSampleSize = genOutputSize / batchSize;
+            int inputSampleSize = inputTotalSize / batchSize;
+            int discSampleSize = discInputTotalSize / batchSize;
+
+            for (int i = 0; i < genSampleSize; i++)
+            {
+                // The second half of each sample in discInputGradients corresponds to the generated image
+                int discGenOffset = inputSampleSize + i;
+                T advGrad = (discGenOffset < discSampleSize)
+                    ? discInputGradients.GetFlat(b * discSampleSize + discGenOffset)
+                    : NumOps.Zero;
+
+                T l1Grad = l1Gradients.GetFlat(b * genSampleSize + i);
+
+                // Combine: adversarial gradient + weighted L1 gradient
+                combinedGradients.SetFlat(b * genSampleSize + i, NumOps.Add(advGrad, l1Grad));
+            }
         }
 
-        Generator.Backpropagate(combinedGradients);
-        UpdateNetworkParameters(Generator);
+        Generator.Backward(combinedGradients);
+        UpdateGeneratorParameters();
 
         Discriminator.SetTrainingMode(true);
 
@@ -337,63 +376,122 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         return tensor;
     }
 
-    private void UpdateNetworkParameters(ConvolutionalNeuralNetwork<T> network)
+    private void UpdateGeneratorParameters()
     {
-        var parameters = network.GetParameters();
-        var gradients = network.GetParameterGradients();
+        var gradients = Generator.GetParameterGradients();
+        var parameters = Generator.GetParameters();
+        int paramCount = parameters.Length;
 
-        if (_momentum == null || _momentum.Length != parameters.Length)
+        // Adam hyperparameters - beta1=0.5 for Pix2Pix (paper recommendation)
+        T beta1 = NumOps.FromDouble(0.5);
+        T beta2 = NumOps.FromDouble(0.999);
+        T epsilon = NumOps.FromDouble(1e-8);
+        T lr = NumOps.FromDouble(_genCurrentLearningRate);
+
+        // Update beta powers
+        _genBeta1Power = NumOps.Multiply(_genBeta1Power, beta1);
+        _genBeta2Power = NumOps.Multiply(_genBeta2Power, beta2);
+
+        // Bias correction factors
+        T beta1Correction = NumOps.Subtract(NumOps.One, _genBeta1Power);
+        T beta2Correction = NumOps.Subtract(NumOps.One, _genBeta2Power);
+
+        // Clip gradients
+        T maxGradNorm = NumOps.FromDouble(5.0);
+        T gradNormSq = NumOps.Zero;
+        for (int i = 0; i < paramCount; i++)
+            gradNormSq = NumOps.Add(gradNormSq, NumOps.Multiply(gradients[i], gradients[i]));
+        T gradNorm = NumOps.Sqrt(gradNormSq);
+
+        T scale = NumOps.One;
+        if (NumOps.GreaterThan(gradNorm, maxGradNorm))
+            scale = NumOps.Divide(maxGradNorm, NumOps.Add(gradNorm, epsilon));
+
+        for (int i = 0; i < paramCount; i++)
         {
-            _momentum = new Vector<T>(parameters.Length);
-            _momentum.Fill(NumOps.Zero);
+            T g = NumOps.Multiply(gradients[i], scale);
+
+            // Update biased first moment estimate
+            _genMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _genMomentum[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), g)
+            );
+
+            // Update biased second raw moment estimate
+            _genSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _genSecondMoment[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta2), NumOps.Multiply(g, g))
+            );
+
+            // Compute bias-corrected estimates
+            T mHat = NumOps.Divide(_genMomentum[i], beta1Correction);
+            T vHat = NumOps.Divide(_genSecondMoment[i], beta2Correction);
+
+            // Update parameters
+            T update = NumOps.Divide(NumOps.Multiply(lr, mHat), NumOps.Add(NumOps.Sqrt(vHat), epsilon));
+            parameters[i] = NumOps.Subtract(parameters[i], update);
         }
 
-        if (_secondMoment == null || _secondMoment.Length != parameters.Length)
+        Generator.UpdateParameters(parameters);
+
+        // Learning rate decay
+        _genCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_genBeta1Power));
+    }
+
+    private void UpdateDiscriminatorParameters()
+    {
+        var gradients = Discriminator.GetParameterGradients();
+        var parameters = Discriminator.GetParameters();
+        int paramCount = parameters.Length;
+
+        // Adam hyperparameters - beta1=0.5 for Pix2Pix (paper recommendation)
+        T beta1 = NumOps.FromDouble(0.5);
+        T beta2 = NumOps.FromDouble(0.999);
+        T epsilon = NumOps.FromDouble(1e-8);
+        T lr = NumOps.FromDouble(_discCurrentLearningRate);
+
+        // Update beta powers
+        _discBeta1Power = NumOps.Multiply(_discBeta1Power, beta1);
+        _discBeta2Power = NumOps.Multiply(_discBeta2Power, beta2);
+
+        // Bias correction factors
+        T beta1Correction = NumOps.Subtract(NumOps.One, _discBeta1Power);
+        T beta2Correction = NumOps.Subtract(NumOps.One, _discBeta2Power);
+
+        // Clip gradients
+        T maxGradNorm = NumOps.FromDouble(5.0);
+        T gradNormSq = NumOps.Zero;
+        for (int i = 0; i < paramCount; i++)
+            gradNormSq = NumOps.Add(gradNormSq, NumOps.Multiply(gradients[i], gradients[i]));
+        T gradNorm = NumOps.Sqrt(gradNormSq);
+
+        T scale = NumOps.One;
+        if (NumOps.GreaterThan(gradNorm, maxGradNorm))
+            scale = NumOps.Divide(maxGradNorm, NumOps.Add(gradNorm, epsilon));
+
+        for (int i = 0; i < paramCount; i++)
         {
-            _secondMoment = new Vector<T>(parameters.Length);
-            _secondMoment.Fill(NumOps.Zero);
+            T g = NumOps.Multiply(gradients[i], scale);
+
+            _discMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _discMomentum[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), g)
+            );
+
+            _discSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _discSecondMoment[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta2), NumOps.Multiply(g, g))
+            );
+
+            T mHat = NumOps.Divide(_discMomentum[i], beta1Correction);
+            T vHat = NumOps.Divide(_discSecondMoment[i], beta2Correction);
+
+            T update = NumOps.Divide(NumOps.Multiply(lr, mHat), NumOps.Add(NumOps.Sqrt(vHat), epsilon));
+            parameters[i] = NumOps.Subtract(parameters[i], update);
         }
 
-        var learningRate = NumOps.FromDouble(_currentLearningRate);
-        var beta1 = NumOps.FromDouble(0.5);
-        var beta2 = NumOps.FromDouble(0.999);
-        var epsilon = NumOps.FromDouble(1e-8);
-
-        var updatedParameters = new Vector<T>(parameters.Length);
-
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _momentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _momentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
-            );
-
-            _secondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _secondMoment[i]),
-                NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, beta2),
-                    NumOps.Multiply(gradients[i], gradients[i])
-                )
-            );
-
-            var momentumCorrected = NumOps.Divide(_momentum[i], NumOps.Subtract(NumOps.One, _beta1Power));
-            var secondMomentCorrected = NumOps.Divide(_secondMoment[i], NumOps.Subtract(NumOps.One, _beta2Power));
-
-            var adaptiveLR = NumOps.Divide(
-                learningRate,
-                NumOps.Add(NumOps.Sqrt(secondMomentCorrected), epsilon)
-            );
-
-            updatedParameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(adaptiveLR, momentumCorrected)
-            );
-        }
-
-        _beta1Power = NumOps.Multiply(_beta1Power, beta1);
-        _beta2Power = NumOps.Multiply(_beta2Power, beta2);
-
-        network.UpdateParameters(updatedParameters);
+        Discriminator.UpdateParameters(parameters);
+        _discCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_discBeta1Power));
     }
 
     protected override void InitializeLayers() { }
@@ -422,8 +520,13 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
 
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_currentLearningRate);
+        writer.Write(_initialLearningRate);
+        writer.Write(_learningRateDecay);
         writer.Write(_l1Lambda);
+
+        // Write per-network learning rates
+        writer.Write(_genCurrentLearningRate);
+        writer.Write(_discCurrentLearningRate);
 
         var generatorBytes = Generator.Serialize();
         writer.Write(generatorBytes.Length);
@@ -436,8 +539,13 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _currentLearningRate = reader.ReadDouble();
+        _initialLearningRate = reader.ReadDouble();
+        _learningRateDecay = reader.ReadDouble();
         _l1Lambda = reader.ReadDouble();
+
+        // Read per-network learning rates
+        _genCurrentLearningRate = reader.ReadDouble();
+        _discCurrentLearningRate = reader.ReadDouble();
 
         int generatorDataLength = reader.ReadInt32();
         byte[] generatorData = reader.ReadBytes(generatorDataLength);
