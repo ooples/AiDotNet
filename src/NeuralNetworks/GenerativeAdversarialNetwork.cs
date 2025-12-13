@@ -1329,6 +1329,16 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     public Tensor<T> GenerateRandomNoiseTensor(int batchSize, int noiseSize)
     {
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
+        }
+
+        if (noiseSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(noiseSize), noiseSize, "Noise size must be positive.");
+        }
+
         var random = RandomHelper.CreateSecureRandom();
         var shape = new int[] { batchSize, noiseSize };
         var noise = new Tensor<T>(shape);

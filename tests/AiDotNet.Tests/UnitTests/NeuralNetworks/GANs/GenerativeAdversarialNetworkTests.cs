@@ -66,18 +66,15 @@ public class GenerativeAdversarialNetworkTests
     }
 
     [Fact]
-    public void GenerativeAdversarialNetwork_GenerateRandomNoiseTensor_WithZeroNoiseSize_ReturnsEmptyTensor()
+    public void GenerativeAdversarialNetwork_GenerateRandomNoiseTensor_WithZeroNoiseSize_ThrowsException()
     {
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
         var discArch = CreateThreeDimensionalDiscriminatorArchitecture();
         var gan = new GenerativeAdversarialNetwork<double>(genArch, discArch, InputType.ThreeDimensional);
 
-        // Act - The implementation doesn't throw on zero/negative noise size, it creates a tensor
-        var noise = gan.GenerateRandomNoiseTensor(4, 1);
-
-        // Assert
-        Assert.NotNull(noise);
+        // Act & Assert - Zero noiseSize should throw ArgumentOutOfRangeException
+        Assert.Throws<ArgumentOutOfRangeException>(() => gan.GenerateRandomNoiseTensor(4, 0));
     }
 
     [Fact]
