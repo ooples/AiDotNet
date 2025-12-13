@@ -167,12 +167,12 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         double initialLearningRate = DefaultLearningRate,
         double learningRateDecay = DefaultLearningRateDecay)
         : base(new NeuralNetworkArchitecture<T>(
-            inputType,
+            InputType.OneDimensional,  // Base GAN takes latent vector input (1D)
             NeuralNetworkTaskType.Generative,
             NetworkComplexity.Deep,
             latentSize,
-            imageChannels * 4 * (int)Math.Pow(2, maxResolutionLevel) * 4 * (int)Math.Pow(2, maxResolutionLevel),
-            0, 0, 0,
+            0, 0, 1,  // inputHeight, inputWidth=0 for 1D, inputDepth=1 required
+            imageChannels * 4 * (int)Math.Pow(2, maxResolutionLevel) * 4 * (int)Math.Pow(2, maxResolutionLevel),  // outputSize
             null), lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         // Validate inputs

@@ -104,12 +104,12 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         double initialLearningRate = 0.0002)
         : base(new NeuralNetworkArchitecture<T>(
-            inputType,
+            InputType.OneDimensional,  // Base GAN takes latent vector input (1D)
             NeuralNetworkTaskType.Generative,
             NetworkComplexity.Medium,
             generatorArchitecture.InputSize + numClasses,
-            discriminatorArchitecture.OutputSize,
-            0, 0, 0,
+            0, 0, 1,  // inputHeight, inputWidth=0 for 1D, inputDepth=1 required
+            discriminatorArchitecture.OutputSize,  // outputSize
             null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
         // Input validation

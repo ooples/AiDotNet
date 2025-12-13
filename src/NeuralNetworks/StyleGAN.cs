@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -316,7 +317,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         var styles = MappingNetwork.Predict(latentCodes);
 
         // Apply style mixing if enabled
-        if (_enableStyleMixing && new Random().NextDouble() < _styleMixingProbability)
+        if (_enableStyleMixing && RandomHelper.ThreadSafeRandom.NextDouble() < _styleMixingProbability)
         {
             var latentCodes2 = GenerateRandomLatentCodes(batchSize);
             var styles2 = MappingNetwork.Predict(latentCodes2);
@@ -396,7 +397,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<T> MixStyles(Tensor<T> styles1, Tensor<T> styles2)
     {
-        var random = new Random();
+        var random = RandomHelper.ThreadSafeRandom;
         int mixingLayer = random.Next(1, styles1.Shape[1] / 2); // Mix in middle layers
 
         var mixedStyles = new Tensor<T>(styles1.Shape);

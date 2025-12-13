@@ -145,12 +145,12 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         double initialLearningRate = 0.0001)
         : base(new NeuralNetworkArchitecture<T>(
-            inputType,
+            InputType.OneDimensional,  // Base GAN takes latent vector input (1D)
             NeuralNetworkTaskType.Generative,
             NetworkComplexity.Deep,
             latentSize + classEmbeddingDim,
-            imageChannels * imageHeight * imageWidth,
-            0, 0, 0,
+            0, 0, 1,  // inputHeight, inputWidth=0 for 1D, inputDepth=1 required
+            imageChannels * imageHeight * imageWidth,  // outputSize
             null), lossFunction ?? new HingeLoss<T>())
     {
         // Input validation

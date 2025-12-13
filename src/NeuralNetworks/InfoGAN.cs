@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -529,7 +530,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     public Tensor<T> GenerateRandomLatentCodes(int batchSize)
     {
-        var random = new Random();
+        var random = RandomHelper.ThreadSafeRandom;
         var codes = new Tensor<T>(new int[] { batchSize, _latentCodeSize });
 
         for (int b = 0; b < batchSize; b++)

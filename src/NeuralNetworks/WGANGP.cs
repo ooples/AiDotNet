@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -349,7 +350,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         Tensor<T> fakeImages,
         int batchSize)
     {
-        var random = new Random();
+        var random = RandomHelper.ThreadSafeRandom;
 
         // Create interpolated images
         var interpolatedImages = new Tensor<T>(realImages.Shape);
