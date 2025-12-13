@@ -24,6 +24,8 @@ export default {
     // Ignore general merge commits containing "Merge" followed by common patterns
     (message) => /^Merge (origin|upstream|master|main)/i.test(message),
     // Ignore legacy commits from Work Session PRs (before conventional commits)
-    (message) => /^Work (Session Planning|on Issue)/.test(message)
+    (message) => /^Work (Session Planning|on Issue)/.test(message),
+    // Ignore legacy PR titles like "Fix issue X in AiDotNet (#Y)"
+    (message) => /^Fix issue \d+ in AiDotNet/.test(message)
   ]
 };
