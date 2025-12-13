@@ -38,22 +38,28 @@ public class OutlierRemovalIntegrationTests
     [Fact]
     public void ZScoreOutlierRemoval_WithOutlier_RemovesOutlier()
     {
-        // Arrange
+        // Arrange - need enough data points for statistically meaningful z-score
+        // With n=4 and one extreme outlier, the outlier skews mean/std so much that its z-score < 2
+        // Using more data points ensures proper outlier detection
         var outlierRemoval = new ZScoreOutlierRemoval<double, Matrix<double>, Vector<double>>(threshold: 2);
         var inputs = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
+            { 1.5, 2.5 },
             { 2.0, 3.0 },
+            { 2.5, 3.5 },
             { 3.0, 4.0 },
-            { 100.0, 200.0 }  // Clear outlier
+            { 3.5, 4.5 },
+            { 4.0, 5.0 },
+            { 100.0, 200.0 }  // Clear outlier - now z-score will be > 2
         });
-        var outputs = new Vector<double>(new[] { 1.0, 2.0, 3.0, 100.0 });
+        var outputs = new Vector<double>(new[] { 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 100.0 });
 
         // Act
         var (cleanedInputs, cleanedOutputs) = outlierRemoval.RemoveOutliers(inputs, outputs);
 
         // Assert - outlier should be removed
-        Assert.True(cleanedOutputs.Length < 4);
+        Assert.True(cleanedOutputs.Length < 8);
     }
 
     [Fact]
@@ -406,20 +412,25 @@ public class OutlierRemovalIntegrationTests
     {
         // Arrange - outlier in second feature only
         var outlierRemoval = new ZScoreOutlierRemoval<double, Matrix<double>, Vector<double>>(threshold: 2);
+        // Need enough data points for statistically meaningful z-score detection
         var inputs = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
+            { 1.5, 2.5, 3.5 },
             { 2.0, 3.0, 4.0 },
+            { 2.5, 3.5, 4.5 },
             { 3.0, 4.0, 5.0 },
-            { 2.5, 100.0, 4.5 }  // Second feature is outlier
+            { 3.5, 4.5, 5.5 },
+            { 4.0, 5.0, 6.0 },
+            { 2.5, 100.0, 4.5 }  // Second feature is outlier - z-score will be > 2 with more data points
         });
-        var outputs = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
+        var outputs = new Vector<double>(new[] { 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 100.0 });
 
         // Act
         var (cleanedInputs, cleanedOutputs) = outlierRemoval.RemoveOutliers(inputs, outputs);
 
         // Assert - row with outlier in any feature should be removed
-        Assert.True(cleanedOutputs.Length < 4);
+        Assert.True(cleanedOutputs.Length < 8);
     }
 
     [Fact]

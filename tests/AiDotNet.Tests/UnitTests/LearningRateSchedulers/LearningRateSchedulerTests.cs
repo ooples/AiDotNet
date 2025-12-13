@@ -20,14 +20,15 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
         {
             var scheduler = new StepLRScheduler(0.1, stepSize: 3, gamma: 0.5);
 
-            // Steps 1-3: LR should remain at 0.1
-            for (int i = 0; i < 3; i++)
+            // Steps 1-2: LR should remain at 0.1 (before stepSize)
+            for (int i = 0; i < 2; i++)
             {
                 scheduler.Step();
             }
             Assert.Equal(0.1, scheduler.CurrentLearningRate, 6);
 
-            // Step 4: Should decay to 0.05
+            // Step 3: Should decay to 0.05 (at stepSize)
+            // Per PyTorch StepLR: lr = initial_lr * gamma ** (step // step_size)
             scheduler.Step();
             Assert.Equal(0.05, scheduler.CurrentLearningRate, 6);
         }

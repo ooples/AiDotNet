@@ -82,7 +82,7 @@ public class BlackmanHarrisWindow<T> : IWindowFunction<T>
             T term2 = _numOps.Multiply(_numOps.FromDouble(0.48829), MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(2 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1)))));
             T term3 = _numOps.Multiply(_numOps.FromDouble(0.14128), MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(4 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1)))));
             T term4 = _numOps.Multiply(_numOps.FromDouble(0.01168), MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(6 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1)))));
-            window[n] = _numOps.Subtract(_numOps.Subtract(_numOps.Add(term1, term2), term3), term4);
+            window[n] = _numOps.Subtract(_numOps.Add(_numOps.Subtract(term1, term2), term3), term4);
         }
 
         return window;

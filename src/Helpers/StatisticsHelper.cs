@@ -4882,7 +4882,11 @@ public static class StatisticsHelper<T>
         T totalNegatives = _numOps.Subtract(_numOps.FromDouble(actual.Length), totalPositives);
 
         if (_numOps.Equals(totalPositives, _numOps.Zero) || _numOps.Equals(totalNegatives, _numOps.Zero))
-            throw new ArgumentException("Both positive and negative samples are required to calculate AUC.");
+        {
+            // Return 0 for regression data or data without both classes
+            // AUC is a classification metric and is not meaningful for regression
+            return _numOps.Zero;
+        }
 
         T truePositives = _numOps.Zero;
         T falsePositives = _numOps.Zero;
