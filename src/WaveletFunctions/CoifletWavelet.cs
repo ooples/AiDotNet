@@ -137,15 +137,15 @@ public class CoifletWavelet<T> : WaveletFunctionBase<T>
     /// <para>
     /// <b>For Beginners:</b>
     /// The scaling function is the basic building block used to construct the wavelet.
-    /// 
+    ///
     /// For Coiflet wavelets, the scaling function satisfies a two-scale relation:
     /// f(t) = S c_k f(2t-k)
-    /// 
+    ///
     /// This is a recursive definition, which makes exact calculation challenging.
     /// This method implements a simple recursive approximation that:
     /// 1. Checks if the point is within the support [0,1]
     /// 2. If so, calculates the function value using the two-scale relation
-    /// 
+    ///
     /// In practice, this recursive approach has limitations and would typically be
     /// replaced by more sophisticated numerical methods for accurate calculation.
     /// However, it illustrates the fundamental recursive nature of wavelet scaling functions.
@@ -153,13 +153,32 @@ public class CoifletWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private double ScalingFunction(double t)
     {
+        return ScalingFunctionRecursive(t, 0);
+    }
+
+    /// <summary>
+    /// Recursive helper for scaling function with depth limit to prevent stack overflow.
+    /// </summary>
+    private double ScalingFunctionRecursive(double t, int depth)
+    {
+        // Base case: outside support
         if (t < 0 || t > 1)
             return 0;
+
+        // Base case: max recursion depth reached - return approximation
+        const int MaxDepth = 10;
+        if (depth >= MaxDepth)
+            return 1.0; // Return constant approximation at max depth
 
         double result = 0;
         for (int k = 0; k < 6 * _order; k++)
         {
-            result += Convert.ToDouble(_coefficients[k]) * ScalingFunction(2 * t - k);
+            double shiftedT = 2 * t - k;
+            // Only recurse if the shifted value is within support
+            if (shiftedT >= 0 && shiftedT <= 1)
+            {
+                result += Convert.ToDouble(_coefficients[k]) * ScalingFunctionRecursive(shiftedT, depth + 1);
+            }
         }
 
         return result;
