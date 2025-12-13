@@ -321,7 +321,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
                 $"Batch size mismatch: images1 has {batchSize1} samples, images2 has {batchSize2} samples.");
         }
 
-        // Simplified: concatenate along channel dimension
+        // Concatenate along feature dimension by flattening spatial dimensions to 2D
         int batchSize = batchSize1;
         int totalSize1 = images1.Shape.Aggregate(1, (a, b) => a * b);
         int totalSize2 = images2.Shape.Aggregate(1, (a, b) => a * b);
@@ -490,7 +490,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         Generator.UpdateParameters(updatedParameters);
 
         // Learning rate decay
-        _genCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_genBeta1Power));
+        _genCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * NumOps.ToDouble(_genBeta1Power));
     }
 
     /// <summary>
@@ -555,7 +555,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
 
         Discriminator.UpdateParameters(updatedParameters);
-        _discCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_discBeta1Power));
+        _discCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * NumOps.ToDouble(_discBeta1Power));
     }
 
     protected override void InitializeLayers() { }

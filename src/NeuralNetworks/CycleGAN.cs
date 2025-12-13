@@ -568,7 +568,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
             _genAtoBCurrentLearningRate);
 
         // Apply learning rate decay
-        _genAtoBCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_genAtoBBeta1Power));
+        _genAtoBCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * NumOps.ToDouble(_genAtoBBeta1Power));
 
         GeneratorAtoB.UpdateParameters(updatedParams);
     }
@@ -586,7 +586,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
             _genBtoACurrentLearningRate);
 
         // Apply learning rate decay
-        _genBtoACurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_genBtoABeta1Power));
+        _genBtoACurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * NumOps.ToDouble(_genBtoABeta1Power));
 
         GeneratorBtoA.UpdateParameters(updatedParams);
     }
@@ -604,7 +604,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
             _discACurrentLearningRate);
 
         // Apply learning rate decay
-        _discACurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_discABeta1Power));
+        _discACurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * NumOps.ToDouble(_discABeta1Power));
 
         DiscriminatorA.UpdateParameters(updatedParams);
     }
@@ -622,7 +622,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
             _discBCurrentLearningRate);
 
         // Apply learning rate decay
-        _discBCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_discBBeta1Power));
+        _discBCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * NumOps.ToDouble(_discBBeta1Power));
 
         DiscriminatorB.UpdateParameters(updatedParams);
     }

@@ -784,14 +784,20 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         // Serialize generator optimizer state
         SerializationHelper<T>.SerializeVector(writer, _genMomentum);
         SerializationHelper<T>.SerializeVector(writer, _genSecondMoment);
+        writer.Write(NumOps.ToDouble(_genBeta1Power));
+        writer.Write(NumOps.ToDouble(_genBeta2Power));
 
         // Serialize discriminator optimizer state
         SerializationHelper<T>.SerializeVector(writer, _discMomentum);
         SerializationHelper<T>.SerializeVector(writer, _discSecondMoment);
+        writer.Write(NumOps.ToDouble(_discBeta1Power));
+        writer.Write(NumOps.ToDouble(_discBeta2Power));
 
         // Serialize Q network optimizer state
         SerializationHelper<T>.SerializeVector(writer, _qMomentum);
         SerializationHelper<T>.SerializeVector(writer, _qSecondMoment);
+        writer.Write(NumOps.ToDouble(_qBeta1Power));
+        writer.Write(NumOps.ToDouble(_qBeta2Power));
 
         var generatorBytes = Generator.Serialize();
         writer.Write(generatorBytes.Length);
@@ -820,14 +826,20 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         // Deserialize generator optimizer state
         _genMomentum = SerializationHelper<T>.DeserializeVector(reader);
         _genSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        _genBeta1Power = NumOps.FromDouble(reader.ReadDouble());
+        _genBeta2Power = NumOps.FromDouble(reader.ReadDouble());
 
         // Deserialize discriminator optimizer state
         _discMomentum = SerializationHelper<T>.DeserializeVector(reader);
         _discSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        _discBeta1Power = NumOps.FromDouble(reader.ReadDouble());
+        _discBeta2Power = NumOps.FromDouble(reader.ReadDouble());
 
         // Deserialize Q network optimizer state
         _qMomentum = SerializationHelper<T>.DeserializeVector(reader);
         _qSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        _qBeta1Power = NumOps.FromDouble(reader.ReadDouble());
+        _qBeta2Power = NumOps.FromDouble(reader.ReadDouble());
 
         int generatorDataLength = reader.ReadInt32();
         byte[] generatorData = reader.ReadBytes(generatorDataLength);
