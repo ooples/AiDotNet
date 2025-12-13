@@ -179,14 +179,18 @@ public class ConditionalGAN<T> : NeuralNetworkBase<T>
         _learningRateDecay = 0.9999;
 
         // Initialize generator optimizer state
-        _genBeta1Power = NumOps.One;
-        _genBeta2Power = NumOps.One;
+        // Beta powers start at beta^1 (the beta values) so first iteration's bias correction
+        // computes (1 - beta) which is non-zero. With beta1=0.5, first iteration: 1-0.5=0.5
+        _genBeta1Power = NumOps.FromDouble(0.5);
+        _genBeta2Power = NumOps.FromDouble(0.999);
         _genMomentum = Vector<T>.Empty();
         _genSecondMoment = Vector<T>.Empty();
 
         // Initialize discriminator optimizer state
-        _discBeta1Power = NumOps.One;
-        _discBeta2Power = NumOps.One;
+        // Beta powers start at beta^1 (the beta values) so first iteration's bias correction
+        // computes (1 - beta) which is non-zero. With beta1=0.5, first iteration: 1-0.5=0.5
+        _discBeta1Power = NumOps.FromDouble(0.5);
+        _discBeta2Power = NumOps.FromDouble(0.999);
         _discMomentum = Vector<T>.Empty();
         _discSecondMoment = Vector<T>.Empty();
 
@@ -694,6 +698,18 @@ public class ConditionalGAN<T> : NeuralNetworkBase<T>
     /// </remarks>
     public Tensor<T> CreateOneHotCondition(int batchSize, int classIndex)
     {
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize,
+                "Batch size must be positive.");
+        }
+
+        if (classIndex < 0 || classIndex >= _numConditionClasses)
+        {
+            throw new ArgumentOutOfRangeException(nameof(classIndex), classIndex,
+                $"Class index must be between 0 and {_numConditionClasses - 1} (inclusive).");
+        }
+
         var conditions = new Tensor<T>(new int[] { batchSize, _numConditionClasses });
 
         for (int b = 0; b < batchSize; b++)
@@ -759,10 +775,14 @@ public class ConditionalGAN<T> : NeuralNetworkBase<T>
         // Serialize generator optimizer state
         SerializationHelper<T>.SerializeVector(writer, _genMomentum);
         SerializationHelper<T>.SerializeVector(writer, _genSecondMoment);
+        writer.Write(NumOps.ToDouble(_genBeta1Power));
+        writer.Write(NumOps.ToDouble(_genBeta2Power));
 
         // Serialize discriminator optimizer state
         SerializationHelper<T>.SerializeVector(writer, _discMomentum);
         SerializationHelper<T>.SerializeVector(writer, _discSecondMoment);
+        writer.Write(NumOps.ToDouble(_discBeta1Power));
+        writer.Write(NumOps.ToDouble(_discBeta2Power));
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -782,10 +802,14 @@ public class ConditionalGAN<T> : NeuralNetworkBase<T>
         // Deserialize generator optimizer state
         _genMomentum = SerializationHelper<T>.DeserializeVector(reader);
         _genSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        _genBeta1Power = NumOps.FromDouble(reader.ReadDouble());
+        _genBeta2Power = NumOps.FromDouble(reader.ReadDouble());
 
         // Deserialize discriminator optimizer state
         _discMomentum = SerializationHelper<T>.DeserializeVector(reader);
         _discSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        _discBeta1Power = NumOps.FromDouble(reader.ReadDouble());
+        _discBeta2Power = NumOps.FromDouble(reader.ReadDouble());
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
