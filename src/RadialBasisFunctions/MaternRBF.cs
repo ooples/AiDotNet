@@ -126,11 +126,39 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
             return _numOps.One;
         }
 
+        // Use closed-form expressions for half-integer nu values (more numerically stable)
         double sqrt2nu = Math.Sqrt(2 * _nu);
+        double scaledRDouble = Convert.ToDouble(scaledR);
+        double x = sqrt2nu * scaledRDouble;
+
+        // For nu = 0.5: k(r) = exp(-x)
+        if (Math.Abs(_nu - 0.5) < 1e-10)
+        {
+            return _numOps.Exp(_numOps.Negate(_numOps.FromDouble(x)));
+        }
+
+        // For nu = 1.5: k(r) = (1 + x) * exp(-x)
+        if (Math.Abs(_nu - 1.5) < 1e-10)
+        {
+            T expTerm = _numOps.Exp(_numOps.Negate(_numOps.FromDouble(x)));
+            return _numOps.Multiply(_numOps.Add(_numOps.One, _numOps.FromDouble(x)), expTerm);
+        }
+
+        // For nu = 2.5: k(r) = (1 + x + x^2/3) * exp(-x)
+        if (Math.Abs(_nu - 2.5) < 1e-10)
+        {
+            T expTerm = _numOps.Exp(_numOps.Negate(_numOps.FromDouble(x)));
+            T xSquaredOver3 = _numOps.FromDouble(x * x / 3.0);
+            return _numOps.Multiply(
+                _numOps.Add(_numOps.Add(_numOps.One, _numOps.FromDouble(x)), xSquaredOver3),
+                expTerm);
+        }
+
+        // General case using Bessel functions
         T term1 = _numOps.Power(_numOps.FromDouble(2), _numOps.FromDouble(1 - _nu));
         T term2 = _numOps.FromDouble(1 / MathHelper.Gamma(_nu));
-        T term3 = _numOps.Power(_numOps.Multiply(_numOps.FromDouble(sqrt2nu), scaledR), _numOps.FromDouble(_nu));
-        T term4 = _numOps.FromDouble(MathHelper.BesselK(_nu, Convert.ToDouble(_numOps.Multiply(_numOps.FromDouble(sqrt2nu), scaledR))));
+        T term3 = _numOps.Power(_numOps.FromDouble(x), _numOps.FromDouble(_nu));
+        T term4 = _numOps.FromDouble(MathHelper.BesselK(_nu, x));
 
         return _numOps.Multiply(_numOps.Multiply(_numOps.Multiply(term1, term2), term3), term4);
     }
