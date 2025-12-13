@@ -165,19 +165,20 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
 
         // Initialize Generator optimizer state
+        // Beta powers start at beta^1 so first iteration's bias correction is non-zero
         int genParamCount = Generator.GetParameterCount();
         _genMomentum = new Vector<T>(genParamCount);
         _genSecondMoment = new Vector<T>(genParamCount);
-        _genBeta1Power = NumOps.One;
-        _genBeta2Power = NumOps.One;
+        _genBeta1Power = NumOps.FromDouble(0.9);
+        _genBeta2Power = NumOps.FromDouble(0.999);
         _genCurrentLearningRate = initialLearningRate;
 
         // Initialize Discriminator optimizer state
         int discParamCount = Discriminator.GetParameterCount();
         _discMomentum = new Vector<T>(discParamCount);
         _discSecondMoment = new Vector<T>(discParamCount);
-        _discBeta1Power = NumOps.One;
-        _discBeta2Power = NumOps.One;
+        _discBeta1Power = NumOps.FromDouble(0.9);
+        _discBeta2Power = NumOps.FromDouble(0.999);
         _discCurrentLearningRate = initialLearningRate;
 
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
@@ -306,8 +307,22 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ConcatenateImages(Tensor<T> images1, Tensor<T> images2)
     {
+        if (images1.Shape.Length < 1 || images2.Shape.Length < 1)
+        {
+            throw new ArgumentException("Both image tensors must have at least one dimension.");
+        }
+
+        int batchSize1 = images1.Shape[0];
+        int batchSize2 = images2.Shape[0];
+
+        if (batchSize1 != batchSize2)
+        {
+            throw new ArgumentException(
+                $"Batch size mismatch: images1 has {batchSize1} samples, images2 has {batchSize2} samples.");
+        }
+
         // Simplified: concatenate along channel dimension
-        int batchSize = images1.Shape[0];
+        int batchSize = batchSize1;
         int totalSize1 = images1.Shape.Aggregate(1, (a, b) => a * b);
         int totalSize2 = images2.Shape.Aggregate(1, (a, b) => a * b);
         int size1 = totalSize1 / batchSize;
