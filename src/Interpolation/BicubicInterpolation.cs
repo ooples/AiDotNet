@@ -105,8 +105,27 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
     /// <returns>The interpolated z-value at the specified (x,y) coordinates.</returns>
     public T Interpolate(T x, T y)
     {
+        // Check if x and y exactly match grid points - return exact value
+        for (int xi = 0; xi < _x.Length; xi++)
+        {
+            if (_numOps.Equals(x, _x[xi]))
+            {
+                for (int yi = 0; yi < _y.Length; yi++)
+                {
+                    if (_numOps.Equals(y, _y[yi]))
+                    {
+                        return _z[xi, yi];
+                    }
+                }
+            }
+        }
+
         int i = FindInterval(_x, x);
         int j = FindInterval(_y, y);
+
+        // Ensure valid interval for bicubic (need points before and after)
+        i = Math.Max(1, Math.Min(i, _x.Length - 3));
+        j = Math.Max(1, Math.Min(j, _y.Length - 3));
 
         T[,] p = new T[4, 4];
         for (int m = -1; m <= 2; m++)

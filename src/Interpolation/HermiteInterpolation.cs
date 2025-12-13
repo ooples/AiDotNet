@@ -108,12 +108,19 @@ public class HermiteInterpolation<T> : IInterpolation<T>
         // Calculate the normalized position within the interval (0 to 1)
         T t = _numOps.Divide(_numOps.Subtract(x, x0), h);
 
-        // Calculate the Hermite basis functions
-        // These control how the values and slopes at the endpoints influence the curve
-        T h00 = _numOps.Multiply(_numOps.Subtract(_numOps.FromDouble(2), _numOps.Multiply(_numOps.FromDouble(3), t)), _numOps.Add(_numOps.One, _numOps.Multiply(_numOps.FromDouble(-1), t)));
-        T h10 = _numOps.Multiply(h, _numOps.Multiply(t, _numOps.Add(_numOps.One, _numOps.Multiply(_numOps.FromDouble(-1), t))));
-        T h01 = _numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(3), t), _numOps.Subtract(_numOps.FromDouble(2), t));
-        T h11 = _numOps.Multiply(h, _numOps.Multiply(t, _numOps.Subtract(t, _numOps.One)));
+        // Calculate t² and t³ for the Hermite basis functions
+        T t2 = _numOps.Multiply(t, t);
+        T t3 = _numOps.Multiply(t2, t);
+
+        // Calculate the Hermite basis functions (correct formulas):
+        // h00(t) = 2t³ - 3t² + 1
+        // h10(t) = t³ - 2t² + t (scaled by h in the final calculation)
+        // h01(t) = -2t³ + 3t²
+        // h11(t) = t³ - t² (scaled by h in the final calculation)
+        T h00 = _numOps.Add(_numOps.Add(_numOps.Multiply(_numOps.FromDouble(2), t3), _numOps.Multiply(_numOps.FromDouble(-3), t2)), _numOps.One);
+        T h10 = _numOps.Multiply(h, _numOps.Add(_numOps.Add(t3, _numOps.Multiply(_numOps.FromDouble(-2), t2)), t));
+        T h01 = _numOps.Add(_numOps.Multiply(_numOps.FromDouble(-2), t3), _numOps.Multiply(_numOps.FromDouble(3), t2));
+        T h11 = _numOps.Multiply(h, _numOps.Add(t3, _numOps.Multiply(_numOps.FromDouble(-1), t2)));
 
         // Combine the basis functions with the values and slopes to get the interpolated value
         return _numOps.Add(
