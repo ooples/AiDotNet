@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -28,6 +30,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class CroppingLayer<T> : LayerBase<T>
 {
+
     /// <summary>
     /// The amount to crop from the top of each dimension.
     /// </summary>
@@ -142,6 +145,7 @@ public class CroppingLayer<T> : LayerBase<T>
     /// <param name="cropLeft">The amount to crop from the left of each dimension.</param>
     /// <param name="cropRight">The amount to crop from the right of each dimension.</param>
     /// <param name="scalarActivation">The activation function to apply. Defaults to Identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a cropping layer with the specified cropping parameters and activation function.
@@ -166,7 +170,8 @@ public class CroppingLayer<T> : LayerBase<T>
         int[] cropBottom,
         int[] cropLeft,
         int[] cropRight,
-        IActivationFunction<T>? scalarActivation = null)
+        IActivationFunction<T>? scalarActivation = null,
+        IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, cropTop, cropBottom, cropLeft, cropRight), scalarActivation ?? new IdentityActivation<T>())
     {
         _cropTop = cropTop;
@@ -185,6 +190,7 @@ public class CroppingLayer<T> : LayerBase<T>
     /// <param name="cropLeft">The amount to crop from the left of each dimension.</param>
     /// <param name="cropRight">The amount to crop from the right of each dimension.</param>
     /// <param name="vectorActivation">The vector activation function to apply. Defaults to Identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a cropping layer with the specified cropping parameters and a vector activation function.
@@ -209,7 +215,8 @@ public class CroppingLayer<T> : LayerBase<T>
         int[] cropBottom,
         int[] cropLeft,
         int[] cropRight,
-        IVectorActivationFunction<T>? vectorActivation = null)
+        IVectorActivationFunction<T>? vectorActivation = null,
+        IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, cropTop, cropBottom, cropLeft, cropRight), vectorActivation ?? new IdentityActivation<T>())
     {
         _cropTop = cropTop;
@@ -242,8 +249,8 @@ public class CroppingLayer<T> : LayerBase<T>
     /// - Subtract how much you're trimming from the right
     /// - The result is the new size for that dimension
     ///
-    /// For example, if you start with an image that's 28×28 pixels and crop 2 pixels from each side,
-    /// the output will be 24×24 pixels (28 - 2 - 2 = 24).
+    /// For example, if you start with an image that's 28Ã—28 pixels and crop 2 pixels from each side,
+    /// the output will be 24Ã—24 pixels (28 - 2 - 2 = 24).
     /// </para>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape, int[] cropTop, int[] cropBottom, int[] cropLeft, int[] cropRight)
@@ -281,26 +288,28 @@ public class CroppingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        int[] inputShape = input.Shape;
-        int[] outputShape = GetOutputShape();
-        Tensor<T> output = new Tensor<T>(outputShape);
-        int batchSize = inputShape[0];
-        int channels = inputShape[3];
-        for (int b = 0; b < batchSize; b++)
+        // Validate input is 4D tensor [batch, height, width, channels] as required for cropping indices
+        if (input.Rank != 4)
         {
-            for (int y = 0; y < outputShape[1]; y++)
-            {
-                for (int x = 0; x < outputShape[2]; x++)
-                {
-                    for (int c = 0; c < channels; c++)
-                    {
-                        output[b, y, x, c] = input[b, y + _cropTop[1], x + _cropLeft[2], c];
-                    }
-                }
-            }
+            throw new ArgumentException(
+                $"CroppingLayer requires a 4D tensor with format [batch, height, width, channels]. " +
+                $"Got tensor with rank {input.Rank}.",
+                nameof(input));
         }
 
-        return ApplyActivation(output);
+        _lastInput = input; // Store for autodiff backward pass
+
+        // Convert from NHWC [batch, height, width, channels] to NCHW [batch, channels, height, width]
+        // Required because Engine.Crop expects NCHW format
+        var inputNCHW = input.Transpose([0, 3, 1, 2]);
+
+        // Perform crop on NCHW format
+        var croppedNCHW = Engine.Crop(inputNCHW, _cropTop[1], _cropLeft[2], GetOutputShape()[1], GetOutputShape()[2]);
+
+        // Convert back from NCHW to NHWC [batch, height, width, channels]
+        var cropped = croppedNCHW.Transpose([0, 2, 3, 1]);
+
+        return ApplyActivation(cropped);
     }
 
     /// <summary>
@@ -316,7 +325,7 @@ public class CroppingLayer<T> : LayerBase<T>
     /// input that were kept during the forward pass.
     /// </para>
     /// <para><b>For Beginners:</b> This method helps pass error information backward through the network during training.
-    /// 
+    ///
     /// During the backward pass:
     /// - A tensor the same size as the original input is created
     /// - The gradient information is placed in the center (non-cropped) region
@@ -329,24 +338,71 @@ public class CroppingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        int[] inputShape = GetInputShape();
-        Tensor<T> inputGradient = new Tensor<T>(inputShape);
-        int batchSize = inputShape[0];
-        int channels = inputShape[3];
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int y = 0; y < outputGradient.Shape[1]; y++)
-            {
-                for (int x = 0; x < outputGradient.Shape[2]; x++)
-                {
-                    for (int c = 0; c < channels; c++)
-                    {
-                        inputGradient[b, y + _cropTop[1], x + _cropLeft[2], c] = outputGradient[b, y, x, c];
-                    }
-                }
-            }
-        }
-        return ApplyActivationDerivative(inputGradient, outputGradient);
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert outputGradient from NHWC to NCHW (same as forward pass)
+        var outputGradientNCHW = outputGradient.Transpose([0, 3, 1, 2]);
+
+        // Convert input shape from NHWC to NCHW for CropBackward
+        var inputShapeNHWC = GetInputShape();
+        var inputShapeNCHW = new int[] { inputShapeNHWC[0], inputShapeNHWC[3], inputShapeNHWC[1], inputShapeNHWC[2] };
+
+        var inputGradientNCHW = Engine.CropBackward(outputGradientNCHW, inputShapeNCHW, _cropTop[1], _cropLeft[2]);
+
+        // Convert back from NCHW to NHWC
+        var inputGradient = inputGradientNCHW.Transpose([0, 2, 3, 1]);
+
+        return ApplyActivationDerivative(_lastInput, inputGradient);
+    }
+
+    /// <summary>
+    /// Stores the last input for use in autodiff backward pass.
+    /// </summary>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes gradients using the same computation as BackwardManual to ensure
+    /// identical results. Both paths use the same indexing logic for placing output gradients
+    /// in the input gradient tensor at the cropped region positions.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert outputGradient from NHWC to NCHW (same as forward pass)
+        var outputGradientNCHW = outputGradient.Transpose([0, 3, 1, 2]);
+
+        // Convert input shape from NHWC to NCHW for CropBackward
+        var inputShapeNHWC = GetInputShape();
+        var inputShapeNCHW = new int[] { inputShapeNHWC[0], inputShapeNHWC[3], inputShapeNHWC[1], inputShapeNHWC[2] };
+
+        var inputGradientNCHW = Engine.CropBackward(outputGradientNCHW, inputShapeNCHW, _cropTop[1], _cropLeft[2]);
+
+        // Convert back from NCHW to NHWC
+        var inputGradient = inputGradientNCHW.Transpose([0, 2, 3, 1]);
+
+        return ApplyActivationDerivative(_lastInput, inputGradient);
     }
    
     /// <summary>
@@ -401,6 +457,85 @@ public class CroppingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Exports this layer's computation as a differentiable computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to which input variable nodes should be added.</param>
+    /// <returns>The output computation node representing this layer's operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the activation function is not supported for JIT compilation.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representation of the cropping operation that can be compiled
+    /// and optimized for efficient execution. The graph represents removing specified portions from the edges
+    /// of the input tensor followed by optional activation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an optimized version of the cropping operation.
+    ///
+    /// For cropping layers:
+    /// - Creates a placeholder for the input tensor
+    /// - Applies the cropping operation (removes edges)
+    /// - Applies the activation function if present
+    /// - Returns a computation graph for efficient execution
+    ///
+    /// This allows for faster inference by pre-compiling the cropping operation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (!CanActivationBeJitted())
+        {
+            var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? "unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation yet. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax");
+        }
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // CroppingLayer uses NHWC format [batch, H, W, channels]
+        // Need to convert to NCHW for TensorOperations.Crop
+        // Create placeholder for input in NHWC format
+        var inputPlaceholderNHWC = new Tensor<T>(InputShape);
+
+        // Convert to NCHW format
+        int batch = InputShape[0];
+        int height = InputShape[1];
+        int width = InputShape[2];
+        int channels = InputShape[3];
+        var inputShapeNCHW = new int[] { batch, channels, height, width };
+        var inputPlaceholderNCHW = new Tensor<T>(inputShapeNCHW);
+
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholderNCHW, "input");
+        inputNodes.Add(inputNode);
+
+        // Apply cropping operation
+        // Crop expects [top, bottom, left, right] for 4D tensors in NCHW format
+        var cropping = new int[] { _cropTop[1], _cropBottom[1], _cropLeft[2], _cropRight[2] };
+        var croppedNode = TensorOperations<T>.Crop(inputNode, cropping);
+
+        // Apply activation function using LayerBase helper
+        var activatedOutput = ApplyActivationToGraph(croppedNode);
+
+        return activatedOutput;
+    }
+
+    /// <summary>
+    /// Gets whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>True if the activation function supports JIT compilation, false otherwise.</value>
+    /// <remarks>
+    /// <para>
+    /// Cropping layers support JIT compilation as long as their activation function does.
+    /// The cropping operation is straightforward to compile and optimize.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => CanActivationBeJitted();
+
+    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -409,7 +544,7 @@ public class CroppingLayer<T> : LayerBase<T>
     /// It is implemented to satisfy the abstract method requirement from the base class.
     /// </para>
     /// <para><b>For Beginners:</b> This method is empty because cropping layers don't store any temporary information.
-    /// 
+    ///
     /// Since cropping layers:
     /// - Don't keep track of past inputs
     /// - Don't remember anything between operations
@@ -421,7 +556,8 @@ public class CroppingLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
-        // No state to reset in a cropping layer
+        // Clear cached input for autodiff
+        _lastInput = null;
     }
 
     /// <summary>

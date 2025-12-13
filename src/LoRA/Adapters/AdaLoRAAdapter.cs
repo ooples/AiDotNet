@@ -47,7 +47,7 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Static random number generator for thread-safe initialization.
     /// </summary>
-    private static readonly Random _rng = new Random();
+    private static readonly Random _rng = RandomHelper.CreateSecureRandom();
 
     /// <summary>
     /// Maximum possible rank for this adapter.

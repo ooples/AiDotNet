@@ -1,4 +1,5 @@
 ﻿using AiDotNet;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
@@ -12,7 +13,7 @@ namespace AiDotNetTestConsole.Examples;
 /// </summary>
 public class RegressionExample
 {
-    public void RunExample()
+    public async Task RunExample()
     {
         Console.WriteLine("Multiple Regression Example - House Price Prediction");
         Console.WriteLine("==================================================\n");
@@ -71,10 +72,11 @@ public class RegressionExample
             };
 
             // Build a multiple regression model
-            var model = modelBuilder
+            var model = await modelBuilder
+                .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(houseFeatures, housePrices))
                 .ConfigureOptimizer(optimizer)
                 .ConfigureModel(new MultipleRegression<double>(regressionOptions))
-                .Build(houseFeatures, housePrices);
+                .BuildAsync();
 
             Console.WriteLine("Model trained successfully!");
 

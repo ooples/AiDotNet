@@ -1,3 +1,5 @@
+
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -30,16 +32,10 @@ namespace AiDotNet.LossFunctions;
 public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
-    /// Small value to prevent numerical instability with log(0).
-    /// </summary>
-    private readonly T _epsilon;
-    
-    /// <summary>
     /// Initializes a new instance of the CategoricalCrossEntropyLoss class.
     /// </summary>
     public CategoricalCrossEntropyLoss()
     {
-        _epsilon = NumOps.FromDouble(1e-15);
     }
     
     /// <summary>
@@ -55,11 +51,8 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         T sum = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
-            // Clamp values to prevent log(0)
-            T p = MathHelper.Clamp(predicted[i], _epsilon, NumOps.Subtract(NumOps.One, _epsilon));
-            
-            // -?(actual * log(predicted))
-            sum = NumOps.Add(sum, NumOps.Multiply(actual[i], NumOps.Log(p)));
+            // -Σ(actual * log(predicted))
+            sum = NumOps.Add(sum, NumOps.Multiply(actual[i], NumericalStabilityHelper.SafeLog(predicted[i], NumericalStabilityHelper.SmallEpsilon)));
         }
         
         return NumOps.Negate(sum);

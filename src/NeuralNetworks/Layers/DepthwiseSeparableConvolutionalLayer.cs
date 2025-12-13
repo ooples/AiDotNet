@@ -1,3 +1,5 @@
+
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -7,7 +9,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para>
 /// A depthwise separable convolutional layer splits the standard convolution operation into two parts:
 /// a depthwise convolution, which applies a single filter per input channel, and a pointwise convolution,
-/// which uses 1×1 convolutions to combine the outputs. This approach dramatically reduces the number of
+/// which uses 1Ã—1 convolutions to combine the outputs. This approach dramatically reduces the number of
 /// parameters and computational cost compared to standard convolution.
 /// </para>
 /// <para><b>For Beginners:</b> A depthwise separable convolution is like a more efficient way to filter an image.
@@ -54,13 +56,13 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This tensor stores the weights for the pointwise convolution. It has dimensions
-    /// [OutputDepth, InputDepth, 1, 1], which applies 1×1 convolutions to mix channels
+    /// [OutputDepth, InputDepth, 1, 1], which applies 1Ã—1 convolutions to mix channels
     /// without spatial filtering.
     /// </para>
     /// <para><b>For Beginners:</b> These are the filters that combine channels after they've been processed.
     /// 
     /// After each channel has been filtered separately:
-    /// - These 1×1 filters mix the channels together
+    /// - These 1Ã—1 filters mix the channels together
     /// - They learn how to combine the filtered channels to create useful output features
     /// - They don't look at spatial patterns (no width or height, just combining channels)
     /// 
@@ -74,21 +76,21 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector contains a bias value for each output channel. Biases are added after
+    /// This tensor contains a bias value for each output channel. Biases are added after
     /// both convolution steps are completed and before the activation function is applied.
     /// </para>
     /// <para><b>For Beginners:</b> Biases are like base values added to each output channel.
-    /// 
+    ///
     /// Think of biases as:
     /// - A starting point or offset value
     /// - Added after all the filtering and mixing is done
     /// - Helping the network be more flexible in what patterns it detects
-    /// 
+    ///
     /// For example, a positive bias might make a feature detector more sensitive,
     /// triggering more easily even with weaker input signals.
     /// </para>
     /// </remarks>
-    private Vector<T> _biases;
+    private Tensor<T> _biases;
 
     /// <summary>
     /// Stored input data from the most recent forward pass, used for backpropagation.
@@ -152,6 +154,27 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _lastOutput;
 
     /// <summary>
+    /// Stored pre-activation output from the most recent forward pass, used for backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the output before the activation function is applied. It's needed during
+    /// backpropagation because some activation functions (like Sigmoid, Tanh) require the pre-activation
+    /// value to compute their derivative correctly, rather than the post-activation value.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the network's memory of the result before the activation function.
+    ///
+    /// The layer remembers:
+    /// - The output after convolution and bias addition, but before activation
+    /// - This is needed because some activation functions need the "raw" value to compute their derivative
+    ///
+    /// Think of it like remembering the score before applying a curve - you need the original score
+    /// to calculate how much the curve changed things.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastPreActivation;
+
+    /// <summary>
     /// Calculated gradients for the depthwise kernels during backpropagation.
     /// </summary>
     /// <remarks>
@@ -209,7 +232,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// Adjusting biases can help fine-tune the sensitivity of feature detectors.
     /// </para>
     /// </remarks>
-    private Vector<T>? _biasesGradient;
+    private Tensor<T>? _biasesGradient;
 
     /// <summary>
     /// The number of channels in the input data.
@@ -257,16 +280,16 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This field stores the spatial size of the depthwise filter kernels. For example, a kernel size
-    /// of 3 means 3×3 kernels are used for the depthwise convolution.
+    /// of 3 means 3Ã—3 kernels are used for the depthwise convolution.
     /// </para>
     /// <para><b>For Beginners:</b> This is how big each filter is when looking for patterns.
     /// 
     /// For example:
-    /// - A kernelSize of 3 means each filter is a 3×3 grid (9 points)
-    /// - A kernelSize of 5 means each filter is a 5×5 grid (25 points)
+    /// - A kernelSize of 3 means each filter is a 3Ã—3 grid (9 points)
+    /// - A kernelSize of 5 means each filter is a 5Ã—5 grid (25 points)
     /// 
-    /// Smaller kernels (3×3) look for simple patterns like edges.
-    /// Larger kernels (5×5 or 7×7) can detect more complex patterns but use more memory.
+    /// Smaller kernels (3Ã—3) look for simple patterns like edges.
+    /// Larger kernels (5Ã—5 or 7Ã—7) can detect more complex patterns but use more memory.
     /// </para>
     /// </remarks>
     private readonly int _kernelSize;
@@ -389,13 +412,13 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
 
         _depthwiseKernels = new Tensor<T>([inputDepth, 1, kernelSize, kernelSize]);
         _pointwiseKernels = new Tensor<T>([outputDepth, inputDepth, 1, 1]);
-        _biases = new Vector<T>(outputDepth);
+        _biases = new Tensor<T>([outputDepth]);
 
         InitializeParameters();
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="DepthwiseSeparableConvolutionalLayer{T}"/> class with the specified 
+    /// Initializes a new instance of the <see cref="DepthwiseSeparableConvolutionalLayer{T}"/> class with the specified
     /// parameters and a vector activation function.
     /// </summary>
     /// <param name="inputDepth">The number of channels in the input data.</param>
@@ -439,7 +462,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
 
         _depthwiseKernels = new Tensor<T>([inputDepth, 1, kernelSize, kernelSize]);
         _pointwiseKernels = new Tensor<T>([outputDepth, inputDepth, 1, 1]);
-        _biases = new Vector<T>(outputDepth);
+        _biases = new Tensor<T>([outputDepth]);
 
         InitializeParameters();
     }
@@ -471,55 +494,17 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        T depthwiseScale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_kernelSize * _kernelSize)));
-        T pointwiseScale = NumOps.Sqrt(NumOps.FromDouble(2.0 / _inputDepth));
+        T depthwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(_kernelSize * _kernelSize)));
+        T pointwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(_inputDepth)));
 
-        InitializeTensor(_depthwiseKernels, depthwiseScale);
-        InitializeTensor(_pointwiseKernels, pointwiseScale);
+        _depthwiseKernels = Engine.TensorMultiplyScalar(
+            new Tensor<T>(_depthwiseKernels.Shape, Vector<T>.CreateRandom(_depthwiseKernels.Length, -0.5, 0.5)),
+            depthwiseScale);
+        _pointwiseKernels = Engine.TensorMultiplyScalar(
+            new Tensor<T>(_pointwiseKernels.Shape, Vector<T>.CreateRandom(_pointwiseKernels.Length, -0.5, 0.5)),
+            pointwiseScale);
 
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            _biases[i] = NumOps.Zero;
-        }
-    }
-
-    /// <summary>
-    /// Initializes a tensor with random values scaled by the specified factor.
-    /// </summary>
-    /// <param name="tensor">The tensor to initialize.</param>
-    /// <param name="scale">The scaling factor for the random values.</param>
-    /// <remarks>
-    /// <para>
-    /// This helper method initializes a tensor with random values between -0.5 and 0.5, scaled by
-    /// the specified factor. This ensures that the initial values are appropriately sized to avoid
-    /// issues during training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This helper method fills a tensor with carefully scaled random values.
-    /// 
-    /// For each value in the tensor:
-    /// - Generate a random number between -0.5 and 0.5
-    /// - Multiply it by the scaling factor
-    /// - This keeps the initial values in a good range for learning
-    /// 
-    /// The scaling helps prevent the network from starting with values that are
-    /// too large or too small, which can cause problems during training.
-    /// </para>
-    /// </remarks>
-    private void InitializeTensor(Tensor<T> tensor, T scale)
-    {
-        for (int i = 0; i < tensor.Shape[0]; i++)
-        {
-            for (int j = 0; j < tensor.Shape[1]; j++)
-            {
-                for (int k = 0; k < tensor.Shape[2]; k++)
-                {
-                    for (int l = 0; l < tensor.Shape[3]; l++)
-                    {
-                        tensor[i, j, k, l] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-                    }
-                }
-            }
-        }
+        _biases.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -572,7 +557,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// - Includes height, width, and the number of output channels
     /// - Is used by the next layer in the network
     /// 
-    /// For example, if your layer creates 64 feature maps that are 112×112, 
+    /// For example, if your layer creates 64 feature maps that are 112Ã—112, 
     /// the output shape would be [112, 112, 64], meaning:
     /// - 112 pixels tall
     /// - 112 pixels wide
@@ -688,36 +673,34 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        int batchSize = input.Shape[0];
-        int outputHeight = CalculateOutputDimension(input.Shape[1], _kernelSize, _stride, _padding);
-        int outputWidth = CalculateOutputDimension(input.Shape[2], _kernelSize, _stride, _padding);
 
-        // Depthwise convolution
-        var depthwiseOutput = DepthwiseConvolution(input);
-        _lastDepthwiseOutput = depthwiseOutput;
+        // Convert input from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
+        var inputNCHW = input.Transpose([0, 3, 1, 2]);
 
-        // Pointwise convolution
-        var pointwiseOutput = PointwiseConvolution(depthwiseOutput);
+        var strideArr = new int[] { _stride, _stride };
+        var paddingArr = new int[] { _padding, _padding };
 
-        // Add biases and apply activation
-        var output = new Tensor<T>([batchSize, outputHeight, outputWidth, _outputDepth]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < outputHeight; h++)
-            {
-                for (int w = 0; w < outputWidth; w++)
-                {
-                    for (int c = 0; c < _outputDepth; c++)
-                    {
-                        T value = NumOps.Add(pointwiseOutput[b, h, w, c], _biases[c]);
-                        output[b, h, w, c] = ApplyActivation(value);
-                    }
-                }
-            }
-        }
+        // Step 1: Depthwise convolution using Engine
+        var depthwiseOutputNCHW = Engine.DepthwiseConv2D(inputNCHW, _depthwiseKernels, strideArr, paddingArr);
 
-        _lastOutput = output;
-        return output;
+        // Convert back to NHWC for caching
+        _lastDepthwiseOutput = depthwiseOutputNCHW.Transpose([0, 2, 3, 1]);
+
+        // Step 2: Pointwise convolution (1x1 conv) using Engine
+        var pointwiseOutputNCHW = Engine.Conv2D(depthwiseOutputNCHW, _pointwiseKernels, new int[] { 1, 1 }, new int[] { 0, 0 }, new int[] { 1, 1 });
+
+        // Add bias using broadcast: reshape [outputDepth] to [1, outputDepth, 1, 1]
+        var biasReshaped = _biases.Reshape([1, _outputDepth, 1, 1]);
+        pointwiseOutputNCHW = Engine.TensorBroadcastAdd(pointwiseOutputNCHW, biasReshaped);
+
+        // Convert output from NCHW back to NHWC
+        var output = pointwiseOutputNCHW.Transpose([0, 2, 3, 1]);
+
+        // Cache pre-activation for proper derivative computation during backward pass
+        // Some activation functions (Sigmoid, Tanh) require the pre-activation value
+        _lastPreActivation = output;
+        _lastOutput = ApplyActivation(output);
+        return _lastOutput;
     }
 
     /// <summary>
@@ -795,14 +778,14 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// <returns>The output tensor after pointwise convolution.</returns>
     /// <remarks>
     /// <para>
-    /// This method performs the pointwise convolution step, which applies 1×1 convolutions to combine the
+    /// This method performs the pointwise convolution step, which applies 1Ã—1 convolutions to combine the
     /// channels output by the depthwise convolution. This is where the channel mixing occurs, allowing
     /// the layer to learn relationships between features detected in different channels.
     /// </para>
     /// <para><b>For Beginners:</b> This method applies the second step of the filtering process.
     /// 
     /// Pointwise convolution:
-    /// - Uses 1×1 filters (just one pixel in size)
+    /// - Uses 1Ã—1 filters (just one pixel in size)
     /// - Combines information across all channels
     /// - Creates new output channels based on combinations of input channels
     /// 
@@ -857,99 +840,187 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// These gradients indicate how each parameter should be adjusted to reduce the loss.
     /// </para>
     /// <para><b>For Beginners:</b> This method helps the layer learn from its mistakes.
-    /// 
+    ///
     /// During the backward pass:
     /// - The layer receives information about how wrong its output was
     /// - It calculates how to adjust each of its filters to be more accurate
     /// - It prepares the adjustments but doesn't apply them yet
     /// - It passes information back to previous layers so they can learn too
-    /// 
+    ///
     /// The layer has to figure out:
     /// - How to adjust the depthwise filters (first step)
     /// - How to adjust the pointwise filters (second step)
     /// - How to adjust the biases
-    /// 
+    ///
     /// This is where the actual "learning" happens in the neural network.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastDepthwiseOutput == null || _lastOutput == null)
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastDepthwiseOutput == null || _lastOutput == null || _lastPreActivation == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int batchSize = outputGradient.Shape[0];
-        int outputHeight = outputGradient.Shape[1];
-        int outputWidth = outputGradient.Shape[2];
-        int inputHeight = _lastInput.Shape[1];
-        int inputWidth = _lastInput.Shape[2];
+        // Apply activation derivative using pre-activation value for correctness
+        var delta = ApplyActivationDerivative(_lastPreActivation, outputGradient);
 
-        // Initialize gradients
-        _depthwiseKernelsGradient = new Tensor<T>(_depthwiseKernels.Shape);
-        _pointwiseKernelsGradient = new Tensor<T>(_pointwiseKernels.Shape);
-        _biasesGradient = new Vector<T>(_biases.Length);
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        // Convert gradients from NHWC to NCHW for Engine operations
+        var deltaNCHW = delta.Transpose([0, 3, 1, 2]);
+        var inputNCHW = _lastInput.Transpose([0, 3, 1, 2]);
+        var depthwiseOutputNCHW = _lastDepthwiseOutput.Transpose([0, 3, 1, 2]);
 
-        // Compute gradients for biases and pointwise kernels
-        for (int b = 0; b < batchSize; b++)
+        var strideArr = new int[] { _stride, _stride };
+        var paddingArr = new int[] { _padding, _padding };
+
+        // Calculate bias gradient: sum over batch, height, width (axes 0, 2, 3 in NCHW)
+        _biasesGradient = Engine.ReduceSum(deltaNCHW, new[] { 0, 2, 3 }, keepDims: false);
+
+        // Calculate pointwise kernel gradient (1x1 conv backward)
+        _pointwiseKernelsGradient = Engine.Conv2DBackwardKernel(deltaNCHW, depthwiseOutputNCHW, _pointwiseKernels.Shape, new int[] { 1, 1 }, new int[] { 0, 0 }, new int[] { 1, 1 });
+
+        // Calculate depthwise output gradient (backward through pointwise)
+        var depthwiseGradNCHW = Engine.Conv2DBackwardInput(deltaNCHW, _pointwiseKernels, depthwiseOutputNCHW.Shape, new int[] { 1, 1 }, new int[] { 0, 0 }, new int[] { 1, 1 });
+
+        // Calculate depthwise kernel gradient
+        _depthwiseKernelsGradient = Engine.DepthwiseConv2DBackwardKernel(depthwiseGradNCHW, inputNCHW, _depthwiseKernels.Shape, strideArr, paddingArr);
+
+        // Calculate input gradient (backward through depthwise)
+        var inputGradientNCHW = Engine.DepthwiseConv2DBackwardInput(depthwiseGradNCHW, _depthwiseKernels, inputNCHW.Shape, strideArr, paddingArr);
+
+        // Convert input gradient from NCHW back to NHWC
+        return inputGradientNCHW.Transpose([0, 2, 3, 1]);
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients using DepthwiseConv2D and Conv2D operations.
+    /// Production-grade pattern: Uses cached _lastOutput for activation derivative computation,
+    /// Engine.TensorMultiply for GPU/CPU acceleration, and minimal autodiff graph.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastOutput == null || _lastPreActivation == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Production-grade: Compute activation derivative using cached pre-activation
+        // Some activations (Sigmoid, Tanh) require pre-activation value for correct derivative
+        Tensor<T> preActivationGradient;
+        if (VectorActivation != null)
         {
-            for (int h = 0; h < outputHeight; h++)
-            {
-                for (int w = 0; w < outputWidth; w++)
-                {
-                    for (int oc = 0; oc < _outputDepth; oc++)
-                    {
-                        T gradValue = ApplyActivationDerivative(outputGradient[b, h, w, oc], _lastOutput[b, h, w, oc]);
-                        _biasesGradient[oc] = NumOps.Add(_biasesGradient[oc], gradValue);
+            var actDeriv = VectorActivation.Derivative(_lastPreActivation);
+            preActivationGradient = Engine.TensorMultiply(outputGradient, actDeriv);
+        }
+        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            var activation = ScalarActivation;
+            var activationDerivative = _lastPreActivation.Transform((x, _) => activation.Derivative(x));
+            preActivationGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
+        }
+        else
+        {
+            preActivationGradient = outputGradient;
+        }
 
-                        for (int ic = 0; ic < _inputDepth; ic++)
-                        {
-                            _pointwiseKernelsGradient[oc, ic, 0, 0] = NumOps.Add(_pointwiseKernelsGradient[oc, ic, 0, 0],
-                                NumOps.Multiply(gradValue, _lastDepthwiseOutput[b, h, w, ic]));
-                        }
+        // Convert from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W] using Tensor.Transpose
+        var inputNCHW = _lastInput.Transpose([0, 3, 1, 2]);
+        var preActivationGradientNCHW = preActivationGradient.Transpose([0, 3, 1, 2]);
+
+        // Create computation nodes
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputNCHW, "input", requiresGradient: true);
+        var depthwiseKernelNode = Autodiff.TensorOperations<T>.Variable(_depthwiseKernels, "depthwise_kernel", requiresGradient: true);
+        var pointwiseKernelNode = Autodiff.TensorOperations<T>.Variable(_pointwiseKernels, "pointwise_kernel", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(_biases, "bias", requiresGradient: true);
+
+        // Build minimal autodiff graph for linear operations (activation derivative already applied)
+        // Step 1: Depthwise convolution
+        var depthwiseOutput = Autodiff.TensorOperations<T>.DepthwiseConv2D(
+            inputNode,
+            depthwiseKernelNode,
+            bias: null,
+            stride: new int[] { _stride, _stride },
+            padding: new int[] { _padding, _padding });
+
+        // Step 2: Pointwise convolution (1x1 conv)
+        var preActivationNode = Autodiff.TensorOperations<T>.Conv2D(
+            depthwiseOutput,
+            pointwiseKernelNode,
+            biasNode,
+            stride: new int[] { 1, 1 },
+            padding: new int[] { 0, 0 });
+
+        // Set gradient on pre-activation node (activation derivative already applied)
+        preActivationNode.Gradient = preActivationGradientNCHW;
+
+        // Inline topological sort and backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((preActivationNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
                     }
                 }
             }
         }
 
-        // Compute gradients for depthwise kernels and input
-        for (int b = 0; b < batchSize; b++)
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
-            for (int c = 0; c < _inputDepth; c++)
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
             {
-                for (int oh = 0; oh < outputHeight; oh++)
-                {
-                    for (int ow = 0; ow < outputWidth; ow++)
-                    {
-                        T gradValue = NumOps.Zero;
-                        for (int oc = 0; oc < _outputDepth; oc++)
-                        {
-                            gradValue = NumOps.Add(gradValue, NumOps.Multiply(
-                                ApplyActivationDerivative(outputGradient[b, oh, ow, oc], _lastOutput[b, oh, ow, oc]),
-                                _pointwiseKernels[oc, c, 0, 0]));
-                        }
-
-                        for (int kh = 0; kh < _kernelSize; kh++)
-                        {
-                            for (int kw = 0; kw < _kernelSize; kw++)
-                            {
-                                int ih = oh * _stride + kh - _padding;
-                                int iw = ow * _stride + kw - _padding;
-
-                                if (ih >= 0 && ih < inputHeight && iw >= 0 && iw < inputWidth)
-                                {
-                                    _depthwiseKernelsGradient[c, 0, kh, kw] = NumOps.Add(_depthwiseKernelsGradient[c, 0, kh, kw],
-                                        NumOps.Multiply(gradValue, _lastInput[b, ih, iw, c]));
-                                    inputGradient[b, ih, iw, c] = NumOps.Add(inputGradient[b, ih, iw, c],
-                                        NumOps.Multiply(gradValue, _depthwiseKernels[c, 0, kh, kw]));
-                                }
-                            }
-                        }
-                    }
-                }
+                node.BackwardFunction(node.Gradient);
             }
         }
 
-        return inputGradient;
+        // Extract gradients
+        if (depthwiseKernelNode.Gradient != null)
+            _depthwiseKernelsGradient = depthwiseKernelNode.Gradient;
+
+        if (pointwiseKernelNode.Gradient != null)
+            _pointwiseKernelsGradient = pointwiseKernelNode.Gradient;
+
+        if (biasNode.Gradient != null)
+            _biasesGradient = biasNode.Gradient;
+
+        // Convert input gradient from NCHW back to NHWC using Transpose
+        var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        return inputGradientNCHW.Transpose([0, 2, 3, 1]);
     }
 
     /// <summary>
@@ -1032,43 +1103,15 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         if (_depthwiseKernelsGradient == null || _pointwiseKernelsGradient == null || _biasesGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Update depthwise kernels
-        for (int i = 0; i < _depthwiseKernels.Shape[0]; i++)
-        {
-            for (int j = 0; j < _depthwiseKernels.Shape[1]; j++)
-            {
-                for (int k = 0; k < _depthwiseKernels.Shape[2]; k++)
-                {
-                    for (int l = 0; l < _depthwiseKernels.Shape[3]; l++)
-                    {
-                        _depthwiseKernels[i, j, k, l] = NumOps.Subtract(_depthwiseKernels[i, j, k, l],
-                            NumOps.Multiply(learningRate, _depthwiseKernelsGradient[i, j, k, l]));
-                    }
-                }
-            }
-        }
+        // Use Engine operations for GPU/CPU acceleration
+        _depthwiseKernels = Engine.TensorSubtract(_depthwiseKernels, Engine.TensorMultiplyScalar(_depthwiseKernelsGradient, learningRate));
+        _pointwiseKernels = Engine.TensorSubtract(_pointwiseKernels, Engine.TensorMultiplyScalar(_pointwiseKernelsGradient, learningRate));
+        _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
 
-        // Update pointwise kernels
-        for (int i = 0; i < _pointwiseKernels.Shape[0]; i++)
-        {
-            for (int j = 0; j < _pointwiseKernels.Shape[1]; j++)
-            {
-                for (int k = 0; k < _pointwiseKernels.Shape[2]; k++)
-                {
-                    for (int l = 0; l < _pointwiseKernels.Shape[3]; l++)
-                    {
-                        _pointwiseKernels[i, j, k, l] = NumOps.Subtract(_pointwiseKernels[i, j, k, l],
-                            NumOps.Multiply(learningRate, _pointwiseKernelsGradient[i, j, k, l]));
-                    }
-                }
-            }
-        }
-
-        // Update biases
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            _biases[i] = NumOps.Subtract(_biases[i], NumOps.Multiply(learningRate, _biasesGradient[i]));
-        }
+        // Reset gradients
+        _depthwiseKernelsGradient = null;
+        _pointwiseKernelsGradient = null;
+        _biasesGradient = null;
     }
 
     /// <summary>
@@ -1097,49 +1140,9 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
-        var parameters = new Vector<T>(totalParams);
-    
-        int index = 0;
-    
-        // Copy depthwise kernel parameters
-        for (int i = 0; i < _depthwiseKernels.Shape[0]; i++)
-        {
-            for (int j = 0; j < _depthwiseKernels.Shape[1]; j++)
-            {
-                for (int k = 0; k < _depthwiseKernels.Shape[2]; k++)
-                {
-                    for (int l = 0; l < _depthwiseKernels.Shape[3]; l++)
-                    {
-                        parameters[index++] = _depthwiseKernels[i, j, k, l];
-                    }
-                }
-            }
-        }
-    
-        // Copy pointwise kernel parameters
-        for (int i = 0; i < _pointwiseKernels.Shape[0]; i++)
-        {
-            for (int j = 0; j < _pointwiseKernels.Shape[1]; j++)
-            {
-                for (int k = 0; k < _pointwiseKernels.Shape[2]; k++)
-                {
-                    for (int l = 0; l < _pointwiseKernels.Shape[3]; l++)
-                    {
-                        parameters[index++] = _pointwiseKernels[i, j, k, l];
-                    }
-                }
-            }
-        }
-    
-        // Copy bias parameters
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            parameters[index++] = _biases[i];
-        }
-    
-        return parameters;
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(_depthwiseKernels.ToVector(), _pointwiseKernels.ToVector()),
+            _biases.ToVector());
     }
 
     /// <summary>
@@ -1169,49 +1172,23 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int totalParams = _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
-    
+
         if (parameters.Length != totalParams)
         {
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
-    
-        int index = 0;
-    
-        // Set depthwise kernel parameters
-        for (int i = 0; i < _depthwiseKernels.Shape[0]; i++)
-        {
-            for (int j = 0; j < _depthwiseKernels.Shape[1]; j++)
-            {
-                for (int k = 0; k < _depthwiseKernels.Shape[2]; k++)
-                {
-                    for (int l = 0; l < _depthwiseKernels.Shape[3]; l++)
-                    {
-                        _depthwiseKernels[i, j, k, l] = parameters[index++];
-                    }
-                }
-            }
-        }
-    
-        // Set pointwise kernel parameters
-        for (int i = 0; i < _pointwiseKernels.Shape[0]; i++)
-        {
-            for (int j = 0; j < _pointwiseKernels.Shape[1]; j++)
-            {
-                for (int k = 0; k < _pointwiseKernels.Shape[2]; k++)
-                {
-                    for (int l = 0; l < _pointwiseKernels.Shape[3]; l++)
-                    {
-                        _pointwiseKernels[i, j, k, l] = parameters[index++];
-                    }
-                }
-            }
-        }
-    
-        // Set bias parameters
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            _biases[i] = parameters[index++];
-        }
+
+        int dwLen = _depthwiseKernels.Length;
+        int pwLen = _pointwiseKernels.Length;
+        int biasLen = _biases.Length;
+
+        var dwVec = parameters.Slice(0, dwLen);
+        var pwVec = parameters.Slice(dwLen, pwLen);
+        var biasVec = parameters.Slice(dwLen + pwLen, biasLen);
+
+        _depthwiseKernels = Tensor<T>.FromVector(dwVec, [_inputDepth, 1, _kernelSize, _kernelSize]);
+        _pointwiseKernels = Tensor<T>.FromVector(pwVec, [_outputDepth, _inputDepth, 1, 1]);
+        _biases = Tensor<T>.FromVector(biasVec, [_outputDepth]);
     }
 
     /// <summary>
@@ -1245,8 +1222,98 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastDepthwiseOutput = null;
         _lastOutput = null;
+        _lastPreActivation = null;
         _depthwiseKernelsGradient = null;
         _pointwiseKernelsGradient = null;
         _biasesGradient = null;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> when kernels are initialized and activation function supports JIT.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Depthwise separable convolutional layers support JIT compilation using DepthwiseConv2D and Conv2D
+    /// operations from TensorOperations. The layer performs depthwise convolution followed by
+    /// pointwise (1x1) convolution.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation =>
+        _depthwiseKernels != null && _pointwiseKernels != null && _biases != null &&
+        CanActivationBeJitted();
+
+    /// <summary>
+    /// Exports the depthwise separable convolutional layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the depthwise separable convolution output.</returns>
+    /// <remarks>
+    /// <para>
+    /// The depthwise separable convolution computation graph implements:
+    /// 1. Depthwise convolution: Applies separate filters to each input channel
+    /// 2. Pointwise convolution: 1x1 convolution to combine channels and add bias
+    /// 3. Activation function
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates an optimized version of the depthwise separable convolution.
+    /// It dramatically reduces computational cost compared to standard convolution.
+    /// </para>
+    /// </remarks>
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_depthwiseKernels == null || _pointwiseKernels == null || _biases == null)
+            throw new InvalidOperationException("Kernels and biases not initialized.");
+
+        if (InputShape == null || InputShape.Length < 3)
+            throw new InvalidOperationException("Layer input shape not configured. Expected [height, width, channels].");
+
+        // Validate activation can be JIT compiled
+        if (!CanActivationBeJitted())
+        {
+            var activationType = (ScalarActivation?.GetType() ?? VectorActivation?.GetType())?.Name ?? "Unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax, Identity");
+        }
+
+        // Create symbolic input node in NHWC format [batch, height, width, channels]
+        var symbolicInput = new Tensor<T>(new int[] { 1, InputShape[0], InputShape[1], InputShape[2] });
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "dw_separable_input");
+        inputNodes.Add(inputNode);
+
+        // Depthwise kernels are already in [inputDepth, 1, kernelSize, kernelSize] format
+        var depthwiseKernelNode = Autodiff.TensorOperations<T>.Constant(_depthwiseKernels, "depthwise_kernel");
+
+        // Pointwise kernels are already in [outputDepth, inputDepth, 1, 1] format
+        var pointwiseKernelNode = Autodiff.TensorOperations<T>.Constant(_pointwiseKernels, "pointwise_kernel");
+
+        // Bias is already a Tensor<T>
+        var biasNode = Autodiff.TensorOperations<T>.Constant(_biases, "bias");
+
+        // Step 1: Depthwise convolution (no bias)
+        var depthwiseOutput = Autodiff.TensorOperations<T>.DepthwiseConv2D(
+            inputNode,
+            depthwiseKernelNode,
+            bias: null,
+            stride: new int[] { _stride, _stride },
+            padding: new int[] { _padding, _padding });
+
+        // Step 2: Pointwise convolution (1x1 conv with bias)
+        var pointwiseOutput = Autodiff.TensorOperations<T>.Conv2D(
+            depthwiseOutput,
+            pointwiseKernelNode,
+            biasNode,
+            stride: new int[] { 1, 1 },
+            padding: new int[] { 0, 0 });
+
+        // Step 3: Apply activation function using base class helper
+        var output = ApplyActivationToGraph(pointwiseOutput);
+
+        return output;
     }
 }

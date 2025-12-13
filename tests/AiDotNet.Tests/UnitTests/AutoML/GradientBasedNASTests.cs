@@ -1,6 +1,8 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.AutoML;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.NeuralNetworks;
 using System;
 using System.Threading.Tasks;
 using Xunit;
@@ -160,7 +162,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             supernet.Predict(data);
 
             // Act
-            supernet.BackwardWeights(data, labels);
+            supernet.BackwardWeights(data, labels, supernet.DefaultLossFunction);
             var weightGrads = supernet.GetWeightGradients();
 
             // Assert

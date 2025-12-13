@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Statistics;
+using AiDotNet.Tests.Helpers;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.FitDetectors
@@ -60,6 +61,21 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                     PredictionStats = PredictionStats<double>.Empty()
                 }
             };
+        }
+
+        private ModelEvaluationData<double, Matrix<double>, Vector<double>> CreateMockEvaluationData(
+            double trainMse = 0.1, double validationMse = 0.12)
+        {
+            var (trainActual, trainPredicted) = FitDetectorTestHelper.CreateVectorsWithTargetMse(trainMse);
+            var (validActual, validPredicted) = FitDetectorTestHelper.CreateVectorsWithTargetMse(validationMse);
+
+            // Create well-conditioned feature matrix for VIF calculation
+            var features = FitDetectorTestHelper.CreateFeatureMatrix(trainActual.Length, 3);
+
+            return FitDetectorTestHelper.CreateEvaluationData(
+                trainActual, trainPredicted,
+                validActual, validPredicted,
+                features: features);
         }
 
         [Fact]
@@ -427,6 +443,40 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result.Recommendations);
             Assert.NotEmpty(result.Recommendations);
             Assert.True(result.Recommendations.Count > 5); // At least fit advice + 5 metrics
+        }
+
+        [Fact]
+        public void DetectFit_WithValidData_ReturnsResult()
+        {
+            // Arrange
+            var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();
+            var evaluationData = CreateMockEvaluationData(trainMse: 0.05, validationMse: 0.06);
+
+            // Act
+            var result = detector.DetectFit(evaluationData);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.NotNull(result.FitType);
+            Assert.NotEmpty(result.Recommendations);
+        }
+
+        [Fact]
+        public void DetectFit_ResultContainsAllRequiredFields()
+        {
+            // Arrange
+            var detector = new BayesianFitDetector<double, Matrix<double>, Vector<double>>();
+            var evaluationData = CreateMockEvaluationData(trainMse: 0.1, validationMse: 0.12);
+
+            // Act
+            var result = detector.DetectFit(evaluationData);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.NotNull(result.FitType);
+            Assert.NotNull(result.ConfidenceLevel);
+            Assert.NotNull(result.Recommendations);
+            Assert.NotEmpty(result.Recommendations);
         }
     }
 }

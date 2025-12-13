@@ -1,15 +1,15 @@
 namespace AiDotNet.WindowFunctions;
 
 /// <summary>
-/// Implements the Parzen window function (also known as the de la Vallée-Poussin window) for signal processing applications.
+/// Implements the Parzen window function (also known as the de la VallÃ©e-Poussin window) for signal processing applications.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The Parzen window is a piecewise cubic approximation of the Gaussian window. It is defined by a piecewise function:
 /// For |n - N/2| = N/4:
-///   w(n) = 1 - 6(2|n-N/2|/N)² + 6(2|n-N/2|/N)³
+///   w(n) = 1 - 6(2|n-N/2|/N)Â² + 6(2|n-N/2|/N)Â³
 /// For N/4 &lt; |n - N/2| = N/2:
-///   w(n) = 2(1 - 2|n-N/2|/N)³
+///   w(n) = 2(1 - 2|n-N/2|/N)Â³
 /// where n is the sample index and N is the window size.
 /// </para>
 /// <para><b>For Beginners:</b> A window function is like a special filter that helps analyze signals more accurately.
@@ -61,9 +61,9 @@ public class ParzenWindow<T> : IWindowFunction<T>
     /// <para>
     /// This method implements the Parzen window function formula, which is a piecewise function:
     /// For |n - N/2| = N/4:
-    ///   w(n) = 1 - 6(2|n-N/2|/N)² + 6(2|n-N/2|/N)³
+    ///   w(n) = 1 - 6(2|n-N/2|/N)Â² + 6(2|n-N/2|/N)Â³
     /// For N/4 &lt; |n - N/2| = N/2:
-    ///   w(n) = 2(1 - 2|n-N/2|/N)³
+    ///   w(n) = 2(1 - 2|n-N/2|/N)Â³
     /// It calculates the window function value for each point from 0 to windowSize-1.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates the actual window values based on the size you specify.

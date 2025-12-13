@@ -8,7 +8,7 @@ namespace AiDotNet.Extensions;
 /// making certain mathematical operations easier. This class adds helpful methods to work with these
 /// decompositions in your AI applications.
 /// 
-/// Think of matrix decomposition like factoring a number (e.g., 12 = 3 × 4), but for matrices.
+/// Think of matrix decomposition like factoring a number (e.g., 12 = 3 Ã— 4), but for matrices.
 /// These decompositions are important in many AI algorithms for solving equations efficiently.
 /// </remarks>
 public static class MatrixDecompositionExtensions

@@ -1,0 +1,55 @@
+namespace AiDotNet.Serving.ContinuousBatching;
+
+/// <summary>
+/// Configuration for the continuous batcher.
+/// </summary>
+public class ContinuousBatcherConfig
+{
+    /// <summary>
+    /// Scheduler configuration.
+    /// </summary>
+    public BatchSchedulerConfig SchedulerConfig { get; set; } = new();
+
+    /// <summary>
+    /// End-of-sequence token ID.
+    /// </summary>
+    public int EosTokenId { get; set; } = 2;
+
+    /// <summary>
+    /// Milliseconds to sleep when idle.
+    /// </summary>
+    public int IdleSleepMs { get; set; } = 10;
+
+    /// <summary>
+    /// Whether to automatically start the batcher when a request is submitted.
+    /// </summary>
+    public bool AutoStart { get; set; } = true;
+
+    /// <summary>
+    /// Maximum number of tokens in context (prompt + generated).
+    /// </summary>
+    public int MaxContextLength { get; set; } = 4096;
+
+    /// <summary>
+    /// Whether to enable speculative decoding.
+    /// </summary>
+    public bool EnableSpeculativeDecoding { get; set; } = false;
+
+    /// <summary>
+    /// Creates config for a specific model.
+    /// </summary>
+    public static ContinuousBatcherConfig ForModel(string modelName, int maxBatchSize = 8)
+    {
+        return new ContinuousBatcherConfig
+        {
+            SchedulerConfig = BatchSchedulerConfig.ForModel(modelName, maxBatchSize),
+            MaxContextLength = modelName.ToLowerInvariant() switch
+            {
+                "llama-7b" or "llama-13b" => 4096,
+                "llama-70b" => 4096,
+                "gpt2" => 1024,
+                _ => 2048
+            }
+        };
+    }
+}

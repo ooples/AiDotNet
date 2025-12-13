@@ -13,7 +13,7 @@ namespace AiDotNet.Statistics;
 /// <para>
 /// For Beginners:
 /// When you build a predictive model (like a machine learning model), you often want to:
-/// 1. Measure how well your model performs (using metrics like R², accuracy, etc.)
+/// 1. Measure how well your model performs (using metrics like RÂ², accuracy, etc.)
 /// 2. Understand how confident you can be in your predictions (using various intervals)
 /// 3. Understand the relationship between actual and predicted values (using correlations)
 /// 
@@ -241,14 +241,14 @@ public class PredictionStats<T>
     /// </summary>
     /// <remarks>
     /// For Beginners:
-    /// R² (R-squared) is perhaps the most common metric for regression models. It ranges from 0 to 1:
+    /// RÂ² (R-squared) is perhaps the most common metric for regression models. It ranges from 0 to 1:
     /// - 1 means your model perfectly predicts all values
     /// - 0 means your model does no better than simply predicting the average for every case
     /// - Values in between indicate the percentage of variance your model explains
     ///
-    /// For example, an R² of 0.75 means your model explains 75% of the variability in the target variable.
+    /// For example, an RÂ² of 0.75 means your model explains 75% of the variability in the target variable.
     ///
-    /// Be careful: a high R² doesn't necessarily mean your model is good - it could be overfitting!
+    /// Be careful: a high RÂ² doesn't necessarily mean your model is good - it could be overfitting!
     /// </remarks>
     public T R2 { get; private set; }
 
@@ -264,18 +264,18 @@ public class PredictionStats<T>
     public T RSquared => R2;
 
     /// <summary>
-    /// R² adjusted for the number of predictors in the model.
+    /// RÂ² adjusted for the number of predictors in the model.
     /// </summary>
     /// <remarks>
     /// For Beginners:
-    /// AdjustedR2 is a modified version of R² that accounts for the number of features in your model.
+    /// AdjustedR2 is a modified version of RÂ² that accounts for the number of features in your model.
     /// 
-    /// Regular R² always increases when you add more features, even if they don't actually improve predictions.
+    /// Regular RÂ² always increases when you add more features, even if they don't actually improve predictions.
     /// AdjustedR2 penalizes adding unnecessary features, so it only increases if the new feature
     /// actually improves the model more than would be expected by chance.
     /// 
     /// This makes it more useful when comparing models with different numbers of features.
-    /// Like R², values closer to 1 are better.
+    /// Like RÂ², values closer to 1 are better.
     /// </remarks>
     public T AdjustedR2 { get; private set; }
 
@@ -284,14 +284,14 @@ public class PredictionStats<T>
     /// </summary>
     /// <remarks>
     /// For Beginners:
-    /// ExplainedVarianceScore is similar to R², but it doesn't penalize the model for systematic bias.
+    /// ExplainedVarianceScore is similar to RÂ², but it doesn't penalize the model for systematic bias.
     /// 
     /// It ranges from 0 to 1, with higher values being better:
     /// - 1 means your model explains all the variance in the data (perfect)
     /// - 0 means your model doesn't explain any variance
     /// 
     /// If your model's predictions are all shifted by a constant amount from the actual values,
-    /// R² would be lower, but ExplainedVarianceScore would still be high.
+    /// RÂ² would be lower, but ExplainedVarianceScore would still be high.
     /// </remarks>
     public T ExplainedVarianceScore { get; private set; }
 
@@ -519,8 +519,12 @@ public class PredictionStats<T>
         Recall = _numOps.Zero;
         F1Score = _numOps.Zero;
 
-        CalculatePredictionStats(inputs.Actual, inputs.Predicted, inputs.NumberOfParameters, _numOps.FromDouble(inputs.ConfidenceLevel), inputs.LearningCurveSteps, 
-            inputs.PredictionType);
+        // Only calculate prediction stats if we have actual data
+        if (inputs.Actual.Length > 0 && inputs.Predicted.Length > 0)
+        {
+            CalculatePredictionStats(inputs.Actual, inputs.Predicted, inputs.NumberOfParameters, _numOps.FromDouble(inputs.ConfidenceLevel), inputs.LearningCurveSteps,
+                inputs.PredictionType);
+        }
     }
 
     /// <summary>

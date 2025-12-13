@@ -67,12 +67,12 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// <summary>
     /// The projection weights that transform flattened patches to embeddings.
     /// </summary>
-    private Matrix<T> _projectionWeights;
+    private Tensor<T> _projectionWeights;
 
     /// <summary>
     /// The bias terms added to the projected embeddings.
     /// </summary>
-    private Vector<T> _projectionBias;
+    private Tensor<T> _projectionBias;
 
     /// <summary>
     /// Cached input from the forward pass for use in the backward pass.
@@ -82,12 +82,12 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// <summary>
     /// Gradients for projection weights calculated during backward pass.
     /// </summary>
-    private Matrix<T>? _projectionWeightsGradient;
+    private Tensor<T>? _projectionWeightsGradient;
 
     /// <summary>
     /// Gradients for projection bias calculated during backward pass.
     /// </summary>
-    private Vector<T>? _projectionBiasGradient;
+    private Tensor<T>? _projectionBiasGradient;
 
     /// <summary>
     /// Cached pre-activation tensor from forward pass for use in activation derivative calculation.
@@ -98,6 +98,14 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// Indicates whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets the total number of parameters in this layer.
+    /// </summary>
+    /// <value>
+    /// The total number of trainable parameters (projection weights + projection bias).
+    /// </value>
+    public override int ParameterCount => _projectionWeights.Shape[0] * _projectionWeights.Shape[1] + _projectionBias.Length;
 
     /// <summary>
     /// Creates a new patch embedding layer with the specified dimensions.
@@ -153,8 +161,8 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         _numPatches = _numPatchesHeight * _numPatchesWidth;
 
         int patchDim = _channels * _patchSize * _patchSize;
-        _projectionWeights = new Matrix<T>(patchDim, _embeddingDim);
-        _projectionBias = new Vector<T>(_embeddingDim);
+        _projectionWeights = new Tensor<T>([patchDim, _embeddingDim]);
+        _projectionBias = new Tensor<T>([_embeddingDim]);
 
         InitializeParameters();
     }
@@ -167,15 +175,15 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         int patchDim = _channels * _patchSize * _patchSize;
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (patchDim + _embeddingDim)));
 
-        for (int i = 0; i < _projectionWeights.Rows; i++)
+        for (int i = 0; i < _projectionWeights.Shape[0]; i++)
         {
-            for (int j = 0; j < _projectionWeights.Columns; j++)
+            for (int j = 0; j < _projectionWeights.Shape[1]; j++)
             {
                 _projectionWeights[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
             }
         }
 
-        for (int i = 0; i < _projectionBias.Length; i++)
+        for (int i = 0; i < _projectionBias.Shape[0]; i++)
         {
             _projectionBias[i] = NumOps.Zero;
         }
@@ -206,50 +214,27 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         int batchSize = input.Shape[0];
         int patchDim = _channels * _patchSize * _patchSize;
 
-        var patches = new Tensor<T>([batchSize, _numPatches, patchDim]);
+        // Efficient Patchify using Reshape and Transpose
+        // Input: [B, C, H, W]
+        // 1. Reshape to split H and W into patches: [B, C, Nh, P, Nw, P]
+        var reshaped = input.Reshape(batchSize, _channels, _numPatchesHeight, _patchSize, _numPatchesWidth, _patchSize);
+        
+        // 2. Transpose to group patch dimensions: [B, Nh, Nw, C, P, P]
+        var transposed = reshaped.Transpose(new[] { 0, 2, 4, 1, 3, 5 });
+        
+        // 3. Flatten patches: [B, Nh*Nw, C*P*P] = [B, N, patchDim]
+        var patches = transposed.Reshape(batchSize, _numPatches, patchDim);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int patchIdx = 0;
-            for (int ph = 0; ph < _numPatchesHeight; ph++)
-            {
-                for (int pw = 0; pw < _numPatchesWidth; pw++)
-                {
-                    int flatIdx = 0;
-                    for (int c = 0; c < _channels; c++)
-                    {
-                        for (int h = 0; h < _patchSize; h++)
-                        {
-                            for (int w = 0; w < _patchSize; w++)
-                            {
-                                int inputH = ph * _patchSize + h;
-                                int inputW = pw * _patchSize + w;
-                                patches[b, patchIdx, flatIdx] = input[b, c, inputH, inputW];
-                                flatIdx++;
-                            }
-                        }
-                    }
-                    patchIdx++;
-                }
-            }
-        }
-
-        var preActivation = new Tensor<T>([batchSize, _numPatches, _embeddingDim]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int p = 0; p < _numPatches; p++)
-            {
-                for (int e = 0; e < _embeddingDim; e++)
-                {
-                    T sum = _projectionBias[e];
-                    for (int d = 0; d < patchDim; d++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(patches[b, p, d], _projectionWeights[d, e]));
-                    }
-                    preActivation[b, p, e] = sum;
-                }
-            }
-        }
+        // Projection: patches @ weights + bias
+        // Reshape to 2D for TensorMatMul: [B*N, patchDim] @ [patchDim, embedDim] -> [B*N, embedDim]
+        var patchesFlat = patches.Reshape(batchSize * _numPatches, patchDim);
+        var projectedFlat = Engine.TensorMatMul(patchesFlat, _projectionWeights);
+        // Reshape back to 3D: [B, N, embedDim]
+        var projected = projectedFlat.Reshape(batchSize, _numPatches, _embeddingDim);
+        
+        // Add bias (broadcast)
+        var biasBroadcast = _projectionBias.Reshape(1, 1, _embeddingDim);
+        var preActivation = Engine.TensorBroadcastAdd(projected, biasBroadcast);
 
         _lastPreActivation = preActivation;
         return ApplyActivation(preActivation);
@@ -274,6 +259,118 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients by building a computation graph
+    /// that mirrors the forward pass operations (Reshape -> Permute -> Reshape -> MatMul -> Add).
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // 1. Create variables
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var weightsNode = Autodiff.TensorOperations<T>.Variable(_projectionWeights, "weights", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(_projectionBias, "bias", requiresGradient: true);
+
+        // 2. Patchify Logic
+        int batchSize = _lastInput.Shape[0];
+        int patchDim = _channels * _patchSize * _patchSize;
+
+        // Reshape to split H and W into patches: [B, C, Nh, P, Nw, P]
+        var reshapedNode = Autodiff.TensorOperations<T>.Reshape(inputNode, 
+            batchSize, _channels, _numPatchesHeight, _patchSize, _numPatchesWidth, _patchSize);
+
+        // Permute to group patch dimensions: [B, Nh, Nw, C, P, P]
+        // Using new Permute operation added to TensorOperations
+        var transposedNode = Autodiff.TensorOperations<T>.Permute(reshapedNode, 0, 2, 4, 1, 3, 5);
+
+        // Flatten patches: [B, N, patchDim]
+        var patchesNode = Autodiff.TensorOperations<T>.Reshape(transposedNode, batchSize, _numPatches, patchDim);
+
+        // 3. Projection: patches @ weights
+        var projectedNode = Autodiff.TensorOperations<T>.MatrixMultiply(patchesNode, weightsNode);
+
+        // 4. Add Bias (broadcast)
+        // Reshape bias to [1, 1, EmbedDim] to match [B, N, EmbedDim] for broadcasting on last dim
+        // Note: TensorOperations.Add supports broadcasting if implemented, or we can explicit reshape
+        // TensorOperations.Add usually does broadcast logic.
+        // But to be safe and explicit (and match Forward logic), let's reshape bias.
+        var biasReshapedNode = Autodiff.TensorOperations<T>.Reshape(biasNode, 1, 1, _embeddingDim);
+        var preActivationNode = Autodiff.TensorOperations<T>.Add(projectedNode, biasReshapedNode);
+
+        // 5. Apply Activation
+        var activatedOutput = ApplyActivationToGraph(preActivationNode);
+
+        // 6. Set Gradient and Execute Backward
+        activatedOutput.Gradient = outputGradient;
+
+        // Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((activatedOutput, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // 7. Store Gradients
+        _projectionWeightsGradient = weightsNode.Gradient;
+        _projectionBiasGradient = biasNode.Gradient;
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null || _lastPreActivation == null)
         {
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -284,87 +381,37 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         int batchSize = _lastInput.Shape[0];
         int patchDim = _channels * _patchSize * _patchSize;
 
-        _projectionWeightsGradient = new Matrix<T>(patchDim, _embeddingDim);
-        _projectionBiasGradient = new Vector<T>(_embeddingDim);
+        // 1. Gradient w.r.t Bias: Sum over batch and patches
+        _projectionBiasGradient = Engine.ReduceSum(activationGradient, new[] { 0, 1 });
 
-        var patches = new Tensor<T>([batchSize, _numPatches, patchDim]);
-        var patchesGradient = new Tensor<T>([batchSize, _numPatches, patchDim]);
+        // 2. Reconstruct patches from input
+        var reshapedInput = _lastInput.Reshape(batchSize, _channels, _numPatchesHeight, _patchSize, _numPatchesWidth, _patchSize);
+        var transposedInput = reshapedInput.Transpose(new[] { 0, 2, 4, 1, 3, 5 });
+        var patches = transposedInput.Reshape(batchSize, _numPatches, patchDim);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int patchIdx = 0;
-            for (int ph = 0; ph < _numPatchesHeight; ph++)
-            {
-                for (int pw = 0; pw < _numPatchesWidth; pw++)
-                {
-                    int flatIdx = 0;
-                    for (int c = 0; c < _channels; c++)
-                    {
-                        for (int h = 0; h < _patchSize; h++)
-                        {
-                            for (int w = 0; w < _patchSize; w++)
-                            {
-                                int inputH = ph * _patchSize + h;
-                                int inputW = pw * _patchSize + w;
-                                patches[b, patchIdx, flatIdx] = _lastInput[b, c, inputH, inputW];
-                                flatIdx++;
-                            }
-                        }
-                    }
-                    patchIdx++;
-                }
-            }
-        }
+        // 3. Gradient w.r.t Weights: patches^T @ grad
+        var patchesT = patches.Transpose(new[] { 0, 2, 1 });
+        // [B, P, N] @ [B, N, E] -> [B, P, E]
+        var weightGradBatch = Engine.BatchMatMul(patchesT, activationGradient);
+        // Sum over batch
+        _projectionWeightsGradient = Engine.ReduceSum(weightGradBatch, new[] { 0 });
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int p = 0; p < _numPatches; p++)
-            {
-                for (int e = 0; e < _embeddingDim; e++)
-                {
-                    T grad = activationGradient[b, p, e];
-                    _projectionBiasGradient[e] = NumOps.Add(_projectionBiasGradient[e], grad);
+        // 4. Gradient w.r.t Input (Patches)
+        // [B*N, E] @ [E, P] -> [B*N, P]
+        var weightsT = Engine.TensorTranspose(_projectionWeights);
+        var gradFlat = activationGradient.Reshape(batchSize * _numPatches, _embeddingDim);
+        var patchesGradFlat = Engine.TensorMatMul(gradFlat, weightsT);
+        var patchesGrad = patchesGradFlat.Reshape(batchSize, _numPatches, patchDim);
 
-                    for (int d = 0; d < patchDim; d++)
-                    {
-                        T weightGrad = NumOps.Multiply(patches[b, p, d], grad);
-                        _projectionWeightsGradient[d, e] = NumOps.Add(_projectionWeightsGradient[d, e], weightGrad);
-
-                        T patchGrad = NumOps.Multiply(_projectionWeights[d, e], grad);
-                        patchesGradient[b, p, d] = NumOps.Add(patchesGradient[b, p, d], patchGrad);
-                    }
-                }
-            }
-        }
-
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        for (int b = 0; b < batchSize; b++)
-        {
-            int patchIdx = 0;
-            for (int ph = 0; ph < _numPatchesHeight; ph++)
-            {
-                for (int pw = 0; pw < _numPatchesWidth; pw++)
-                {
-                    int flatIdx = 0;
-                    for (int c = 0; c < _channels; c++)
-                    {
-                        for (int h = 0; h < _patchSize; h++)
-                        {
-                            for (int w = 0; w < _patchSize; w++)
-                            {
-                                int inputH = ph * _patchSize + h;
-                                int inputW = pw * _patchSize + w;
-                                inputGradient[b, c, inputH, inputW] = patchesGradient[b, patchIdx, flatIdx];
-                                flatIdx++;
-                            }
-                        }
-                    }
-                    patchIdx++;
-                }
-            }
-        }
-
-        return inputGradient;
+        // 5. Un-patchify: Reshape/Transpose back to image [B, C, H, W]
+        // [B, N, P] -> [B, Nh, Nw, C, P, P]
+        var gradReshaped = patchesGrad.Reshape(batchSize, _numPatchesHeight, _numPatchesWidth, _channels, _patchSize, _patchSize);
+        
+        // Transpose to [B, C, Nh, P, Nw, P]
+        var gradTransposed = gradReshaped.Transpose(new[] { 0, 3, 1, 4, 2, 5 });
+        
+        // Reshape to [B, C, H, W]
+        return gradTransposed.Reshape(_lastInput.Shape);
     }
 
     /// <summary>
@@ -388,22 +435,8 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         }
 
-        for (int i = 0; i < _projectionWeights.Rows; i++)
-        {
-            for (int j = 0; j < _projectionWeights.Columns; j++)
-            {
-                _projectionWeights[i, j] = NumOps.Subtract(
-                    _projectionWeights[i, j],
-                    NumOps.Multiply(learningRate, _projectionWeightsGradient[i, j]));
-            }
-        }
-
-        for (int i = 0; i < _projectionBias.Length; i++)
-        {
-            _projectionBias[i] = NumOps.Subtract(
-                _projectionBias[i],
-                NumOps.Multiply(learningRate, _projectionBiasGradient[i]));
-        }
+        _projectionWeights = Engine.TensorSubtract(_projectionWeights, Engine.TensorMultiplyScalar(_projectionWeightsGradient, learningRate));
+        _projectionBias = Engine.TensorSubtract(_projectionBias, Engine.TensorMultiplyScalar(_projectionBiasGradient, learningRate));
     }
 
     /// <summary>
@@ -418,19 +451,19 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        int totalParams = _projectionWeights.Rows * _projectionWeights.Columns + _projectionBias.Length;
+        int totalParams = _projectionWeights.Shape[0] * _projectionWeights.Shape[1] + _projectionBias.Shape[0];
         var parameters = new Vector<T>(totalParams);
         int index = 0;
 
-        for (int i = 0; i < _projectionWeights.Rows; i++)
+        for (int i = 0; i < _projectionWeights.Shape[0]; i++)
         {
-            for (int j = 0; j < _projectionWeights.Columns; j++)
+            for (int j = 0; j < _projectionWeights.Shape[1]; j++)
             {
                 parameters[index++] = _projectionWeights[i, j];
             }
         }
 
-        for (int i = 0; i < _projectionBias.Length; i++)
+        for (int i = 0; i < _projectionBias.Shape[0]; i++)
         {
             parameters[index++] = _projectionBias[i];
         }
@@ -451,7 +484,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int totalParams = _projectionWeights.Rows * _projectionWeights.Columns + _projectionBias.Length;
+        int totalParams = _projectionWeights.Shape[0] * _projectionWeights.Shape[1] + _projectionBias.Shape[0];
 
         if (parameters.Length != totalParams)
         {
@@ -460,15 +493,15 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
 
         int index = 0;
 
-        for (int i = 0; i < _projectionWeights.Rows; i++)
+        for (int i = 0; i < _projectionWeights.Shape[0]; i++)
         {
-            for (int j = 0; j < _projectionWeights.Columns; j++)
+            for (int j = 0; j < _projectionWeights.Shape[1]; j++)
             {
                 _projectionWeights[i, j] = parameters[index++];
             }
         }
 
-        for (int i = 0; i < _projectionBias.Length; i++)
+        for (int i = 0; i < _projectionBias.Shape[0]; i++)
         {
             _projectionBias[i] = parameters[index++];
         }
@@ -490,4 +523,29 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         _projectionWeightsGradient = null;
         _projectionBiasGradient = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_projectionWeights == null || _projectionBias == null)
+            throw new InvalidOperationException("Layer weights not initialized.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Weights and biases are already Tensor<T>
+        var weightsNode = TensorOperations<T>.Constant(_projectionWeights, "weights");
+        var biasNode = TensorOperations<T>.Constant(_projectionBias, "bias");
+
+        var output = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
+        return TensorOperations<T>.Add(output, biasNode);
+    }
+
+    public override bool SupportsJitCompilation => _projectionWeights != null && _projectionBias != null;
 }
