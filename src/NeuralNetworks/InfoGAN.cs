@@ -213,22 +213,23 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         _learningRateDecay = 0.9999;
 
         // Initialize Generator optimizer state
-        _genBeta1Power = NumOps.One;
-        _genBeta2Power = NumOps.One;
+        // Beta powers start at beta^1 so first iteration's bias correction is non-zero
+        _genBeta1Power = NumOps.FromDouble(0.5);
+        _genBeta2Power = NumOps.FromDouble(0.999);
         _genCurrentLearningRate = initialLearningRate;
         _genMomentum = Vector<T>.Empty();
         _genSecondMoment = Vector<T>.Empty();
 
         // Initialize Discriminator optimizer state
-        _discBeta1Power = NumOps.One;
-        _discBeta2Power = NumOps.One;
+        _discBeta1Power = NumOps.FromDouble(0.5);
+        _discBeta2Power = NumOps.FromDouble(0.999);
         _discCurrentLearningRate = initialLearningRate;
         _discMomentum = Vector<T>.Empty();
         _discSecondMoment = Vector<T>.Empty();
 
         // Initialize QNetwork optimizer state
-        _qBeta1Power = NumOps.One;
-        _qBeta2Power = NumOps.One;
+        _qBeta1Power = NumOps.FromDouble(0.5);
+        _qBeta2Power = NumOps.FromDouble(0.999);
         _qCurrentLearningRate = initialLearningRate;
         _qMomentum = Vector<T>.Empty();
         _qSecondMoment = Vector<T>.Empty();
@@ -471,7 +472,21 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> ConcatenateTensors(Tensor<T> noise, Tensor<T> codes)
     {
-        int batchSize = noise.Shape[0];
+        if (noise.Shape.Length < 2 || codes.Shape.Length < 2)
+        {
+            throw new ArgumentException("Both noise and codes must be at least 2D tensors.");
+        }
+
+        int noiseBatchSize = noise.Shape[0];
+        int codesBatchSize = codes.Shape[0];
+
+        if (noiseBatchSize != codesBatchSize)
+        {
+            throw new ArgumentException(
+                $"Batch size mismatch: noise has {noiseBatchSize} samples, codes has {codesBatchSize} samples.");
+        }
+
+        int batchSize = noiseBatchSize;
         int noiseSize = noise.Shape[1];
         int codeSize = codes.Shape[1];
 
