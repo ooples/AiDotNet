@@ -312,16 +312,9 @@ public class SAGAN<T> : NeuralNetworkBase<T>
 
         // Fake images - hinge loss: max(0, 1 + D(G(z)))
         var noise = GenerateNoise(batchSize);
-        Tensor<T> fakeImages;
-
-        if (_isConditional && realLabels != null)
-        {
-            fakeImages = Generate(noise, realLabels);
-        }
-        else
-        {
-            fakeImages = Generate(noise);
-        }
+        Tensor<T> fakeImages = (_isConditional && realLabels != null)
+            ? Generate(noise, realLabels)
+            : Generate(noise);
 
         var fakeOutput = Discriminator.Predict(fakeImages);
         var fakeLoss = CalculateHingeLoss(fakeOutput, false, batchSize);
@@ -339,16 +332,9 @@ public class SAGAN<T> : NeuralNetworkBase<T>
         Discriminator.SetTrainingMode(false);
 
         var generatorNoise = GenerateNoise(batchSize);
-        Tensor<T> generatedImages;
-
-        if (_isConditional && realLabels != null)
-        {
-            generatedImages = Generate(generatorNoise, realLabels);
-        }
-        else
-        {
-            generatedImages = Generate(generatorNoise);
-        }
+        Tensor<T> generatedImages = (_isConditional && realLabels != null)
+            ? Generate(generatorNoise, realLabels)
+            : Generate(generatorNoise);
 
         var generatorOutput = Discriminator.Predict(generatedImages);
 

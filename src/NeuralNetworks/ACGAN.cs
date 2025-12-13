@@ -32,11 +32,20 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class ACGAN<T> : NeuralNetworkBase<T>
 {
-    private Vector<T> _momentum;
-    private Vector<T> _secondMoment;
-    private T _beta1Power;
-    private T _beta2Power;
-    private double _currentLearningRate;
+    // Generator optimizer state
+    private Vector<T> _genMomentum;
+    private Vector<T> _genSecondMoment;
+    private T _genBeta1Power;
+    private T _genBeta2Power;
+    private double _genCurrentLearningRate;
+
+    // Discriminator optimizer state
+    private Vector<T> _discMomentum;
+    private Vector<T> _discSecondMoment;
+    private T _discBeta1Power;
+    private T _discBeta2Power;
+    private double _discCurrentLearningRate;
+
     private readonly double _initialLearningRate;
     private readonly double _learningRateDecay;
     private readonly List<T> _generatorLosses = [];
@@ -102,17 +111,24 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     {
         _numClasses = numClasses;
         _initialLearningRate = initialLearningRate;
-        _currentLearningRate = initialLearningRate;
+        _genCurrentLearningRate = initialLearningRate;
+        _discCurrentLearningRate = initialLearningRate;
         _learningRateDecay = 0.9999;
 
-        // Initialize optimizer parameters
-        _beta1Power = NumOps.One;
-        _beta2Power = NumOps.One;
+        // Initialize generator optimizer state
+        _genBeta1Power = NumOps.One;
+        _genBeta2Power = NumOps.One;
+        _genMomentum = Vector<T>.Empty();
+        _genSecondMoment = Vector<T>.Empty();
+
+        // Initialize discriminator optimizer state
+        _discBeta1Power = NumOps.One;
+        _discBeta2Power = NumOps.One;
+        _discMomentum = Vector<T>.Empty();
+        _discSecondMoment = Vector<T>.Empty();
 
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
-        _momentum = Vector<T>.Empty();
-        _secondMoment = Vector<T>.Empty();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
         InitializeLayers();
@@ -170,7 +186,7 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         // Backpropagate for real images
         var realGradients = CalculateDiscriminatorGradients(realDiscOutput, realLabels, isReal: true, batchSize);
         Discriminator.Backpropagate(realGradients);
-        UpdateNetworkParameters(Discriminator);
+        UpdateDiscriminatorParameters();
 
         // Train discriminator on fake images
         var fakeDiscOutput = Discriminator.Predict(fakeImages);
@@ -181,7 +197,7 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         // Backpropagate for fake images
         var fakeGradients = CalculateDiscriminatorGradients(fakeDiscOutput, fakeLabels, isReal: false, batchSize);
         Discriminator.Backpropagate(fakeGradients);
-        UpdateNetworkParameters(Discriminator);
+        UpdateDiscriminatorParameters();
 
         // Total discriminator loss
         T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
@@ -207,7 +223,7 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         var genGradients = CalculateDiscriminatorGradients(genDiscOutput, fakeLabels, isReal: true, batchSize);
         var discInputGradients = Discriminator.Backpropagate(genGradients);
         Generator.Backpropagate(discInputGradients);
-        UpdateNetworkParameters(Generator);
+        UpdateGeneratorParameters();
 
         Discriminator.SetTrainingMode(true);
 
@@ -403,26 +419,26 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates network parameters using Adam optimizer.
+    /// Updates generator parameters using Adam optimizer with generator-specific state.
     /// </summary>
-    private void UpdateNetworkParameters(ConvolutionalNeuralNetwork<T> network)
+    private void UpdateGeneratorParameters()
     {
-        var parameters = network.GetParameters();
-        var gradients = network.GetParameterGradients();
+        var parameters = Generator.GetParameters();
+        var gradients = Generator.GetParameterGradients();
 
-        if (_momentum == null || _momentum.Length != parameters.Length)
+        if (_genMomentum == null || _genMomentum.Length != parameters.Length)
         {
-            _momentum = new Vector<T>(parameters.Length);
-            _momentum.Fill(NumOps.Zero);
+            _genMomentum = new Vector<T>(parameters.Length);
+            _genMomentum.Fill(NumOps.Zero);
         }
 
-        if (_secondMoment == null || _secondMoment.Length != parameters.Length)
+        if (_genSecondMoment == null || _genSecondMoment.Length != parameters.Length)
         {
-            _secondMoment = new Vector<T>(parameters.Length);
-            _secondMoment.Fill(NumOps.Zero);
+            _genSecondMoment = new Vector<T>(parameters.Length);
+            _genSecondMoment.Fill(NumOps.Zero);
         }
 
-        var learningRate = NumOps.FromDouble(_currentLearningRate);
+        var learningRate = NumOps.FromDouble(_genCurrentLearningRate);
         var beta1 = NumOps.FromDouble(0.5);
         var beta2 = NumOps.FromDouble(0.999);
         var epsilon = NumOps.FromDouble(1e-8);
@@ -431,21 +447,21 @@ public class ACGAN<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < parameters.Length; i++)
         {
-            _momentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _momentum[i]),
+            _genMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _genMomentum[i]),
                 NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
             );
 
-            _secondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _secondMoment[i]),
+            _genSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _genSecondMoment[i]),
                 NumOps.Multiply(
                     NumOps.Subtract(NumOps.One, beta2),
                     NumOps.Multiply(gradients[i], gradients[i])
                 )
             );
 
-            var momentumCorrected = NumOps.Divide(_momentum[i], NumOps.Subtract(NumOps.One, _beta1Power));
-            var secondMomentCorrected = NumOps.Divide(_secondMoment[i], NumOps.Subtract(NumOps.One, _beta2Power));
+            var momentumCorrected = NumOps.Divide(_genMomentum[i], NumOps.Subtract(NumOps.One, _genBeta1Power));
+            var secondMomentCorrected = NumOps.Divide(_genSecondMoment[i], NumOps.Subtract(NumOps.One, _genBeta2Power));
 
             var adaptiveLR = NumOps.Divide(
                 learningRate,
@@ -458,11 +474,74 @@ public class ACGAN<T> : NeuralNetworkBase<T>
             );
         }
 
-        _beta1Power = NumOps.Multiply(_beta1Power, beta1);
-        _beta2Power = NumOps.Multiply(_beta2Power, beta2);
-        _currentLearningRate *= _learningRateDecay;
+        _genBeta1Power = NumOps.Multiply(_genBeta1Power, beta1);
+        _genBeta2Power = NumOps.Multiply(_genBeta2Power, beta2);
+        _genCurrentLearningRate *= _learningRateDecay;
 
-        network.UpdateParameters(updatedParameters);
+        Generator.UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Updates discriminator parameters using Adam optimizer with discriminator-specific state.
+    /// </summary>
+    private void UpdateDiscriminatorParameters()
+    {
+        var parameters = Discriminator.GetParameters();
+        var gradients = Discriminator.GetParameterGradients();
+
+        if (_discMomentum == null || _discMomentum.Length != parameters.Length)
+        {
+            _discMomentum = new Vector<T>(parameters.Length);
+            _discMomentum.Fill(NumOps.Zero);
+        }
+
+        if (_discSecondMoment == null || _discSecondMoment.Length != parameters.Length)
+        {
+            _discSecondMoment = new Vector<T>(parameters.Length);
+            _discSecondMoment.Fill(NumOps.Zero);
+        }
+
+        var learningRate = NumOps.FromDouble(_discCurrentLearningRate);
+        var beta1 = NumOps.FromDouble(0.5);
+        var beta2 = NumOps.FromDouble(0.999);
+        var epsilon = NumOps.FromDouble(1e-8);
+
+        var updatedParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _discMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _discMomentum[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
+            );
+
+            _discSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _discSecondMoment[i]),
+                NumOps.Multiply(
+                    NumOps.Subtract(NumOps.One, beta2),
+                    NumOps.Multiply(gradients[i], gradients[i])
+                )
+            );
+
+            var momentumCorrected = NumOps.Divide(_discMomentum[i], NumOps.Subtract(NumOps.One, _discBeta1Power));
+            var secondMomentCorrected = NumOps.Divide(_discSecondMoment[i], NumOps.Subtract(NumOps.One, _discBeta2Power));
+
+            var adaptiveLR = NumOps.Divide(
+                learningRate,
+                NumOps.Add(NumOps.Sqrt(secondMomentCorrected), epsilon)
+            );
+
+            updatedParameters[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(adaptiveLR, momentumCorrected)
+            );
+        }
+
+        _discBeta1Power = NumOps.Multiply(_discBeta1Power, beta1);
+        _discBeta2Power = NumOps.Multiply(_discBeta2Power, beta2);
+        _discCurrentLearningRate *= _learningRateDecay;
+
+        Discriminator.UpdateParameters(updatedParameters);
     }
 
     protected override void InitializeLayers()
@@ -500,7 +579,8 @@ public class ACGAN<T> : NeuralNetworkBase<T>
 
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_currentLearningRate);
+        writer.Write(_genCurrentLearningRate);
+        writer.Write(_discCurrentLearningRate);
         writer.Write(_numClasses);
 
         var generatorBytes = Generator.Serialize();
@@ -514,7 +594,8 @@ public class ACGAN<T> : NeuralNetworkBase<T>
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _currentLearningRate = reader.ReadDouble();
+        _genCurrentLearningRate = reader.ReadDouble();
+        _discCurrentLearningRate = reader.ReadDouble();
         _numClasses = reader.ReadInt32();
 
         int generatorDataLength = reader.ReadInt32();

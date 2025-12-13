@@ -37,8 +37,8 @@ public class WGAN<T> : NeuralNetworkBase<T>
     private double _currentLearningRate;
     private double _initialLearningRate;
     private double _learningRateDecay;
-    private List<T> _criticLosses = [];
-    private List<T> _generatorLosses = [];
+    private readonly List<T> _criticLosses = [];
+    private readonly List<T> _generatorLosses = [];
 
     /// <summary>
     /// The weight clipping threshold for enforcing the Lipschitz constraint.
@@ -104,7 +104,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
     /// </remarks>
     public ConvolutionalNeuralNetwork<T> Critic { get; private set; }
 
-    private ILossFunction<T> _lossFunction;
+    private readonly ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WGAN{T}"/> class.

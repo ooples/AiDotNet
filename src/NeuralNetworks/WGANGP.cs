@@ -39,8 +39,8 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     private T _beta2Power;
     private double _currentLearningRate;
     private double _initialLearningRate;
-    private List<T> _criticLosses = [];
-    private List<T> _generatorLosses = [];
+    private readonly List<T> _criticLosses = [];
+    private readonly List<T> _generatorLosses = [];
 
     /// <summary>
     /// The coefficient for the gradient penalty term in the loss function.
@@ -77,7 +77,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     /// </summary>
     public ConvolutionalNeuralNetwork<T> Critic { get; private set; }
 
-    private ILossFunction<T> _lossFunction;
+    private readonly ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WGANGP{T}"/> class.
