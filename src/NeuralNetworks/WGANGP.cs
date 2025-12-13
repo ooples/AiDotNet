@@ -222,7 +222,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     {
         Critic.SetTrainingMode(true);
 
-        // Forward pass on real images
+        // Forward pass on real images to compute scores
         var realScores = Critic.Predict(realImages);
         T realScore = NumOps.Zero;
         for (int i = 0; i < batchSize; i++)
@@ -231,7 +231,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         }
         realScore = NumOps.Divide(realScore, NumOps.FromDouble(batchSize));
 
-        // Forward pass on fake images
+        // Forward pass on fake images to compute scores
         var fakeScores = Critic.Predict(fakeImages);
         T fakeScore = NumOps.Zero;
         for (int i = 0; i < batchSize; i++)
@@ -240,7 +240,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         }
         fakeScore = NumOps.Divide(fakeScore, NumOps.FromDouble(batchSize));
 
-        // Compute gradient penalty (this also computes gradients for the GP term)
+        // Compute gradient penalty (this calls Predict on interpolated images which overwrites cache)
         var (gradientPenalty, gpParameterGradients) = ComputeGradientPenaltyWithGradients(realImages, fakeImages, batchSize);
 
         // Wasserstein loss with gradient penalty: -E[D(real)] + E[D(fake)] + lambda * GP
@@ -255,7 +255,9 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             realGradients[i, 0] = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
         }
 
-        // Backpropagate through critic for real images and capture gradients
+        // IMPORTANT: Re-run forward pass on real images before backprop
+        // The GP computation called Predict(interpolated) which overwrote the cached activations
+        Critic.Predict(realImages);
         Critic.Backpropagate(realGradients);
         var realParameterGradients = Critic.GetParameterGradients().Clone();
 
@@ -266,7 +268,8 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             fakeGradients[i, 0] = NumOps.Divide(NumOps.Negate(NumOps.One), NumOps.FromDouble(batchSize));
         }
 
-        // Backpropagate through critic for fake images and capture gradients
+        // IMPORTANT: Re-run forward pass on fake images before backprop
+        Critic.Predict(fakeImages);
         Critic.Backpropagate(fakeGradients);
         var fakeParameterGradients = Critic.GetParameterGradients().Clone();
 

@@ -697,8 +697,10 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Read learning rate (backwards compatibility - was stored as _currentLearningRate)
-        reader.ReadDouble();
+        // Read the learning rate that was written in SerializeNetworkSpecificData
+        // Note: _initialLearningRate is readonly so we can't reassign it here
+        // The value will be correctly set by the constructor when CreateNewInstance is used
+        _ = reader.ReadDouble(); // Consume the stored learning rate value
         _latentSize = reader.ReadInt32();
         _intermediateLatentSize = reader.ReadInt32();
         _enableStyleMixing = reader.ReadBoolean();

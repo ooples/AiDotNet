@@ -177,19 +177,21 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Initializes class embeddings using orthogonal initialization.
-    /// Orthogonal initialization helps with training stability.
+    /// Initializes class embeddings using scaled uniform random initialization.
+    /// Uses small random values centered at zero for stability.
     /// </summary>
     private Matrix<T> InitializeClassEmbeddings()
     {
         var embeddings = new Matrix<T>(NumClasses, ClassEmbeddingDim);
 
-        // Simplified orthogonal initialization
+        // Use scaled uniform random initialization
+        // Scale factor follows Xavier initialization: sqrt(6 / (fan_in + fan_out))
+        double scale = Math.Sqrt(6.0 / (NumClasses + ClassEmbeddingDim));
         for (int i = 0; i < NumClasses; i++)
         {
             for (int j = 0; j < ClassEmbeddingDim; j++)
             {
-                embeddings[i, j] = NumOps.FromDouble((Random.NextDouble() - 0.5) * 0.1);
+                embeddings[i, j] = NumOps.FromDouble((Random.NextDouble() * 2.0 - 1.0) * scale);
             }
         }
 
@@ -250,13 +252,36 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     /// Generates images from latent codes and class labels.
     /// </summary>
     /// <param name="latentCodes">Latent noise vectors</param>
-    /// <param name="classIndices">Class indices for each sample</param>
+    /// <param name="classIndices">Class indices for each sample (must be in range [0, NumClasses))</param>
     /// <returns>Generated images</returns>
+    /// <exception cref="ArgumentException">Thrown when class indices don't match batch size or are out of range.</exception>
     public Tensor<T> Generate(Tensor<T> latentCodes, int[] classIndices)
     {
         if (classIndices.Length != latentCodes.Shape[0])
         {
-            throw new ArgumentException("Number of class indices must match batch size");
+            throw new ArgumentException(
+                $"Number of class indices ({classIndices.Length}) must match batch size ({latentCodes.Shape[0]})",
+                nameof(classIndices));
+        }
+
+        // Validate class indices are in valid range
+        for (int i = 0; i < classIndices.Length; i++)
+        {
+            if (classIndices[i] < 0 || classIndices[i] >= NumClasses)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(classIndices),
+                    $"Class index {classIndices[i]} at position {i} is out of range. Must be in [0, {NumClasses}).");
+            }
+        }
+
+        // Validate latent code dimensions
+        int expectedLatentSize = latentCodes.Length / latentCodes.Shape[0];
+        if (expectedLatentSize != LatentSize)
+        {
+            throw new ArgumentException(
+                $"Latent code dimension ({expectedLatentSize}) must match LatentSize ({LatentSize})",
+                nameof(latentCodes));
         }
 
         Generator.SetTrainingMode(false);
@@ -310,7 +335,12 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         // Sample from approximate Gaussian using Box-Muller transform
         for (int i = 0; i < noise.Length; i += 2)
         {
+            // Clamp u1 to (0, 1] to avoid log(0) = -Infinity
             var u1 = Random.NextDouble();
+            if (u1 <= double.Epsilon)
+            {
+                u1 = double.Epsilon;
+            }
             var u2 = Random.NextDouble();
 
             var z1 = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
@@ -370,17 +400,19 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     /// <returns>Tuple of (discriminator loss, generator loss)</returns>
     public (T discriminatorLoss, T generatorLoss) TrainStep(Tensor<T> realImages, int[] realLabels, int batchSize)
     {
-        var one = NumOps.One;
-
         // === Train Discriminator ===
         Discriminator.SetTrainingMode(true);
         Generator.SetTrainingMode(false);
 
-        // Real images
+        // Real images - maximize D(real)
         var realOutput = Discriminator.Predict(realImages);
         var realLoss = CalculateHingeLoss(realOutput, true, batchSize);
 
-        // Fake images
+        // Compute gradients for real images: dL/d(output) for hinge loss
+        var realGradients = CalculateHingeLossGradients(realOutput, true, batchSize);
+        Discriminator.Backward(realGradients);
+
+        // Fake images - minimize D(fake)
         var noise = GenerateNoise(batchSize);
         var fakeLabels = new int[batchSize];
         for (int i = 0; i < batchSize; i++)
@@ -392,17 +424,20 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         var fakeOutput = Discriminator.Predict(fakeImages);
         var fakeLoss = CalculateHingeLoss(fakeOutput, false, batchSize);
 
+        // Compute gradients for fake images
+        var fakeGradients = CalculateHingeLossGradients(fakeOutput, false, batchSize);
+        Discriminator.Backward(fakeGradients);
+
         var discriminatorLoss = NumOps.Add(realLoss, fakeLoss);
         _discriminatorLosses.Add(discriminatorLoss);
 
-        // Backpropagate discriminator
-        var discGradient = new Tensor<T>([1]);
-        discGradient[0] = one;
-        Discriminator.Backward(discGradient);
+        // Update discriminator parameters
+        UpdateDiscriminatorParameters();
 
         // === Train Generator ===
         Generator.SetTrainingMode(true);
-        Discriminator.SetTrainingMode(false);
+        // Keep Discriminator in training mode - required for backpropagation
+        // We just don't call UpdateDiscriminatorParameters() during generator training
 
         var generatorNoise = GenerateNoise(batchSize);
         var generatorLabels = new int[batchSize];
@@ -411,17 +446,178 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             generatorLabels[i] = Random.Next(NumClasses);
         }
 
-        var generatedImages = Generate(generatorNoise, generatorLabels);
+        // Generate images and get discriminator output
+        var generatedImages = GenerateWithGradients(generatorNoise, generatorLabels);
         var generatorOutput = Discriminator.Predict(generatedImages);
         var generatorLoss = CalculateHingeLoss(generatorOutput, true, batchSize);
         _generatorLosses.Add(generatorLoss);
 
-        // Backpropagate generator
-        var genGradient = new Tensor<T>([1]);
-        genGradient[0] = one;
-        Generator.Backward(genGradient);
+        // Compute gradient of generator loss w.r.t. discriminator output
+        // For generator, we want to maximize D(fake), so loss = -D(fake), gradient = -1/batchSize
+        var genOutputGradients = CalculateHingeLossGradients(generatorOutput, true, batchSize);
+
+        // Backprop through discriminator to get gradients w.r.t. its input (the generated images)
+        var discInputGradients = Discriminator.BackwardWithInputGradient(genOutputGradients);
+
+        // Backprop through generator using the discriminator input gradients
+        Generator.Backward(discInputGradients);
+
+        // Update generator parameters
+        UpdateGeneratorParameters();
 
         return (discriminatorLoss, generatorLoss);
+    }
+
+    /// <summary>
+    /// Generates images for training with proper gradient tracking.
+    /// </summary>
+    private Tensor<T> GenerateWithGradients(Tensor<T> noise, int[] classIndices)
+    {
+        // Create class embeddings tensor
+        var classEmbeddings = new Tensor<T>([classIndices.Length, ClassEmbeddingDim]);
+        for (int i = 0; i < classIndices.Length; i++)
+        {
+            var embedding = GetClassEmbedding(classIndices[i]);
+            for (int j = 0; j < ClassEmbeddingDim; j++)
+            {
+                classEmbeddings[i, j] = embedding[j];
+            }
+        }
+
+        // Concatenate latent codes and class embeddings
+        var input = ConcatenateTensors(noise, classEmbeddings);
+
+        return Generator.Predict(input);
+    }
+
+    /// <summary>
+    /// Calculates hinge loss gradients for backpropagation.
+    /// </summary>
+    private Tensor<T> CalculateHingeLossGradients(Tensor<T> output, bool isReal, int batchSize)
+    {
+        var gradients = new Tensor<T>(output.Shape);
+
+        for (int i = 0; i < output.Length; i++)
+        {
+            T gradient;
+            if (isReal)
+            {
+                // For real: loss = max(0, 1 - output)
+                // Gradient = -1 if (1 - output) > 0, else 0
+                var margin = NumOps.Subtract(NumOps.One, output.GetFlat(i));
+                gradient = NumOps.GreaterThan(margin, NumOps.Zero)
+                    ? NumOps.Negate(NumOps.Divide(NumOps.One, NumOps.FromDouble(output.Length)))
+                    : NumOps.Zero;
+            }
+            else
+            {
+                // For fake: loss = max(0, 1 + output)
+                // Gradient = 1 if (1 + output) > 0, else 0
+                var margin = NumOps.Add(NumOps.One, output.GetFlat(i));
+                gradient = NumOps.GreaterThan(margin, NumOps.Zero)
+                    ? NumOps.Divide(NumOps.One, NumOps.FromDouble(output.Length))
+                    : NumOps.Zero;
+            }
+
+            gradients.SetFlat(i, gradient);
+        }
+
+        return gradients;
+    }
+
+    /// <summary>
+    /// Updates discriminator parameters using Adam optimizer.
+    /// </summary>
+    private void UpdateDiscriminatorParameters()
+    {
+        var parameters = Discriminator.GetParameters();
+        var gradients = Discriminator.GetParameterGradients();
+
+        // Initialize optimizer state if needed
+        if (_momentum == null || _momentum.Length != parameters.Length)
+        {
+            _momentum = new Vector<T>(parameters.Length);
+            _momentum.Fill(NumOps.Zero);
+        }
+
+        if (_secondMoment == null || _secondMoment.Length != parameters.Length)
+        {
+            _secondMoment = new Vector<T>(parameters.Length);
+            _secondMoment.Fill(NumOps.Zero);
+        }
+
+        // Adam optimizer parameters (beta1=0 for GANs)
+        var learningRate = NumOps.FromDouble(_currentLearningRate);
+        var beta1 = NumOps.FromDouble(0.0);
+        var beta2 = NumOps.FromDouble(0.999);
+        var epsilon = NumOps.FromDouble(1e-8);
+
+        var updatedParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _momentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _momentum[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
+            );
+
+            _secondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _secondMoment[i]),
+                NumOps.Multiply(
+                    NumOps.Subtract(NumOps.One, beta2),
+                    NumOps.Multiply(gradients[i], gradients[i])
+                )
+            );
+
+            var adaptiveLR = NumOps.Divide(
+                learningRate,
+                NumOps.Add(NumOps.Sqrt(_secondMoment[i]), epsilon)
+            );
+
+            updatedParameters[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(adaptiveLR, _momentum[i])
+            );
+        }
+
+        Discriminator.UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Updates generator parameters using Adam optimizer.
+    /// </summary>
+    private void UpdateGeneratorParameters()
+    {
+        var parameters = Generator.GetParameters();
+        var gradients = Generator.GetParameterGradients();
+
+        // Adam optimizer parameters (beta1=0 for GANs)
+        var learningRate = NumOps.FromDouble(_currentLearningRate);
+        var beta1 = NumOps.FromDouble(0.0);
+        var beta2 = NumOps.FromDouble(0.999);
+        var epsilon = NumOps.FromDouble(1e-8);
+
+        var updatedParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Note: Using shared momentum/secondMoment isn't ideal but matches original design
+            // A production implementation would use separate optimizer state per network
+            var mHat = gradients[i]; // With beta1=0, momentum is just the gradient
+            var vHat = NumOps.Multiply(gradients[i], gradients[i]);
+
+            var adaptiveLR = NumOps.Divide(
+                learningRate,
+                NumOps.Add(NumOps.Sqrt(vHat), epsilon)
+            );
+
+            updatedParameters[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(adaptiveLR, mHat)
+            );
+        }
+
+        Generator.UpdateParameters(updatedParameters);
     }
 
     /// <summary>
@@ -430,6 +626,10 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     /// For real: max(0, 1 - y)
     /// For fake: max(0, 1 + y)
     /// </summary>
+    /// <param name="output">Discriminator output tensor</param>
+    /// <param name="isReal">True if computing loss for real samples, false for fake</param>
+    /// <param name="batchSize">Batch size (unused, kept for API compatibility)</param>
+    /// <returns>Average hinge loss over all output elements</returns>
     private T CalculateHingeLoss(Tensor<T> output, bool isReal, int batchSize)
     {
         var loss = NumOps.Zero;
@@ -454,7 +654,9 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             loss = NumOps.Add(loss, hingeLoss);
         }
 
-        return NumOps.Divide(loss, NumOps.FromDouble(batchSize));
+        // Normalize by total number of output elements, not just batch size
+        // This correctly handles cases where output has multiple logits per sample
+        return NumOps.Divide(loss, NumOps.FromDouble(output.Length));
     }
 
     /// <summary>

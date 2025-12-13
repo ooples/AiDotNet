@@ -360,28 +360,64 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private T ComputeGradientPenalty(Tensor<T> realImages, Tensor<T> fakeImages, int batchSize)
     {
-        var alpha = NumOps.FromDouble(Random.NextDouble());
-
-        // Interpolate between real and fake images
+        // For each sample in batch, use a different interpolation coefficient
         var interpolated = new Tensor<T>(realImages.Shape);
-        var oneMinusAlpha = NumOps.Subtract(NumOps.One, alpha);
-        for (int i = 0; i < realImages.Length; i++)
+        int sampleSize = realImages.Length / batchSize;
+
+        for (int b = 0; b < batchSize; b++)
         {
-            var real = NumOps.Multiply(alpha, realImages.GetFlat(i));
-            var fake = NumOps.Multiply(oneMinusAlpha, fakeImages.GetFlat(i));
-            interpolated.SetFlat(i, NumOps.Add(real, fake));
+            var alpha = NumOps.FromDouble(Random.NextDouble());
+            var oneMinusAlpha = NumOps.Subtract(NumOps.One, alpha);
+
+            for (int i = 0; i < sampleSize; i++)
+            {
+                int idx = b * sampleSize + i;
+                var real = NumOps.Multiply(alpha, realImages.GetFlat(idx));
+                var fake = NumOps.Multiply(oneMinusAlpha, fakeImages.GetFlat(idx));
+                interpolated.SetFlat(idx, NumOps.Add(real, fake));
+            }
         }
 
-        // Compute discriminator output on interpolated images (needed for side effects)
-        _ = Discriminator.Predict(interpolated);
+        // Forward pass on interpolated images
+        var interpolatedOutput = Discriminator.Predict(interpolated);
 
-        // Simplified gradient computation (full implementation would use autograd)
-        var gradientNorm = NumOps.FromDouble(1.0);
-        var penalty = NumOps.Subtract(gradientNorm, NumOps.One);
-        penalty = NumOps.Multiply(penalty, penalty);
-        penalty = NumOps.Multiply(penalty, NumOps.FromDouble(10.0)); // GP coefficient
+        // Create gradient of 1s for backpropagation
+        var ones = new Tensor<T>(interpolatedOutput.Shape);
+        for (int i = 0; i < interpolatedOutput.Length; i++)
+        {
+            ones.SetFlat(i, NumOps.One);
+        }
 
-        return penalty;
+        // Backpropagate to get gradients w.r.t. interpolated input
+        var inputGradients = Discriminator.BackwardWithInputGradient(ones);
+
+        // Compute L2 norm of gradients for each sample
+        T totalPenalty = NumOps.Zero;
+        int gradSampleSize = inputGradients.Length / batchSize;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            T gradNormSquared = NumOps.Zero;
+
+            for (int i = 0; i < gradSampleSize; i++)
+            {
+                int idx = b * gradSampleSize + i;
+                T gradValue = inputGradients.GetFlat(idx);
+                gradNormSquared = NumOps.Add(gradNormSquared, NumOps.Multiply(gradValue, gradValue));
+            }
+
+            T gradNorm = NumOps.Sqrt(gradNormSquared);
+
+            // Penalty: (||grad|| - 1)^2
+            T deviation = NumOps.Subtract(gradNorm, NumOps.One);
+            T penalty = NumOps.Multiply(deviation, deviation);
+
+            totalPenalty = NumOps.Add(totalPenalty, penalty);
+        }
+
+        // Average penalty across batch, scaled by GP coefficient (lambda = 10)
+        T avgPenalty = NumOps.Divide(totalPenalty, NumOps.FromDouble(batchSize));
+        return NumOps.Multiply(avgPenalty, NumOps.FromDouble(10.0));
     }
 
     /// <summary>
