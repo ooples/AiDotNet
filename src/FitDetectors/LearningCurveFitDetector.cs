@@ -148,7 +148,13 @@ public class LearningCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, T
         var validationVariance = CalculateVariance(evaluationData.ValidationSet.PredictionStats.LearningCurve);
 
         var totalVariance = NumOps.Add(trainingVariance, validationVariance);
-        return NumOps.Subtract(NumOps.One, NumOps.Divide(totalVariance, NumOps.FromDouble(2)));
+        var result = NumOps.Subtract(NumOps.One, NumOps.Divide(totalVariance, NumOps.FromDouble(2)));
+
+        // Clamp confidence to [0, 1]
+        if (NumOps.LessThan(result, NumOps.Zero)) result = NumOps.Zero;
+        if (NumOps.GreaterThan(result, NumOps.One)) result = NumOps.One;
+
+        return result;
     }
 
     /// <summary>
