@@ -100,6 +100,10 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     private double _driftPenaltyCoefficient;
     private ILossFunction<T> _lossFunction;
 
+    // Alpha blending state for progressive growth fade-in
+    private bool _isFadingIn;
+    private Tensor<T>? _previousResolutionOutput;
+
     /// <summary>
     /// Initializes a new instance of Progressive GAN.
     /// </summary>
@@ -182,9 +186,39 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
 
         CurrentResolutionLevel++;
         Alpha = 0.0; // Start with old layers only, gradually increase to 1.0
+        _isFadingIn = true; // Enable alpha blending during fade-in phase
 
         return true;
     }
+
+    /// <summary>
+    /// Updates the alpha value for progressive fade-in during training.
+    /// Should be called each training step during fade-in phase to smoothly blend new layers.
+    /// </summary>
+    /// <param name="alphaIncrement">Amount to increase alpha per step (typical: 1.0 / fadeInSteps)</param>
+    /// <returns>True if still fading in, false if fade-in is complete (Alpha >= 1.0)</returns>
+    public bool UpdateAlpha(double alphaIncrement)
+    {
+        if (!_isFadingIn)
+        {
+            return false;
+        }
+
+        Alpha = Math.Min(1.0, Alpha + alphaIncrement);
+
+        if (Alpha >= 1.0)
+        {
+            _isFadingIn = false;
+            _previousResolutionOutput = null; // Clear cached output
+        }
+
+        return _isFadingIn;
+    }
+
+    /// <summary>
+    /// Gets whether the network is currently in the fade-in phase after a growth step.
+    /// </summary>
+    public bool IsFadingIn => _isFadingIn;
 
     /// <summary>
     /// Gets the current image resolution based on the resolution level.
@@ -446,7 +480,10 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     {
         Generator.SetTrainingMode(false);
         var noise = GenerateNoise(numImages);
-        return Generator.Predict(noise);
+        var newOutput = Generator.Predict(noise);
+
+        // Apply alpha blending during fade-in phase
+        return ApplyAlphaBlending(newOutput);
     }
 
     /// <summary>
@@ -457,7 +494,74 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     public Tensor<T> Generate(Tensor<T> latentCodes)
     {
         Generator.SetTrainingMode(false);
-        return Generator.Predict(latentCodes);
+        var newOutput = Generator.Predict(latentCodes);
+
+        // Apply alpha blending during fade-in phase
+        return ApplyAlphaBlending(newOutput);
+    }
+
+    /// <summary>
+    /// Applies alpha blending between new and previous resolution outputs during fade-in.
+    /// Implements the ProGAN smooth transition: output = (1 - alpha) * upsampled_old + alpha * new
+    /// Uses optimized Engine operations for SIMD/GPU acceleration.
+    /// </summary>
+    private Tensor<T> ApplyAlphaBlending(Tensor<T> newOutput)
+    {
+        // If not fading in or alpha is 1.0, return new output directly
+        if (!_isFadingIn || Alpha >= 1.0)
+        {
+            return newOutput;
+        }
+
+        // If we don't have a previous output cached, cache a downsampled/upsampled version
+        // This simulates the "old path" through the network
+        if (_previousResolutionOutput is null || _previousResolutionOutput.Shape[0] != newOutput.Shape[0])
+        {
+            // For first step of fade-in, create a blurred/downsampled version as baseline
+            _previousResolutionOutput = CreateDownsampledUpsampled(newOutput);
+        }
+
+        // Blend using optimized tensor operations: (1 - alpha) * old + alpha * new
+        // Uses vectorized SIMD operations via Tensor.Multiply and Tensor.Add
+        var alphaT = NumOps.FromDouble(Alpha);
+        var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
+
+        // Scale tensors using vectorized operations
+        var oldScaled = _previousResolutionOutput.Multiply(oneMinusAlpha);
+        var newScaled = newOutput.Multiply(alphaT);
+
+        // Add using vectorized operations
+        var blended = oldScaled.Add(newScaled);
+
+        // Update cached output for next iteration (smoothly transition baseline)
+        _previousResolutionOutput = blended;
+
+        return blended;
+    }
+
+    /// <summary>
+    /// Creates a downsampled then upsampled version of the output to simulate previous resolution.
+    /// This approximates what the "old path" (toRGB at lower resolution, upsampled) would produce.
+    /// Uses optimized Engine.AvgPool2D and Engine.Upsample for CPU/GPU acceleration.
+    /// </summary>
+    private Tensor<T> CreateDownsampledUpsampled(Tensor<T> output)
+    {
+        // Validate input tensor has correct dimensions for 2D spatial operations
+        if (output.Shape.Length < 4 || output.Shape[2] < 2 || output.Shape[3] < 2)
+        {
+            return output; // Can't downsample if already at minimum size
+        }
+
+        // Use optimized Engine operations for average pooling and upsampling
+        // These leverage SIMD vectorization on CPU and GPU kernels when available
+
+        // Average pooling 2x2 with stride 2 (halves spatial dimensions)
+        var downsampled = Engine.AvgPool2D(output, poolSize: 2, stride: 2, padding: 0);
+
+        // Upsample back to original size using nearest neighbor interpolation
+        var upsampled = Engine.Upsample(downsampled, scaleH: 2, scaleW: 2);
+
+        return upsampled;
     }
 
     /// <inheritdoc/>
