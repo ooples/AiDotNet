@@ -188,8 +188,10 @@ public class SAGAN<T> : NeuralNetworkBase<T>
         AttentionLayers = attentionLayers ?? [2, 3];
 
         // Initialize optimizer parameters
-        _beta1Power = NumOps.One;
-        _beta2Power = NumOps.One;
+        // Beta powers start at beta^1 (the actual beta values) so first iteration's bias correction
+        // computes (1 - beta) which is non-zero. SAGAN uses Adam with beta1=0.0, beta2=0.9
+        _beta1Power = NumOps.Zero; // SAGAN uses beta1=0.0 for TTUR
+        _beta2Power = NumOps.FromDouble(0.9);
 
         // Create generator and discriminator with self-attention
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
@@ -278,19 +280,35 @@ public class SAGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Creates class embeddings for conditional generation.
     /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when called in unconditional mode (NumClasses=0)</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when a class index is out of valid range</exception>
     private Tensor<T> CreateClassEmbeddings(int[] classIndices)
     {
+        // Validate that we're in conditional mode
+        if (NumClasses <= 0)
+        {
+            throw new InvalidOperationException(
+                "Cannot create class embeddings in unconditional mode (NumClasses=0). " +
+                "Either set NumClasses > 0 in constructor or don't pass class indices.");
+        }
+
         var embeddingDim = 128; // Simplified fixed dimension
         var embeddings = new Tensor<T>([classIndices.Length, embeddingDim]);
 
-        // Simplified: one-hot encoding scaled by embedding dimension
+        // Validate and create one-hot encoding
         for (int i = 0; i < classIndices.Length; i++)
         {
             var classIdx = classIndices[i];
-            if (classIdx >= 0 && classIdx < embeddingDim)
+
+            // Validate class index is within valid range
+            if (classIdx < 0 || classIdx >= NumClasses)
             {
-                embeddings.SetFlat(i * embeddingDim + classIdx, NumOps.One);
+                throw new ArgumentOutOfRangeException(nameof(classIndices),
+                    $"Class index {classIdx} at position {i} is out of range. Valid range: 0 to {NumClasses - 1}.");
             }
+
+            // Set one-hot encoding at the class index position within the embedding
+            embeddings.SetFlat(i * embeddingDim + classIdx, NumOps.One);
         }
 
         return embeddings;
