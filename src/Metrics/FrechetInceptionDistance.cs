@@ -250,6 +250,26 @@ namespace AiDotNet.Metrics
                 }
             }
 
+            // Compute Frobenius norm first to determine regularization scale
+            var preFrobNormSq = _numOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    preFrobNormSq = _numOps.Add(preFrobNormSq,
+                        _numOps.Multiply(symProduct[i, j], symProduct[i, j]));
+                }
+            }
+            var preFrobNorm = _numOps.Sqrt(preFrobNormSq);
+
+            // Tikhonov regularization for numerical stability
+            // Add small value to diagonal to improve conditioning
+            var eps = _numOps.FromDouble(Math.Max(1e-12, 1e-6 * _numOps.ToDouble(preFrobNorm)));
+            for (int i = 0; i < n; i++)
+            {
+                symProduct[i, i] = _numOps.Add(symProduct[i, i], eps);
+            }
+
             var frobNormSq = _numOps.Zero;
             for (int i = 0; i < n; i++)
             {
@@ -283,6 +303,9 @@ namespace AiDotNet.Metrics
             var three = _numOps.FromDouble(3.0);
 
             const int maxIterations = 15;
+            const double convergenceTolerance = 1e-10;
+            const double divergenceThreshold = 1e10;
+
             for (int iter = 0; iter < maxIterations; iter++)
             {
                 var YY = (Matrix<T>)Engine.MatrixMultiply(Y, Y);
@@ -300,12 +323,33 @@ namespace AiDotNet.Metrics
                 }
 
                 var newY = (Matrix<T>)Engine.MatrixMultiply(Y, threeIMinusAYY);
+
+                // Compute update magnitude for convergence check
+                var updateNormSq = _numOps.Zero;
                 for (int i = 0; i < n; i++)
                 {
                     for (int j = 0; j < n; j++)
                     {
-                        Y[i, j] = _numOps.Multiply(half, newY[i, j]);
+                        var newVal = _numOps.Multiply(half, newY[i, j]);
+                        var diff = _numOps.Subtract(newVal, Y[i, j]);
+                        updateNormSq = _numOps.Add(updateNormSq, _numOps.Multiply(diff, diff));
+                        Y[i, j] = newVal;
                     }
+                }
+
+                var updateNorm = _numOps.ToDouble(_numOps.Sqrt(updateNormSq));
+
+                // Check for divergence (values growing too large)
+                if (updateNorm > divergenceThreshold)
+                {
+                    // Matrix is ill-conditioned; return trace of identity as fallback
+                    return _numOps.FromDouble(n);
+                }
+
+                // Check for convergence (change is negligible)
+                if (updateNorm < convergenceTolerance)
+                {
+                    break;
                 }
             }
 
