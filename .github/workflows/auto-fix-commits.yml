@@ -31,7 +31,6 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            // Get PR associated with the head branch
             const headBranch = '${{ github.event.workflow_run.head_branch }}';
             const headSha = '${{ github.event.workflow_run.head_sha }}';
 
@@ -45,21 +44,19 @@ jobs:
             });
 
             if (prs.data.length === 0) {
-              core.setFailed('No open PR found for this branch. This may occur if the workflow triggered before the PR was opened, or if the branch name does not match any open PR. Please verify that the PR exists and the branch name is correct.');
+              core.setFailed('No open PR found for this branch');
               return;
             }
 
             const pr = prs.data[0];
             core.info(`Found PR #${pr.number}: ${pr.title}`);
 
-            // Verify PR title follows conventional commits (should be auto-fixed already)
             const pattern = /^(feat|fix|docs|refactor|perf|test|chore|ci|style)(\(.+\))?!?: .+/;
             if (!pattern.test(pr.title)) {
               core.setFailed(`PR title does not follow conventional commits: ${pr.title}`);
               return;
             }
 
-            // Don't modify PRs from forks (security)
             if (pr.head.repo.full_name !== pr.base.repo.full_name) {
               core.setFailed('Cannot auto-fix commits from forked repositories');
               return;
@@ -102,10 +99,8 @@ jobs:
 
           echo "Squashing $COMMIT_COUNT commits into one..."
 
-          # Reset to base branch keeping all changes staged
           git reset --soft "origin/$BASE_BRANCH"
 
-          # Create the squashed commit with the PR title
           git commit -m "$PR_TITLE
 
           Squashed $COMMIT_COUNT commits automatically by GitHub Actions.
@@ -123,7 +118,6 @@ jobs:
           PR_TITLE="${{ steps.get-pr.outputs.pr_title }}"
           CURRENT_MSG=$(git log -1 --format=%B)
 
-          # Check if commit message already matches PR title
           FIRST_LINE=$(echo "$CURRENT_MSG" | head -1)
           if [ "$FIRST_LINE" = "$PR_TITLE" ]; then
             echo "Commit message already matches PR title, no fix needed"
@@ -133,7 +127,6 @@ jobs:
 
           echo "Amending commit message to match PR title..."
 
-          # Preserve the body if it exists (skip subject and blank line, then trim whitespace)
           BODY=$(echo "$CURRENT_MSG" | tail -n +3 | awk '{$1=$1};1')
 
           if [ -n "$BODY" ]; then
@@ -168,31 +161,35 @@ jobs:
 
             let message;
             if (commitCount > 1) {
-              message = `### Commit Messages Auto-Fixed
-
-The commitlint check failed because one or more commit messages didn't follow [Conventional Commits](https://www.conventionalcommits.org/) format.
-
-**Action taken** — Squashed ${commitCount} commits into a single commit using the PR title as the commit message.
-
-**New commit message**
-\`\`\`
-${prTitle}
-\`\`\`
-
-The PR branch has been force-pushed with the fixed commit. If you had local changes, you may need to \`git pull --rebase\`.`;
+              message = [
+                '### Commit Messages Auto-Fixed',
+                '',
+                'The commitlint check failed because one or more commit messages did not follow [Conventional Commits](https://www.conventionalcommits.org/) format.',
+                '',
+                `**Action taken** - Squashed ${commitCount} commits into a single commit using the PR title as the commit message.`,
+                '',
+                '**New commit message**',
+                '```',
+                prTitle,
+                '```',
+                '',
+                'The PR branch has been force-pushed with the fixed commit. If you had local changes, you may need to `git pull --rebase`.'
+              ].join('\n');
             } else {
-              message = `### Commit Message Auto-Fixed
-
-The commitlint check failed because the commit message didn't follow [Conventional Commits](https://www.conventionalcommits.org/) format.
-
-**Action taken** — Amended the commit message to use the PR title.
-
-**New commit message**
-\`\`\`
-${prTitle}
-\`\`\`
-
-The PR branch has been force-pushed with the fixed commit. If you had local changes, you may need to \`git pull --rebase\`.`;
+              message = [
+                '### Commit Message Auto-Fixed',
+                '',
+                'The commitlint check failed because the commit message did not follow [Conventional Commits](https://www.conventionalcommits.org/) format.',
+                '',
+                '**Action taken** - Amended the commit message to use the PR title.',
+                '',
+                '**New commit message**',
+                '```',
+                prTitle,
+                '```',
+                '',
+                'The PR branch has been force-pushed with the fixed commit. If you had local changes, you may need to `git pull --rebase`.'
+              ].join('\n');
             }
 
             await github.rest.issues.createComment({
