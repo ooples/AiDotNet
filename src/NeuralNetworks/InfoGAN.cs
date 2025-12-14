@@ -177,6 +177,10 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
         InputType inputType)
     {
+        // Validate before base initializer to throw ArgumentNullException instead of NRE
+        ArgumentNullException.ThrowIfNull(generatorArchitecture, nameof(generatorArchitecture));
+        ArgumentNullException.ThrowIfNull(discriminatorArchitecture, nameof(discriminatorArchitecture));
+
         if (inputType == InputType.ThreeDimensional)
         {
             return new NeuralNetworkArchitecture<T>(
@@ -314,11 +318,28 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         Tensor<T> noise,
         Tensor<T> latentCodes)
     {
+        // Validate inputs are non-null and have consistent batch sizes
+        ArgumentNullException.ThrowIfNull(realImages, nameof(realImages));
+        ArgumentNullException.ThrowIfNull(noise, nameof(noise));
+        ArgumentNullException.ThrowIfNull(latentCodes, nameof(latentCodes));
+
+        if (realImages.Shape.Length == 0 || noise.Shape.Length == 0 || latentCodes.Shape.Length == 0)
+        {
+            throw new ArgumentException("Input tensors must have at least one dimension.");
+        }
+
+        int batchSize = realImages.Shape[0];
+        if (noise.Shape[0] != batchSize || latentCodes.Shape[0] != batchSize)
+        {
+            throw new ArgumentException(
+                $"Batch size mismatch: realImages has {batchSize}, " +
+                $"noise has {noise.Shape[0]}, latentCodes has {latentCodes.Shape[0]}. " +
+                "All inputs must have the same batch size.");
+        }
+
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(true);
         QNetwork.SetTrainingMode(true);
-
-        int batchSize = realImages.Shape[0];
 
         // ----- Train Discriminator -----
 
@@ -382,7 +403,15 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         var miGradients = CalculateMutualInfoGradients(predictedCodes, latentCodes, batchSize);
         var qInputGradients = QNetwork.BackwardWithInputGradient(miGradients);
 
-        // Combine gradients
+        // Combine gradients - verify shapes match
+        if (!discInputGradients.Shape.SequenceEqual(qInputGradients.Shape))
+        {
+            throw new InvalidOperationException(
+                $"Gradient shape mismatch: discriminator input gradients have shape " +
+                $"[{string.Join(", ", discInputGradients.Shape)}] but Q network input gradients have shape " +
+                $"[{string.Join(", ", qInputGradients.Shape)}]. Both must match for gradient combining.");
+        }
+
         var combinedGradients = new Tensor<T>(discInputGradients.Shape);
         int gradLength = discInputGradients.Shape.Aggregate(1, (a, b) => a * b);
         for (int i = 0; i < gradLength; i++)
@@ -514,9 +543,12 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> ConcatenateTensors(Tensor<T> noise, Tensor<T> codes)
     {
-        if (noise.Shape.Length < 2 || codes.Shape.Length < 2)
+        // Require exactly rank 2 since we only handle [batch, features] concatenation
+        if (noise.Shape.Length != 2 || codes.Shape.Length != 2)
         {
-            throw new ArgumentException("Both noise and codes must be at least 2D tensors.");
+            throw new ArgumentException(
+                $"Both noise and codes must be exactly 2D tensors [batch, features]. " +
+                $"Got noise with rank {noise.Shape.Length} and codes with rank {codes.Shape.Length}.");
         }
 
         int noiseBatchSize = noise.Shape[0];
@@ -804,20 +836,40 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
+        const int MaxNetworkDataLength = 100 * 1024 * 1024; // 100 MB max per network
+
         // Deserialize InfoGAN-specific hyperparameters
         _latentCodeSize = reader.ReadInt32();
         _mutualInfoCoefficient = reader.ReadDouble();
 
-        // Deserialize all three networks
+        // Deserialize all three networks with bounds checking
         int generatorDataLength = reader.ReadInt32();
+        if (generatorDataLength < 0 || generatorDataLength > MaxNetworkDataLength)
+        {
+            throw new InvalidDataException(
+                $"Invalid generator data length: {generatorDataLength}. " +
+                $"Must be between 0 and {MaxNetworkDataLength}.");
+        }
         byte[] generatorData = reader.ReadBytes(generatorDataLength);
         Generator.Deserialize(generatorData);
 
         int discriminatorDataLength = reader.ReadInt32();
+        if (discriminatorDataLength < 0 || discriminatorDataLength > MaxNetworkDataLength)
+        {
+            throw new InvalidDataException(
+                $"Invalid discriminator data length: {discriminatorDataLength}. " +
+                $"Must be between 0 and {MaxNetworkDataLength}.");
+        }
         byte[] discriminatorData = reader.ReadBytes(discriminatorDataLength);
         Discriminator.Deserialize(discriminatorData);
 
         int qNetworkDataLength = reader.ReadInt32();
+        if (qNetworkDataLength < 0 || qNetworkDataLength > MaxNetworkDataLength)
+        {
+            throw new InvalidDataException(
+                $"Invalid Q network data length: {qNetworkDataLength}. " +
+                $"Must be between 0 and {MaxNetworkDataLength}.");
+        }
         byte[] qNetworkData = reader.ReadBytes(qNetworkDataLength);
         QNetwork.Deserialize(qNetworkData);
 
