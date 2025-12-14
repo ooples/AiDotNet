@@ -241,6 +241,18 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     /// Grows the networks to the next resolution level.
     /// Call this periodically during training to progressively increase resolution.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Current implementation: Updates metadata (resolution level, alpha) for blending output resolutions.
+    /// The Generator/Discriminator architectures must be pre-configured for the maximum target resolution,
+    /// and this method controls which resolution path is active via the alpha blending factor.
+    /// </para>
+    /// <para>
+    /// Note: This is a simplified progressive growing implementation. True progressive growing
+    /// (dynamically adding layers at runtime) would require significant architectural changes
+    /// to support on-the-fly network mutation while preserving learned weights.
+    /// </para>
+    /// </remarks>
     /// <returns>True if growth was successful, false if already at maximum resolution</returns>
     public bool GrowNetworks()
     {
@@ -489,7 +501,9 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
 
         // === Train Generator ===
         Generator.SetTrainingMode(true);
-        Discriminator.SetTrainingMode(false);
+        // Keep discriminator in training mode for backward pass (required for gradient computation)
+        // We prevent discriminator parameter updates by not calling UpdateDiscriminatorParametersVectorized()
+        Discriminator.SetTrainingMode(true);
 
         var generatorNoise = GenerateGaussianNoise(batchSize);
         var generatedImages = Generator.Predict(generatorNoise);

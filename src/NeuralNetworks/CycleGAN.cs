@@ -282,11 +282,40 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Performs one training step for CycleGAN.
     /// </summary>
+    /// <param name="realA">Real images from domain A.</param>
+    /// <param name="realB">Real images from domain B.</param>
+    /// <returns>A tuple containing discriminator loss, generator loss, and cycle consistency loss.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when realA or realB is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when batch dimensions don't match or batch size is zero.</exception>
     public (T discLoss, T genLoss, T cycleLoss) TrainStep(
         Tensor<T> realA,
         Tensor<T> realB)
     {
+        // Validate input tensors
+        if (realA is null)
+        {
+            throw new ArgumentNullException(nameof(realA), "Real images from domain A cannot be null.");
+        }
+
+        if (realB is null)
+        {
+            throw new ArgumentNullException(nameof(realB), "Real images from domain B cannot be null.");
+        }
+
         int batchSize = realA.Shape[0];
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentException("Batch size must be positive.", nameof(realA));
+        }
+
+        if (realB.Shape[0] != batchSize)
+        {
+            throw new ArgumentException(
+                $"Batch size mismatch: realA has batch size {batchSize}, but realB has batch size {realB.Shape[0]}. " +
+                "Both tensors must have the same batch dimension.",
+                nameof(realB));
+        }
 
         // ----- Train Discriminators -----
 
@@ -820,10 +849,27 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        if (parameters is null)
+        {
+            throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
+        }
+
         int genAtoBCount = GeneratorAtoB.GetParameterCount();
         int genBtoACount = GeneratorBtoA.GetParameterCount();
         int discACount = DiscriminatorA.GetParameterCount();
         int discBCount = DiscriminatorB.GetParameterCount();
+
+        int totalCount = genAtoBCount + genBtoACount + discACount + discBCount;
+
+        if (parameters.Length != totalCount)
+        {
+            throw new ArgumentException(
+                $"Parameters vector length mismatch: expected {totalCount} " +
+                $"(GeneratorAtoB: {genAtoBCount}, GeneratorBtoA: {genBtoACount}, " +
+                $"DiscriminatorA: {discACount}, DiscriminatorB: {discBCount}), " +
+                $"but received {parameters.Length}.",
+                nameof(parameters));
+        }
 
         int offset = 0;
 

@@ -852,9 +852,25 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        if (parameters is null)
+        {
+            throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
+        }
+
         int generatorCount = Generator.GetParameterCount();
         int discriminatorCount = Discriminator.GetParameterCount();
         int qNetworkCount = QNetwork.GetParameterCount();
+
+        int totalCount = generatorCount + discriminatorCount + qNetworkCount;
+
+        if (parameters.Length != totalCount)
+        {
+            throw new ArgumentException(
+                $"Parameters vector length mismatch: expected {totalCount} " +
+                $"(Generator: {generatorCount}, Discriminator: {discriminatorCount}, " +
+                $"QNetwork: {qNetworkCount}), but received {parameters.Length}.",
+                nameof(parameters));
+        }
 
         int offset = 0;
 
