@@ -30,6 +30,7 @@ namespace AiDotNet.PromptEngineering.Chains;
 public class SequentialChain<TInput, TOutput> : ChainBase<TInput, TOutput>
 {
     private readonly List<ChainStep> _steps;
+    private IReadOnlyList<string>? _cachedStepNames;
 
     /// <summary>
     /// Initializes a new instance of the SequentialChain class.
@@ -61,6 +62,7 @@ public class SequentialChain<TInput, TOutput> : ChainBase<TInput, TOutput>
         }
 
         _steps.Add(new ChainStep(stepName, stepFunction, null));
+        _cachedStepNames = null; // Invalidate cache
         return this;
     }
 
@@ -83,13 +85,29 @@ public class SequentialChain<TInput, TOutput> : ChainBase<TInput, TOutput>
         }
 
         _steps.Add(new ChainStep(stepName, null, stepFunction));
+        _cachedStepNames = null; // Invalidate cache
         return this;
     }
 
     /// <summary>
     /// Gets the current steps in the chain.
     /// </summary>
-    public IReadOnlyList<string> Steps => _steps.Select(s => s.Name).ToList().AsReadOnly();
+    /// <remarks>
+    /// This property uses lazy initialization with caching to avoid repeated allocations.
+    /// The cache is automatically invalidated when steps are added.
+    /// </remarks>
+    public IReadOnlyList<string> Steps
+    {
+        get
+        {
+            if (_cachedStepNames is null)
+            {
+                _cachedStepNames = _steps.Select(s => s.Name).ToList().AsReadOnly();
+            }
+
+            return _cachedStepNames;
+        }
+    }
 
     /// <summary>
     /// Executes all steps sequentially.
