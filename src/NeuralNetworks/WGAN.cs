@@ -250,6 +250,13 @@ public class WGAN<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(noise), "Noise tensor cannot be null.");
         }
 
+        if (realImages.Shape[0] != noise.Shape[0])
+        {
+            throw new ArgumentException(
+                $"Batch size mismatch: realImages batch={realImages.Shape[0]} vs noise batch={noise.Shape[0]}.",
+                nameof(noise));
+        }
+
         Generator.SetTrainingMode(true);
         Critic.SetTrainingMode(true);
 
@@ -363,14 +370,11 @@ public class WGAN<T> : NeuralNetworkBase<T>
 
         T avgScore = NumOps.Divide(totalScore, NumOps.FromDouble(batchSize));
 
-        // For WGAN, we want to:
-        // - Maximize critic output for real images
-        // - Minimize critic output for fake images
-        // This is equivalent to maximizing (realScore - fakeScore)
-
-        // Create gradients: +1 for real images, -1 for fake images
+        // For WGAN, we want to minimize L = -(E[D(real)] - E[D(fake)])
+        // So: dL/dD(real) = -1, dL/dD(fake) = +1
+        // Create gradients for loss minimization (Backpropagate expects dL/dOutput)
         var gradients = new Tensor<T>(criticScores.Shape);
-        T gradientValue = isReal ? NumOps.One : NumOps.Negate(NumOps.One);
+        T gradientValue = isReal ? NumOps.Negate(NumOps.One) : NumOps.One;
 
         for (int i = 0; i < batchSize; i++)
         {
@@ -412,15 +416,16 @@ public class WGAN<T> : NeuralNetworkBase<T>
 
         T avgScore = NumOps.Divide(totalScore, NumOps.FromDouble(batchSize));
 
-        // Loss is negative of the score (we minimize loss, which maximizes score)
+        // Loss is -avgScore, so we minimize -E[D(G(z))]
         T loss = NumOps.Negate(avgScore);
 
-        // Create gradients (we want to maximize critic output)
+        // Gradient of L = -avgScore with respect to score is -1/batchSize
+        // (Backpropagate expects dL/dOutput)
         var gradients = new Tensor<T>(criticScores.Shape);
 
         for (int i = 0; i < batchSize; i++)
         {
-            gradients[i, 0] = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
+            gradients[i, 0] = NumOps.Divide(NumOps.Negate(NumOps.One), NumOps.FromDouble(batchSize));
         }
 
         // Backpropagate through critic to get gradients for generator output
@@ -527,7 +532,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
             throw new ArgumentOutOfRangeException(nameof(noiseSize), noiseSize, "Noise size must be positive.");
         }
 
-        var totalElements = batchSize * noiseSize;
+        var totalElements = checked(batchSize * noiseSize);
         var mean = NumOps.Zero;
         var stddev = NumOps.One;
         var noiseVector = Engine.GenerateGaussianNoise<T>(totalElements, mean, stddev);
