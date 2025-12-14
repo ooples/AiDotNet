@@ -263,7 +263,8 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         // ----- Train Generator -----
 
         Generator.SetTrainingMode(true);
-        Discriminator.SetTrainingMode(false);
+        // Keep Discriminator in training mode - required for BackwardWithInputGradient
+        // We just don't call UpdateDiscriminatorWithOptimizer() during generator training
 
         // Generate new fake images
         var newFakeImages = Generator.Predict(inputImages);
@@ -551,25 +552,31 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Calculates the binary cross-entropy loss.
+    /// Calculates the binary cross-entropy loss with logits (numerically stable).
     /// </summary>
+    /// <remarks>
+    /// Uses the numerically stable formula: max(z,0) - z*t + log(1 + exp(-|z|))
+    /// where z is the logit (pre-sigmoid prediction) and t is the target.
+    /// This avoids numerical instability from computing log of values near 0 or 1.
+    /// </remarks>
     private T CalculateBinaryLoss(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
         T totalLoss = NumOps.Zero;
-        T epsilon = NumOps.FromDouble(1e-10);
 
         for (int i = 0; i < batchSize; i++)
         {
-            T prediction = predictions[i, 0];
+            T logit = predictions[i, 0];
             T target = targets[i, 0];
 
-            T logP = NumOps.Log(NumOps.Add(prediction, epsilon));
-            T logOneMinusP = NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, prediction), epsilon));
+            // BCE with logits: max(z,0) - z*t + log(1 + exp(-|z|))
+            T maxLogitZero = NumOps.GreaterThan(logit, NumOps.Zero) ? logit : NumOps.Zero;
+            T absLogit = NumOps.GreaterThanOrEquals(logit, NumOps.Zero) ? logit : NumOps.Negate(logit);
+            T expNegAbsLogit = NumOps.Exp(NumOps.Negate(absLogit));
+            T logOnePlusExp = NumOps.Log(NumOps.Add(NumOps.One, expNegAbsLogit));
 
-            T loss = NumOps.Negate(NumOps.Add(
-                NumOps.Multiply(target, logP),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, target), logOneMinusP)
-            ));
+            T loss = NumOps.Add(
+                NumOps.Subtract(maxLogitZero, NumOps.Multiply(logit, target)),
+                logOnePlusExp);
 
             totalLoss = NumOps.Add(totalLoss, loss);
         }
@@ -578,16 +585,30 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Calculates the gradients for binary cross-entropy loss.
+    /// Calculates the gradients for binary cross-entropy loss with logits.
     /// </summary>
+    /// <remarks>
+    /// The gradient of BCE with logits with respect to the logit z is:
+    /// dL/dz = sigmoid(z) - target = 1/(1+exp(-z)) - target
+    /// This is consistent with the logits-based loss formula.
+    /// </remarks>
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
         var gradients = new Tensor<T>(predictions.Shape);
 
         for (int i = 0; i < batchSize; i++)
         {
+            T logit = predictions[i, 0];
+            T target = targets[i, 0];
+
+            // sigmoid(logit) = 1 / (1 + exp(-logit))
+            T negLogit = NumOps.Negate(logit);
+            T expNegLogit = NumOps.Exp(negLogit);
+            T sigmoid = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegLogit));
+
+            // Gradient = (sigmoid(logit) - target) / batchSize
             gradients[i, 0] = NumOps.Divide(
-                NumOps.Subtract(predictions[i, 0], targets[i, 0]),
+                NumOps.Subtract(sigmoid, target),
                 NumOps.FromDouble(batchSize)
             );
         }

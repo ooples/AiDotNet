@@ -178,8 +178,14 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         InputType inputType)
     {
         // Validate before base initializer to throw ArgumentNullException instead of NRE
-        ArgumentNullException.ThrowIfNull(generatorArchitecture, nameof(generatorArchitecture));
-        ArgumentNullException.ThrowIfNull(discriminatorArchitecture, nameof(discriminatorArchitecture));
+        if (generatorArchitecture is null)
+        {
+            throw new ArgumentNullException(nameof(generatorArchitecture));
+        }
+        if (discriminatorArchitecture is null)
+        {
+            throw new ArgumentNullException(nameof(discriminatorArchitecture));
+        }
 
         if (inputType == InputType.ThreeDimensional)
         {
@@ -319,9 +325,18 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         Tensor<T> latentCodes)
     {
         // Validate inputs are non-null and have consistent batch sizes
-        ArgumentNullException.ThrowIfNull(realImages, nameof(realImages));
-        ArgumentNullException.ThrowIfNull(noise, nameof(noise));
-        ArgumentNullException.ThrowIfNull(latentCodes, nameof(latentCodes));
+        if (realImages is null)
+        {
+            throw new ArgumentNullException(nameof(realImages));
+        }
+        if (noise is null)
+        {
+            throw new ArgumentNullException(nameof(noise));
+        }
+        if (latentCodes is null)
+        {
+            throw new ArgumentNullException(nameof(latentCodes));
+        }
 
         if (realImages.Shape.Length == 0 || noise.Shape.Length == 0 || latentCodes.Shape.Length == 0)
         {

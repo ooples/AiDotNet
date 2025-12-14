@@ -200,6 +200,21 @@ public class ACGAN<T> : NeuralNetworkBase<T>
                 nameof(fakeLabels));
         }
 
+        // Validate label shape dimensions - must be 2D with correct class count
+        if (realLabels.Shape.Length != 2 || realLabels.Shape[1] != _numClasses)
+        {
+            throw new ArgumentException(
+                $"realLabels must be [batch,{_numClasses}], got [{string.Join(",", realLabels.Shape)}].",
+                nameof(realLabels));
+        }
+
+        if (fakeLabels.Shape.Length != 2 || fakeLabels.Shape[1] != _numClasses)
+        {
+            throw new ArgumentException(
+                $"fakeLabels must be [batch,{_numClasses}], got [{string.Join(",", fakeLabels.Shape)}].",
+                nameof(fakeLabels));
+        }
+
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(true);
 
@@ -374,6 +389,8 @@ public class ACGAN<T> : NeuralNetworkBase<T>
 
     /// <summary>
     /// Calculates gradients for discriminator backpropagation.
+    /// Uses the correct gradient formula for probability-based BCE:
+    /// dL/dp = (p - target) / (p * (1 - p))
     /// </summary>
     private Tensor<T> CalculateDiscriminatorGradients(
         Tensor<T> discOutput,
@@ -383,20 +400,34 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     {
         var gradients = new Tensor<T>(discOutput.Shape);
         T authTarget = isReal ? NumOps.One : NumOps.Zero;
+        T epsilon = NumOps.FromDouble(1e-10);
+        T batchSizeT = NumOps.FromDouble(batchSize);
 
         for (int i = 0; i < batchSize; i++)
         {
-            gradients[i, 0] = NumOps.Divide(
-                NumOps.Subtract(discOutput[i, 0], authTarget),
-                NumOps.FromDouble(batchSize)
+            // Clamp prediction to avoid division by zero
+            T p = MathHelper.Clamp(discOutput[i, 0], epsilon, NumOps.Subtract(NumOps.One, epsilon));
+
+            // Gradient for probability-based BCE: (p - target) / (p * (1 - p)) / batchSize
+            T pTimesOneMinusP = NumOps.Multiply(p, NumOps.Subtract(NumOps.One, p));
+            T authGrad = NumOps.Divide(
+                NumOps.Divide(NumOps.Subtract(p, authTarget), pTimesOneMinusP),
+                batchSizeT
             );
+            gradients[i, 0] = authGrad;
 
             for (int c = 0; c < _numClasses; c++)
             {
-                gradients[i, 1 + c] = NumOps.Divide(
-                    NumOps.Subtract(discOutput[i, 1 + c], labels[i, c]),
-                    NumOps.FromDouble(batchSize)
+                // Clamp class prediction to avoid division by zero
+                T classP = MathHelper.Clamp(discOutput[i, 1 + c], epsilon, NumOps.Subtract(NumOps.One, epsilon));
+                T classPTimesOneMinusP = NumOps.Multiply(classP, NumOps.Subtract(NumOps.One, classP));
+
+                // Gradient for probability-based BCE
+                T classGrad = NumOps.Divide(
+                    NumOps.Divide(NumOps.Subtract(classP, labels[i, c]), classPTimesOneMinusP),
+                    batchSizeT
                 );
+                gradients[i, 1 + c] = classGrad;
             }
         }
 
