@@ -112,17 +112,12 @@ public class ChatPromptTemplate : PromptTemplateBase
     /// </summary>
     private void UpdateTemplate()
     {
-        var builder = new StringBuilder();
-
-        foreach (var message in _messages)
-        {
-            var formattedMessage = _messageFormat
+        var formattedMessages = _messages.Select(message =>
+            _messageFormat
                 .Replace("{role}", CapitalizeFirst(message.Role))
-                .Replace("{content}", message.Content);
-            builder.AppendLine(formattedMessage);
-        }
+                .Replace("{content}", message.Content));
 
-        Template = builder.ToString().TrimEnd();
+        Template = string.Join(Environment.NewLine, formattedMessages);
         InputVariables = new List<string>(); // Chat templates don't use variable substitution
     }
 

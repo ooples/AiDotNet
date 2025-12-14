@@ -156,7 +156,7 @@ public class ToolRegistry
         {
             builder.AppendLine($"Tool: {tool.Name}");
             builder.AppendLine($"Description: {tool.Description}");
-            builder.AppendLine($"Parameters: {tool.ParameterSchema.RootElement.ToString()}");
+            builder.AppendLine($"Parameters: {tool.ParameterSchema.RootElement.GetRawText()}");
             builder.AppendLine();
         }
 

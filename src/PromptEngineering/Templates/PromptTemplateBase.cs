@@ -96,16 +96,10 @@ public abstract class PromptTemplateBase : IPromptTemplate
             return false;
         }
 
-        // Check that all required variables are present
+        // Check that all required variables are present and not null
         foreach (var variable in InputVariables)
         {
-            if (!variables.ContainsKey(variable))
-            {
-                return false;
-            }
-
-            // Check that the variable value is not null (empty string is allowed)
-            if (variables[variable] == null)
+            if (!variables.TryGetValue(variable, out var value) || value == null)
             {
                 return false;
             }
@@ -147,15 +141,11 @@ public abstract class PromptTemplateBase : IPromptTemplate
     private static List<string> ExtractVariables(string template)
     {
         var matches = VariablePattern.Matches(template);
-        var variables = new HashSet<string>();
 
-        foreach (Match match in matches.Cast<Match>())
-        {
-            if (match.Groups.Count > 1)
-            {
-                variables.Add(match.Groups[1].Value);
-            }
-        }
+        var variables = new HashSet<string>(
+            matches.Cast<Match>()
+                .Where(match => match.Groups.Count > 1)
+                .Select(match => match.Groups[1].Value));
 
         return variables.ToList();
     }

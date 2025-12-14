@@ -82,7 +82,7 @@ public abstract class FunctionToolBase : IFunctionTool
         {
             return ExecuteCore(arguments);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
             return $"Error executing function '{Name}': {ex.Message}";
         }
@@ -113,19 +113,17 @@ public abstract class FunctionToolBase : IFunctionTool
 
                 var args = arguments.RootElement;
 
-                // Check that all required fields are present
-                foreach (var field in requiredFields)
+                // Check that all required fields are present using LINQ
+                var allFieldsPresent = requiredFields.All(field => args.TryGetProperty(field!, out _));
+                if (!allFieldsPresent)
                 {
-                    if (!args.TryGetProperty(field!, out _))
-                    {
-                        return false;
-                    }
+                    return false;
                 }
             }
 
             return true;
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
             return false;
         }
