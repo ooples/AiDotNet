@@ -349,7 +349,8 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Concatenates two image tensors along the feature dimension.
+    /// Concatenates two image tensors along the feature/channel dimension.
+    /// Handles both 3D/4D spatial and 2D flattened inputs.
     /// </summary>
     private Tensor<T> ConcatenateImages(Tensor<T> images1, Tensor<T> images2)
     {
@@ -367,8 +368,128 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
                 $"Batch size mismatch: images1 has {batchSize1} samples, images2 has {batchSize2} samples.");
         }
 
-        // Concatenate along feature dimension by flattening spatial dimensions to 2D
         int batchSize = batchSize1;
+
+        // Check if we have spatial (3D/4D) tensors for PatchGAN discriminator
+        // For 3D inputs, concatenate along channel dimension to preserve spatial structure
+        if (Architecture.InputType == InputType.ThreeDimensional &&
+            images1.Shape.Length >= 3 && images2.Shape.Length >= 3)
+        {
+            return ConcatenateSpatialImages(images1, images2);
+        }
+
+        // Fallback to flattened concatenation for non-spatial inputs
+        return ConcatenateFlattenedImages(images1, images2);
+    }
+
+    /// <summary>
+    /// Concatenates spatial image tensors along the channel dimension.
+    /// Input: [B,H,W,C1] + [B,H,W,C2] => Output: [B,H,W,C1+C2]
+    /// </summary>
+    private Tensor<T> ConcatenateSpatialImages(Tensor<T> images1, Tensor<T> images2)
+    {
+        int batchSize = images1.Shape[0];
+
+        // Determine spatial dimensions based on shape
+        int height1, width1, channels1;
+        int height2, width2, channels2;
+
+        if (images1.Shape.Length == 4 && images2.Shape.Length == 4)
+        {
+            // 4D tensor: [B, H, W, C] (assuming channels-last)
+            height1 = images1.Shape[1];
+            width1 = images1.Shape[2];
+            channels1 = images1.Shape[3];
+
+            height2 = images2.Shape[1];
+            width2 = images2.Shape[2];
+            channels2 = images2.Shape[3];
+        }
+        else if (images1.Shape.Length == 3 && images2.Shape.Length == 3)
+        {
+            // 3D tensor: [B, H*W, C] - use architecture dimensions
+            height1 = Architecture.InputHeight;
+            width1 = Architecture.InputWidth;
+            channels1 = images1.Shape[2];
+
+            height2 = Architecture.InputHeight;
+            width2 = Architecture.InputWidth;
+            channels2 = images2.Shape[2];
+        }
+        else
+        {
+            // Fall back to flattened for mixed shapes
+            return ConcatenateFlattenedImages(images1, images2);
+        }
+
+        // Validate spatial dimensions match
+        if (height1 != height2 || width1 != width2)
+        {
+            throw new ArgumentException(
+                $"Spatial dimensions must match: images1 is [{height1},{width1}], " +
+                $"images2 is [{height2},{width2}].");
+        }
+
+        int height = height1;
+        int width = width1;
+        int totalChannels = channels1 + channels2;
+
+        // Create output tensor with concatenated channels
+        int[] outputShape = images1.Shape.Length == 4
+            ? new int[] { batchSize, height, width, totalChannels }
+            : new int[] { batchSize, height * width, totalChannels };
+        var result = new Tensor<T>(outputShape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            if (images1.Shape.Length == 4)
+            {
+                for (int h = 0; h < height; h++)
+                {
+                    for (int w = 0; w < width; w++)
+                    {
+                        // Copy channels from images1
+                        for (int c = 0; c < channels1; c++)
+                        {
+                            result[b, h, w, c] = images1[b, h, w, c];
+                        }
+                        // Copy channels from images2
+                        for (int c = 0; c < channels2; c++)
+                        {
+                            result[b, h, w, channels1 + c] = images2[b, h, w, c];
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // 3D case: [B, H*W, C]
+                int spatialSize = height * width;
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    // Copy channels from images1
+                    for (int c = 0; c < channels1; c++)
+                    {
+                        result[b, s, c] = images1[b, s, c];
+                    }
+                    // Copy channels from images2
+                    for (int c = 0; c < channels2; c++)
+                    {
+                        result[b, s, channels1 + c] = images2[b, s, c];
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Concatenates flattened image tensors along the feature dimension.
+    /// </summary>
+    private Tensor<T> ConcatenateFlattenedImages(Tensor<T> images1, Tensor<T> images2)
+    {
+        int batchSize = images1.Shape[0];
         int totalSize1 = images1.Shape.Aggregate(1, (a, b) => a * b);
         int totalSize2 = images2.Shape.Aggregate(1, (a, b) => a * b);
         int size1 = totalSize1 / batchSize;
