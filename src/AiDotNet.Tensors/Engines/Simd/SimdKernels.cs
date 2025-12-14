@@ -4,10 +4,11 @@ using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using System.Runtime.Intrinsics.Arm;
 
-namespace AiDotNet.InferenceOptimization.Kernels
+namespace AiDotNet.Tensors.Engines.Simd
 {
     /// <summary>
-    /// SIMD-optimized kernels for common operations
+    /// SIMD-optimized kernels for common operations.
+    /// Provides hardware-accelerated implementations using AVX2, SSE, and ARM NEON.
     /// </summary>
     public static class SimdKernels
     {

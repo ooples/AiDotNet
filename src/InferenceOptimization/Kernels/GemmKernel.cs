@@ -2,6 +2,8 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Simd;
 
 namespace AiDotNet.InferenceOptimization.Kernels
 {

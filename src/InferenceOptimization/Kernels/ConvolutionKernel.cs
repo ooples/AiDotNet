@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.InferenceOptimization.Kernels
 {

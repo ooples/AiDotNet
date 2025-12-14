@@ -3,10 +3,11 @@ using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics.X86;
 using System.Runtime.Intrinsics.Arm;
 
-namespace AiDotNet.InferenceOptimization
+namespace AiDotNet.Tensors.Engines
 {
     /// <summary>
-    /// Provides platform and hardware capability detection
+    /// Provides platform and hardware capability detection for optimizing
+    /// tensor operations based on available SIMD instructions and cache sizes.
     /// </summary>
     public static class PlatformDetector
     {
@@ -53,7 +54,7 @@ namespace AiDotNet.InferenceOptimization
             {
                 caps.HasNeon = AdvSimd.IsSupported;
                 caps.HasArmBase = ArmBase.IsSupported;
-                caps.HasArmAes = Aes.IsSupported;
+                caps.HasArmAes = System.Runtime.Intrinsics.Arm.Aes.IsSupported;
                 caps.HasArmCrc32 = Crc32.IsSupported;
                 caps.HasArmDp = AdvSimd.Arm64.IsSupported;
             }
@@ -160,14 +161,15 @@ namespace AiDotNet.InferenceOptimization
     }
 
     /// <summary>
-    /// Represents detected platform capabilities
+    /// Represents detected platform capabilities including SIMD support,
+    /// cache sizes, and GPU availability.
     /// </summary>
     public class PlatformCapabilities
     {
         // Basic platform info
         public Architecture Architecture { get; set; }
-        public string OSDescription { get; set; }
-        public string FrameworkDescription { get; set; }
+        public string OSDescription { get; set; } = string.Empty;
+        public string FrameworkDescription { get; set; } = string.Empty;
         public int ProcessorCount { get; set; }
         public bool Is64BitProcess { get; set; }
         public bool Is64BitOperatingSystem { get; set; }

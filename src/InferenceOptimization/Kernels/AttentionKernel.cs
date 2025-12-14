@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines.Simd;
 
 namespace AiDotNet.InferenceOptimization.Kernels
 {
@@ -189,7 +190,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
         /// </summary>
         public Tensor<float> MultiHeadAttention(
             Tensor<float> q, Tensor<float> k, Tensor<float> v,
-            int numHeads, Tensor<float> mask = null)
+            int numHeads, Tensor<float>? mask = null)
         {
             if (q.Dimensions.Length != 3)
                 throw new ArgumentException("Multi-head attention requires 3D tensors");
