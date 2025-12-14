@@ -767,6 +767,31 @@ public class HLIRToLLIRLowering<T> where T : struct
             OperationType.BatchNormalization or OperationType.LayerNormalization =>
                 CreateNormalizationOpForFusion(node, outputShape, outputDataType, inputIds),
 
+            // Pooling operations (for fused Conv+Pool patterns)
+            OperationType.MaxPool2D or OperationType.AvgPool2D or OperationType.GlobalAveragePooling =>
+                CreatePoolingOpForFusion(node, outputShape, outputDataType, inputIds),
+
+            // Memory/reshape operations (for fused attention + reshape patterns)
+            OperationType.Reshape or OperationType.Transpose or OperationType.Flatten =>
+                CreateMemoryOpForFusion(node, outputShape, outputDataType, inputIds),
+
+            // Reduction operations (for fused attention + reduction patterns)
+            OperationType.ReduceSum or OperationType.Mean or OperationType.ReduceMean or
+            OperationType.ReduceMax or OperationType.ReduceMin =>
+                CreateReductionOpForFusion(node, outputShape, outputDataType, inputIds),
+
+            // Dense/fully-connected operations (commonly fused with activations)
+            OperationType.Dense or OperationType.FullyConnected =>
+                CreateMatMulOp(node, outputShape, outputDataType, inputIds),
+
+            // Attention operations (for transformer fusions)
+            OperationType.Attention or OperationType.MultiHeadAttention =>
+                CreateAttentionOpForFusion(node, outputShape, outputDataType, inputIds),
+
+            // Dropout is identity during inference (no-op in fusion context)
+            OperationType.Dropout =>
+                CreateIdentityOpForFusion(node, outputShape, outputDataType, inputIds),
+
             // Unsupported operation in fused context
             _ => throw new InvalidOperationException(
                 $"Operation '{node.Operation}' is not supported within fused operations. " +
@@ -991,6 +1016,278 @@ public class HLIRToLLIRLowering<T> where T : struct
         fusedOp.Attributes["axis"] = axis;
 
         return fusedOp;
+    }
+
+    /// <summary>
+    /// Creates a FusedOp representing a pooling operation for use within fused operation contexts.
+    /// </summary>
+    /// <param name="node">The HLIR node representing the pooling operation.</param>
+    /// <param name="outputShape">The output shape for this sub-operation.</param>
+    /// <param name="outputDataType">The output data type for this sub-operation.</param>
+    /// <param name="inputIds">The resolved input buffer IDs within the fusion context.</param>
+    /// <returns>A FusedOp containing pooling-specific parameters for LLIR execution.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method enables pooling operations (MaxPool2D, AvgPool2D, GlobalAveragePooling) to be
+    /// included in fused operation patterns such as Conv+Pool or Conv+BN+ReLU+Pool. The pooling
+    /// parameters (kernel size, stride, padding) are extracted from the HLIR node attributes.
+    /// </para>
+    /// <para>
+    /// Pooling operations have spatial window, stride, and padding parameters that distinguish
+    /// them from simple reductions. This method uses FusedOp to preserve these windowed operation
+    /// semantics for efficient runtime execution.
+    /// </para>
+    /// </remarks>
+    private FusedOp CreatePoolingOpForFusion(
+        HLIRNode<T> node,
+        int[] outputShape,
+        IRDataType outputDataType,
+        int[] inputIds)
+    {
+        var outputId = _llirGraph.AllocateBufferId();
+
+        var pattern = node.Operation switch
+        {
+            OperationType.MaxPool2D => "MaxPool2D",
+            OperationType.AvgPool2D => "AvgPool2D",
+            OperationType.GlobalAveragePooling => "GlobalAvgPool",
+            _ => "MaxPool2D"
+        };
+
+        // Extract pooling parameters from node attributes
+        var kernelH = GetAttributeInt(node, "kernelH", 2);
+        var kernelW = GetAttributeInt(node, "kernelW", 2);
+        var strideH = GetAttributeInt(node, "strideH", 2);
+        var strideW = GetAttributeInt(node, "strideW", 2);
+        var padH = GetAttributeInt(node, "padH", 0);
+        var padW = GetAttributeInt(node, "padW", 0);
+
+        var fusedOp = new FusedOp
+        {
+            OutputId = outputId,
+            Name = node.Name,
+            InputIds = inputIds,
+            OutputShape = outputShape,
+            OutputDataType = outputDataType,
+            Device = GetDeviceForNode(node),
+            FusionPattern = pattern,
+            SourceHLIRNodeId = node.Id
+        };
+
+        // Store pooling parameters in attributes for runtime execution
+        fusedOp.Attributes["kernelH"] = kernelH;
+        fusedOp.Attributes["kernelW"] = kernelW;
+        fusedOp.Attributes["strideH"] = strideH;
+        fusedOp.Attributes["strideW"] = strideW;
+        fusedOp.Attributes["padH"] = padH;
+        fusedOp.Attributes["padW"] = padW;
+
+        return fusedOp;
+    }
+
+    /// <summary>
+    /// Creates a MemoryOp representing a memory/reshape operation for use within fused operation contexts.
+    /// </summary>
+    /// <param name="node">The HLIR node representing the memory operation.</param>
+    /// <param name="outputShape">The output shape for this sub-operation.</param>
+    /// <param name="outputDataType">The output data type for this sub-operation.</param>
+    /// <param name="inputIds">The resolved input buffer IDs within the fusion context.</param>
+    /// <returns>A MemoryOp containing reshape/transpose parameters for LLIR execution.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method enables memory operations (Reshape, Transpose, Flatten) to be included in
+    /// fused operation patterns such as attention mechanisms that require reshaping between
+    /// matrix multiplications. These operations are typically zero-copy or view operations.
+    /// </para>
+    /// </remarks>
+    private MemoryOp CreateMemoryOpForFusion(
+        HLIRNode<T> node,
+        int[] outputShape,
+        IRDataType outputDataType,
+        int[] inputIds)
+    {
+        var outputId = _llirGraph.AllocateBufferId();
+
+        var memOpType = node.Operation switch
+        {
+            OperationType.Reshape => MemoryOpType.Reshape,
+            OperationType.Transpose => MemoryOpType.Transpose,
+            OperationType.Flatten => MemoryOpType.Reshape,
+            _ => MemoryOpType.Copy
+        };
+
+        var op = new MemoryOp
+        {
+            OutputId = outputId,
+            Name = node.Name,
+            InputIds = inputIds,
+            OutputShape = outputShape,
+            OutputDataType = outputDataType,
+            Device = GetDeviceForNode(node),
+            MemoryOpType = memOpType,
+            SourceHLIRNodeId = node.Id
+        };
+
+        // Handle transpose permutation
+        if (node.Operation == OperationType.Transpose &&
+            node.Attributes.TryGetValue("perm", out var perm))
+        {
+            op.Permutation = GetAttributeIntArray(perm, "perm");
+        }
+
+        // Handle reshape new shape
+        if (node.Operation == OperationType.Reshape || node.Operation == OperationType.Flatten)
+        {
+            op.NewShape = outputShape;
+        }
+
+        return op;
+    }
+
+    /// <summary>
+    /// Creates a ReduceOp representing a reduction operation for use within fused operation contexts.
+    /// </summary>
+    /// <param name="node">The HLIR node representing the reduction operation.</param>
+    /// <param name="outputShape">The output shape for this sub-operation.</param>
+    /// <param name="outputDataType">The output data type for this sub-operation.</param>
+    /// <param name="inputIds">The resolved input buffer IDs within the fusion context.</param>
+    /// <returns>A ReduceOp containing reduction parameters for LLIR execution.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method enables reduction operations (ReduceSum, Mean, ReduceMax, ReduceMin) to be
+    /// included in fused operation patterns such as attention softmax normalization or
+    /// mean pooling operations. The reduction axes and keepDims parameters are preserved.
+    /// </para>
+    /// </remarks>
+    private ReduceOp CreateReductionOpForFusion(
+        HLIRNode<T> node,
+        int[] outputShape,
+        IRDataType outputDataType,
+        int[] inputIds)
+    {
+        var outputId = _llirGraph.AllocateBufferId();
+
+        var reduceType = node.Operation switch
+        {
+            OperationType.ReduceSum => ReduceType.Sum,
+            OperationType.Mean or OperationType.ReduceMean => ReduceType.Mean,
+            OperationType.ReduceMax => ReduceType.Max,
+            OperationType.ReduceMin => ReduceType.Min,
+            _ => ReduceType.Sum
+        };
+
+        var axes = node.Attributes.TryGetValue("axes", out var ax) ? GetAttributeIntArray(ax, "axes") : Array.Empty<int>();
+        var keepDims = node.Attributes.TryGetValue("keepDims", out var kd) && (bool)kd;
+
+        // Get input shape for accurate cost estimation
+        var inputShape = node.InputTypes.Count > 0 && node.InputTypes[0].Shape != null
+            ? node.InputTypes[0].Shape
+            : Array.Empty<int>();
+
+        return new ReduceOp
+        {
+            OutputId = outputId,
+            Name = node.Name,
+            InputIds = inputIds,
+            OutputShape = outputShape,
+            OutputDataType = outputDataType,
+            Device = GetDeviceForNode(node),
+            ReduceType = reduceType,
+            Axes = axes,
+            KeepDims = keepDims,
+            InputShape = inputShape,
+            SourceHLIRNodeId = node.Id
+        };
+    }
+
+    /// <summary>
+    /// Creates a FusedOp representing an attention operation for use within fused operation contexts.
+    /// </summary>
+    /// <param name="node">The HLIR node representing the attention operation.</param>
+    /// <param name="outputShape">The output shape for this sub-operation.</param>
+    /// <param name="outputDataType">The output data type for this sub-operation.</param>
+    /// <param name="inputIds">The resolved input buffer IDs within the fusion context.</param>
+    /// <returns>A FusedOp containing attention parameters for LLIR execution.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method enables attention operations (Attention, MultiHeadAttention) to be included
+    /// in fused transformer patterns such as LayerNorm+Attention or Attention+FFN fusions.
+    /// These operations benefit significantly from fusion to reduce memory bandwidth.
+    /// </para>
+    /// </remarks>
+    private FusedOp CreateAttentionOpForFusion(
+        HLIRNode<T> node,
+        int[] outputShape,
+        IRDataType outputDataType,
+        int[] inputIds)
+    {
+        var outputId = _llirGraph.AllocateBufferId();
+
+        var pattern = node.Operation == OperationType.MultiHeadAttention
+            ? "MultiHeadAttention"
+            : "Attention";
+
+        // Extract attention-specific parameters
+        var numHeads = GetAttributeInt(node, "numHeads", 8);
+        var headDim = GetAttributeInt(node, "headDim", 64);
+        var scale = GetAttributeDouble(node, "scale", 1.0 / Math.Sqrt(headDim));
+        var causal = GetAttributeBool(node, "causal", false);
+
+        var fusedOp = new FusedOp
+        {
+            OutputId = outputId,
+            Name = node.Name,
+            InputIds = inputIds,
+            OutputShape = outputShape,
+            OutputDataType = outputDataType,
+            Device = GetDeviceForNode(node),
+            FusionPattern = pattern,
+            SourceHLIRNodeId = node.Id
+        };
+
+        // Store attention parameters for runtime execution
+        fusedOp.Attributes["numHeads"] = numHeads;
+        fusedOp.Attributes["headDim"] = headDim;
+        fusedOp.Attributes["scale"] = scale;
+        fusedOp.Attributes["causal"] = causal;
+
+        return fusedOp;
+    }
+
+    /// <summary>
+    /// Creates an identity ElementwiseOp for operations that are no-ops during inference.
+    /// </summary>
+    /// <param name="node">The HLIR node representing the no-op operation.</param>
+    /// <param name="outputShape">The output shape for this sub-operation.</param>
+    /// <param name="outputDataType">The output data type for this sub-operation.</param>
+    /// <param name="inputIds">The resolved input buffer IDs within the fusion context.</param>
+    /// <returns>An ElementwiseOp configured as an identity operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method handles operations like Dropout that become identity operations during
+    /// inference. Rather than special-casing these in the fusion executor, we emit an
+    /// explicit identity op that can be optimized away during execution planning.
+    /// </para>
+    /// </remarks>
+    private ElementwiseOp CreateIdentityOpForFusion(
+        HLIRNode<T> node,
+        int[] outputShape,
+        IRDataType outputDataType,
+        int[] inputIds)
+    {
+        var outputId = _llirGraph.AllocateBufferId();
+
+        return new ElementwiseOp
+        {
+            OutputId = outputId,
+            Name = node.Name,
+            InputIds = inputIds,
+            OutputShape = outputShape,
+            OutputDataType = outputDataType,
+            Device = GetDeviceForNode(node),
+            ElementwiseType = ElementwiseOpType.Identity,
+            SourceHLIRNodeId = node.Id
+        };
     }
 
     #endregion
