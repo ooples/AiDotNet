@@ -518,20 +518,88 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
         if (targetSparsity < 0 || targetSparsity > 1)
             throw new ArgumentException("targetSparsity must be between 0 and 1");
 
-        // For all types, use unstructured approach based on importance scores
         var flatScores = importanceScores.ToVector();
         int totalElements = flatScores.Length;
-        int elementsToPrune = (int)(totalElements * targetSparsity);
-
-        var indexed = flatScores.Select((score, idx) => (idx, score: _numOps.ToDouble(score))).ToArray();
-        Array.Sort(indexed, (a, b) => a.score.CompareTo(b.score));
-
         var keepIndices = new bool[totalElements];
         ArrayPolyfill.Fill(keepIndices, true);
 
-        for (int i = 0; i < elementsToPrune; i++)
+        // For 4D tensors, apply proper structured pruning
+        if (importanceScores.Rank == 4 && (_pruningType == StructurePruningType.Filter || _pruningType == StructurePruningType.Channel))
         {
-            keepIndices[indexed[i].idx] = false;
+            int filters = importanceScores.Shape[0];
+            int channels = importanceScores.Shape[1];
+            int height = importanceScores.Shape[2];
+            int width = importanceScores.Shape[3];
+            int elementsPerFilter = channels * height * width;
+            int elementsPerChannel = height * width;
+
+            if (_pruningType == StructurePruningType.Filter)
+            {
+                // Prune entire filters - get one score per filter (they're identical within filter)
+                int filtersToPrune = (int)(filters * targetSparsity);
+                var filterScores = new List<(int filterIdx, double score)>();
+
+                for (int f = 0; f < filters; f++)
+                {
+                    // All elements in a filter have the same score from ComputeFilterImportanceScores
+                    double score = _numOps.ToDouble(flatScores[f * elementsPerFilter]);
+                    filterScores.Add((f, score));
+                }
+
+                filterScores.Sort((a, b) => a.score.CompareTo(b.score));
+
+                // Mark entire filters as pruned
+                for (int i = 0; i < filtersToPrune && i < filterScores.Count; i++)
+                {
+                    int filterIdx = filterScores[i].filterIdx;
+                    int baseIdx = filterIdx * elementsPerFilter;
+                    for (int j = 0; j < elementsPerFilter; j++)
+                    {
+                        keepIndices[baseIdx + j] = false;
+                    }
+                }
+            }
+            else // Channel pruning
+            {
+                // Prune entire channels across all filters
+                int channelsToPrune = (int)(channels * targetSparsity);
+                var channelScores = new List<(int channelIdx, double score)>();
+
+                for (int c = 0; c < channels; c++)
+                {
+                    // All elements in a channel have the same score from ComputeChannelImportanceScores
+                    double score = _numOps.ToDouble(flatScores[c * elementsPerChannel]);
+                    channelScores.Add((c, score));
+                }
+
+                channelScores.Sort((a, b) => a.score.CompareTo(b.score));
+
+                // Mark entire channels as pruned across all filters
+                for (int i = 0; i < channelsToPrune && i < channelScores.Count; i++)
+                {
+                    int channelIdx = channelScores[i].channelIdx;
+                    for (int f = 0; f < filters; f++)
+                    {
+                        int baseIdx = f * elementsPerFilter + channelIdx * elementsPerChannel;
+                        for (int j = 0; j < elementsPerChannel; j++)
+                        {
+                            keepIndices[baseIdx + j] = false;
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            // For non-4D tensors or Neuron pruning, use element-wise approach
+            int elementsToPrune = (int)(totalElements * targetSparsity);
+            var indexed = flatScores.Select((score, idx) => (idx, score: _numOps.ToDouble(score))).ToArray();
+            Array.Sort(indexed, (a, b) => a.score.CompareTo(b.score));
+
+            for (int i = 0; i < elementsToPrune; i++)
+            {
+                keepIndices[indexed[i].idx] = false;
+            }
         }
 
         return new PruningMask<T>(keepIndices);
@@ -737,11 +805,31 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
             throw new ArgumentException("CSC format requires 2D tensor");
 
         int cols = shape[1];
+        int nnz = values.Count;
+
+        // Build triplets and sort by (column, row) for proper CSC ordering
+        var triplets = new List<(int col, int row, T value)>(nnz);
+        for (int i = 0; i < nnz; i++)
+        {
+            triplets.Add((columnIndices[i], rowIndices[i], values[i]));
+        }
+        triplets.Sort((a, b) =>
+        {
+            int colCmp = a.col.CompareTo(b.col);
+            return colCmp != 0 ? colCmp : a.row.CompareTo(b.row);
+        });
+
+        // Build CSC arrays from sorted triplets
+        var sortedValues = new T[nnz];
+        var sortedRowIndices = new int[nnz];
         var colPointers = new int[cols + 1];
 
-        // Count non-zeros per column
-        foreach (var col in columnIndices)
-            colPointers[col + 1]++;
+        for (int i = 0; i < nnz; i++)
+        {
+            sortedValues[i] = triplets[i].value;
+            sortedRowIndices[i] = triplets[i].row;
+            colPointers[triplets[i].col + 1]++;
+        }
 
         // Convert counts to pointers
         for (int i = 1; i <= cols; i++)
@@ -750,8 +838,8 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
         return new SparseCompressionResult<T>
         {
             Format = SparseFormat.CSC,
-            Values = values.ToArray(),
-            RowIndices = rowIndices.ToArray(),
+            Values = sortedValues,
+            RowIndices = sortedRowIndices,
             ColumnPointers = colPointers,
             OriginalShape = shape
         };
