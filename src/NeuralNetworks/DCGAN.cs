@@ -116,7 +116,12 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
         // 3D feature map. The typical starting spatial size is 4x4 which gets upsampled through
         // transposed convolutions. The depth represents the number of feature channels.
         // Note: The actual latent vector (1D) handling is done by the first projection layer.
-        int initialSpatialSize = 4;
+
+        // Compute the initial spatial size based on image dimensions.
+        // Standard DCGAN uses powers of 2 (4->8->16->32->64...).
+        // We compute the smallest valid initial size that can upsample to target dimensions.
+        int targetSize = Math.Min(imageHeight, imageWidth);
+        int initialSpatialSize = ComputeInitialSpatialSize(targetSize);
         int initialChannels = featureMaps * 8;  // Standard DCGAN uses 8x feature maps initially
 
         return new NeuralNetworkArchitecture<T>(
@@ -127,6 +132,56 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
             inputHeight: initialSpatialSize,
             inputWidth: initialSpatialSize,
             outputSize: imageChannels * imageHeight * imageWidth);
+    }
+
+    /// <summary>
+    /// Computes the initial spatial size for the generator based on target image size.
+    /// For standard DCGAN architecture, the generator upsamples by doubling at each layer.
+    /// </summary>
+    private static int ComputeInitialSpatialSize(int targetSize)
+    {
+        // Standard initial spatial sizes are 4 or 2
+        // For target sizes like 28 (MNIST), we use 7 as initial size (7->14->28)
+        // For target sizes like 32 (CIFAR), we use 4 as initial size (4->8->16->32)
+        // For target sizes like 64, we use 4 as initial size (4->8->16->32->64)
+
+        if (targetSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(targetSize), targetSize,
+                "Target image size must be positive.");
+        }
+
+        // Check if targetSize is a power of 2 times 4 (standard DCGAN)
+        if (targetSize >= 4 && IsPowerOfTwo(targetSize / 4) && targetSize % 4 == 0)
+        {
+            return 4;  // Standard DCGAN initial size
+        }
+
+        // For non-standard sizes (like 28 for MNIST), find largest factor that divides evenly
+        // and results in a reasonable number of upsampling steps (2-6)
+        for (int numUpsampleLayers = 2; numUpsampleLayers <= 6; numUpsampleLayers++)
+        {
+            int divisor = 1 << numUpsampleLayers;  // 2^numUpsampleLayers
+            if (targetSize % divisor == 0)
+            {
+                int initialSize = targetSize / divisor;
+                if (initialSize >= 2 && initialSize <= 8)
+                {
+                    return initialSize;
+                }
+            }
+        }
+
+        // Fallback: use 4 and let architecture handle any mismatch
+        return 4;
+    }
+
+    /// <summary>
+    /// Checks if a number is a power of 2.
+    /// </summary>
+    private static bool IsPowerOfTwo(int n)
+    {
+        return n > 0 && (n & (n - 1)) == 0;
     }
 
     /// <summary>
