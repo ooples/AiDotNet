@@ -424,15 +424,29 @@ public class WGAN<T> : NeuralNetworkBase<T>
 
         T avgScore = NumOps.Divide(totalScore, NumOps.FromDouble(batchSize));
 
-        // For WGAN, we want to minimize L = -(E[D(real)] - E[D(fake)])
-        // So: dL/dD(real) = -1, dL/dD(fake) = +1
-        // Create gradients for loss minimization (Backpropagate expects dL/dOutput)
-        var gradients = new Tensor<T>(criticScores.Shape);
-        T gradientValue = isReal ? NumOps.Negate(NumOps.One) : NumOps.One;
+        // Create predicted scores and labels vectors for loss function
+        // Labels: +1 for real samples, -1 for fake samples (Wasserstein convention)
+        var predictedScores = new Vector<T>(batchSize);
+        var labels = new Vector<T>(batchSize);
+        T labelValue = isReal ? NumOps.One : NumOps.Negate(NumOps.One);
 
         for (int i = 0; i < batchSize; i++)
         {
-            gradients[i, 0] = NumOps.Divide(gradientValue, NumOps.FromDouble(batchSize));
+            predictedScores[i] = criticScores[i, 0];
+            labels[i] = labelValue;
+        }
+
+        // Use the loss function to calculate gradients
+        // WassersteinLoss.CalculateDerivative returns -labels[i] / n
+        // For real (label=+1): gradient = -1/n (want to maximize score)
+        // For fake (label=-1): gradient = +1/n (want to minimize score)
+        var derivativeVector = _lossFunction.CalculateDerivative(predictedScores, labels);
+
+        // Convert gradient vector back to tensor for backpropagation
+        var gradients = new Tensor<T>(criticScores.Shape);
+        for (int i = 0; i < batchSize; i++)
+        {
+            gradients[i, 0] = derivativeVector[i];
         }
 
         // Backpropagate
@@ -459,27 +473,33 @@ public class WGAN<T> : NeuralNetworkBase<T>
         // Get critic scores for generated images
         var criticScores = Critic.Predict(generatedImages);
 
-        // Calculate average score (generator wants to maximize this)
+        // Create predicted scores and labels vectors for loss function
+        // For generator training, we want to maximize critic score on fakes
+        // Use label +1 (treating fakes as "should be real") to get gradient -1/n
+        // This minimizes the negative of the score, i.e., maximizes the score
         int batchSize = noise.Shape[0];
-        T totalScore = NumOps.Zero;
+        var predictedScores = new Vector<T>(batchSize);
+        var labels = new Vector<T>(batchSize);
 
         for (int i = 0; i < batchSize; i++)
         {
-            totalScore = NumOps.Add(totalScore, criticScores[i, 0]);
+            predictedScores[i] = criticScores[i, 0];
+            labels[i] = NumOps.One; // Want to maximize score (be more "real")
         }
 
-        T avgScore = NumOps.Divide(totalScore, NumOps.FromDouble(batchSize));
+        // Calculate loss using the loss function: -mean(predicted * labels)
+        // With labels = +1: loss = -mean(predicted), minimizing this maximizes scores
+        T loss = _lossFunction.CalculateLoss(predictedScores, labels);
 
-        // Loss is -avgScore, so we minimize -E[D(G(z))]
-        T loss = NumOps.Negate(avgScore);
+        // Use the loss function to calculate gradients
+        // WassersteinLoss.CalculateDerivative with label=+1 returns -1/n
+        var derivativeVector = _lossFunction.CalculateDerivative(predictedScores, labels);
 
-        // Gradient of L = -avgScore with respect to score is -1/batchSize
-        // (Backpropagate expects dL/dOutput)
+        // Convert gradient vector back to tensor for backpropagation
         var gradients = new Tensor<T>(criticScores.Shape);
-
         for (int i = 0; i < batchSize; i++)
         {
-            gradients[i, 0] = NumOps.Divide(NumOps.Negate(NumOps.One), NumOps.FromDouble(batchSize));
+            gradients[i, 0] = derivativeVector[i];
         }
 
         // Backpropagate through critic to get gradients for generator output
