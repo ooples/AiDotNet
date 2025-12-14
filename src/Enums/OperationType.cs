@@ -579,5 +579,264 @@ public enum OperationType
     /// <summary>
     /// Generic attention mechanism operation.
     /// </summary>
-    Attention
+    Attention,
+
+    // InferenceOptimization Operations
+
+    /// <summary>
+    /// Output node in computation graph.
+    /// </summary>
+    Output,
+
+    /// <summary>
+    /// General convolution operation.
+    /// </summary>
+    Convolution,
+
+    /// <summary>
+    /// 2D convolution operation.
+    /// </summary>
+    Convolution2D,
+
+    /// <summary>
+    /// 3D convolution operation.
+    /// </summary>
+    Convolution3D,
+
+    /// <summary>
+    /// Depthwise convolution operation.
+    /// </summary>
+    DepthwiseConvolution,
+
+    /// <summary>
+    /// Dilated convolution operation.
+    /// </summary>
+    DilatedConvolution,
+
+    /// <summary>
+    /// Deconvolution (transposed convolution) operation.
+    /// </summary>
+    Deconvolution,
+
+    /// <summary>
+    /// Batch normalization.
+    /// </summary>
+    BatchNormalization,
+
+    /// <summary>
+    /// Layer normalization.
+    /// </summary>
+    LayerNormalization,
+
+    /// <summary>
+    /// Instance normalization.
+    /// </summary>
+    InstanceNormalization,
+
+    /// <summary>
+    /// Group normalization.
+    /// </summary>
+    GroupNormalization,
+
+    /// <summary>
+    /// Max pooling operation.
+    /// </summary>
+    MaxPooling,
+
+    /// <summary>
+    /// Average pooling operation.
+    /// </summary>
+    AveragePooling,
+
+    /// <summary>
+    /// Global average pooling.
+    /// </summary>
+    GlobalAveragePooling,
+
+    /// <summary>
+    /// Global max pooling.
+    /// </summary>
+    GlobalMaxPooling,
+
+    /// <summary>
+    /// Adaptive pooling.
+    /// </summary>
+    AdaptivePooling,
+
+    /// <summary>
+    /// Dense (fully connected) layer.
+    /// </summary>
+    Dense,
+
+    /// <summary>
+    /// Fully connected layer.
+    /// </summary>
+    FullyConnected,
+
+    /// <summary>
+    /// General Matrix Multiplication.
+    /// </summary>
+    Gemm,
+
+    /// <summary>
+    /// Minimum value reduction.
+    /// </summary>
+    ReduceMin,
+
+    /// <summary>
+    /// Self-attention operation.
+    /// </summary>
+    SelfAttention,
+
+    /// <summary>
+    /// Cross-attention operation.
+    /// </summary>
+    CrossAttention,
+
+    /// <summary>
+    /// LSTM recurrent layer.
+    /// </summary>
+    LSTM,
+
+    /// <summary>
+    /// GRU recurrent layer.
+    /// </summary>
+    GRU,
+
+    /// <summary>
+    /// Basic RNN layer.
+    /// </summary>
+    RNN,
+
+    /// <summary>
+    /// Flatten tensor to 1D.
+    /// </summary>
+    Flatten,
+
+    /// <summary>
+    /// Remove dimensions of size 1.
+    /// </summary>
+    Squeeze,
+
+    /// <summary>
+    /// Add dimension of size 1.
+    /// </summary>
+    Unsqueeze,
+
+    /// <summary>
+    /// Expand tensor dimensions.
+    /// </summary>
+    Expand,
+
+    /// <summary>
+    /// DropPath regularization.
+    /// </summary>
+    DropPath,
+
+    /// <summary>
+    /// Positional encoding for transformers.
+    /// </summary>
+    PositionalEncoding,
+
+    /// <summary>
+    /// Stack tensors along new axis.
+    /// </summary>
+    Stack,
+
+    /// <summary>
+    /// Element-wise equality.
+    /// </summary>
+    Equal,
+
+    /// <summary>
+    /// Element-wise greater than.
+    /// </summary>
+    Greater,
+
+    /// <summary>
+    /// Element-wise less than.
+    /// </summary>
+    Less,
+
+    /// <summary>
+    /// Element-wise greater or equal.
+    /// </summary>
+    GreaterOrEqual,
+
+    /// <summary>
+    /// Element-wise less or equal.
+    /// </summary>
+    LessOrEqual,
+
+    /// <summary>
+    /// Logical AND.
+    /// </summary>
+    And,
+
+    /// <summary>
+    /// Logical OR.
+    /// </summary>
+    Or,
+
+    /// <summary>
+    /// Logical NOT.
+    /// </summary>
+    Not,
+
+    /// <summary>
+    /// Logical XOR.
+    /// </summary>
+    Xor,
+
+    /// <summary>
+    /// Type cast operation.
+    /// </summary>
+    Cast,
+
+    /// <summary>
+    /// Clip values to range.
+    /// </summary>
+    Clip,
+
+    /// <summary>
+    /// Scatter values to indices.
+    /// </summary>
+    Scatter,
+
+    // Fused Operations for InferenceOptimization
+
+    /// <summary>
+    /// Fused Conv + BatchNorm + ReLU.
+    /// </summary>
+    FusedConvBatchNormReLU,
+
+    /// <summary>
+    /// Fused MatMul + Bias.
+    /// </summary>
+    FusedMatMulBias,
+
+    /// <summary>
+    /// Fused MatMul + Bias + ReLU.
+    /// </summary>
+    FusedMatMulBiasReLU,
+
+    /// <summary>
+    /// Fused MatMul + Bias + GELU.
+    /// </summary>
+    FusedMatMulBiasGELU,
+
+    /// <summary>
+    /// Fused MultiHead Attention.
+    /// </summary>
+    FusedMultiHeadAttention,
+
+    /// <summary>
+    /// Fused LayerNorm + Attention.
+    /// </summary>
+    FusedLayerNormAttention,
+
+    /// <summary>
+    /// Unknown operation type.
+    /// </summary>
+    Unknown
 }
