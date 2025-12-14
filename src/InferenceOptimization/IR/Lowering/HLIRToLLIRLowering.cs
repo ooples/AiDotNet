@@ -478,7 +478,7 @@ public class HLIRToLLIRLowering<T> where T : struct
         if (node.Operation == OperationType.Transpose &&
             node.Attributes.TryGetValue("perm", out var perm))
         {
-            op.Permutation = (int[])perm;
+            op.Permutation = GetAttributeIntArray(perm, "perm");
         }
 
         if (node.Operation == OperationType.Reshape)
@@ -528,7 +528,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             _ => ReduceType.Sum
         };
 
-        var axes = node.Attributes.TryGetValue("axes", out var ax) ? (int[])ax : Array.Empty<int>();
+        var axes = node.Attributes.TryGetValue("axes", out var ax) ? GetAttributeIntArray(ax, "axes") : Array.Empty<int>();
         var keepDims = node.Attributes.TryGetValue("keepDims", out var kd) && (bool)kd;
 
         // Get input shape for accurate cost estimation
@@ -1089,6 +1089,149 @@ public class HLIRToLLIRLowering<T> where T : struct
         {
             return defaultValue;
         }
+    }
+
+    /// <summary>
+    /// Safely converts an attribute value to an int array with defensive type handling.
+    /// </summary>
+    /// <param name="value">The attribute value to convert.</param>
+    /// <param name="attributeName">The name of the attribute (for error messages).</param>
+    /// <returns>An int array, or empty array if conversion is not possible.</returns>
+    /// <remarks>
+    /// <para><b>Design Philosophy:</b></para>
+    /// <para>
+    /// Handles various runtime types that may be stored in node attributes:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>int[] - returned directly</description></item>
+    /// <item><description>long[] - converted with overflow checking</description></item>
+    /// <item><description>IList&lt;int&gt; - materialized to int[]</description></item>
+    /// <item><description>IEnumerable&lt;long&gt; - converted element-wise</description></item>
+    /// <item><description>object[] - each element converted via Convert.ToInt32</description></item>
+    /// <item><description>IEnumerable - each element converted via Convert.ToInt32</description></item>
+    /// </list>
+    /// </remarks>
+    private static int[] GetAttributeIntArray(object? value, string attributeName)
+    {
+        if (value == null)
+        {
+            return Array.Empty<int>();
+        }
+
+        // Handle int[] directly
+        if (value is int[] intArray)
+        {
+            return intArray;
+        }
+
+        // Handle long[] with overflow checking
+        if (value is long[] longArray)
+        {
+            var result = new int[longArray.Length];
+            for (int i = 0; i < longArray.Length; i++)
+            {
+                long val = longArray[i];
+                if (val is < int.MinValue or > int.MaxValue)
+                {
+                    throw new OverflowException(
+                        $"Value {val} at index {i} in attribute '{attributeName}' exceeds int range.");
+                }
+                result[i] = (int)val;
+            }
+            return result;
+        }
+
+        // Handle IList<int> (e.g., List<int>)
+        if (value is IList<int> intList)
+        {
+            var result = new int[intList.Count];
+            intList.CopyTo(result, 0);
+            return result;
+        }
+
+        // Handle IEnumerable<int> (but not IList<int>, already handled)
+        if (value is IEnumerable<int> intEnumerable)
+        {
+            return intEnumerable.ToArray();
+        }
+
+        // Handle IEnumerable<long>
+        if (value is IEnumerable<long> longEnumerable)
+        {
+            var list = new List<int>();
+            int index = 0;
+            foreach (long val in longEnumerable)
+            {
+                if (val is < int.MinValue or > int.MaxValue)
+                {
+                    throw new OverflowException(
+                        $"Value {val} at index {index} in attribute '{attributeName}' exceeds int range.");
+                }
+                list.Add((int)val);
+                index++;
+            }
+            return list.ToArray();
+        }
+
+        // Handle object[] - convert each element individually
+        if (value is object[] objArray)
+        {
+            var result = new int[objArray.Length];
+            for (int i = 0; i < objArray.Length; i++)
+            {
+                object? element = objArray[i];
+                if (element == null)
+                {
+                    throw new InvalidCastException(
+                        $"Null element at index {i} in attribute '{attributeName}' cannot be converted to int.");
+                }
+
+                try
+                {
+                    result[i] = Convert.ToInt32(element);
+                }
+                catch (Exception ex) when (ex is FormatException or OverflowException or InvalidCastException)
+                {
+                    throw new InvalidCastException(
+                        $"Element at index {i} (type: {element.GetType().Name}, value: {element}) " +
+                        $"in attribute '{attributeName}' cannot be converted to int.", ex);
+                }
+            }
+            return result;
+        }
+
+        // Handle any other IEnumerable - try to convert each element
+        if (value is System.Collections.IEnumerable enumerable)
+        {
+            var list = new List<int>();
+            int index = 0;
+            foreach (object? element in enumerable)
+            {
+                if (element == null)
+                {
+                    throw new InvalidCastException(
+                        $"Null element at index {index} in attribute '{attributeName}' cannot be converted to int.");
+                }
+
+                try
+                {
+                    list.Add(Convert.ToInt32(element));
+                }
+                catch (Exception ex) when (ex is FormatException or OverflowException or InvalidCastException)
+                {
+                    throw new InvalidCastException(
+                        $"Element at index {index} (type: {element.GetType().Name}, value: {element}) " +
+                        $"in attribute '{attributeName}' cannot be converted to int.", ex);
+                }
+                index++;
+            }
+            return list.ToArray();
+        }
+
+        // If none of the above, throw a descriptive exception
+        throw new InvalidCastException(
+            $"Attribute '{attributeName}' has type '{value.GetType().Name}' which cannot be converted to int[]. " +
+            "Expected int[], long[], List<int>, or another enumerable of numeric values.");
     }
 
     #endregion
