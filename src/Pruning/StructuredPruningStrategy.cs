@@ -181,7 +181,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
                     double columnNorm = 0;
                     for (int row = 0; row < weights.Rows; row++)
                     {
-                        double val = Convert.ToDouble(weights[row, col]);
+                        double val = _numOps.ToDouble(weights[row, col]);
                         columnNorm += val * val;
                     }
                     columnNorm = Math.Sqrt(columnNorm);
@@ -202,7 +202,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
                     double rowNorm = 0;
                     for (int col = 0; col < weights.Columns; col++)
                     {
-                        double val = Convert.ToDouble(weights[row, col]);
+                        double val = _numOps.ToDouble(weights[row, col]);
                         rowNorm += val * val;
                     }
                     rowNorm = Math.Sqrt(rowNorm);
@@ -223,7 +223,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
                     double columnNorm = 0;
                     for (int row = 0; row < weights.Rows; row++)
                     {
-                        double val = Convert.ToDouble(weights[row, col]);
+                        double val = _numOps.ToDouble(weights[row, col]);
                         columnNorm += val * val;
                     }
                     columnNorm = Math.Sqrt(columnNorm);
@@ -261,8 +261,11 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
     /// </remarks>
     public IPruningMask<T> CreateMask(Matrix<T> importanceScores, double targetSparsity)
     {
+        if (double.IsNaN(targetSparsity) || double.IsInfinity(targetSparsity))
+            throw new ArgumentException("targetSparsity cannot be NaN or Infinity.", nameof(targetSparsity));
+
         if (targetSparsity < 0 || targetSparsity > 1)
-            throw new ArgumentException("targetSparsity must be between 0 and 1");
+            throw new ArgumentException("targetSparsity must be between 0 and 1", nameof(targetSparsity));
 
         if (importanceScores.Rows == 0 || importanceScores.Columns == 0)
             throw new ArgumentException("importanceScores matrix cannot be empty.", nameof(importanceScores));
@@ -281,7 +284,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
                 var columnScores = new List<(int col, double score)>();
                 for (int col = 0; col < importanceScores.Columns; col++)
                 {
-                    double score = Convert.ToDouble(importanceScores[0, col]);
+                    double score = _numOps.ToDouble(importanceScores[0, col]);
                     columnScores.Add((col, score));
                 }
 
@@ -317,7 +320,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
                 var rowScores = new List<(int row, double score)>();
                 for (int row = 0; row < importanceScores.Rows; row++)
                 {
-                    double score = Convert.ToDouble(importanceScores[row, 0]);
+                    double score = _numOps.ToDouble(importanceScores[row, 0]);
                     rowScores.Add((row, score));
                 }
 
@@ -374,6 +377,14 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
     /// <param name="weights">Weight tensor</param>
     /// <param name="gradients">Gradients (not used for structured pruning)</param>
     /// <returns>Tensor of importance scores</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor rank doesn't match the pruning type requirements.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Structured pruning requires specific tensor shapes:
+    /// - Neuron pruning: Requires 2D tensors (matrices). For 2D, use ComputeImportanceScores(Matrix) instead.
+    /// - Filter pruning: Requires 4D tensors [filters, channels, height, width].
+    /// - Channel pruning: Requires 4D tensors [filters, channels, height, width].
+    /// </para>
+    /// </remarks>
     public Tensor<T> ComputeImportanceScores(Tensor<T> weights, Tensor<T>? gradients = null)
     {
         switch (_pruningType)
@@ -382,15 +393,21 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
                 return ComputeFilterImportanceScores(weights);
             case StructurePruningType.Channel:
                 return ComputeChannelImportanceScores(weights);
-            default:
-                // For other types, just compute absolute values
-                var flatWeights = weights.ToVector();
-                var scores = new T[flatWeights.Length];
-                for (int i = 0; i < flatWeights.Length; i++)
+            case StructurePruningType.Neuron:
+                // Neuron pruning is only meaningful for 2D matrices
+                if (weights.Rank != 2)
                 {
-                    scores[i] = _numOps.FromDouble(Math.Abs(_numOps.ToDouble(flatWeights[i])));
+                    throw new ArgumentException(
+                        $"Neuron structured pruning requires 2D tensor (matrix). Got {weights.Rank}D tensor. " +
+                        "For 4D convolutional tensors, use Filter or Channel pruning type.",
+                        nameof(weights));
                 }
-                return Tensor<T>.FromVector(new Vector<T>(scores), (int[])weights.Shape.Clone());
+                // For 2D tensors, convert to matrix and use matrix-based scoring
+                var matrix = weights.ToMatrix();
+                var matrixScores = ComputeImportanceScores(matrix, gradients: null);
+                return Tensor<T>.FromMatrix(matrixScores);
+            default:
+                throw new NotSupportedException($"Pruning type {_pruningType} is not supported for tensor operations.");
         }
     }
 
@@ -484,8 +501,11 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
     /// <returns>Binary mask (1 = keep, 0 = prune)</returns>
     public IPruningMask<T> CreateMask(Vector<T> importanceScores, double targetSparsity)
     {
+        if (double.IsNaN(targetSparsity) || double.IsInfinity(targetSparsity))
+            throw new ArgumentException("targetSparsity cannot be NaN or Infinity.", nameof(targetSparsity));
+
         if (targetSparsity < 0 || targetSparsity > 1)
-            throw new ArgumentException("targetSparsity must be between 0 and 1");
+            throw new ArgumentException("targetSparsity must be between 0 and 1", nameof(targetSparsity));
 
         int totalElements = importanceScores.Length;
         int elementsToPrune = (int)(totalElements * targetSparsity);
@@ -515,8 +535,11 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
     /// <returns>Binary mask (1 = keep, 0 = prune)</returns>
     public IPruningMask<T> CreateMask(Tensor<T> importanceScores, double targetSparsity)
     {
+        if (double.IsNaN(targetSparsity) || double.IsInfinity(targetSparsity))
+            throw new ArgumentException("targetSparsity cannot be NaN or Infinity.", nameof(targetSparsity));
+
         if (targetSparsity < 0 || targetSparsity > 1)
-            throw new ArgumentException("targetSparsity must be between 0 and 1");
+            throw new ArgumentException("targetSparsity must be between 0 and 1", nameof(targetSparsity));
 
         var flatScores = importanceScores.ToVector();
         int totalElements = flatScores.Length;
@@ -589,17 +612,31 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
                 }
             }
         }
+        else if (importanceScores.Rank == 2 && _pruningType == StructurePruningType.Neuron)
+        {
+            // For 2D tensors with Neuron pruning, convert to matrix and use structured matrix pruning
+            var matrix = importanceScores.ToMatrix();
+            var matrixMask = CreateMask(matrix, targetSparsity);
+
+            // Apply matrix mask once and transfer pattern to flat keepIndices
+            var matrixResult = matrixMask.Apply(matrix);
+            int cols = importanceScores.Shape[1];
+            for (int i = 0; i < importanceScores.Shape[0]; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    int flatIdx = i * cols + j;
+                    keepIndices[flatIdx] = !_numOps.Equals(matrixResult[i, j], _numOps.Zero);
+                }
+            }
+        }
         else
         {
-            // For non-4D tensors or Neuron pruning, use element-wise approach
-            int elementsToPrune = (int)(totalElements * targetSparsity);
-            var indexed = flatScores.Select((score, idx) => (idx, score: _numOps.ToDouble(score))).ToArray();
-            Array.Sort(indexed, (a, b) => a.score.CompareTo(b.score));
-
-            for (int i = 0; i < elementsToPrune; i++)
-            {
-                keepIndices[indexed[i].idx] = false;
-            }
+            // For unsupported tensor ranks, throw an exception to maintain structured semantics
+            throw new ArgumentException(
+                $"Structured pruning type {_pruningType} does not support {importanceScores.Rank}D tensors. " +
+                "Use Neuron pruning for 2D tensors, or Filter/Channel pruning for 4D tensors.",
+                nameof(importanceScores));
         }
 
         return new PruningMask<T>(keepIndices);
@@ -768,9 +805,69 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
                     SparsityM = 4
                 };
 
+            case SparseFormat.StructuredNtoM:
+                // Default to 2:4 pattern for StructuredNtoM when no explicit n, m are provided
+                return ToSparseFormat(weights, format, 2, 4);
+
             default:
-                throw new NotImplementedException($"Sparse format {format} not yet implemented for structured pruning");
+                throw new NotSupportedException($"Sparse format {format} is not supported for structured pruning");
         }
+    }
+
+    /// <summary>
+    /// Converts pruned weights to N:M structured sparse format for efficient storage.
+    /// </summary>
+    /// <param name="weights">Pruned weights (containing zeros).</param>
+    /// <param name="format">Target sparse format (should be Structured2to4 or StructuredNtoM).</param>
+    /// <param name="n">Number of zeros per group in N:M sparsity pattern.</param>
+    /// <param name="m">Group size in N:M sparsity pattern.</param>
+    /// <returns>Sparse representation with N:M pattern metadata.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when n or m are invalid.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> N:M structured sparsity is a special pattern where exactly N elements
+    /// out of every M consecutive elements are zero. For example, 2:4 sparsity means 2 zeros per 4 elements.
+    /// This is hardware-friendly on NVIDIA Ampere GPUs which have specialized support for 2:4 patterns.
+    /// </para>
+    /// </remarks>
+    public SparseCompressionResult<T> ToSparseFormat(Tensor<T> weights, SparseFormat format, int n, int m)
+    {
+        if (m <= 0)
+            throw new ArgumentOutOfRangeException(nameof(m), "m must be greater than 0.");
+        if (n < 0)
+            throw new ArgumentOutOfRangeException(nameof(n), "n must be greater than or equal to 0.");
+        if (n > m)
+            throw new ArgumentException($"n ({n}) cannot be greater than m ({m}).", nameof(n));
+
+        // For non-N:M formats, delegate to the standard method
+        if (format != SparseFormat.Structured2to4 && format != SparseFormat.StructuredNtoM)
+            return ToSparseFormat(weights, format);
+
+        var flatWeights = weights.ToVector();
+        var nonZeroValues = new List<T>();
+        var mask = new List<byte>();
+
+        for (int i = 0; i < flatWeights.Length; i++)
+        {
+            if (!_numOps.Equals(flatWeights[i], _numOps.Zero))
+            {
+                nonZeroValues.Add(flatWeights[i]);
+                mask.Add(1);
+            }
+            else
+            {
+                mask.Add(0);
+            }
+        }
+
+        return new SparseCompressionResult<T>
+        {
+            Format = format,
+            Values = nonZeroValues.ToArray(),
+            SparsityMask = mask.ToArray(),
+            SparsityN = n,
+            SparsityM = m,
+            OriginalShape = weights.Shape.ToArray()
+        };
     }
 
     private SparseCompressionResult<T> ConvertToCSR(List<T> values, List<int> rowIndices, List<int> columnIndices, int[] shape)

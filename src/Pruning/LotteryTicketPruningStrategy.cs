@@ -528,8 +528,17 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
     /// <param name="weights">Pruned weights (containing zeros).</param>
     /// <param name="format">Target sparse format.</param>
     /// <returns>Sparse representation.</returns>
+    /// <remarks>
+    /// For StructuredNtoM format, use the overload that accepts n and m parameters.
+    /// </remarks>
     public SparseCompressionResult<T> ToSparseFormat(Tensor<T> weights, SparseFormat format)
     {
+        // For N:M formats, delegate to the overload with explicit parameters
+        if (format == SparseFormat.Structured2to4)
+            return ToSparseFormat(weights, format, 2, 4);
+        if (format == SparseFormat.StructuredNtoM)
+            return ToSparseFormat(weights, format, 2, 4); // Default to 2:4 pattern
+
         var flatWeights = weights.ToVector();
         var nonZeroValues = new List<T>();
         var rowIndices = new List<int>();
@@ -621,39 +630,59 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
                     OriginalShape = weights.Shape.ToArray()
                 };
 
-            case SparseFormat.Structured2to4:
-            case SparseFormat.StructuredNtoM:
-                // For N:M sparsity, just store non-zero values with a mask
-                var mask = new List<byte>();
-                int n = format == SparseFormat.Structured2to4 ? 2 : 0;
-                int m = format == SparseFormat.Structured2to4 ? 4 : 0;
-
-                for (int i = 0; i < flatWeights.Length; i++)
-                {
-                    if (!_numOps.Equals(flatWeights[i], _numOps.Zero))
-                    {
-                        nonZeroValues.Add(flatWeights[i]);
-                        mask.Add(1);
-                    }
-                    else
-                    {
-                        mask.Add(0);
-                    }
-                }
-
-                return new SparseCompressionResult<T>
-                {
-                    Format = format,
-                    Values = nonZeroValues.ToArray(),
-                    SparsityMask = mask.ToArray(),
-                    SparsityN = n,
-                    SparsityM = m,
-                    OriginalShape = weights.Shape.ToArray()
-                };
-
             default:
-                throw new NotSupportedException($"Sparse format {format} is not yet supported");
+                throw new NotSupportedException($"Sparse format {format} is not supported");
         }
+    }
+
+    /// <summary>
+    /// Converts pruned weights to N:M structured sparse format for efficient storage.
+    /// </summary>
+    /// <param name="weights">Pruned weights (containing zeros).</param>
+    /// <param name="format">Target sparse format (should be Structured2to4 or StructuredNtoM).</param>
+    /// <param name="n">Number of zeros per group in N:M sparsity pattern.</param>
+    /// <param name="m">Group size in N:M sparsity pattern.</param>
+    /// <returns>Sparse representation with N:M pattern metadata.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when n or m are invalid.</exception>
+    public SparseCompressionResult<T> ToSparseFormat(Tensor<T> weights, SparseFormat format, int n, int m)
+    {
+        if (m <= 0)
+            throw new ArgumentOutOfRangeException(nameof(m), "m must be greater than 0.");
+        if (n < 0)
+            throw new ArgumentOutOfRangeException(nameof(n), "n must be greater than or equal to 0.");
+        if (n > m)
+            throw new ArgumentException($"n ({n}) cannot be greater than m ({m}).", nameof(n));
+
+        // For non-N:M formats, delegate to the standard method
+        if (format != SparseFormat.Structured2to4 && format != SparseFormat.StructuredNtoM)
+            return ToSparseFormat(weights, format);
+
+        var flatWeights = weights.ToVector();
+        var nonZeroValues = new List<T>();
+        var mask = new List<byte>();
+
+        for (int i = 0; i < flatWeights.Length; i++)
+        {
+            if (!_numOps.Equals(flatWeights[i], _numOps.Zero))
+            {
+                nonZeroValues.Add(flatWeights[i]);
+                mask.Add(1);
+            }
+            else
+            {
+                mask.Add(0);
+            }
+        }
+
+        return new SparseCompressionResult<T>
+        {
+            Format = format,
+            Values = nonZeroValues.ToArray(),
+            SparsityMask = mask.ToArray(),
+            SparsityN = n,
+            SparsityM = m,
+            OriginalShape = weights.Shape.ToArray()
+        };
     }
 
     /// <summary>

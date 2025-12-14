@@ -232,8 +232,8 @@ public class GradientPruningStrategy<T> : IPruningStrategy<T>
 
         flatScores.Sort((a, b) =>
         {
-            double aVal = Convert.ToDouble(a.score);
-            double bVal = Convert.ToDouble(b.score);
+            double aVal = _numOps.ToDouble(a.score);
+            double bVal = _numOps.ToDouble(b.score);
             return aVal.CompareTo(bVal);
         });
 
@@ -510,16 +510,68 @@ public class GradientPruningStrategy<T> : IPruningStrategy<T>
         }
         else if (format == SparseFormat.StructuredNtoM)
         {
-            // N:M format requires explicit N and M parameters which aren't available through this method.
-            // Use CreateNtoMMask() to create masks with specific N:M patterns, then call ToSparseFormat
-            // with Structured2to4 format, or implement an overload that accepts N and M parameters.
-            throw new NotSupportedException(
-                "StructuredNtoM format requires explicit N and M parameters. " +
-                "Use Structured2to4 for 2:4 sparsity, or implement ToSparseFormat(weights, format, n, m) overload.");
+            // Default to 2:4 pattern for StructuredNtoM when no explicit n, m are provided
+            return ToSparseFormat(weights, format, 2, 4);
         }
         else
         {
             throw new NotSupportedException($"Sparse format {format} is not supported");
         }
+    }
+
+    /// <summary>
+    /// Converts pruned weights to N:M structured sparse format for efficient storage.
+    /// </summary>
+    /// <param name="weights">Pruned weights (containing zeros).</param>
+    /// <param name="format">Target sparse format (should be Structured2to4 or StructuredNtoM).</param>
+    /// <param name="n">Number of zeros per group in N:M sparsity pattern.</param>
+    /// <param name="m">Group size in N:M sparsity pattern.</param>
+    /// <returns>Sparse representation with N:M pattern metadata.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when n or m are invalid.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> N:M structured sparsity is a special pattern where exactly N elements
+    /// out of every M consecutive elements are zero. For example, 2:4 sparsity means 2 zeros per 4 elements.
+    /// This is hardware-friendly on NVIDIA Ampere GPUs which have specialized support for 2:4 patterns.
+    /// </para>
+    /// </remarks>
+    public SparseCompressionResult<T> ToSparseFormat(Tensor<T> weights, SparseFormat format, int n, int m)
+    {
+        if (m <= 0)
+            throw new ArgumentOutOfRangeException(nameof(m), "m must be greater than 0.");
+        if (n < 0)
+            throw new ArgumentOutOfRangeException(nameof(n), "n must be greater than or equal to 0.");
+        if (n > m)
+            throw new ArgumentException($"n ({n}) cannot be greater than m ({m}).", nameof(n));
+
+        // For non-N:M formats, delegate to the standard method
+        if (format != SparseFormat.Structured2to4 && format != SparseFormat.StructuredNtoM)
+            return ToSparseFormat(weights, format);
+
+        var flatWeights = weights.ToVector();
+        var nonZeroValues = new List<T>();
+        var mask = new List<byte>();
+
+        for (int i = 0; i < flatWeights.Length; i++)
+        {
+            if (!_numOps.Equals(flatWeights[i], _numOps.Zero))
+            {
+                nonZeroValues.Add(flatWeights[i]);
+                mask.Add(1);
+            }
+            else
+            {
+                mask.Add(0);
+            }
+        }
+
+        return new SparseCompressionResult<T>
+        {
+            Format = format,
+            Values = nonZeroValues.ToArray(),
+            SparsityMask = mask.ToArray(),
+            SparsityN = n,
+            SparsityM = m,
+            OriginalShape = weights.Shape.ToArray()
+        };
     }
 }
