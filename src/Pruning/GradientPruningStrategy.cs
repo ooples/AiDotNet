@@ -510,8 +510,12 @@ public class GradientPruningStrategy<T> : IPruningStrategy<T>
         }
         else if (format == SparseFormat.StructuredNtoM)
         {
-            // Default to 2:4 for N:M format
-            return ToSparseFormat(weights, SparseFormat.Structured2to4);
+            // N:M format requires explicit N and M parameters which aren't available through this method.
+            // Use CreateNtoMMask() to create masks with specific N:M patterns, then call ToSparseFormat
+            // with Structured2to4 format, or implement an overload that accepts N and M parameters.
+            throw new NotSupportedException(
+                "StructuredNtoM format requires explicit N and M parameters. " +
+                "Use Structured2to4 for 2:4 sparsity, or implement ToSparseFormat(weights, format, n, m) overload.");
         }
         else
         {
