@@ -199,7 +199,9 @@ public class SAGAN<T> : NeuralNetworkBase<T>
 
         _momentum = Vector<T>.Empty();
         _secondMoment = Vector<T>.Empty();
-        _lossFunction = lossFunction ?? new HingeLoss<T>();
+        // Note: _lossFunction is set via base class constructor (line 173)
+        // Store reference for CreateNewInstance
+        _lossFunction = LossFunction;
 
         InitializeLayers();
     }
@@ -388,6 +390,10 @@ public class SAGAN<T> : NeuralNetworkBase<T>
         discGradient.SetFlat(0, one);
         Discriminator.Backward(discGradient);
 
+        // Update discriminator parameters using Adam with TTUR
+        // SAGAN uses higher LR for discriminator (4x generator LR)
+        ApplyAdamUpdate(Discriminator, _currentLearningRate * 4.0, isGenerator: false);
+
         // === Train Generator ===
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(false);
@@ -412,6 +418,14 @@ public class SAGAN<T> : NeuralNetworkBase<T>
         var genGradient = new Tensor<T>([1]);
         genGradient.SetFlat(0, one);
         Generator.Backward(genGradient);
+
+        // Update generator parameters using Adam with TTUR
+        // SAGAN uses lower LR for generator (base LR)
+        ApplyAdamUpdate(Generator, _currentLearningRate, isGenerator: true);
+
+        // Update beta powers for next iteration (bias correction)
+        // SAGAN uses beta1=0.0, beta2=0.9
+        _beta2Power = NumOps.Multiply(_beta2Power, NumOps.FromDouble(0.9));
 
         return (discriminatorLoss, generatorLoss);
     }
@@ -444,6 +458,99 @@ public class SAGAN<T> : NeuralNetworkBase<T>
         }
 
         return NumOps.Divide(loss, NumOps.FromDouble(batchSize));
+    }
+
+    /// <summary>
+    /// Applies Adam optimizer update to network parameters using TTUR (Two Time-Scale Update Rule).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// SAGAN uses Adam with specific hyperparameters for stable GAN training:
+    /// - beta1 = 0.0 (no momentum on gradients)
+    /// - beta2 = 0.9 (momentum on squared gradients)
+    /// - Different learning rates for G and D (TTUR)
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates the network weights based on computed gradients.
+    /// Adam adapts the learning rate for each parameter individually based on the history
+    /// of gradients, which helps training converge faster and more stably.
+    /// </para>
+    /// </remarks>
+    /// <param name="network">The network whose parameters to update</param>
+    /// <param name="learningRate">Learning rate for this update</param>
+    /// <param name="isGenerator">True for generator (uses first half of momentum arrays)</param>
+    private void ApplyAdamUpdate(ConvolutionalNeuralNetwork<T> network, double learningRate, bool isGenerator)
+    {
+        var parameters = network.GetParameters();
+        var gradients = network.GetGradients();
+
+        if (parameters.Length == 0 || gradients.Length == 0)
+            return;
+
+        // Offset in momentum arrays: generator uses first half, discriminator uses second half
+        int offset = isGenerator ? 0 : Generator.GetParameterCount();
+        int paramCount = parameters.Length;
+
+        // Ensure momentum arrays are properly sized
+        if (_momentum.Length < offset + paramCount || _secondMoment.Length < offset + paramCount)
+        {
+            var newMomentum = new Vector<T>(offset + paramCount);
+            var newSecondMoment = new Vector<T>(offset + paramCount);
+            for (int i = 0; i < _momentum.Length && i < newMomentum.Length; i++)
+            {
+                newMomentum[i] = _momentum[i];
+                newSecondMoment[i] = _secondMoment[i];
+            }
+            _momentum = newMomentum;
+            _secondMoment = newSecondMoment;
+        }
+
+        // Adam hyperparameters for SAGAN
+        T beta1 = NumOps.Zero;  // SAGAN uses beta1=0.0
+        T beta2 = NumOps.FromDouble(0.9);
+        T epsilon = NumOps.FromDouble(1e-8);
+        T lr = NumOps.FromDouble(learningRate);
+        T one = NumOps.One;
+
+        // Bias correction terms
+        T beta2Correction = NumOps.Subtract(one, _beta2Power);
+        // Guard against zero/negative correction (use epsilon fallback)
+        T correctionThreshold = NumOps.FromDouble(1e-8);
+        if (NumOps.LessThan(beta2Correction, correctionThreshold))
+            beta2Correction = correctionThreshold;
+
+        var updatedParams = new Vector<T>(paramCount);
+
+        for (int i = 0; i < paramCount; i++)
+        {
+            int momIdx = offset + i;
+            T gradient = gradients[i];
+
+            // Update biased first moment: m_t = beta1 * m_{t-1} + (1 - beta1) * g_t
+            // With beta1=0, this simplifies to: m_t = g_t
+            T m = NumOps.Add(
+                NumOps.Multiply(beta1, _momentum[momIdx]),
+                NumOps.Multiply(NumOps.Subtract(one, beta1), gradient));
+            _momentum[momIdx] = m;
+
+            // Update biased second moment: v_t = beta2 * v_{t-1} + (1 - beta2) * g_t^2
+            T gradSquared = NumOps.Multiply(gradient, gradient);
+            T v = NumOps.Add(
+                NumOps.Multiply(beta2, _secondMoment[momIdx]),
+                NumOps.Multiply(NumOps.Subtract(one, beta2), gradSquared));
+            _secondMoment[momIdx] = v;
+
+            // Bias-corrected second moment: v_hat = v_t / (1 - beta2^t)
+            T vHat = NumOps.Divide(v, beta2Correction);
+
+            // Parameter update: theta = theta - lr * m / (sqrt(v_hat) + epsilon)
+            // Note: With beta1=0, m = g_t, so no bias correction needed for m
+            T sqrtV = NumOps.Sqrt(vHat);
+            T denominator = NumOps.Add(sqrtV, epsilon);
+            T update = NumOps.Multiply(lr, NumOps.Divide(m, denominator));
+            updatedParams[i] = NumOps.Subtract(parameters[i], update);
+        }
+
+        network.UpdateParameters(updatedParams);
     }
 
     /// <summary>
