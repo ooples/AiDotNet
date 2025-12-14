@@ -84,9 +84,14 @@ public class TensorCompressionMetadata<T> : ICompressionMetadata<T>
         }
 
         // Copy the array to prevent external modifications
-        OriginalShape = (int[])originalShape.Clone();
+        _originalShape = (int[])originalShape.Clone();
         InnerMetadata = innerMetadata;
     }
+
+    /// <summary>
+    /// The internal backing field for OriginalShape, kept private to ensure immutability.
+    /// </summary>
+    private readonly int[] _originalShape;
 
     /// <summary>
     /// Gets the compression type from the underlying compression algorithm.
@@ -117,7 +122,7 @@ public class TensorCompressionMetadata<T> : ICompressionMetadata<T>
         get
         {
             int length = 1;
-            foreach (int dim in OriginalShape)
+            foreach (int dim in _originalShape)
             {
                 length *= dim;
             }
@@ -126,7 +131,7 @@ public class TensorCompressionMetadata<T> : ICompressionMetadata<T>
     }
 
     /// <summary>
-    /// Gets the original shape (dimensions) of the tensor.
+    /// Gets a copy of the original shape (dimensions) of the tensor.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> The shape array describes the structure of the original tensor:
@@ -136,9 +141,10 @@ public class TensorCompressionMetadata<T> : ICompressionMetadata<T>
     /// - [64, 3, 3, 3] means a 4D tensor (common for conv filters)
     ///
     /// This shape is essential for reshaping the decompressed data back into the correct tensor format.
+    /// A defensive copy is returned to preserve immutability.
     /// </para>
     /// </remarks>
-    public int[] OriginalShape { get; }
+    public int[] OriginalShape => (int[])_originalShape.Clone();
 
     /// <summary>
     /// Gets the number of dimensions in the original tensor.
@@ -151,7 +157,7 @@ public class TensorCompressionMetadata<T> : ICompressionMetadata<T>
     /// - 3+ for higher-dimensional tensors (common in deep learning)
     /// </para>
     /// </remarks>
-    public int Rank => OriginalShape.Length;
+    public int Rank => _originalShape.Length;
 
     /// <summary>
     /// Gets the inner compression metadata from the underlying vector compression algorithm.
@@ -182,6 +188,6 @@ public class TensorCompressionMetadata<T> : ICompressionMetadata<T>
     public long GetMetadataSize()
     {
         // Size = Rank (int, to know array length) + OriginalShape (int[]) + InnerMetadata size
-        return sizeof(int) + (OriginalShape.Length * sizeof(int)) + InnerMetadata.GetMetadataSize();
+        return sizeof(int) + (_originalShape.Length * sizeof(int)) + InnerMetadata.GetMetadataSize();
     }
 }
