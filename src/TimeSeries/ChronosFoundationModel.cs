@@ -1157,7 +1157,8 @@ internal class ChronosTransformerLayerTensor<T>
     private List<Tensor<T>> CausalSelfAttention(List<Tensor<T>> input)
     {
         int seqLen = input.Count;
-        double scale = 1.0 / Math.Sqrt(_headDim);
+        // Scale by embedding dimension since we're doing full-vector attention (not per-head)
+        double scale = 1.0 / Math.Sqrt(_embeddingDim);
 
         var queries = input.Select(x => MatVecMul(_queryProj, x)).ToList();
         var keys = input.Select(x => MatVecMul(_keyProj, x)).ToList();
@@ -1221,7 +1222,8 @@ internal class ChronosTransformerLayerTensor<T>
         var keys = input.Select(x => MatVecMul(_keyProj, x)).ToList();
         var values = input.Select(x => MatVecMul(_valueProj, x)).ToList();
 
-        double scale = 1.0 / Math.Sqrt(_headDim);
+        // Scale by embedding dimension since we're doing full-vector attention (not per-head)
+        double scale = 1.0 / Math.Sqrt(_embeddingDim);
 
         for (int q = 0; q < seqLen; q++)
         {

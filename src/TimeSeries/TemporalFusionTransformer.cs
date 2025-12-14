@@ -350,6 +350,29 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
             seqLen = 1;
         }
 
+        // For seqLen=1, attention is degenerate (softmax over single element = 1.0)
+        // Skip attention computation and just apply output projection with residual
+        if (seqLen == 1)
+        {
+            var inputSlice = new Tensor<T>([hiddenSize]);
+            for (int d = 0; d < hiddenSize && d < input.Length; d++)
+            {
+                inputSlice[d] = input[d];
+            }
+
+            // Apply V projection then output projection
+            var v = ForwardLinear(inputSlice, _valueWeight, new Tensor<T>([hiddenSize]));
+            var earlyOutput = ForwardLinear(v, _outputWeight, new Tensor<T>([hiddenSize]));
+
+            // Residual connection
+            for (int i = 0; i < hiddenSize; i++)
+            {
+                earlyOutput[i] = NumOps.Add(earlyOutput[i], inputSlice[i]);
+            }
+
+            return earlyOutput;
+        }
+
         // Resize/reshape input to [seqLen, hiddenSize]
         var reshapedInput = new Tensor<T>([seqLen, hiddenSize]);
         for (int t = 0; t < seqLen; t++)
@@ -498,6 +521,36 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Computes softmax gradient: d_score[i] = sum_j(dW[j] * w[j] * (delta_{ij} - w[i]))
+    /// </summary>
+    private T[] ComputeSoftmaxGradient(T[] dWeights, T[,,] allWeights, int qi, int h, int seqLen)
+    {
+        var dScores = new T[seqLen];
+        for (int i = 0; i < seqLen; i++)
+        {
+            T wi = allWeights[qi, i, h];
+            dScores[i] = ComputeSingleSoftmaxGradient(dWeights, allWeights, qi, h, i, wi, seqLen);
+        }
+        return dScores;
+    }
+
+    /// <summary>
+    /// Computes a single element of the softmax gradient.
+    /// </summary>
+    private T ComputeSingleSoftmaxGradient(T[] dWeights, T[,,] allWeights, int qi, int h, int i, T wi, int seqLen)
+    {
+        T sum = NumOps.Zero;
+        for (int j = 0; j < seqLen; j++)
+        {
+            T wj = allWeights[qi, j, h];
+            T delta = (i == j) ? NumOps.One : NumOps.Zero;
+            T factor = NumOps.Multiply(wj, NumOps.Subtract(delta, wi));
+            sum = NumOps.Add(sum, NumOps.Multiply(dWeights[j], factor));
+        }
+        return sum;
     }
 
     private T Sigmoid(T x)
@@ -728,21 +781,8 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
                     dWeights[ki] = dW;
                 }
 
-                // Backprop through softmax: d_score[i] = sum_j(dW[j] * w[j] * (delta_{ij} - w[i]))
-                var dScores = new T[seqLen];
-                for (int i = 0; i < seqLen; i++)
-                {
-                    T sum = NumOps.Zero;
-                    T wi = allWeights[qi, i, h];
-                    for (int j = 0; j < seqLen; j++)
-                    {
-                        T wj = allWeights[qi, j, h];
-                        T delta = (i == j) ? NumOps.One : NumOps.Zero;
-                        T factor = NumOps.Multiply(wj, NumOps.Subtract(delta, wi));
-                        sum = NumOps.Add(sum, NumOps.Multiply(dWeights[j], factor));
-                    }
-                    dScores[i] = sum;
-                }
+                // Backprop through softmax using helper method
+                var dScores = ComputeSoftmaxGradient(dWeights, allWeights, qi, h, seqLen);
 
                 // Backprop through score computation: score = (Q dot K) * scale
                 for (int ki = 0; ki < seqLen; ki++)

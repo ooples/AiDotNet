@@ -85,8 +85,10 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
                     var (mean, logVar, hidden) = _encoder.EncodeWithCache(input);
 
                     // Reparameterization trick: z = mean + std * epsilon
+                    // Use cryptographically secure random for true stochastic sampling during training
+                    // This enables proper VAE regularization by introducing genuine randomness
                     var z = new Tensor<T>(mean.Shape);
-                    var random = RandomHelper.CreateSeededRandom(42 + epoch * 10000 + i);
+                    var random = RandomHelper.CreateSecureRandom();
                     for (int j = 0; j < mean.Length; j++)
                     {
                         // Sample from standard normal using Box-Muller transform
