@@ -64,7 +64,7 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     private readonly Random _random;
 
     // Tokenization parameters
-    private int _vocabularySize;
+    private readonly int _vocabularySize;
     private double _binMin = -15.0;
     private double _binMax = 15.0;
     private double _binWidth;
@@ -215,7 +215,9 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         {
             for (int i = 0; i < embeddingDim; i++)
             {
-                double angle = pos / Math.Pow(10000.0, (2.0 * (i / 2)) / embeddingDim);
+                // Integer division (i / 2) is intentional - pairs adjacent dimensions (sin/cos) with same frequency
+                int dimPair = i / 2;
+                double angle = pos / Math.Pow(10000.0, (2.0 * dimPair) / embeddingDim);
                 double value = i % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle);
                 pe[pos, i] = _numOps.FromDouble(value);
             }
@@ -1000,7 +1002,7 @@ internal class ChronosTransformerLayerTensor<T>
 
         var random = RandomHelper.CreateSeededRandom(seed);
         double attnStddev = Math.Sqrt(2.0 / embeddingDim);
-        double ffnStddev = Math.Sqrt(2.0 / (embeddingDim * 4));
+        double ffnStddev = Math.Sqrt(2.0 / (embeddingDim * 4.0));
 
         // Initialize attention projections
         _queryProj = InitTensor(new[] { embeddingDim, embeddingDim }, attnStddev, random);

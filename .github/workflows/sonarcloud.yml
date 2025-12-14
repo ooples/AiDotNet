@@ -64,8 +64,9 @@ jobs:
           queries: security-and-quality
 
       # CodeQL needs to trace the build - can't reuse artifacts
+      # Build only the main library to avoid file lock issues with AiDotNet.Serving's static web assets
       - name: Build for CodeQL (net8.0)
-        run: dotnet build -c Release --no-restore -f net8.0
+        run: dotnet build src/AiDotNet.csproj -c Release --no-restore -f net8.0
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4

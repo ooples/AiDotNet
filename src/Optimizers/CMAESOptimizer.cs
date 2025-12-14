@@ -334,7 +334,6 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
             if (NumOps.LessThan(a.fitness, b.fitness)) return 1;
             return 0;
         });
-
         var selectedPopulation = new Matrix<T>(mu, dimensions);
         for (int i = 0; i < mu; i++)
         {
