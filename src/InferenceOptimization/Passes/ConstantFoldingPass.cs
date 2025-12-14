@@ -85,13 +85,17 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
     {
         try
         {
-            // Compute the constant result
+            // Compute the constant result using vectorized Engine operations
             Tensor<T>? result = node.OperationType switch
             {
                 OperationType.Add => FoldAdd(node),
                 OperationType.Subtract => FoldSubtract(node),
                 OperationType.Multiply => FoldMultiply(node),
                 OperationType.Divide => FoldDivide(node),
+                OperationType.Power => FoldPower(node),
+                OperationType.Sqrt => FoldSqrt(node),
+                OperationType.Exp => FoldExp(node),
+                OperationType.Log => FoldLog(node),
                 OperationType.MatMul => FoldMatMul(node),
                 _ => null
             };
@@ -314,6 +318,178 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         catch
         {
             // If tensor arithmetic fails (e.g., division by zero), don't fold
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Folds a power operation by computing the elementwise power of a constant tensor.
+    /// </summary>
+    /// <param name="node">The optimization node representing the power operation.</param>
+    /// <returns>
+    /// A tensor containing the elementwise power result, or null if the operation cannot be folded.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method supports two modes:
+    /// <list type="bullet">
+    /// <item><description>Single input with scalar exponent from node attributes</description></item>
+    /// <item><description>Two inputs: base tensor and exponent tensor (elementwise power)</description></item>
+    /// </list>
+    /// </para>
+    /// <para><b>Performance:</b> Uses vectorized Engine operations for optimal performance.</para>
+    /// </remarks>
+    private Tensor<T>? FoldPower(OptimizationNode<T> node)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        try
+        {
+            if (node.Inputs.Count == 1)
+            {
+                // Unary power with scalar exponent from attributes
+                var baseValue = node.Inputs[0].ConstantValue;
+                if (baseValue == null) return null;
+
+                // Get exponent from node metadata/parameters
+                if (node.Metadata.TryGetValue("exponent", out var expObj) && expObj is double expDouble)
+                {
+                    var exponent = numOps.FromDouble(expDouble);
+                    return engine.TensorPow(baseValue, exponent);
+                }
+
+                // Default to square if no exponent specified
+                var two = numOps.FromDouble(2.0);
+                return engine.TensorPow(baseValue, two);
+            }
+            else if (node.Inputs.Count == 2)
+            {
+                // Binary power: base ^ exponent (elementwise)
+                var baseValue = node.Inputs[0].ConstantValue;
+                var exponentValue = node.Inputs[1].ConstantValue;
+
+                if (baseValue == null || exponentValue == null) return null;
+
+                if (!baseValue.Shape.SequenceEqual(exponentValue.Shape))
+                {
+                    return null;
+                }
+
+                // Elementwise power using scalar operations
+                var result = new Tensor<T>(baseValue.Shape);
+                for (int i = 0; i < baseValue.Length; i++)
+                {
+                    var b = numOps.ToDouble(baseValue[i]);
+                    var e = numOps.ToDouble(exponentValue[i]);
+                    result[i] = numOps.FromDouble(Math.Pow(b, e));
+                }
+                return result;
+            }
+
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Folds a square root operation by computing the elementwise square root of a constant tensor.
+    /// </summary>
+    /// <param name="node">The optimization node representing the square root operation.</param>
+    /// <returns>
+    /// A tensor containing the elementwise square root, or null if the operation cannot be folded.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the Engine's vectorized TensorSqrt operation for optimal performance.
+    /// Square root is a unary operation requiring exactly one input tensor.
+    /// </para>
+    /// <para><b>Performance:</b> Uses hardware-accelerated SIMD operations when available.</para>
+    /// </remarks>
+    private Tensor<T>? FoldSqrt(OptimizationNode<T> node)
+    {
+        if (node.Inputs.Count != 1) return null;
+
+        var input = node.Inputs[0].ConstantValue;
+        if (input == null) return null;
+
+        try
+        {
+            var engine = AiDotNetEngine.Current;
+            return engine.TensorSqrt(input);
+        }
+        catch
+        {
+            // If sqrt fails (e.g., negative values), don't fold
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Folds an exponential operation by computing the elementwise e^x of a constant tensor.
+    /// </summary>
+    /// <param name="node">The optimization node representing the exponential operation.</param>
+    /// <returns>
+    /// A tensor containing the elementwise exponential (e^x), or null if the operation cannot be folded.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the Engine's vectorized TensorExp operation for optimal performance.
+    /// Exponential is a unary operation requiring exactly one input tensor.
+    /// </para>
+    /// <para><b>Performance:</b> Uses hardware-accelerated SIMD operations when available.</para>
+    /// </remarks>
+    private Tensor<T>? FoldExp(OptimizationNode<T> node)
+    {
+        if (node.Inputs.Count != 1) return null;
+
+        var input = node.Inputs[0].ConstantValue;
+        if (input == null) return null;
+
+        try
+        {
+            var engine = AiDotNetEngine.Current;
+            return engine.TensorExp(input);
+        }
+        catch
+        {
+            // If exp fails (e.g., overflow), don't fold
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Folds a natural logarithm operation by computing the elementwise ln(x) of a constant tensor.
+    /// </summary>
+    /// <param name="node">The optimization node representing the logarithm operation.</param>
+    /// <returns>
+    /// A tensor containing the elementwise natural logarithm, or null if the operation cannot be folded.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the Engine's vectorized TensorLog operation for optimal performance.
+    /// Logarithm is a unary operation requiring exactly one input tensor.
+    /// </para>
+    /// <para><b>Performance:</b> Uses hardware-accelerated SIMD operations when available.</para>
+    /// </remarks>
+    private Tensor<T>? FoldLog(OptimizationNode<T> node)
+    {
+        if (node.Inputs.Count != 1) return null;
+
+        var input = node.Inputs[0].ConstantValue;
+        if (input == null) return null;
+
+        try
+        {
+            var engine = AiDotNetEngine.Current;
+            return engine.TensorLog(input);
+        }
+        catch
+        {
+            // If log fails (e.g., non-positive values), don't fold
             return null;
         }
     }

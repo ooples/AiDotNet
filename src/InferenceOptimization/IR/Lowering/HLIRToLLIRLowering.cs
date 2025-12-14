@@ -255,10 +255,50 @@ public class HLIRToLLIRLowering<T> where T : struct
         };
     }
 
+    /// <summary>
+    /// Lowers a Conv2D operation from HLIR to LLIR representation.
+    /// </summary>
+    /// <param name="node">The HLIR node representing the Conv2D operation.</param>
+    /// <returns>The lowered Conv2DOp for LLIR execution.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the node has insufficient input type information for proper lowering.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// Conv2D lowering requires complete shape information for both input tensor and kernel.
+    /// The input tensor shape must be in NCHW format: [batch, channels, height, width].
+    /// The kernel shape must be in OIHW format: [out_channels, in_channels, kernel_h, kernel_w].
+    /// </para>
+    /// </remarks>
     private LLIROp LowerConv2D(HLIRNode<T> node)
     {
         var inputIds = GetLLIRInputIds(node);
         var bufferId = _llirGraph.AllocateBufferId();
+
+        // Validate input types - Conv2D requires proper shape information
+        if (node.InputTypes.Count < 2)
+        {
+            throw new InvalidOperationException(
+                $"Conv2D node '{node.Name}' (id={node.Id}) requires at least 2 input types " +
+                $"(input tensor and kernel), but only has {node.InputTypes.Count}.");
+        }
+
+        var inputShape = node.InputTypes[0].Shape;
+        var kernelShape = node.InputTypes[1].Shape;
+
+        if (inputShape == null || inputShape.Length < 4)
+        {
+            throw new InvalidOperationException(
+                $"Conv2D node '{node.Name}' (id={node.Id}) has invalid input tensor shape. " +
+                $"Expected 4D NCHW tensor, got {(inputShape == null ? "null" : $"{inputShape.Length}D")}.");
+        }
+
+        if (kernelShape == null || kernelShape.Length < 4)
+        {
+            throw new InvalidOperationException(
+                $"Conv2D node '{node.Name}' (id={node.Id}) has invalid kernel shape. " +
+                $"Expected 4D OIHW tensor, got {(kernelShape == null ? "null" : $"{kernelShape.Length}D")}.");
+        }
 
         // Extract convolution parameters
         var strideH = GetAttributeInt(node, "strideH", 1);
@@ -267,10 +307,9 @@ public class HLIRToLLIRLowering<T> where T : struct
         var padW = GetAttributeInt(node, "padW", 0);
         var groups = GetAttributeInt(node, "groups", 1);
 
-        // Infer dimensions from input types
-        var inputShape = node.InputTypes.Count > 0 ? node.InputTypes[0].Shape : new int[] { 1, 1, 1, 1 };
-        var kernelShape = node.InputTypes.Count > 1 ? node.InputTypes[1].Shape : new int[] { 1, 1, 3, 3 };
-
+        // Shapes have been validated - safe to access directly
+        // Input shape: NCHW [batch, channels, height, width]
+        // Kernel shape: OIHW [out_channels, in_channels, kernel_h, kernel_w]
         var op = new Conv2DOp
         {
             OutputId = bufferId,
@@ -279,13 +318,13 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
-            BatchSize = inputShape.Length > 0 ? inputShape[0] : 1,
-            InputChannels = inputShape.Length > 1 ? inputShape[1] : 1,
-            InputHeight = inputShape.Length > 2 ? inputShape[2] : 1,
-            InputWidth = inputShape.Length > 3 ? inputShape[3] : 1,
-            OutputChannels = kernelShape.Length > 0 ? kernelShape[0] : 1,
-            KernelHeight = kernelShape.Length > 2 ? kernelShape[2] : 3,
-            KernelWidth = kernelShape.Length > 3 ? kernelShape[3] : 3,
+            BatchSize = inputShape[0],
+            InputChannels = inputShape[1],
+            InputHeight = inputShape[2],
+            InputWidth = inputShape[3],
+            OutputChannels = kernelShape[0],
+            KernelHeight = kernelShape[2],
+            KernelWidth = kernelShape[3],
             StrideH = strideH,
             StrideW = strideW,
             PadH = padH,
@@ -598,15 +637,106 @@ public class HLIRToLLIRLowering<T> where T : struct
         _hlirToLlirBufferMap[node.Id] = bufferId;
     }
 
+    /// <summary>
+    /// Lowers a single HLIR node to an LLIR operation for inclusion in a fused operation.
+    /// </summary>
+    /// <param name="node">The HLIR node to lower.</param>
+    /// <returns>The lowered LLIR operation with complete metadata, or null if the operation type is not supported.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates LLIR operations with full metadata transfer from the source HLIR node,
+    /// including shape information, data types, and operation-specific dimensions. This is critical
+    /// for accurate cost estimation in fused operations.
+    /// </para>
+    /// <para>
+    /// For MatMul operations, the M, N, K dimensions are extracted from input/output shapes.
+    /// For ElementwiseOp operations, OutputShape and OutputDataType are transferred.
+    /// </para>
+    /// </remarks>
     private LLIROp? LowerNodeToOp(HLIRNode<T> node)
     {
-        // Simplified lowering for nodes within a fusion
+        // Get common properties from the node
+        var outputShape = node.OutputType?.Shape ?? Array.Empty<int>();
+        var outputDataType = node.OutputType != null ? ConvertDataType(node.OutputType.DataType) : IRDataType.Float32;
+        var inputIds = GetLLIRInputIds(node);
+
         return node.Operation switch
         {
-            OperationType.MatMul => new MatMulOp { Name = node.Name },
-            OperationType.Add => new ElementwiseOp { ElementwiseType = ElementwiseOpType.Add },
-            OperationType.ReLU => new ElementwiseOp { ElementwiseType = ElementwiseOpType.ReLU },
+            OperationType.MatMul => CreateMatMulOp(node, outputShape, outputDataType, inputIds),
+            OperationType.Add => CreateElementwiseOp(node, ElementwiseOpType.Add, outputShape, outputDataType, inputIds),
+            OperationType.Subtract => CreateElementwiseOp(node, ElementwiseOpType.Subtract, outputShape, outputDataType, inputIds),
+            OperationType.Multiply => CreateElementwiseOp(node, ElementwiseOpType.Multiply, outputShape, outputDataType, inputIds),
+            OperationType.ReLU => CreateElementwiseOp(node, ElementwiseOpType.ReLU, outputShape, outputDataType, inputIds),
+            OperationType.Sigmoid => CreateElementwiseOp(node, ElementwiseOpType.Sigmoid, outputShape, outputDataType, inputIds),
+            OperationType.Tanh => CreateElementwiseOp(node, ElementwiseOpType.Tanh, outputShape, outputDataType, inputIds),
+            OperationType.GELU => CreateElementwiseOp(node, ElementwiseOpType.GELU, outputShape, outputDataType, inputIds),
             _ => null
+        };
+    }
+
+    /// <summary>
+    /// Creates a MatMulOp with proper dimension information from the HLIR node.
+    /// </summary>
+    private MatMulOp CreateMatMulOp(HLIRNode<T> node, int[] outputShape, IRDataType outputDataType, int[] inputIds)
+    {
+        // Infer M, N, K dimensions from input/output shapes
+        // MatMul: [M, K] × [K, N] = [M, N]
+        int m = 1, n = 1, k = 1;
+
+        if (node.InputTypes.Count >= 2)
+        {
+            var leftShape = node.InputTypes[0].Shape;
+            var rightShape = node.InputTypes[1].Shape;
+
+            if (leftShape != null && leftShape.Length >= 2)
+            {
+                m = leftShape[^2]; // Second-to-last dimension
+                k = leftShape[^1]; // Last dimension
+            }
+
+            if (rightShape != null && rightShape.Length >= 2)
+            {
+                n = rightShape[^1]; // Last dimension
+            }
+        }
+        else if (outputShape.Length >= 2)
+        {
+            // Fallback: infer from output shape
+            m = outputShape[^2];
+            n = outputShape[^1];
+        }
+
+        return new MatMulOp
+        {
+            Name = node.Name,
+            InputIds = inputIds,
+            OutputShape = outputShape,
+            OutputDataType = outputDataType,
+            M = m,
+            N = n,
+            K = k,
+            SourceHLIRNodeId = node.Id
+        };
+    }
+
+    /// <summary>
+    /// Creates an ElementwiseOp with proper metadata from the HLIR node.
+    /// </summary>
+    private ElementwiseOp CreateElementwiseOp(
+        HLIRNode<T> node,
+        ElementwiseOpType opType,
+        int[] outputShape,
+        IRDataType outputDataType,
+        int[] inputIds)
+    {
+        return new ElementwiseOp
+        {
+            Name = node.Name,
+            ElementwiseType = opType,
+            InputIds = inputIds,
+            OutputShape = outputShape,
+            OutputDataType = outputDataType,
+            SourceHLIRNodeId = node.Id
         };
     }
 

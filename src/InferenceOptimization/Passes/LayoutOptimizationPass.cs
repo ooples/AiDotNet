@@ -52,14 +52,32 @@ public class LayoutOptimizationPass<T> : OptimizationPassBase<T> where T : struc
     };
 
     /// <summary>
+    /// The set of supported memory layouts for tensor operations.
+    /// </summary>
+    private static readonly HashSet<string> SupportedLayouts = new() { "NCHW", "NHWC" };
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="LayoutOptimizationPass{T}"/> class.
     /// </summary>
     /// <param name="targetLayout">The target layout to optimize for. Default is "NCHW".</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the specified targetLayout is not supported.
+    /// </exception>
     /// <remarks>
-    /// Use "NCHW" for NVIDIA GPUs and "NHWC" for CPUs/TPUs.
+    /// <para>Supported layouts:</para>
+    /// <list type="bullet">
+    /// <item><description>"NCHW" - Batch-Channel-Height-Width (preferred by NVIDIA GPUs)</description></item>
+    /// <item><description>"NHWC" - Batch-Height-Width-Channel (preferred by CPUs/TPUs)</description></item>
+    /// </list>
     /// </remarks>
     public LayoutOptimizationPass(string targetLayout = "NCHW")
     {
+        if (!SupportedLayouts.Contains(targetLayout))
+        {
+            throw new ArgumentException(
+                $"Unsupported layout '{targetLayout}'. Supported layouts: {string.Join(", ", SupportedLayouts)}.",
+                nameof(targetLayout));
+        }
         _targetLayout = targetLayout;
     }
 
@@ -123,17 +141,31 @@ public class LayoutOptimizationPass<T> : OptimizationPassBase<T> where T : struc
     }
 
     /// <summary>
-    /// Gets the preferred memory layout for a given operation type.
+    /// Gets the intrinsic preferred memory layout for a given operation type.
     /// </summary>
     /// <param name="opType">The operation type to check.</param>
-    /// <returns>The preferred layout string ("NCHW", "NHWC", or "AGNOSTIC").</returns>
+    /// <returns>The intrinsic preferred layout string ("NCHW", "NHWC", or "AGNOSTIC").</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the operation's intrinsic layout preference, which is independent
+    /// of the target hardware layout. Operations like convolution, batch normalization, and
+    /// pooling inherently prefer NCHW layout due to their memory access patterns.
+    /// </para>
+    /// <para>
+    /// The pass then inserts layout conversions at boundaries between operations with
+    /// different intrinsic preferences and the target layout.
+    /// </para>
+    /// </remarks>
     private string GetPreferredLayout(OperationType opType)
     {
+        // Channel-first operations (Conv, BatchNorm, Pooling) intrinsically prefer NCHW
+        // regardless of the target hardware layout
         if (ChannelFirstOps.Contains(opType))
         {
-            return _targetLayout;
+            return "NCHW";
         }
 
+        // Most other operations are layout-agnostic
         return "AGNOSTIC";
     }
 
@@ -219,10 +251,8 @@ public class LayoutOptimizationPass<T> : OptimizationPassBase<T> where T : struc
             // 1. Transpose receives input from the original source
             transposeNode.AddInput(input);
 
-            // 2. Remove the direct connection from input to node
-            input.Outputs.Remove(node);
-
-            // 3. Replace the input on the target node with the transpose output
+            // 2. Replace the input on the target node with the transpose output
+            // Note: ReplaceInput handles the edge removal internally via oldInput.Outputs.Remove(this)
             node.ReplaceInput(input, transposeNode);
 
             // 4. Add the transpose node to the graph
@@ -266,24 +296,44 @@ public class LayoutOptimizationPass<T> : OptimizationPassBase<T> where T : struc
     /// <param name="sourceLayout">The source layout.</param>
     /// <param name="targetLayout">The target layout.</param>
     /// <returns>The permutation array for the transpose operation.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the layout conversion is not supported (different layouts that aren't NCHW/NHWC).
+    /// </exception>
+    /// <remarks>
+    /// <para>Supported conversions:</para>
+    /// <list type="bullet">
+    /// <item><description>NCHW → NHWC: permutation [0, 2, 3, 1]</description></item>
+    /// <item><description>NHWC → NCHW: permutation [0, 3, 1, 2]</description></item>
+    /// <item><description>Same layout: identity permutation [0, 1, 2, 3]</description></item>
+    /// </list>
+    /// </remarks>
     private int[] GetLayoutPermutation(string sourceLayout, string targetLayout)
     {
         // NCHW indices: N=0, C=1, H=2, W=3
         // NHWC indices: N=0, H=1, W=2, C=3
+
+        if (sourceLayout == targetLayout)
+        {
+            // Same layout - identity permutation (no-op)
+            return new[] { 0, 1, 2, 3 };
+        }
 
         if (sourceLayout == "NCHW" && targetLayout == "NHWC")
         {
             // NCHW -> NHWC: Move C from position 1 to position 3
             return new[] { 0, 2, 3, 1 };
         }
-        else if (sourceLayout == "NHWC" && targetLayout == "NCHW")
+
+        if (sourceLayout == "NHWC" && targetLayout == "NCHW")
         {
             // NHWC -> NCHW: Move C from position 3 to position 1
             return new[] { 0, 3, 1, 2 };
         }
 
-        // Identity permutation for same layouts or unsupported conversions
-        return new[] { 0, 1, 2, 3 };
+        // Unsupported conversion - fail fast to catch configuration errors
+        throw new NotSupportedException(
+            $"Layout conversion from '{sourceLayout}' to '{targetLayout}' is not supported. " +
+            "Supported conversions: NCHW <-> NHWC.");
     }
 
     /// <inheritdoc/>
