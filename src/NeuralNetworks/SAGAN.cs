@@ -292,7 +292,9 @@ public class SAGAN<T> : NeuralNetworkBase<T>
                 "Either set NumClasses > 0 in constructor or don't pass class indices.");
         }
 
-        var embeddingDim = 128; // Simplified fixed dimension
+        // One-hot embedding dimension must equal NumClasses to avoid overflow
+        // when classIdx >= previous hardcoded value (128)
+        var embeddingDim = NumClasses;
         var embeddings = new Tensor<T>([classIndices.Length, embeddingDim]);
 
         // Validate and create one-hot encoding
