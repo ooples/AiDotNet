@@ -56,24 +56,38 @@ public class TensorCompressionMetadata<T> : ICompressionMetadata<T>
         if (originalShape == null) throw new ArgumentNullException(nameof(originalShape));
         if (innerMetadata == null) throw new ArgumentNullException(nameof(innerMetadata));
 
-        if (originalShape.Length == 0)
+        // Clone first to prevent TOCTOU race conditions where caller mutates array during validation
+        var shapeCopy = (int[])originalShape.Clone();
+
+        if (shapeCopy.Length == 0)
         {
             throw new ArgumentException("Tensor shape cannot be empty.", nameof(originalShape));
         }
 
         // Validate dimensions are positive and compute total size with overflow check
         long totalElements = 1;
-        for (int i = 0; i < originalShape.Length; i++)
+        for (int i = 0; i < shapeCopy.Length; i++)
         {
-            if (originalShape[i] <= 0)
+            if (shapeCopy[i] <= 0)
             {
                 throw new ArgumentException(
-                    $"All tensor dimensions must be positive. Dimension {i} has value {originalShape[i]}.",
+                    $"All tensor dimensions must be positive. Dimension {i} has value {shapeCopy[i]}.",
                     nameof(originalShape));
             }
 
-            // Check for overflow before multiplication
-            totalElements = checked(totalElements * originalShape[i]);
+            try
+            {
+                // Check for overflow before multiplication
+                totalElements = checked(totalElements * shapeCopy[i]);
+            }
+            catch (OverflowException)
+            {
+                throw new ArgumentException(
+                    $"Tensor dimensions product overflows. Dimension {i} with value {shapeCopy[i]} " +
+                    $"caused overflow when multiplied with previous total {totalElements / shapeCopy[i]}.",
+                    nameof(originalShape));
+            }
+
             if (totalElements > int.MaxValue)
             {
                 throw new ArgumentException(
@@ -83,8 +97,7 @@ public class TensorCompressionMetadata<T> : ICompressionMetadata<T>
             }
         }
 
-        // Copy the array to prevent external modifications
-        _originalShape = (int[])originalShape.Clone();
+        _originalShape = shapeCopy;
         InnerMetadata = innerMetadata;
     }
 
