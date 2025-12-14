@@ -98,12 +98,9 @@ public class HybridHuffmanClusteringCompression<T> : ModelCompressionBase<T>
     /// </summary>
     /// <param name="weights">The original model weights.</param>
     /// <returns>Compressed weights and hybrid metadata.</returns>
-    public override (Vector<T> compressedWeights, object metadata) Compress(Vector<T> weights)
+    public override (Vector<T> compressedWeights, ICompressionMetadata<T> metadata) Compress(Vector<T> weights)
     {
-        if (weights == null)
-        {
-            throw new ArgumentNullException(nameof(weights));
-        }
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
 
         if (weights.Length == 0)
         {
@@ -118,10 +115,11 @@ public class HybridHuffmanClusteringCompression<T> : ModelCompressionBase<T>
             // Stage 2: Apply Huffman encoding to cluster indices
             var (huffmanWeights, huffmanMetadata) = _huffmanCompression.Compress(clusteredWeights);
 
-            // Combine metadata using legacy non-generic class for compatibility with base class
-#pragma warning disable CS0618 // Type or member is obsolete
-            var hybridMetadata = new HybridCompressionMetadata(clusteringMetadata, huffmanMetadata);
-#pragma warning restore CS0618
+            // Combine metadata
+            var hybridMetadata = new HybridCompressionMetadata<T>(
+                (WeightClusteringMetadata<T>)clusteringMetadata,
+                (HuffmanEncodingMetadata<T>)huffmanMetadata,
+                weights.Length);
 
             return (huffmanWeights, hybridMetadata);
         }
@@ -133,24 +131,16 @@ public class HybridHuffmanClusteringCompression<T> : ModelCompressionBase<T>
     /// <param name="compressedWeights">The compressed weights.</param>
     /// <param name="metadata">The hybrid compression metadata.</param>
     /// <returns>The decompressed weights.</returns>
-    public override Vector<T> Decompress(Vector<T> compressedWeights, object metadata)
+    public override Vector<T> Decompress(Vector<T> compressedWeights, ICompressionMetadata<T> metadata)
     {
-        if (compressedWeights == null)
-        {
-            throw new ArgumentNullException(nameof(compressedWeights));
-        }
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
 
-        if (metadata == null)
+        if (metadata is not HybridCompressionMetadata<T> hybridMetadata)
         {
-            throw new ArgumentNullException(nameof(metadata));
-        }
-
-#pragma warning disable CS0618 // Type or member is obsolete
-        var hybridMetadata = metadata as HybridCompressionMetadata;
-#pragma warning restore CS0618
-        if (hybridMetadata == null)
-        {
-            throw new ArgumentException("Invalid metadata type for hybrid compression.", nameof(metadata));
+            throw new ArgumentException(
+                $"Expected {nameof(HybridCompressionMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
         }
 
         lock (_lockObject)
@@ -170,22 +160,12 @@ public class HybridHuffmanClusteringCompression<T> : ModelCompressionBase<T>
     /// <summary>
     /// Gets the total compressed size from both compression stages.
     /// </summary>
-    public override long GetCompressedSize(Vector<T> compressedWeights, object metadata)
+    public override long GetCompressedSize(Vector<T> compressedWeights, ICompressionMetadata<T> metadata)
     {
-        if (compressedWeights == null)
-        {
-            throw new ArgumentNullException(nameof(compressedWeights));
-        }
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
 
-        if (metadata == null)
-        {
-            throw new ArgumentNullException(nameof(metadata));
-        }
-
-#pragma warning disable CS0618 // Type or member is obsolete
-        var hybridMetadata = metadata as HybridCompressionMetadata;
-#pragma warning restore CS0618
-        if (hybridMetadata == null)
+        if (metadata is not HybridCompressionMetadata<T> hybridMetadata)
         {
             throw new ArgumentException("Invalid metadata type.", nameof(metadata));
         }

@@ -11,9 +11,7 @@ namespace AiDotNetBenchmarkTests.BenchmarkTests;
 /// Tests architecture setup and network instantiation performance
 /// </summary>
 [MemoryDiagnoser]
-[SimpleJob(RuntimeMoniker.Net462, baseline: true)]
-[SimpleJob(RuntimeMoniker.Net60)]
-[SimpleJob(RuntimeMoniker.Net70)]
+[SimpleJob(RuntimeMoniker.Net471, baseline: true)]
 [SimpleJob(RuntimeMoniker.Net80)]
 public class NeuralNetworkArchitecturesBenchmarks
 {

@@ -139,18 +139,6 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         }
 
         [Fact]
-        public void Decompress_WithInvalidMetadata_ThrowsException()
-        {
-            // Arrange
-            var compression = new LowRankFactorizationCompression<double>();
-            var compressedWeights = new Vector<double>(new double[] { 1.0, 2.0 });
-
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() =>
-                compression.Decompress(compressedWeights, "invalid metadata"));
-        }
-
-        [Fact]
         public void GetCompressedSize_ReturnsCorrectSize()
         {
             // Arrange

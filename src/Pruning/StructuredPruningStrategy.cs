@@ -1,0 +1,749 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.ModelCompression;
+
+namespace AiDotNet.Pruning;
+
+/// <summary>
+/// Structured pruning removes entire neurons/filters/channels.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// Structured pruning removes entire structural units (neurons, filters, channels) rather than
+/// individual weights. This results in smaller dense networks that are easier to deploy and
+/// can achieve actual speedups on standard hardware, unlike unstructured pruning which creates
+/// sparse matrices that require specialized libraries for acceleration.
+/// </para>
+/// <para><b>For Beginners:</b> This strategy removes entire building blocks, not just individual connections.
+///
+/// The difference between structured and unstructured pruning:
+///
+/// Unstructured pruning (like magnitude or gradient):
+/// - Removes individual connections randomly scattered throughout the network
+/// - Creates a "swiss cheese" pattern with holes everywhere
+/// - Requires special sparse matrix libraries to run faster
+/// - Harder to deploy on mobile or edge devices
+///
+/// Structured pruning:
+/// - Removes entire neurons, filters, or channels
+/// - Creates a smaller but still dense (solid) network
+/// - Runs faster on ANY hardware - no special libraries needed!
+/// - Easier to deploy and understand
+///
+/// Analogy: Building a smaller car
+/// - Unstructured: Remove random bolts and parts everywhere (car still same size, just hollow)
+/// - Structured: Remove entire seats or components (car is actually smaller)
+///
+/// Types of structured pruning:
+/// 1. **Neuron pruning**: Remove entire neurons (columns in weight matrix)
+///    - Reduces layer width
+///    - Common in fully connected layers
+///
+/// 2. **Filter pruning**: Remove entire convolutional filters
+///    - Reduces number of feature maps
+///    - Very effective for CNNs
+///
+/// 3. **Channel pruning**: Remove input/output channels
+///    - Reduces both computation and memory
+///    - Commonly used with filter pruning
+///
+/// Example:
+/// Original layer: 100 neurons
+/// After 40% structured pruning: 60 neurons (actually smaller!)
+/// After 40% unstructured pruning: 100 neurons (60% of weights are zero, but layer size unchanged)
+///
+/// Trade-offs:
+/// - Structured pruning: Less flexibility, but real speedups
+/// - Unstructured pruning: More flexibility, but needs special hardware/software
+/// </para>
+/// </remarks>
+public class StructuredPruningStrategy<T> : IPruningStrategy<T>
+{
+    private readonly INumericOperations<T> _numOps;
+    private readonly StructurePruningType _pruningType;
+
+    /// <summary>
+    /// Gets whether this strategy requires gradients (false for structured pruning).
+    /// </summary>
+    public bool RequiresGradients => false;
+
+    /// <summary>
+    /// Gets whether this is structured pruning (true).
+    /// </summary>
+    public bool IsStructured => true;
+
+    /// <summary>
+    /// Gets the name of this pruning strategy.
+    /// </summary>
+    public string Name => "Structured";
+
+    /// <summary>
+    /// Gets supported sparsity patterns for structured pruning.
+    /// </summary>
+    public IReadOnlyList<SparsityPattern> SupportedPatterns { get; }
+
+    /// <summary>
+    /// Defines the type of structural unit to prune.
+    /// </summary>
+    public enum StructurePruningType
+    {
+        /// <summary>
+        /// Prune entire output neurons (columns in weight matrix).
+        /// </summary>
+        /// <remarks>
+        /// <para><b>For Beginners:</b> This removes entire neurons from a layer.
+        /// In a weight matrix, each column represents one neuron's connections.
+        /// Removing a column = removing that neuron entirely.
+        /// </para>
+        /// </remarks>
+        Neuron,
+
+        /// <summary>
+        /// Prune entire filters in convolutional layers.
+        /// </summary>
+        /// <remarks>
+        /// <para><b>For Beginners:</b> In CNNs, filters detect patterns (edges, textures, etc.).
+        /// This removes entire filters that don't contribute much.
+        /// Fewer filters = faster convolutions and less memory.
+        /// </para>
+        /// </remarks>
+        Filter,
+
+        /// <summary>
+        /// Prune entire channels in convolutional layers.
+        /// </summary>
+        /// <remarks>
+        /// <para><b>For Beginners:</b> Channels are different "views" or feature maps.
+        /// For example, RGB images have 3 input channels (red, green, blue).
+        /// This removes entire channels that aren't important.
+        /// </para>
+        /// </remarks>
+        Channel
+    }
+
+    /// <summary>
+    /// Creates a new structured pruning strategy.
+    /// </summary>
+    /// <param name="pruningType">Type of structural pruning to perform</param>
+    public StructuredPruningStrategy(StructurePruningType pruningType = StructurePruningType.Neuron)
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _pruningType = pruningType;
+
+        // Initialize supported patterns based on pruning type
+        var patterns = new List<SparsityPattern>();
+        switch (pruningType)
+        {
+            case StructurePruningType.Neuron:
+                patterns.Add(SparsityPattern.RowStructured);
+                patterns.Add(SparsityPattern.ColumnStructured);
+                break;
+            case StructurePruningType.Filter:
+                patterns.Add(SparsityPattern.FilterStructured);
+                break;
+            case StructurePruningType.Channel:
+                patterns.Add(SparsityPattern.ChannelStructured);
+                break;
+        }
+        SupportedPatterns = patterns.AsReadOnly();
+    }
+
+    /// <summary>
+    /// Computes importance scores for structural units.
+    /// </summary>
+    /// <param name="weights">Weight matrix</param>
+    /// <param name="gradients">Gradients (not used for basic structured pruning)</param>
+    /// <returns>Matrix of importance scores (same value per structural unit)</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This scores entire groups (neurons/filters) instead of individual weights.
+    ///
+    /// For neuron pruning:
+    /// - Each neuron is scored by the L2 norm (magnitude) of all its incoming weights
+    /// - Higher norm = more important neuron
+    /// - All weights in the same column get the same score (they're part of the same neuron)
+    ///
+    /// L2 norm intuition:
+    /// If a neuron has strong connections (large weights), it's probably important.
+    /// If all its weights are tiny, it's not contributing much.
+    /// </para>
+    /// </remarks>
+    public Matrix<T> ComputeImportanceScores(Matrix<T> weights, Matrix<T>? gradients = null)
+    {
+        var scores = new Matrix<T>(weights.Rows, weights.Columns);
+
+        switch (_pruningType)
+        {
+            case StructurePruningType.Neuron:
+                // Score for each neuron (column) = L2 norm of its weights
+                for (int col = 0; col < weights.Columns; col++)
+                {
+                    double columnNorm = 0;
+                    for (int row = 0; row < weights.Rows; row++)
+                    {
+                        double val = Convert.ToDouble(weights[row, col]);
+                        columnNorm += val * val;
+                    }
+                    columnNorm = Math.Sqrt(columnNorm);
+
+                    // Assign same score to all weights in column
+                    for (int row = 0; row < weights.Rows; row++)
+                    {
+                        scores[row, col] = _numOps.FromDouble(columnNorm);
+                    }
+                }
+                break;
+
+            case StructurePruningType.Filter:
+                // For 2D matrix, Filter pruning treats rows as filters
+                // Score for each filter (row) = L2 norm of its weights
+                for (int row = 0; row < weights.Rows; row++)
+                {
+                    double rowNorm = 0;
+                    for (int col = 0; col < weights.Columns; col++)
+                    {
+                        double val = Convert.ToDouble(weights[row, col]);
+                        rowNorm += val * val;
+                    }
+                    rowNorm = Math.Sqrt(rowNorm);
+
+                    // Assign same score to all weights in row
+                    for (int col = 0; col < weights.Columns; col++)
+                    {
+                        scores[row, col] = _numOps.FromDouble(rowNorm);
+                    }
+                }
+                break;
+
+            case StructurePruningType.Channel:
+                // For 2D matrix, Channel pruning treats columns as channels (same as Neuron)
+                // Score for each channel (column) = L2 norm of its weights
+                for (int col = 0; col < weights.Columns; col++)
+                {
+                    double columnNorm = 0;
+                    for (int row = 0; row < weights.Rows; row++)
+                    {
+                        double val = Convert.ToDouble(weights[row, col]);
+                        columnNorm += val * val;
+                    }
+                    columnNorm = Math.Sqrt(columnNorm);
+
+                    // Assign same score to all weights in column
+                    for (int row = 0; row < weights.Rows; row++)
+                    {
+                        scores[row, col] = _numOps.FromDouble(columnNorm);
+                    }
+                }
+                break;
+        }
+
+        return scores;
+    }
+
+    /// <summary>
+    /// Creates a structured pruning mask.
+    /// </summary>
+    /// <param name="importanceScores">Importance scores from ComputeImportanceScores</param>
+    /// <param name="targetSparsity">Target sparsity ratio (0 to 1)</param>
+    /// <returns>Binary mask (1 = keep, 0 = prune)</returns>
+    /// <exception cref="ArgumentException">Thrown when targetSparsity is not between 0 and 1</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a mask where entire columns/rows are either all 1s or all 0s.
+    ///
+    /// For neuron pruning with 50% sparsity:
+    /// 1. Score each neuron (column) by its L2 norm
+    /// 2. Sort neurons by score
+    /// 3. Keep top 50%, prune bottom 50%
+    /// 4. Entire columns are set to either all 1s (keep) or all 0s (prune)
+    ///
+    /// This is different from unstructured pruning where individual elements can be 0 or 1.
+    /// </para>
+    /// </remarks>
+    public IPruningMask<T> CreateMask(Matrix<T> importanceScores, double targetSparsity)
+    {
+        if (targetSparsity < 0 || targetSparsity > 1)
+            throw new ArgumentException("targetSparsity must be between 0 and 1");
+
+        var keepIndices = new bool[importanceScores.Rows, importanceScores.Columns];
+
+        switch (_pruningType)
+        {
+            case StructurePruningType.Neuron:
+            case StructurePruningType.Channel:
+                // Prune entire columns (neurons/channels)
+                int totalColumns = importanceScores.Columns;
+                int columnsToPrune = (int)(totalColumns * targetSparsity);
+
+                // Get score for each column (all rows in column have same score)
+                var columnScores = new List<(int col, double score)>();
+                for (int col = 0; col < importanceScores.Columns; col++)
+                {
+                    double score = Convert.ToDouble(importanceScores[0, col]);
+                    columnScores.Add((col, score));
+                }
+
+                // Sort by score (ascending - lowest scores get pruned first)
+                columnScores.Sort((a, b) => a.score.CompareTo(b.score));
+
+                // Mark columns to keep
+                var keepColumns = new bool[importanceScores.Columns];
+                for (int i = 0; i < importanceScores.Columns; i++)
+                    keepColumns[i] = true;
+
+                for (int i = 0; i < columnsToPrune; i++)
+                {
+                    keepColumns[columnScores[i].col] = false;
+                }
+
+                // Create mask
+                for (int row = 0; row < importanceScores.Rows; row++)
+                {
+                    for (int col = 0; col < importanceScores.Columns; col++)
+                    {
+                        keepIndices[row, col] = keepColumns[col];
+                    }
+                }
+                break;
+
+            case StructurePruningType.Filter:
+                // Prune entire rows (filters)
+                int totalRows = importanceScores.Rows;
+                int rowsToPrune = (int)(totalRows * targetSparsity);
+
+                // Get score for each row (all columns in row have same score)
+                var rowScores = new List<(int row, double score)>();
+                for (int row = 0; row < importanceScores.Rows; row++)
+                {
+                    double score = Convert.ToDouble(importanceScores[row, 0]);
+                    rowScores.Add((row, score));
+                }
+
+                // Sort by score (ascending - lowest scores get pruned first)
+                rowScores.Sort((a, b) => a.score.CompareTo(b.score));
+
+                // Mark rows to keep
+                var keepRows = new bool[importanceScores.Rows];
+                for (int i = 0; i < importanceScores.Rows; i++)
+                    keepRows[i] = true;
+
+                for (int i = 0; i < rowsToPrune; i++)
+                {
+                    keepRows[rowScores[i].row] = false;
+                }
+
+                // Create mask
+                for (int row = 0; row < importanceScores.Rows; row++)
+                {
+                    for (int col = 0; col < importanceScores.Columns; col++)
+                    {
+                        keepIndices[row, col] = keepRows[row];
+                    }
+                }
+                break;
+        }
+
+        var mask = new PruningMask<T>(importanceScores.Rows, importanceScores.Columns);
+        mask.UpdateMask(keepIndices);
+
+        return mask;
+    }
+
+    /// <summary>
+    /// Computes importance scores for vector weights.
+    /// </summary>
+    /// <param name="weights">Weight vector</param>
+    /// <param name="gradients">Gradients (not used for structured pruning)</param>
+    /// <returns>Vector of importance scores</returns>
+    public Vector<T> ComputeImportanceScores(Vector<T> weights, Vector<T>? gradients = null)
+    {
+        // For vectors, importance is just the absolute value
+        var scores = new T[weights.Length];
+        for (int i = 0; i < weights.Length; i++)
+        {
+            scores[i] = _numOps.FromDouble(Math.Abs(_numOps.ToDouble(weights[i])));
+        }
+        return new Vector<T>(scores);
+    }
+
+    /// <summary>
+    /// Computes importance scores for tensor weights.
+    /// </summary>
+    /// <param name="weights">Weight tensor</param>
+    /// <param name="gradients">Gradients (not used for structured pruning)</param>
+    /// <returns>Tensor of importance scores</returns>
+    public Tensor<T> ComputeImportanceScores(Tensor<T> weights, Tensor<T>? gradients = null)
+    {
+        switch (_pruningType)
+        {
+            case StructurePruningType.Filter:
+                return ComputeFilterImportanceScores(weights);
+            case StructurePruningType.Channel:
+                return ComputeChannelImportanceScores(weights);
+            default:
+                // For other types, just compute absolute values
+                var flatWeights = weights.ToVector();
+                var scores = new T[flatWeights.Length];
+                for (int i = 0; i < flatWeights.Length; i++)
+                {
+                    scores[i] = _numOps.FromDouble(Math.Abs(_numOps.ToDouble(flatWeights[i])));
+                }
+                return Tensor<T>.FromVector(new Vector<T>(scores), (int[])weights.Shape.Clone());
+        }
+    }
+
+    private Tensor<T> ComputeFilterImportanceScores(Tensor<T> weights)
+    {
+        if (weights.Rank != 4)
+            throw new ArgumentException("Filter pruning requires 4D tensor [filters, channels, height, width]");
+
+        var dims = weights.Shape;
+        int filters = dims[0];
+        int channels = dims[1];
+        int height = dims[2];
+        int width = dims[3];
+        int elementsPerFilter = channels * height * width;
+
+        var flatData = weights.ToVector();
+        var scores = new T[flatData.Length];
+
+        // Compute L2 norm for each filter
+        for (int f = 0; f < filters; f++)
+        {
+            double norm = 0;
+            int baseIdx = f * elementsPerFilter;
+            for (int i = 0; i < elementsPerFilter; i++)
+            {
+                double val = _numOps.ToDouble(flatData[baseIdx + i]);
+                norm += val * val;
+            }
+            norm = Math.Sqrt(norm);
+
+            // Assign same score to all weights in filter
+            for (int i = 0; i < elementsPerFilter; i++)
+            {
+                scores[baseIdx + i] = _numOps.FromDouble(norm);
+            }
+        }
+
+        return Tensor<T>.FromVector(new Vector<T>(scores), (int[])dims.Clone());
+    }
+
+    private Tensor<T> ComputeChannelImportanceScores(Tensor<T> weights)
+    {
+        if (weights.Rank != 4)
+            throw new ArgumentException("Channel pruning requires 4D tensor [filters, channels, height, width]");
+
+        var dims = weights.Shape;
+        int filters = dims[0];
+        int channels = dims[1];
+        int height = dims[2];
+        int width = dims[3];
+        int elementsPerChannel = height * width;
+        int elementsPerFilter = channels * elementsPerChannel;
+
+        var flatData = weights.ToVector();
+        var scores = new T[flatData.Length];
+
+        // Compute L2 norm for each channel across all filters
+        for (int c = 0; c < channels; c++)
+        {
+            double norm = 0;
+            for (int f = 0; f < filters; f++)
+            {
+                int baseIdx = f * elementsPerFilter + c * elementsPerChannel;
+                for (int i = 0; i < elementsPerChannel; i++)
+                {
+                    double val = _numOps.ToDouble(flatData[baseIdx + i]);
+                    norm += val * val;
+                }
+            }
+            norm = Math.Sqrt(norm);
+
+            // Assign same score to all weights in channel
+            for (int f = 0; f < filters; f++)
+            {
+                int baseIdx = f * elementsPerFilter + c * elementsPerChannel;
+                for (int i = 0; i < elementsPerChannel; i++)
+                {
+                    scores[baseIdx + i] = _numOps.FromDouble(norm);
+                }
+            }
+        }
+
+        return Tensor<T>.FromVector(new Vector<T>(scores), (int[])dims.Clone());
+    }
+
+    /// <summary>
+    /// Creates a pruning mask for vector weights.
+    /// </summary>
+    /// <param name="importanceScores">Importance scores from ComputeImportanceScores</param>
+    /// <param name="targetSparsity">Target sparsity ratio (0 to 1)</param>
+    /// <returns>Binary mask (1 = keep, 0 = prune)</returns>
+    public IPruningMask<T> CreateMask(Vector<T> importanceScores, double targetSparsity)
+    {
+        if (targetSparsity < 0 || targetSparsity > 1)
+            throw new ArgumentException("targetSparsity must be between 0 and 1");
+
+        int totalElements = importanceScores.Length;
+        int elementsToPrune = (int)(totalElements * targetSparsity);
+
+        // Sort by importance
+        var indexed = importanceScores.Select((score, idx) => (idx, score: _numOps.ToDouble(score))).ToArray();
+        Array.Sort(indexed, (a, b) => a.score.CompareTo(b.score));
+
+        // Create mask
+        var keepIndices = new bool[totalElements];
+        ArrayPolyfill.Fill(keepIndices, true);
+
+        for (int i = 0; i < elementsToPrune; i++)
+        {
+            keepIndices[indexed[i].idx] = false;
+        }
+
+        var mask = new PruningMask<T>(keepIndices);
+        return mask;
+    }
+
+    /// <summary>
+    /// Creates a pruning mask for tensor weights.
+    /// </summary>
+    /// <param name="importanceScores">Importance scores from ComputeImportanceScores</param>
+    /// <param name="targetSparsity">Target sparsity ratio (0 to 1)</param>
+    /// <returns>Binary mask (1 = keep, 0 = prune)</returns>
+    public IPruningMask<T> CreateMask(Tensor<T> importanceScores, double targetSparsity)
+    {
+        if (targetSparsity < 0 || targetSparsity > 1)
+            throw new ArgumentException("targetSparsity must be between 0 and 1");
+
+        // For all types, use unstructured approach based on importance scores
+        var flatScores = importanceScores.ToVector();
+        int totalElements = flatScores.Length;
+        int elementsToPrune = (int)(totalElements * targetSparsity);
+
+        var indexed = flatScores.Select((score, idx) => (idx, score: _numOps.ToDouble(score))).ToArray();
+        Array.Sort(indexed, (a, b) => a.score.CompareTo(b.score));
+
+        var keepIndices = new bool[totalElements];
+        ArrayPolyfill.Fill(keepIndices, true);
+
+        for (int i = 0; i < elementsToPrune; i++)
+        {
+            keepIndices[indexed[i].idx] = false;
+        }
+
+        return new PruningMask<T>(keepIndices);
+    }
+
+    /// <summary>
+    /// Creates a 2:4 structured sparsity mask (NVIDIA Ampere compatible).
+    /// </summary>
+    /// <param name="importanceScores">Importance scores</param>
+    /// <returns>2:4 structured mask (exactly 2 zeros per 4 elements)</returns>
+    public IPruningMask<T> Create2to4Mask(Tensor<T> importanceScores)
+    {
+        return CreateNtoMMask(importanceScores, 2, 4);
+    }
+
+    /// <summary>
+    /// Creates an N:M structured sparsity mask.
+    /// </summary>
+    /// <param name="importanceScores">Importance scores</param>
+    /// <param name="n">Number of zeros per group</param>
+    /// <param name="m">Group size</param>
+    /// <returns>N:M structured mask</returns>
+    public IPruningMask<T> CreateNtoMMask(Tensor<T> importanceScores, int n, int m)
+    {
+        var flatScores = importanceScores.ToVector();
+        int totalElements = flatScores.Length;
+        var keepIndices = new bool[totalElements];
+        ArrayPolyfill.Fill(keepIndices, true);
+
+        // Process in groups of m elements
+        for (int groupStart = 0; groupStart < totalElements; groupStart += m)
+        {
+            int groupEnd = Math.Min(groupStart + m, totalElements);
+            int groupSize = groupEnd - groupStart;
+
+            var groupScores = new List<(int idx, double score)>();
+            for (int i = groupStart; i < groupEnd; i++)
+                groupScores.Add((i, _numOps.ToDouble(flatScores[i])));
+
+            groupScores.Sort((a, b) => a.score.CompareTo(b.score));
+
+            int numToPrune = Math.Min(n, groupSize);
+            for (int i = 0; i < numToPrune; i++)
+                keepIndices[groupScores[i].idx] = false;
+        }
+
+        return new PruningMask<T>(keepIndices);
+    }
+
+    /// <summary>
+    /// Applies pruning mask to vector weights in-place.
+    /// </summary>
+    /// <param name="weights">Weight vector to prune</param>
+    /// <param name="mask">Pruning mask to apply</param>
+    public void ApplyPruning(Vector<T> weights, IPruningMask<T> mask)
+    {
+        var pruned = mask.Apply(weights);
+        for (int i = 0; i < weights.Length; i++)
+            weights[i] = pruned[i];
+    }
+
+    /// <summary>
+    /// Applies the pruning mask to weights in-place.
+    /// </summary>
+    /// <param name="weights">Weight matrix to prune</param>
+    /// <param name="mask">Pruning mask to apply</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This sets entire columns to zero, effectively removing those neurons.
+    /// After this, you can actually create a smaller weight matrix if you want,
+    /// since entire neurons are gone!
+    /// </para>
+    /// </remarks>
+    public void ApplyPruning(Matrix<T> weights, IPruningMask<T> mask)
+    {
+        var pruned = mask.Apply(weights);
+
+        for (int i = 0; i < weights.Rows; i++)
+            for (int j = 0; j < weights.Columns; j++)
+                weights[i, j] = pruned[i, j];
+    }
+
+    /// <summary>
+    /// Applies pruning mask to tensor weights in-place.
+    /// </summary>
+    /// <param name="weights">Weight tensor to prune</param>
+    /// <param name="mask">Pruning mask to apply</param>
+    public void ApplyPruning(Tensor<T> weights, IPruningMask<T> mask)
+    {
+        var pruned = mask.Apply(weights);
+        var prunedFlat = pruned.ToVector();
+        var weightsFlat = weights.ToVector();
+
+        for (int i = 0; i < weightsFlat.Length; i++)
+            weightsFlat[i] = prunedFlat[i];
+    }
+
+    /// <summary>
+    /// Converts pruned weights to sparse format for efficient storage.
+    /// </summary>
+    /// <param name="weights">Pruned weights (containing zeros)</param>
+    /// <param name="format">Target sparse format</param>
+    /// <returns>Sparse representation</returns>
+    public SparseCompressionResult<T> ToSparseFormat(Tensor<T> weights, SparseFormat format)
+    {
+        var flatWeights = weights.ToVector();
+        var nonZeroValues = new List<T>();
+        var rowIndices = new List<int>();
+        var columnIndices = new List<int>();
+
+        // Extract non-zero values and their positions
+        for (int i = 0; i < flatWeights.Length; i++)
+        {
+            if (!_numOps.Equals(flatWeights[i], _numOps.Zero))
+            {
+                nonZeroValues.Add(flatWeights[i]);
+
+                // For 2D tensors, calculate row and column
+                if (weights.Rank == 2)
+                {
+                    int cols = weights.Shape[1];
+                    rowIndices.Add(i / cols);
+                    columnIndices.Add(i % cols);
+                }
+                else
+                {
+                    // For higher-dimensional tensors, use flat index
+                    rowIndices.Add(i);
+                    columnIndices.Add(0);
+                }
+            }
+        }
+
+        // Build result based on format
+        switch (format)
+        {
+            case SparseFormat.COO:
+                return new SparseCompressionResult<T>
+                {
+                    Format = SparseFormat.COO,
+                    Values = nonZeroValues.ToArray(),
+                    RowIndices = rowIndices.ToArray(),
+                    ColumnIndices = columnIndices.ToArray(),
+                    OriginalShape = weights.Shape.ToArray()
+                };
+
+            case SparseFormat.CSR:
+                return ConvertToCSR(nonZeroValues, rowIndices, columnIndices, weights.Shape.ToArray());
+
+            case SparseFormat.CSC:
+                return ConvertToCSC(nonZeroValues, rowIndices, columnIndices, weights.Shape.ToArray());
+
+            case SparseFormat.Structured2to4:
+                return new SparseCompressionResult<T>
+                {
+                    Format = SparseFormat.Structured2to4,
+                    Values = nonZeroValues.ToArray(),
+                    OriginalShape = weights.Shape.ToArray(),
+                    SparsityN = 2,
+                    SparsityM = 4
+                };
+
+            default:
+                throw new NotImplementedException($"Sparse format {format} not yet implemented for structured pruning");
+        }
+    }
+
+    private SparseCompressionResult<T> ConvertToCSR(List<T> values, List<int> rowIndices, List<int> columnIndices, int[] shape)
+    {
+        if (shape.Length != 2)
+            throw new ArgumentException("CSR format requires 2D tensor");
+
+        int rows = shape[0];
+        var rowPointers = new int[rows + 1];
+
+        // Count non-zeros per row
+        foreach (var row in rowIndices)
+            rowPointers[row + 1]++;
+
+        // Convert counts to pointers
+        for (int i = 1; i <= rows; i++)
+            rowPointers[i] += rowPointers[i - 1];
+
+        return new SparseCompressionResult<T>
+        {
+            Format = SparseFormat.CSR,
+            Values = values.ToArray(),
+            ColumnIndices = columnIndices.ToArray(),
+            RowPointers = rowPointers,
+            OriginalShape = shape
+        };
+    }
+
+    private SparseCompressionResult<T> ConvertToCSC(List<T> values, List<int> rowIndices, List<int> columnIndices, int[] shape)
+    {
+        if (shape.Length != 2)
+            throw new ArgumentException("CSC format requires 2D tensor");
+
+        int cols = shape[1];
+        var colPointers = new int[cols + 1];
+
+        // Count non-zeros per column
+        foreach (var col in columnIndices)
+            colPointers[col + 1]++;
+
+        // Convert counts to pointers
+        for (int i = 1; i <= cols; i++)
+            colPointers[i] += colPointers[i - 1];
+
+        return new SparseCompressionResult<T>
+        {
+            Format = SparseFormat.CSC,
+            Values = values.ToArray(),
+            RowIndices = rowIndices.ToArray(),
+            ColumnPointers = colPointers,
+            OriginalShape = shape
+        };
+    }
+}

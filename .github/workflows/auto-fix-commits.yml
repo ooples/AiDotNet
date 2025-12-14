@@ -31,6 +31,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            // Get PR associated with the head branch
             const headBranch = '${{ github.event.workflow_run.head_branch }}';
             const headSha = '${{ github.event.workflow_run.head_sha }}';
 
@@ -44,19 +45,21 @@ jobs:
             });
 
             if (prs.data.length === 0) {
-              core.setFailed('No open PR found for this branch');
+              core.setFailed('No open PR found for this branch. This may occur if the workflow triggered before the PR was opened, or if the branch name does not match any open PR. Please verify that the PR exists and the branch name is correct.');
               return;
             }
 
             const pr = prs.data[0];
             core.info(`Found PR #${pr.number}: ${pr.title}`);
 
+            // Verify PR title follows conventional commits (should be auto-fixed already)
             const pattern = /^(feat|fix|docs|refactor|perf|test|chore|ci|style)(\(.+\))?!?: .+/;
             if (!pattern.test(pr.title)) {
               core.setFailed(`PR title does not follow conventional commits: ${pr.title}`);
               return;
             }
 
+            // Don't modify PRs from forks (security)
             if (pr.head.repo.full_name !== pr.base.repo.full_name) {
               core.setFailed('Cannot auto-fix commits from forked repositories');
               return;
@@ -99,8 +102,10 @@ jobs:
 
           echo "Squashing $COMMIT_COUNT commits into one..."
 
+          # Reset to base branch keeping all changes staged
           git reset --soft "origin/$BASE_BRANCH"
 
+          # Create the squashed commit with the PR title
           git commit -m "$PR_TITLE
 
           Squashed $COMMIT_COUNT commits automatically by GitHub Actions.
@@ -118,6 +123,7 @@ jobs:
           PR_TITLE="${{ steps.get-pr.outputs.pr_title }}"
           CURRENT_MSG=$(git log -1 --format=%B)
 
+          # Check if commit message already matches PR title
           FIRST_LINE=$(echo "$CURRENT_MSG" | head -1)
           if [ "$FIRST_LINE" = "$PR_TITLE" ]; then
             echo "Commit message already matches PR title, no fix needed"
@@ -127,6 +133,7 @@ jobs:
 
           echo "Amending commit message to match PR title..."
 
+          # Preserve the body if it exists (skip subject and blank line, then trim whitespace)
           BODY=$(echo "$CURRENT_MSG" | tail -n +3 | awk '{$1=$1};1')
 
           if [ -n "$BODY" ]; then
@@ -143,22 +150,15 @@ jobs:
           echo "changes_made=true" >> $GITHUB_OUTPUT
 
       - name: Force push fixed commits
-        id: push-commits
         if: steps.squash-commits.outputs.changes_made == 'true' || steps.fix-single-commit.outputs.changes_made == 'true'
-        continue-on-error: true
         run: |
           HEAD_BRANCH="${{ steps.get-pr.outputs.head_branch }}"
           HEAD_SHA="${{ steps.get-pr.outputs.head_sha }}"
           echo "Force pushing to $HEAD_BRANCH..."
-          if git push origin "$HEAD_BRANCH" --force-with-lease="$HEAD_BRANCH:$HEAD_SHA"; then
-            echo "push_success=true" >> $GITHUB_OUTPUT
-          else
-            echo "push_success=false" >> $GITHUB_OUTPUT
-            echo "::warning::Force push failed - likely due to branch protection rules"
-          fi
+          git push origin "$HEAD_BRANCH" --force-with-lease="$HEAD_BRANCH:$HEAD_SHA"
 
-      - name: Comment on PR (success)
-        if: steps.push-commits.outputs.push_success == 'true'
+      - name: Comment on PR
+        if: steps.squash-commits.outputs.changes_made == 'true' || steps.fix-single-commit.outputs.changes_made == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -168,88 +168,32 @@ jobs:
 
             let message;
             if (commitCount > 1) {
-              message = [
-                '### Commit Messages Auto-Fixed',
-                '',
-                'The commitlint check failed because one or more commit messages did not follow [Conventional Commits](https://www.conventionalcommits.org/) format.',
-                '',
-                `**Action taken** - Squashed ${commitCount} commits into a single commit using the PR title as the commit message.`,
-                '',
-                '**New commit message**',
-                '```',
-                prTitle,
-                '```',
-                '',
-                'The PR branch has been force-pushed with the fixed commit. If you had local changes, you may need to `git pull --rebase`.'
-              ].join('\n');
+              message = `### Commit Messages Auto-Fixed
+
+The commitlint check failed because one or more commit messages didn't follow [Conventional Commits](https://www.conventionalcommits.org/) format.
+
+**Action taken** — Squashed ${commitCount} commits into a single commit using the PR title as the commit message.
+
+**New commit message**
+\`\`\`
+${prTitle}
+\`\`\`
+
+The PR branch has been force-pushed with the fixed commit. If you had local changes, you may need to \`git pull --rebase\`.`;
             } else {
-              message = [
-                '### Commit Message Auto-Fixed',
-                '',
-                'The commitlint check failed because the commit message did not follow [Conventional Commits](https://www.conventionalcommits.org/) format.',
-                '',
-                '**Action taken** - Amended the commit message to use the PR title.',
-                '',
-                '**New commit message**',
-                '```',
-                prTitle,
-                '```',
-                '',
-                'The PR branch has been force-pushed with the fixed commit. If you had local changes, you may need to `git pull --rebase`.'
-              ].join('\n');
+              message = `### Commit Message Auto-Fixed
+
+The commitlint check failed because the commit message didn't follow [Conventional Commits](https://www.conventionalcommits.org/) format.
+
+**Action taken** — Amended the commit message to use the PR title.
+
+**New commit message**
+\`\`\`
+${prTitle}
+\`\`\`
+
+The PR branch has been force-pushed with the fixed commit. If you had local changes, you may need to \`git pull --rebase\`.`;
             }
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber,
-              body: message
-            });
-
-      - name: Comment on PR (manual fix needed)
-        if: (steps.squash-commits.outputs.changes_made == 'true' || steps.fix-single-commit.outputs.changes_made == 'true') && steps.push-commits.outputs.push_success != 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const prNumber = ${{ steps.get-pr.outputs.pr_number }};
-            const commitCount = ${{ steps.count-commits.outputs.commit_count }};
-            const prTitle = `${{ steps.get-pr.outputs.pr_title }}`;
-
-            const message = [
-              '### Manual Commit Message Fix Required',
-              '',
-              'The commitlint check failed because one or more commit messages did not follow [Conventional Commits](https://www.conventionalcommits.org/) format.',
-              '',
-              '**Automatic fix could not be applied** due to branch protection rules that prevent force-pushing.',
-              '',
-              '**Please run the following commands locally to fix:**',
-              '',
-              '```bash',
-              '# Fetch latest changes',
-              'git fetch origin',
-              '',
-              `# Interactive rebase to squash ${commitCount} commits`,
-              `git rebase -i origin/${{ steps.get-pr.outputs.base_branch }}`,
-              '',
-              '# In the editor, change all "pick" to "squash" (or "s") except the first one',
-              '# Save and close the editor',
-              '',
-              '# When prompted for the commit message, use:',
-              prTitle,
-              '',
-              '# Force push the fixed commits',
-              `git push origin ${{ steps.get-pr.outputs.head_branch }} --force-with-lease`,
-              '```',
-              '',
-              '**Or use this one-liner:**',
-              '```bash',
-              `git fetch origin && git reset --soft origin/${{ steps.get-pr.outputs.base_branch }} && git commit -m "${prTitle}" && git push --force-with-lease`,
-              '```',
-              '',
-              '---',
-              '',
-              '> **Note:** Repository admins can enable automatic fixing by allowing force-pushes from GitHub Actions in the branch protection settings.'
-            ].join('\n');
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,

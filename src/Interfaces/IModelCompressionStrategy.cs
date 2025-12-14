@@ -7,7 +7,7 @@ namespace AiDotNet.Interfaces;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// <b>For Beginners:</b> Model compression is the process of making AI models smaller and faster
+/// <para><b>For Beginners:</b> Model compression is the process of making AI models smaller and faster
 /// without significantly hurting their performance.
 ///
 /// Think of it like compressing a video file - you want to reduce the file size so it's easier to
@@ -20,10 +20,15 @@ namespace AiDotNet.Interfaces;
 /// - Some remove less important parts (pruning)
 /// - Some use clever encoding schemes to store data more efficiently (quantization, Huffman coding)
 ///
-/// This interface defines the standard methods that all compression strategies must implement.
+/// This interface supports ALL types of neural network data:
+/// - Vectors (1D): Bias terms, embeddings
+/// - Matrices (2D): Fully connected layer weights
+/// - Tensors (N-D): Convolutional filters, attention weights
+/// </para>
 /// </remarks>
 public interface IModelCompressionStrategy<T>
 {
+    #region Vector Operations (1D)
     /// <summary>
     /// Compresses the given model weights.
     /// </summary>
@@ -41,7 +46,7 @@ public interface IModelCompressionStrategy<T>
     /// For example, if you have 1 million weight values, compression might reduce them to 100,000 values
     /// plus some additional information about how to reconstruct the original values when needed.
     /// </remarks>
-    (Vector<T> compressedWeights, object metadata) Compress(Vector<T> weights);
+    (Vector<T> compressedWeights, ICompressionMetadata<T> metadata) Compress(Vector<T> weights);
 
     /// <summary>
     /// Decompresses the compressed weights back to their original form.
@@ -64,7 +69,7 @@ public interface IModelCompressionStrategy<T>
     /// - Huffman trees (for Huffman encoding)
     /// - Scaling factors (for quantization)
     /// </remarks>
-    Vector<T> Decompress(Vector<T> compressedWeights, object metadata);
+    Vector<T> Decompress(Vector<T> compressedWeights, ICompressionMetadata<T> metadata);
 
     /// <summary>
     /// Calculates the compression ratio achieved.
@@ -104,5 +109,78 @@ public interface IModelCompressionStrategy<T>
     ///
     /// This gives you an accurate picture of the actual memory savings you'll achieve.
     /// </remarks>
-    long GetCompressedSize(Vector<T> compressedWeights, object metadata);
+    long GetCompressedSize(Vector<T> compressedWeights, ICompressionMetadata<T> metadata);
+
+    #endregion
+
+    #region Matrix Operations (2D)
+
+    /// <summary>
+    /// Compresses a 2D matrix of weights (e.g., fully connected layer).
+    /// </summary>
+    /// <param name="weights">The original weight matrix to compress.</param>
+    /// <returns>A tuple containing the compressed weights and compression metadata.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Matrices are 2D arrays of numbers, commonly used for
+    /// fully connected (dense) layer weights in neural networks.
+    ///
+    /// For example, a layer connecting 100 inputs to 50 outputs has a 100x50 weight matrix.
+    /// Compressing these matrices can significantly reduce model size.
+    /// </para>
+    /// </remarks>
+    (Matrix<T> compressedWeights, ICompressionMetadata<T> metadata) CompressMatrix(Matrix<T> weights);
+
+    /// <summary>
+    /// Decompresses the compressed matrix weights back to their original form.
+    /// </summary>
+    /// <param name="compressedWeights">The compressed weight matrix.</param>
+    /// <param name="metadata">The metadata needed for decompression.</param>
+    /// <returns>The decompressed weight matrix.</returns>
+    Matrix<T> DecompressMatrix(Matrix<T> compressedWeights, ICompressionMetadata<T> metadata);
+
+    /// <summary>
+    /// Gets the size in bytes of the compressed matrix representation.
+    /// </summary>
+    /// <param name="compressedWeights">The compressed weight matrix.</param>
+    /// <param name="metadata">The compression metadata.</param>
+    /// <returns>The total size in bytes.</returns>
+    long GetCompressedSize(Matrix<T> compressedWeights, ICompressionMetadata<T> metadata);
+
+    #endregion
+
+    #region Tensor Operations (N-D)
+
+    /// <summary>
+    /// Compresses an N-dimensional tensor of weights (e.g., convolutional filters).
+    /// </summary>
+    /// <param name="weights">The original weight tensor to compress.</param>
+    /// <returns>A tuple containing the compressed weights and compression metadata.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Tensors are multi-dimensional arrays, essential for
+    /// convolutional layers and attention mechanisms.
+    ///
+    /// A convolutional filter might be 4D: [num_filters, channels, height, width].
+    /// For example, 64 filters with 3 channels and 3x3 kernels = [64, 3, 3, 3].
+    /// Compressing these tensors enables efficient storage of complex models.
+    /// </para>
+    /// </remarks>
+    (Tensor<T> compressedWeights, ICompressionMetadata<T> metadata) CompressTensor(Tensor<T> weights);
+
+    /// <summary>
+    /// Decompresses the compressed tensor weights back to their original form.
+    /// </summary>
+    /// <param name="compressedWeights">The compressed weight tensor.</param>
+    /// <param name="metadata">The metadata needed for decompression.</param>
+    /// <returns>The decompressed weight tensor.</returns>
+    Tensor<T> DecompressTensor(Tensor<T> compressedWeights, ICompressionMetadata<T> metadata);
+
+    /// <summary>
+    /// Gets the size in bytes of the compressed tensor representation.
+    /// </summary>
+    /// <param name="compressedWeights">The compressed weight tensor.</param>
+    /// <param name="metadata">The compression metadata.</param>
+    /// <returns>The total size in bytes.</returns>
+    long GetCompressedSize(Tensor<T> compressedWeights, ICompressionMetadata<T> metadata);
+
+    #endregion
 }
