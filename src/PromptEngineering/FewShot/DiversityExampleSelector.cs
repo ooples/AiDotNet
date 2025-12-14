@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PromptEngineering.FewShot;
 
@@ -104,7 +105,7 @@ public class DiversityExampleSelector<T> : FewShotExampleSelectorBase<T>
             return selected.AsReadOnly();
         }
 
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         var firstIndex = random.Next(remaining.Count);
         selected.Add(remaining[firstIndex]);
         remaining.RemoveAt(firstIndex);

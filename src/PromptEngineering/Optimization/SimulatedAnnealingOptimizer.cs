@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.PromptEngineering.Templates;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PromptEngineering.Optimization;
 
@@ -65,7 +66,7 @@ public class SimulatedAnnealingOptimizer<T> : PromptOptimizerBase<T>
         _initialTemperature = Math.Max(0.01, initialTemperature);
         _coolingRate = Math.Max(0.5, Math.Min(0.999, coolingRate));
         _minTemperature = Math.Max(0.001, minTemperature);
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         _modifications = new List<string>
         {

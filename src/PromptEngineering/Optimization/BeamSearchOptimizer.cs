@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.PromptEngineering.Templates;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PromptEngineering.Optimization;
 
@@ -61,7 +62,7 @@ public class BeamSearchOptimizer<T> : PromptOptimizerBase<T>
     {
         _beamWidth = Math.Max(1, beamWidth);
         _variationsPerCandidate = Math.Max(1, variationsPerCandidate);
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         _prefixes = new List<string>
         {

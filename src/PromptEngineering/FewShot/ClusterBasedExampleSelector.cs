@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PromptEngineering.FewShot;
 
@@ -73,7 +74,7 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
         _embeddingFunction = embeddingFunction ?? throw new ArgumentNullException(nameof(embeddingFunction));
         _clusterCount = Math.Max(1, clusterCount);
         _exampleEmbeddings = new Dictionary<FewShotExample, double[]>();
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         _clusters = new List<List<FewShotExample>>();
         _clustersDirty = true;
     }

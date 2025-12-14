@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PromptEngineering.FewShot;
 
@@ -45,7 +46,7 @@ public class RandomExampleSelector<T> : FewShotExampleSelectorBase<T>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public RandomExampleSelector(int? seed = null)
     {
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

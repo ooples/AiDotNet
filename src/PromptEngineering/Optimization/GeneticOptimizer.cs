@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.PromptEngineering.Templates;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PromptEngineering.Optimization;
 
@@ -67,7 +68,7 @@ public class GeneticOptimizer<T> : PromptOptimizerBase<T>
         _mutationRate = Math.Max(0.0, Math.Min(1.0, mutationRate));
         _crossoverRate = Math.Max(0.0, Math.Min(1.0, crossoverRate));
         _eliteCount = Math.Min(eliteCount, _populationSize / 2);
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         // Default genetic building blocks
         _prefixes = new List<string>

@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.PromptEngineering.Templates;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PromptEngineering.Optimization;
 
@@ -58,7 +59,7 @@ public class GreedyHillClimbingOptimizer<T> : PromptOptimizerBase<T>
         int? seed = null)
     {
         _maxNoImprovementIterations = Math.Max(1, maxNoImprovementIterations);
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         // Define mutation operations
         _mutations = new List<Func<string, string>>
