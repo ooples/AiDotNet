@@ -916,6 +916,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             PadH = padH,
             PadW = padW,
             Groups = groups,
+            Device = GetDeviceForNode(node),
             SourceHLIRNodeId = node.Id
         };
 
