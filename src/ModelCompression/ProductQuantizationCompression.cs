@@ -126,12 +126,9 @@ public class ProductQuantizationCompression<T> : ModelCompressionBase<T>
     /// </summary>
     /// <param name="weights">The original model weights.</param>
     /// <returns>Compressed weights and metadata containing codebooks and codes.</returns>
-    public override (Vector<T> compressedWeights, object metadata) Compress(Vector<T> weights)
+    public override (Vector<T> compressedWeights, ICompressionMetadata<T> metadata) Compress(Vector<T> weights)
     {
-        if (weights == null)
-        {
-            throw new ArgumentNullException(nameof(weights));
-        }
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
 
         if (weights.Length == 0)
         {
@@ -202,17 +199,16 @@ public class ProductQuantizationCompression<T> : ModelCompressionBase<T>
     /// <param name="compressedWeights">The compressed weights (codebook indices).</param>
     /// <param name="metadata">The metadata containing codebooks.</param>
     /// <returns>The decompressed weights.</returns>
-    public override Vector<T> Decompress(Vector<T> compressedWeights, object metadata)
+    public override Vector<T> Decompress(Vector<T> compressedWeights, ICompressionMetadata<T> metadata)
     {
-        if (compressedWeights == null)
-        {
-            throw new ArgumentNullException(nameof(compressedWeights));
-        }
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
 
-        var pqMetadata = metadata as ProductQuantizationMetadata<T>;
-        if (pqMetadata == null)
+        if (metadata is not ProductQuantizationMetadata<T> pqMetadata)
         {
-            throw new ArgumentException("Invalid metadata type for product quantization.", nameof(metadata));
+            throw new ArgumentException(
+                $"Expected {nameof(ProductQuantizationMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
         }
 
         var decompressedArray = new T[pqMetadata.OriginalLength];
@@ -241,12 +237,16 @@ public class ProductQuantizationCompression<T> : ModelCompressionBase<T>
     /// <summary>
     /// Gets the compressed size including codebooks and codes.
     /// </summary>
-    public override long GetCompressedSize(Vector<T> compressedWeights, object metadata)
+    public override long GetCompressedSize(Vector<T> compressedWeights, ICompressionMetadata<T> metadata)
     {
-        var pqMetadata = metadata as ProductQuantizationMetadata<T>;
-        if (pqMetadata == null)
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
+
+        if (metadata is not ProductQuantizationMetadata<T> pqMetadata)
         {
-            throw new ArgumentException("Invalid metadata type.", nameof(metadata));
+            throw new ArgumentException(
+                $"Expected {nameof(ProductQuantizationMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
         }
 
         // Size of codes (one code per subvector)

@@ -94,12 +94,9 @@ public class SparsePruningCompression<T> : ModelCompressionBase<T>
     /// </summary>
     /// <param name="weights">The original model weights.</param>
     /// <returns>Compressed sparse representation and metadata.</returns>
-    public override (Vector<T> compressedWeights, object metadata) Compress(Vector<T> weights)
+    public override (Vector<T> compressedWeights, ICompressionMetadata<T> metadata) Compress(Vector<T> weights)
     {
-        if (weights == null)
-        {
-            throw new ArgumentNullException(nameof(weights));
-        }
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
 
         if (weights.Length == 0)
         {
@@ -140,17 +137,16 @@ public class SparsePruningCompression<T> : ModelCompressionBase<T>
     /// <param name="compressedWeights">The non-zero weight values.</param>
     /// <param name="metadata">The metadata containing indices and original length.</param>
     /// <returns>The reconstructed dense weights (with zeros filled in).</returns>
-    public override Vector<T> Decompress(Vector<T> compressedWeights, object metadata)
+    public override Vector<T> Decompress(Vector<T> compressedWeights, ICompressionMetadata<T> metadata)
     {
-        if (compressedWeights == null)
-        {
-            throw new ArgumentNullException(nameof(compressedWeights));
-        }
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
 
-        var sparseMetadata = metadata as SparsePruningMetadata<T>;
-        if (sparseMetadata == null)
+        if (metadata is not SparsePruningMetadata<T> sparseMetadata)
         {
-            throw new ArgumentException("Invalid metadata type for sparse pruning.", nameof(metadata));
+            throw new ArgumentException(
+                $"Expected {nameof(SparsePruningMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
         }
 
         // Reconstruct dense array
@@ -178,12 +174,16 @@ public class SparsePruningCompression<T> : ModelCompressionBase<T>
     /// <summary>
     /// Gets the compressed size including sparse values and indices.
     /// </summary>
-    public override long GetCompressedSize(Vector<T> compressedWeights, object metadata)
+    public override long GetCompressedSize(Vector<T> compressedWeights, ICompressionMetadata<T> metadata)
     {
-        var sparseMetadata = metadata as SparsePruningMetadata<T>;
-        if (sparseMetadata == null)
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
+
+        if (metadata is not SparsePruningMetadata<T> sparseMetadata)
         {
-            throw new ArgumentException("Invalid metadata type.", nameof(metadata));
+            throw new ArgumentException(
+                $"Expected {nameof(SparsePruningMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
         }
 
         // Size of non-zero values

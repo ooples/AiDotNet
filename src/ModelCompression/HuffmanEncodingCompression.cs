@@ -81,7 +81,7 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
     /// </summary>
     /// <param name="weights">The original model weights.</param>
     /// <returns>Compressed weights and metadata containing the Huffman tree and encoding table.</returns>
-    public override (Vector<T> compressedWeights, object metadata) Compress(Vector<T> weights)
+    public override (Vector<T> compressedWeights, ICompressionMetadata<T> metadata) Compress(Vector<T> weights)
     {
         if (weights == null)
         {
@@ -144,22 +144,16 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
     /// <param name="compressedWeights">The compressed weights (encoded as bytes).</param>
     /// <param name="metadata">The metadata containing the Huffman tree.</param>
     /// <returns>The decompressed weights.</returns>
-    public override Vector<T> Decompress(Vector<T> compressedWeights, object metadata)
+    public override Vector<T> Decompress(Vector<T> compressedWeights, ICompressionMetadata<T> metadata)
     {
-        if (compressedWeights == null)
-        {
-            throw new ArgumentNullException(nameof(compressedWeights));
-        }
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
 
-        if (metadata == null)
+        if (metadata is not HuffmanEncodingMetadata<T> huffmanMetadata)
         {
-            throw new ArgumentNullException(nameof(metadata));
-        }
-
-        var huffmanMetadata = metadata as HuffmanEncodingMetadata<T>;
-        if (huffmanMetadata == null)
-        {
-            throw new ArgumentException("Invalid metadata type for Huffman encoding.", nameof(metadata));
+            throw new ArgumentException(
+                $"Expected {nameof(HuffmanEncodingMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
         }
 
         lock (_lockObject)
@@ -190,22 +184,16 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
     /// <summary>
     /// Gets the compressed size including the Huffman tree and encoded bits.
     /// </summary>
-    public override long GetCompressedSize(Vector<T> compressedWeights, object metadata)
+    public override long GetCompressedSize(Vector<T> compressedWeights, ICompressionMetadata<T> metadata)
     {
-        if (compressedWeights == null)
-        {
-            throw new ArgumentNullException(nameof(compressedWeights));
-        }
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
 
-        if (metadata == null)
+        if (metadata is not HuffmanEncodingMetadata<T> huffmanMetadata)
         {
-            throw new ArgumentNullException(nameof(metadata));
-        }
-
-        var huffmanMetadata = metadata as HuffmanEncodingMetadata<T>;
-        if (huffmanMetadata == null)
-        {
-            throw new ArgumentException("Invalid metadata type.", nameof(metadata));
+            throw new ArgumentException(
+                $"Expected {nameof(HuffmanEncodingMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
         }
 
         // Size of encoded bits (in bytes)
