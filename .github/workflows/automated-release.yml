@@ -87,19 +87,34 @@ jobs:
 
           BUMP_TYPE="none"
 
+          # Check for breaking changes (conventional format)
           if echo "$COMMITS" | grep -iE "(BREAKING CHANGE:|BREAKING:|^[a-f0-9]+ [a-z]+(\([^)]*\))?!:)" > /dev/null; then
             BUMP_TYPE="major"
             echo "Found BREAKING CHANGE - will bump MAJOR version"
           fi
 
+          # Check for features (conventional format: feat:)
           if [ "$BUMP_TYPE" = "none" ] && echo "$COMMITS" | grep -iE "^[a-f0-9]+ feat(\(.*\))?:" > /dev/null; then
             BUMP_TYPE="minor"
             echo "Found feat: commits - will bump MINOR version"
           fi
 
+          # Check for fixes/refactor/perf/docs (conventional format with colon)
           if [ "$BUMP_TYPE" = "none" ] && echo "$COMMITS" | grep -iE "^[a-f0-9]+ (fix|refactor|perf|docs)(\(.*\))?:" > /dev/null; then
             BUMP_TYPE="minor"
             echo "Found fix:/refactor:/perf:/docs: commits - will bump MINOR version"
+          fi
+
+          # FALLBACK: Check for common non-conventional patterns (without colon)
+          # This handles PR titles like "Fix issue #123" or "Add feature X"
+          if [ "$BUMP_TYPE" = "none" ] && echo "$COMMITS" | grep -iE "^[a-f0-9]+ (add|implement|create|new) " > /dev/null; then
+            BUMP_TYPE="minor"
+            echo "Found Add/Implement/Create commits - will bump MINOR version"
+          fi
+
+          if [ "$BUMP_TYPE" = "none" ] && echo "$COMMITS" | grep -iE "^[a-f0-9]+ (fix|update|improve|enhance|resolve|patch|correct|repair) " > /dev/null; then
+            BUMP_TYPE="minor"
+            echo "Found Fix/Update/Improve commits - will bump MINOR version"
           fi
 
           case $BUMP_TYPE in
@@ -185,6 +200,28 @@ jobs:
               MSG=$(echo "$line" | sed -E 's/^[a-f0-9]+ docs(\(.*\))?: //')
               CHANGELOG+="- $MSG"$'\n'
             done < <(echo "$DOCS")
+            CHANGELOG+=$'\n'
+          fi
+
+          # FALLBACK: Non-conventional commits - New features (Add/Implement/Create/New)
+          NEW_FEATURES=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ (add|implement|create|new) " | grep -viE "^[a-f0-9]+ (feat|fix|refactor|perf|docs)(\(.*\))?:" || true)
+          if [ -n "$NEW_FEATURES" ]; then
+            CHANGELOG+="### New Features"$'\n'
+            while IFS= read -r line; do
+              MSG=$(echo "$line" | sed -E 's/^[a-f0-9]+ //')
+              CHANGELOG+="- $MSG"$'\n'
+            done < <(echo "$NEW_FEATURES")
+            CHANGELOG+=$'\n'
+          fi
+
+          # FALLBACK: Non-conventional commits - Bug fixes and improvements
+          OTHER_FIXES=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ (fix|update|improve|enhance|resolve|patch|correct|repair) " | grep -viE "^[a-f0-9]+ (feat|fix|refactor|perf|docs)(\(.*\))?:" || true)
+          if [ -n "$OTHER_FIXES" ]; then
+            CHANGELOG+="### Bug Fixes & Improvements"$'\n'
+            while IFS= read -r line; do
+              MSG=$(echo "$line" | sed -E 's/^[a-f0-9]+ //')
+              CHANGELOG+="- $MSG"$'\n'
+            done < <(echo "$OTHER_FIXES")
             CHANGELOG+=$'\n'
           fi
 
