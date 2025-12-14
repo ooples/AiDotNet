@@ -83,10 +83,32 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
         int numConditionClasses)
     {
-        // Discriminator input includes both image and condition vector
-        int inputSize = discriminatorArchitecture.InputSize > 0
-            ? discriminatorArchitecture.InputSize + numConditionClasses
-            : 0;
+        // Check if discriminator expects spatial input (3D/4D tensor with H, W, D > 0)
+        bool isSpatialInput = discriminatorArchitecture.InputHeight > 0
+            && discriminatorArchitecture.InputWidth > 0
+            && discriminatorArchitecture.InputDepth > 0;
+
+        int inputSize;
+        int inputDepth;
+
+        if (isSpatialInput)
+        {
+            // Spatial discriminator: conditions are added as extra channels
+            // inputDepth increases by numConditionClasses
+            inputDepth = discriminatorArchitecture.InputDepth + numConditionClasses;
+            // inputSize may need to account for the extra channels across spatial dims
+            inputSize = discriminatorArchitecture.InputSize > 0
+                ? discriminatorArchitecture.InputSize + (numConditionClasses * discriminatorArchitecture.InputHeight * discriminatorArchitecture.InputWidth)
+                : 0;
+        }
+        else
+        {
+            // Flat discriminator: conditions are concatenated to the input vector
+            inputSize = discriminatorArchitecture.InputSize > 0
+                ? discriminatorArchitecture.InputSize + numConditionClasses
+                : 0;
+            inputDepth = discriminatorArchitecture.InputDepth;
+        }
 
         return new NeuralNetworkArchitecture<T>(
             inputType: discriminatorArchitecture.InputType,
@@ -95,7 +117,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
             inputSize: inputSize,
             inputHeight: discriminatorArchitecture.InputHeight,
             inputWidth: discriminatorArchitecture.InputWidth,
-            inputDepth: discriminatorArchitecture.InputDepth,
+            inputDepth: inputDepth,
             outputSize: 1,
             layers: null);
     }
@@ -289,15 +311,81 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         var discriminatorInputGradients = Discriminator.Backpropagate(outputGradients);
 
         // Extract gradients for the image part (not the condition part)
+        // Handle both spatial (4D) and flattened (2D) gradient formats
         int batchSize = generatorInput.Shape[0];
-        int imageSize = discriminatorInputGradients.Length / batchSize - _numConditionClasses;
+        Tensor<T> generatorGradients;
 
-        var generatorGradients = new Tensor<T>(new int[] { batchSize, imageSize });
-        for (int b = 0; b < batchSize; b++)
+        if (discriminatorInputGradients.Shape.Length == 4)
         {
-            for (int i = 0; i < imageSize; i++)
+            // Spatial gradient format: [B, H, W, C+K] or [B, C+K, H, W]
+            // Detect channel layout based on discriminator architecture
+            var discArch = Discriminator.Architecture;
+            int expectedChannels = discArch.InputDepth > 0 ? discArch.InputDepth : 0;
+            bool isChannelsFirst = expectedChannels > 0 && discriminatorInputGradients.Shape[1] == (expectedChannels + _numConditionClasses);
+
+            int height, width, totalChannels, imageChannels;
+            if (isChannelsFirst)
             {
-                generatorGradients.SetFlatIndex(b * imageSize + i, discriminatorInputGradients.GetFlatIndexValue(b * (imageSize + _numConditionClasses) + i));
+                // [B, C+K, H, W]
+                totalChannels = discriminatorInputGradients.Shape[1];
+                height = discriminatorInputGradients.Shape[2];
+                width = discriminatorInputGradients.Shape[3];
+                imageChannels = totalChannels - _numConditionClasses;
+
+                // Extract image gradients (first imageChannels channels)
+                generatorGradients = new Tensor<T>(new int[] { batchSize, imageChannels, height, width });
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int c = 0; c < imageChannels; c++)
+                    {
+                        for (int h = 0; h < height; h++)
+                        {
+                            for (int w = 0; w < width; w++)
+                            {
+                                generatorGradients[b, c, h, w] = discriminatorInputGradients[b, c, h, w];
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // [B, H, W, C+K]
+                height = discriminatorInputGradients.Shape[1];
+                width = discriminatorInputGradients.Shape[2];
+                totalChannels = discriminatorInputGradients.Shape[3];
+                imageChannels = totalChannels - _numConditionClasses;
+
+                // Extract image gradients (first imageChannels channels)
+                generatorGradients = new Tensor<T>(new int[] { batchSize, height, width, imageChannels });
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int h = 0; h < height; h++)
+                    {
+                        for (int w = 0; w < width; w++)
+                        {
+                            for (int c = 0; c < imageChannels; c++)
+                            {
+                                generatorGradients[b, h, w, c] = discriminatorInputGradients[b, h, w, c];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            // Flattened gradient format: [B, image+K]
+            int totalSize = discriminatorInputGradients.Length / batchSize;
+            int imageSize = totalSize - _numConditionClasses;
+
+            generatorGradients = new Tensor<T>(new int[] { batchSize, imageSize });
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int i = 0; i < imageSize; i++)
+                {
+                    generatorGradients.SetFlatIndex(b * imageSize + i, discriminatorInputGradients.GetFlatIndexValue(b * totalSize + i));
+                }
             }
         }
 
@@ -361,35 +449,47 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     }
 
     /// <summary>
-    /// Calculates binary cross-entropy loss.
+    /// Calculates binary cross-entropy loss with logits (numerically stable).
     /// </summary>
+    /// <remarks>
+    /// Uses the numerically stable formula: max(z,0) - z*t + log(1 + exp(-|z|))
+    /// where z is the logit (pre-sigmoid prediction) and t is the target.
+    /// This avoids numerical instability from computing log of values near 0 or 1.
+    /// </remarks>
     private T CalculateBinaryLoss(Tensor<T> predictions, Tensor<T> targets)
     {
         int batchSize = predictions.Shape[0];
         T totalLoss = NumOps.Zero;
-        T epsilon = NumOps.FromDouble(1e-10);
 
         for (int i = 0; i < batchSize; i++)
         {
-            T prediction = predictions[i, 0];
+            T logit = predictions[i, 0];
             T target = targets[i, 0];
 
-            T logP = NumOps.Log(NumOps.Add(prediction, epsilon));
-            T logOneMinusP = NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, prediction), epsilon));
+            // BCE with logits: max(z,0) - z*t + log(1 + exp(-|z|))
+            T maxLogitZero = NumOps.GreaterThan(logit, NumOps.Zero) ? logit : NumOps.Zero;
+            T absLogit = NumOps.GreaterThanOrEquals(logit, NumOps.Zero) ? logit : NumOps.Negate(logit);
+            T expNegAbsLogit = NumOps.Exp(NumOps.Negate(absLogit));
+            T logOnePlusExp = NumOps.Log(NumOps.Add(NumOps.One, expNegAbsLogit));
 
-            T termOne = NumOps.Multiply(target, logP);
-            T termTwo = NumOps.Multiply(NumOps.Subtract(NumOps.One, target), logOneMinusP);
+            T loss = NumOps.Add(
+                NumOps.Subtract(maxLogitZero, NumOps.Multiply(logit, target)),
+                logOnePlusExp);
 
-            T sampleLoss = NumOps.Negate(NumOps.Add(termOne, termTwo));
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
+            totalLoss = NumOps.Add(totalLoss, loss);
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
     /// <summary>
-    /// Calculates gradients for backpropagation.
+    /// Calculates gradients for binary cross-entropy loss with logits.
     /// </summary>
+    /// <remarks>
+    /// The gradient of BCE with logits with respect to the logit z is:
+    /// dL/dz = sigmoid(z) - target = 1/(1+exp(-z)) - target
+    /// This is consistent with the logits-based loss formula.
+    /// </remarks>
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets)
     {
         int batchSize = predictions.Shape[0];
@@ -397,7 +497,16 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
 
         for (int i = 0; i < batchSize; i++)
         {
-            gradients[i, 0] = NumOps.Subtract(predictions[i, 0], targets[i, 0]);
+            T logit = predictions[i, 0];
+            T target = targets[i, 0];
+
+            // sigmoid(logit) = 1 / (1 + exp(-logit))
+            T negLogit = NumOps.Negate(logit);
+            T expNegLogit = NumOps.Exp(negLogit);
+            T sigmoid = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegLogit));
+
+            // Gradient = sigmoid(logit) - target
+            gradients[i, 0] = NumOps.Subtract(sigmoid, target);
         }
 
         return gradients;
@@ -525,12 +634,29 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
 
         if (images.Shape.Length == 4)
         {
-            // 4D tensor: [B, C, H, W] or [B, H, W, C]
-            // Assume channels-last format (more common for conditional GANs)
-            height = images.Shape[1];
-            width = images.Shape[2];
-            channels = images.Shape[3];
-            isChannelsFirst = false;
+            // 4D tensor: [B, C, H, W] (channels-first) or [B, H, W, C] (channels-last)
+            // Detect layout using discriminator architecture
+            var discArch = Discriminator.Architecture;
+            int expectedChannels = discArch.InputDepth > 0 ? discArch.InputDepth : 0;
+
+            // Check if shape[1] matches expected channels (channels-first: [B, C, H, W])
+            // or shape[3] matches expected channels (channels-last: [B, H, W, C])
+            if (expectedChannels > 0 && images.Shape[1] == expectedChannels)
+            {
+                // Channels-first format: [B, C, H, W]
+                channels = images.Shape[1];
+                height = images.Shape[2];
+                width = images.Shape[3];
+                isChannelsFirst = true;
+            }
+            else
+            {
+                // Channels-last format: [B, H, W, C] (default)
+                height = images.Shape[1];
+                width = images.Shape[2];
+                channels = images.Shape[3];
+                isChannelsFirst = false;
+            }
         }
         else if (images.Shape.Length == 3)
         {
