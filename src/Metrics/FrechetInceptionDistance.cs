@@ -342,8 +342,9 @@ namespace AiDotNet.Metrics
                 // Check for divergence (values growing too large)
                 if (updateNorm > divergenceThreshold)
                 {
-                    // Matrix is ill-conditioned; return trace of identity as fallback
-                    return _numOps.FromDouble(n);
+                    // Newton-Schulz failed; use eigenvalue-based fallback
+                    // For trace(sqrt(A)), compute sum of sqrt of eigenvalues
+                    return ComputeTraceSqrtViaEigenvalues(symProduct, n);
                 }
 
                 // Check for convergence (change is negligible)
@@ -387,6 +388,132 @@ namespace AiDotNet.Metrics
         {
             var features = ExtractFeatures(images);
             return ComputeStatistics(features);
+        }
+
+        /// <summary>
+        /// Computes trace(sqrt(A)) using eigenvalue decomposition via Jacobi iteration.
+        /// Used as fallback when Newton-Schulz iteration diverges.
+        /// </summary>
+        private T ComputeTraceSqrtViaEigenvalues(Matrix<T> A, int n)
+        {
+            // Create a working copy for Jacobi iteration
+            var matrix = new Matrix<T>(n, n);
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    matrix[i, j] = A[i, j];
+                }
+            }
+
+            const int maxJacobiIterations = 50;
+            const double jacobiTolerance = 1e-10;
+
+            // Jacobi eigenvalue algorithm for symmetric matrices
+            for (int iter = 0; iter < maxJacobiIterations; iter++)
+            {
+                // Find largest off-diagonal element
+                int p = 0, q = 1;
+                var maxOffDiag = _numOps.Zero;
+                bool foundOffDiag = false;
+
+                for (int i = 0; i < n; i++)
+                {
+                    for (int j = i + 1; j < n; j++)
+                    {
+                        var absVal = _numOps.GreaterThanOrEquals(matrix[i, j], _numOps.Zero)
+                            ? matrix[i, j]
+                            : _numOps.Negate(matrix[i, j]);
+
+                        if (!foundOffDiag || _numOps.GreaterThan(absVal, maxOffDiag))
+                        {
+                            maxOffDiag = absVal;
+                            p = i;
+                            q = j;
+                            foundOffDiag = true;
+                        }
+                    }
+                }
+
+                // Check convergence (off-diagonal elements small enough)
+                if (_numOps.ToDouble(maxOffDiag) < jacobiTolerance)
+                {
+                    break;
+                }
+
+                // Compute Jacobi rotation angle
+                var diff = _numOps.Subtract(matrix[q, q], matrix[p, p]);
+                T theta;
+                if (Math.Abs(_numOps.ToDouble(diff)) < 1e-15)
+                {
+                    theta = _numOps.FromDouble(Math.PI / 4.0);
+                }
+                else
+                {
+                    var tau = _numOps.Divide(
+                        _numOps.Multiply(_numOps.FromDouble(2.0), matrix[p, q]),
+                        diff);
+                    var tauDouble = _numOps.ToDouble(tau);
+                    var t = Math.Sign(tauDouble) / (Math.Abs(tauDouble) + Math.Sqrt(1.0 + tauDouble * tauDouble));
+                    theta = _numOps.FromDouble(Math.Atan(t));
+                }
+
+                var cosTheta = _numOps.FromDouble(Math.Cos(_numOps.ToDouble(theta)));
+                var sinTheta = _numOps.FromDouble(Math.Sin(_numOps.ToDouble(theta)));
+
+                // Apply Jacobi rotation: A' = J^T * A * J
+                for (int i = 0; i < n; i++)
+                {
+                    if (i != p && i != q)
+                    {
+                        var aip = matrix[i, p];
+                        var aiq = matrix[i, q];
+
+                        matrix[i, p] = _numOps.Add(
+                            _numOps.Multiply(cosTheta, aip),
+                            _numOps.Multiply(sinTheta, aiq));
+                        matrix[p, i] = matrix[i, p];
+
+                        matrix[i, q] = _numOps.Subtract(
+                            _numOps.Multiply(cosTheta, aiq),
+                            _numOps.Multiply(sinTheta, aip));
+                        matrix[q, i] = matrix[i, q];
+                    }
+                }
+
+                var app = matrix[p, p];
+                var aqq = matrix[q, q];
+                var apq = matrix[p, q];
+
+                matrix[p, p] = _numOps.Add(
+                    _numOps.Add(
+                        _numOps.Multiply(_numOps.Multiply(cosTheta, cosTheta), app),
+                        _numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(2.0), _numOps.Multiply(cosTheta, sinTheta)), apq)),
+                    _numOps.Multiply(_numOps.Multiply(sinTheta, sinTheta), aqq));
+
+                matrix[q, q] = _numOps.Add(
+                    _numOps.Subtract(
+                        _numOps.Multiply(_numOps.Multiply(sinTheta, sinTheta), app),
+                        _numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(2.0), _numOps.Multiply(cosTheta, sinTheta)), apq)),
+                    _numOps.Multiply(_numOps.Multiply(cosTheta, cosTheta), aqq));
+
+                matrix[p, q] = _numOps.Zero;
+                matrix[q, p] = _numOps.Zero;
+            }
+
+            // Sum sqrt of eigenvalues (diagonal elements after Jacobi)
+            // Only include positive eigenvalues (covariance matrices should be PSD)
+            var traceSqrt = _numOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                var eigenvalue = matrix[i, i];
+                if (_numOps.GreaterThan(eigenvalue, _numOps.Zero))
+                {
+                    traceSqrt = _numOps.Add(traceSqrt, _numOps.Sqrt(eigenvalue));
+                }
+            }
+
+            return traceSqrt;
         }
     }
 }
