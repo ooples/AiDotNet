@@ -763,6 +763,10 @@ public class HLIRToLLIRLowering<T> where T : struct
             OperationType.Softmax => CreateElementwiseOp(node, ElementwiseOpType.Softmax, outputShape, outputDataType, inputIds),
             OperationType.LogSoftmax => CreateElementwiseOp(node, ElementwiseOpType.LogSoftmax, outputShape, outputDataType, inputIds),
 
+            // Normalization operations (for fused Conv+BN+ReLU patterns)
+            OperationType.BatchNormalization or OperationType.LayerNormalization =>
+                CreateNormalizationOpForFusion(node, outputShape, outputDataType, inputIds),
+
             // Unsupported operation in fused context
             _ => throw new InvalidOperationException(
                 $"Operation '{node.Operation}' is not supported within fused operations. " +
@@ -922,6 +926,71 @@ public class HLIRToLLIRLowering<T> where T : struct
 
         conv2DOp.Algorithm = SelectConvAlgorithm(conv2DOp);
         return conv2DOp;
+    }
+
+    /// <summary>
+    /// Creates a FusedOp representing a normalization operation for use within fused operation contexts.
+    /// </summary>
+    /// <param name="node">The HLIR node representing the normalization operation.</param>
+    /// <param name="outputShape">The output shape for this sub-operation.</param>
+    /// <param name="outputDataType">The output data type for this sub-operation.</param>
+    /// <param name="inputIds">The resolved input buffer IDs within the fusion context.</param>
+    /// <returns>A FusedOp containing normalization-specific parameters for LLIR execution.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method enables normalization operations (BatchNormalization, LayerNormalization) to be
+    /// included in fused operation patterns such as Conv+BN+ReLU. The normalization parameters
+    /// (epsilon, momentum, axis) are extracted from the HLIR node attributes and stored in the
+    /// FusedOp's Attributes dictionary.
+    /// </para>
+    /// <para>
+    /// For BatchNormalization, the typical parameters include:
+    /// - epsilon: Small constant for numerical stability (default 1e-5)
+    /// - momentum: Running mean/variance momentum (default 0.1)
+    /// - axis: Channel axis for normalization (default -1, typically channel dimension)
+    /// </para>
+    /// <para>
+    /// For LayerNormalization, similar parameters are used but normalization occurs
+    /// across different dimensions (typically the feature dimension).
+    /// </para>
+    /// </remarks>
+    private FusedOp CreateNormalizationOpForFusion(
+        HLIRNode<T> node,
+        int[] outputShape,
+        IRDataType outputDataType,
+        int[] inputIds)
+    {
+        // Allocate output buffer for this sub-op within the fused operation
+        var outputId = _llirGraph.AllocateBufferId();
+
+        // Extract normalization-specific parameters from node attributes
+        var epsilon = GetAttributeDouble(node, "epsilon", 1e-5);
+        var momentum = GetAttributeDouble(node, "momentum", 0.1);
+        var axis = GetAttributeInt(node, "axis", -1);
+
+        // Determine fusion pattern based on operation type
+        var fusionPattern = node.Operation == OperationType.BatchNormalization
+            ? "BatchNorm"
+            : "LayerNorm";
+
+        var fusedOp = new FusedOp
+        {
+            OutputId = outputId,
+            Name = node.Name,
+            InputIds = inputIds,
+            OutputShape = outputShape,
+            OutputDataType = outputDataType,
+            Device = GetDeviceForNode(node),
+            FusionPattern = fusionPattern,
+            SourceHLIRNodeId = node.Id
+        };
+
+        // Store normalization parameters in attributes for runtime execution
+        fusedOp.Attributes["epsilon"] = epsilon;
+        fusedOp.Attributes["momentum"] = momentum;
+        fusedOp.Attributes["axis"] = axis;
+
+        return fusedOp;
     }
 
     #endregion
