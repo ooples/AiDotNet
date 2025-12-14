@@ -681,13 +681,19 @@ public class HLIRToLLIRLowering<T> where T : struct
             SourceHLIRNodeId = node.Id
         };
 
-        // Lower each original node as part of the fused op
+        // Local map for internal fusion buffer wiring (e.g., Conv→BN→ReLU chains)
+        // This allows sub-ops within the fusion to reference each other's outputs
+        var fusionBufferMap = new Dictionary<int, int>();
+
+        // Lower each original node as part of the fused op with fusion-aware input resolution
         foreach (var originalNode in fusedFrom)
         {
-            var llirOp = LowerNodeToOp(originalNode);
+            var llirOp = LowerNodeToOpWithFusionContext(originalNode, fusionBufferMap);
             if (llirOp != null)
             {
                 fusedOp.FusedOps.Add(llirOp);
+                // Store this sub-op's output in the fusion buffer map for subsequent sub-ops
+                fusionBufferMap[originalNode.Id] = llirOp.OutputId;
             }
         }
 
@@ -696,9 +702,10 @@ public class HLIRToLLIRLowering<T> where T : struct
     }
 
     /// <summary>
-    /// Lowers a single HLIR node to an LLIR operation for inclusion in a fused operation.
+    /// Lowers a single HLIR node to an LLIR operation with fusion-aware input resolution.
     /// </summary>
     /// <param name="node">The HLIR node to lower.</param>
+    /// <param name="fusionBufferMap">Local buffer map for internal fusion dependencies (e.g., Conv→BN→ReLU chains).</param>
     /// <returns>The lowered LLIR operation with complete metadata, or null if the operation type is not supported.</returns>
     /// <remarks>
     /// <para>
@@ -707,16 +714,22 @@ public class HLIRToLLIRLowering<T> where T : struct
     /// for accurate cost estimation in fused operations.
     /// </para>
     /// <para>
+    /// For chained fusion patterns (e.g., Conv→BN→ReLU), sub-ops may depend on each other's outputs.
+    /// The fusionBufferMap is checked first for internal fusion dependencies, then falls back to
+    /// the global _hlirToLlirBufferMap for external dependencies.
+    /// </para>
+    /// <para>
     /// For MatMul operations, the M, N, K dimensions are extracted from input/output shapes.
     /// For ElementwiseOp operations, OutputShape and OutputDataType are transferred.
     /// </para>
     /// </remarks>
-    private LLIROp? LowerNodeToOp(HLIRNode<T> node)
+    private LLIROp? LowerNodeToOpWithFusionContext(HLIRNode<T> node, Dictionary<int, int> fusionBufferMap)
     {
         // Get common properties from the node
         var outputShape = node.OutputType?.Shape ?? Array.Empty<int>();
         var outputDataType = node.OutputType != null ? ConvertDataType(node.OutputType.DataType) : IRDataType.Float32;
-        var inputIds = GetLLIRInputIds(node);
+        // Use fusion-aware input resolution for chained fusion patterns
+        var inputIds = GetLLIRInputIdsWithFusionContext(node, fusionBufferMap);
 
         return node.Operation switch
         {
@@ -835,6 +848,43 @@ public class HLIRToLLIRLowering<T> where T : struct
                     $"missing lowering implementation for operation type '{input.Operation}'.");
             }
             ids.Add(llirId);
+        }
+        return ids.ToArray();
+    }
+
+    /// <summary>
+    /// Resolves LLIR input IDs with fusion-aware context for chained fusion patterns.
+    /// </summary>
+    /// <param name="node">The HLIR node whose inputs need resolution.</param>
+    /// <param name="fusionBufferMap">Local buffer map for internal fusion dependencies.</param>
+    /// <returns>Array of resolved LLIR buffer IDs.</returns>
+    /// <remarks>
+    /// For chained fusions (e.g., Conv→BN→ReLU), sub-ops depend on each other's outputs.
+    /// This method checks the fusionBufferMap first for internal fusion dependencies,
+    /// then falls back to the global _hlirToLlirBufferMap for external dependencies.
+    /// </remarks>
+    private int[] GetLLIRInputIdsWithFusionContext(HLIRNode<T> node, Dictionary<int, int> fusionBufferMap)
+    {
+        var ids = new List<int>();
+        foreach (var input in node.Inputs)
+        {
+            // First check fusion buffer map for internal fusion dependencies
+            if (fusionBufferMap.TryGetValue(input.Id, out var fusionId))
+            {
+                ids.Add(fusionId);
+            }
+            // Fall back to global buffer map for external dependencies
+            else if (_hlirToLlirBufferMap.TryGetValue(input.Id, out var globalId))
+            {
+                ids.Add(globalId);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Cannot resolve input '{input.Name}' (ID: {input.Id}) for node '{node.Name}' (ID: {node.Id}). " +
+                    $"Input not found in fusion buffer map or global buffer map. " +
+                    $"This indicates a topological ordering issue within the fusion or missing lowering implementation.");
+            }
         }
         return ids.ToArray();
     }
