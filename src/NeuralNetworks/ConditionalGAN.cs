@@ -59,21 +59,21 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// <summary>
     /// Creates the combined ConditionalGAN architecture with correct dimension handling.
     /// </summary>
+    /// <remarks>
+    /// The generator architecture is returned unchanged. The condition vector is concatenated
+    /// with the noise at runtime in GenerateConditional(), not by modifying the architecture.
+    /// This preserves compatibility with the base CNN requirements for 3D input.
+    /// </remarks>
     private static NeuralNetworkArchitecture<T> CreateConditionalGeneratorArchitecture(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         int numConditionClasses)
     {
-        // Generator input includes both noise and condition vector
-        return new NeuralNetworkArchitecture<T>(
-            inputType: generatorArchitecture.InputType,
-            taskType: NeuralNetworkTaskType.Generative,
-            complexity: generatorArchitecture.Complexity,
-            inputSize: generatorArchitecture.InputSize + numConditionClasses,
-            inputHeight: generatorArchitecture.InputHeight,
-            inputWidth: generatorArchitecture.InputWidth,
-            inputDepth: generatorArchitecture.InputDepth,
-            outputSize: generatorArchitecture.OutputSize,
-            layers: null);
+        // Return the generator architecture unchanged. The condition concatenation
+        // is handled at runtime in GenerateConditional() and TrainStep(), not by
+        // modifying the architecture dimensions. This avoids conflicts between
+        // inputSize and dimension parameters for ThreeDimensional input types.
+        _ = numConditionClasses; // Used at runtime for condition handling
+        return generatorArchitecture;
     }
 
     /// <summary>
