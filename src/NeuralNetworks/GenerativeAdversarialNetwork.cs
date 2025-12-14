@@ -30,175 +30,6 @@ namespace AiDotNet.NeuralNetworks;
 public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
-    /// Gets or sets the momentum values for the optimizer.
-    /// </summary>
-    /// <value>A vector of momentum values for each parameter.</value>
-    /// <remarks>
-    /// <para>
-    /// Momentum is an optimization technique that helps accelerate gradient descent in the relevant direction
-    /// and dampens oscillations. It does this by adding a fraction of the previous parameter update to the
-    /// current update. This helps the optimizer converge faster and avoid getting stuck in local minima.
-    /// </para>
-    /// <para><b>For Beginners:</b> This helps the networks learn more smoothly.
-    /// 
-    /// Think of momentum as:
-    /// - A ball rolling down a hill that builds up speed
-    /// - It helps the network keep moving in a consistent direction
-    /// - It smooths out the learning process, preventing wild changes
-    /// - This makes training more stable and often faster
-    /// 
-    /// For example, if the network is consistently trying to adjust a parameter in
-    /// the same direction, momentum helps it make bigger adjustments over time.
-    /// </para>
-    /// </remarks>
-    private Vector<T> _momentum;
-
-    /// <summary>
-    /// Gets or sets the second moment estimates for the Adam optimizer.
-    /// </summary>
-    /// <value>A vector of second moment values for each parameter.</value>
-    /// <remarks>
-    /// <para>
-    /// The second moment estimates are used by the Adam optimizer to adapt the learning rate for each parameter.
-    /// They track the squared gradients, providing a measure of how quickly each parameter is changing.
-    /// Parameters that change more rapidly get smaller learning rates, and vice versa, which helps stabilize training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This helps the networks adjust their learning speed for different parts.
-    /// 
-    /// Think of second moments as:
-    /// - A record of how wildly each part of the network has been changing
-    /// - Parts that change a lot get smaller updates (to avoid instability)
-    /// - Parts that change little get larger updates (to learn faster)
-    /// - This adaptive approach helps GANs train more reliably
-    /// 
-    /// It's like automatically adjusting the sensitivity of different controls
-    /// based on how jumpy they've been in the past.
-    /// </para>
-    /// </remarks>
-    private Vector<T> _secondMoment;
-
-    /// <summary>
-    /// Gets or sets the current value of beta1 raised to the power of the iteration count for Adam optimizer.
-    /// </summary>
-    /// <value>The current beta1 power value.</value>
-    /// <remarks>
-    /// <para>
-    /// This value is used for bias correction in the Adam optimizer. The beta1 parameter controls the
-    /// exponential decay rate for the first moment estimates (momentum). The power value is updated at
-    /// each training step and helps correct the bias in the early stages of training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a technical value that helps the optimizer work correctly.
-    /// 
-    /// Think of beta1Power as:
-    /// - A correction factor for the optimizer
-    /// - It helps make the early stages of training more accurate
-    /// - Without it, the network might learn too slowly at the beginning
-    /// - It's automatically adjusted during training
-    /// 
-    /// This is part of what makes modern optimizers like Adam so effective for
-    /// training complex models like GANs.
-    /// </para>
-    /// </remarks>
-    private T _beta1Power;
-
-    /// <summary>
-    /// Gets or sets the current value of beta2 raised to the power of the iteration count for Adam optimizer.
-    /// </summary>
-    /// <value>The current beta2 power value.</value>
-    /// <remarks>
-    /// <para>
-    /// This value is used for bias correction in the Adam optimizer. The beta2 parameter controls the
-    /// exponential decay rate for the second moment estimates. The power value is updated at
-    /// each training step and helps correct the bias in the early stages of training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is another technical value that helps the optimizer work correctly.
-    /// 
-    /// Think of beta2Power as:
-    /// - A companion to beta1Power for the second moment estimates
-    /// - It ensures the adaptive learning rates are accurate from the start
-    /// - Without it, the adaptation might be too aggressive or too conservative initially
-    /// - Like beta1Power, it's automatically adjusted during training
-    /// 
-    /// These correction factors are what make Adam one of the preferred optimizers
-    /// for training GANs.
-    /// </para>
-    /// </remarks>
-    private T _beta2Power;
-
-    /// <summary>
-    /// Gets or sets the current learning rate for the optimizer.
-    /// </summary>
-    /// <value>A double representing the current learning rate.</value>
-    /// <remarks>
-    /// <para>
-    /// The learning rate determines the step size at each iteration while moving toward a minimum of the loss function.
-    /// In this implementation, the learning rate can decay over time and can be adapted based on training progress.
-    /// Finding the right learning rate is critical for effective GAN training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This controls how big the adjustments are during training.
-    /// 
-    /// Think of the learning rate as:
-    /// - The size of the steps the networks take when learning
-    /// - Too large, and they might overshoot and never find the best solution
-    /// - Too small, and training will take forever
-    /// - In this implementation, it gradually decreases over time
-    /// 
-    /// The learning rate is one of the most important hyperparameters to tune
-    /// when training GANs, as they can be notoriously unstable.
-    /// </para>
-    /// </remarks>
-    private double _currentLearningRate = 0.001;
-
-    /// <summary>
-    /// Gets or sets the initial learning rate for the optimizer.
-    /// </summary>
-    /// <value>A double representing the initial learning rate.</value>
-    /// <remarks>
-    /// <para>
-    /// The initial learning rate is the starting point for the optimizer's step size. It determines
-    /// how large the initial parameter updates are during training. This value is typically reduced
-    /// over time using learning rate decay to fine-tune the model as it approaches convergence.
-    /// </para>
-    /// <para><b>For Beginners:</b> This sets the starting speed of learning for the networks.
-    /// 
-    /// Think of the initial learning rate as:
-    /// - The initial step size the networks take when learning
-    /// - A larger value means bigger initial steps (faster initial learning, but potentially unstable)
-    /// - A smaller value means smaller initial steps (slower initial learning, but potentially more stable)
-    /// - It's often reduced over time as the networks fine-tune their performance
-    /// 
-    /// Finding the right initial learning rate is crucial for effective GAN training,
-    /// as it impacts both the speed of convergence and the stability of the training process.
-    /// </para>
-    /// </remarks>
-    private double _initialLearningRate = 0.001;
-
-    /// <summary>
-    /// Gets or sets the rate at which the learning rate decays during training.
-    /// </summary>
-    /// <value>A double representing the learning rate decay factor.</value>
-    /// <remarks>
-    /// <para>
-    /// The learning rate decay factor determines how quickly the learning rate decreases over time.
-    /// A value close to 1 means the learning rate decreases very slowly, while a smaller value
-    /// causes it to decrease more rapidly. Decreasing the learning rate over time can help the
-    /// model converge to a more optimal solution.
-    /// </para>
-    /// <para><b>For Beginners:</b> This controls how quickly the step size shrinks during training.
-    /// 
-    /// Think of learning rate decay as:
-    /// - A factor that gradually reduces the learning rate
-    /// - At the beginning, large steps help explore the solution space quickly
-    /// - As training progresses, smaller steps help fine-tune the solution
-    /// - A value of 0.9999 means the learning rate decreases very slowly
-    /// 
-    /// This is like starting with bold brush strokes when painting, then gradually
-    /// switching to finer brushes for the details.
-    /// </para>
-    /// </remarks>
-    private double _learningRateDecay = 0.9999;
-
-    /// <summary>
     /// Gets or sets the list of recent generator loss values for monitoring training progress.
     /// </summary>
     /// <value>A list of loss values from recent training iterations.</value>
@@ -275,6 +106,58 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
 
     private ILossFunction<T> _lossFunction;
+
+    /// <summary>
+    /// The optimizer used for updating generator parameters during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This optimizer handles the gradient-based parameter updates for the Generator network.
+    /// By default, Adam optimizer is used, but any IGradientBasedOptimizer can be provided
+    /// for customized training behavior.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the learning algorithm for the Generator.
+    /// It decides how to adjust the Generator's internal values based on feedback from training.
+    /// </para>
+    /// </remarks>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
+
+    /// <summary>
+    /// The optimizer used for updating discriminator parameters during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This optimizer handles the gradient-based parameter updates for the Discriminator network.
+    /// By default, Adam optimizer is used, but any IGradientBasedOptimizer can be provided
+    /// for customized training behavior.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the learning algorithm for the Discriminator.
+    /// It decides how to adjust the Discriminator's internal values based on feedback from training.
+    /// </para>
+    /// </remarks>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorOptimizer;
+
+    /// <summary>
+    /// Gets the optimizer used for updating generator parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Provides access to the generator's optimizer for derived classes that need
+    /// custom training logic.
+    /// </para>
+    /// </remarks>
+    protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GeneratorOptimizer => _generatorOptimizer;
+
+    /// <summary>
+    /// Gets the optimizer used for updating discriminator parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Provides access to the discriminator's optimizer for derived classes that need
+    /// custom training logic.
+    /// </para>
+    /// </remarks>
+    protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> DiscriminatorOptimizer => _discriminatorOptimizer;
 
     /// <summary>
     /// Gets or sets whether gradient penalty (WGAN-GP) is enabled for training stability.
@@ -394,13 +277,52 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
+    /// Creates the combined GAN architecture from generator and discriminator architectures.
+    /// </summary>
+    private static NeuralNetworkArchitecture<T> CreateGANArchitecture(
+        NeuralNetworkArchitecture<T> generatorArchitecture,
+        NeuralNetworkArchitecture<T> discriminatorArchitecture,
+        InputType inputType)
+    {
+        // For 3D input (images), use the discriminator's dimensions since it takes the image input
+        // The GAN's combined architecture represents the data flow from image to output
+        if (inputType == InputType.ThreeDimensional)
+        {
+            // Don't pass inputSize - let the validation calculate it from dimensions
+            return new NeuralNetworkArchitecture<T>(
+                inputType: inputType,
+                taskType: NeuralNetworkTaskType.Generative,
+                complexity: NetworkComplexity.Medium,
+                inputSize: 0, // Let validation calculate from dimensions
+                inputHeight: discriminatorArchitecture.InputHeight,
+                inputWidth: discriminatorArchitecture.InputWidth,
+                inputDepth: discriminatorArchitecture.InputDepth,
+                outputSize: discriminatorArchitecture.OutputSize,
+                layers: null);
+        }
+
+        // For 1D input, use the generator's input size
+        return new NeuralNetworkArchitecture<T>(
+            inputType: inputType,
+            taskType: NeuralNetworkTaskType.Generative,
+            complexity: NetworkComplexity.Medium,
+            inputSize: generatorArchitecture.InputSize,
+            inputHeight: 0,
+            inputWidth: 0,
+            inputDepth: 1,
+            outputSize: discriminatorArchitecture.OutputSize,
+            layers: null);
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GenerativeAdversarialNetwork{T}"/> class.
     /// </summary>
     /// <param name="generatorArchitecture">The neural network architecture for the generator.</param>
     /// <param name="discriminatorArchitecture">The neural network architecture for the discriminator.</param>
-    /// <param name="fitnessCalculator">The fitness calculator used to compute loss values during training.</param>
     /// <param name="inputType">The type of input the GAN will process.</param>
-    /// <param name="initialLearningRate">The initial learning rate for the optimizer. Default is 0.001.</param>
+    /// <param name="generatorOptimizer">The optimizer for the generator. If null, Adam optimizer is used.</param>
+    /// <param name="discriminatorOptimizer">The optimizer for the discriminator. If null, Adam optimizer is used.</param>
+    /// <param name="lossFunction">The loss function used to compute loss values during training.</param>
     /// <remarks>
     /// <para>
     /// This constructor initializes a new Generative Adversarial Network with the specified generator and discriminator
@@ -408,34 +330,26 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// training progress. The GAN's architecture is a combination of the generator and discriminator architectures.
     /// </para>
     /// <para><b>For Beginners:</b> This sets up the complete GAN system with both networks.
-    /// 
+    ///
     /// When creating a new GAN:
     /// - You provide separate architectures for the generator and discriminator
-    /// - The fitnessCalculator determines how performance is measured
+    /// - You can optionally provide custom optimizers for each network
     /// - The inputType specifies what kind of data the GAN will work with
-    /// - The initialLearningRate controls how quickly the networks learn initially
-    /// 
+    /// - If you don't specify optimizers, Adam optimizer is used by default
+    ///
     /// Think of it like establishing the rules and roles for the forger and detective
     /// before their competition begins.
     /// </para>
     /// </remarks>
-    public GenerativeAdversarialNetwork(NeuralNetworkArchitecture<T> generatorArchitecture, 
+    public GenerativeAdversarialNetwork(NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
         InputType inputType,
-        ILossFunction<T>? lossFunction = null,
-        double initialLearningRate = 0.001)
-        : base(new NeuralNetworkArchitecture<T>(
-            inputType,
-            NeuralNetworkTaskType.Generative, 
-            NetworkComplexity.Medium, 
-            generatorArchitecture.InputSize, 
-            discriminatorArchitecture.OutputSize, 
-            0, 0, 0, 
-            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorOptimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorOptimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(CreateGANArchitecture(generatorArchitecture, discriminatorArchitecture, inputType),
+            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
-        _initialLearningRate = initialLearningRate;
-        _currentLearningRate = initialLearningRate;
-
         // Initialize auxiliary loss fields
         AuxiliaryLossWeight = NumOps.FromDouble(10.0);
         _lastGradientPenalty = NumOps.Zero;
@@ -443,17 +357,15 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         _lastDiscriminatorLoss = NumOps.Zero;
         _lastGeneratorLoss = NumOps.Zero;
 
-        // Initialize optimizer parameters
-        _beta1Power = NumOps.One;
-        _beta2Power = NumOps.One;
-    
         // Initialize tracking collections
         _generatorLosses = [];
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
-        _momentum = Vector<T>.Empty();
-        _secondMoment = Vector<T>.Empty();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
+
+        // Initialize optimizers (default to Adam if not provided)
+        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator);
+        _discriminatorOptimizer = discriminatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator);
 
         InitializeLayers();
     }
@@ -547,26 +459,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         if (_generatorLosses.Count > 100)
         {
             _generatorLosses.RemoveAt(0); // Keep only recent losses
-        }
-
-        // ----- Adaptive learning rate adjustment -----
-
-        // Adapt learning rate based on recent performance
-        if (_generatorLosses.Count >= 20)
-        {
-            var recentAverage = _generatorLosses.Skip(_generatorLosses.Count - 10).Average(l => Convert.ToDouble(l));
-            var previousAverage = _generatorLosses.Skip(_generatorLosses.Count - 20).Take(10).Average(l => Convert.ToDouble(l));
-
-            // If loss is not improving or worsening, adjust learning rate
-            if (recentAverage > previousAverage * 0.95)
-            {
-                _currentLearningRate *= 0.95; // Reduce learning rate by 5%
-            }
-            else if (recentAverage < previousAverage * 0.8)
-            {
-                // Loss is improving significantly, we can potentially increase learning rate slightly
-                _currentLearningRate = Math.Min(_currentLearningRate * 1.05, 0.001); // Increase but cap
-            }
         }
 
         return (discriminatorLoss, generatorLoss);
@@ -666,24 +558,22 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     }
 
     /// <summary>
-    /// Updates the parameters of a network using the Adam optimizer with the calculated gradients.
+    /// Updates the parameters of a network using the configured optimizer with the calculated gradients.
     /// </summary>
     /// <param name="network">The neural network to update.</param>
     /// <remarks>
     /// <para>
     /// This method applies the calculated gradients to update the parameters of the specified network
-    /// using the Adam optimizer. It includes gradient clipping, momentum, and adaptive learning rates
-    /// for stable and efficient training. This tensor-based implementation handles all parameters
-    /// at once for better performance.
+    /// using the configured optimizer (Generator or Discriminator). It includes gradient clipping
+    /// for stable and efficient training.
     /// </para>
-    /// <para><b>For Beginners:</b> This updates the network's internal values using an advanced algorithm.
-    /// 
+    /// <para><b>For Beginners:</b> This updates the network's internal values using the optimizer.
+    ///
     /// The parameter update process:
-    /// - Uses the Adam optimizer, which adapts to the training dynamics
-    /// - Applies momentum to smooth updates and avoid oscillations
-    /// - Includes adaptive learning rates for different parameters
-    /// - Prevents excessively large updates that could destabilize training
-    /// 
+    /// - Uses the configured optimizer (default is Adam)
+    /// - Applies gradient clipping to prevent exploding gradients
+    /// - The optimizer handles momentum, adaptive learning rates, etc.
+    ///
     /// This approach helps GANs train more reliably and efficiently.
     /// </para>
     /// </remarks>
@@ -692,24 +582,11 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Get current parameters and gradients
         var parameters = network.GetParameters();
         var gradients = network.GetParameterGradients();
-    
-        // Initialize optimizer state if not already done
-        if (_momentum == null || _momentum.Length != parameters.Length)
-        {
-            _momentum = new Vector<T>(parameters.Length);
-            _momentum.Fill(NumOps.Zero);
-        }
-    
-        if (_secondMoment == null || _secondMoment.Length != parameters.Length)
-        {
-            _secondMoment = new Vector<T>(parameters.Length);
-            _secondMoment.Fill(NumOps.Zero);
-        }
-    
+
         // Gradient clipping to prevent exploding gradients
         var gradientNorm = gradients.L2Norm();
         var clipThreshold = NumOps.FromDouble(5.0);
-    
+
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
             var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
@@ -718,57 +595,13 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
             }
         }
-    
-        // Adam optimizer parameters
-        var learningRate = NumOps.FromDouble(_currentLearningRate);
-        var beta1 = NumOps.FromDouble(0.9);  // Momentum coefficient
-        var beta2 = NumOps.FromDouble(0.999); // RMS coefficient
-        var epsilon = NumOps.FromDouble(1e-8);
-    
-        // Updated parameters vector
-        var updatedParameters = new Vector<T>(parameters.Length);
-    
-        // Apply Adam updates to all parameters at once
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            // Update momentum (first moment)
-            _momentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _momentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
-            );
-        
-            // Update second moment
-            _secondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _secondMoment[i]),
-                NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, beta2),
-                    NumOps.Multiply(gradients[i], gradients[i])
-                )
-            );
-        
-            // Bias correction
-            var momentumCorrected = NumOps.Divide(_momentum[i], NumOps.Subtract(NumOps.One, _beta1Power));
-            var secondMomentCorrected = NumOps.Divide(_secondMoment[i], NumOps.Subtract(NumOps.One, _beta2Power));
-        
-            // Adam update
-            var adaptiveLR = NumOps.Divide(
-                learningRate,
-                NumOps.Add(NumOps.Sqrt(secondMomentCorrected), epsilon)
-            );
-        
-            updatedParameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(adaptiveLR, momentumCorrected)
-            );
-        }
-    
-        // Update beta powers for next iteration
-        _beta1Power = NumOps.Multiply(_beta1Power, beta1);
-        _beta2Power = NumOps.Multiply(_beta2Power, beta2);
-    
-        // Apply learning rate decay
-        _currentLearningRate *= _learningRateDecay;
-    
+
+        // Select the appropriate optimizer based on which network is being updated
+        var optimizer = ReferenceEquals(network, Generator) ? _generatorOptimizer : _discriminatorOptimizer;
+
+        // Use the optimizer to compute updated parameters
+        var updatedParameters = optimizer.UpdateParameters(parameters, gradients);
+
         // Update network parameters
         network.UpdateParameters(updatedParameters);
     }
@@ -831,7 +664,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         metrics["ScoreStandardDeviation"] = stdDevScore;
         metrics["ScoreRange"] = maxScore - minScore;
         metrics["RecentGeneratorLoss"] = recentLoss;
-        metrics["CurrentLearningRate"] = _currentLearningRate;
 
         // Advanced metrics for diagnosing GAN issues
 
@@ -1008,24 +840,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         if (_generatorLosses.Count > 100)
         {
             _generatorLosses.RemoveAt(0);
-        }
-
-        // Adapt learning rate based on recent performance
-        if (_generatorLosses.Count >= 20)
-        {
-            var recentAverage = _generatorLosses.Skip(_generatorLosses.Count - 10).Average(l => Convert.ToDouble(l));
-            var previousAverage = _generatorLosses.Skip(_generatorLosses.Count - 20).Take(10).Average(l => Convert.ToDouble(l));
-
-            // If loss is not improving or worsening, adjust learning rate
-            if (recentAverage > previousAverage * 0.95)
-            {
-                _currentLearningRate *= 0.95; // Reduce learning rate by 5%
-            }
-            else if (recentAverage < previousAverage * 0.8)
-            {
-                // Loss is improving significantly, we can potentially increase learning rate slightly
-                _currentLearningRate = Math.Min(_currentLearningRate * 1.05, 0.001); // Increase but cap
-            }
         }
 
         LastLoss = totalGeneratorLoss;
@@ -1297,6 +1111,16 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     public Tensor<T> GenerateRandomNoiseTensor(int batchSize, int noiseSize)
     {
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
+        }
+
+        if (noiseSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(noiseSize), noiseSize, "Noise size must be positive.");
+        }
+
         var random = RandomHelper.CreateSecureRandom();
         var shape = new int[] { batchSize, noiseSize };
         var noise = new Tensor<T>(shape);
@@ -1383,8 +1207,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         metrics["ScoreStandardDeviation"] = stdDevScore;
         metrics["ScoreRange"] = maxScore - minScore;
         metrics["RecentGeneratorLoss"] = recentLoss;
-        metrics["CurrentLearningRate"] = _currentLearningRate;
-    
+
         // Mode collapse indicator (if very low standard deviation, might indicate mode collapse)
         metrics["PotentialModeCollapse"] = stdDevScore < 0.05 ? 1.0 : 0.0;
     
@@ -1596,7 +1419,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             { "DiscriminatorLoss", _lastDiscriminatorLoss?.ToString() ?? "0" },
             { "GradientPenalty", _lastGradientPenalty?.ToString() ?? "0" },
             { "FeatureMatchingLoss", _lastFeatureMatchingLoss?.ToString() ?? "0" },
-            { "CurrentLearningRate", _currentLearningRate.ToString() },
             { "UseGradientPenalty", _useGradientPenalty.ToString() },
             { "UseFeatureMatching", UseFeatureMatching.ToString() }
         };
@@ -1722,54 +1544,15 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        // Save learning rate parameters
-        writer.Write(_currentLearningRate);
-        writer.Write(_learningRateDecay);
-    
-        // Save optimizer state
-        writer.Write(_beta1Power != null ? Convert.ToDouble(_beta1Power) : 1.0);
-        writer.Write(_beta2Power != null ? Convert.ToDouble(_beta2Power) : 1.0);
-    
-        // Save momentum and second moment vectors
-        if (_momentum != null && _momentum.Length > 0)
-        {
-            writer.Write(true); // Flag indicating momentum exists
-            writer.Write(_momentum.Length);
-        
-            for (int i = 0; i < _momentum.Length; i++)
-            {
-                writer.Write(Convert.ToDouble(_momentum[i]));
-            }
-        }
-        else
-        {
-            writer.Write(false); // No momentum saved
-        }
-    
-        if (_secondMoment != null && _secondMoment.Length > 0)
-        {
-            writer.Write(true); // Flag indicating second moment exists
-            writer.Write(_secondMoment.Length);
-        
-            for (int i = 0; i < _secondMoment.Length; i++)
-            {
-                writer.Write(Convert.ToDouble(_secondMoment[i]));
-            }
-        }
-        else
-        {
-            writer.Write(false); // No second moment saved
-        }
-    
         // Save recent loss history (last 20 entries at most)
         int lossCount = Math.Min(_generatorLosses.Count, 20);
         writer.Write(lossCount);
-    
+
         for (int i = _generatorLosses.Count - lossCount; i < _generatorLosses.Count; i++)
         {
             writer.Write(Convert.ToDouble(_generatorLosses[i]));
         }
-    
+
         // Save Generator and Discriminator networks
         var generatorBytes = Generator.Serialize();
         writer.Write(generatorBytes.Length);
@@ -1804,48 +1587,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Load learning rate parameters
-        _currentLearningRate = reader.ReadDouble();
-        _learningRateDecay = reader.ReadDouble();
-
-        // Load optimizer state
-        _beta1Power = NumOps.FromDouble(reader.ReadDouble());
-        _beta2Power = NumOps.FromDouble(reader.ReadDouble());
-
-        // Load momentum if it exists
-        bool hasMomentum = reader.ReadBoolean();
-        if (hasMomentum)
-        {
-            int momentumLength = reader.ReadInt32();
-            _momentum = new Vector<T>(momentumLength);
-    
-            for (int i = 0; i < momentumLength; i++)
-            {
-                _momentum[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-        else
-        {
-            _momentum = new Vector<T>(0);
-        }
-
-        // Load second moment if it exists
-        bool hasSecondMoment = reader.ReadBoolean();
-        if (hasSecondMoment)
-        {
-            int secondMomentLength = reader.ReadInt32();
-            _secondMoment = new Vector<T>(secondMomentLength);
-    
-            for (int i = 0; i < secondMomentLength; i++)
-            {
-                _secondMoment[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-        else
-        {
-            _secondMoment = new Vector<T>(0);
-        }
-
         // Load recent loss history
         int lossCount = reader.ReadInt32();
         _generatorLosses = new List<T>(lossCount);
@@ -1911,17 +1652,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Calculate the magnitude of parameter changes
         T parameterChangeNorm = parameters.L2Norm();
 
-        // Adjust learning rate based on parameter change magnitude
-        if (NumOps.GreaterThan(parameterChangeNorm, NumOps.FromDouble(1.0)))
-        {
-            _currentLearningRate *= 0.95; // Reduce learning rate if changes are large
-        }
-        else if (NumOps.LessThan(parameterChangeNorm, NumOps.FromDouble(0.01)))
-        {
-            _currentLearningRate = Math.Min(_currentLearningRate * 1.05, _initialLearningRate); // Increase learning rate if changes are small, but cap it at initial rate
-        }
-
-        // Reset optimizer state if a very large change is detected
+        // Reset optimizer state if a very large change is detected (indicates training instability)
         if (NumOps.GreaterThan(parameterChangeNorm, NumOps.FromDouble(10.0)))
         {
             ResetOptimizerState();
@@ -1949,10 +1680,9 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     private void ResetOptimizerState()
     {
-        _beta1Power = NumOps.One;
-        _beta2Power = NumOps.One;
-        _momentum = new Vector<T>(Generator.GetParameterCount() + Discriminator.GetParameterCount());
-        _secondMoment = new Vector<T>(Generator.GetParameterCount() + Discriminator.GetParameterCount());
+        // Reset both optimizers to their initial state
+        _generatorOptimizer.Reset();
+        _discriminatorOptimizer.Reset();
     }
 
     /// <summary>
@@ -2448,7 +2178,8 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             Generator.Architecture,
             Discriminator.Architecture,
             Architecture.InputType,
-            _lossFunction,
-            _initialLearningRate);
+            generatorOptimizer: null,
+            discriminatorOptimizer: null,
+            _lossFunction);
     }
 }

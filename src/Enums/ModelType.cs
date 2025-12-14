@@ -766,6 +766,66 @@ public enum ModelType
 
     GenerativeAdversarialNetwork,
 
+    /// <summary>
+    /// A Deep Convolutional GAN that uses convolutional layers with specific architectural guidelines.
+    /// </summary>
+    DCGAN,
+
+    /// <summary>
+    /// A Wasserstein GAN that uses Wasserstein distance for more stable training.
+    /// </summary>
+    WassersteinGAN,
+
+    /// <summary>
+    /// A Wasserstein GAN with Gradient Penalty for enforcing Lipschitz constraint.
+    /// </summary>
+    WassersteinGANGP,
+
+    /// <summary>
+    /// A Conditional GAN that generates data conditioned on additional information.
+    /// </summary>
+    ConditionalGAN,
+
+    /// <summary>
+    /// An Auxiliary Classifier GAN that includes class information in generation.
+    /// </summary>
+    AuxiliaryClassifierGAN,
+
+    /// <summary>
+    /// An Information Maximizing GAN that learns disentangled representations.
+    /// </summary>
+    InfoGAN,
+
+    /// <summary>
+    /// A StyleGAN that generates high-quality images with style-based generation.
+    /// </summary>
+    StyleGAN,
+
+    /// <summary>
+    /// A Progressive GAN that grows during training for high-resolution image generation.
+    /// </summary>
+    ProgressiveGAN,
+
+    /// <summary>
+    /// A BigGAN that uses large batch sizes for high-fidelity image generation.
+    /// </summary>
+    BigGAN,
+
+    /// <summary>
+    /// A CycleGAN for unpaired image-to-image translation.
+    /// </summary>
+    CycleGAN,
+
+    /// <summary>
+    /// A Pix2Pix GAN for paired image-to-image translation.
+    /// </summary>
+    Pix2Pix,
+
+    /// <summary>
+    /// A Self-Attention GAN that uses attention mechanisms for modeling long-range dependencies.
+    /// </summary>
+    SAGAN,
+
     NeuralTuringMachine,
 
     NEAT,
