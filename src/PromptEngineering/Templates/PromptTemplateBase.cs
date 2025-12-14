@@ -96,16 +96,9 @@ public abstract class PromptTemplateBase : IPromptTemplate
             return false;
         }
 
-        // Check that all required variables are present and not null
-        foreach (var variable in InputVariables)
-        {
-            if (!variables.TryGetValue(variable, out var value) || value == null)
-            {
-                return false;
-            }
-        }
-
-        return true;
+        // Check that all required variables are present and not null using LINQ
+        return InputVariables.All(variable =>
+            variables.TryGetValue(variable, out var value) && value != null);
     }
 
     /// <summary>
