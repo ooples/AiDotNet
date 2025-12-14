@@ -449,19 +449,41 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Translates image from domain A to domain B.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method temporarily sets the generator to evaluation mode for inference,
+    /// then restores the original training mode after prediction. This ensures
+    /// batch normalization and dropout behave correctly during both inference
+    /// and subsequent training steps.
+    /// </para>
+    /// </remarks>
     public Tensor<T> TranslateAtoB(Tensor<T> imageA)
     {
+        bool originalTrainingMode = GeneratorAtoB.IsTrainingMode;
         GeneratorAtoB.SetTrainingMode(false);
-        return GeneratorAtoB.Predict(imageA);
+        var result = GeneratorAtoB.Predict(imageA);
+        GeneratorAtoB.SetTrainingMode(originalTrainingMode);
+        return result;
     }
 
     /// <summary>
     /// Translates image from domain B to domain A.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method temporarily sets the generator to evaluation mode for inference,
+    /// then restores the original training mode after prediction. This ensures
+    /// batch normalization and dropout behave correctly during both inference
+    /// and subsequent training steps.
+    /// </para>
+    /// </remarks>
     public Tensor<T> TranslateBtoA(Tensor<T> imageB)
     {
+        bool originalTrainingMode = GeneratorBtoA.IsTrainingMode;
         GeneratorBtoA.SetTrainingMode(false);
-        return GeneratorBtoA.Predict(imageB);
+        var result = GeneratorBtoA.Predict(imageB);
+        GeneratorBtoA.SetTrainingMode(originalTrainingMode);
+        return result;
     }
 
     private T CalculateDiscriminatorLoss(Tensor<T> realPred, Tensor<T> fakePred, int batchSize)
