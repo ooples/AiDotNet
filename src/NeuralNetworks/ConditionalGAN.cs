@@ -450,8 +450,35 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
 
     /// <summary>
     /// Concatenates images with condition vectors for discriminator input.
+    /// Handles both spatial (3D/4D) and flattened (2D) discriminator architectures.
     /// </summary>
     private Tensor<T> ConcatenateImageAndCondition(Tensor<T> images, Tensor<T> conditions)
+    {
+        int batchSize = images.Shape[0];
+        int conditionSize = conditions.Shape[1];
+
+        // Check if discriminator expects spatial input (3D/4D tensor)
+        var discArch = Discriminator.Architecture;
+        bool expectsSpatialInput = discArch.InputHeight > 0 && discArch.InputWidth > 0;
+
+        if (expectsSpatialInput && images.Shape.Length >= 3)
+        {
+            // Spatial architecture: tile conditions across spatial dimensions
+            // Input image shape: [B, H, W, C] or [B, C, H, W]
+            // Output shape: [B, H, W, C + K] or [B, C + K, H, W]
+            return ConcatenateSpatialImageAndCondition(images, conditions);
+        }
+        else
+        {
+            // Flattened architecture: concatenate flattened image with condition vector
+            return ConcatenateFlattenedImageAndCondition(images, conditions);
+        }
+    }
+
+    /// <summary>
+    /// Concatenates flattened images with condition vectors for 1D discriminator input.
+    /// </summary>
+    private Tensor<T> ConcatenateFlattenedImageAndCondition(Tensor<T> images, Tensor<T> conditions)
     {
         int batchSize = images.Shape[0];
         int imageSize = images.Length / batchSize;
@@ -472,6 +499,106 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
             for (int i = 0; i < conditionSize; i++)
             {
                 result[b, imageSize + i] = conditions[b, i];
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Concatenates spatial images with condition vectors by tiling conditions
+    /// across spatial dimensions and appending as extra channels.
+    /// </summary>
+    /// <remarks>
+    /// For a [B, H, W, C] image and [B, K] condition:
+    /// - Expands condition to [B, H, W, K] by replicating across H and W
+    /// - Concatenates along channel axis to produce [B, H, W, C + K]
+    /// </remarks>
+    private Tensor<T> ConcatenateSpatialImageAndCondition(Tensor<T> images, Tensor<T> conditions)
+    {
+        int batchSize = images.Shape[0];
+        int conditionSize = conditions.Shape[1];
+
+        // Determine image dimensions based on shape
+        int height, width, channels;
+        bool isChannelsFirst;
+
+        if (images.Shape.Length == 4)
+        {
+            // 4D tensor: [B, C, H, W] or [B, H, W, C]
+            // Assume channels-last format (more common for conditional GANs)
+            height = images.Shape[1];
+            width = images.Shape[2];
+            channels = images.Shape[3];
+            isChannelsFirst = false;
+        }
+        else if (images.Shape.Length == 3)
+        {
+            // 3D tensor: [B, H*W, C] or similar - treat as spatial
+            height = Discriminator.Architecture.InputHeight;
+            width = Discriminator.Architecture.InputWidth;
+            channels = images.Length / (batchSize * height * width);
+            isChannelsFirst = false;
+        }
+        else
+        {
+            // Fall back to flattened for unexpected shapes
+            return ConcatenateFlattenedImageAndCondition(images, conditions);
+        }
+
+        // Create output tensor with extra channels for conditions
+        int[] outputShape = isChannelsFirst
+            ? new int[] { batchSize, channels + conditionSize, height, width }
+            : new int[] { batchSize, height, width, channels + conditionSize };
+        var result = new Tensor<T>(outputShape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < height; h++)
+            {
+                for (int w = 0; w < width; w++)
+                {
+                    // Copy original image channels
+                    for (int c = 0; c < channels; c++)
+                    {
+                        T value;
+                        if (images.Shape.Length == 4)
+                        {
+                            value = isChannelsFirst
+                                ? images[b, c, h, w]
+                                : images[b, h, w, c];
+                        }
+                        else
+                        {
+                            // For 3D, calculate linear index
+                            int idx = h * width * channels + w * channels + c;
+                            value = images.GetFlatIndexValue(b * (height * width * channels) + idx);
+                        }
+
+                        if (isChannelsFirst)
+                        {
+                            result[b, c, h, w] = value;
+                        }
+                        else
+                        {
+                            result[b, h, w, c] = value;
+                        }
+                    }
+
+                    // Tile condition across spatial dimensions (replicate at each H, W position)
+                    for (int k = 0; k < conditionSize; k++)
+                    {
+                        T condValue = conditions[b, k];
+                        if (isChannelsFirst)
+                        {
+                            result[b, channels + k, h, w] = condValue;
+                        }
+                        else
+                        {
+                            result[b, h, w, channels + k] = condValue;
+                        }
+                    }
+                }
             }
         }
 
