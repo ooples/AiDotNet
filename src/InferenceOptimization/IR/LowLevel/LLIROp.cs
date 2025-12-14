@@ -563,6 +563,15 @@ public class FusedOp : LLIROp
     /// </summary>
     public string FusionPattern { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Additional attributes for the fused operation (e.g., pooling parameters).
+    /// </summary>
+    /// <remarks>
+    /// Used to store operation-specific parameters that don't fit in the standard properties,
+    /// such as kernel size, stride, and padding for pooling operations.
+    /// </remarks>
+    public Dictionary<string, object> Attributes { get; set; } = new();
+
     public override OperationMetrics EstimateCost()
     {
         var combined = new OperationMetrics();

@@ -270,19 +270,27 @@ public class LayoutOptimizationPass<T> : OptimizationPassBase<T> where T : struc
     /// <param name="inputShape">The input tensor shape.</param>
     /// <param name="sourceLayout">The source layout.</param>
     /// <param name="targetLayout">The target layout.</param>
-    /// <returns>The transposed output shape.</returns>
+    /// <returns>The transposed output shape, or the original shape if not exactly 4D.</returns>
+    /// <remarks>
+    /// <para>
+    /// Layout conversion (NCHW ↔ NHWC) only applies to exactly 4D tensors.
+    /// Non-4D tensors are returned unchanged since they don't follow the
+    /// NCHW/NHWC layout conventions.
+    /// </para>
+    /// </remarks>
     private int[] ComputeTransposedShape(int[] inputShape, string sourceLayout, string targetLayout)
     {
-        if (inputShape == null || inputShape.Length < 4)
+        // Layout conversion only applies to exactly 4D tensors (NCHW/NHWC format)
+        // Non-4D tensors are returned unchanged
+        if (inputShape == null || inputShape.Length != 4)
         {
-            // Only 4D tensors need layout conversion
             return inputShape ?? Array.Empty<int>();
         }
 
         var permutation = GetLayoutPermutation(sourceLayout, targetLayout);
-        var outputShape = new int[inputShape.Length];
+        var outputShape = new int[4];
 
-        for (int i = 0; i < inputShape.Length; i++)
+        for (int i = 0; i < 4; i++)
         {
             outputShape[i] = inputShape[permutation[i]];
         }

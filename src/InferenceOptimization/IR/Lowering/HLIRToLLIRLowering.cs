@@ -387,17 +387,43 @@ public class HLIRToLLIRLowering<T> where T : struct
         return fusedOp;
     }
 
+    /// <summary>
+    /// Lowers a pooling operation from HLIR to LLIR representation.
+    /// </summary>
+    /// <param name="node">The HLIR node representing the pooling operation.</param>
+    /// <returns>The lowered FusedOp containing pooling parameters for LLIR execution.</returns>
+    /// <remarks>
+    /// <para>
+    /// Pooling operations (MaxPool2D, AvgPool2D) have spatial window, stride, and padding
+    /// parameters that distinguish them from simple reductions. This method uses FusedOp
+    /// to preserve these windowed operation semantics rather than ReduceOp which would
+    /// lose the spatial parameters.
+    /// </para>
+    /// <para>
+    /// The pooling parameters (kernel size, stride, padding) are extracted from the node's
+    /// attributes and stored in the FusedOp's Attributes dictionary for runtime execution.
+    /// </para>
+    /// </remarks>
     private LLIROp LowerPooling(HLIRNode<T> node)
     {
         var bufferId = _llirGraph.AllocateBufferId();
-        var reduceType = node.Operation switch
+        var pattern = node.Operation switch
         {
-            OperationType.MaxPool2D => ReduceType.Max,
-            OperationType.AvgPool2D or OperationType.GlobalAveragePooling => ReduceType.Mean,
-            _ => ReduceType.Max
+            OperationType.MaxPool2D => "MaxPool2D",
+            OperationType.AvgPool2D => "AvgPool2D",
+            OperationType.GlobalAveragePooling => "GlobalAvgPool",
+            _ => "MaxPool2D"
         };
 
-        return new ReduceOp
+        // Extract pooling parameters from node attributes
+        var kernelH = GetAttributeInt(node, "kernelH", 2);
+        var kernelW = GetAttributeInt(node, "kernelW", 2);
+        var strideH = GetAttributeInt(node, "strideH", 2);
+        var strideW = GetAttributeInt(node, "strideW", 2);
+        var padH = GetAttributeInt(node, "padH", 0);
+        var padW = GetAttributeInt(node, "padW", 0);
+
+        var fusedOp = new FusedOp
         {
             OutputId = bufferId,
             Name = node.Name,
@@ -405,9 +431,19 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
-            ReduceType = reduceType,
+            FusionPattern = pattern,
             SourceHLIRNodeId = node.Id
         };
+
+        // Store pooling parameters in attributes for runtime execution
+        fusedOp.Attributes["kernelH"] = kernelH;
+        fusedOp.Attributes["kernelW"] = kernelW;
+        fusedOp.Attributes["strideH"] = strideH;
+        fusedOp.Attributes["strideW"] = strideW;
+        fusedOp.Attributes["padH"] = padH;
+        fusedOp.Attributes["padW"] = padW;
+
+        return fusedOp;
     }
 
     private LLIROp LowerMemoryOp(HLIRNode<T> node)
@@ -545,10 +581,23 @@ public class HLIRToLLIRLowering<T> where T : struct
         };
     }
 
+    /// <summary>
+    /// Lowers a dropout operation from HLIR to LLIR representation.
+    /// </summary>
+    /// <param name="node">The HLIR node representing the dropout operation.</param>
+    /// <returns>Always returns null since dropout is a no-op in inference mode.</returns>
+    /// <remarks>
+    /// <para>
+    /// During inference, dropout is a no-op (identity operation) - inputs pass through
+    /// unchanged. This method simply maps the node's output to its input buffer,
+    /// avoiding unnecessary memory allocation or computation.
+    /// </para>
+    /// </remarks>
     private LLIROp? LowerDropout(HLIRNode<T> node)
     {
         // Dropout in inference mode is a no-op (identity)
-        if (_hlirToLlirBufferMap.TryGetValue(node.Inputs[0].Id, out var inputId))
+        // Validate that the node has at least one input before accessing
+        if (node.Inputs.Count > 0 && _hlirToLlirBufferMap.TryGetValue(node.Inputs[0].Id, out var inputId))
         {
             _hlirToLlirBufferMap[node.Id] = inputId;
         }
@@ -816,13 +865,72 @@ public class HLIRToLLIRLowering<T> where T : struct
         return op.Device == DeviceType.GPU ? ConvAlgorithm.Implicit : ConvAlgorithm.Im2Col;
     }
 
+    /// <summary>
+    /// Safely retrieves an integer attribute from a node's attribute dictionary.
+    /// </summary>
+    /// <param name="node">The HLIR node containing the attributes.</param>
+    /// <param name="key">The attribute key to look up.</param>
+    /// <param name="defaultValue">The default value to return if the attribute is missing or invalid.</param>
+    /// <returns>The attribute value as an integer, or the default value if not found or conversion fails.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method handles various attribute types safely:
+    /// <list type="bullet">
+    /// <item><description>Direct integer types (int, long, short, byte) are converted directly</description></item>
+    /// <item><description>String values are parsed using int.TryParse</description></item>
+    /// <item><description>Other IConvertible types use Convert.ToInt32 with exception handling</description></item>
+    /// <item><description>Any conversion failure returns the default value</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
     private int GetAttributeInt(HLIRNode<T> node, string key, int defaultValue)
     {
-        if (node.Attributes.TryGetValue(key, out var value))
+        if (!node.Attributes.TryGetValue(key, out var value) || value == null)
+        {
+            return defaultValue;
+        }
+
+        // Handle common integer types directly
+        if (value is int intValue)
+        {
+            return intValue;
+        }
+        if (value is long longValue)
+        {
+            return longValue is >= int.MinValue and <= int.MaxValue ? (int)longValue : defaultValue;
+        }
+        if (value is short shortValue)
+        {
+            return shortValue;
+        }
+        if (value is byte byteValue)
+        {
+            return byteValue;
+        }
+
+        // Handle string values
+        if (value is string strValue)
+        {
+            return int.TryParse(strValue, out var parsed) ? parsed : defaultValue;
+        }
+
+        // Handle other IConvertible types with exception handling
+        try
         {
             return Convert.ToInt32(value);
         }
-        return defaultValue;
+        catch (FormatException)
+        {
+            return defaultValue;
+        }
+        catch (OverflowException)
+        {
+            return defaultValue;
+        }
+        catch (InvalidCastException)
+        {
+            return defaultValue;
+        }
     }
 
     #endregion
