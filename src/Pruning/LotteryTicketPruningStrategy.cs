@@ -449,6 +449,13 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
     /// <returns>N:M structured mask.</returns>
     public IPruningMask<T> CreateNtoMMask(Tensor<T> importanceScores, int n, int m)
     {
+        if (m <= 0)
+            throw new ArgumentOutOfRangeException(nameof(m), "m must be greater than 0.");
+        if (n < 0)
+            throw new ArgumentOutOfRangeException(nameof(n), "n must be greater than or equal to 0.");
+        if (n > m)
+            throw new ArgumentException($"n ({n}) cannot be greater than m ({m}).", nameof(n));
+
         var flatScores = importanceScores.ToVector();
         int totalElements = flatScores.Length;
         var keepIndices = new bool[totalElements];
