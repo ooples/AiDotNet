@@ -282,4 +282,19 @@ public static class IRDataTypeExtensions
 
     public static bool IsQuantized(this IRDataType type) =>
         type is IRDataType.QInt8 or IRDataType.QUInt8 or IRDataType.QInt4 or IRDataType.QInt2;
+
+    /// <summary>
+    /// Gets the size in bytes of each element for the given data type.
+    /// </summary>
+    public static int ElementSizeInBytes(this IRDataType type) => type switch
+    {
+        IRDataType.Bool => 1,
+        IRDataType.Int8 or IRDataType.UInt8 or IRDataType.QInt8 or IRDataType.QUInt8 => 1,
+        IRDataType.Int16 or IRDataType.UInt16 or IRDataType.Float16 or IRDataType.BFloat16 => 2,
+        IRDataType.Int32 or IRDataType.UInt32 or IRDataType.Float32 => 4,
+        IRDataType.Int64 or IRDataType.UInt64 or IRDataType.Float64 or IRDataType.Complex64 => 8,
+        IRDataType.Complex128 or IRDataType.Decimal => 16,
+        IRDataType.QInt4 or IRDataType.QInt2 => 1, // packed representation
+        _ => 8 // default to 8 for unknown types
+    };
 }

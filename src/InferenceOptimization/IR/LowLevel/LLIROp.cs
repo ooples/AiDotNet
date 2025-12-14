@@ -39,8 +39,9 @@ public abstract class LLIROp
 
     /// <summary>
     /// Unique identifier for the output buffer.
+    /// Defaults to -1 (invalid) to prevent silent buffer collisions from missed assignments.
     /// </summary>
-    public int OutputId { get; set; }
+    public int OutputId { get; set; } = -1;
 
     /// <summary>
     /// Input buffer identifiers.
@@ -399,7 +400,8 @@ public class ElementwiseOp : LLIROp
     public override OperationMetrics EstimateCost()
     {
         var elements = OutputShape.Aggregate(1L, (a, b) => a * b);
-        var elemSize = OutputDataType.IsFloatingPoint() ? 4 : 4;
+        // Use proper element size based on data type (Float16=2, Float32=4, Float64=8, etc.)
+        var elemSize = OutputDataType.ElementSizeInBytes();
 
         return new OperationMetrics
         {

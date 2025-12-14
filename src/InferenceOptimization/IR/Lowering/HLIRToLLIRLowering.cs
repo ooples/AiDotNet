@@ -109,13 +109,16 @@ public class HLIRToLLIRLowering<T> where T : struct
             }
         }
 
-        // Map output nodes
+        // Map output nodes - fail-fast if any output is missing
         foreach (var outputNode in hlirGraph.OutputNodes)
         {
-            if (_hlirToLlirBufferMap.TryGetValue(outputNode.Id, out var llirId))
+            if (!_hlirToLlirBufferMap.TryGetValue(outputNode.Id, out var llirId))
             {
-                _llirGraph.OutputIds.Add(llirId);
+                throw new InvalidOperationException(
+                    $"Output node '{outputNode.Name}' (ID: {outputNode.Id}) was not lowered. " +
+                    $"This indicates a missing lowering implementation for operation type '{outputNode.Operation}'.");
             }
+            _llirGraph.OutputIds.Add(llirId);
         }
 
         // Post-processing
@@ -711,15 +714,27 @@ public class HLIRToLLIRLowering<T> where T : struct
 
         return node.Operation switch
         {
-            OperationType.MatMul => CreateMatMulOp(node, outputShape, outputDataType, inputIds),
+            // Matrix operations
+            OperationType.MatMul or OperationType.Gemm => CreateMatMulOp(node, outputShape, outputDataType, inputIds),
+
+            // Elementwise arithmetic
             OperationType.Add => CreateElementwiseOp(node, ElementwiseOpType.Add, outputShape, outputDataType, inputIds),
             OperationType.Subtract => CreateElementwiseOp(node, ElementwiseOpType.Subtract, outputShape, outputDataType, inputIds),
             OperationType.Multiply => CreateElementwiseOp(node, ElementwiseOpType.Multiply, outputShape, outputDataType, inputIds),
+            OperationType.Divide => CreateElementwiseOp(node, ElementwiseOpType.Divide, outputShape, outputDataType, inputIds),
+
+            // Activation functions
             OperationType.ReLU => CreateElementwiseOp(node, ElementwiseOpType.ReLU, outputShape, outputDataType, inputIds),
             OperationType.Sigmoid => CreateElementwiseOp(node, ElementwiseOpType.Sigmoid, outputShape, outputDataType, inputIds),
             OperationType.Tanh => CreateElementwiseOp(node, ElementwiseOpType.Tanh, outputShape, outputDataType, inputIds),
             OperationType.GELU => CreateElementwiseOp(node, ElementwiseOpType.GELU, outputShape, outputDataType, inputIds),
-            _ => null
+            OperationType.Softmax => CreateElementwiseOp(node, ElementwiseOpType.Softmax, outputShape, outputDataType, inputIds),
+            OperationType.LogSoftmax => CreateElementwiseOp(node, ElementwiseOpType.LogSoftmax, outputShape, outputDataType, inputIds),
+
+            // Unsupported operation in fused context
+            _ => throw new InvalidOperationException(
+                $"Operation '{node.Operation}' is not supported within fused operations. " +
+                $"Node: '{node.Name}' (ID: {node.Id})")
         };
     }
 
@@ -798,10 +813,14 @@ public class HLIRToLLIRLowering<T> where T : struct
         var ids = new List<int>();
         foreach (var input in node.Inputs)
         {
-            if (_hlirToLlirBufferMap.TryGetValue(input.Id, out var llirId))
+            if (!_hlirToLlirBufferMap.TryGetValue(input.Id, out var llirId))
             {
-                ids.Add(llirId);
+                throw new InvalidOperationException(
+                    $"Input node '{input.Name}' (ID: {input.Id}) was not lowered before being used by " +
+                    $"node '{node.Name}' (ID: {node.Id}). This indicates a topological ordering issue or " +
+                    $"missing lowering implementation for operation type '{input.Operation}'.");
             }
+            ids.Add(llirId);
         }
         return ids.ToArray();
     }
@@ -828,19 +847,20 @@ public class HLIRToLLIRLowering<T> where T : struct
 
     private (int m, int n, int k) InferMatMulDims(HLIRNode<T> node)
     {
-        // Infer from input shapes
+        // Infer from input shapes with null safety
         if (node.InputTypes.Count >= 2)
         {
             var shapeA = node.InputTypes[0].Shape;
             var shapeB = node.InputTypes[1].Shape;
 
-            if (shapeA.Length >= 2 && shapeB.Length >= 2)
+            // Guard against null shapes - shapes may not be known at lowering time
+            if (shapeA != null && shapeB != null && shapeA.Length >= 2 && shapeB.Length >= 2)
             {
                 return (shapeA[^2], shapeB[^1], shapeA[^1]);
             }
         }
 
-        // Default
+        // Default when shapes are unknown or incompatible
         return (1, 1, 1);
     }
 
