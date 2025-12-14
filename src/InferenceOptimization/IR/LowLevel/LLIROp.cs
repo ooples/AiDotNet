@@ -456,7 +456,8 @@ public class Conv2DOp : LLIROp
         var flops = 2L * BatchSize * OutputChannels * outH * outW *
                     (InputChannels / Groups) * KernelHeight * KernelWidth;
 
-        var elemSize = 4;
+        // Use proper element size based on data type (Float16=2, Float32=4, Float64=8, etc.)
+        var elemSize = OutputDataType.ElementSizeInBytes();
         var inputSize = (long)BatchSize * InputChannels * InputHeight * InputWidth * elemSize;
         var kernelSize = (long)OutputChannels * (InputChannels / Groups) * KernelHeight * KernelWidth * elemSize;
         var outputSize = (long)BatchSize * OutputChannels * outH * outW * elemSize;
@@ -491,17 +492,29 @@ public class ReduceOp : LLIROp
     public int[] Axes { get; set; } = Array.Empty<int>();
     public bool KeepDims { get; set; }
 
+    /// <summary>
+    /// Shape of the input tensor before reduction. Required for accurate cost estimation.
+    /// </summary>
+    public int[] InputShape { get; set; } = Array.Empty<int>();
+
     public override OperationMetrics EstimateCost()
     {
-        var inputElements = InputIds.Length > 0 ? OutputShape.Aggregate(1L, (a, b) => a * b) : 1;
-        var reduceFactor = Axes.Length > 0 ? Axes.Aggregate(1L, (a, ax) => a * (ax < OutputShape.Length ? OutputShape[ax] : 1)) : 1;
+        // Calculate input and output element counts
+        var inputElements = InputShape.Length > 0
+            ? InputShape.Aggregate(1L, (a, b) => a * b)
+            : OutputShape.Aggregate(1L, (a, b) => a * b); // Fallback if InputShape not set
+        var outputElements = OutputShape.Aggregate(1L, (a, b) => a * b);
+
+        // Use proper element size based on data type
+        var elemSize = OutputDataType.ElementSizeInBytes();
 
         return new OperationMetrics
         {
-            FLOPs = inputElements * reduceFactor,
-            MemoryRead = inputElements * reduceFactor * 4,
-            MemoryWrite = inputElements * 4,
-            LatencyNs = inputElements / 100
+            // Each output element requires processing all elements along reduced axes
+            FLOPs = inputElements,
+            MemoryRead = inputElements * elemSize,
+            MemoryWrite = outputElements * elemSize,
+            LatencyNs = Math.Max(1, inputElements / 100)
         };
     }
 }
@@ -525,14 +538,15 @@ public class MemoryOp : LLIROp
     public override OperationMetrics EstimateCost()
     {
         var elements = OutputShape.Aggregate(1L, (a, b) => a * b);
-        var elemSize = 4;
+        // Use proper element size based on data type (Float16=2, Float32=4, Float64=8, etc.)
+        var elemSize = OutputDataType.ElementSizeInBytes();
 
         return new OperationMetrics
         {
             FLOPs = 0,
             MemoryRead = elements * elemSize,
             MemoryWrite = elements * elemSize,
-            LatencyNs = elements / 1000
+            LatencyNs = Math.Max(1, elements / 1000)
         };
     }
 }
@@ -614,14 +628,15 @@ public class ConstantOp : LLIROp
 
     public override OperationMetrics EstimateCost()
     {
-        var bytes = Data?.Length ?? OutputShape.Aggregate(1L, (a, b) => a * b) * 4;
+        // Use actual data length if available, otherwise calculate from shape and proper element size
+        var bytes = Data?.Length ?? OutputShape.Aggregate(1L, (a, b) => a * b) * OutputDataType.ElementSizeInBytes();
 
         return new OperationMetrics
         {
             FLOPs = 0,
             MemoryRead = bytes,
             MemoryWrite = bytes,
-            LatencyNs = bytes / 1000
+            LatencyNs = Math.Max(1, bytes / 1000)
         };
     }
 }

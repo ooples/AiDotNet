@@ -531,6 +531,11 @@ public class HLIRToLLIRLowering<T> where T : struct
         var axes = node.Attributes.TryGetValue("axes", out var ax) ? (int[])ax : Array.Empty<int>();
         var keepDims = node.Attributes.TryGetValue("keepDims", out var kd) && (bool)kd;
 
+        // Get input shape for accurate cost estimation
+        var inputShape = node.InputTypes.Count > 0 && node.InputTypes[0].Shape != null
+            ? node.InputTypes[0].Shape
+            : Array.Empty<int>();
+
         return new ReduceOp
         {
             OutputId = bufferId,
@@ -542,6 +547,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             ReduceType = reduceType,
             Axes = axes,
             KeepDims = keepDims,
+            InputShape = inputShape,
             SourceHLIRNodeId = node.Id
         };
     }
@@ -770,8 +776,12 @@ public class HLIRToLLIRLowering<T> where T : struct
             n = outputShape[^1];
         }
 
+        // Allocate output buffer for this sub-op within the fused operation
+        var outputId = _llirGraph.AllocateBufferId();
+
         return new MatMulOp
         {
+            OutputId = outputId,
             Name = node.Name,
             InputIds = inputIds,
             OutputShape = outputShape,
@@ -793,8 +803,12 @@ public class HLIRToLLIRLowering<T> where T : struct
         IRDataType outputDataType,
         int[] inputIds)
     {
+        // Allocate output buffer for this sub-op within the fused operation
+        var outputId = _llirGraph.AllocateBufferId();
+
         return new ElementwiseOp
         {
+            OutputId = outputId,
             Name = node.Name,
             ElementwiseType = opType,
             InputIds = inputIds,

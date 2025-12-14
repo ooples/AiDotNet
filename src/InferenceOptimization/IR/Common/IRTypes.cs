@@ -262,7 +262,7 @@ public static class IRDataTypeExtensions
             IRDataType.Int16 => typeof(short),
             IRDataType.Int32 => typeof(int),
             IRDataType.Int64 => typeof(long),
-            IRDataType.UInt8 or IRDataType.QUInt8 => typeof(byte),
+            IRDataType.UInt8 or IRDataType.QUInt8 or IRDataType.QInt4 or IRDataType.QInt2 => typeof(byte), // Packed quantized types stored as bytes
             IRDataType.UInt16 => typeof(ushort),
             IRDataType.UInt32 => typeof(uint),
             IRDataType.UInt64 => typeof(ulong),
