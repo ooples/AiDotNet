@@ -143,15 +143,22 @@ jobs:
           echo "changes_made=true" >> $GITHUB_OUTPUT
 
       - name: Force push fixed commits
+        id: push-commits
         if: steps.squash-commits.outputs.changes_made == 'true' || steps.fix-single-commit.outputs.changes_made == 'true'
+        continue-on-error: true
         run: |
           HEAD_BRANCH="${{ steps.get-pr.outputs.head_branch }}"
           HEAD_SHA="${{ steps.get-pr.outputs.head_sha }}"
           echo "Force pushing to $HEAD_BRANCH..."
-          git push origin "$HEAD_BRANCH" --force-with-lease="$HEAD_BRANCH:$HEAD_SHA"
+          if git push origin "$HEAD_BRANCH" --force-with-lease="$HEAD_BRANCH:$HEAD_SHA"; then
+            echo "push_success=true" >> $GITHUB_OUTPUT
+          else
+            echo "push_success=false" >> $GITHUB_OUTPUT
+            echo "::warning::Force push failed - likely due to branch protection rules"
+          fi
 
-      - name: Comment on PR
-        if: steps.squash-commits.outputs.changes_made == 'true' || steps.fix-single-commit.outputs.changes_made == 'true'
+      - name: Comment on PR (success)
+        if: steps.push-commits.outputs.push_success == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -191,6 +198,58 @@ jobs:
                 'The PR branch has been force-pushed with the fixed commit. If you had local changes, you may need to `git pull --rebase`.'
               ].join('\n');
             }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: message
+            });
+
+      - name: Comment on PR (manual fix needed)
+        if: (steps.squash-commits.outputs.changes_made == 'true' || steps.fix-single-commit.outputs.changes_made == 'true') && steps.push-commits.outputs.push_success != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ steps.get-pr.outputs.pr_number }};
+            const commitCount = ${{ steps.count-commits.outputs.commit_count }};
+            const prTitle = `${{ steps.get-pr.outputs.pr_title }}`;
+
+            const message = [
+              '### Manual Commit Message Fix Required',
+              '',
+              'The commitlint check failed because one or more commit messages did not follow [Conventional Commits](https://www.conventionalcommits.org/) format.',
+              '',
+              '**Automatic fix could not be applied** due to branch protection rules that prevent force-pushing.',
+              '',
+              '**Please run the following commands locally to fix:**',
+              '',
+              '```bash',
+              '# Fetch latest changes',
+              'git fetch origin',
+              '',
+              `# Interactive rebase to squash ${commitCount} commits`,
+              `git rebase -i origin/${{ steps.get-pr.outputs.base_branch }}`,
+              '',
+              '# In the editor, change all "pick" to "squash" (or "s") except the first one',
+              '# Save and close the editor',
+              '',
+              '# When prompted for the commit message, use:',
+              prTitle,
+              '',
+              '# Force push the fixed commits',
+              `git push origin ${{ steps.get-pr.outputs.head_branch }} --force-with-lease`,
+              '```',
+              '',
+              '**Or use this one-liner:**',
+              '```bash',
+              `git fetch origin && git reset --soft origin/${{ steps.get-pr.outputs.base_branch }} && git commit -m "${prTitle}" && git push --force-with-lease`,
+              '```',
+              '',
+              '---',
+              '',
+              '> **Note:** Repository admins can enable automatic fixing by allowing force-pushes from GitHub Actions in the branch protection settings.'
+            ].join('\n');
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
