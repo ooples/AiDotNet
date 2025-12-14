@@ -35,8 +35,6 @@ namespace AiDotNet.ModelCompression;
 /// </remarks>
 public class TensorCompressionMetadata<T> : ICompressionMetadata<T>
 {
-    private readonly int _elementSize;
-
     /// <summary>
     /// Initializes a new instance of the TensorCompressionMetadata class.
     /// </summary>
@@ -76,10 +74,6 @@ public class TensorCompressionMetadata<T> : ICompressionMetadata<T>
         // Copy the array to prevent external modifications
         OriginalShape = (int[])originalShape.Clone();
         InnerMetadata = innerMetadata;
-
-        _elementSize = typeof(T) == typeof(float) ? 4 :
-                       typeof(T) == typeof(double) ? 8 :
-                       System.Runtime.InteropServices.Marshal.SizeOf(typeof(T));
     }
 
     /// <summary>
