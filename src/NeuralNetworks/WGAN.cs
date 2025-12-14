@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.LossFunctions;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -157,10 +158,10 @@ public class WGAN<T> : NeuralNetworkBase<T>
     /// <param name="inputType">The type of input the WGAN will process.</param>
     /// <param name="generatorOptimizer">Optional optimizer for the generator. If null, RMSprop optimizer is used (recommended for WGAN).</param>
     /// <param name="criticOptimizer">Optional optimizer for the critic. If null, RMSprop optimizer is used (recommended for WGAN).</param>
-    /// <param name="lossFunction">Optional loss function for base class compatibility and serialization.
-    /// Note: WGAN training uses the Wasserstein distance (critic scores) directly, not this loss function.
-    /// This parameter is retained for consistency with the <see cref="NeuralNetworkBase{T}"/> interface
-    /// and to enable proper serialization/deserialization of the model.</param>
+    /// <param name="lossFunction">Optional loss function. Defaults to <see cref="WassersteinLoss{T}"/> which
+    /// implements the Wasserstein distance formula. WGAN training uses the critic scores directly for
+    /// gradient computation, but the WassersteinLoss provides a consistent interface for computing
+    /// loss values and serialization.</param>
     /// <param name="weightClipValue">The weight clipping threshold. Default is 0.01.</param>
     /// <param name="criticIterations">Number of critic iterations per generator iteration. Default is 5.</param>
     /// <remarks>
@@ -176,15 +177,16 @@ public class WGAN<T> : NeuralNetworkBase<T>
     /// </list>
     /// </para>
     /// <para>
-    /// <b>About the Loss Function Parameter:</b>
+    /// <b>About the Loss Function:</b>
     /// Unlike traditional GANs that use binary cross-entropy loss, WGAN uses the Wasserstein distance
-    /// (Earth Mover's distance) which is computed directly from critic scores. The loss function
-    /// parameter exists for interface compatibility and serialization, but the actual WGAN training
-    /// minimizes/maximizes critic outputs directly:
+    /// (Earth Mover's distance). By default, WGAN uses <see cref="WassersteinLoss{T}"/> which implements
+    /// this mathematically-correct loss function. The actual WGAN training optimizes critic outputs:
     /// <list type="bullet">
     /// <item><description>Critic loss: maximize E[critic(real)] - E[critic(fake)]</description></item>
     /// <item><description>Generator loss: maximize E[critic(fake)]</description></item>
     /// </list>
+    /// The WassersteinLoss computes the same formula: -mean(predicted * label), where label is +1 for
+    /// real samples and -1 for fake samples.
     /// </para>
     /// <para><b>For Beginners:</b> This sets up the WGAN with sensible defaults.
     ///
@@ -194,10 +196,11 @@ public class WGAN<T> : NeuralNetworkBase<T>
     /// - Weight clipping (0.01) enforces the mathematical constraints
     /// - Critic iterations (5) means the critic trains 5 times per generator update
     ///
-    /// About the loss function: WGAN uses a special "Wasserstein distance" instead of
-    /// a traditional loss function. The critic's output is a score (higher = more real-looking),
-    /// not a probability like in regular GANs. The loss function parameter is kept for
-    /// technical reasons but isn't used during WGAN training.
+    /// About the loss function: WGAN uses the "Wasserstein distance" (also called Earth Mover's
+    /// distance) to measure how different real and fake images are. By default, we use
+    /// WassersteinLoss which implements this mathematically. The critic's output is a score
+    /// (higher = more real-looking), not a probability like in regular GANs. You don't need
+    /// to specify a loss function - the default WassersteinLoss is the correct choice!
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentNullException">Thrown when generatorArchitecture or criticArchitecture is null.</exception>
@@ -213,7 +216,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
         double weightClipValue = 0.01,
         int criticIterations = 5)
         : base(CreateWGANArchitecture(generatorArchitecture, criticArchitecture, inputType),
-               lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
+               lossFunction ?? new WassersteinLoss<T>())
     {
         if (generatorArchitecture is null)
         {
@@ -257,7 +260,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
 
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Critic = new ConvolutionalNeuralNetwork<T>(criticArchitecture);
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
+        _lossFunction = lossFunction ?? new WassersteinLoss<T>();
 
         // Initialize optimizers (RMSprop is the recommended default for WGAN per the original paper)
         _generatorOptimizer = generatorOptimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Generator);

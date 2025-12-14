@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -830,7 +831,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
 
         // Generate random conditions for training (random class for each sample)
         var conditions = new Tensor<T>(new int[] { batchSize, _numConditionClasses });
-        var random = new Random();
+        var random = RandomHelper.ThreadSafeRandom;
 
         for (int b = 0; b < batchSize; b++)
         {

@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Metrics
 {
@@ -245,7 +246,7 @@ namespace AiDotNet.Metrics
         /// </summary>
         private Matrix<T> CreateDummyPredictions(int numSamples)
         {
-            var random = new Random();
+            var random = RandomHelper.ThreadSafeRandom;
             var predictions = new Matrix<T>(numSamples, NumClasses);
 
             for (int i = 0; i < numSamples; i++)
