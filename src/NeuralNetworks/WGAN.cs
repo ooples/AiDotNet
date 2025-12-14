@@ -33,20 +33,18 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class WGAN<T> : NeuralNetworkBase<T>
 {
-    // Generator optimizer state (RMSprop)
-    private Vector<T> _genMomentum;
-    private Vector<T> _genSecondMoment;
-    private double _genCurrentLearningRate;
-
-    // Critic optimizer state (RMSprop)
-    private Vector<T> _criticMomentum;
-    private Vector<T> _criticSecondMoment;
-    private double _criticCurrentLearningRate;
-
-    private double _initialLearningRate;
-    private double _learningRateDecay;
     private readonly List<T> _criticLosses = [];
     private readonly List<T> _generatorLosses = [];
+
+    /// <summary>
+    /// The optimizer for the generator network.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
+
+    /// <summary>
+    /// The optimizer for the critic network.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _criticOptimizer;
 
     /// <summary>
     /// The weight clipping threshold for enforcing the Lipschitz constraint.
@@ -117,6 +115,10 @@ public class WGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Creates the combined WGAN architecture with correct dimension handling.
     /// </summary>
+    /// <param name="generatorArchitecture">The generator architecture.</param>
+    /// <param name="criticArchitecture">The critic architecture.</param>
+    /// <param name="inputType">The type of input.</param>
+    /// <returns>The combined architecture for the WGAN.</returns>
     private static NeuralNetworkArchitecture<T> CreateWGANArchitecture(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> criticArchitecture,
@@ -151,16 +153,32 @@ public class WGAN<T> : NeuralNetworkBase<T>
     /// <param name="generatorArchitecture">The neural network architecture for the generator.</param>
     /// <param name="criticArchitecture">The neural network architecture for the critic.</param>
     /// <param name="inputType">The type of input the WGAN will process.</param>
+    /// <param name="generatorOptimizer">Optional optimizer for the generator. If null, RMSprop optimizer is used (recommended for WGAN).</param>
+    /// <param name="criticOptimizer">Optional optimizer for the critic. If null, RMSprop optimizer is used (recommended for WGAN).</param>
     /// <param name="lossFunction">Optional loss function (typically not used, as WGAN uses Wasserstein distance).</param>
-    /// <param name="initialLearningRate">The initial learning rate. Default is 0.00005 (lower than vanilla GAN).</param>
     /// <param name="weightClipValue">The weight clipping threshold. Default is 0.01.</param>
     /// <param name="criticIterations">Number of critic iterations per generator iteration. Default is 5.</param>
+    /// <remarks>
+    /// <para>
+    /// The WGAN constructor initializes both the generator and critic networks along with their
+    /// respective optimizers. RMSprop is recommended over Adam for WGAN training stability.
+    /// </para>
+    /// <para><b>For Beginners:</b> This sets up the WGAN with sensible defaults.
+    ///
+    /// Key parameters:
+    /// - Generator/critic architectures define the network structures
+    /// - Optimizers control how the networks learn (RMSprop is recommended for WGAN)
+    /// - Weight clipping (0.01) enforces the mathematical constraints
+    /// - Critic iterations (5) means the critic trains 5 times per generator update
+    /// </para>
+    /// </remarks>
     public WGAN(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> criticArchitecture,
         InputType inputType,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorOptimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? criticOptimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double initialLearningRate = 0.00005,
         double weightClipValue = 0.01,
         int criticIterations = 5)
         : base(CreateWGANArchitecture(generatorArchitecture, criticArchitecture, inputType),
@@ -168,15 +186,11 @@ public class WGAN<T> : NeuralNetworkBase<T>
     {
         if (generatorArchitecture is null)
         {
-            throw new ArgumentNullException(nameof(generatorArchitecture));
+            throw new ArgumentNullException(nameof(generatorArchitecture), "Generator architecture cannot be null.");
         }
         if (criticArchitecture is null)
         {
-            throw new ArgumentNullException(nameof(criticArchitecture));
-        }
-        if (initialLearningRate <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(initialLearningRate), initialLearningRate, "Initial learning rate must be positive.");
+            throw new ArgumentNullException(nameof(criticArchitecture), "Critic architecture cannot be null.");
         }
         if (weightClipValue <= 0)
         {
@@ -187,24 +201,16 @@ public class WGAN<T> : NeuralNetworkBase<T>
             throw new ArgumentOutOfRangeException(nameof(criticIterations), criticIterations, "Critic iterations must be positive.");
         }
 
-        _initialLearningRate = initialLearningRate;
         _weightClipValue = weightClipValue;
         _criticIterations = criticIterations;
-        _learningRateDecay = 0.9999;
-
-        // Initialize Generator optimizer state (RMSprop)
-        _genCurrentLearningRate = initialLearningRate;
-        _genMomentum = Vector<T>.Empty();
-        _genSecondMoment = Vector<T>.Empty();
-
-        // Initialize Critic optimizer state (RMSprop)
-        _criticCurrentLearningRate = initialLearningRate;
-        _criticMomentum = Vector<T>.Empty();
-        _criticSecondMoment = Vector<T>.Empty();
 
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Critic = new ConvolutionalNeuralNetwork<T>(criticArchitecture);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
+
+        // Initialize optimizers (RMSprop is recommended for WGAN, Adam is fallback)
+        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator);
+        _criticOptimizer = criticOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Critic);
 
         InitializeLayers();
     }
@@ -234,6 +240,16 @@ public class WGAN<T> : NeuralNetworkBase<T>
     /// </remarks>
     public (T criticLoss, T generatorLoss) TrainStep(Tensor<T> realImages, Tensor<T> noise)
     {
+        if (realImages is null)
+        {
+            throw new ArgumentNullException(nameof(realImages), "Real images tensor cannot be null.");
+        }
+
+        if (noise is null)
+        {
+            throw new ArgumentNullException(nameof(noise), "Noise tensor cannot be null.");
+        }
+
         Generator.SetTrainingMode(true);
         Critic.SetTrainingMode(true);
 
@@ -364,8 +380,8 @@ public class WGAN<T> : NeuralNetworkBase<T>
         // Backpropagate
         Critic.Backpropagate(gradients);
 
-        // Update parameters
-        UpdateCriticParameters();
+        // Update parameters using optimizer
+        UpdateCriticWithOptimizer();
 
         return avgScore;
     }
@@ -378,8 +394,6 @@ public class WGAN<T> : NeuralNetworkBase<T>
     private T TrainGeneratorBatch(Tensor<T> noise)
     {
         Generator.SetTrainingMode(true);
-        // Keep Critic in training mode - required for backpropagation
-        // We just don't call UpdateCriticParameters() during generator training
 
         // Generate fake images
         var generatedImages = Generator.Predict(noise);
@@ -415,167 +429,67 @@ public class WGAN<T> : NeuralNetworkBase<T>
         // Backpropagate through generator
         Generator.Backward(criticInputGradients);
 
-        // Update generator parameters
-        UpdateGeneratorParameters();
+        // Update generator parameters using optimizer
+        UpdateGeneratorWithOptimizer();
 
         return loss;
     }
 
     /// <summary>
-    /// Updates Generator parameters using RMSprop optimizer with vectorized operations.
+    /// Updates generator parameters using the configured optimizer.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method implements the RMSprop optimizer with gradient clipping for stable training.
-    /// All vector operations are performed using Engine methods for optimal performance.
-    /// </para>
-    /// <para><b>For Beginners:</b> This adjusts the generator's weights to make it better at fooling the critic.
-    ///
-    /// The update process:
-    /// - Clips gradients to prevent extreme updates
-    /// - Uses RMSprop to adaptively adjust the learning rate for each parameter
-    /// - Applies learning rate decay to gradually slow down learning over time
-    /// - Updates all generator parameters in a vectorized manner for efficiency
-    /// </para>
-    /// </remarks>
-    private void UpdateGeneratorParameters()
+    private void UpdateGeneratorWithOptimizer()
     {
         var parameters = Generator.GetParameters();
         var gradients = Generator.GetParameterGradients();
 
-        // Initialize optimizer state if needed
-        if (_genMomentum.Length != parameters.Length)
-        {
-            _genMomentum = new Vector<T>(parameters.Length);
-            _genMomentum.Fill(NumOps.Zero);
-        }
-
-        if (_genSecondMoment.Length != parameters.Length)
-        {
-            _genSecondMoment = new Vector<T>(parameters.Length);
-            _genSecondMoment.Fill(NumOps.Zero);
-        }
-
-        // Gradient clipping (vectorized)
+        // Gradient clipping
         var gradientNorm = gradients.L2Norm();
         var clipThreshold = NumOps.FromDouble(5.0);
 
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
             var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            gradients = Engine.Multiply(gradients, scaleFactor);
+            for (int i = 0; i < gradients.Length; i++)
+            {
+                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
+            }
         }
 
-        // RMSprop parameters (recommended for WGAN)
-        var learningRate = NumOps.FromDouble(_genCurrentLearningRate);
-        var decay = NumOps.FromDouble(0.9);
-        var epsilon = NumOps.FromDouble(1e-8);
-
-        // Update second moment (RMSprop) - vectorized
-        // secondMoment = decay * secondMoment + (1 - decay) * gradients^2
-        var oneMinusDecay = NumOps.Subtract(NumOps.One, decay);
-        var gradientsSquared = Engine.Multiply(gradients, gradients);
-        var decayedSecondMoment = Engine.Multiply(_genSecondMoment, decay);
-        var newSecondMomentTerm = Engine.Multiply(gradientsSquared, oneMinusDecay);
-        _genSecondMoment = Engine.Add(decayedSecondMoment, newSecondMomentTerm);
-
-        // RMSprop update - vectorized
-        // adaptiveLR = learningRate / (sqrt(secondMoment) + epsilon)
-        var sqrtSecondMoment = (Vector<T>)Engine.Sqrt(_genSecondMoment);
-        var epsilonVector = Vector<T>.CreateDefault(sqrtSecondMoment.Length, epsilon);
-        var denominator = (Vector<T>)Engine.Add(sqrtSecondMoment, epsilonVector);
-        var learningRateVector = Vector<T>.CreateDefault(denominator.Length, learningRate);
-        var adaptiveLR = (Vector<T>)Engine.Divide(learningRateVector, denominator);
-
-        // parameters = parameters - adaptiveLR * gradients
-        var update = (Vector<T>)Engine.Multiply(adaptiveLR, gradients);
-        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
-
-        // Apply learning rate decay
-        _genCurrentLearningRate *= _learningRateDecay;
-
+        var updatedParameters = _generatorOptimizer.UpdateParameters(parameters, gradients);
         Generator.UpdateParameters(updatedParameters);
     }
 
     /// <summary>
-    /// Updates Critic parameters using RMSprop optimizer with vectorized operations.
+    /// Updates critic parameters using the configured optimizer.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method implements the RMSprop optimizer with gradient clipping for stable training.
-    /// All vector operations are performed using Engine methods for optimal performance.
-    /// </para>
-    /// <para><b>For Beginners:</b> This adjusts the critic's weights to make it better at evaluating images.
-    ///
-    /// The update process:
-    /// - Clips gradients to prevent extreme updates
-    /// - Uses RMSprop to adaptively adjust the learning rate for each parameter
-    /// - Applies learning rate decay to gradually slow down learning over time
-    /// - Updates all critic parameters in a vectorized manner for efficiency
-    /// </para>
-    /// </remarks>
-    private void UpdateCriticParameters()
+    private void UpdateCriticWithOptimizer()
     {
         var parameters = Critic.GetParameters();
         var gradients = Critic.GetParameterGradients();
 
-        // Initialize optimizer state if needed
-        if (_criticMomentum.Length != parameters.Length)
-        {
-            _criticMomentum = new Vector<T>(parameters.Length);
-            _criticMomentum.Fill(NumOps.Zero);
-        }
-
-        if (_criticSecondMoment.Length != parameters.Length)
-        {
-            _criticSecondMoment = new Vector<T>(parameters.Length);
-            _criticSecondMoment.Fill(NumOps.Zero);
-        }
-
-        // Gradient clipping (vectorized)
+        // Gradient clipping
         var gradientNorm = gradients.L2Norm();
         var clipThreshold = NumOps.FromDouble(5.0);
 
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
             var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            gradients = Engine.Multiply(gradients, scaleFactor);
+            for (int i = 0; i < gradients.Length; i++)
+            {
+                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
+            }
         }
 
-        // RMSprop parameters (recommended for WGAN)
-        var learningRate = NumOps.FromDouble(_criticCurrentLearningRate);
-        var decay = NumOps.FromDouble(0.9);
-        var epsilon = NumOps.FromDouble(1e-8);
-
-        // Update second moment (RMSprop) - vectorized
-        // secondMoment = decay * secondMoment + (1 - decay) * gradients^2
-        var oneMinusDecay = NumOps.Subtract(NumOps.One, decay);
-        var gradientsSquared = Engine.Multiply(gradients, gradients);
-        var decayedSecondMoment = Engine.Multiply(_criticSecondMoment, decay);
-        var newSecondMomentTerm = Engine.Multiply(gradientsSquared, oneMinusDecay);
-        _criticSecondMoment = Engine.Add(decayedSecondMoment, newSecondMomentTerm);
-
-        // RMSprop update - vectorized
-        // adaptiveLR = learningRate / (sqrt(secondMoment) + epsilon)
-        var sqrtSecondMoment = (Vector<T>)Engine.Sqrt(_criticSecondMoment);
-        var epsilonVector = Vector<T>.CreateDefault(sqrtSecondMoment.Length, epsilon);
-        var denominator = (Vector<T>)Engine.Add(sqrtSecondMoment, epsilonVector);
-        var learningRateVector = Vector<T>.CreateDefault(denominator.Length, learningRate);
-        var adaptiveLR = (Vector<T>)Engine.Divide(learningRateVector, denominator);
-
-        // parameters = parameters - adaptiveLR * gradients
-        var update = (Vector<T>)Engine.Multiply(adaptiveLR, gradients);
-        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
-
-        // Apply learning rate decay
-        _criticCurrentLearningRate *= _learningRateDecay;
-
+        var updatedParameters = _criticOptimizer.UpdateParameters(parameters, gradients);
         Critic.UpdateParameters(updatedParameters);
     }
 
     /// <summary>
     /// Generates synthetic images using the generator.
     /// </summary>
+    /// <param name="noise">The noise tensor to generate images from.</param>
+    /// <returns>A tensor containing the generated images.</returns>
     public Tensor<T> GenerateImages(Tensor<T> noise)
     {
         Generator.SetTrainingMode(false);
@@ -585,6 +499,9 @@ public class WGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Generates a tensor of random noise for the generator.
     /// </summary>
+    /// <param name="batchSize">The number of noise vectors to generate.</param>
+    /// <param name="noiseSize">The dimensionality of each noise vector.</param>
+    /// <returns>A tensor of random noise values.</returns>
     /// <remarks>
     /// <para>
     /// This method uses vectorized Gaussian noise generation from the Engine for optimal performance.
@@ -614,12 +531,14 @@ public class WGAN<T> : NeuralNetworkBase<T>
         var mean = NumOps.Zero;
         var stddev = NumOps.One;
         var noiseVector = Engine.GenerateGaussianNoise<T>(totalElements, mean, stddev);
-        return Tensor<T>.FromVector(noiseVector, new int[] { batchSize, noiseSize });
+        return Tensor<T>.FromVector(noiseVector, [batchSize, noiseSize]);
     }
 
     /// <summary>
     /// Evaluates the WGAN by generating images and calculating metrics.
     /// </summary>
+    /// <param name="sampleSize">The number of samples to generate for evaluation.</param>
+    /// <returns>A dictionary containing evaluation metrics.</returns>
     public Dictionary<string, double> EvaluateModel(int sampleSize = 100)
     {
         var metrics = new Dictionary<string, double>();
@@ -641,8 +560,6 @@ public class WGAN<T> : NeuralNetworkBase<T>
         metrics["MinCriticScore"] = scoresList.Min();
         metrics["MaxCriticScore"] = scoresList.Max();
         metrics["CriticScoreStdDev"] = StatisticsHelper<double>.CalculateStandardDeviation(scoresList);
-        metrics["GeneratorLearningRate"] = _genCurrentLearningRate;
-        metrics["CriticLearningRate"] = _criticCurrentLearningRate;
 
         if (_generatorLosses.Count > 0)
         {
@@ -657,21 +574,34 @@ public class WGAN<T> : NeuralNetworkBase<T>
         return metrics;
     }
 
+    /// <summary>
+    /// Resets both optimizer states for a fresh training run.
+    /// </summary>
+    public void ResetOptimizerState()
+    {
+        _generatorOptimizer.Reset();
+        _criticOptimizer.Reset();
+    }
+
+    /// <inheritdoc/>
     protected override void InitializeLayers()
     {
         // WGAN doesn't use layers directly
     }
 
+    /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         return Generator.Predict(input);
     }
 
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         TrainStep(expectedOutput, input);
     }
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -688,25 +618,21 @@ public class WGAN<T> : NeuralNetworkBase<T>
         };
     }
 
+    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        // Save both learning rates
-        writer.Write(_genCurrentLearningRate);
-        writer.Write(_criticCurrentLearningRate);
         writer.Write(_weightClipValue);
         writer.Write(_criticIterations);
-        writer.Write(_initialLearningRate);
-        writer.Write(_learningRateDecay);
 
-        // Serialize generator optimizer state
-        SerializationHelper<T>.SerializeVector(writer, _genMomentum);
-        SerializationHelper<T>.SerializeVector(writer, _genSecondMoment);
+        // Serialize loss histories
+        writer.Write(_generatorLosses.Count);
+        foreach (var loss in _generatorLosses)
+            writer.Write(NumOps.ToDouble(loss));
 
-        // Serialize critic optimizer state
-        SerializationHelper<T>.SerializeVector(writer, _criticMomentum);
-        SerializationHelper<T>.SerializeVector(writer, _criticSecondMoment);
+        writer.Write(_criticLosses.Count);
+        foreach (var loss in _criticLosses)
+            writer.Write(NumOps.ToDouble(loss));
 
-        // Serialize generator and critic networks
         var generatorBytes = Generator.Serialize();
         writer.Write(generatorBytes.Length);
         writer.Write(generatorBytes);
@@ -716,25 +642,23 @@ public class WGAN<T> : NeuralNetworkBase<T>
         writer.Write(criticBytes);
     }
 
+    /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Read both learning rates
-        _genCurrentLearningRate = reader.ReadDouble();
-        _criticCurrentLearningRate = reader.ReadDouble();
         _weightClipValue = reader.ReadDouble();
         _criticIterations = reader.ReadInt32();
-        _initialLearningRate = reader.ReadDouble();
-        _learningRateDecay = reader.ReadDouble();
 
-        // Deserialize generator optimizer state
-        _genMomentum = SerializationHelper<T>.DeserializeVector(reader);
-        _genSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        // Deserialize loss histories
+        _generatorLosses.Clear();
+        int genLossCount = reader.ReadInt32();
+        for (int i = 0; i < genLossCount; i++)
+            _generatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
 
-        // Deserialize critic optimizer state
-        _criticMomentum = SerializationHelper<T>.DeserializeVector(reader);
-        _criticSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        _criticLosses.Clear();
+        int criticLossCount = reader.ReadInt32();
+        for (int i = 0; i < criticLossCount; i++)
+            _criticLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
 
-        // Deserialize generator and critic networks
         int generatorDataLength = reader.ReadInt32();
         byte[] generatorData = reader.ReadBytes(generatorDataLength);
         Generator.Deserialize(generatorData);
@@ -744,14 +668,16 @@ public class WGAN<T> : NeuralNetworkBase<T>
         Critic.Deserialize(criticData);
     }
 
+    /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new WGAN<T>(
             Generator.Architecture,
             Critic.Architecture,
             Architecture.InputType,
+            null, // Use default optimizer
+            null, // Use default optimizer
             _lossFunction,
-            _initialLearningRate,
             _weightClipValue,
             _criticIterations);
     }

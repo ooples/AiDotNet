@@ -67,14 +67,14 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
         int imageWidth,
         int generatorFeatureMaps = 64,
         int discriminatorFeatureMaps = 64,
-        ILossFunction<T>? lossFunction = null,
-        double initialLearningRate = 0.0002)
+        ILossFunction<T>? lossFunction = null)
         : base(
             CreateDCGANGeneratorArchitecture(latentSize, imageChannels, imageHeight, imageWidth, generatorFeatureMaps),
             CreateDCGANDiscriminatorArchitecture(imageChannels, imageHeight, imageWidth, discriminatorFeatureMaps),
             InputType.ThreeDimensional,
-            lossFunction,
-            initialLearningRate)
+            generatorOptimizer: null,
+            discriminatorOptimizer: null,
+            lossFunction)
     {
     }
 

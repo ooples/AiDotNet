@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -40,36 +41,65 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type.</typeparam>
 public class CycleGAN<T> : NeuralNetworkBase<T>
 {
-    // GeneratorAtoB optimizer state
-    private Vector<T> _genAtoBMomentum;
-    private Vector<T> _genAtoBSecondMoment;
-    private T _genAtoBBeta1Power;
-    private T _genAtoBBeta2Power;
-    private double _genAtoBCurrentLearningRate;
+    /// <summary>
+    /// The optimizer used for training generator A→B.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This optimizer manages the gradient-based parameter updates for the generator
+    /// that transforms images from domain A to domain B. The optimizer handles momentum,
+    /// adaptive learning rates, and other algorithm-specific state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This optimizer controls how the A→B generator
+    /// learns from its mistakes and adjusts its parameters during training.
+    /// </para>
+    /// </remarks>
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorAtoBOptimizer;
 
-    // GeneratorBtoA optimizer state
-    private Vector<T> _genBtoAMomentum;
-    private Vector<T> _genBtoASecondMoment;
-    private T _genBtoABeta1Power;
-    private T _genBtoABeta2Power;
-    private double _genBtoACurrentLearningRate;
+    /// <summary>
+    /// The optimizer used for training generator B→A.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This optimizer manages the gradient-based parameter updates for the generator
+    /// that transforms images from domain B to domain A. The optimizer handles momentum,
+    /// adaptive learning rates, and other algorithm-specific state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This optimizer controls how the B→A generator
+    /// learns from its mistakes and adjusts its parameters during training.
+    /// </para>
+    /// </remarks>
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorBtoAOptimizer;
 
-    // DiscriminatorA optimizer state
-    private Vector<T> _discAMomentum;
-    private Vector<T> _discASecondMoment;
-    private T _discABeta1Power;
-    private T _discABeta2Power;
-    private double _discACurrentLearningRate;
+    /// <summary>
+    /// The optimizer used for training discriminator A.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This optimizer manages the gradient-based parameter updates for the discriminator
+    /// that evaluates images in domain A (real vs. generated). The optimizer handles momentum,
+    /// adaptive learning rates, and other algorithm-specific state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This optimizer controls how discriminator A
+    /// learns to better distinguish real images from fake ones in domain A.
+    /// </para>
+    /// </remarks>
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorAOptimizer;
 
-    // DiscriminatorB optimizer state
-    private Vector<T> _discBMomentum;
-    private Vector<T> _discBSecondMoment;
-    private T _discBBeta1Power;
-    private T _discBBeta2Power;
-    private double _discBCurrentLearningRate;
-
-    private double _initialLearningRate;
-    private double _learningRateDecay;
+    /// <summary>
+    /// The optimizer used for training discriminator B.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This optimizer manages the gradient-based parameter updates for the discriminator
+    /// that evaluates images in domain B (real vs. generated). The optimizer handles momentum,
+    /// adaptive learning rates, and other algorithm-specific state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This optimizer controls how discriminator B
+    /// learns to better distinguish real images from fake ones in domain B.
+    /// </para>
+    /// </remarks>
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorBOptimizer;
 
     /// <summary>
     /// Coefficient for cycle consistency loss.
@@ -139,14 +169,66 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
             outputSize: generatorAtoB.OutputSize);
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CycleGAN{T}"/> class with the specified architecture and training parameters.
+    /// </summary>
+    /// <param name="generatorAtoB">The architecture for the generator that transforms images from domain A to domain B.</param>
+    /// <param name="generatorBtoA">The architecture for the generator that transforms images from domain B to domain A.</param>
+    /// <param name="discriminatorA">The architecture for the discriminator that evaluates images in domain A.</param>
+    /// <param name="discriminatorB">The architecture for the discriminator that evaluates images in domain B.</param>
+    /// <param name="inputType">The type of input data (e.g., ThreeDimensional for images).</param>
+    /// <param name="generatorAtoBOptimizer">
+    /// Optional optimizer for the A→B generator. If null, an Adam optimizer with default GAN settings is created.
+    /// </param>
+    /// <param name="generatorBtoAOptimizer">
+    /// Optional optimizer for the B→A generator. If null, an Adam optimizer with default GAN settings is created.
+    /// </param>
+    /// <param name="discriminatorAOptimizer">
+    /// Optional optimizer for discriminator A. If null, an Adam optimizer with default GAN settings is created.
+    /// </param>
+    /// <param name="discriminatorBOptimizer">
+    /// Optional optimizer for discriminator B. If null, an Adam optimizer with default GAN settings is created.
+    /// </param>
+    /// <param name="lossFunction">Optional loss function. If null, the default loss function for generative tasks is used.</param>
+    /// <param name="cycleConsistencyLambda">
+    /// The coefficient for cycle consistency loss. Higher values enforce stronger cycle consistency. Default is 10.0.
+    /// </param>
+    /// <param name="identityLambda">
+    /// The coefficient for identity loss. Helps preserve color composition. Default is 5.0.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a CycleGAN with four separate networks and optimizers:
+    /// - Generator A→B: Transforms images from domain A to domain B
+    /// - Generator B→A: Transforms images from domain B to domain A
+    /// - Discriminator A: Evaluates whether images in domain A are real or generated
+    /// - Discriminator B: Evaluates whether images in domain B are real or generated
+    /// </para>
+    /// <para><b>For Beginners:</b> CycleGAN needs four networks to work:
+    /// - Two generators to translate images in both directions
+    /// - Two discriminators to judge images in each domain
+    ///
+    /// The cycle consistency loss ensures that translating A→B→A gets back to the original,
+    /// which helps maintain content while only changing style.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when any of the architecture parameters is null.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when cycleConsistencyLambda or identityLambda is negative.
+    /// </exception>
     public CycleGAN(
         NeuralNetworkArchitecture<T> generatorAtoB,
         NeuralNetworkArchitecture<T> generatorBtoA,
         NeuralNetworkArchitecture<T> discriminatorA,
         NeuralNetworkArchitecture<T> discriminatorB,
         InputType inputType,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorAtoBOptimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorBtoAOptimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorAOptimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorBOptimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double initialLearningRate = 0.0002,
         double cycleConsistencyLambda = 10.0,
         double identityLambda = 5.0)
         : base(CreateCycleGANArchitecture(generatorAtoB, inputType),
@@ -169,10 +251,6 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentNullException(nameof(discriminatorB), "Discriminator B architecture cannot be null.");
         }
-        if (initialLearningRate <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(initialLearningRate), initialLearningRate, "Initial learning rate must be positive.");
-        }
         if (cycleConsistencyLambda < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(cycleConsistencyLambda), cycleConsistencyLambda, "Cycle consistency lambda must be non-negative.");
@@ -184,46 +262,17 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
         _cycleConsistencyLambda = cycleConsistencyLambda;
         _identityLambda = identityLambda;
-        _initialLearningRate = initialLearningRate;
-        _learningRateDecay = 0.0001;
 
         GeneratorAtoB = new ConvolutionalNeuralNetwork<T>(generatorAtoB);
         GeneratorBtoA = new ConvolutionalNeuralNetwork<T>(generatorBtoA);
         DiscriminatorA = new ConvolutionalNeuralNetwork<T>(discriminatorA);
         DiscriminatorB = new ConvolutionalNeuralNetwork<T>(discriminatorB);
 
-        // Initialize GeneratorAtoB optimizer state
-        // Beta powers start at beta^1 so first iteration's bias correction is non-zero
-        int genAtoBParamCount = GeneratorAtoB.GetParameterCount();
-        _genAtoBMomentum = new Vector<T>(genAtoBParamCount);
-        _genAtoBSecondMoment = new Vector<T>(genAtoBParamCount);
-        _genAtoBBeta1Power = NumOps.FromDouble(0.9);
-        _genAtoBBeta2Power = NumOps.FromDouble(0.999);
-        _genAtoBCurrentLearningRate = initialLearningRate;
-
-        // Initialize GeneratorBtoA optimizer state
-        int genBtoAParamCount = GeneratorBtoA.GetParameterCount();
-        _genBtoAMomentum = new Vector<T>(genBtoAParamCount);
-        _genBtoASecondMoment = new Vector<T>(genBtoAParamCount);
-        _genBtoABeta1Power = NumOps.FromDouble(0.9);
-        _genBtoABeta2Power = NumOps.FromDouble(0.999);
-        _genBtoACurrentLearningRate = initialLearningRate;
-
-        // Initialize DiscriminatorA optimizer state
-        int discAParamCount = DiscriminatorA.GetParameterCount();
-        _discAMomentum = new Vector<T>(discAParamCount);
-        _discASecondMoment = new Vector<T>(discAParamCount);
-        _discABeta1Power = NumOps.FromDouble(0.9);
-        _discABeta2Power = NumOps.FromDouble(0.999);
-        _discACurrentLearningRate = initialLearningRate;
-
-        // Initialize DiscriminatorB optimizer state
-        int discBParamCount = DiscriminatorB.GetParameterCount();
-        _discBMomentum = new Vector<T>(discBParamCount);
-        _discBSecondMoment = new Vector<T>(discBParamCount);
-        _discBBeta1Power = NumOps.FromDouble(0.9);
-        _discBBeta2Power = NumOps.FromDouble(0.999);
-        _discBCurrentLearningRate = initialLearningRate;
+        // Initialize optimizers - use provided optimizers or create default Adam optimizers
+        _generatorAtoBOptimizer = generatorAtoBOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(GeneratorAtoB);
+        _generatorBtoAOptimizer = generatorBtoAOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(GeneratorBtoA);
+        _discriminatorAOptimizer = discriminatorAOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(DiscriminatorA);
+        _discriminatorBOptimizer = discriminatorBOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(DiscriminatorB);
 
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
 
@@ -490,141 +539,149 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Applies vectorized Adam update using Engine operations for SIMD/GPU acceleration.
-    /// This follows the gold-standard pattern from the codebase's production-ready models.
+    /// Updates the parameters of the generator A→B network using its optimizer.
     /// </summary>
-    private Vector<T> ApplyVectorizedAdamUpdate(
-        Vector<T> parameters,
-        Vector<T> gradient,
-        ref Vector<T> momentum,
-        ref Vector<T> secondMoment,
-        ref T beta1Power,
-        ref T beta2Power,
-        double learningRate)
-    {
-        T beta1 = NumOps.FromDouble(0.0); // GANs often use beta1=0
-        T beta2 = NumOps.FromDouble(0.999);
-        T oneMinusBeta1 = NumOps.FromDouble(1.0); // 1.0 - 0.0 = 1.0
-        T oneMinusBeta2 = NumOps.FromDouble(0.001); // 1.0 - 0.999 = 0.001
-        T epsilon = NumOps.FromDouble(1e-8);
-        T lr = NumOps.FromDouble(learningRate);
-
-        // Gradient clipping using vectorized L2 norm
-        T maxGradNorm = NumOps.FromDouble(5.0);
-        T gradientNorm = gradient.L2Norm();
-
-        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
-        {
-            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
-            gradient = (Vector<T>)Engine.Multiply(gradient, scaleFactor);
-        }
-
-        // Update beta powers
-        beta1Power = NumOps.Multiply(beta1Power, beta1);
-        beta2Power = NumOps.Multiply(beta2Power, beta2);
-
-        // Compute bias correction factors
-        T biasCorrection1 = NumOps.Subtract(NumOps.One, beta1Power);
-        T biasCorrection2 = NumOps.Subtract(NumOps.One, beta2Power);
-
-        // Update biased first moment: m = beta1 * m + (1 - beta1) * gradient
-        var mScaled = (Vector<T>)Engine.Multiply(momentum, beta1);
-        var gradScaled = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
-        momentum = (Vector<T>)Engine.Add(mScaled, gradScaled);
-
-        // Update biased second moment: v = beta2 * v + (1 - beta2) * gradient^2
-        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
-        var vScaled = (Vector<T>)Engine.Multiply(secondMoment, beta2);
-        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
-        secondMoment = (Vector<T>)Engine.Add(vScaled, gradSquaredScaled);
-
-        // Compute bias-corrected first moment: mHat = m / (1 - beta1^t)
-        var mHat = (Vector<T>)Engine.Divide(momentum, biasCorrection1);
-
-        // Compute bias-corrected second moment: vHat = v / (1 - beta2^t)
-        var vHat = (Vector<T>)Engine.Divide(secondMoment, biasCorrection2);
-
-        // Compute update: update = lr * mHat / (sqrt(vHat) + epsilon)
-        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
-        var epsilonVec = Vector<T>.CreateDefault(vHatSqrt.Length, epsilon);
-        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
-        var updateDiv = (Vector<T>)Engine.Divide(mHat, denominator);
-        var update = (Vector<T>)Engine.Multiply(updateDiv, lr);
-
-        // Apply update: parameters = parameters - update
-        return (Vector<T>)Engine.Subtract(parameters, update);
-    }
-
+    /// <remarks>
+    /// <para>
+    /// This method retrieves the current parameters and gradients from the generator,
+    /// applies gradient clipping for training stability, and uses the configured optimizer
+    /// to compute parameter updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts the A→B generator's weights
+    /// based on how well it fooled the discriminator and maintained cycle consistency.
+    /// </para>
+    /// </remarks>
     private void UpdateGeneratorAtoBParameters()
     {
         var parameters = GeneratorAtoB.GetParameters();
         var gradients = GeneratorAtoB.GetParameterGradients();
 
-        // Vectorized Adam update using Engine operations
-        var updatedParams = ApplyVectorizedAdamUpdate(
-            parameters, gradients,
-            ref _genAtoBMomentum, ref _genAtoBSecondMoment,
-            ref _genAtoBBeta1Power, ref _genAtoBBeta2Power,
-            _genAtoBCurrentLearningRate);
+        // Gradient clipping for training stability
+        T maxGradNorm = NumOps.FromDouble(5.0);
+        T gradientNorm = gradients.L2Norm();
+        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
+        {
+            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
+            gradients = (Vector<T>)Engine.Multiply(gradients, scaleFactor);
+        }
 
-        // Apply learning rate decay
-        _genAtoBCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * NumOps.ToDouble(_genAtoBBeta1Power));
-
+        var updatedParams = _generatorAtoBOptimizer.UpdateParameters(parameters, gradients);
         GeneratorAtoB.UpdateParameters(updatedParams);
     }
 
+    /// <summary>
+    /// Updates the parameters of the generator B→A network using its optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves the current parameters and gradients from the generator,
+    /// applies gradient clipping for training stability, and uses the configured optimizer
+    /// to compute parameter updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts the B→A generator's weights
+    /// based on how well it fooled the discriminator and maintained cycle consistency.
+    /// </para>
+    /// </remarks>
     private void UpdateGeneratorBtoAParameters()
     {
         var parameters = GeneratorBtoA.GetParameters();
         var gradients = GeneratorBtoA.GetParameterGradients();
 
-        // Vectorized Adam update using Engine operations
-        var updatedParams = ApplyVectorizedAdamUpdate(
-            parameters, gradients,
-            ref _genBtoAMomentum, ref _genBtoASecondMoment,
-            ref _genBtoABeta1Power, ref _genBtoABeta2Power,
-            _genBtoACurrentLearningRate);
+        // Gradient clipping for training stability
+        T maxGradNorm = NumOps.FromDouble(5.0);
+        T gradientNorm = gradients.L2Norm();
+        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
+        {
+            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
+            gradients = (Vector<T>)Engine.Multiply(gradients, scaleFactor);
+        }
 
-        // Apply learning rate decay
-        _genBtoACurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * NumOps.ToDouble(_genBtoABeta1Power));
-
+        var updatedParams = _generatorBtoAOptimizer.UpdateParameters(parameters, gradients);
         GeneratorBtoA.UpdateParameters(updatedParams);
     }
 
+    /// <summary>
+    /// Updates the parameters of discriminator A using its optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves the current parameters and gradients from the discriminator,
+    /// applies gradient clipping for training stability, and uses the configured optimizer
+    /// to compute parameter updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts discriminator A's weights
+    /// based on how well it distinguished real images from generated ones in domain A.
+    /// </para>
+    /// </remarks>
     private void UpdateDiscriminatorAParameters()
     {
         var parameters = DiscriminatorA.GetParameters();
         var gradients = DiscriminatorA.GetParameterGradients();
 
-        // Vectorized Adam update using Engine operations
-        var updatedParams = ApplyVectorizedAdamUpdate(
-            parameters, gradients,
-            ref _discAMomentum, ref _discASecondMoment,
-            ref _discABeta1Power, ref _discABeta2Power,
-            _discACurrentLearningRate);
+        // Gradient clipping for training stability
+        T maxGradNorm = NumOps.FromDouble(5.0);
+        T gradientNorm = gradients.L2Norm();
+        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
+        {
+            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
+            gradients = (Vector<T>)Engine.Multiply(gradients, scaleFactor);
+        }
 
-        // Apply learning rate decay
-        _discACurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * NumOps.ToDouble(_discABeta1Power));
-
+        var updatedParams = _discriminatorAOptimizer.UpdateParameters(parameters, gradients);
         DiscriminatorA.UpdateParameters(updatedParams);
     }
 
+    /// <summary>
+    /// Updates the parameters of discriminator B using its optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves the current parameters and gradients from the discriminator,
+    /// applies gradient clipping for training stability, and uses the configured optimizer
+    /// to compute parameter updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts discriminator B's weights
+    /// based on how well it distinguished real images from generated ones in domain B.
+    /// </para>
+    /// </remarks>
     private void UpdateDiscriminatorBParameters()
     {
         var parameters = DiscriminatorB.GetParameters();
         var gradients = DiscriminatorB.GetParameterGradients();
 
-        // Vectorized Adam update using Engine operations
-        var updatedParams = ApplyVectorizedAdamUpdate(
-            parameters, gradients,
-            ref _discBMomentum, ref _discBSecondMoment,
-            ref _discBBeta1Power, ref _discBBeta2Power,
-            _discBCurrentLearningRate);
+        // Gradient clipping for training stability
+        T maxGradNorm = NumOps.FromDouble(5.0);
+        T gradientNorm = gradients.L2Norm();
+        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
+        {
+            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
+            gradients = (Vector<T>)Engine.Multiply(gradients, scaleFactor);
+        }
 
-        // Apply learning rate decay
-        _discBCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * NumOps.ToDouble(_discBBeta1Power));
-
+        var updatedParams = _discriminatorBOptimizer.UpdateParameters(parameters, gradients);
         DiscriminatorB.UpdateParameters(updatedParams);
+    }
+
+    /// <summary>
+    /// Resets the state of all optimizers to their initial values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets all four optimizers (both generators and both discriminators)
+    /// to their initial state. This is useful when restarting training or when you want
+    /// to clear accumulated momentum and adaptive learning rate information.
+    /// </para>
+    /// <para><b>For Beginners:</b> Call this method when you want to start fresh with
+    /// training, as if the model had never been trained before. The network weights
+    /// remain unchanged, but the optimizer's memory of past gradients is cleared.
+    /// </para>
+    /// </remarks>
+    public void ResetOptimizerState()
+    {
+        _generatorAtoBOptimizer.Reset();
+        _generatorBtoAOptimizer.Reset();
+        _discriminatorAOptimizer.Reset();
+        _discriminatorBOptimizer.Reset();
     }
 
     protected override void InitializeLayers() { }
@@ -654,43 +711,26 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         };
     }
 
+    /// <summary>
+    /// Serializes CycleGAN-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the CycleGAN-specific configuration and all four networks.
+    /// Optimizer state is managed by the optimizer implementations themselves.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves the CycleGAN's settings and all
+    /// four networks (two generators and two discriminators) to a file.
+    /// </para>
+    /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_initialLearningRate);
-        writer.Write(_learningRateDecay);
+        // Serialize CycleGAN-specific hyperparameters
         writer.Write(_cycleConsistencyLambda);
         writer.Write(_identityLambda);
 
-        // Write per-network learning rates
-        writer.Write(_genAtoBCurrentLearningRate);
-        writer.Write(_genBtoACurrentLearningRate);
-        writer.Write(_discACurrentLearningRate);
-        writer.Write(_discBCurrentLearningRate);
-
-        // Serialize GeneratorAtoB optimizer state
-        SerializationHelper<T>.SerializeVector(writer, _genAtoBMomentum);
-        SerializationHelper<T>.SerializeVector(writer, _genAtoBSecondMoment);
-        SerializationHelper<T>.WriteValue(writer, _genAtoBBeta1Power);
-        SerializationHelper<T>.WriteValue(writer, _genAtoBBeta2Power);
-
-        // Serialize GeneratorBtoA optimizer state
-        SerializationHelper<T>.SerializeVector(writer, _genBtoAMomentum);
-        SerializationHelper<T>.SerializeVector(writer, _genBtoASecondMoment);
-        SerializationHelper<T>.WriteValue(writer, _genBtoABeta1Power);
-        SerializationHelper<T>.WriteValue(writer, _genBtoABeta2Power);
-
-        // Serialize DiscriminatorA optimizer state
-        SerializationHelper<T>.SerializeVector(writer, _discAMomentum);
-        SerializationHelper<T>.SerializeVector(writer, _discASecondMoment);
-        SerializationHelper<T>.WriteValue(writer, _discABeta1Power);
-        SerializationHelper<T>.WriteValue(writer, _discABeta2Power);
-
-        // Serialize DiscriminatorB optimizer state
-        SerializationHelper<T>.SerializeVector(writer, _discBMomentum);
-        SerializationHelper<T>.SerializeVector(writer, _discBSecondMoment);
-        SerializationHelper<T>.WriteValue(writer, _discBBeta1Power);
-        SerializationHelper<T>.WriteValue(writer, _discBBeta2Power);
-
+        // Serialize all four networks
         var genAtoB = GeneratorAtoB.Serialize();
         writer.Write(genAtoB.Length);
         writer.Write(genAtoB);
@@ -708,43 +748,26 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         writer.Write(discB);
     }
 
+    /// <summary>
+    /// Deserializes CycleGAN-specific data from a binary reader.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes the CycleGAN-specific configuration and all four networks.
+    /// After deserialization, the optimizers are reset to their initial state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads the CycleGAN's settings and all
+    /// four networks (two generators and two discriminators) from a file.
+    /// </para>
+    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _initialLearningRate = reader.ReadDouble();
-        _learningRateDecay = reader.ReadDouble();
+        // Deserialize CycleGAN-specific hyperparameters
         _cycleConsistencyLambda = reader.ReadDouble();
         _identityLambda = reader.ReadDouble();
 
-        // Read per-network learning rates
-        _genAtoBCurrentLearningRate = reader.ReadDouble();
-        _genBtoACurrentLearningRate = reader.ReadDouble();
-        _discACurrentLearningRate = reader.ReadDouble();
-        _discBCurrentLearningRate = reader.ReadDouble();
-
-        // Deserialize GeneratorAtoB optimizer state
-        _genAtoBMomentum = SerializationHelper<T>.DeserializeVector(reader);
-        _genAtoBSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
-        _genAtoBBeta1Power = SerializationHelper<T>.ReadValue(reader);
-        _genAtoBBeta2Power = SerializationHelper<T>.ReadValue(reader);
-
-        // Deserialize GeneratorBtoA optimizer state
-        _genBtoAMomentum = SerializationHelper<T>.DeserializeVector(reader);
-        _genBtoASecondMoment = SerializationHelper<T>.DeserializeVector(reader);
-        _genBtoABeta1Power = SerializationHelper<T>.ReadValue(reader);
-        _genBtoABeta2Power = SerializationHelper<T>.ReadValue(reader);
-
-        // Deserialize DiscriminatorA optimizer state
-        _discAMomentum = SerializationHelper<T>.DeserializeVector(reader);
-        _discASecondMoment = SerializationHelper<T>.DeserializeVector(reader);
-        _discABeta1Power = SerializationHelper<T>.ReadValue(reader);
-        _discABeta2Power = SerializationHelper<T>.ReadValue(reader);
-
-        // Deserialize DiscriminatorB optimizer state
-        _discBMomentum = SerializationHelper<T>.DeserializeVector(reader);
-        _discBSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
-        _discBBeta1Power = SerializationHelper<T>.ReadValue(reader);
-        _discBBeta2Power = SerializationHelper<T>.ReadValue(reader);
-
+        // Deserialize all four networks
         int genAtoB_Length = reader.ReadInt32();
         GeneratorAtoB.Deserialize(reader.ReadBytes(genAtoB_Length));
 
@@ -756,8 +779,24 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
         int discB_Length = reader.ReadInt32();
         DiscriminatorB.Deserialize(reader.ReadBytes(discB_Length));
+
+        // Reset optimizer state after loading network weights
+        ResetOptimizerState();
     }
 
+    /// <summary>
+    /// Creates a new instance of the CycleGAN with the same configuration.
+    /// </summary>
+    /// <returns>A new CycleGAN instance with the same architecture and hyperparameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a fresh CycleGAN instance with the same network architectures
+    /// and hyperparameters. The new instance has freshly initialized optimizers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a copy of the CycleGAN structure
+    /// but with new, untrained networks and fresh optimizers.
+    /// </para>
+    /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new CycleGAN<T>(
@@ -766,8 +805,11 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
             DiscriminatorA.Architecture,
             DiscriminatorB.Architecture,
             Architecture.InputType,
+            generatorAtoBOptimizer: null,
+            generatorBtoAOptimizer: null,
+            discriminatorAOptimizer: null,
+            discriminatorBOptimizer: null,
             _lossFunction,
-            _initialLearningRate,
             _cycleConsistencyLambda,
             _identityLambda);
     }

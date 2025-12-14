@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
@@ -49,30 +50,57 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class InfoGAN<T> : NeuralNetworkBase<T>
 {
-    // Generator optimizer state
-    private Vector<T> _genMomentum;
-    private Vector<T> _genSecondMoment;
-    private T _genBeta1Power;
-    private T _genBeta2Power;
-    private double _genCurrentLearningRate;
+    /// <summary>
+    /// The optimizer used for training the generator network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This optimizer manages the gradient-based parameter updates for the generator.
+    /// The optimizer handles momentum, adaptive learning rates, and other algorithm-specific state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This optimizer controls how the generator
+    /// learns from its mistakes and adjusts its parameters during training.
+    /// </para>
+    /// </remarks>
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
 
-    // Discriminator optimizer state
-    private Vector<T> _discMomentum;
-    private Vector<T> _discSecondMoment;
-    private T _discBeta1Power;
-    private T _discBeta2Power;
-    private double _discCurrentLearningRate;
+    /// <summary>
+    /// The optimizer used for training the discriminator network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This optimizer manages the gradient-based parameter updates for the discriminator.
+    /// The optimizer handles momentum, adaptive learning rates, and other algorithm-specific state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This optimizer controls how the discriminator
+    /// learns to better distinguish real images from fake ones.
+    /// </para>
+    /// </remarks>
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorOptimizer;
 
-    // QNetwork optimizer state
-    private Vector<T> _qMomentum;
-    private Vector<T> _qSecondMoment;
-    private T _qBeta1Power;
-    private T _qBeta2Power;
-    private double _qCurrentLearningRate;
+    /// <summary>
+    /// The optimizer used for training the Q network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This optimizer manages the gradient-based parameter updates for the Q network,
+    /// which predicts latent codes from generated images. The optimizer handles momentum,
+    /// adaptive learning rates, and other algorithm-specific state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This optimizer controls how the Q network
+    /// learns to predict which latent codes were used to generate an image.
+    /// </para>
+    /// </remarks>
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _qNetworkOptimizer;
 
-    private double _initialLearningRate;
-    private double _learningRateDecay;
+    /// <summary>
+    /// List of recent generator losses for tracking training progress.
+    /// </summary>
     private readonly List<T> _generatorLosses = [];
+
+    /// <summary>
+    /// List of recent discriminator losses for tracking training progress.
+    /// </summary>
     private readonly List<T> _discriminatorLosses = [];
 
     /// <summary>
@@ -172,24 +200,59 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="InfoGAN{T}"/> class.
+    /// Initializes a new instance of the <see cref="InfoGAN{T}"/> class with the specified architecture and training parameters.
     /// </summary>
-    /// <param name="generatorArchitecture">The generator architecture.</param>
-    /// <param name="discriminatorArchitecture">The discriminator architecture.</param>
-    /// <param name="qNetworkArchitecture">The Q network architecture (should output latentCodeSize values).</param>
-    /// <param name="latentCodeSize">The size of the latent code.</param>
-    /// <param name="inputType">The input type.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
-    /// <param name="initialLearningRate">Initial learning rate. Default is 0.0002.</param>
-    /// <param name="mutualInfoCoefficient">Mutual information coefficient. Default is 1.0.</param>
+    /// <param name="generatorArchitecture">The architecture for the generator network.</param>
+    /// <param name="discriminatorArchitecture">The architecture for the discriminator network.</param>
+    /// <param name="qNetworkArchitecture">The architecture for the Q network (should output latentCodeSize values).</param>
+    /// <param name="latentCodeSize">The size of the latent code (number of controllable features).</param>
+    /// <param name="inputType">The type of input data (e.g., ThreeDimensional for images).</param>
+    /// <param name="generatorOptimizer">
+    /// Optional optimizer for the generator. If null, an Adam optimizer with default settings is created.
+    /// </param>
+    /// <param name="discriminatorOptimizer">
+    /// Optional optimizer for the discriminator. If null, an Adam optimizer with default settings is created.
+    /// </param>
+    /// <param name="qNetworkOptimizer">
+    /// Optional optimizer for the Q network. If null, an Adam optimizer with default settings is created.
+    /// </param>
+    /// <param name="lossFunction">Optional loss function. If null, the default loss function for generative tasks is used.</param>
+    /// <param name="mutualInfoCoefficient">
+    /// The coefficient for mutual information loss. Higher values prioritize feature learning. Default is 1.0.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates an InfoGAN with three networks:
+    /// - Generator: Creates images from noise and latent codes
+    /// - Discriminator: Determines if images are real or fake
+    /// - Q Network: Predicts latent codes from generated images
+    ///
+    /// The mutual information loss encourages the generator to use the latent codes in meaningful ways
+    /// that can be recovered by the Q network.
+    /// </para>
+    /// <para><b>For Beginners:</b> InfoGAN learns controllable features automatically:
+    /// - The generator creates images using random noise + controllable codes
+    /// - The Q network tries to guess which codes were used
+    /// - This forces the codes to represent real, interpretable features
+    /// - After training, you can manipulate specific features by changing the codes
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when any of the architecture parameters is null.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when latentCodeSize is not positive or mutualInfoCoefficient is negative.
+    /// </exception>
     public InfoGAN(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
         NeuralNetworkArchitecture<T> qNetworkArchitecture,
         int latentCodeSize,
         InputType inputType,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorOptimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorOptimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? qNetworkOptimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double initialLearningRate = 0.0002,
         double mutualInfoCoefficient = 1.0)
         : base(CreateInfoGANArchitecture(generatorArchitecture, discriminatorArchitecture, inputType),
                lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
@@ -202,41 +265,20 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(qNetworkArchitecture));
         if (latentCodeSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(latentCodeSize), latentCodeSize, "Latent code size must be positive.");
-        if (initialLearningRate <= 0)
-            throw new ArgumentOutOfRangeException(nameof(initialLearningRate), initialLearningRate, "Initial learning rate must be positive.");
         if (mutualInfoCoefficient < 0)
             throw new ArgumentOutOfRangeException(nameof(mutualInfoCoefficient), mutualInfoCoefficient, "Mutual information coefficient must be non-negative.");
 
         _latentCodeSize = latentCodeSize;
         _mutualInfoCoefficient = mutualInfoCoefficient;
-        _initialLearningRate = initialLearningRate;
-        _learningRateDecay = 0.9999;
-
-        // Initialize Generator optimizer state
-        // Beta powers start at beta^1 so first iteration's bias correction is non-zero
-        _genBeta1Power = NumOps.FromDouble(0.5);
-        _genBeta2Power = NumOps.FromDouble(0.999);
-        _genCurrentLearningRate = initialLearningRate;
-        _genMomentum = Vector<T>.Empty();
-        _genSecondMoment = Vector<T>.Empty();
-
-        // Initialize Discriminator optimizer state
-        _discBeta1Power = NumOps.FromDouble(0.5);
-        _discBeta2Power = NumOps.FromDouble(0.999);
-        _discCurrentLearningRate = initialLearningRate;
-        _discMomentum = Vector<T>.Empty();
-        _discSecondMoment = Vector<T>.Empty();
-
-        // Initialize QNetwork optimizer state
-        _qBeta1Power = NumOps.FromDouble(0.5);
-        _qBeta2Power = NumOps.FromDouble(0.999);
-        _qCurrentLearningRate = initialLearningRate;
-        _qMomentum = Vector<T>.Empty();
-        _qSecondMoment = Vector<T>.Empty();
 
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
         QNetwork = new ConvolutionalNeuralNetwork<T>(qNetworkArchitecture);
+
+        // Initialize optimizers - use provided optimizers or create default Adam optimizers
+        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator);
+        _discriminatorOptimizer = discriminatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator);
+        _qNetworkOptimizer = qNetworkOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(QNetwork);
 
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
@@ -560,180 +602,117 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates Generator parameters using vectorized Adam optimizer with CPU/GPU acceleration.
+    /// Updates the parameters of the generator network using its optimizer.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves the current parameters and gradients from the generator,
+    /// applies gradient clipping for training stability, and uses the configured optimizer
+    /// to compute parameter updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts the generator's weights
+    /// based on how well it fooled the discriminator and produced recoverable codes.
+    /// </para>
+    /// </remarks>
     private void UpdateGeneratorParameters()
     {
         var parameters = Generator.GetParameters();
         var gradients = Generator.GetParameterGradients();
 
-        if (_genMomentum.Length != parameters.Length)
+        // Gradient clipping for training stability
+        T maxGradNorm = NumOps.FromDouble(5.0);
+        T gradientNorm = gradients.L2Norm();
+        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
         {
-            _genMomentum = new Vector<T>(parameters.Length);
-            _genMomentum.Fill(NumOps.Zero);
+            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
+            gradients = (Vector<T>)Engine.Multiply(gradients, scaleFactor);
         }
 
-        if (_genSecondMoment.Length != parameters.Length)
-        {
-            _genSecondMoment = new Vector<T>(parameters.Length);
-            _genSecondMoment.Fill(NumOps.Zero);
-        }
-
-        var learningRate = NumOps.FromDouble(_genCurrentLearningRate);
-        var beta1 = NumOps.FromDouble(0.5);
-        var beta2 = NumOps.FromDouble(0.999);
-        var epsilon = NumOps.FromDouble(1e-8);
-        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
-        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
-
-        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
-        var mScaled = (Vector<T>)Engine.Multiply(_genMomentum, beta1);
-        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
-        _genMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
-
-        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
-        var vScaled = (Vector<T>)Engine.Multiply(_genSecondMoment, beta2);
-        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
-        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
-        _genSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
-
-        // Bias correction
-        var beta1Correction = NumOps.Subtract(NumOps.One, _genBeta1Power);
-        var beta2Correction = NumOps.Subtract(NumOps.One, _genBeta2Power);
-        var mCorrected = (Vector<T>)Engine.Divide(_genMomentum, beta1Correction);
-        var vCorrected = (Vector<T>)Engine.Divide(_genSecondMoment, beta2Correction);
-
-        // Vectorized parameter update: p = p - lr * m_corrected / (sqrt(v_corrected) + epsilon)
-        var sqrtV = (Vector<T>)Engine.Sqrt(vCorrected);
-        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
-        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
-        var lrTimesM = (Vector<T>)Engine.Multiply(mCorrected, learningRate);
-        var update = (Vector<T>)Engine.Divide(lrTimesM, sqrtVPlusEps);
-        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
-
-        _genBeta1Power = NumOps.Multiply(_genBeta1Power, beta1);
-        _genBeta2Power = NumOps.Multiply(_genBeta2Power, beta2);
-        _genCurrentLearningRate *= _learningRateDecay;
-
-        Generator.UpdateParameters(updatedParameters);
+        var updatedParams = _generatorOptimizer.UpdateParameters(parameters, gradients);
+        Generator.UpdateParameters(updatedParams);
     }
 
     /// <summary>
-    /// Updates Discriminator parameters using vectorized Adam optimizer with CPU/GPU acceleration.
+    /// Updates the parameters of the discriminator network using its optimizer.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves the current parameters and gradients from the discriminator,
+    /// applies gradient clipping for training stability, and uses the configured optimizer
+    /// to compute parameter updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts the discriminator's weights
+    /// based on how well it distinguished real images from fake ones.
+    /// </para>
+    /// </remarks>
     private void UpdateDiscriminatorParameters()
     {
         var parameters = Discriminator.GetParameters();
         var gradients = Discriminator.GetParameterGradients();
 
-        if (_discMomentum.Length != parameters.Length)
+        // Gradient clipping for training stability
+        T maxGradNorm = NumOps.FromDouble(5.0);
+        T gradientNorm = gradients.L2Norm();
+        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
         {
-            _discMomentum = new Vector<T>(parameters.Length);
-            _discMomentum.Fill(NumOps.Zero);
+            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
+            gradients = (Vector<T>)Engine.Multiply(gradients, scaleFactor);
         }
 
-        if (_discSecondMoment.Length != parameters.Length)
-        {
-            _discSecondMoment = new Vector<T>(parameters.Length);
-            _discSecondMoment.Fill(NumOps.Zero);
-        }
-
-        var learningRate = NumOps.FromDouble(_discCurrentLearningRate);
-        var beta1 = NumOps.FromDouble(0.5);
-        var beta2 = NumOps.FromDouble(0.999);
-        var epsilon = NumOps.FromDouble(1e-8);
-        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
-        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
-
-        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
-        var mScaled = (Vector<T>)Engine.Multiply(_discMomentum, beta1);
-        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
-        _discMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
-
-        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
-        var vScaled = (Vector<T>)Engine.Multiply(_discSecondMoment, beta2);
-        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
-        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
-        _discSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
-
-        // Bias correction
-        var beta1Correction = NumOps.Subtract(NumOps.One, _discBeta1Power);
-        var beta2Correction = NumOps.Subtract(NumOps.One, _discBeta2Power);
-        var mCorrected = (Vector<T>)Engine.Divide(_discMomentum, beta1Correction);
-        var vCorrected = (Vector<T>)Engine.Divide(_discSecondMoment, beta2Correction);
-
-        // Vectorized parameter update: p = p - lr * m_corrected / (sqrt(v_corrected) + epsilon)
-        var sqrtV = (Vector<T>)Engine.Sqrt(vCorrected);
-        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
-        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
-        var lrTimesM = (Vector<T>)Engine.Multiply(mCorrected, learningRate);
-        var update = (Vector<T>)Engine.Divide(lrTimesM, sqrtVPlusEps);
-        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
-
-        _discBeta1Power = NumOps.Multiply(_discBeta1Power, beta1);
-        _discBeta2Power = NumOps.Multiply(_discBeta2Power, beta2);
-        _discCurrentLearningRate *= _learningRateDecay;
-
-        Discriminator.UpdateParameters(updatedParameters);
+        var updatedParams = _discriminatorOptimizer.UpdateParameters(parameters, gradients);
+        Discriminator.UpdateParameters(updatedParams);
     }
 
     /// <summary>
-    /// Updates QNetwork parameters using vectorized Adam optimizer with CPU/GPU acceleration.
+    /// Updates the parameters of the Q network using its optimizer.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves the current parameters and gradients from the Q network,
+    /// applies gradient clipping for training stability, and uses the configured optimizer
+    /// to compute parameter updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts the Q network's weights
+    /// based on how well it predicted the latent codes from generated images.
+    /// </para>
+    /// </remarks>
     private void UpdateQNetworkParameters()
     {
         var parameters = QNetwork.GetParameters();
         var gradients = QNetwork.GetParameterGradients();
 
-        if (_qMomentum.Length != parameters.Length)
+        // Gradient clipping for training stability
+        T maxGradNorm = NumOps.FromDouble(5.0);
+        T gradientNorm = gradients.L2Norm();
+        if (NumOps.GreaterThan(gradientNorm, maxGradNorm))
         {
-            _qMomentum = new Vector<T>(parameters.Length);
-            _qMomentum.Fill(NumOps.Zero);
+            T scaleFactor = NumOps.Divide(maxGradNorm, gradientNorm);
+            gradients = (Vector<T>)Engine.Multiply(gradients, scaleFactor);
         }
 
-        if (_qSecondMoment.Length != parameters.Length)
-        {
-            _qSecondMoment = new Vector<T>(parameters.Length);
-            _qSecondMoment.Fill(NumOps.Zero);
-        }
+        var updatedParams = _qNetworkOptimizer.UpdateParameters(parameters, gradients);
+        QNetwork.UpdateParameters(updatedParams);
+    }
 
-        var learningRate = NumOps.FromDouble(_qCurrentLearningRate);
-        var beta1 = NumOps.FromDouble(0.5);
-        var beta2 = NumOps.FromDouble(0.999);
-        var epsilon = NumOps.FromDouble(1e-8);
-        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
-        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
-
-        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
-        var mScaled = (Vector<T>)Engine.Multiply(_qMomentum, beta1);
-        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
-        _qMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
-
-        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
-        var vScaled = (Vector<T>)Engine.Multiply(_qSecondMoment, beta2);
-        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
-        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
-        _qSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
-
-        // Bias correction
-        var beta1Correction = NumOps.Subtract(NumOps.One, _qBeta1Power);
-        var beta2Correction = NumOps.Subtract(NumOps.One, _qBeta2Power);
-        var mCorrected = (Vector<T>)Engine.Divide(_qMomentum, beta1Correction);
-        var vCorrected = (Vector<T>)Engine.Divide(_qSecondMoment, beta2Correction);
-
-        // Vectorized parameter update: p = p - lr * m_corrected / (sqrt(v_corrected) + epsilon)
-        var sqrtV = (Vector<T>)Engine.Sqrt(vCorrected);
-        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
-        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
-        var lrTimesM = (Vector<T>)Engine.Multiply(mCorrected, learningRate);
-        var update = (Vector<T>)Engine.Divide(lrTimesM, sqrtVPlusEps);
-        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
-
-        _qBeta1Power = NumOps.Multiply(_qBeta1Power, beta1);
-        _qBeta2Power = NumOps.Multiply(_qBeta2Power, beta2);
-        _qCurrentLearningRate *= _learningRateDecay;
-
-        QNetwork.UpdateParameters(updatedParameters);
+    /// <summary>
+    /// Resets the state of all optimizers to their initial values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets all three optimizers (generator, discriminator, and Q network)
+    /// to their initial state. This is useful when restarting training or when you want
+    /// to clear accumulated momentum and adaptive learning rate information.
+    /// </para>
+    /// <para><b>For Beginners:</b> Call this method when you want to start fresh with
+    /// training, as if the model had never been trained before. The network weights
+    /// remain unchanged, but the optimizer's memory of past gradients is cleared.
+    /// </para>
+    /// </remarks>
+    public void ResetOptimizerState()
+    {
+        _generatorOptimizer.Reset();
+        _discriminatorOptimizer.Reset();
+        _qNetworkOptimizer.Reset();
     }
 
     protected override void InitializeLayers()
@@ -770,35 +749,26 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         };
     }
 
+    /// <summary>
+    /// Serializes InfoGAN-specific data to a binary writer.
+    /// </summary>
+    /// <param name="writer">The binary writer to write to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the InfoGAN-specific configuration and all three networks.
+    /// Optimizer state is managed by the optimizer implementations themselves.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves the InfoGAN's settings and all
+    /// three networks (generator, discriminator, and Q network) to a file.
+    /// </para>
+    /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        // Save all three learning rates
-        writer.Write(_genCurrentLearningRate);
-        writer.Write(_discCurrentLearningRate);
-        writer.Write(_qCurrentLearningRate);
+        // Serialize InfoGAN-specific hyperparameters
         writer.Write(_latentCodeSize);
         writer.Write(_mutualInfoCoefficient);
-        writer.Write(_initialLearningRate);
-        writer.Write(_learningRateDecay);
 
-        // Serialize generator optimizer state
-        SerializationHelper<T>.SerializeVector(writer, _genMomentum);
-        SerializationHelper<T>.SerializeVector(writer, _genSecondMoment);
-        writer.Write(NumOps.ToDouble(_genBeta1Power));
-        writer.Write(NumOps.ToDouble(_genBeta2Power));
-
-        // Serialize discriminator optimizer state
-        SerializationHelper<T>.SerializeVector(writer, _discMomentum);
-        SerializationHelper<T>.SerializeVector(writer, _discSecondMoment);
-        writer.Write(NumOps.ToDouble(_discBeta1Power));
-        writer.Write(NumOps.ToDouble(_discBeta2Power));
-
-        // Serialize Q network optimizer state
-        SerializationHelper<T>.SerializeVector(writer, _qMomentum);
-        SerializationHelper<T>.SerializeVector(writer, _qSecondMoment);
-        writer.Write(NumOps.ToDouble(_qBeta1Power));
-        writer.Write(NumOps.ToDouble(_qBeta2Power));
-
+        // Serialize all three networks
         var generatorBytes = Generator.Serialize();
         writer.Write(generatorBytes.Length);
         writer.Write(generatorBytes);
@@ -812,35 +782,26 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         writer.Write(qNetworkBytes);
     }
 
+    /// <summary>
+    /// Deserializes InfoGAN-specific data from a binary reader.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes the InfoGAN-specific configuration and all three networks.
+    /// After deserialization, the optimizers are reset to their initial state.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads the InfoGAN's settings and all
+    /// three networks (generator, discriminator, and Q network) from a file.
+    /// </para>
+    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Read all three learning rates
-        _genCurrentLearningRate = reader.ReadDouble();
-        _discCurrentLearningRate = reader.ReadDouble();
-        _qCurrentLearningRate = reader.ReadDouble();
+        // Deserialize InfoGAN-specific hyperparameters
         _latentCodeSize = reader.ReadInt32();
         _mutualInfoCoefficient = reader.ReadDouble();
-        _initialLearningRate = reader.ReadDouble();
-        _learningRateDecay = reader.ReadDouble();
 
-        // Deserialize generator optimizer state
-        _genMomentum = SerializationHelper<T>.DeserializeVector(reader);
-        _genSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
-        _genBeta1Power = NumOps.FromDouble(reader.ReadDouble());
-        _genBeta2Power = NumOps.FromDouble(reader.ReadDouble());
-
-        // Deserialize discriminator optimizer state
-        _discMomentum = SerializationHelper<T>.DeserializeVector(reader);
-        _discSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
-        _discBeta1Power = NumOps.FromDouble(reader.ReadDouble());
-        _discBeta2Power = NumOps.FromDouble(reader.ReadDouble());
-
-        // Deserialize Q network optimizer state
-        _qMomentum = SerializationHelper<T>.DeserializeVector(reader);
-        _qSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
-        _qBeta1Power = NumOps.FromDouble(reader.ReadDouble());
-        _qBeta2Power = NumOps.FromDouble(reader.ReadDouble());
-
+        // Deserialize all three networks
         int generatorDataLength = reader.ReadInt32();
         byte[] generatorData = reader.ReadBytes(generatorDataLength);
         Generator.Deserialize(generatorData);
@@ -852,8 +813,24 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         int qNetworkDataLength = reader.ReadInt32();
         byte[] qNetworkData = reader.ReadBytes(qNetworkDataLength);
         QNetwork.Deserialize(qNetworkData);
+
+        // Reset optimizer state after loading network weights
+        ResetOptimizerState();
     }
 
+    /// <summary>
+    /// Creates a new instance of the InfoGAN with the same configuration.
+    /// </summary>
+    /// <returns>A new InfoGAN instance with the same architecture and hyperparameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a fresh InfoGAN instance with the same network architectures
+    /// and hyperparameters. The new instance has freshly initialized optimizers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a copy of the InfoGAN structure
+    /// but with new, untrained networks and fresh optimizers.
+    /// </para>
+    /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new InfoGAN<T>(
@@ -862,8 +839,10 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             QNetwork.Architecture,
             _latentCodeSize,
             Architecture.InputType,
+            generatorOptimizer: null,
+            discriminatorOptimizer: null,
+            qNetworkOptimizer: null,
             _lossFunction,
-            _initialLearningRate,
             _mutualInfoCoefficient);
     }
 

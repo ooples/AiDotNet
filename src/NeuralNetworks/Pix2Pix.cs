@@ -13,12 +13,12 @@ namespace AiDotNet.NeuralNetworks;
 /// - Uses a PatchGAN discriminator that classifies image patches
 /// - Combines adversarial loss with L1 reconstruction loss
 /// - Requires paired training data (input-output pairs)
-/// - Works for various tasks: edges→photo, day→night, sketch→image, etc.
+/// - Works for various tasks: edges to photo, day to night, sketch to image, etc.
 /// </para>
 /// <para><b>For Beginners:</b> Pix2Pix transforms one type of image to another.
 ///
 /// Key features:
-/// - Learns from paired examples (input A → output B)
+/// - Learns from paired examples (input A becomes output B)
 /// - Generator: U-Net architecture preserves spatial information
 /// - Discriminator: PatchGAN focuses on local image patches
 /// - Loss: Both "looks real" and "matches input"
@@ -37,22 +37,18 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class Pix2Pix<T> : NeuralNetworkBase<T>
 {
-    // Generator optimizer state
-    private Vector<T> _genMomentum;
-    private Vector<T> _genSecondMoment;
-    private T _genBeta1Power;
-    private T _genBeta2Power;
-    private double _genCurrentLearningRate;
+    private readonly List<T> _discriminatorLosses = [];
+    private readonly List<T> _generatorLosses = [];
 
-    // Discriminator optimizer state
-    private Vector<T> _discMomentum;
-    private Vector<T> _discSecondMoment;
-    private T _discBeta1Power;
-    private T _discBeta2Power;
-    private double _discCurrentLearningRate;
+    /// <summary>
+    /// The optimizer for the generator network.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
 
-    private double _initialLearningRate;
-    private double _learningRateDecay;
+    /// <summary>
+    /// The optimizer for the discriminator network.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorOptimizer;
 
     /// <summary>
     /// The coefficient for the L1 reconstruction loss.
@@ -81,7 +77,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// PatchGAN classifies whether each N×N patch in an image is real or fake,
+    /// PatchGAN classifies whether each N x N patch in an image is real or fake,
     /// rather than classifying the entire image. This encourages sharp high-frequency
     /// details and works well for image-to-image translation.
     /// </para>
@@ -98,11 +94,14 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// </remarks>
     public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
 
-    private ILossFunction<T> _lossFunction;
+    private readonly ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Creates the combined Pix2Pix architecture with correct dimension handling.
     /// </summary>
+    /// <param name="generatorArchitecture">The generator architecture.</param>
+    /// <param name="inputType">The type of input.</param>
+    /// <returns>The combined architecture for Pix2Pix.</returns>
     private static NeuralNetworkArchitecture<T> CreatePix2PixArchitecture(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         InputType inputType)
@@ -135,53 +134,58 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// <param name="generatorArchitecture">U-Net generator architecture.</param>
     /// <param name="discriminatorArchitecture">PatchGAN discriminator architecture.</param>
     /// <param name="inputType">Input type.</param>
+    /// <param name="generatorOptimizer">Optional optimizer for the generator. If null, Adam optimizer is used.</param>
+    /// <param name="discriminatorOptimizer">Optional optimizer for the discriminator. If null, Adam optimizer is used.</param>
     /// <param name="lossFunction">Optional loss function.</param>
-    /// <param name="initialLearningRate">Initial learning rate. Default is 0.0002.</param>
     /// <param name="l1Lambda">L1 loss coefficient. Default is 100.0.</param>
+    /// <remarks>
+    /// <para>
+    /// The Pix2Pix constructor initializes both the generator and discriminator networks along with their
+    /// respective optimizers. The L1 lambda coefficient controls how strongly the output should match
+    /// the target image.
+    /// </para>
+    /// <para><b>For Beginners:</b> This sets up Pix2Pix with sensible defaults.
+    ///
+    /// Key parameters:
+    /// - Generator/discriminator architectures define the network structures
+    /// - Optimizers control how the networks learn
+    /// - L1 lambda (100.0) controls how closely output matches target
+    /// </para>
+    /// </remarks>
     public Pix2Pix(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
         InputType inputType,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorOptimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorOptimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double initialLearningRate = 0.0002,
         double l1Lambda = 100.0)
         : base(CreatePix2PixArchitecture(generatorArchitecture, inputType),
                lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
         if (generatorArchitecture is null)
-            throw new ArgumentNullException(nameof(generatorArchitecture));
+        {
+            throw new ArgumentNullException(nameof(generatorArchitecture), "Generator architecture cannot be null.");
+        }
         if (discriminatorArchitecture is null)
-            throw new ArgumentNullException(nameof(discriminatorArchitecture));
-        if (initialLearningRate <= 0)
-            throw new ArgumentOutOfRangeException(nameof(initialLearningRate), initialLearningRate, "Initial learning rate must be positive.");
+        {
+            throw new ArgumentNullException(nameof(discriminatorArchitecture), "Discriminator architecture cannot be null.");
+        }
         if (l1Lambda < 0)
+        {
             throw new ArgumentOutOfRangeException(nameof(l1Lambda), l1Lambda, "L1 lambda must be non-negative.");
+        }
 
         _l1Lambda = l1Lambda;
-        _initialLearningRate = initialLearningRate;
-        _learningRateDecay = 0.0001;
 
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
 
-        // Initialize Generator optimizer state
-        // Beta powers start at beta^1 so first iteration's bias correction is non-zero
-        int genParamCount = Generator.GetParameterCount();
-        _genMomentum = new Vector<T>(genParamCount);
-        _genSecondMoment = new Vector<T>(genParamCount);
-        _genBeta1Power = NumOps.FromDouble(0.9);
-        _genBeta2Power = NumOps.FromDouble(0.999);
-        _genCurrentLearningRate = initialLearningRate;
-
-        // Initialize Discriminator optimizer state
-        int discParamCount = Discriminator.GetParameterCount();
-        _discMomentum = new Vector<T>(discParamCount);
-        _discSecondMoment = new Vector<T>(discParamCount);
-        _discBeta1Power = NumOps.FromDouble(0.9);
-        _discBeta2Power = NumOps.FromDouble(0.999);
-        _discCurrentLearningRate = initialLearningRate;
-
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
+
+        // Initialize optimizers (default to Adam if not provided)
+        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator);
+        _discriminatorOptimizer = discriminatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator);
 
         InitializeLayers();
     }
@@ -192,10 +196,37 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// <param name="inputImages">Input images (e.g., sketches, semantic maps).</param>
     /// <param name="targetImages">Target output images (e.g., photos).</param>
     /// <returns>Tuple of (discriminator loss, generator loss, L1 loss).</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the Pix2Pix training algorithm:
+    /// 1. Train discriminator on real and fake image pairs
+    /// 2. Train generator with combined adversarial and L1 loss
+    /// 3. The discriminator learns to distinguish real from fake
+    /// 4. The generator learns to both fool the discriminator and match the target
+    /// </para>
+    /// <para><b>For Beginners:</b> One training round for Pix2Pix.
+    ///
+    /// The training process:
+    /// - Discriminator learns to spot fake images
+    /// - Generator learns to create realistic images that match target
+    /// - L1 loss ensures output closely matches expected result
+    /// - Returns loss values for monitoring progress
+    /// </para>
+    /// </remarks>
     public (T discriminatorLoss, T generatorLoss, T l1Loss) TrainStep(
         Tensor<T> inputImages,
         Tensor<T> targetImages)
     {
+        if (inputImages is null)
+        {
+            throw new ArgumentNullException(nameof(inputImages), "Input images tensor cannot be null.");
+        }
+
+        if (targetImages is null)
+        {
+            throw new ArgumentNullException(nameof(targetImages), "Target images tensor cannot be null.");
+        }
+
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(true);
 
@@ -225,7 +256,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         T fakeLossD = CalculateBinaryLoss(fakePredictions, fakeLabels, batchSize);
         var fakeGradients = CalculateBinaryGradients(fakePredictions, fakeLabels, batchSize);
         Discriminator.Backward(fakeGradients);
-        UpdateDiscriminatorParameters();
+        UpdateDiscriminatorWithOptimizer();
 
         T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLossD), NumOps.FromDouble(2.0));
 
@@ -289,9 +320,19 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         }
 
         Generator.Backward(combinedGradients);
-        UpdateGeneratorParameters();
+        UpdateGeneratorWithOptimizer();
 
         Discriminator.SetTrainingMode(true);
+
+        // Track losses
+        _discriminatorLosses.Add(discriminatorLoss);
+        _generatorLosses.Add(generatorLoss);
+
+        if (_discriminatorLosses.Count > 100)
+        {
+            _discriminatorLosses.RemoveAt(0);
+            _generatorLosses.RemoveAt(0);
+        }
 
         return (discriminatorLoss, generatorLoss, l1Loss);
     }
@@ -299,12 +340,17 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Translates input images to output images.
     /// </summary>
+    /// <param name="inputImages">The input images to translate.</param>
+    /// <returns>The translated output images.</returns>
     public Tensor<T> Translate(Tensor<T> inputImages)
     {
         Generator.SetTrainingMode(false);
         return Generator.Predict(inputImages);
     }
 
+    /// <summary>
+    /// Concatenates two image tensors along the feature dimension.
+    /// </summary>
     private Tensor<T> ConcatenateImages(Tensor<T> images1, Tensor<T> images2)
     {
         if (images1.Shape.Length < 1 || images2.Shape.Length < 1)
@@ -345,6 +391,9 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         return result;
     }
 
+    /// <summary>
+    /// Calculates the L1 loss between predictions and targets.
+    /// </summary>
     private T CalculateL1Loss(Tensor<T> predictions, Tensor<T> targets)
     {
         T totalLoss = NumOps.Zero;
@@ -360,6 +409,9 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(count));
     }
 
+    /// <summary>
+    /// Calculates the gradients for L1 loss.
+    /// </summary>
     private Tensor<T> CalculateL1Gradients(Tensor<T> predictions, Tensor<T> targets)
     {
         var gradients = new Tensor<T>(predictions.Shape);
@@ -377,6 +429,9 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         return gradients;
     }
 
+    /// <summary>
+    /// Calculates the binary cross-entropy loss.
+    /// </summary>
     private T CalculateBinaryLoss(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
         T totalLoss = NumOps.Zero;
@@ -401,6 +456,9 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
+    /// <summary>
+    /// Calculates the gradients for binary cross-entropy loss.
+    /// </summary>
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
         var gradients = new Tensor<T>(predictions.Shape);
@@ -416,6 +474,9 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         return gradients;
     }
 
+    /// <summary>
+    /// Creates a tensor filled with a single label value.
+    /// </summary>
     private Tensor<T> CreateLabelTensor(int batchSize, T value)
     {
         var tensor = new Tensor<T>(new int[] { batchSize, 1 });
@@ -427,146 +488,83 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates Generator parameters using vectorized Adam optimizer with CPU/GPU acceleration.
+    /// Updates generator parameters using the configured optimizer.
     /// </summary>
-    private void UpdateGeneratorParameters()
+    private void UpdateGeneratorWithOptimizer()
     {
-        var gradients = Generator.GetParameterGradients();
         var parameters = Generator.GetParameters();
+        var gradients = Generator.GetParameterGradients();
 
-        // Adam hyperparameters - beta1=0.5 for Pix2Pix (paper recommendation)
-        T beta1 = NumOps.FromDouble(0.5);
-        T beta2 = NumOps.FromDouble(0.999);
-        T epsilon = NumOps.FromDouble(1e-8);
-        T lr = NumOps.FromDouble(_genCurrentLearningRate);
-        T oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
-        T oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
+        // Gradient clipping
+        var gradientNorm = gradients.L2Norm();
+        var clipThreshold = NumOps.FromDouble(5.0);
 
-        // Update beta powers
-        _genBeta1Power = NumOps.Multiply(_genBeta1Power, beta1);
-        _genBeta2Power = NumOps.Multiply(_genBeta2Power, beta2);
+        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
+        {
+            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
+            for (int i = 0; i < gradients.Length; i++)
+            {
+                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
+            }
+        }
 
-        // Bias correction factors
-        T beta1Correction = NumOps.Subtract(NumOps.One, _genBeta1Power);
-        T beta2Correction = NumOps.Subtract(NumOps.One, _genBeta2Power);
-
-        // Vectorized gradient clipping
-        T maxGradNorm = NumOps.FromDouble(5.0);
-        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
-        T gradNormSq = NumOps.Zero;
-        for (int i = 0; i < gSquared.Length; i++)
-            gradNormSq = NumOps.Add(gradNormSq, gSquared[i]);
-        T gradNorm = NumOps.Sqrt(gradNormSq);
-
-        T scale = NumOps.One;
-        if (NumOps.GreaterThan(gradNorm, maxGradNorm))
-            scale = NumOps.Divide(maxGradNorm, NumOps.Add(gradNorm, epsilon));
-
-        var clippedGradients = (Vector<T>)Engine.Multiply(gradients, scale);
-
-        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
-        var mScaled = (Vector<T>)Engine.Multiply(_genMomentum, beta1);
-        var gScaled = (Vector<T>)Engine.Multiply(clippedGradients, oneMinusBeta1);
-        _genMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
-
-        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
-        var vScaled = (Vector<T>)Engine.Multiply(_genSecondMoment, beta2);
-        var gSquaredClipped = (Vector<T>)Engine.Multiply(clippedGradients, clippedGradients);
-        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquaredClipped, oneMinusBeta2);
-        _genSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
-
-        // Bias correction
-        var mCorrected = (Vector<T>)Engine.Divide(_genMomentum, beta1Correction);
-        var vCorrected = (Vector<T>)Engine.Divide(_genSecondMoment, beta2Correction);
-
-        // Vectorized parameter update: p = p - lr * m_corrected / (sqrt(v_corrected) + epsilon)
-        var sqrtV = (Vector<T>)Engine.Sqrt(vCorrected);
-        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
-        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
-        var lrTimesM = (Vector<T>)Engine.Multiply(mCorrected, lr);
-        var update = (Vector<T>)Engine.Divide(lrTimesM, sqrtVPlusEps);
-        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
-
+        var updatedParameters = _generatorOptimizer.UpdateParameters(parameters, gradients);
         Generator.UpdateParameters(updatedParameters);
-
-        // Learning rate decay
-        _genCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * NumOps.ToDouble(_genBeta1Power));
     }
 
     /// <summary>
-    /// Updates Discriminator parameters using vectorized Adam optimizer with CPU/GPU acceleration.
+    /// Updates discriminator parameters using the configured optimizer.
     /// </summary>
-    private void UpdateDiscriminatorParameters()
+    private void UpdateDiscriminatorWithOptimizer()
     {
-        var gradients = Discriminator.GetParameterGradients();
         var parameters = Discriminator.GetParameters();
+        var gradients = Discriminator.GetParameterGradients();
 
-        // Adam hyperparameters - beta1=0.5 for Pix2Pix (paper recommendation)
-        T beta1 = NumOps.FromDouble(0.5);
-        T beta2 = NumOps.FromDouble(0.999);
-        T epsilon = NumOps.FromDouble(1e-8);
-        T lr = NumOps.FromDouble(_discCurrentLearningRate);
-        T oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
-        T oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
+        // Gradient clipping
+        var gradientNorm = gradients.L2Norm();
+        var clipThreshold = NumOps.FromDouble(5.0);
 
-        // Update beta powers
-        _discBeta1Power = NumOps.Multiply(_discBeta1Power, beta1);
-        _discBeta2Power = NumOps.Multiply(_discBeta2Power, beta2);
+        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
+        {
+            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
+            for (int i = 0; i < gradients.Length; i++)
+            {
+                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
+            }
+        }
 
-        // Bias correction factors
-        T beta1Correction = NumOps.Subtract(NumOps.One, _discBeta1Power);
-        T beta2Correction = NumOps.Subtract(NumOps.One, _discBeta2Power);
-
-        // Vectorized gradient clipping
-        T maxGradNorm = NumOps.FromDouble(5.0);
-        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
-        T gradNormSq = NumOps.Zero;
-        for (int i = 0; i < gSquared.Length; i++)
-            gradNormSq = NumOps.Add(gradNormSq, gSquared[i]);
-        T gradNorm = NumOps.Sqrt(gradNormSq);
-
-        T scale = NumOps.One;
-        if (NumOps.GreaterThan(gradNorm, maxGradNorm))
-            scale = NumOps.Divide(maxGradNorm, NumOps.Add(gradNorm, epsilon));
-
-        var clippedGradients = (Vector<T>)Engine.Multiply(gradients, scale);
-
-        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
-        var mScaled = (Vector<T>)Engine.Multiply(_discMomentum, beta1);
-        var gScaled = (Vector<T>)Engine.Multiply(clippedGradients, oneMinusBeta1);
-        _discMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
-
-        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
-        var vScaled = (Vector<T>)Engine.Multiply(_discSecondMoment, beta2);
-        var gSquaredClipped = (Vector<T>)Engine.Multiply(clippedGradients, clippedGradients);
-        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquaredClipped, oneMinusBeta2);
-        _discSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
-
-        // Bias correction
-        var mCorrected = (Vector<T>)Engine.Divide(_discMomentum, beta1Correction);
-        var vCorrected = (Vector<T>)Engine.Divide(_discSecondMoment, beta2Correction);
-
-        // Vectorized parameter update: p = p - lr * m_corrected / (sqrt(v_corrected) + epsilon)
-        var sqrtV = (Vector<T>)Engine.Sqrt(vCorrected);
-        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
-        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
-        var lrTimesM = (Vector<T>)Engine.Multiply(mCorrected, lr);
-        var update = (Vector<T>)Engine.Divide(lrTimesM, sqrtVPlusEps);
-        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
-
+        var updatedParameters = _discriminatorOptimizer.UpdateParameters(parameters, gradients);
         Discriminator.UpdateParameters(updatedParameters);
-        _discCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * NumOps.ToDouble(_discBeta1Power));
     }
 
-    protected override void InitializeLayers() { }
+    /// <summary>
+    /// Resets both optimizer states for a fresh training run.
+    /// </summary>
+    public void ResetOptimizerState()
+    {
+        _generatorOptimizer.Reset();
+        _discriminatorOptimizer.Reset();
+    }
 
-    public override Tensor<T> Predict(Tensor<T> input) => Generator.Predict(input);
+    /// <inheritdoc/>
+    protected override void InitializeLayers()
+    {
+        // Pix2Pix doesn't use layers directly
+    }
 
+    /// <inheritdoc/>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        return Generator.Predict(input);
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         TrainStep(input, expectedOutput);
     }
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -582,27 +580,19 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         };
     }
 
+    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_initialLearningRate);
-        writer.Write(_learningRateDecay);
         writer.Write(_l1Lambda);
 
-        // Write per-network learning rates
-        writer.Write(_genCurrentLearningRate);
-        writer.Write(_discCurrentLearningRate);
+        // Serialize loss histories
+        writer.Write(_generatorLosses.Count);
+        foreach (var loss in _generatorLosses)
+            writer.Write(NumOps.ToDouble(loss));
 
-        // Serialize generator optimizer state
-        SerializationHelper<T>.SerializeVector(writer, _genMomentum);
-        SerializationHelper<T>.SerializeVector(writer, _genSecondMoment);
-        writer.Write(NumOps.ToDouble(_genBeta1Power));
-        writer.Write(NumOps.ToDouble(_genBeta2Power));
-
-        // Serialize discriminator optimizer state
-        SerializationHelper<T>.SerializeVector(writer, _discMomentum);
-        SerializationHelper<T>.SerializeVector(writer, _discSecondMoment);
-        writer.Write(NumOps.ToDouble(_discBeta1Power));
-        writer.Write(NumOps.ToDouble(_discBeta2Power));
+        writer.Write(_discriminatorLosses.Count);
+        foreach (var loss in _discriminatorLosses)
+            writer.Write(NumOps.ToDouble(loss));
 
         var generatorBytes = Generator.Serialize();
         writer.Write(generatorBytes.Length);
@@ -613,27 +603,21 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         writer.Write(discriminatorBytes);
     }
 
+    /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _initialLearningRate = reader.ReadDouble();
-        _learningRateDecay = reader.ReadDouble();
         _l1Lambda = reader.ReadDouble();
 
-        // Read per-network learning rates
-        _genCurrentLearningRate = reader.ReadDouble();
-        _discCurrentLearningRate = reader.ReadDouble();
+        // Deserialize loss histories
+        _generatorLosses.Clear();
+        int genLossCount = reader.ReadInt32();
+        for (int i = 0; i < genLossCount; i++)
+            _generatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
 
-        // Deserialize generator optimizer state
-        _genMomentum = SerializationHelper<T>.DeserializeVector(reader);
-        _genSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
-        _genBeta1Power = NumOps.FromDouble(reader.ReadDouble());
-        _genBeta2Power = NumOps.FromDouble(reader.ReadDouble());
-
-        // Deserialize discriminator optimizer state
-        _discMomentum = SerializationHelper<T>.DeserializeVector(reader);
-        _discSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
-        _discBeta1Power = NumOps.FromDouble(reader.ReadDouble());
-        _discBeta2Power = NumOps.FromDouble(reader.ReadDouble());
+        _discriminatorLosses.Clear();
+        int discLossCount = reader.ReadInt32();
+        for (int i = 0; i < discLossCount; i++)
+            _discriminatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
 
         int generatorDataLength = reader.ReadInt32();
         byte[] generatorData = reader.ReadBytes(generatorDataLength);
@@ -644,14 +628,16 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         Discriminator.Deserialize(discriminatorData);
     }
 
+    /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new Pix2Pix<T>(
             Generator.Architecture,
             Discriminator.Architecture,
             Architecture.InputType,
+            null, // Use default optimizer
+            null, // Use default optimizer
             _lossFunction,
-            _initialLearningRate,
             _l1Lambda);
     }
 
@@ -664,16 +650,28 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         int generatorCount = Generator.GetParameterCount();
         int discriminatorCount = Discriminator.GetParameterCount();
 
+        if (parameters.Length != generatorCount + discriminatorCount)
+        {
+            throw new ArgumentException(
+                $"Expected {generatorCount + discriminatorCount} parameters, " +
+                $"but received {parameters.Length}.",
+                nameof(parameters));
+        }
+
         // Update Generator parameters
         var generatorParams = new Vector<T>(generatorCount);
         for (int i = 0; i < generatorCount; i++)
+        {
             generatorParams[i] = parameters[i];
+        }
         Generator.UpdateParameters(generatorParams);
 
         // Update Discriminator parameters
         var discriminatorParams = new Vector<T>(discriminatorCount);
         for (int i = 0; i < discriminatorCount; i++)
+        {
             discriminatorParams[i] = parameters[generatorCount + i];
+        }
         Discriminator.UpdateParameters(discriminatorParams);
     }
 }
