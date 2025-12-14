@@ -40,7 +40,6 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
     /// <param name="generatorFeatureMaps">The number of feature maps in the generator's first layer.</param>
     /// <param name="discriminatorFeatureMaps">The number of feature maps in the discriminator's first layer.</param>
     /// <param name="lossFunction">Optional loss function. If not provided, binary cross-entropy will be used.</param>
-    /// <param name="initialLearningRate">The initial learning rate for training. Default is 0.0002.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a DCGAN with the standard architecture following the guidelines

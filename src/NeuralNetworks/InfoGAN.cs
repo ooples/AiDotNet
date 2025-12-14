@@ -575,6 +575,13 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         if (noiseSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(noiseSize), noiseSize, "Noise size must be positive.");
 
+        // Guard against int overflow in element count calculation
+        if (batchSize > int.MaxValue / noiseSize)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize),
+                $"Batch size ({batchSize}) * noise size ({noiseSize}) would overflow int.MaxValue.");
+        }
+
         var totalElements = batchSize * noiseSize;
         var mean = NumOps.Zero;
         var stddev = NumOps.One;
