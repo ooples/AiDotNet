@@ -85,7 +85,8 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="generatorArchitecture">The neural network architecture for the generator.</param>
     /// <param name="discriminatorArchitecture">The neural network architecture for the discriminator.
-    /// Note: Output size should be 1 + numClasses (authenticity + class logits).</param>
+    /// Note: Output size should be 1 + numClasses (authenticity probability + class probabilities).
+    /// All outputs must be in range (0, 1) - use sigmoid/softmax activations in the final layer.</param>
     /// <param name="numClasses">The number of classes.</param>
     /// <param name="inputType">The type of input.</param>
     /// <param name="generatorOptimizer">Optional optimizer for the generator. If null, Adam optimizer is used.</param>
@@ -227,7 +228,8 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         var fakeImages = Generator.Predict(generatorInput);
 
         // Train discriminator on real images
-        var realDiscOutput = Discriminator.Predict(realImages);
+        var realDiscOutputRaw = Discriminator.Predict(realImages);
+        var realDiscOutput = NormalizeToProbabilities(realDiscOutputRaw);
         T realAuthLoss = CalculateAuthenticityLoss(realDiscOutput, isReal: true, batchSize);
         T realClassLoss = CalculateClassificationLoss(realDiscOutput, realLabels, batchSize);
         T realLoss = NumOps.Add(realAuthLoss, realClassLoss);
@@ -238,7 +240,8 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         UpdateDiscriminatorWithOptimizer();
 
         // Train discriminator on fake images
-        var fakeDiscOutput = Discriminator.Predict(fakeImages);
+        var fakeDiscOutputRaw = Discriminator.Predict(fakeImages);
+        var fakeDiscOutput = NormalizeToProbabilities(fakeDiscOutputRaw);
         T fakeAuthLoss = CalculateAuthenticityLoss(fakeDiscOutput, isReal: false, batchSize);
         T fakeClassLoss = CalculateClassificationLoss(fakeDiscOutput, fakeLabels, batchSize);
         T fakeLoss = NumOps.Add(fakeAuthLoss, fakeClassLoss);
@@ -260,7 +263,8 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         var newFakeImages = Generator.Predict(newGeneratorInput);
 
         // Get discriminator output
-        var genDiscOutput = Discriminator.Predict(newFakeImages);
+        var genDiscOutputRaw = Discriminator.Predict(newFakeImages);
+        var genDiscOutput = NormalizeToProbabilities(genDiscOutputRaw);
 
         // For generator, we want discriminator to think images are real AND match the class
         T genAuthLoss = CalculateAuthenticityLoss(genDiscOutput, isReal: true, batchSize);
@@ -364,23 +368,34 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Calculates the classification loss for the class predictions.
+    /// Calculates the classification loss for the class predictions using binary cross-entropy.
+    /// Uses full BCE formula: -[target*log(p) + (1-target)*log(1-p)]
+    /// This is consistent with the gradient formula: (p - target) / (p * (1 - p))
     /// </summary>
     private T CalculateClassificationLoss(Tensor<T> discOutput, Tensor<T> labels, int batchSize)
     {
         T totalLoss = NumOps.Zero;
         T epsilon = NumOps.FromDouble(1e-10);
+        T one = NumOps.One;
 
         for (int i = 0; i < batchSize; i++)
         {
             for (int c = 0; c < _numClasses; c++)
             {
-                T prediction = MathHelper.Clamp(discOutput[i, 1 + c], epsilon, NumOps.Subtract(NumOps.One, epsilon));
+                T prediction = MathHelper.Clamp(discOutput[i, 1 + c], epsilon, NumOps.Subtract(one, epsilon));
                 T target = labels[i, c];
 
+                // Full BCE loss: -[target*log(p) + (1-target)*log(1-p)]
                 T logP = NumOps.Log(NumOps.Add(prediction, epsilon));
-                T loss = NumOps.Multiply(target, logP);
-                totalLoss = NumOps.Subtract(totalLoss, loss);
+                T oneMinusP = NumOps.Subtract(one, prediction);
+                T logOneMinusP = NumOps.Log(NumOps.Add(oneMinusP, epsilon));
+                T oneMinusTarget = NumOps.Subtract(one, target);
+
+                T loss = NumOps.Negate(NumOps.Add(
+                    NumOps.Multiply(target, logP),
+                    NumOps.Multiply(oneMinusTarget, logOneMinusP)
+                ));
+                totalLoss = NumOps.Add(totalLoss, loss);
             }
         }
 
@@ -464,6 +479,53 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Normalizes discriminator output to valid probability range [0, 1].
+    /// If values appear to be logits (outside [0,1]), applies sigmoid transformation.
+    /// </summary>
+    private Tensor<T> NormalizeToProbabilities(Tensor<T> discOutput)
+    {
+        int batchSize = discOutput.Shape[0];
+        int outputSize = discOutput.Shape[1];
+        bool hasLogits = false;
+        T zero = NumOps.Zero;
+        T one = NumOps.One;
+
+        // Check if any values are outside [0, 1] range (indicating logits)
+        for (int i = 0; i < batchSize && !hasLogits; i++)
+        {
+            for (int j = 0; j < outputSize && !hasLogits; j++)
+            {
+                T val = discOutput[i, j];
+                if (NumOps.LessThan(val, zero) || NumOps.GreaterThan(val, one))
+                {
+                    hasLogits = true;
+                }
+            }
+        }
+
+        if (!hasLogits)
+        {
+            return discOutput;
+        }
+
+        // Apply sigmoid transformation: p = 1 / (1 + exp(-x))
+        var normalized = new Tensor<T>(discOutput.Shape);
+        for (int i = 0; i < batchSize; i++)
+        {
+            for (int j = 0; j < outputSize; j++)
+            {
+                T logit = discOutput[i, j];
+                T negLogit = NumOps.Negate(logit);
+                T expNegLogit = NumOps.Exp(negLogit);
+                T denominator = NumOps.Add(one, expNegLogit);
+                normalized[i, j] = NumOps.Divide(one, denominator);
+            }
+        }
+
+        return normalized;
     }
 
     /// <summary>
