@@ -75,6 +75,8 @@ public class TensorCompressionMetadata<T> : ICompressionMetadata<T>
                     nameof(originalShape));
             }
 
+            // Store previous value for error message in case of overflow
+            long previousTotal = totalElements;
             try
             {
                 // Check for overflow before multiplication
@@ -84,7 +86,7 @@ public class TensorCompressionMetadata<T> : ICompressionMetadata<T>
             {
                 throw new ArgumentException(
                     $"Tensor dimensions product overflows. Dimension {i} with value {shapeCopy[i]} " +
-                    $"caused overflow when multiplied with previous total {totalElements / shapeCopy[i]}.",
+                    $"caused overflow when multiplied with previous total {previousTotal}.",
                     nameof(originalShape));
             }
 
