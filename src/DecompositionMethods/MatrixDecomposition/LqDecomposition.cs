@@ -5,20 +5,27 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// </summary>
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
 /// <remarks>
-/// <b>For Beginners:</b> LQ decomposition breaks down a matrix A into two components: A = LQ where:
-/// - L is a lower triangular matrix (values only on and below the diagonal)
-/// - Q is an orthogonal matrix (its columns are perpendicular to each other)
-/// 
+/// <para>
+/// LQ decomposition factors a matrix A into the product A = LQ, where L is a lower triangular matrix
+/// and Q is an orthogonal matrix. This decomposition is the transpose version of QR decomposition and
+/// is particularly useful when working with matrices that have more columns than rows.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> LQ decomposition breaks down a matrix A into two components:
+/// L (a lower triangular matrix with values only on and below the diagonal) and
+/// Q (an orthogonal matrix with columns that are perpendicular to each other).
 /// This decomposition is useful for solving linear systems, least squares problems,
 /// and other numerical linear algebra tasks.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Solving underdetermined systems of equations
+/// - Least squares problems with wide matrices
+/// - Numerical stability in various computations
+/// </para>
 /// </remarks>
-public class LqDecomposition<T> : IMatrixDecomposition<T>
+public class LqDecomposition<T> : MatrixDecompositionBase<T>
 {
-    /// <summary>
-    /// Provides operations for the numeric type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
     /// <summary>
     /// Gets the lower triangular matrix L from the decomposition.
     /// </summary>
@@ -26,21 +33,18 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// <b>For Beginners:</b> The L matrix contains values only on and below the diagonal.
     /// It represents one part of the factorization of the original matrix.
     /// </remarks>
-    public Matrix<T> L { get; private set; }
+    public Matrix<T> L { get; private set; } = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Gets the orthogonal matrix Q from the decomposition.
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> An orthogonal matrix has columns that are perpendicular to each other
-    /// and have unit length. This means Q^T � Q = I (the identity matrix).
+    /// and have unit length. This means Q^T * Q = I (the identity matrix).
     /// </remarks>
-    public Matrix<T> Q { get; private set; }
+    public Matrix<T> Q { get; private set; } = new Matrix<T>(0, 0);
 
-    /// <summary>
-    /// Gets the original matrix that was decomposed.
-    /// </summary>
-    public Matrix<T> A { get; private set; }
+    private readonly LqAlgorithmType _algorithm;
 
     /// <summary>
     /// Initializes a new instance of the LqDecomposition class and performs the decomposition.
@@ -53,10 +57,18 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// you can access the L and Q matrices or use methods like Solve() to work with the decomposition.
     /// </remarks>
     public LqDecomposition(Matrix<T> matrix, LqAlgorithmType algorithm = LqAlgorithmType.Householder)
+        : base(matrix)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        A = matrix;
-        (L, Q) = Decompose(matrix, algorithm);
+        _algorithm = algorithm;
+        Decompose();
+    }
+
+    /// <summary>
+    /// Performs the LQ decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        (L, Q) = ComputeDecomposition(A, _algorithm);
     }
 
     /// <summary>
@@ -67,13 +79,13 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// <b>For Beginners:</b> This method finds the values of x that satisfy the equation Ax = b.
     /// It uses the LQ decomposition to solve this in two steps:
-    /// 
+    ///
     /// 1. Forward substitution: Solve Ly = b for y
-    /// 2. Multiply by Q^T: x = Q^T � y
-    /// 
+    /// 2. Multiply by Q^T: x = Q^T * y
+    ///
     /// This approach is more efficient than directly inverting the matrix A.
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         var y = ForwardSubstitution(L, b);
         return Q.Transpose().Multiply(y);
@@ -86,7 +98,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="algorithm">The algorithm to use for decomposition.</param>
     /// <returns>A tuple containing the L and Q matrices.</returns>
     /// <exception cref="ArgumentException">Thrown when an unsupported algorithm is specified.</exception>
-    private (Matrix<T> L, Matrix<T> Q) Decompose(Matrix<T> matrix, LqAlgorithmType algorithm)
+    private (Matrix<T> L, Matrix<T> Q) ComputeDecomposition(Matrix<T> matrix, LqAlgorithmType algorithm)
     {
         return algorithm switch
         {
@@ -127,20 +139,20 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
                 x[i - k] = a[i, k];
             }
 
-            T alpha = _numOps.Negate(_numOps.SignOrZero(x[0]));
-            alpha = _numOps.Multiply(alpha, _numOps.Sqrt(x.DotProduct(x)));
+            T alpha = NumOps.Negate(NumOps.SignOrZero(x[0]));
+            alpha = NumOps.Multiply(alpha, NumOps.Sqrt(x.DotProduct(x)));
 
             var u = new Vector<T>(x.Length);
-            u[0] = _numOps.Subtract(x[0], alpha);
+            u[0] = NumOps.Subtract(x[0], alpha);
             for (int i = 1; i < x.Length; i++)
             {
                 u[i] = x[i];
             }
 
-            T norm_u = _numOps.Sqrt(u.DotProduct(u));
+            T norm_u = NumOps.Sqrt(u.DotProduct(u));
             for (int i = 0; i < u.Length; i++)
             {
-                u[i] = _numOps.Divide(u[i], norm_u);
+                u[i] = NumOps.Divide(u[i], norm_u);
             }
 
             var uMatrix = new Matrix<T>(u.Length, 1);
@@ -154,7 +166,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
 
             for (int i = 0; i < m - k; i++)
             {
-                uTu[i, i] = _numOps.Subtract(uTu[i, i], _numOps.One);
+                uTu[i, i] = NumOps.Subtract(uTu[i, i], NumOps.One);
             }
 
             var P = Matrix<T>.CreateIdentityMatrix(m);
@@ -162,7 +174,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
             {
                 for (int j = k; j < m; j++)
                 {
-                    P[i, j] = _numOps.Add(P[i, j], _numOps.Multiply(_numOps.FromDouble(2), uTu[i - k, j - k]));
+                    P[i, j] = NumOps.Add(P[i, j], NumOps.Multiply(NumOps.FromDouble(2), uTu[i - k, j - k]));
                 }
             }
 
@@ -179,11 +191,11 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
             {
                 if (i == j)
                 {
-                    Q[i, j] = _numOps.One;
+                    Q[i, j] = NumOps.One;
                 }
                 else
                 {
-                    Q[i, j] = _numOps.Negate(Q[i, j]);
+                    Q[i, j] = NumOps.Negate(Q[i, j]);
                 }
             }
         }
@@ -222,16 +234,17 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
             {
                 var q = Q.GetColumn(j);
                 T proj = v.DotProduct(q);
-                for (int k = 0; k < n; k++)
-                {
-                    v[k] = _numOps.Subtract(v[k], _numOps.Multiply(proj, q[k]));
-                }
+                // VECTORIZED: Use Engine operations for subtraction
+                var projection = (Vector<T>)Engine.Multiply(q, proj);
+                v = (Vector<T>)Engine.Subtract(v, projection);
             }
 
-            T norm = _numOps.Sqrt(v.DotProduct(v));
+            T norm = NumOps.Sqrt(v.DotProduct(v));
+            // VECTORIZED: Normalize using Engine division
+            Vector<T> qCol = (Vector<T>)Engine.Divide(v, norm);
             for (int j = 0; j < n; j++)
             {
-                Q[j, i] = _numOps.Divide(v[j], norm);
+                Q[j, i] = qCol[j];
             }
 
             for (int j = 0; j <= i; j++)
@@ -272,26 +285,26 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int j = n - 1; j > i; j--)
             {
-                if (!_numOps.Equals(L[i, j], _numOps.Zero))
+                if (!NumOps.Equals(L[i, j], NumOps.Zero))
                 {
                     T a = L[i, j - 1];
                     T b = L[i, j];
-                    T r = _numOps.Sqrt(_numOps.Add(_numOps.Multiply(a, a), _numOps.Multiply(b, b)));
-                    T c = _numOps.Divide(a, r);
-                    T s = _numOps.Divide(b, r);
+                    T r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(a, a), NumOps.Multiply(b, b)));
+                    T c = NumOps.Divide(a, r);
+                    T s = NumOps.Divide(b, r);
 
                     for (int k = 0; k < m; k++)
                     {
                         T temp = L[k, j - 1];
-                        L[k, j - 1] = _numOps.Add(_numOps.Multiply(c, temp), _numOps.Multiply(s, L[k, j]));
-                        L[k, j] = _numOps.Subtract(_numOps.Multiply(_numOps.Negate(s), temp), _numOps.Multiply(c, L[k, j]));
+                        L[k, j - 1] = NumOps.Add(NumOps.Multiply(c, temp), NumOps.Multiply(s, L[k, j]));
+                        L[k, j] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp), NumOps.Multiply(c, L[k, j]));
                     }
 
                     for (int k = 0; k < n; k++)
                     {
                         T temp = Q[j - 1, k];
-                        Q[j - 1, k] = _numOps.Add(_numOps.Multiply(c, temp), _numOps.Multiply(s, Q[j, k]));
-                        Q[j, k] = _numOps.Subtract(_numOps.Multiply(_numOps.Negate(s), temp), _numOps.Multiply(c, Q[j, k]));
+                        Q[j - 1, k] = NumOps.Add(NumOps.Multiply(c, temp), NumOps.Multiply(s, Q[j, k]));
+                        Q[j, k] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp), NumOps.Multiply(c, Q[j, k]));
                     }
                 }
             }
@@ -309,12 +322,12 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// <b>For Beginners:</b> Forward substitution is a method to solve equations when the matrix
     /// is lower triangular (has non-zero values only on and below the diagonal).
-    /// 
+    ///
     /// The process works by:
     /// 1. Solving for the first variable directly (since there are no other variables in the first equation)
     /// 2. Using that value to solve for the second variable
     /// 3. Continuing this pattern for all variables
-    /// 
+    ///
     /// This is much faster than general matrix inversion because we can solve for each
     /// variable one at a time, working from top to bottom.
     /// </remarks>
@@ -325,31 +338,25 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
 
         for (int i = 0; i < n; i++)
         {
-            T sum = _numOps.Zero;
-            for (int j = 0; j < i; j++)
+            // VECTORIZED: Use dot product for sum computation
+            T sum = NumOps.Zero;
+            if (i > 0)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(L[i, j], y[j]));
+                var rowSlice = new T[i];
+                var ySlice = new T[i];
+                for (int k = 0; k < i; k++)
+                {
+                    rowSlice[k] = L[i, k];
+                    ySlice[k] = y[k];
+                }
+                var rowVec = new Vector<T>(rowSlice);
+                var yVec = new Vector<T>(ySlice);
+                sum = rowVec.DotProduct(yVec);
             }
 
-            y[i] = _numOps.Divide(_numOps.Subtract(b[i], sum), L[i, i]);
+            y[i] = NumOps.Divide(NumOps.Subtract(b[i], sum), L[i, i]);
         }
 
         return y;
-    }
-
-    /// <summary>
-    /// Calculates the inverse of the original matrix using the LQ decomposition.
-    /// </summary>
-    /// <returns>The inverse of the original matrix A.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> The inverse of a matrix A is another matrix A?� such that when multiplied 
-    /// together, they give the identity matrix (A � A?� = I).
-    /// 
-    /// This method uses a helper function that efficiently computes the inverse using
-    /// the LQ decomposition we've already calculated.
-    /// </remarks>
-    public Matrix<T> Invert()
-    {
-        return MatrixHelper<T>.InvertUsingDecomposition(this);
     }
 }

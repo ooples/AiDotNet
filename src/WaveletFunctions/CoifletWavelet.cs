@@ -34,18 +34,13 @@ namespace AiDotNet.WaveletFunctions;
 /// with higher orders providing more vanishing moments but wider support.
 /// </para>
 /// </remarks>
-public class CoifletWavelet<T> : IWaveletFunction<T>
+public class CoifletWavelet<T> : WaveletFunctionBase<T>
 {
-    /// <summary>
-    /// Provides numeric operations for the specific type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-    
     /// <summary>
     /// The coefficients of the Coiflet wavelet.
     /// </summary>
     private readonly T[] _coefficients;
-    
+
     /// <summary>
     /// The order of the Coiflet wavelet.
     /// </summary>
@@ -85,10 +80,9 @@ public class CoifletWavelet<T> : IWaveletFunction<T>
         if (order < 1 || order > 5)
             throw new ArgumentException("Order must be between 1 and 5.", nameof(order));
 
-        _numOps = MathHelper.GetNumericOperations<T>();
         _order = order;
         double[] doubleCoefficients = CoifletWavelet<T>.GetCoifletCoefficients(order);
-        _coefficients = [.. doubleCoefficients.Select(c => _numOps.FromDouble(c))];
+        _coefficients = [.. doubleCoefficients.Select(c => NumOps.FromDouble(c))];
     }
 
     /// <summary>
@@ -115,19 +109,19 @@ public class CoifletWavelet<T> : IWaveletFunction<T>
     /// to a signal at specific points.
     /// </para>
     /// </remarks>
-    public T Calculate(T x)
+    public override T Calculate(T x)
     {
         double t = Convert.ToDouble(x);
         if (t < 0 || t > 6 * _order - 1)
-            return _numOps.Zero;
+            return NumOps.Zero;
 
-        T result = _numOps.Zero;
+        T result = NumOps.Zero;
         for (int k = 0; k < 6 * _order; k++)
         {
             double shiftedT = t - k;
             if (shiftedT >= 0 && shiftedT < 1)
             {
-                result = _numOps.Add(result, _numOps.Multiply(_coefficients[k], _numOps.FromDouble(ScalingFunction(shiftedT))));
+                result = NumOps.Add(result, NumOps.Multiply(_coefficients[k], NumOps.FromDouble(ScalingFunction(shiftedT))));
             }
         }
 
@@ -143,15 +137,15 @@ public class CoifletWavelet<T> : IWaveletFunction<T>
     /// <para>
     /// <b>For Beginners:</b>
     /// The scaling function is the basic building block used to construct the wavelet.
-    /// 
+    ///
     /// For Coiflet wavelets, the scaling function satisfies a two-scale relation:
     /// f(t) = S c_k f(2t-k)
-    /// 
+    ///
     /// This is a recursive definition, which makes exact calculation challenging.
     /// This method implements a simple recursive approximation that:
     /// 1. Checks if the point is within the support [0,1]
     /// 2. If so, calculates the function value using the two-scale relation
-    /// 
+    ///
     /// In practice, this recursive approach has limitations and would typically be
     /// replaced by more sophisticated numerical methods for accurate calculation.
     /// However, it illustrates the fundamental recursive nature of wavelet scaling functions.
@@ -159,13 +153,32 @@ public class CoifletWavelet<T> : IWaveletFunction<T>
     /// </remarks>
     private double ScalingFunction(double t)
     {
+        return ScalingFunctionRecursive(t, 0);
+    }
+
+    /// <summary>
+    /// Recursive helper for scaling function with depth limit to prevent stack overflow.
+    /// </summary>
+    private double ScalingFunctionRecursive(double t, int depth)
+    {
+        // Base case: outside support
         if (t < 0 || t > 1)
             return 0;
+
+        // Base case: max recursion depth reached - return approximation
+        const int MaxDepth = 10;
+        if (depth >= MaxDepth)
+            return 1.0; // Return constant approximation at max depth
 
         double result = 0;
         for (int k = 0; k < 6 * _order; k++)
         {
-            result += Convert.ToDouble(_coefficients[k]) * ScalingFunction(2 * t - k);
+            double shiftedT = 2 * t - k;
+            // Only recurse if the shifted value is within support
+            if (shiftedT >= 0 && shiftedT <= 1)
+            {
+                result += Convert.ToDouble(_coefficients[k]) * ScalingFunctionRecursive(shiftedT, depth + 1);
+            }
         }
 
         return result;
@@ -198,7 +211,7 @@ public class CoifletWavelet<T> : IWaveletFunction<T>
     /// which makes wavelet decomposition efficient for compression and multi-resolution analysis.
     /// </para>
     /// </remarks>
-    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         var lowPass = GetScalingCoefficients();
         var highPass = GetWaveletCoefficients();
@@ -236,7 +249,7 @@ public class CoifletWavelet<T> : IWaveletFunction<T>
     /// the decomposition process.
     /// </para>
     /// </remarks>
-    public Vector<T> GetScalingCoefficients()
+    public override Vector<T> GetScalingCoefficients()
     {
         double[] coeffs = CoifletWavelet<T>.GetCoifletCoefficients(_order);
         return NormalizeAndConvert(coeffs);
@@ -271,7 +284,7 @@ public class CoifletWavelet<T> : IWaveletFunction<T>
     /// The alternating signs ((-1)^n) create the oscillating nature that is characteristic of wavelets.
     /// </para>
     /// </remarks>
-    public Vector<T> GetWaveletCoefficients()
+    public override Vector<T> GetWaveletCoefficients()
     {
         double[] coeffs = CoifletWavelet<T>.GetCoifletCoefficients(_order);
         int n = coeffs.Length;
@@ -380,7 +393,7 @@ public class CoifletWavelet<T> : IWaveletFunction<T>
     private Vector<T> NormalizeAndConvert(double[] coeffs)
     {
         double normFactor = Math.Sqrt(coeffs.Sum(c => c * c));
-        return new Vector<T>([.. coeffs.Select(c => _numOps.FromDouble(c / normFactor))]);
+        return new Vector<T>([.. coeffs.Select(c => NumOps.FromDouble(c / normFactor))]);
     }
 
     /// <summary>
@@ -414,13 +427,13 @@ public class CoifletWavelet<T> : IWaveletFunction<T>
         var result = new T[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            result[i] = _numOps.Zero;
+            result[i] = NumOps.Zero;
             for (int j = 0; j < filter.Length; j++)
             {
                 int k = i - j + filter.Length / 2;
                 if (k >= 0 && k < input.Length)
                 {
-                    result[i] = _numOps.Add(result[i], _numOps.Multiply(input[k], filter[j]));
+                    result[i] = NumOps.Add(result[i], NumOps.Multiply(input[k], filter[j]));
                 }
             }
         }

@@ -84,6 +84,16 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     private Vector<T>? _accumulatedSquaredUpdates;
 
     /// <summary>
+    /// Stores the pre-update snapshot of accumulated squared gradients for accurate reverse updates.
+    /// </summary>
+    private Vector<T>? _previousAccumulatedSquaredGradients;
+
+    /// <summary>
+    /// Stores the pre-update snapshot of accumulated squared updates for accurate reverse updates.
+    /// </summary>
+    private Vector<T>? _previousAccumulatedSquaredUpdates;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="AdaDeltaOptimizer{T}"/> class.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
@@ -106,7 +116,8 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </remarks>
     public AdaDeltaOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        AdaDeltaOptimizerOptions<T, TInput, TOutput>? options = null)
+        AdaDeltaOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
         : base(model, options ?? new())
     {
         _options = options ?? new AdaDeltaOptimizerOptions<T, TInput, TOutput>();
@@ -224,35 +235,174 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         var parameters = currentSolution.GetParameters();
-        var newCoefficients = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
+
+        // Initialize state vectors if needed
+        if (_accumulatedSquaredGradients == null || _accumulatedSquaredUpdates == null || _accumulatedSquaredGradients.Length != parameters.Length)
         {
-            // Update accumulated squared gradients
-            _accumulatedSquaredGradients![i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(_options.Rho), _accumulatedSquaredGradients[i]),
-                NumOps.Multiply(NumOps.FromDouble(1 - _options.Rho), NumOps.Multiply(gradient[i], gradient[i]))
-            );
-
-            // Compute update
-            var update = NumOps.Multiply(
-                NumOps.Sqrt(NumOps.Add(_accumulatedSquaredUpdates![i], NumOps.FromDouble(_options.Epsilon))),
-                NumOps.Divide(gradient[i], NumOps.Sqrt(NumOps.Add(_accumulatedSquaredGradients[i], NumOps.FromDouble(_options.Epsilon))))
-            );
-
-            // Update accumulated squared updates
-            _accumulatedSquaredUpdates[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(_options.Rho), _accumulatedSquaredUpdates[i]),
-                NumOps.Multiply(NumOps.FromDouble(1 - _options.Rho), NumOps.Multiply(update, update))
-            );
-
-            // Update coefficients
-            newCoefficients[i] = NumOps.Subtract(parameters[i], update);
+            _accumulatedSquaredGradients = new Vector<T>(parameters.Length);
+            _accumulatedSquaredUpdates = new Vector<T>(parameters.Length);
         }
+
+        // Use shared UpdateParameters method to eliminate duplication
+        var newCoefficients = UpdateParameters(parameters, gradient);
 
         return currentSolution.WithParameters(newCoefficients);
     }
 
-        /// <summary>
+    /// <summary>
+    /// Updates a vector of parameters using the AdaDelta optimization algorithm.
+    /// </summary>
+    /// <param name="parameters">The current parameter vector to be updated.</param>
+    /// <param name="gradient">The gradient vector corresponding to the parameters.</param>
+    /// <returns>The updated parameter vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the AdaDelta update rule by maintaining exponential moving averages of both
+    /// squared gradients and squared updates. This allows AdaDelta to adapt the learning rate without
+    /// requiring an explicit learning rate parameter.
+    /// </para>
+    /// <para><b>For Beginners:</b> AdaDelta automatically adjusts learning rates by remembering both
+    /// how gradients have changed (squared gradients) and how parameters have been updated (squared updates).
+    /// This makes it largely learning-rate-free, adapting automatically to the scale of the problem.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        if (_accumulatedSquaredGradients == null || _accumulatedSquaredUpdates == null || _accumulatedSquaredGradients.Length != parameters.Length)
+        {
+            _accumulatedSquaredGradients = new Vector<T>(parameters.Length);
+            _accumulatedSquaredUpdates = new Vector<T>(parameters.Length);
+            _previousAccumulatedSquaredGradients = new Vector<T>(parameters.Length);
+            _previousAccumulatedSquaredUpdates = new Vector<T>(parameters.Length);
+        }
+
+        // Save pre-update state for accurate reverse updates (element-wise copy required for reverse)
+        if (_previousAccumulatedSquaredGradients == null || _previousAccumulatedSquaredUpdates == null)
+        {
+            _previousAccumulatedSquaredGradients = new Vector<T>(parameters.Length);
+            _previousAccumulatedSquaredUpdates = new Vector<T>(parameters.Length);
+        }
+
+        // Vectorized copy of accumulated state
+        _previousAccumulatedSquaredGradients = new Vector<T>(_accumulatedSquaredGradients);
+        _previousAccumulatedSquaredUpdates = new Vector<T>(_accumulatedSquaredUpdates);
+
+        // === Vectorized AdaDelta Update using IEngine (Phase B: US-GPU-015) ===
+        T rho = NumOps.FromDouble(_options.Rho);
+        T oneMinusRho = NumOps.FromDouble(1 - _options.Rho);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+
+        // Update accumulated squared gradients: accSqGrad = rho * accSqGrad + (1 - rho) * gradient^2
+        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
+        var rhoTimesAccSqGrad = (Vector<T>)Engine.Multiply(_accumulatedSquaredGradients, rho);
+        var oneMinusRhoTimesGradSq = (Vector<T>)Engine.Multiply(gradSquared, oneMinusRho);
+        _accumulatedSquaredGradients = (Vector<T>)Engine.Add(rhoTimesAccSqGrad, oneMinusRhoTimesGradSq);
+
+        // Compute RMS of accumulated squared updates and gradients
+        var epsilonVec = Vector<T>.CreateDefault(_accumulatedSquaredUpdates.Length, epsilon);
+        var accSqUpdPlusEps = (Vector<T>)Engine.Add(_accumulatedSquaredUpdates, epsilonVec);
+        var rmsUpdate = (Vector<T>)Engine.Sqrt(accSqUpdPlusEps);
+
+        var accSqGradPlusEps = (Vector<T>)Engine.Add(_accumulatedSquaredGradients, epsilonVec);
+        var rmsGrad = (Vector<T>)Engine.Sqrt(accSqGradPlusEps);
+
+        // Compute update: update = (RMS[Δ] / RMS[g]) * gradient
+        var ratio = (Vector<T>)Engine.Divide(rmsUpdate, rmsGrad);
+        var update = (Vector<T>)Engine.Multiply(ratio, gradient);
+
+        // Update accumulated squared updates: accSqUpd = rho * accSqUpd + (1 - rho) * update^2
+        var updateSquared = (Vector<T>)Engine.Multiply(update, update);
+        var rhoTimesAccSqUpd = (Vector<T>)Engine.Multiply(_accumulatedSquaredUpdates, rho);
+        var oneMinusRhoTimesUpdSq = (Vector<T>)Engine.Multiply(updateSquared, oneMinusRho);
+        _accumulatedSquaredUpdates = (Vector<T>)Engine.Add(rhoTimesAccSqUpd, oneMinusRhoTimesUpdSq);
+
+        // Update parameters: params = params - update
+        var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
+
+        return updatedParams;
+    }
+
+    /// <summary>
+    /// Reverses an AdaDelta gradient update to recover original parameters.
+    /// </summary>
+    /// <param name="updatedParameters">Parameters after AdaDelta update</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the update</returns>
+    /// <remarks>
+    /// <para>
+    /// AdaDelta's reverse update requires both accumulated squared gradients and accumulated squared updates
+    /// from the forward pass. This method must be called immediately after UpdateParameters while both states are fresh.
+    /// It recalculates the adaptive update that was applied based on the accumulated statistics.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where parameters were before an AdaDelta update.
+    /// AdaDelta uses two pieces of memory: one for gradient history and one for update history.
+    /// To reverse an update, we need both memories to reconstruct what step was taken. It's like
+    /// rewinding a dance where each move depends on previous moves and the music (gradients).
+    /// </para>
+    /// </remarks>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        if (_previousAccumulatedSquaredGradients == null || _previousAccumulatedSquaredUpdates == null ||
+            _previousAccumulatedSquaredGradients.Length != updatedParameters.Length)
+        {
+            throw new InvalidOperationException(
+                "AdaDelta optimizer state is not initialized. ReverseUpdate must be called after UpdateParameters.");
+        }
+
+        if (_accumulatedSquaredGradients == null || _accumulatedSquaredUpdates == null)
+        {
+            throw new InvalidOperationException(
+                "AdaDelta optimizer current state is not initialized.");
+        }
+
+        // === Vectorized Reverse AdaDelta Update using IEngine (Phase B: US-GPU-015) ===
+        T rho = NumOps.FromDouble(_options.Rho);
+        T oneMinusRho = NumOps.FromDouble(1 - _options.Rho);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+
+        // Recalculate accumulated squared gradients at update time
+        var rhoVec = Vector<T>.CreateDefault(appliedGradients.Length, rho);
+        var oneMinusRhoVec = Vector<T>.CreateDefault(appliedGradients.Length, oneMinusRho);
+
+        var gradSquared = (Vector<T>)Engine.Multiply(appliedGradients, appliedGradients);
+        var rhoTimesPrevAccSqGrad = (Vector<T>)Engine.Multiply(_previousAccumulatedSquaredGradients, rhoVec);
+        var oneMinusRhoTimesGradSq = (Vector<T>)Engine.Multiply(gradSquared, oneMinusRhoVec);
+        var accGradAtUpdateTime = (Vector<T>)Engine.Add(rhoTimesPrevAccSqGrad, oneMinusRhoTimesGradSq);
+
+        // Recalculate the update that was applied
+        var epsilonVec = Vector<T>.CreateDefault(appliedGradients.Length, epsilon);
+        var prevAccSqUpdPlusEps = (Vector<T>)Engine.Add(_previousAccumulatedSquaredUpdates, epsilonVec);
+        var rmsUpdate = (Vector<T>)Engine.Sqrt(prevAccSqUpdPlusEps);
+
+        var accGradPlusEps = (Vector<T>)Engine.Add(accGradAtUpdateTime, epsilonVec);
+        var rmsGrad = (Vector<T>)Engine.Sqrt(accGradPlusEps);
+
+        var ratio = (Vector<T>)Engine.Divide(rmsUpdate, rmsGrad);
+        var update = (Vector<T>)Engine.Multiply(ratio, appliedGradients);
+
+        // Reverse: original = updated + update
+        var original = (Vector<T>)Engine.Add(updatedParameters, update);
+
+        // Restore state so the rollback fully reverts the step
+        _accumulatedSquaredGradients = new Vector<T>(_previousAccumulatedSquaredGradients);
+        _accumulatedSquaredUpdates = new Vector<T>(_previousAccumulatedSquaredUpdates);
+
+        return original;
+    }
+
+    /// <summary>
     /// Updates the adaptive parameters of the AdaDelta optimizer.
     /// </summary>
     /// <param name="currentStepData">The optimization step data for the current iteration.</param>

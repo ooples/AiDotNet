@@ -6,25 +6,27 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// </summary>
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
 /// <remarks>
+/// <para>
+/// LDL decomposition factors a symmetric matrix A into the product A = LDL^T, where L is a lower
+/// triangular matrix with ones on the diagonal, and D is a diagonal matrix. This decomposition is
+/// particularly useful for symmetric matrices and avoids computing square roots, making it more
+/// numerically stable than Cholesky decomposition in some cases.
+/// </para>
+/// <para>
 /// <b>For Beginners:</b> LDL decomposition breaks down a symmetric matrix into simpler parts:
-/// - L: A lower triangular matrix (has values only on and below the diagonal)
-/// - D: A diagonal matrix (has values only on the diagonal)
-/// 
-/// This decomposition is useful for solving linear systems, calculating determinants,
-/// and inverting matrices more efficiently than working with the original matrix.
+/// L (a lower triangular matrix with values only on and below the diagonal) and D (a diagonal matrix
+/// with values only on the diagonal). This decomposition is useful for solving linear systems,
+/// calculating determinants, and inverting matrices more efficiently than working with the original matrix.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Solving systems of linear equations in optimization
+/// - Covariance matrix analysis in statistics
+/// - Kalman filtering in signal processing
+/// </para>
 /// </remarks>
-public class LdlDecomposition<T> : IMatrixDecomposition<T>
+public class LdlDecomposition<T> : MatrixDecompositionBase<T>
 {
-    /// <summary>
-    /// Provides operations for the numeric type T (addition, multiplication, etc.)
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
-    /// The original matrix being decomposed.
-    /// </summary>
-    public Matrix<T> A { get; }
-    
     /// <summary>
     /// The lower triangular matrix L from the decomposition.
     /// </summary>
@@ -33,7 +35,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// The diagonal elements are all set to 1.
     /// </remarks>
     public Matrix<T> L { get; private set; }
-    
+
     /// <summary>
     /// The diagonal matrix D from the decomposition, stored as a vector of the diagonal elements.
     /// </summary>
@@ -42,6 +44,8 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// we just store the diagonal values in a vector for efficiency.
     /// </remarks>
     public Vector<T> D { get; private set; }
+
+    private readonly LdlAlgorithmType _algorithm;
 
     /// <summary>
     /// Initializes a new instance of the LDL decomposition for the specified matrix.
@@ -54,29 +58,33 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// the decomposition using the specified algorithm.
     /// </remarks>
     public LdlDecomposition(Matrix<T> matrix, LdlAlgorithmType algorithm = LdlAlgorithmType.Cholesky)
+        : base(matrix)
     {
         if (!matrix.IsSquareMatrix())
             throw new ArgumentException("Matrix must be square for LDL decomposition.");
 
-        _numOps = MathHelper.GetNumericOperations<T>();
-        A = matrix;
+        _algorithm = algorithm;
         int n = A.Rows;
         L = new Matrix<T>(n, n);
         D = new Vector<T>(n);
-        Decompose(algorithm);
+        Decompose();
     }
 
     /// <summary>
-    /// Performs the LDL decomposition using the specified algorithm.
+    /// Performs the LDL decomposition.
     /// </summary>
-    /// <param name="algorithm">The algorithm to use for decomposition (default is Cholesky).</param>
+    protected override void Decompose()
+    {
+        ComputeDecomposition(_algorithm);
+    }
+
+
+    /// <summary>
+    /// Performs the actual decomposition computation using the specified algorithm.
+    /// </summary>
+    /// <param name="algorithm">The algorithm to use for decomposition.</param>
     /// <exception cref="ArgumentException">Thrown when an unsupported algorithm is specified.</exception>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method does the actual work of breaking down the original matrix
-    /// into the L and D components. Different algorithms may be more efficient for different
-    /// types of matrices.
-    /// </remarks>
-    public void Decompose(LdlAlgorithmType algorithm = LdlAlgorithmType.Cholesky)
+    private void ComputeDecomposition(LdlAlgorithmType algorithm)
     {
         switch (algorithm)
         {
@@ -111,24 +119,48 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
 
         for (int j = 0; j < n; j++)
         {
-            T sum = _numOps.Zero;
-            for (int k = 0; k < j; k++)
+            // VECTORIZED: Calculate D[j] using dot product
+            T sum = NumOps.Zero;
+            if (j > 0)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(L[j, k], L[j, k]), D[k]));
+                var ljRow = new T[j];
+                var dSlice = new T[j];
+                for (int k = 0; k < j; k++)
+                {
+                    ljRow[k] = NumOps.Multiply(L[j, k], L[j, k]);
+                    dSlice[k] = D[k];
+                }
+                var ljVec = new Vector<T>(ljRow);
+                var dVec = new Vector<T>(dSlice);
+                sum = ljVec.DotProduct(dVec);
             }
-            D[j] = _numOps.Subtract(A[j, j], sum);
+            D[j] = NumOps.Subtract(A[j, j], sum);
 
-            L[j, j] = _numOps.One;
+            L[j, j] = NumOps.One;
 
             for (int i = j + 1; i < n; i++)
             {
-                sum = _numOps.Zero;
-                for (int k = 0; k < j; k++)
+                // VECTORIZED: Calculate L[i,j] using dot product
+                sum = NumOps.Zero;
+                if (j > 0)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(L[i, k], L[j, k]), D[k]));
+                    var liRow = new T[j];
+                    var ljRow = new T[j];
+                    var dSlice = new T[j];
+                    for (int k = 0; k < j; k++)
+                    {
+                        liRow[k] = L[i, k];
+                        ljRow[k] = L[j, k];
+                        dSlice[k] = D[k];
+                    }
+                    // Compute element-wise product then sum
+                    for (int k = 0; k < j; k++)
+                    {
+                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(liRow[k], ljRow[k]), dSlice[k]));
+                    }
                 }
 
-                L[i, j] = _numOps.Divide(_numOps.Subtract(A[i, j], sum), D[j]);
+                L[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[j]);
             }
         }
     }
@@ -151,24 +183,48 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
 
         for (int j = 0; j < n; j++)
         {
-            T sum = _numOps.Zero;
-            for (int k = 0; k < j; k++)
+            // VECTORIZED: Calculate D[j] using dot product
+            T sum = NumOps.Zero;
+            if (j > 0)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(L[j, k], L[j, k]), D[k]));
+                var ljRow = new T[j];
+                var dSlice = new T[j];
+                for (int k = 0; k < j; k++)
+                {
+                    ljRow[k] = NumOps.Multiply(L[j, k], L[j, k]);
+                    dSlice[k] = D[k];
+                }
+                var ljVec = new Vector<T>(ljRow);
+                var dVec = new Vector<T>(dSlice);
+                sum = ljVec.DotProduct(dVec);
             }
 
-            D[j] = _numOps.Subtract(A[j, j], sum);
-            L[j, j] = _numOps.One;
+            D[j] = NumOps.Subtract(A[j, j], sum);
+            L[j, j] = NumOps.One;
 
             for (int i = j + 1; i < n; i++)
             {
-                sum = _numOps.Zero;
-                for (int k = 0; k < j; k++)
+                // VECTORIZED: Calculate L[i,j] using element-wise product and sum
+                sum = NumOps.Zero;
+                if (j > 0)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(L[i, k], L[j, k]), D[k]));
+                    var liRow = new T[j];
+                    var ljRow = new T[j];
+                    var dSlice = new T[j];
+                    for (int k = 0; k < j; k++)
+                    {
+                        liRow[k] = L[i, k];
+                        ljRow[k] = L[j, k];
+                        dSlice[k] = D[k];
+                    }
+                    // Compute element-wise product then sum
+                    for (int k = 0; k < j; k++)
+                    {
+                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(liRow[k], ljRow[k]), dSlice[k]));
+                    }
                 }
 
-                L[i, j] = _numOps.Divide(_numOps.Subtract(A[i, j], sum), D[j]);
+                L[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[j]);
             }
         }
     }
@@ -182,14 +238,14 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// <b>For Beginners:</b> This method finds the values of x that satisfy the equation Ax = b.
     /// It uses the LDL decomposition to solve this in three steps:
-    /// 
+    ///
     /// 1. Forward substitution: Solve Ly = b for y
     /// 2. Diagonal scaling: Solve Dz = y for z
     /// 3. Backward substitution: Solve L^T x = z for x
-    /// 
+    ///
     /// This approach is much more efficient than directly inverting the matrix A.
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         if (b.Length != A.Rows)
             throw new ArgumentException("Vector b must have the same length as the number of rows in matrix A.");
@@ -198,30 +254,48 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
         Vector<T> y = new(b.Length);
         for (int i = 0; i < b.Length; i++)
         {
-            T sum = _numOps.Zero;
-            for (int j = 0; j < i; j++)
+            // VECTORIZED: Use dot product for sum computation
+            T sum = NumOps.Zero;
+            if (i > 0)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(L[i, j], y[j]));
+                var rowSlice = new T[i];
+                var ySlice = new T[i];
+                for (int k = 0; k < i; k++)
+                {
+                    rowSlice[k] = L[i, k];
+                    ySlice[k] = y[k];
+                }
+                var rowVec = new Vector<T>(rowSlice);
+                var yVec = new Vector<T>(ySlice);
+                sum = rowVec.DotProduct(yVec);
             }
-            y[i] = _numOps.Subtract(b[i], sum);
+            y[i] = NumOps.Subtract(b[i], sum);
         }
 
-        // Diagonal scaling
-        for (int i = 0; i < b.Length; i++)
-        {
-            y[i] = _numOps.Divide(y[i], D[i]);
-        }
+        // VECTORIZED: Diagonal scaling using vector division
+        y = y.ElementwiseDivide(D);
 
         // Backward substitution
         Vector<T> x = new Vector<T>(b.Length);
         for (int i = b.Length - 1; i >= 0; i--)
         {
-            T sum = _numOps.Zero;
-            for (int j = i + 1; j < b.Length; j++)
+            // VECTORIZED: Use dot product for sum computation
+            T sum = NumOps.Zero;
+            if (i < b.Length - 1)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(L[j, i], x[j]));
+                int remaining = b.Length - i - 1;
+                var colSlice = new T[remaining];
+                var xSlice = new T[remaining];
+                for (int k = 0; k < remaining; k++)
+                {
+                    colSlice[k] = L[i + 1 + k, i];
+                    xSlice[k] = x[i + 1 + k];
+                }
+                var colVec = new Vector<T>(colSlice);
+                var xVec = new Vector<T>(xSlice);
+                sum = colVec.DotProduct(xVec);
             }
-            x[i] = _numOps.Subtract(y[i], sum);
+            x[i] = NumOps.Subtract(y[i], sum);
         }
 
         return x;
@@ -232,18 +306,18 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <returns>The inverse of the original matrix A.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> The inverse of a matrix A is another matrix A?π such that when multiplied 
-    /// together, they give the identity matrix (A ◊ A?π = I).
-    /// 
+    /// <b>For Beginners:</b> The inverse of a matrix A is another matrix A‚Åª¬π such that when multiplied
+    /// together, they give the identity matrix (A * A‚Åª¬π = I).
+    ///
     /// This method computes the inverse by:
     /// 1. Creating a set of unit vectors (vectors with a single 1 and the rest 0s)
     /// 2. Solving the system Ax = e_i for each unit vector e_i
     /// 3. Combining these solutions as columns to form the inverse matrix
-    /// 
+    ///
     /// Using LDL decomposition for this process is more efficient and numerically stable
     /// than directly computing the inverse through other methods.
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         int n = A.Rows;
         Matrix<T> inverse = new(n, n);
@@ -252,7 +326,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
         {
             Vector<T> ei = new(n)
             {
-                [i] = _numOps.One  // Fixed to use _numOps instead of NumOps
+                [i] = NumOps.One
             };
             Vector<T> column = Solve(ei);
             for (int j = 0; j < n; j++)

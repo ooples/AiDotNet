@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.Interfaces;
@@ -146,7 +146,7 @@ public class SelfCorrectingRetriever<T>
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
-        if (topK <= 0)
+        if (topK < 1)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
         metadataFilters ??= new Dictionary<string, object>();

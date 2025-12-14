@@ -1378,20 +1378,20 @@ public static class StatisticsHelper<T>
     }
 
     /// <summary>
-    /// Calculates the coefficient of determination (R²) between actual and predicted values.
+    /// Calculates the coefficient of determination (RÂ²) between actual and predicted values.
     /// </summary>
     /// <param name="actualValues">The actual observed values.</param>
     /// <param name="predictedValues">The predicted values from a model.</param>
-    /// <returns>The R² value, ranging from 0 to 1 (or negative in case of poor fit).</returns>
+    /// <returns>The RÂ² value, ranging from 0 to 1 (or negative in case of poor fit).</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> R² (R-squared) tells you how well your model explains the variation in your data.
+    /// <b>For Beginners:</b> RÂ² (R-squared) tells you how well your model explains the variation in your data.
     /// It ranges from 0 to 1, where:
     /// - 1 means your model perfectly predicts the data
     /// - 0 means your model is no better than just using the average value
     /// - Negative values can occur when the model performs worse than using the average
     /// 
-    /// For example, an R² of 0.75 means your model explains 75% of the variation in the data.
+    /// For example, an RÂ² of 0.75 means your model explains 75% of the variation in the data.
     /// </para>
     /// </remarks>
     public static T CalculateR2(Vector<T> actualValues, Vector<T> predictedValues)
@@ -1422,18 +1422,18 @@ public static class StatisticsHelper<T>
     }
 
     /// <summary>
-    /// Calculates the adjusted R² value, which accounts for the number of predictors in the model.
+    /// Calculates the adjusted RÂ² value, which accounts for the number of predictors in the model.
     /// </summary>
-    /// <param name="r2">The standard R² value.</param>
+    /// <param name="r2">The standard RÂ² value.</param>
     /// <param name="n">The number of observations (sample size).</param>
     /// <param name="p">The number of predictors (independent variables) in the model.</param>
-    /// <returns>The adjusted R² value.</returns>
+    /// <returns>The adjusted RÂ² value.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Adjusted R² is a modified version of R² that accounts for the number of predictors in your model.
-    /// Regular R² always increases when you add more variables to your model, even if those variables don't actually improve predictions.
-    /// Adjusted R² penalizes you for adding variables that don't help, making it more useful when comparing models with different numbers of variables.
-    /// Like regular R², higher values indicate better model fit.
+    /// <b>For Beginners:</b> Adjusted RÂ² is a modified version of RÂ² that accounts for the number of predictors in your model.
+    /// Regular RÂ² always increases when you add more variables to your model, even if those variables don't actually improve predictions.
+    /// Adjusted RÂ² penalizes you for adding variables that don't help, making it more useful when comparing models with different numbers of variables.
+    /// Like regular RÂ², higher values indicate better model fit.
     /// </para>
     /// </remarks>
     public static T CalculateAdjustedR2(T r2, int n, int p)
@@ -1454,7 +1454,7 @@ public static class StatisticsHelper<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The explained variance score measures how much of the variance in the actual data is captured by your model.
-    /// It's similar to R², but focuses specifically on variance.
+    /// It's similar to RÂ², but focuses specifically on variance.
     /// - A score of 1 means your model perfectly captures the variance in the data
     /// - A score of 0 means your model doesn't explain any of the variance
     /// - Negative scores can occur when the model is worse than just predicting the mean
@@ -2229,7 +2229,7 @@ public static class StatisticsHelper<T>
     public static (T LowerBound, T UpperBound) CalculateWeibullConfidenceIntervals(Vector<T> values, T confidenceLevel)
     {
         const int bootstrapSamples = 1000;
-        var rng = new Random();
+        var rng = RandomHelper.CreateSecureRandom();
         var estimates = new List<(T Shape, T Scale)>();
 
         for (int i = 0; i < bootstrapSamples; i++)
@@ -3176,7 +3176,7 @@ public static class StatisticsHelper<T>
     /// <b>For Beginners:</b> This method calculates confidence intervals around specific quantiles 
     /// (percentiles) of your predicted values. For example, you might want to know the range around 
     /// the median (50th percentile) or the 90th percentile of your predictions. For each quantile you 
-    /// specify, this method calculates a lower and upper bound by looking at nearby quantiles (±2.5%). 
+    /// specify, this method calculates a lower and upper bound by looking at nearby quantiles (Â²2.5%). 
     /// This gives you an idea of the uncertainty around different parts of your prediction distribution. 
     /// These intervals are useful when you're interested in specific parts of the distribution rather 
     /// than just the mean or a single prediction.
@@ -3739,8 +3739,8 @@ public static class StatisticsHelper<T>
     /// <para>
     /// <b>For Beginners:</b> This method calculates three important metrics for evaluating prediction 
     /// performance. Precision measures how many of your positive predictions were actually correct 
-    /// (true positives ÷ (true positives + false positives)). Recall measures how many of the actual 
-    /// positives your model correctly identified (true positives ÷ (true positives + false negatives)). 
+    /// (true positives Â² (true positives + false positives)). Recall measures how many of the actual 
+    /// positives your model correctly identified (true positives Â² (true positives + false negatives)). 
     /// The F1 score is the harmonic mean of precision and recall, providing a single metric that balances 
     /// both concerns. For binary classification, these metrics are calculated based on the standard 
     /// definitions. For regression problems, the method adapts these concepts by considering predictions 
@@ -3892,7 +3892,7 @@ public static class StatisticsHelper<T>
     /// <b>For Beginners:</b> The Variance Inflation Factor (VIF) measures how much the variance of a 
     /// regression coefficient is increased due to multicollinearity (correlation between features). 
     /// For each feature, the VIF is calculated by regressing that feature against all other features 
-    /// and then using the formula 1/(1-R²), where R² is the coefficient of determination from that 
+    /// and then using the formula 1/(1-RÂ²), where RÂ² is the coefficient of determination from that 
     /// regression. A VIF of 1 means there's no correlation between this feature and others, while higher 
     /// values indicate increasing multicollinearity. As a rule of thumb, VIF values above 5-10 are 
     /// considered problematic. This method calculates VIF for each feature and logs a warning when it 
@@ -4196,7 +4196,7 @@ public static class StatisticsHelper<T>
     /// <para>
     /// <b>For Beginners:</b> The Deviance Information Criterion (DIC) is a hierarchical modeling 
     /// generalization of the AIC and BIC, used for Bayesian model comparison. It's calculated as 
-    /// D(?¯) + 2pD, where D(?¯) is the deviance at the posterior mean (a measure of how well the model 
+    /// D(?Â²) + 2pD, where D(?Â²) is the deviance at the posterior mean (a measure of how well the model 
     /// fits the data), and pD is the effective number of parameters (a measure of model complexity). 
     /// Lower DIC values indicate better models. DIC is particularly useful for comparing Bayesian models 
     /// where the posterior distributions have been obtained using Markov Chain Monte Carlo (MCMC) methods. 
@@ -4207,8 +4207,8 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateDIC<TInput, TOutput>(ModelStats<T, TInput, TOutput> modelStats)
     {
-        // DIC = D(?¯) + 2pD
-        // where D(?¯) is the deviance at the posterior mean, and pD is the effective number of parameters
+        // DIC = D(?Â²) + 2pD
+        // where D(?Â²) is the deviance at the posterior mean, and pD is the effective number of parameters
         var devianceAtPosteriorMean = _numOps.Multiply(_numOps.FromDouble(-2), modelStats.LogLikelihood);
         var effectiveNumberOfParameters = modelStats.EffectiveNumberOfParameters;
 
@@ -4339,7 +4339,7 @@ public static class StatisticsHelper<T>
     /// <para>
     /// <b>For Beginners:</b> Likelihood measures how probable the observed data is under a specific model. 
     /// This method calculates the likelihood for a single observation using a Gaussian (normal) distribution 
-    /// centered at the predicted value. It computes exp(-0.5 * residual²), where residual is the difference 
+    /// centered at the predicted value. It computes exp(-0.5 * residualÂ²), where residual is the difference 
     /// between the actual and predicted values. Higher likelihood values indicate that the model's prediction 
     /// is closer to the actual value. Likelihood is a fundamental concept in statistics and forms the basis 
     /// for many estimation methods, including maximum likelihood estimation. In Bayesian statistics, the 
@@ -4712,7 +4712,7 @@ public static class StatisticsHelper<T>
     /// regression analysis, SST is the total variance that a model attempts to explain. It can be 
     /// partitioned into the explained sum of squares (SSR, the variation explained by the model) and 
     /// the residual sum of squares (SSE, the unexplained variation). The ratio SSR/SST gives the 
-    /// coefficient of determination (R²), which indicates the proportion of variance explained by the model.
+    /// coefficient of determination (RÂ²), which indicates the proportion of variance explained by the model.
     /// </para>
     /// </remarks>
     public static T CalculateTotalSumOfSquares(Vector<T> values)
@@ -4800,7 +4800,7 @@ public static class StatisticsHelper<T>
         var sigma2 = _numOps.Divide(rss, _numOps.FromDouble(n - featureCount));
         var standardError = _numOps.Sqrt(sigma2);
 
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         var samples = new List<T>(numSamples);
 
         for (int i = 0; i < numSamples; i++)
@@ -4882,7 +4882,11 @@ public static class StatisticsHelper<T>
         T totalNegatives = _numOps.Subtract(_numOps.FromDouble(actual.Length), totalPositives);
 
         if (_numOps.Equals(totalPositives, _numOps.Zero) || _numOps.Equals(totalNegatives, _numOps.Zero))
-            throw new ArgumentException("Both positive and negative samples are required to calculate AUC.");
+        {
+            // Return 0 for regression data or data without both classes
+            // AUC is a classification metric and is not meaningful for regression
+            return _numOps.Zero;
+        }
 
         T truePositives = _numOps.Zero;
         T falsePositives = _numOps.Zero;
@@ -6093,7 +6097,7 @@ public static class StatisticsHelper<T>
     /// cluster, then for each cluster, calculates the squared distance between its centroid and the global 
     /// centroid, multiplies by the cluster size, and adds to the total variance. Between-cluster variance is 
     /// a key component in the Calinski-Harabasz Index and other clustering evaluation metrics. It quantifies 
-    /// the "separation" aspect of clustering quality—how well the algorithm has identified distinct groups 
+    /// the "separation" aspect of clustering qualityÂ²how well the algorithm has identified distinct groups 
     /// in the data.
     /// </para>
     /// </remarks>
@@ -6135,7 +6139,7 @@ public static class StatisticsHelper<T>
     /// all data points, finds the centroid of the cluster each point belongs to, calculates the squared 
     /// distance between the point and its centroid, and adds to the total variance. Within-cluster variance 
     /// is a key component in the Calinski-Harabasz Index and other clustering evaluation metrics. It quantifies 
-    /// the "cohesion" aspect of clustering quality—how similar points within the same cluster are to each 
+    /// the "cohesion" aspect of clustering qualityÂ²how similar points within the same cluster are to each 
     /// other. Good clustering algorithms minimize this variance while maximizing between-cluster variance.
     /// </para>
     /// </remarks>
@@ -6206,6 +6210,128 @@ public static class StatisticsHelper<T>
     }
 
     /// <summary>
+    /// Calculates the Adjusted Rand Index (ARI) between two clusterings.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <param name="labels1">The first set of cluster labels.</param>
+    /// <param name="labels2">The second set of cluster labels (e.g., ground truth).</param>
+    /// <returns>The Adjusted Rand Index value, ranging from -1 to 1, where 1 indicates perfect agreement.</returns>
+    /// <remarks>
+    /// <para>
+    /// The Adjusted Rand Index (ARI) is a measure of the similarity between two data clusterings, adjusted for chance.
+    /// It computes a similarity measure between two clusterings by considering all pairs of samples and counting pairs
+    /// that are assigned in the same or different clusters in the predicted and true clusterings.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method compares two different ways of grouping the same data and tells you
+    /// how similar they are, while accounting for random chance.
+    ///
+    /// The score ranges from -1 to 1:
+    /// - 1.0 means the two clusterings are identical
+    /// - 0.0 means the agreement is what you'd expect from random clustering
+    /// - Negative values mean the clusterings are worse than random
+    ///
+    /// This is useful for:
+    /// - Comparing your clustering results to known "ground truth" labels
+    /// - Evaluating how stable your clustering algorithm is across different runs
+    /// - Comparing different clustering algorithms on the same data
+    ///
+    /// For example, if you cluster customer data and want to see how well it matches manually-defined segments,
+    /// ARI tells you how similar your automated clustering is to the manual segmentation.
+    /// </para>
+    /// </remarks>
+    public static T CalculateAdjustedRandIndex(Vector<T> labels1, Vector<T> labels2)
+    {
+        if (labels1.Length != labels2.Length)
+        {
+            throw new ArgumentException("Label vectors must have the same length");
+        }
+
+        int n = labels1.Length;
+
+        // Handle edge case where n < 2
+        if (n < 2)
+        {
+            return _numOps.One; // Perfect agreement for trivial cases
+        }
+
+        // Build contingency table with type-safe keys
+        // Note: Suppressing CS8714 because T is constrained by INumericOperations which ensures
+        // valid comparison semantics. The notnull constraint would break backwards compatibility.
+#pragma warning disable CS8714
+        var contingencyTable = new Dictionary<(T, T), int>(EqualityComparer<(T, T)>.Default);
+        var rowSums = new Dictionary<T, int>(EqualityComparer<T>.Default);
+        var colSums = new Dictionary<T, int>(EqualityComparer<T>.Default);
+#pragma warning restore CS8714
+
+        for (int i = 0; i < n; i++)
+        {
+            T label1 = labels1[i];
+            T label2 = labels2[i];
+
+            var key = (label1, label2);
+            if (!contingencyTable.TryGetValue(key, out var cellCount))
+                cellCount = 0;
+            contingencyTable[key] = cellCount + 1;
+
+            if (!rowSums.TryGetValue(label1, out var rowCount))
+                rowCount = 0;
+            rowSums[label1] = rowCount + 1;
+
+            if (!colSums.TryGetValue(label2, out var colCount))
+                colCount = 0;
+            colSums[label2] = colCount + 1;
+        }
+
+        // Calculate sum of combinations for contingency table entries
+        T sumCombinations = _numOps.Zero;
+        foreach (var count in contingencyTable.Values.Where(c => c > 1))
+        {
+            sumCombinations = _numOps.Add(sumCombinations, _numOps.FromDouble((long)count * (count - 1) / 2.0));
+        }
+
+        // Calculate sum of combinations for row sums (a_i)
+        T sumRowCombinations = _numOps.Zero;
+        foreach (var count in rowSums.Values.Where(c => c > 1))
+        {
+            sumRowCombinations = _numOps.Add(sumRowCombinations, _numOps.FromDouble((long)count * (count - 1) / 2.0));
+        }
+
+        // Calculate sum of combinations for column sums (b_j)
+        T sumColCombinations = _numOps.Zero;
+        foreach (var count in colSums.Values.Where(c => c > 1))
+        {
+            sumColCombinations = _numOps.Add(sumColCombinations, _numOps.FromDouble((long)count * (count - 1) / 2.0));
+        }
+
+        // Total number of pairs
+        T totalCombinations = _numOps.FromDouble((long)n * (n - 1) / 2.0);
+
+        // Calculate expected index
+        T expectedIndex = _numOps.Divide(
+            _numOps.Multiply(sumRowCombinations, sumColCombinations),
+            totalCombinations
+        );
+
+        // Calculate max index
+        T maxIndex = _numOps.Divide(
+            _numOps.Add(sumRowCombinations, sumColCombinations),
+            _numOps.FromDouble(2.0)
+        );
+
+        // Calculate Adjusted Rand Index
+        T numerator = _numOps.Subtract(sumCombinations, expectedIndex);
+        T denominator = _numOps.Subtract(maxIndex, expectedIndex);
+
+        // Handle edge case where denominator is zero
+        if (_numOps.Equals(denominator, _numOps.Zero))
+        {
+            return _numOps.One;
+        }
+
+        return _numOps.Divide(numerator, denominator);
+    }
+
+    /// <summary>
     /// Calculates the average distance from all points in a cluster to the cluster's centroid.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -6216,13 +6342,13 @@ public static class StatisticsHelper<T>
     /// <returns>The average distance from points to the centroid.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This helper method calculates the average distance from all points in a specific 
-    /// cluster to that cluster's centroid. It's a measure of cluster scatter or dispersion—how spread out 
-    /// the points in a cluster are. The method identifies all points with the specified label, calculates 
-    /// the Euclidean distance from each point to the centroid, and returns the average. Lower average 
-    /// distances indicate more compact, homogeneous clusters. This measure is used in clustering evaluation 
-    /// metrics like the Davies-Bouldin Index to assess the compactness of clusters. It helps determine 
-    /// whether a clustering algorithm has successfully grouped similar points together, which is a key 
+    /// <b>For Beginners:</b> This helper method calculates the average distance from all points in a specific
+    /// cluster to that cluster's centroid. It's a measure of cluster scatter or dispersionâ€”how spread out
+    /// the points in a cluster are. The method identifies all points with the specified label, calculates
+    /// the Euclidean distance from each point to the centroid, and returns the average. Lower average
+    /// distances indicate more compact, homogeneous clusters. This measure is used in clustering evaluation
+    /// metrics like the Davies-Bouldin Index to assess the compactness of clusters. It helps determine
+    /// whether a clustering algorithm has successfully grouped similar points together, which is a key
     /// aspect of clustering quality.
     /// </para>
     /// </remarks>

@@ -5,8 +5,8 @@ namespace AiDotNet.Factories;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> Matrix decomposition is a way of breaking down a complex matrix into simpler 
-/// components that are easier to work with mathematically. It's like factoring a number (e.g., 12 = 3 × 4), 
+/// <b>For Beginners:</b> Matrix decomposition is a way of breaking down a complex matrix into simpler
+/// components that are easier to work with mathematically. It's like factoring a number (e.g., 12 = 3 Ã— 4),
 /// but for matrices.
 /// </para>
 /// <para>
@@ -48,6 +48,8 @@ public static class MatrixDecompositionFactory
     /// <item><description>Bidiagonal: Transforms a matrix into a bidiagonal form.</description></item>
     /// <item><description>Ldl: A variant of Cholesky decomposition for indefinite matrices.</description></item>
     /// <item><description>Udu: A decomposition that produces a unit upper triangular matrix, a diagonal matrix, and another unit upper triangular matrix.</description></item>
+    /// <item><description>Nmf: Non-negative Matrix Factorization, decomposes a non-negative matrix into two non-negative matrices.</description></item>
+    /// <item><description>Ica: Independent Component Analysis, separates mixed signals into statistically independent components.</description></item>
     /// </list>
     /// </para>
     /// </remarks>
@@ -69,6 +71,8 @@ public static class MatrixDecompositionFactory
             MatrixDecompositionType.Bidiagonal => new BidiagonalDecomposition<T>(matrix),
             MatrixDecompositionType.Ldl => new LdlDecomposition<T>(matrix),
             MatrixDecompositionType.Udu => new UduDecomposition<T>(matrix),
+            MatrixDecompositionType.Nmf => new NmfDecomposition<T>(matrix),
+            MatrixDecompositionType.Ica => new IcaDecomposition<T>(matrix),
             _ => throw new ArgumentException($"Unsupported decomposition type: {decompositionType}")
         };
     }
@@ -109,6 +113,8 @@ public static class MatrixDecompositionFactory
             BidiagonalDecomposition<T> => MatrixDecompositionType.Bidiagonal,
             LdlDecomposition<T> => MatrixDecompositionType.Ldl,
             UduDecomposition<T> => MatrixDecompositionType.Udu,
+            NmfDecomposition<T> => MatrixDecompositionType.Nmf,
+            IcaDecomposition<T> => MatrixDecompositionType.Ica,
             _ => throw new ArgumentException($"Unsupported decomposition type: {decomposition?.GetType().Name}")
         };
     }

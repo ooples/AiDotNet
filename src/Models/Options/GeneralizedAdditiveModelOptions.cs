@@ -62,7 +62,7 @@ public class GeneralizedAdditiveModelOptions<T> : RegressionOptions<T>
     /// value of 3 corresponds to cubic splines, which provide a good balance of smoothness and stability.
     /// </para>
     /// <para><b>For Beginners:</b> This setting controls how smooth the transitions are between the curve
-    /// pieces in your model. With the default value of 3, the model uses cubic polynomials (like y = ax³ + bx² + cx + d)
+    /// pieces in your model. With the default value of 3, the model uses cubic polynomials (like y = axÂ³ + bxÂ² + cx + d)
     /// which create very smooth curves with continuous first and second derivatives (meaning the curve and its
     /// slope change gradually without sudden jumps).
     /// 

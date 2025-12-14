@@ -63,15 +63,15 @@ public class DefaultFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput,
     /// <param name="evaluationData">Data containing model performance metrics for training, validation, and test sets</param>
     /// <returns>The detected fit type (e.g., GoodFit, Overfit, Underfit)</returns>
     /// <remarks>
-    /// This method uses R² (R-squared) values to classify the model's fit:
-    /// - GoodFit: High R² values across all datasets (>0.9)
-    /// - Overfit: High R² on training (>0.9) but lower on validation (<0.7)
-    /// - Underfit: Low R² values on both training and validation (<0.7)
-    /// - HighVariance: Large difference between training and validation R² (>0.2)
-    /// - HighBias: Very low R² values across all datasets (<0.5)
+    /// This method uses RÂ² (R-squared) values to classify the model's fit:
+    /// - GoodFit: High RÂ² values across all datasets (>0.9)
+    /// - Overfit: High RÂ² on training (>0.9) but lower on validation (<0.7)
+    /// - Underfit: Low RÂ² values on both training and validation (<0.7)
+    /// - HighVariance: Large difference between training and validation RÂ² (>0.2)
+    /// - HighBias: Very low RÂ² values across all datasets (<0.5)
     /// - Unstable: Any other pattern that doesn't fit the above categories
     /// 
-    /// R² is a statistical measure that represents how well the model explains the variance in the data,
+    /// RÂ² is a statistical measure that represents how well the model explains the variance in the data,
     /// with values closer to 1 indicating better fit.
     /// </remarks>
     protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
@@ -104,7 +104,7 @@ public class DefaultFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput,
     /// <param name="evaluationData">Data containing model performance metrics for training, validation, and test sets</param>
     /// <returns>A confidence score between 0 and 1, with higher values indicating better performance</returns>
     /// <remarks>
-    /// This method calculates the average R² value across training, validation, and test datasets.
+    /// This method calculates the average RÂ² value across training, validation, and test datasets.
     /// The resulting value gives a simple measure of overall model quality:
     /// - Values close to 1 indicate high confidence in the model's predictions
     /// - Values close to 0 indicate poor model performance

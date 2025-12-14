@@ -113,8 +113,16 @@ public class ZScoreOutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInpu
             {
                 var column = inputMatrix.GetColumn(j);
                 (var mean, var std) = StatisticsHelper<T>.CalculateMeanAndStandardDeviation(column);
+
+                // If standard deviation is zero (all values are the same), skip z-score check
+                // as no point can be an outlier when all values are identical
+                if (_numOps.Equals(std, _numOps.Zero))
+                {
+                    continue;
+                }
+
                 var zScore = _numOps.Divide(_numOps.Subtract(column[i], mean), std);
-                
+
                 if (_numOps.GreaterThan(_numOps.Abs(zScore), _threshold))
                 {
                     isOutlier = true;

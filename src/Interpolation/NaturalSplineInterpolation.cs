@@ -92,9 +92,9 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
         _degree = degree;
         _decomposition = decomposition;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _coefficients = new Vector<T>[_degree];
+        _coefficients = new Vector<T>[_degree + 1];
 
-        for (int i = 0; i < _degree; i++)
+        for (int i = 0; i <= _degree; i++)
         {
             _coefficients[i] = new Vector<T>(x.Length - 1);
         }
@@ -125,7 +125,7 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
         T dx = _numOps.Subtract(x, _x[i]);
         T result = _y[i];
 
-        for (int j = 1; j < _degree; j++)
+        for (int j = 1; j <= _degree; j++)
         {
             result = _numOps.Add(result, _numOps.Multiply(_coefficients[j][i], Power(dx, j)));
         }
@@ -150,46 +150,69 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
     private void CalculateCoefficients()
     {
         int n = _x.Length;
+
+        // Calculate interval widths h[i] = x[i+1] - x[i]
+        Vector<T> h = new Vector<T>(n - 1);
+        for (int i = 0; i < n - 1; i++)
+        {
+            h[i] = _numOps.Subtract(_x[i + 1], _x[i]);
+        }
+
+        // Set up the tridiagonal system for natural cubic spline
+        // We solve for second derivatives M[i] at each point
         Matrix<T> A = new Matrix<T>(n, n);
         Vector<T> b = new Vector<T>(n);
 
-        // Set up the system of equations
-        for (int i = 0; i < n - 1; i++)
+        // Natural spline boundary conditions: M[0] = 0, M[n-1] = 0
+        // Ensure boundary rows are completely set (all zeros except diagonal = 1)
+        for (int j = 0; j < n; j++)
         {
-            T h = _numOps.Subtract(_x[i + 1], _x[i]);
-            A[i, i] = h;
-            if (i < n - 2)
-                A[i, i + 1] = _numOps.Multiply(_numOps.FromDouble(2), _numOps.Add(h, _numOps.Subtract(_x[i + 2], _x[i + 1])));
-            if (i > 0)
-                A[i, i - 1] = h;
-
-            if (i < n - 2)
-            {
-                T dy1 = _numOps.Divide(_numOps.Subtract(_y[i + 1], _y[i]), h);
-                T dy2 = _numOps.Divide(_numOps.Subtract(_y[i + 2], _y[i + 1]), _numOps.Subtract(_x[i + 2], _x[i + 1]));
-                b[i] = _numOps.Multiply(_numOps.FromDouble(6), _numOps.Subtract(dy2, dy1));
-            }
+            A[0, j] = _numOps.Zero;
+            A[n - 1, j] = _numOps.Zero;
         }
-
-        // Apply natural spline conditions
         A[0, 0] = _numOps.One;
-        A[n - 1, n - 1] = _numOps.One;
         b[0] = _numOps.Zero;
+        A[n - 1, n - 1] = _numOps.One;
         b[n - 1] = _numOps.Zero;
 
-        // Solve the system
-        var decomposition = _decomposition ?? new LuDecomposition<T>(A);
-        Vector<T> m = MatrixSolutionHelper.SolveLinearSystem(b, decomposition);
+        // Interior equations (tridiagonal system)
+        // h[i-1]*M[i-1] + 2*(h[i-1]+h[i])*M[i] + h[i]*M[i+1] = 6*((y[i+1]-y[i])/h[i] - (y[i]-y[i-1])/h[i-1])
+        for (int i = 1; i < n - 1; i++)
+        {
+            A[i, i - 1] = h[i - 1];
+            A[i, i] = _numOps.Multiply(_numOps.FromDouble(2), _numOps.Add(h[i - 1], h[i]));
+            A[i, i + 1] = h[i];
 
-        // Calculate the coefficients
+            T slope1 = _numOps.Divide(_numOps.Subtract(_y[i], _y[i - 1]), h[i - 1]);
+            T slope2 = _numOps.Divide(_numOps.Subtract(_y[i + 1], _y[i]), h[i]);
+            b[i] = _numOps.Multiply(_numOps.FromDouble(6), _numOps.Subtract(slope2, slope1));
+        }
+
+        // Solve the system for second derivatives M
+        var decomposition = _decomposition ?? new LuDecomposition<T>(A);
+        Vector<T> M = MatrixSolutionHelper.SolveLinearSystem(b, decomposition);
+
+        // Calculate the spline coefficients for each segment
+        // S(x) = a + b*(x-x[i]) + c*(x-x[i])^2 + d*(x-x[i])^3
         for (int i = 0; i < n - 1; i++)
         {
-            T h = _numOps.Subtract(_x[i + 1], _x[i]);
+            // a[i] = y[i]
             _coefficients[0][i] = _y[i];
-            _coefficients[1][i] = _numOps.Divide(_numOps.Subtract(_y[i + 1], _y[i]), h);
-            _coefficients[1][i] = _numOps.Subtract(_coefficients[1][i], _numOps.Multiply(_numOps.Divide(h, _numOps.FromDouble(6)), _numOps.Add(_numOps.Multiply(_numOps.FromDouble(2), m[i]), m[i + 1])));
-            _coefficients[2][i] = _numOps.Divide(m[i], _numOps.FromDouble(2));
-            _coefficients[3][i] = _numOps.Divide(_numOps.Subtract(m[i + 1], m[i]), _numOps.Multiply(_numOps.FromDouble(6), h));
+
+            // b[i] = (y[i+1] - y[i])/h[i] - h[i]*(2*M[i] + M[i+1])/6
+            T term1 = _numOps.Divide(_numOps.Subtract(_y[i + 1], _y[i]), h[i]);
+            T term2 = _numOps.Divide(
+                _numOps.Multiply(h[i], _numOps.Add(_numOps.Multiply(_numOps.FromDouble(2), M[i]), M[i + 1])),
+                _numOps.FromDouble(6));
+            _coefficients[1][i] = _numOps.Subtract(term1, term2);
+
+            // c[i] = M[i]/2
+            _coefficients[2][i] = _numOps.Divide(M[i], _numOps.FromDouble(2));
+
+            // d[i] = (M[i+1] - M[i])/(6*h[i])
+            _coefficients[3][i] = _numOps.Divide(
+                _numOps.Subtract(M[i + 1], M[i]),
+                _numOps.Multiply(_numOps.FromDouble(6), h[i]));
         }
     }
 
@@ -226,11 +249,11 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
     /// <b>For Beginners:</b> This method calculates what happens when you multiply a number by itself
     /// multiple times. For example:
     /// - x^1 = x
-    /// - x^2 = x × x
-    /// - x^3 = x × x × x
+    /// - x^2 = x Ã— x
+    /// - x^3 = x Ã— x Ã— x
     /// 
     /// In the context of spline interpolation, we need these calculations to evaluate
-    /// polynomial terms like x, x², x³, etc., which are used to create the smooth curve.
+    /// polynomial terms like x, xÂ², xÂ³, etc., which are used to create the smooth curve.
     /// </remarks>
     /// <param name="x">The base value to be raised to a power.</param>
     /// <param name="power">The exponent (how many times to multiply x by itself).</param>

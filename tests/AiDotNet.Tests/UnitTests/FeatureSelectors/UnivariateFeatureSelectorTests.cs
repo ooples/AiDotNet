@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.FeatureSelectors;
 using AiDotNet.LinearAlgebra;

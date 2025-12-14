@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -82,6 +84,7 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         _options = options ?? new KNearestNeighborsOptions();
         _xTrain = new Matrix<T>(0, 0);
         _yTrain = new Vector<T>(0);
+        SoftKNNTemperature = NumOps.One; // Default temperature = 1.0
     }
 
     /// <summary>
@@ -396,5 +399,130 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new KNearestNeighborsRegression<T>(_options, Regularization);
+    }
+
+    // ===== Soft KNN Support for JIT Compilation =====
+
+    /// <summary>
+    /// Gets or sets whether to use soft (differentiable) KNN mode for JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> to enable soft KNN mode with attention-weighted outputs for JIT support;
+    /// <c>false</c> (default) for traditional hard K-nearest neighbors.
+    /// </value>
+    /// <remarks>
+    /// <para><b>Soft KNN:</b> Instead of selecting exactly K nearest neighbors and averaging their
+    /// labels, soft KNN computes attention weights over ALL training samples based on distances.
+    /// This makes the algorithm differentiable and JIT-compilable.</para>
+    /// <para><b>Formula:</b> weights = softmax(-distances / temperature)</para>
+    /// <para><b>Output:</b> weighted_output = sum(weights * labels)</para>
+    /// <para><b>Trade-offs:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Soft KNN is differentiable and JIT-compilable</description></item>
+    /// <item><description>Results are smooth approximations of hard K selection</description></item>
+    /// <item><description>Lower temperature = sharper attention (closer to hard K selection)</description></item>
+    /// <item><description>Higher temperature = softer attention (considers more neighbors)</description></item>
+    /// </list>
+    /// <para><b>Computational Note:</b> Soft KNN computes attention over ALL training samples,
+    /// which can be expensive for large training sets. The JIT-compiled version embeds all
+    /// support vectors as constants, so the computation graph size scales with training set size.</para>
+    /// </remarks>
+    public bool UseSoftKNN { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the temperature parameter for soft KNN mode.
+    /// </summary>
+    /// <value>
+    /// The temperature for softmax attention. Lower values produce sharper attention.
+    /// Default is 1.0.
+    /// </value>
+    public T SoftKNNTemperature { get; set; }
+
+    /// <summary>
+    /// Gets whether this model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> when <see cref="UseSoftKNN"/> is enabled and training data is available;
+    /// <c>false</c> otherwise.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// When <see cref="UseSoftKNN"/> is enabled, KNN can be exported as a differentiable
+    /// computation graph using attention-weighted averaging. The training data is embedded
+    /// as constants in the computation graph.
+    /// </para>
+    /// <para>
+    /// When <see cref="UseSoftKNN"/> is disabled, JIT compilation is not supported because
+    /// traditional hard KNN requires dynamic neighbor selection that cannot be represented
+    /// as a static computation graph.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => UseSoftKNN && _xTrain.Rows > 0;
+
+    /// <summary>
+    /// Exports the model's computation as a graph of operations.
+    /// </summary>
+    /// <param name="inputNodes">The input nodes for the computation graph.</param>
+    /// <returns>The root node of the exported computation graph.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when <see cref="UseSoftKNN"/> is false.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no training data is available.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// When soft KNN mode is enabled, this exports the KNN model as a differentiable computation
+    /// graph using <see cref="TensorOperations{T}.SoftKNN"/> operations. The training data
+    /// (support vectors and labels) are embedded as constants in the graph.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (!UseSoftKNN)
+        {
+            throw new NotSupportedException(
+                "KNearestNeighborsRegression does not support JIT compilation in hard KNN mode because it " +
+                "requires dynamic neighbor selection based on distances at prediction time.\n\n" +
+                "To enable JIT compilation, set UseSoftKNN = true to use soft (differentiable) KNN " +
+                "with attention-weighted outputs.");
+        }
+
+        if (_xTrain.Rows == 0)
+        {
+            throw new InvalidOperationException(
+                "Cannot export computation graph: the KNN model has not been trained. " +
+                "Call Train() first to store the training data.");
+        }
+
+        int numFeatures = _xTrain.Columns;
+        int numSamples = _xTrain.Rows;
+
+        // Create input variable node
+        var inputTensor = new Tensor<T>(new[] { numFeatures });
+        var input = TensorOperations<T>.Variable(inputTensor, "input");
+        inputNodes.Add(input);
+
+        // Create constants for support vectors (training features)
+        var supportVectorsTensor = new Tensor<T>(new[] { numSamples, numFeatures });
+        for (int i = 0; i < numSamples; i++)
+        {
+            for (int j = 0; j < numFeatures; j++)
+            {
+                supportVectorsTensor[i * numFeatures + j] = _xTrain[i, j];
+            }
+        }
+        var supportVectors = TensorOperations<T>.Constant(supportVectorsTensor, "support_vectors");
+
+        // Create constants for labels (training targets)
+        var labelsTensor = new Tensor<T>(new[] { numSamples });
+        for (int i = 0; i < numSamples; i++)
+        {
+            labelsTensor[i] = _yTrain[i];
+        }
+        var labels = TensorOperations<T>.Constant(labelsTensor, "labels");
+
+        // Use SoftKNN operation: output = sum(softmax(-distances / temp) * labels)
+        return TensorOperations<T>.SoftKNN(input, supportVectors, labels, SoftKNNTemperature);
     }
 }

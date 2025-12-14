@@ -38,13 +38,8 @@ namespace AiDotNet.WaveletFunctions;
 /// both capabilities.
 /// </para>
 /// </remarks>
-public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
+public class ContinuousMexicanHatWavelet<T> : WaveletFunctionBase<T>
 {
-    /// <summary>
-    /// Provides numeric operations for the specific type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
     /// <summary>
     /// Initializes a new instance of the ContinuousMexicanHatWavelet class.
     /// </summary>
@@ -60,14 +55,13 @@ public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
     /// - The scale (width) of the wavelet is adjusted during the transform process, not in the constructor
     /// 
     /// The Mexican Hat wavelet is defined by the formula:
-    /// ?(t) = (2/v3) · p^(-1/4) · (1-t²) · e^(-t²/2)
+    /// ?(t) = (2/v3) Â· p^(-1/4) Â· (1-tÂ²) Â· e^(-tÂ²/2)
     /// 
     /// This formula creates the characteristic central peak with symmetric valleys on either side.
     /// </para>
     /// </remarks>
     public ContinuousMexicanHatWavelet()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
@@ -81,33 +75,33 @@ public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
     /// This method gives you the actual value of the Mexican Hat wavelet at a specific point.
     /// 
     /// The Mexican Hat wavelet is defined by the formula:
-    /// ?(t) = (2/v3) · p^(-1/4) · (1-t²) · e^(-t²/2)
+    /// ?(t) = (2/v3) Â· p^(-1/4) Â· (1-tÂ²) Â· e^(-tÂ²/2)
     /// 
     /// Breaking this down:
-    /// 1. (1-t²): This term creates the basic shape with a positive center and negative sides
-    /// 2. e^(-t²/2): This is the Gaussian envelope that makes the function decay to zero as t moves away from the center
-    /// 3. (2/v3) · p^(-1/4): This is a normalization factor that ensures the wavelet has unit energy
+    /// 1. (1-tÂ²): This term creates the basic shape with a positive center and negative sides
+    /// 2. e^(-tÂ²/2): This is the Gaussian envelope that makes the function decay to zero as t moves away from the center
+    /// 3. (2/v3) Â· p^(-1/4): This is a normalization factor that ensures the wavelet has unit energy
     /// 
     /// The result is a function that:
     /// - Equals 1 at x=0 (after normalization)
-    /// - Has negative valleys at x = ±v2
+    /// - Has negative valleys at x = Â±v2
     /// - Approaches zero as x moves further from the center
     /// 
     /// You might use this method to visualize the wavelet or to directly apply the wavelet
     /// to a signal at specific points.
     /// </para>
     /// </remarks>
-    public T Calculate(T x)
+    public override T Calculate(T x)
     {
-        T x2 = _numOps.Square(x);
-        T exp_term = _numOps.Exp(_numOps.Negate(_numOps.Divide(x2, _numOps.FromDouble(2))));
+        T x2 = NumOps.Square(x);
+        T exp_term = NumOps.Exp(NumOps.Negate(NumOps.Divide(x2, NumOps.FromDouble(2))));
 
-        T term1 = _numOps.Subtract(_numOps.One, x2);
-        T result = _numOps.Multiply(term1, exp_term);
+        T term1 = NumOps.Subtract(NumOps.One, x2);
+        T result = NumOps.Multiply(term1, exp_term);
 
         // Normalization factor
         double norm_factor = 2.0 / (Math.Sqrt(3) * Math.Pow(Math.PI, 0.25));
-        result = _numOps.Multiply(result, _numOps.FromDouble(norm_factor));
+        result = NumOps.Multiply(result, NumOps.FromDouble(norm_factor));
 
         return result;
     }
@@ -142,7 +136,7 @@ public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
     /// which makes wavelet decomposition efficient for compression and multi-resolution analysis.
     /// </para>
     /// </remarks>
-    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         var waveletCoeffs = GetWaveletCoefficients();
         var scalingCoeffs = GetScalingCoefficients();
@@ -186,26 +180,26 @@ public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
     /// Mexican Hat wavelet's ability to detect high-frequency components.
     /// </para>
     /// </remarks>
-    public Vector<T> GetScalingCoefficients()
+    public override Vector<T> GetScalingCoefficients()
     {
         int length = 64;
         var coeffs = new T[length];
-        T sum = _numOps.Zero;
+        T sum = NumOps.Zero;
 
         for (int i = 0; i < length; i++)
         {
-            T x = _numOps.Divide(_numOps.FromDouble(i - length / 2), _numOps.FromDouble(length / 4));
-            T value = _numOps.Equals(x, _numOps.Zero)
-                ? _numOps.One
-                : _numOps.Divide(MathHelper.Sin(_numOps.Divide(MathHelper.Pi<T>(), x)), _numOps.Multiply(MathHelper.Pi<T>(), x));
+            T x = NumOps.Divide(NumOps.FromDouble(i - length / 2), NumOps.FromDouble(length / 4));
+            T value = NumOps.Equals(x, NumOps.Zero)
+                ? NumOps.One
+                : NumOps.Divide(MathHelper.Sin(NumOps.Divide(MathHelper.Pi<T>(), x)), NumOps.Multiply(MathHelper.Pi<T>(), x));
             coeffs[i] = value;
-            sum = _numOps.Add(sum, _numOps.Abs(value));
+            sum = NumOps.Add(sum, NumOps.Abs(value));
         }
 
         // Normalize
         for (int i = 0; i < length; i++)
         {
-            coeffs[i] = _numOps.Divide(coeffs[i], sum);
+            coeffs[i] = NumOps.Divide(coeffs[i], sum);
         }
 
         return new Vector<T>(coeffs);
@@ -224,7 +218,7 @@ public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
     /// For the Mexican Hat wavelet, these coefficients are a discretized version of the
     /// Mexican Hat function:
     /// 
-    /// ?(t) = (1-t²) · e^(-t²/2)
+    /// ?(t) = (1-tÂ²) Â· e^(-tÂ²/2)
     /// 
     /// This method:
     /// 1. Creates a discretized Mexican Hat wavelet of specified length
@@ -239,28 +233,28 @@ public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
     /// detail information from your signal.
     /// </para>
     /// </remarks>
-    public Vector<T> GetWaveletCoefficients()
+    public override Vector<T> GetWaveletCoefficients()
     {
         int length = 256;
         var coeffs = new T[length];
-        T sum = _numOps.Zero;
+        T sum = NumOps.Zero;
 
         for (int i = 0; i < length; i++)
         {
-            T t = _numOps.Divide(_numOps.FromDouble(i - length / 2), _numOps.FromDouble(length / 4));
-            T t2 = _numOps.Multiply(t, t);
-            T value = _numOps.Multiply(
-                _numOps.Subtract(_numOps.One, t2),
-                _numOps.Exp(_numOps.Divide(_numOps.Negate(t2), _numOps.FromDouble(2.0)))
+            T t = NumOps.Divide(NumOps.FromDouble(i - length / 2), NumOps.FromDouble(length / 4));
+            T t2 = NumOps.Multiply(t, t);
+            T value = NumOps.Multiply(
+                NumOps.Subtract(NumOps.One, t2),
+                NumOps.Exp(NumOps.Divide(NumOps.Negate(t2), NumOps.FromDouble(2.0)))
             );
             coeffs[i] = value;
-            sum = _numOps.Add(sum, _numOps.Abs(value));
+            sum = NumOps.Add(sum, NumOps.Abs(value));
         }
 
         // Normalize
         for (int i = 0; i < length; i++)
         {
-            coeffs[i] = _numOps.Divide(coeffs[i], sum);
+            coeffs[i] = NumOps.Divide(coeffs[i], sum);
         }
 
         return new Vector<T>(coeffs);
@@ -300,12 +294,12 @@ public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
 
         for (int i = 0; i < resultLength; i++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = 0; j < kernel.Length; j++)
             {
                 if (i - j >= 0 && i - j < input.Length)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(input[i - j], kernel[j]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(input[i - j], kernel[j]));
                 }
             }
 

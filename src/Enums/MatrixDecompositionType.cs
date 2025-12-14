@@ -10,7 +10,7 @@ namespace AiDotNet.Enums;
 /// (grids of numbers) into simpler components to solve problems more efficiently.
 /// 
 /// Think of it as:
-/// - Breaking down a complex number like 15 into its factors 3 × 5
+/// - Breaking down a complex number like 15 into its factors 3 Ã— 5
 /// - Disassembling a complicated machine into its basic parts
 /// - Converting a difficult problem into several easier ones
 /// 
@@ -353,7 +353,7 @@ public enum MatrixDecompositionType
     Bidiagonal,
     
     /// <summary>
-    /// Decomposes a symmetric matrix into the product U·D·U?, where U is upper triangular with 1s on the diagonal and D is diagonal.
+    /// Decomposes a symmetric matrix into the product UÂ·DÂ·Uáµ€, where U is upper triangular with 1s on the diagonal and D is diagonal.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -377,27 +377,84 @@ public enum MatrixDecompositionType
     Udu,
     
     /// <summary>
-    /// Decomposes a symmetric matrix into the product L·D·L?, where L is lower triangular with 1s on the diagonal and D is diagonal.
+    /// Decomposes a symmetric matrix into the product LÂ·DÂ·Láµ€, where L is lower triangular with 1s on the diagonal and D is diagonal.
     /// </summary>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> LDL decomposition is similar to UDU but uses lower triangular matrices instead of upper ones.
-    /// It breaks a symmetric matrix into a lower triangular matrix L with 1s on its diagonal, 
+    /// It breaks a symmetric matrix into a lower triangular matrix L with 1s on its diagonal,
     /// a diagonal matrix D, and the transpose of L.
-    /// 
+    ///
     /// Think of it as:
     /// - A variant of Cholesky decomposition that avoids square roots
     /// - A way to break down symmetric matrices into simpler components
     /// - A more numerically stable alternative to certain other decompositions
-    /// 
+    ///
     /// Best used for:
     /// - Solving symmetric linear systems efficiently
     /// - When working with indefinite matrices (where Cholesky might fail)
     /// - Implementing certain optimization algorithms
     /// - When computational stability is important
-    /// 
+    ///
     /// LDL decomposition is often more efficient than LU for symmetric matrices and more stable than Cholesky for indefinite matrices.
     /// </para>
     /// </remarks>
-    Ldl
+    Ldl,
+
+    /// <summary>
+    /// Non-negative Matrix Factorization - decomposes a non-negative matrix into two non-negative matrices W and H.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> NMF breaks down a matrix containing only non-negative values (zero or positive)
+    /// into two simpler non-negative matrices. It's particularly useful when negative values don't make sense
+    /// in your domain (like pixel intensities, word frequencies, or probabilities).
+    ///
+    /// Think of it as:
+    /// - Finding hidden patterns or topics in your data
+    /// - Breaking down complex data into interpretable parts
+    /// - Like SVD but maintaining non-negativity, which often leads to more interpretable results
+    ///
+    /// Best used for:
+    /// - Topic modeling and text mining (finding themes in documents)
+    /// - Image processing and feature extraction
+    /// - Recommendation systems (collaborative filtering)
+    /// - Audio source separation
+    /// - Bioinformatics and gene expression analysis
+    /// - Any domain where negative values are meaningless
+    ///
+    /// NMF often produces more interpretable results than methods that allow negative values
+    /// because the non-negativity constraint leads to parts-based representations.
+    /// </para>
+    /// </remarks>
+    Nmf,
+
+    /// <summary>
+    /// Independent Component Analysis - separates mixed signals into statistically independent source components.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ICA is designed to separate mixed signals into their original independent sources.
+    /// The classic example is the "cocktail party problem" - imagine multiple people talking at once and
+    /// multiple microphones recording the mixed conversations. ICA can separate out each person's voice.
+    ///
+    /// Think of it as:
+    /// - Un-mixing signals that were combined together
+    /// - Finding the hidden independent sources in mixed observations
+    /// - Like trying to separate individual instruments from a musical recording
+    ///
+    /// Best used for:
+    /// - Blind source separation (cocktail party problem)
+    /// - Brain signal analysis (EEG, MEG, fMRI)
+    /// - Removing artifacts from biomedical signals
+    /// - Feature extraction where statistical independence is important
+    /// - Image separation and analysis
+    /// - Financial data analysis
+    /// - Telecommunications
+    ///
+    /// ICA differs from PCA and other methods because it focuses on statistical independence
+    /// rather than just uncorrelated patterns, making it powerful for separating truly independent sources.
+    /// </para>
+    /// </remarks>
+    Ica
 }
