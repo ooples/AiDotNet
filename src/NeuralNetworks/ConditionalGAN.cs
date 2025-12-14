@@ -635,13 +635,18 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         if (images.Shape.Length == 4)
         {
             // 4D tensor: [B, C, H, W] (channels-first) or [B, H, W, C] (channels-last)
-            // Detect layout using discriminator architecture
+            // Detect layout using discriminator architecture, accounting for condition channels
             var discArch = Discriminator.Architecture;
-            int expectedChannels = discArch.InputDepth > 0 ? discArch.InputDepth : 0;
 
-            // Check if shape[1] matches expected channels (channels-first: [B, C, H, W])
-            // or shape[3] matches expected channels (channels-last: [B, H, W, C])
-            if (expectedChannels > 0 && images.Shape[1] == expectedChannels)
+            // The discriminator's InputDepth includes the appended condition channels (C+K).
+            // Raw images only have C channels, so we subtract the condition size to get
+            // the original image channel count for proper layout detection.
+            int conditionChannelsAdded = conditionSize;
+            int originalChannelCount = Math.Max(0, discArch.InputDepth - conditionChannelsAdded);
+
+            // Check if shape[1] matches original image channels (channels-first: [B, C, H, W])
+            // or shape[3] matches original image channels (channels-last: [B, H, W, C])
+            if (originalChannelCount > 0 && images.Shape[1] == originalChannelCount)
             {
                 // Channels-first format: [B, C, H, W]
                 channels = images.Shape[1];
