@@ -61,12 +61,24 @@ public class TensorCompressionMetadata<T> : ICompressionMetadata<T>
             throw new ArgumentException("Tensor shape cannot be empty.", nameof(originalShape));
         }
 
+        // Validate dimensions are positive and compute total size with overflow check
+        long totalElements = 1;
         for (int i = 0; i < originalShape.Length; i++)
         {
             if (originalShape[i] <= 0)
             {
                 throw new ArgumentException(
                     $"All tensor dimensions must be positive. Dimension {i} has value {originalShape[i]}.",
+                    nameof(originalShape));
+            }
+
+            // Check for overflow before multiplication
+            totalElements = checked(totalElements * originalShape[i]);
+            if (totalElements > int.MaxValue)
+            {
+                throw new ArgumentException(
+                    $"Tensor dimensions product exceeds int.MaxValue ({int.MaxValue}). " +
+                    $"Total elements would be {totalElements}.",
                     nameof(originalShape));
             }
         }
