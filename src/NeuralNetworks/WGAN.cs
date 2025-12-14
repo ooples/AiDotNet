@@ -150,18 +150,41 @@ public class WGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Initializes a new instance of the <see cref="WGAN{T}"/> class.
     /// </summary>
-    /// <param name="generatorArchitecture">The neural network architecture for the generator.</param>
-    /// <param name="criticArchitecture">The neural network architecture for the critic.</param>
+    /// <param name="generatorArchitecture">The neural network architecture for the generator.
+    /// The generator output size must match the critic input size.</param>
+    /// <param name="criticArchitecture">The neural network architecture for the critic.
+    /// The critic output size must be 1 (single Wasserstein score).</param>
     /// <param name="inputType">The type of input the WGAN will process.</param>
     /// <param name="generatorOptimizer">Optional optimizer for the generator. If null, RMSprop optimizer is used (recommended for WGAN).</param>
     /// <param name="criticOptimizer">Optional optimizer for the critic. If null, RMSprop optimizer is used (recommended for WGAN).</param>
-    /// <param name="lossFunction">Optional loss function (typically not used, as WGAN uses Wasserstein distance).</param>
+    /// <param name="lossFunction">Optional loss function for base class compatibility and serialization.
+    /// Note: WGAN training uses the Wasserstein distance (critic scores) directly, not this loss function.
+    /// This parameter is retained for consistency with the <see cref="NeuralNetworkBase{T}"/> interface
+    /// and to enable proper serialization/deserialization of the model.</param>
     /// <param name="weightClipValue">The weight clipping threshold. Default is 0.01.</param>
     /// <param name="criticIterations">Number of critic iterations per generator iteration. Default is 5.</param>
     /// <remarks>
     /// <para>
     /// The WGAN constructor initializes both the generator and critic networks along with their
     /// respective optimizers. RMSprop is recommended over Adam for WGAN training stability.
+    /// </para>
+    /// <para>
+    /// <b>Architecture Validation:</b>
+    /// <list type="bullet">
+    /// <item><description>Generator output size must match critic input size (generator produces images that critic evaluates)</description></item>
+    /// <item><description>Critic output size must be 1 (outputs a Wasserstein score, not a probability)</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>About the Loss Function Parameter:</b>
+    /// Unlike traditional GANs that use binary cross-entropy loss, WGAN uses the Wasserstein distance
+    /// (Earth Mover's distance) which is computed directly from critic scores. The loss function
+    /// parameter exists for interface compatibility and serialization, but the actual WGAN training
+    /// minimizes/maximizes critic outputs directly:
+    /// <list type="bullet">
+    /// <item><description>Critic loss: maximize E[critic(real)] - E[critic(fake)]</description></item>
+    /// <item><description>Generator loss: maximize E[critic(fake)]</description></item>
+    /// </list>
     /// </para>
     /// <para><b>For Beginners:</b> This sets up the WGAN with sensible defaults.
     ///
@@ -170,8 +193,16 @@ public class WGAN<T> : NeuralNetworkBase<T>
     /// - Optimizers control how the networks learn (RMSprop is recommended for WGAN)
     /// - Weight clipping (0.01) enforces the mathematical constraints
     /// - Critic iterations (5) means the critic trains 5 times per generator update
+    ///
+    /// About the loss function: WGAN uses a special "Wasserstein distance" instead of
+    /// a traditional loss function. The critic's output is a score (higher = more real-looking),
+    /// not a probability like in regular GANs. The loss function parameter is kept for
+    /// technical reasons but isn't used during WGAN training.
     /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when generatorArchitecture or criticArchitecture is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when architecture sizes are incompatible.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when weightClipValue or criticIterations is invalid.</exception>
     public WGAN(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> criticArchitecture,
@@ -192,6 +223,26 @@ public class WGAN<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentNullException(nameof(criticArchitecture), "Critic architecture cannot be null.");
         }
+
+        // Validate Generator/Critic architecture compatibility
+        // The generator output size must match the critic input size for the WGAN to work
+        if (generatorArchitecture.OutputSize != criticArchitecture.InputSize)
+        {
+            throw new ArgumentException(
+                $"Generator output size ({generatorArchitecture.OutputSize}) must match critic input size ({criticArchitecture.InputSize}). " +
+                "The generator produces images that the critic evaluates.",
+                nameof(criticArchitecture));
+        }
+
+        // Validate critic output size - WGAN critic outputs a single scalar (not a probability)
+        if (criticArchitecture.OutputSize != 1)
+        {
+            throw new ArgumentException(
+                $"Critic output size must be 1 (Wasserstein score), but was {criticArchitecture.OutputSize}. " +
+                "The critic outputs a real-valued score, not a probability distribution.",
+                nameof(criticArchitecture));
+        }
+
         if (weightClipValue <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(weightClipValue), weightClipValue, "Weight clip value must be positive.");

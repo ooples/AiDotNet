@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -611,11 +612,118 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         return Generator.Predict(input);
     }
 
+    /// <summary>
+    /// Performs a single training iteration using the standard neural network interface.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method adapts the AC-GAN's specialized training to the standard <see cref="NeuralNetworkBase{T}.Train"/>
+    /// interface by automatically generating random class labels for both real and fake samples.
+    /// </para>
+    /// <para>
+    /// The AC-GAN training process differs from standard neural networks because it requires:
+    /// <list type="bullet">
+    /// <item><description>Real images with their class labels</description></item>
+    /// <item><description>Noise vectors for generating fake images</description></item>
+    /// <item><description>Target class labels for the generated images</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// When using this simplified interface, random class labels are generated using
+    /// <see cref="RandomHelper.ThreadSafeRandom"/> for thread-safe, cryptographically-seeded
+    /// random number generation. For more control over class labels, use the
+    /// <see cref="TrainStep"/> method directly.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method lets you train an AC-GAN using the same
+    /// interface as other neural networks. Just provide:
+    /// <list type="bullet">
+    /// <item><description><paramref name="input"/>: Random noise vectors (like random seeds for image generation)</description></item>
+    /// <item><description><paramref name="expectedOutput"/>: Real images to learn from</description></item>
+    /// </list>
+    ///
+    /// The method automatically assigns random class labels (like "digit 3", "digit 7", etc.)
+    /// to both the real images and the images to generate. While this is convenient,
+    /// for best results you should use <see cref="TrainStep"/> with actual class labels
+    /// from your dataset.
+    /// </para>
+    /// </remarks>
+    /// <param name="input">The noise tensor used as input to the generator network.
+    /// Shape should be [batchSize, noiseSize] where noiseSize matches the generator's expected input.</param>
+    /// <param name="expectedOutput">The real images tensor used for discriminator training.
+    /// Shape should be [batchSize, height, width, channels] or equivalent flattened form.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="input"/> or
+    /// <paramref name="expectedOutput"/> is null.</exception>
+    /// <seealso cref="TrainStep"/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        if (input is null)
+        {
+            throw new ArgumentNullException(nameof(input), "Noise input tensor cannot be null.");
+        }
+
+        if (expectedOutput is null)
+        {
+            throw new ArgumentNullException(nameof(expectedOutput), "Real images tensor cannot be null.");
+        }
+
         int batchSize = expectedOutput.Shape[0];
-        var labels = CreateOneHotLabels(batchSize, 0);
-        TrainStep(expectedOutput, labels, input, labels);
+
+        // Use thread-safe random for cryptographically secure, thread-safe label generation
+        var random = RandomHelper.ThreadSafeRandom;
+        var realLabelIndices = new int[batchSize];
+        var fakeLabelIndices = new int[batchSize];
+        for (int i = 0; i < batchSize; i++)
+        {
+            realLabelIndices[i] = random.Next(_numClasses);
+            fakeLabelIndices[i] = random.Next(_numClasses);
+        }
+
+        var realLabels = CreateOneHotLabelsFromIndices(batchSize, realLabelIndices);
+        var fakeLabels = CreateOneHotLabelsFromIndices(batchSize, fakeLabelIndices);
+
+        TrainStep(expectedOutput, realLabels, input, fakeLabels);
+    }
+
+    /// <summary>
+    /// Creates one-hot encoded label tensors from class indices.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One-hot encoding converts class indices (0, 1, 2, ...) into binary vectors
+    /// where only one element is 1 and all others are 0.
+    /// </para>
+    /// <para><b>For Beginners:</b> One-hot encoding converts a class number into a format
+    /// neural networks understand better.
+    ///
+    /// Example with 4 classes:
+    /// <list type="bullet">
+    /// <item><description>Class 0 becomes [1, 0, 0, 0]</description></item>
+    /// <item><description>Class 1 becomes [0, 1, 0, 0]</description></item>
+    /// <item><description>Class 2 becomes [0, 0, 1, 0]</description></item>
+    /// <item><description>Class 3 becomes [0, 0, 0, 1]</description></item>
+    /// </list>
+    ///
+    /// This helps the network learn to distinguish between classes more clearly.
+    /// </para>
+    /// </remarks>
+    /// <param name="batchSize">The number of samples in the batch.</param>
+    /// <param name="classIndices">Array of class indices, one per sample in the batch.</param>
+    /// <returns>A tensor of shape [batchSize, numClasses] with one-hot encoded labels.</returns>
+    private Tensor<T> CreateOneHotLabelsFromIndices(int batchSize, int[] classIndices)
+    {
+        var labels = new Tensor<T>(new int[] { batchSize, _numClasses });
+        for (int i = 0; i < batchSize; i++)
+        {
+            int classIndex = classIndices[i];
+            for (int c = 0; c < _numClasses; c++)
+            {
+                labels[i, c] = (classIndex >= 0 && classIndex < _numClasses && c == classIndex)
+                    ? NumOps.One
+                    : NumOps.Zero;
+            }
+        }
+
+        return labels;
     }
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -633,6 +741,33 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         };
     }
 
+    /// <summary>
+    /// Serializes AC-GAN-specific data including networks and optimizer states.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method serializes all components needed to fully restore an AC-GAN's training state:
+    /// <list type="bullet">
+    /// <item><description>Number of classes</description></item>
+    /// <item><description>Loss histories for monitoring training progress</description></item>
+    /// <item><description>Generator and Discriminator networks with all learned weights</description></item>
+    /// <item><description>Optimizer states (momentum, adaptive learning rates, timesteps)</description></item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> When you save an AC-GAN during training, this method ensures
+    /// that everything needed to resume training is saved:
+    /// <list type="bullet">
+    /// <item><description>The networks' learned knowledge (weights and biases)</description></item>
+    /// <item><description>The optimizers' "memory" (like Adam's momentum vectors)</description></item>
+    /// <item><description>Training history (loss values for monitoring)</description></item>
+    /// </list>
+    ///
+    /// Without saving optimizer states, resuming training would be like starting with a new
+    /// optimizer that has forgotten all the momentum and adaptive learning rates it built up,
+    /// which can cause unstable training after loading.
+    /// </para>
+    /// </remarks>
+    /// <param name="writer">The binary writer to serialize data to.</param>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_numClasses);
@@ -646,15 +781,53 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         foreach (var loss in _discriminatorLosses)
             writer.Write(NumOps.ToDouble(loss));
 
+        // Serialize Generator network
         var generatorBytes = Generator.Serialize();
         writer.Write(generatorBytes.Length);
         writer.Write(generatorBytes);
 
+        // Serialize Discriminator network
         var discriminatorBytes = Discriminator.Serialize();
         writer.Write(discriminatorBytes.Length);
         writer.Write(discriminatorBytes);
+
+        // Serialize optimizer states for training resumption
+        // This preserves momentum vectors, adaptive learning rates, and timesteps
+        var generatorOptimizerBytes = _generatorOptimizer.Serialize();
+        writer.Write(generatorOptimizerBytes.Length);
+        writer.Write(generatorOptimizerBytes);
+
+        var discriminatorOptimizerBytes = _discriminatorOptimizer.Serialize();
+        writer.Write(discriminatorOptimizerBytes.Length);
+        writer.Write(discriminatorOptimizerBytes);
     }
 
+    /// <summary>
+    /// Deserializes AC-GAN-specific data including networks and optimizer states.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method restores all components needed to continue AC-GAN training from a saved state:
+    /// <list type="bullet">
+    /// <item><description>Number of classes for classification</description></item>
+    /// <item><description>Loss histories for training progress visualization</description></item>
+    /// <item><description>Generator and Discriminator networks with all learned weights</description></item>
+    /// <item><description>Optimizer states (momentum vectors, adaptive learning rates, timesteps)</description></item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> When you load a saved AC-GAN, this method restores everything
+    /// needed to continue training exactly where you left off:
+    /// <list type="bullet">
+    /// <item><description>The networks remember everything they learned</description></item>
+    /// <item><description>The optimizers remember their momentum and learning rate adjustments</description></item>
+    /// <item><description>Training can resume smoothly without any "warm-up" period</description></item>
+    /// </list>
+    ///
+    /// This is especially important for Adam optimizer which maintains momentum vectors (m and v)
+    /// and a timestep counter - losing these would cause training instability after loading.
+    /// </para>
+    /// </remarks>
+    /// <param name="reader">The binary reader to deserialize data from.</param>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         _numClasses = reader.ReadInt32();
@@ -670,13 +843,25 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         for (int i = 0; i < discLossCount; i++)
             _discriminatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
 
+        // Deserialize Generator network
         int generatorDataLength = reader.ReadInt32();
         byte[] generatorData = reader.ReadBytes(generatorDataLength);
         Generator.Deserialize(generatorData);
 
+        // Deserialize Discriminator network
         int discriminatorDataLength = reader.ReadInt32();
         byte[] discriminatorData = reader.ReadBytes(discriminatorDataLength);
         Discriminator.Deserialize(discriminatorData);
+
+        // Deserialize optimizer states for training resumption
+        // This restores momentum vectors, adaptive learning rates, and timesteps
+        int generatorOptimizerDataLength = reader.ReadInt32();
+        byte[] generatorOptimizerData = reader.ReadBytes(generatorOptimizerDataLength);
+        _generatorOptimizer.Deserialize(generatorOptimizerData);
+
+        int discriminatorOptimizerDataLength = reader.ReadInt32();
+        byte[] discriminatorOptimizerData = reader.ReadBytes(discriminatorOptimizerDataLength);
+        _discriminatorOptimizer.Deserialize(discriminatorOptimizerData);
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
