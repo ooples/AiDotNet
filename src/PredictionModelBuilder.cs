@@ -106,6 +106,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IChain<string, string>? _promptChain;
     private IPromptOptimizer<T>? _promptOptimizer;
     private IFewShotExampleSelector<T>? _fewShotExampleSelector;
+    private IPromptAnalyzer? _promptAnalyzer;
+    private IPromptCompressor? _promptCompressor;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -1035,6 +1037,9 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             finalResult.AttachTokenizer(_tokenizer, _tokenizationConfig);
         }
 
+        // Attach prompt engineering configuration
+        AttachPromptEngineeringConfiguration(finalResult);
+
         return finalResult;
     }
 
@@ -1091,6 +1096,9 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         {
             result.AttachTokenizer(_tokenizer, _tokenizationConfig);
         }
+
+        // Attach prompt engineering configuration
+        AttachPromptEngineeringConfiguration(result);
 
         return result;
     }
@@ -1334,6 +1342,9 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             result.AttachTokenizer(_tokenizer, _tokenizationConfig);
         }
 
+        // Attach prompt engineering configuration
+        AttachPromptEngineeringConfiguration(result);
+
         return result;
     }
 #pragma warning restore CS1998
@@ -1440,6 +1451,9 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         {
             result.AttachTokenizer(_tokenizer, _tokenizationConfig);
         }
+
+        // Reattach prompt engineering components if configured
+        AttachPromptEngineeringConfiguration(result);
 
         return result;
     }
@@ -2268,6 +2282,100 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     {
         _fewShotExampleSelector = selector;
         return this;
+    }
+
+    /// <summary>
+    /// Configures a prompt analyzer for analyzing prompt quality, metrics, and potential issues.
+    /// </summary>
+    /// <param name="analyzer">The prompt analyzer implementation, or null to use default.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// A prompt analyzer examines prompts to provide metrics like token count, estimated cost,
+    /// complexity scores, and can detect potential issues like prompt injection or unclear instructions.
+    /// </para>
+    /// <para><b>For Beginners:</b> The prompt analyzer is like a "spell checker" for your prompts.
+    ///
+    /// It helps you understand:
+    /// - How many tokens your prompt uses (affects cost)
+    /// - How complex your prompt is
+    /// - Whether there might be issues with your prompt
+    ///
+    /// Example:
+    /// <code>
+    /// var analyzer = new PromptAnalyzer();
+    ///
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigurePromptAnalyzer(analyzer)
+    ///     .ConfigureModel(model);
+    ///
+    /// // After building, the trained model can analyze prompts
+    /// var metrics = trainedModel.AnalyzePrompt("Your prompt text...");
+    /// Console.WriteLine($"Token count: {metrics.TokenCount}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptAnalyzer(IPromptAnalyzer? analyzer = null)
+    {
+        _promptAnalyzer = analyzer;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures a prompt compressor for reducing prompt token counts while preserving meaning.
+    /// </summary>
+    /// <param name="compressor">The prompt compressor implementation, or null to use default.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// A prompt compressor reduces the length of prompts to save on API costs and fit within
+    /// context windows. Different compression strategies include removing redundancy,
+    /// summarizing sections, and caching repeated content.
+    /// </para>
+    /// <para><b>For Beginners:</b> The prompt compressor makes your prompts shorter without losing meaning.
+    ///
+    /// Benefits:
+    /// - Lower API costs (fewer tokens = less money)
+    /// - Faster responses (shorter prompts process faster)
+    /// - Fit within model limits (some models have token limits)
+    ///
+    /// Example:
+    /// <code>
+    /// var compressor = new RedundancyCompressor();
+    ///
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigurePromptCompressor(compressor)
+    ///     .ConfigureModel(model);
+    ///
+    /// // After building, the trained model can compress prompts
+    /// var result = trainedModel.CompressPrompt("Your long verbose prompt...");
+    /// Console.WriteLine($"Original: {result.OriginalTokenCount}, Compressed: {result.CompressedTokenCount}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptCompressor(IPromptCompressor? compressor = null)
+    {
+        _promptCompressor = compressor;
+        return this;
+    }
+
+    // ============================================================================
+    // Private Prompt Engineering Helper Methods
+    // ============================================================================
+
+    /// <summary>
+    /// Attaches the configured prompt engineering components to a PredictionModelResult.
+    /// </summary>
+    /// <param name="result">The result to attach configuration to.</param>
+    private void AttachPromptEngineeringConfiguration(PredictionModelResult<T, TInput, TOutput> result)
+    {
+        result.AttachPromptEngineering(
+            _promptTemplate,
+            _promptChain,
+            _promptOptimizer,
+            _fewShotExampleSelector,
+            _promptAnalyzer,
+            _promptCompressor);
     }
 
     // ============================================================================
