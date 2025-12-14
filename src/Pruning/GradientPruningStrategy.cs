@@ -195,10 +195,7 @@ public class GradientPruningStrategy<T> : IPruningStrategy<T>
             keepIndices[flatScores[i].idx] = false;
         }
 
-        var mask = new PruningMask<T>(keepIndices);
-        mask.UpdateMask(keepIndices);
-
-        return mask;
+        return new PruningMask<T>(keepIndices);
     }
 
     /// <summary>
@@ -252,10 +249,7 @@ public class GradientPruningStrategy<T> : IPruningStrategy<T>
             keepIndices[row, col] = false;
         }
 
-        var mask = new PruningMask<T>(keepIndices);
-        mask.UpdateMask(keepIndices);
-
-        return mask;
+        return new PruningMask<T>(keepIndices);
     }
 
     /// <summary>
