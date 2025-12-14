@@ -318,10 +318,11 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         if (discriminatorInputGradients.Shape.Length == 4)
         {
             // Spatial gradient format: [B, H, W, C+K] or [B, C+K, H, W]
-            // Detect channel layout based on discriminator architecture
+            // Detect channel layout based on discriminator architecture.
+            // Note: discArch.InputDepth already includes condition channels (C+K),
+            // so we compare directly without adding _numConditionClasses again.
             var discArch = Discriminator.Architecture;
-            int expectedChannels = discArch.InputDepth > 0 ? discArch.InputDepth : 0;
-            bool isChannelsFirst = expectedChannels > 0 && discriminatorInputGradients.Shape[1] == (expectedChannels + _numConditionClasses);
+            bool isChannelsFirst = discArch.InputDepth > 0 && discriminatorInputGradients.Shape[1] == discArch.InputDepth;
 
             int height, width, totalChannels, imageChannels;
             if (isChannelsFirst)
