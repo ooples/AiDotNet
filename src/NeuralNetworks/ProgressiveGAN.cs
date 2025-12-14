@@ -130,6 +130,14 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     public bool UsePixelNormalization { get; set; }
 
+    /// <summary>
+    /// Gets the last computed gradient penalty value (for monitoring purposes only).
+    /// NOTE: The gradient penalty is NOT included in training because proper WGAN-GP
+    /// requires second-order gradients (d/dθ ||∇_x D(x)||²) which this engine does not support.
+    /// This property allows users to monitor the GP value during training for diagnostic purposes.
+    /// </summary>
+    public T LastGradientPenalty { get; private set; }
+
     private int _imageChannels;
     private int _baseFeatureMaps;
     private readonly ILossFunction<T> _lossFunction;
@@ -223,6 +231,9 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         _genSecondMoment = Vector<T>.Empty();
         _discMomentum = Vector<T>.Empty();
         _discSecondMoment = Vector<T>.Empty();
+
+        // Initialize gradient penalty tracking property
+        LastGradientPenalty = NumOps.Zero;
 
         // Initialize networks at lowest resolution
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
@@ -469,14 +480,23 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         var fakeSum = fakeOutput.Sum(); // Vectorized sum
         var fakeLoss = NumOps.Divide(fakeSum.GetFlat(0), batchSizeT);
 
-        // Gradient penalty (WGAN-GP style)
+        // Gradient penalty (WGAN-GP style) - computed for monitoring only
+        // NOTE: True WGAN-GP requires second-order gradients (d/dθ ||∇_x D(x)||²)
+        // which this engine does not support. The GP value is tracked for monitoring
+        // but not included in the training loss to avoid incorrect gradient flow.
         var gradientPenalty = ComputeGradientPenalty(realImages, fakeImages, batchSize);
 
         // Drift penalty (encourages discriminator outputs to stay near 0)
+        // This can be properly backpropagated since it's based on D(x)² not gradients
         var driftPenalty = ComputeDriftPenalty(realOutput, batchSize);
 
-        // Total discriminator loss
-        var discriminatorLoss = NumOps.Add(NumOps.Add(NumOps.Add(realLoss, fakeLoss), gradientPenalty), driftPenalty);
+        // WGAN discriminator loss: E[D(fake)] - E[D(real)] + drift penalty
+        // GP is excluded from training loss but tracked separately for monitoring
+        var wganLoss = NumOps.Add(realLoss, fakeLoss);
+        var discriminatorLoss = NumOps.Add(wganLoss, driftPenalty);
+
+        // Store GP separately for monitoring (can be accessed via loss history analysis)
+        LastGradientPenalty = gradientPenalty;
 
         // Track loss history (with size limit)
         if (_discriminatorLosses.Count >= MaxLossHistorySize)
