@@ -472,6 +472,12 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     public Tensor<T> GenerateRandomLatentCodes(int batchSize)
     {
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize),
+                $"Batch size must be positive, got {batchSize}.");
+        }
+
         var totalElements = batchSize * _latentSize;
         var mean = NumOps.Zero;
         var stddev = NumOps.One;
@@ -487,14 +493,25 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     {
         T totalLoss = NumOps.Zero;
         T epsilon = NumOps.FromDouble(1e-10);
+        T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
 
         for (int i = 0; i < batchSize; i++)
         {
             T prediction = predictions[i, 0];
             T target = targets[i, 0];
 
-            T logP = NumOps.Log(NumOps.Add(prediction, epsilon));
-            T logOneMinusP = NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, prediction), epsilon));
+            // Clamp prediction to [epsilon, 1-epsilon] to avoid log(0) NaN/Inf
+            if (NumOps.LessThan(prediction, epsilon))
+            {
+                prediction = epsilon;
+            }
+            else if (NumOps.GreaterThan(prediction, oneMinusEpsilon))
+            {
+                prediction = oneMinusEpsilon;
+            }
+
+            T logP = NumOps.Log(prediction);
+            T logOneMinusP = NumOps.Log(NumOps.Subtract(NumOps.One, prediction));
 
             T loss = NumOps.Negate(NumOps.Add(
                 NumOps.Multiply(target, logP),
