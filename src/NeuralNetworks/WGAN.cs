@@ -208,9 +208,9 @@ public class WGAN<T> : NeuralNetworkBase<T>
         Critic = new ConvolutionalNeuralNetwork<T>(criticArchitecture);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
-        // Initialize optimizers (RMSprop is recommended for WGAN, Adam is fallback)
-        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator);
-        _criticOptimizer = criticOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Critic);
+        // Initialize optimizers (RMSprop is the recommended default for WGAN per the original paper)
+        _generatorOptimizer = generatorOptimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Generator);
+        _criticOptimizer = criticOptimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Critic);
 
         InitializeLayers();
     }
@@ -601,9 +601,22 @@ public class WGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// For WGAN, the parameters have GAN-specific semantics:
+    /// - <paramref name="input"/>: The real images tensor (training data)
+    /// - <paramref name="expectedOutput"/>: The noise tensor for the generator
+    /// </para>
+    /// <para><b>For Beginners:</b> In WGAN training:
+    /// - Pass your real images as the first parameter
+    /// - Pass random noise vectors as the second parameter
+    /// - The network will train both critic and generator in one step
+    /// </para>
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        TrainStep(expectedOutput, input);
+        // input = realImages, expectedOutput = noise
+        TrainStep(input, expectedOutput);
     }
 
     /// <inheritdoc/>
