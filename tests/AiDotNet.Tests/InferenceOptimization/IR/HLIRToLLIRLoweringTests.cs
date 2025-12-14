@@ -123,8 +123,15 @@ public class HLIRToLLIRLoweringTests
         var input = hlirGraph.CreateNode(OperationType.Input, "input");
         input.OutputType = new TensorType { Shape = new[] { 1, 64, 56, 56 }, DataType = IRDataType.Float32 };
 
-        var conv = hlirGraph.CreateNode(OperationType.Conv2D, "conv", input);
+        // Create kernel/weight input node
+        var kernel = hlirGraph.CreateNode(OperationType.Constant, "kernel");
+        kernel.OutputType = new TensorType { Shape = new[] { 128, 64, 3, 3 }, DataType = IRDataType.Float32 }; // OIHW format
+
+        var conv = hlirGraph.CreateNode(OperationType.Conv2D, "conv", input, kernel);
         conv.OutputType = new TensorType { Shape = new[] { 1, 128, 56, 56 }, DataType = IRDataType.Float32 };
+        // Add input types for proper lowering
+        conv.InputTypes.Add(new TensorType { Shape = new[] { 1, 64, 56, 56 }, DataType = IRDataType.Float32 });
+        conv.InputTypes.Add(new TensorType { Shape = new[] { 128, 64, 3, 3 }, DataType = IRDataType.Float32 });
         conv.Attributes["kernel_size"] = new[] { 3, 3 };
         conv.Attributes["stride"] = new[] { 1, 1 };
         conv.Attributes["padding"] = new[] { 1, 1 };
@@ -238,7 +245,7 @@ public class HLIRToLLIRLoweringTests
     {
         var hlirGraph = new HLIRGraph<double>();
         var input = hlirGraph.CreateNode(OperationType.Input, "input");
-        input.OutputType = new TensorType { Shape = new[] { 2, 3 }, DataType = IRDataType.Float32 };
+        input.OutputType = new TensorType { Shape = new[] { 1, 64, 56, 56 }, DataType = IRDataType.Float32 };
 
         // Create original nodes that will be marked as fused
         var conv = new HLIRNode<double>
@@ -246,19 +253,24 @@ public class HLIRToLLIRLoweringTests
             Id = 10,
             Name = "conv",
             Operation = OperationType.Conv2D,
-            OutputType = new TensorType { Shape = new[] { 2, 3 }, DataType = IRDataType.Float32 }
+            OutputType = new TensorType { Shape = new[] { 1, 128, 56, 56 }, DataType = IRDataType.Float32 },
+            InputTypes = new List<TensorType>
+            {
+                new TensorType { Shape = new[] { 1, 64, 56, 56 }, DataType = IRDataType.Float32 },
+                new TensorType { Shape = new[] { 128, 64, 3, 3 }, DataType = IRDataType.Float32 }
+            }
         };
         var relu = new HLIRNode<double>
         {
             Id = 11,
             Name = "relu",
             Operation = OperationType.ReLU,
-            OutputType = new TensorType { Shape = new[] { 2, 3 }, DataType = IRDataType.Float32 }
+            OutputType = new TensorType { Shape = new[] { 1, 128, 56, 56 }, DataType = IRDataType.Float32 }
         };
 
         // Create fused node
         var fused = hlirGraph.CreateNode(OperationType.Add, "fused", input);
-        fused.OutputType = new TensorType { Shape = new[] { 2, 3 }, DataType = IRDataType.Float32 };
+        fused.OutputType = new TensorType { Shape = new[] { 1, 128, 56, 56 }, DataType = IRDataType.Float32 };
         fused.IsFused = true;
         fused.FusedFrom = new List<HLIRNode<double>> { conv, relu };
 

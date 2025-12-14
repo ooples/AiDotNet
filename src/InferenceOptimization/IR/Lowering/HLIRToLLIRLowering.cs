@@ -733,6 +733,9 @@ public class HLIRToLLIRLowering<T> where T : struct
 
         return node.Operation switch
         {
+            // Convolution operations
+            OperationType.Conv2D => CreateConv2DOpForFusion(node, outputShape, outputDataType, inputIds),
+
             // Matrix operations
             OperationType.MatMul or OperationType.Gemm => CreateMatMulOp(node, outputShape, outputDataType, inputIds),
 
@@ -829,6 +832,77 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputDataType = outputDataType,
             SourceHLIRNodeId = node.Id
         };
+    }
+
+    /// <summary>
+    /// Creates a Conv2DOp for use within fused operations.
+    /// </summary>
+    private Conv2DOp CreateConv2DOpForFusion(
+        HLIRNode<T> node,
+        int[] outputShape,
+        IRDataType outputDataType,
+        int[] inputIds)
+    {
+        // Allocate output buffer for this sub-op within the fused operation
+        var outputId = _llirGraph.AllocateBufferId();
+
+        // Extract shape information from node's input types if available
+        int batchSize = 1, inputChannels = 1, inputHeight = 1, inputWidth = 1;
+        int outputChannels = 1, kernelHeight = 3, kernelWidth = 3;
+
+        if (node.InputTypes.Count >= 1 && node.InputTypes[0].Shape?.Length >= 4)
+        {
+            var inputShape = node.InputTypes[0].Shape;
+            batchSize = inputShape[0];
+            inputChannels = inputShape[1];
+            inputHeight = inputShape[2];
+            inputWidth = inputShape[3];
+        }
+
+        if (node.InputTypes.Count >= 2 && node.InputTypes[1].Shape?.Length >= 4)
+        {
+            var kernelShape = node.InputTypes[1].Shape;
+            outputChannels = kernelShape[0];
+            kernelHeight = kernelShape[2];
+            kernelWidth = kernelShape[3];
+        }
+        else if (outputShape.Length >= 4)
+        {
+            // Fallback: infer output channels from output shape
+            outputChannels = outputShape[1];
+        }
+
+        // Extract convolution parameters from attributes
+        var strideH = GetAttributeInt(node, "strideH", 1);
+        var strideW = GetAttributeInt(node, "strideW", 1);
+        var padH = GetAttributeInt(node, "padH", 0);
+        var padW = GetAttributeInt(node, "padW", 0);
+        var groups = GetAttributeInt(node, "groups", 1);
+
+        var conv2DOp = new Conv2DOp
+        {
+            OutputId = outputId,
+            Name = node.Name,
+            InputIds = inputIds,
+            OutputShape = outputShape,
+            OutputDataType = outputDataType,
+            BatchSize = batchSize,
+            InputChannels = inputChannels,
+            InputHeight = inputHeight,
+            InputWidth = inputWidth,
+            OutputChannels = outputChannels,
+            KernelHeight = kernelHeight,
+            KernelWidth = kernelWidth,
+            StrideH = strideH,
+            StrideW = strideW,
+            PadH = padH,
+            PadW = padW,
+            Groups = groups,
+            SourceHLIRNodeId = node.Id
+        };
+
+        conv2DOp.Algorithm = SelectConvAlgorithm(conv2DOp);
+        return conv2DOp;
     }
 
     #endregion
