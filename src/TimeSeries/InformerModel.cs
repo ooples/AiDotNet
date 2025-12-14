@@ -694,7 +694,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
 
         // Read layer counts
         int encCount = reader.ReadInt32();
-        int distillCount = reader.ReadInt32();
+        _ = reader.ReadInt32(); // distillCount - read for file format compatibility, value not used
         int decCount = reader.ReadInt32();
 
         // Clear and recreate layers with proper structure (but with placeholder weights)

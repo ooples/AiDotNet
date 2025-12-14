@@ -56,7 +56,7 @@ public class OutlierRemovalIntegrationTests
         var outputs = new Vector<double>(new[] { 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 100.0 });
 
         // Act
-        var (cleanedInputs, cleanedOutputs) = outlierRemoval.RemoveOutliers(inputs, outputs);
+        var (_, cleanedOutputs) = outlierRemoval.RemoveOutliers(inputs, outputs);
 
         // Assert - exactly the outlier row should be removed (7 remaining from 8)
         Assert.Equal(7, cleanedOutputs.Length);
@@ -429,7 +429,7 @@ public class OutlierRemovalIntegrationTests
         var outputs = new Vector<double>(new[] { 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 100.0 });
 
         // Act
-        var (cleanedInputs, cleanedOutputs) = outlierRemoval.RemoveOutliers(inputs, outputs);
+        var (_, cleanedOutputs) = outlierRemoval.RemoveOutliers(inputs, outputs);
 
         // Assert - exactly the outlier row should be removed (7 remaining from 8)
         Assert.Equal(7, cleanedOutputs.Length);
