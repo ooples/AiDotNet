@@ -5,43 +5,27 @@ export default {
     'body-max-line-length': [1, 'always', 200],
   },
   ignores: [
-    // ===== Merge Commits =====
+    // ===== Merge Commits ONLY =====
+    // These are the ONLY legitimate ignores - merge commits cannot follow conventional format
+
     // Ignore GitHub auto-generated merge commits (PR merges)
     (message) => /^Merge pull request #\d+/.test(message),
     // Ignore merge commits when merging branches
     (message) => /^Merge branch '.+'/.test(message),
     // Ignore merge commits from remote
     (message) => /^Merge remote-tracking branch/.test(message),
-    // Ignore manual merge commits (e.g., "merge: resolve conflicts...")
-    (message) => /^merge:/i.test(message),
     // Ignore general merge commits containing "Merge" followed by common patterns
     (message) => /^Merge (origin|upstream|master|main)/i.test(message),
 
-    // ===== Legacy Commits (before conventional commits enforced) =====
-    // These are squashed PR commits that used generic PR titles
+    // ===== GitHub Actions Bot Commits =====
+    // Ignore commits made by GitHub Actions (auto-fixes, dependabot, etc.)
+    (message) => /Co-Authored-By: github-actions\[bot\]/.test(message),
 
-    // Ignore "Work Session Planning" and "Work on Issue" PRs
-    (message) => /^Work (Session|on Issue)/i.test(message),
-
-    // Ignore "Fix issue X in AiDotNet (#Y)" PRs
-    (message) => /^Fix issue \d+ in AiDotNet/i.test(message),
-
-    // Ignore legacy "Implement X" commits (not following feat: format)
-    (message) => /^Implement\s+\w+/i.test(message),
-
-    // Ignore legacy "Add X" commits (not following feat: format)
-    (message) => /^Add\s+\w+/i.test(message),
-
-    // Ignore legacy "Update X" commits (not following feat/fix: format)
-    (message) => /^Update\s+\w+/i.test(message),
-
-    // Ignore legacy "Create X" commits
-    (message) => /^Create\s+\w+/i.test(message),
-
-    // Ignore legacy "Remove X" commits
-    (message) => /^Remove\s+\w+/i.test(message),
-
-    // Ignore commits that are just PR titles (Title (#123))
-    (message) => /^[A-Z][^:]+\s+\(#\d+\)$/.test(message.split('\n')[0]),
+    // NOTE: All legacy ignores have been REMOVED as of 2025-12-14.
+    // The pr-title-lint.yml and commitlint-autofix.yml workflows now handle
+    // auto-fixing non-compliant PR titles and commit messages.
+    // All new commits MUST follow conventional commits format:
+    //   type(scope)?: description
+    // Valid types: feat, fix, docs, refactor, perf, test, chore, ci, style
   ]
 };
