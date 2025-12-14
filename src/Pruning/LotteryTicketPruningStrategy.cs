@@ -516,10 +516,10 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
     {
         var pruned = mask.Apply(weights);
         var flatPruned = pruned.ToVector();
-        var flatWeights = weights.ToVector();
 
-        for (int i = 0; i < flatWeights.Length; i++)
-            flatWeights[i] = flatPruned[i];
+        // Write pruned values back to the original tensor using flat indexer
+        for (int i = 0; i < flatPruned.Length; i++)
+            weights[i] = flatPruned[i];
     }
 
     /// <summary>

@@ -697,10 +697,10 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
     {
         var pruned = mask.Apply(weights);
         var prunedFlat = pruned.ToVector();
-        var weightsFlat = weights.ToVector();
 
-        for (int i = 0; i < weightsFlat.Length; i++)
-            weightsFlat[i] = prunedFlat[i];
+        // Write pruned values back to the original tensor using flat indexer
+        for (int i = 0; i < prunedFlat.Length; i++)
+            weights[i] = prunedFlat[i];
     }
 
     /// <summary>
