@@ -213,8 +213,8 @@ public class HLIRToLLIRLowering<T> where T : struct
         var (m, n, k) = InferMatMulDims(node);
         var bufferId = _llirGraph.AllocateBufferId();
 
-        var transposeA = node.Attributes.TryGetValue("transposeA", out var ta) && (bool)ta;
-        var transposeB = node.Attributes.TryGetValue("transposeB", out var tb) && (bool)tb;
+        var transposeA = GetAttributeBool(node, "transposeA", false);
+        var transposeB = GetAttributeBool(node, "transposeB", false);
 
         return new MatMulOp
         {
@@ -373,6 +373,11 @@ public class HLIRToLLIRLowering<T> where T : struct
     {
         var bufferId = _llirGraph.AllocateBufferId();
 
+        // Extract normalization-specific parameters
+        var epsilon = GetAttributeDouble(node, "epsilon", 1e-5);
+        var momentum = GetAttributeDouble(node, "momentum", 0.1);
+        var axis = GetAttributeInt(node, "axis", -1);
+
         var fusedOp = new FusedOp
         {
             OutputId = bufferId,
@@ -386,6 +391,11 @@ public class HLIRToLLIRLowering<T> where T : struct
                 : "LayerNorm",
             SourceHLIRNodeId = node.Id
         };
+
+        // Store normalization parameters in attributes for runtime execution
+        fusedOp.Attributes["epsilon"] = epsilon;
+        fusedOp.Attributes["momentum"] = momentum;
+        fusedOp.Attributes["axis"] = axis;
 
         return fusedOp;
     }
@@ -795,6 +805,10 @@ public class HLIRToLLIRLowering<T> where T : struct
         // Allocate output buffer for this sub-op within the fused operation
         var outputId = _llirGraph.AllocateBufferId();
 
+        // Extract transpose flags using the same safe helper as LowerMatMul
+        var transposeA = GetAttributeBool(node, "transposeA", false);
+        var transposeB = GetAttributeBool(node, "transposeB", false);
+
         return new MatMulOp
         {
             OutputId = outputId,
@@ -802,9 +816,12 @@ public class HLIRToLLIRLowering<T> where T : struct
             InputIds = inputIds,
             OutputShape = outputShape,
             OutputDataType = outputDataType,
+            Device = GetDeviceForNode(node),
             M = m,
             N = n,
             K = k,
+            TransposeA = transposeA,
+            TransposeB = transposeB,
             SourceHLIRNodeId = node.Id
         };
     }
@@ -830,6 +847,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             InputIds = inputIds,
             OutputShape = outputShape,
             OutputDataType = outputDataType,
+            Device = GetDeviceForNode(node),
             SourceHLIRNodeId = node.Id
         };
     }
@@ -1076,6 +1094,137 @@ public class HLIRToLLIRLowering<T> where T : struct
         try
         {
             return Convert.ToInt32(value);
+        }
+        catch (FormatException)
+        {
+            return defaultValue;
+        }
+        catch (OverflowException)
+        {
+            return defaultValue;
+        }
+        catch (InvalidCastException)
+        {
+            return defaultValue;
+        }
+    }
+
+    /// <summary>
+    /// Safely converts an attribute value to a boolean with defensive type handling.
+    /// </summary>
+    /// <param name="node">The HLIR node containing attributes.</param>
+    /// <param name="key">The attribute key to look up.</param>
+    /// <param name="defaultValue">The value to return if key doesn't exist or conversion fails.</param>
+    /// <returns>The boolean value, or defaultValue if not found or conversion fails.</returns>
+    /// <remarks>
+    /// <para><b>Design Philosophy:</b></para>
+    /// <para>
+    /// Handles various runtime types that may be stored in node attributes:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>bool - returned directly</description></item>
+    /// <item><description>string "true"/"false" (case-insensitive) - parsed to bool</description></item>
+    /// <item><description>int/long 0/1 - converted to false/true</description></item>
+    /// <item><description>Any conversion failure returns the default value</description></item>
+    /// </list>
+    /// </remarks>
+    private bool GetAttributeBool(HLIRNode<T> node, string key, bool defaultValue)
+    {
+        if (!node.Attributes.TryGetValue(key, out var value) || value == null)
+        {
+            return defaultValue;
+        }
+
+        // Handle bool directly
+        if (value is bool boolValue)
+        {
+            return boolValue;
+        }
+
+        // Handle string values (case-insensitive)
+        if (value is string strValue)
+        {
+            if (bool.TryParse(strValue, out var parsed))
+            {
+                return parsed;
+            }
+            // Handle "1" and "0" strings
+            if (strValue == "1") return true;
+            if (strValue == "0") return false;
+            return defaultValue;
+        }
+
+        // Handle integer types (0 = false, non-zero = true)
+        if (value is int intValue)
+        {
+            return intValue != 0;
+        }
+        if (value is long longValue)
+        {
+            return longValue != 0;
+        }
+
+        // Handle other IConvertible types with exception handling
+        try
+        {
+            return Convert.ToBoolean(value);
+        }
+        catch (FormatException)
+        {
+            return defaultValue;
+        }
+        catch (InvalidCastException)
+        {
+            return defaultValue;
+        }
+    }
+
+    /// <summary>
+    /// Safely converts an attribute value to a double with defensive type handling.
+    /// </summary>
+    /// <param name="node">The HLIR node containing attributes.</param>
+    /// <param name="key">The attribute key to look up.</param>
+    /// <param name="defaultValue">The value to return if key doesn't exist or conversion fails.</param>
+    /// <returns>The double value, or defaultValue if not found or conversion fails.</returns>
+    private double GetAttributeDouble(HLIRNode<T> node, string key, double defaultValue)
+    {
+        if (!node.Attributes.TryGetValue(key, out var value) || value == null)
+        {
+            return defaultValue;
+        }
+
+        // Handle numeric types directly
+        if (value is double doubleValue)
+        {
+            return doubleValue;
+        }
+        if (value is float floatValue)
+        {
+            return floatValue;
+        }
+        if (value is int intValue)
+        {
+            return intValue;
+        }
+        if (value is long longValue)
+        {
+            return longValue;
+        }
+        if (value is decimal decimalValue)
+        {
+            return (double)decimalValue;
+        }
+
+        // Handle string values
+        if (value is string strValue)
+        {
+            return double.TryParse(strValue, out var parsed) ? parsed : defaultValue;
+        }
+
+        // Handle other IConvertible types with exception handling
+        try
+        {
+            return Convert.ToDouble(value);
         }
         catch (FormatException)
         {
