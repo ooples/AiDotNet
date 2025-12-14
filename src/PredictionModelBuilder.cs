@@ -24,6 +24,10 @@ global using AiDotNet.RetrievalAugmentedGeneration.Graph;
 global using AiDotNet.Tokenization.Interfaces;
 global using AiDotNet.Tokenization.Configuration;
 global using AiDotNet.Tokenization.HuggingFace;
+global using AiDotNet.PromptEngineering.Templates;
+global using AiDotNet.PromptEngineering.Chains;
+global using AiDotNet.PromptEngineering.Optimization;
+global using AiDotNet.PromptEngineering.FewShot;
 
 namespace AiDotNet;
 
@@ -96,6 +100,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     // Tokenization configuration
     private ITokenizer? _tokenizer;
     private TokenizationConfig? _tokenizationConfig;
+
+    // Prompt engineering configuration
+    private IPromptTemplate? _promptTemplate;
+    private IChain<string, string>? _promptChain;
+    private IPromptOptimizer<T>? _promptOptimizer;
+    private IFewShotExampleSelector<T>? _fewShotExampleSelector;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -2122,6 +2132,141 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             : defaultModel;
         _tokenizer = await AutoTokenizer.FromPretrainedAsync(modelName);
         _tokenizationConfig = config ?? new TokenizationConfig();
+        return this;
+    }
+
+    // ============================================================================
+    // Prompt Engineering Configuration Methods
+    // ============================================================================
+
+    /// <summary>
+    /// Configures the prompt template for language model interactions.
+    /// </summary>
+    /// <param name="template">The prompt template to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// A prompt template provides a structured way to create prompts for language models by combining
+    /// a template string with runtime variables.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> A prompt template is like a form with blanks to fill in. You define the
+    /// structure once and fill in different values each time you use it.
+    ///
+    /// Example:
+    /// <code>
+    /// var template = new SimplePromptTemplate("Translate {text} from {source} to {target}");
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigurePromptTemplate(template)
+    ///     .ConfigureModel(model);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptTemplate(IPromptTemplate? template = null)
+    {
+        _promptTemplate = template;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the prompt chain for composing multiple language model operations.
+    /// </summary>
+    /// <param name="chain">The chain to use for processing prompts.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// A chain orchestrates multiple language model calls, tools, and transformations into a cohesive
+    /// workflow. Chains can be sequential, conditional, or parallel.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> A chain connects multiple steps into a complete workflow, like a recipe
+    /// where each step builds on the previous one.
+    ///
+    /// Example:
+    /// <code>
+    /// var chain = new SequentialChain&lt;string, string&gt;("CustomerSupport")
+    ///     .AddStep("classify", ClassifyEmail)
+    ///     .AddStep("respond", GenerateResponse);
+    ///
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigurePromptChain(chain)
+    ///     .ConfigureModel(model);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptChain(IChain<string, string>? chain = null)
+    {
+        _promptChain = chain;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the prompt optimizer for automatically improving prompts.
+    /// </summary>
+    /// <param name="optimizer">The prompt optimizer to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// A prompt optimizer automatically refines prompts to achieve better performance on a specific task.
+    /// Optimization strategies include discrete search, gradient-based methods, and evolutionary algorithms.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> A prompt optimizer automatically improves your prompts by testing variations
+    /// and keeping the best-performing ones.
+    ///
+    /// Example:
+    /// <code>
+    /// var optimizer = new DiscreteSearchOptimizer&lt;double&gt;();
+    ///
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigurePromptOptimizer(optimizer)
+    ///     .ConfigureModel(model);
+    ///
+    /// // Later, optimize a prompt
+    /// var optimized = optimizer.Optimize(
+    ///     initialPrompt: "Classify sentiment:",
+    ///     evaluationFunction: EvaluatePrompt,
+    ///     maxIterations: 50
+    /// );
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptOptimizer(IPromptOptimizer<T>? optimizer = null)
+    {
+        _promptOptimizer = optimizer;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the few-shot example selector for selecting examples to include in prompts.
+    /// </summary>
+    /// <param name="selector">The few-shot example selector to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// A few-shot example selector chooses the most relevant examples to include in prompts based
+    /// on the current query. Different strategies include random selection, fixed order, and
+    /// similarity-based selection.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Few-shot learning teaches the model by showing it examples. The selector
+    /// picks which examples to show for each new query.
+    ///
+    /// Example:
+    /// <code>
+    /// var selector = new RandomExampleSelector&lt;double&gt;(seed: 42);
+    /// selector.AddExample(new FewShotExample { Input = "Hello", Output = "Hola" });
+    /// selector.AddExample(new FewShotExample { Input = "Goodbye", Output = "Adiós" });
+    ///
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureFewShotExampleSelector(selector)
+    ///     .ConfigureModel(model);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFewShotExampleSelector(IFewShotExampleSelector<T>? selector = null)
+    {
+        _fewShotExampleSelector = selector;
         return this;
     }
 
