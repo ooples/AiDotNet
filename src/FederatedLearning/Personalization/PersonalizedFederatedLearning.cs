@@ -351,7 +351,7 @@ public class PersonalizedFederatedLearning<T>
         int globalParams = totalParams - personalizedParams;
 
         int totalLayers = fullModel.Count;
-        int personalizedLayerCount = _personalizedLayers.Count;
+        int personalizedLayerCount = fullModel.Keys.Count(layerName => _personalizedLayers.Contains(layerName));
         int globalLayerCount = totalLayers - personalizedLayerCount;
 
         return new Dictionary<string, double>

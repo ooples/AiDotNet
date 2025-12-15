@@ -197,6 +197,32 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
     /// <returns>The masked model update.</returns>
     public Dictionary<string, T[]> MaskUpdate(int clientId, Dictionary<string, T[]> clientUpdate)
     {
+        return MaskUpdateInternal(clientId, clientUpdate, clientWeight: null);
+    }
+
+    /// <summary>
+    /// Masks a client's model update with pairwise secrets, applying the client's aggregation weight before masking.
+    /// </summary>
+    /// <remarks>
+    /// For secure weighted averaging, clients must apply weights to their updates <i>before</i> masking so secrets still cancel.
+    /// This overload multiplies the update by <paramref name="clientWeight"/> and then adds the pairwise masks.
+    /// </remarks>
+    /// <param name="clientId">The ID of the client whose update to mask.</param>
+    /// <param name="clientUpdate">The client's (unweighted) model update.</param>
+    /// <param name="clientWeight">The aggregation weight to apply to this client's update (e.g., sample count).</param>
+    /// <returns>The masked (and weighted) model update.</returns>
+    public Dictionary<string, T[]> MaskUpdate(int clientId, Dictionary<string, T[]> clientUpdate, double clientWeight)
+    {
+        if (clientWeight <= 0.0)
+        {
+            throw new ArgumentException("Client weight must be positive.", nameof(clientWeight));
+        }
+
+        return MaskUpdateInternal(clientId, clientUpdate, clientWeight);
+    }
+
+    private Dictionary<string, T[]> MaskUpdateInternal(int clientId, Dictionary<string, T[]> clientUpdate, double? clientWeight)
+    {
         if (clientUpdate == null || clientUpdate.Count == 0)
         {
             throw new ArgumentException("Client update cannot be null or empty.", nameof(clientUpdate));
@@ -212,13 +238,32 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
 
         // Flatten all parameters to apply masks
         var flatParams = FlattenParameters(clientUpdate);
+        EnsureParameterCountMatches(flatParams.Length, nameof(clientUpdate));
+
         var maskedFlatParams = new T[flatParams.Length];
         Array.Copy(flatParams, maskedFlatParams, flatParams.Length);
+
+        // Apply weight to the update (not to the masks) so masks still cancel in the sum.
+        if (clientWeight.HasValue)
+        {
+            var weightT = NumOps.FromDouble(clientWeight.Value);
+            for (int i = 0; i < maskedFlatParams.Length; i++)
+            {
+                maskedFlatParams[i] = NumOps.Multiply(maskedFlatParams[i], weightT);
+            }
+        }
 
         // Add all pairwise secrets for this client
         foreach (var otherClientSecrets in _pairwiseSecrets[clientId].Values)
         {
-            for (int i = 0; i < Math.Min(maskedFlatParams.Length, otherClientSecrets.Length); i++)
+            if (otherClientSecrets.Length != maskedFlatParams.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Pairwise secret length mismatch. Expected {maskedFlatParams.Length}, got {otherClientSecrets.Length}. " +
+                    "Ensure SecureAggregation is constructed with the correct parameterCount.");
+            }
+
+            for (int i = 0; i < maskedFlatParams.Length; i++)
             {
                 maskedFlatParams[i] = NumOps.Add(maskedFlatParams[i], otherClientSecrets[i]);
             }
@@ -231,7 +276,7 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
             var originalLayer = clientUpdate[layerName];
             var maskedLayer = new T[originalLayer.Length];
 
-            for (int i = 0; i < originalLayer.Length && paramIndex < maskedFlatParams.Length; i++, paramIndex++)
+            for (int i = 0; i < originalLayer.Length; i++, paramIndex++)
             {
                 maskedLayer[i] = maskedFlatParams[paramIndex];
             }
@@ -259,9 +304,9 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
     ///
     /// For example with 2 clients:
     /// Client 1 masked: [0.4, 0.0, 0.85] = [0.5, -0.3, 0.8] + [-0.1, 0.3, 0.05]
-    /// Client 2 masked: [0.7, 0.7, 1.05] = [0.6, 0.4, 1.1] + [0.1, -0.3, -0.05]
+    /// Client 2 masked: [0.7, 0.1, 1.05] = [0.6, 0.4, 1.1] + [0.1, -0.3, -0.05]
     ///
-    /// Sum of masked: [1.1, 0.7, 1.9]
+    /// Sum of masked: [1.1, 0.1, 1.9]
     /// True sum: [0.5, -0.3, 0.8] + [0.6, 0.4, 1.1] = [1.1, 0.1, 1.9] ← Matches!
     /// (Note: Secrets [-0.1, 0.3, 0.05] + [0.1, -0.3, -0.05] = [0, 0, 0] ← Cancelled)
     /// </remarks>
@@ -275,6 +320,11 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
         if (maskedUpdates == null || maskedUpdates.Count == 0)
         {
             throw new ArgumentException("Masked updates cannot be null or empty.", nameof(maskedUpdates));
+        }
+
+        if (clientWeights == null || clientWeights.Count == 0)
+        {
+            throw new ArgumentException("Client weights cannot be null or empty.", nameof(clientWeights));
         }
 
         // Get model structure from first client
@@ -311,27 +361,47 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
             }
         }
 
-        // If using weighted aggregation, divide by total weight
-        if (clientWeights != null && clientWeights.Count > 0)
+        // If the client updates were weighted before masking (recommended for secure weighted averaging),
+        // divide by total weight to return a weighted average.
+        double totalWeight = 0.0;
+        foreach (var clientId in maskedUpdates.Keys)
         {
-            double totalWeight = clientWeights.Values.Sum();
-
-            if (totalWeight > 0)
+            if (!clientWeights.TryGetValue(clientId, out var w))
             {
-                var totalWeightT = NumOps.FromDouble(totalWeight);
-                foreach (var layerName in aggregatedUpdate.Keys)
-                {
-                    var aggregatedParams = aggregatedUpdate[layerName];
+                throw new ArgumentException($"Missing weight for client {clientId}.", nameof(clientWeights));
+            }
 
-                    for (int i = 0; i < aggregatedParams.Length; i++)
-                    {
-                        aggregatedParams[i] = NumOps.Divide(aggregatedParams[i], totalWeightT);
-                    }
-                }
+            totalWeight += w;
+        }
+
+        if (totalWeight <= 0.0)
+        {
+            throw new ArgumentException("Total weight must be positive.", nameof(clientWeights));
+        }
+
+        var totalWeightT = NumOps.FromDouble(totalWeight);
+        foreach (var layerName in aggregatedUpdate.Keys)
+        {
+            var aggregatedParams = aggregatedUpdate[layerName];
+
+            for (int i = 0; i < aggregatedParams.Length; i++)
+            {
+                aggregatedParams[i] = NumOps.Divide(aggregatedParams[i], totalWeightT);
             }
         }
 
         return aggregatedUpdate;
+    }
+
+    private void EnsureParameterCountMatches(int actualCount, string paramName)
+    {
+        if (actualCount != _parameterCount)
+        {
+            throw new ArgumentException(
+                $"Model parameter count mismatch. Expected {_parameterCount}, got {actualCount}. " +
+                "Ensure SecureAggregation is constructed with the correct parameterCount.",
+                paramName);
+        }
     }
 
     /// <summary>

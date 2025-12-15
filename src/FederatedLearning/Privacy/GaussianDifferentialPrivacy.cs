@@ -62,6 +62,7 @@ using System;
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
 public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T>
 {
+    private readonly object _sync = new object();
     private double _privacyBudgetConsumed;
     private readonly double _clipNorm;
     private readonly Random _random;
@@ -204,7 +205,10 @@ public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<st
         }
 
         // Update privacy budget consumed
-        _privacyBudgetConsumed += epsilon;
+        lock (_sync)
+        {
+            _privacyBudgetConsumed += epsilon;
+        }
 
         return noisyModel;
     }
@@ -260,8 +264,13 @@ public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<st
     private double GenerateGaussianNoise(double mean, double sigma)
     {
         // Box-Muller transform
-        double u1 = 1.0 - _random.NextDouble(); // Uniform(0,1]
-        double u2 = 1.0 - _random.NextDouble();
+        double u1;
+        double u2;
+        lock (_sync)
+        {
+            u1 = 1.0 - _random.NextDouble(); // Uniform(0,1]
+            u2 = 1.0 - _random.NextDouble();
+        }
         double standardNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
 
         return mean + sigma * standardNormal;
@@ -286,7 +295,10 @@ public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<st
     /// </remarks>
     public override double GetPrivacyBudgetConsumed()
     {
-        return _privacyBudgetConsumed;
+        lock (_sync)
+        {
+            return _privacyBudgetConsumed;
+        }
     }
 
     /// <summary>
@@ -327,6 +339,9 @@ public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<st
     /// </remarks>
     public void ResetPrivacyBudget()
     {
-        _privacyBudgetConsumed = 0.0;
+        lock (_sync)
+        {
+            _privacyBudgetConsumed = 0.0;
+        }
     }
 }
