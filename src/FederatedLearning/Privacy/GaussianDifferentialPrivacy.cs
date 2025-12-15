@@ -177,9 +177,8 @@ public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<st
         {
             var scaleFactor = NumOps.Divide(clipNormT, l2Norm);
 
-            foreach (var layerName in noisyModel.Keys)
+            foreach (var parameters in noisyModel.Values)
             {
-                var parameters = noisyModel[layerName];
                 for (int i = 0; i < parameters.Length; i++)
                 {
                     parameters[i] = NumOps.Multiply(parameters[i], scaleFactor);
@@ -194,9 +193,8 @@ public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<st
         double noiseSigma = (sensitivity / epsilon) * Math.Sqrt(2.0 * Math.Log(1.25 / delta));
 
         // Step 3: Add Gaussian noise to each parameter
-        foreach (var layerName in noisyModel.Keys)
+        foreach (var parameters in noisyModel.Values)
         {
-            var parameters = noisyModel[layerName];
             for (int i = 0; i < parameters.Length; i++)
             {
                 double noise = GenerateGaussianNoise(0.0, noiseSigma);
