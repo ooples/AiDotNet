@@ -209,6 +209,9 @@ AiDotNet Federated Learning v1 is defined by a frozen, exhaustive scope snapshot
 Items explicitly deferred to post-v1 work are tracked here:
 - `docs/FederatedLearning_OutOfScope_Backlog.md`
 
+v1 policy and milestone plan:
+- `docs/FederatedLearning_V1_PolicyMatrix_and_Roadmap.md`
+
 ## Testing
 
 Unit tests are located in `tests/AiDotNet.Tests/FederatedLearning/`:
