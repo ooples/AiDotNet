@@ -55,7 +55,7 @@ namespace AiDotNet.InferenceOptimization
         /// <summary>
         /// Gets the best available operator for the given name
         /// </summary>
-        public ICustomOperator GetOperator(string name)
+        public ICustomOperator? GetOperator(string name)
         {
             if (string.IsNullOrEmpty(name))
                 throw new ArgumentException("Operator name cannot be null or empty", nameof(name));
@@ -63,22 +63,35 @@ namespace AiDotNet.InferenceOptimization
             return _selectedOperators.GetOrAdd(name, key =>
             {
                 if (!_operators.TryGetValue(key, out var candidates))
-                    return null;
+                    return new NullOperator();
 
                 lock (candidates)
                 {
                     // Find the highest priority supported operator
-                    return candidates.FirstOrDefault(op => op.IsSupported());
+                    var result = candidates.FirstOrDefault(op => op.IsSupported());
+                    return result ?? new NullOperator();
                 }
-            });
+            }) is NullOperator ? null : _selectedOperators[name];
         }
 
         /// <summary>
         /// Gets a typed operator
         /// </summary>
-        public ICustomOperator<T> GetOperator<T>(string name) where T : struct
+        public ICustomOperator<T>? GetOperator<T>(string name) where T : struct
         {
             return GetOperator(name) as ICustomOperator<T>;
+        }
+
+        /// <summary>
+        /// Internal marker type for null operators
+        /// </summary>
+        private sealed class NullOperator : ICustomOperator
+        {
+            public string Name => string.Empty;
+            public string Version => string.Empty;
+            public int Priority => int.MinValue;
+            public bool IsSupported() => false;
+            public double EstimatedSpeedup() => 0;
         }
 
         /// <summary>
@@ -124,7 +137,7 @@ namespace AiDotNet.InferenceOptimization
                         Priority = op.Priority,
                         IsSupported = op.IsSupported(),
                         EstimatedSpeedup = op.EstimatedSpeedup(),
-                        Type = op.GetType().FullName
+                        Type = op.GetType().FullName ?? op.GetType().Name
                     }).ToList();
                 }
             }
@@ -147,11 +160,11 @@ namespace AiDotNet.InferenceOptimization
     /// </summary>
     public class OperatorInfo
     {
-        public string Name { get; set; }
-        public string Version { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Version { get; set; } = string.Empty;
         public int Priority { get; set; }
         public bool IsSupported { get; set; }
         public double EstimatedSpeedup { get; set; }
-        public string Type { get; set; }
+        public string Type { get; set; } = string.Empty;
     }
 }

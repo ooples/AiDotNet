@@ -43,7 +43,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
             var v = inputs[2]; // [batch_size, seq_len_v, d_v]
 
             bool useMask = inputs.Length > 3;
-            Tensor<float> mask = useMask ? inputs[3] : null;
+            Tensor<float>? mask = useMask ? inputs[3] : null;
 
             if (q.Shape.Length != 3 || k.Shape.Length != 3 || v.Shape.Length != 3)
                 throw new ArgumentException("Attention requires 3D tensors [batch, seq_len, features]");
@@ -73,7 +73,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
 
         private unsafe void ProcessBatch(
             Tensor<float> q, Tensor<float> k, Tensor<float> v,
-            Tensor<float> mask, Tensor<float> result,
+            Tensor<float>? mask, Tensor<float> result,
             int batchIdx, int seqLenQ, int seqLenK, int dK, int dV)
         {
             float scale = 1.0f / MathF.Sqrt(dK);
@@ -210,7 +210,9 @@ namespace AiDotNet.InferenceOptimization.Kernels
             var vReshaped = ReshapeForMultiHead(v, numHeads, dK);
 
             // Apply attention
-            var attended = Execute(qReshaped, kReshaped, vReshaped, mask);
+            var attended = mask is not null
+                ? Execute(qReshaped, kReshaped, vReshaped, mask)
+                : Execute(qReshaped, kReshaped, vReshaped);
 
             // Reshape back to [batch, seq_len, d_model]
             return ReshapeFromMultiHead(attended, batchSize, seqLen, dModel);

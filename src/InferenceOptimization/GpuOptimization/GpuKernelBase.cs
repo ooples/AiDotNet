@@ -97,8 +97,8 @@ namespace AiDotNet.InferenceOptimization.GpuOptimization
     /// </summary>
     public class GpuDeviceInfo
     {
-        public string Name { get; set; }
-        public string ComputeCapability { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string ComputeCapability { get; set; } = string.Empty;
         public long TotalMemory { get; set; }
         public int MaxThreadsPerBlock { get; set; }
         public int MaxSharedMemoryPerBlock { get; set; }
