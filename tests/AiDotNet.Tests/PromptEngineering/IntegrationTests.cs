@@ -17,14 +17,11 @@ public class IntegrationTests
     [Fact]
     public void CompositeTemplate_WithConditional_WorksTogether()
     {
-        var templates = new List<string>
-        {
-            "System: You are a helpful assistant.",
-            "{{#if context}}Context: {context}{{/if}}",
-            "User: {question}"
-        };
-
-        var composite = new CompositePromptTemplate(templates);
+        var composite = CompositePromptTemplate.Builder()
+            .Add("System: You are a helpful assistant.")
+            .Add(new ConditionalPromptTemplate("{{#if context}}Context: {context}{{/if}}"))
+            .Add("User: {question}")
+            .Build();
 
         // With context
         var withContext = composite.Format(new Dictionary<string, string>
@@ -67,10 +64,11 @@ public class IntegrationTests
     [Fact]
     public void RolePlayingTemplate_WithStructuredOutput_CombinesCorrectly()
     {
-        var role = new RolePlayingTemplate("data analyst", "Analyze the following dataset");
+        var role = new RolePlayingTemplate("data analyst")
+            .WithTask("Analyze the following dataset");
         var structured = new StructuredOutputTemplate(
-            "{ \"insights\": [], \"recommendations\": [] }",
-            "json");
+            StructuredOutputTemplate.OutputFormat.Json,
+            "{ \"insights\": [], \"recommendations\": [] }");
 
         var rolePrompt = role.Format(new Dictionary<string, string>
         {
@@ -93,17 +91,15 @@ public class IntegrationTests
     [Fact]
     public void FewShotPromptTemplate_WithExamples_FormatsCorrectly()
     {
-        var examples = new List<FewShotExample>
-        {
-            new FewShotExample { Input = "Hello", Output = "Hola" },
-            new FewShotExample { Input = "Goodbye", Output = "Adios" }
-        };
+        var selector = new FixedExampleSelector<double>();
+        selector.AddExample(new FewShotExample { Input = "Hello", Output = "Hola" });
+        selector.AddExample(new FewShotExample { Input = "Goodbye", Output = "Adios" });
 
         var template = new FewShotPromptTemplate(
-            "You are a translator. Translate English to Spanish.",
-            examples,
-            "{input}",
-            "{output}");
+            "You are a translator. Translate English to Spanish.\n\n{examples}\n\nNow translate: {query}",
+            selector,
+            exampleCount: 2,
+            exampleFormat: "Input: {input}\nOutput: {output}");
 
         var prompt = template.Format(new Dictionary<string, string>
         {
@@ -192,8 +188,8 @@ public class IntegrationTests
 
         var text = new string('x', 80);
 
-        Assert.True(manager.FitsInWindow(text, reserved: 10)); // 80 + 10 = 90, fits
-        Assert.False(manager.FitsInWindow(text, reserved: 30)); // 80 + 30 = 110, doesn't fit
+        Assert.True(manager.FitsInWindow(text, reservedTokens: 10)); // 80 + 10 = 90, fits
+        Assert.False(manager.FitsInWindow(text, reservedTokens: 30)); // 80 + 30 = 110, doesn't fit
     }
 
     #endregion
@@ -204,9 +200,8 @@ public class IntegrationTests
     public void MultipleTemplates_ChainedTogether_ProducesValidOutput()
     {
         // Step 1: Create a role-playing prompt
-        var roleTemplate = new RolePlayingTemplate(
-            "expert software engineer",
-            "Review the following code");
+        var roleTemplate = new RolePlayingTemplate("expert software engineer")
+            .WithTask("Review the following code");
 
         var rolePrompt = roleTemplate.Format(new Dictionary<string, string>
         {
@@ -222,8 +217,8 @@ public class IntegrationTests
 
         // Step 3: Request structured output
         var structuredTemplate = new StructuredOutputTemplate(
-            "{ \"issues\": [], \"score\": 0, \"suggestions\": [] }",
-            "json");
+            StructuredOutputTemplate.OutputFormat.Json,
+            "{ \"issues\": [], \"score\": 0, \"suggestions\": [] }");
 
         var finalPrompt = structuredTemplate.Format(new Dictionary<string, string>
         {
@@ -239,14 +234,10 @@ public class IntegrationTests
     [Fact]
     public void InstructionTemplate_WithConditionals_ProducesCorrectOutput()
     {
-        var instructions = new List<string>
-        {
-            "Read the input carefully",
-            "Identify key points",
-            "Provide a summary"
-        };
-
-        var instructionTemplate = new InstructionFollowingTemplate(instructions);
+        var instructionTemplate = new InstructionFollowingTemplate()
+            .AddInstruction("Read the input carefully")
+            .AddInstruction("Identify key points")
+            .AddInstruction("Provide a summary");
 
         var conditionalWrapper = new ConditionalPromptTemplate(
             "{{#if verbose}}Detailed analysis: {detailed}{{/if}}\n{instructions}");
@@ -286,27 +277,25 @@ public class IntegrationTests
     {
         // Simulate a QA system workflow
 
-        // 1. Create few-shot examples
-        var examples = new List<FewShotExample>
+        // 1. Create few-shot examples using a selector
+        var selector = new FixedExampleSelector<double>();
+        selector.AddExample(new FewShotExample
         {
-            new FewShotExample
-            {
-                Input = "What is the capital of France?",
-                Output = "The capital of France is Paris."
-            },
-            new FewShotExample
-            {
-                Input = "What is 2 + 2?",
-                Output = "2 + 2 equals 4."
-            }
-        };
+            Input = "What is the capital of France?",
+            Output = "The capital of France is Paris."
+        });
+        selector.AddExample(new FewShotExample
+        {
+            Input = "What is 2 + 2?",
+            Output = "2 + 2 equals 4."
+        });
 
-        // 2. Create template with examples
+        // 2. Create template with example selector
         var fewShotTemplate = new FewShotPromptTemplate(
-            "You are a helpful assistant that answers questions accurately.",
-            examples,
-            "Q: {input}",
-            "A: {output}");
+            "You are a helpful assistant that answers questions accurately.\n\n{examples}\n\n{query}",
+            selector,
+            exampleCount: 2,
+            exampleFormat: "Q: {input}\nA: {output}");
 
         // 3. Format with new query
         var prompt = fewShotTemplate.Format(new Dictionary<string, string>
@@ -330,9 +319,8 @@ public class IntegrationTests
         // Simulate a data analysis workflow
 
         // 1. Role-playing setup
-        var roleTemplate = new RolePlayingTemplate(
-            "senior data scientist",
-            "Analyze the following dataset and provide insights");
+        var roleTemplate = new RolePlayingTemplate("senior data scientist")
+            .WithTask("Analyze the following dataset and provide insights");
 
         // 2. Add structured output requirement
         var outputSchema = @"{
@@ -342,7 +330,9 @@ public class IntegrationTests
             ""confidence"": ""number""
         }";
 
-        var structuredTemplate = new StructuredOutputTemplate(outputSchema, "json");
+        var structuredTemplate = new StructuredOutputTemplate(
+            StructuredOutputTemplate.OutputFormat.Json,
+            outputSchema);
 
         // 3. Create composite workflow
         var rolePrompt = roleTemplate.Format(new Dictionary<string, string>
@@ -368,15 +358,11 @@ public class IntegrationTests
         // Simulate a code review workflow
 
         // 1. Instructions for review
-        var instructions = new List<string>
-        {
-            "Check for security vulnerabilities",
-            "Verify code follows best practices",
-            "Identify performance issues",
-            "Suggest improvements"
-        };
-
-        var instructionTemplate = new InstructionFollowingTemplate(instructions);
+        var instructionTemplate = new InstructionFollowingTemplate()
+            .AddInstruction("Check for security vulnerabilities")
+            .AddInstruction("Verify code follows best practices")
+            .AddInstruction("Identify performance issues")
+            .AddInstruction("Suggest improvements");
 
         // 2. Chain of thought for reasoning
         var cotTemplate = new ChainOfThoughtTemplate("Review code quality step by step");

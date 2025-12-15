@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using AiDotNet.PromptEngineering;
 using AiDotNet.PromptEngineering.Templates;
 using Xunit;
@@ -50,31 +51,33 @@ public class EdgeCaseTests
     }
 
     [Fact]
-    public void StructuredOutputTemplate_NullSchema_ThrowsArgumentNullException()
+    public void StructuredOutputTemplate_NullTemplate_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new StructuredOutputTemplate(null!, "json"));
+        Assert.Throws<ArgumentNullException>(() => new StructuredOutputTemplate(null!));
     }
 
     [Fact]
-    public void StructuredOutputTemplate_NullFormat_ThrowsArgumentNullException()
+    public void StructuredOutputTemplate_EmptyTemplate_ThrowsArgumentException()
     {
-        Assert.Throws<ArgumentNullException>(() => new StructuredOutputTemplate("schema", null!));
+        Assert.Throws<ArgumentException>(() => new StructuredOutputTemplate(""));
     }
 
     [Fact]
     public void RolePlayingTemplate_NullRole_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new RolePlayingTemplate(null!, "task"));
+        Assert.Throws<ArgumentNullException>(() => new RolePlayingTemplate(null!));
     }
 
     [Fact]
-    public void RolePlayingTemplate_NullTask_ThrowsArgumentNullException()
+    public void RolePlayingTemplate_EmptyRole_CreatesWithDefault()
     {
-        Assert.Throws<ArgumentNullException>(() => new RolePlayingTemplate("role", null!));
+        // Empty role is acceptable, defaults to "Assistant"
+        var template = new RolePlayingTemplate("");
+        Assert.NotNull(template);
     }
 
     [Fact]
-    public void InstructionFollowingTemplate_NullInstructions_ThrowsArgumentNullException()
+    public void InstructionFollowingTemplate_NullTemplate_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new InstructionFollowingTemplate(null!));
     }
@@ -86,15 +89,20 @@ public class EdgeCaseTests
     }
 
     [Fact]
-    public void CompositePromptTemplate_NullTemplates_ThrowsArgumentNullException()
+    public void CompositePromptTemplate_NullTemplates_CreatesEmptyComposite()
     {
-        Assert.Throws<ArgumentNullException>(() => new CompositePromptTemplate(null!));
+        // CompositePromptTemplate handles null by creating empty list
+        IPromptTemplate[]? templates = null;
+        var composite = new CompositePromptTemplate(templates!);
+        Assert.NotNull(composite);
     }
 
     [Fact]
-    public void CompositePromptTemplate_EmptyTemplates_ThrowsArgumentException()
+    public void CompositePromptTemplate_EmptyTemplates_CreatesEmptyComposite()
     {
-        Assert.Throws<ArgumentException>(() => new CompositePromptTemplate(new List<string>()));
+        // CompositePromptTemplate allows empty array
+        var composite = new CompositePromptTemplate();
+        Assert.NotNull(composite);
     }
 
     #endregion

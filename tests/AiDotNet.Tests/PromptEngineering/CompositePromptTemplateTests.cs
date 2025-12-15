@@ -25,7 +25,7 @@ public class CompositePromptTemplateTests
     public void AddTemplate_AddsTemplate()
     {
         var composite = new CompositePromptTemplate()
-            .AddTemplate(new SimplePromptTemplate("Hello {name}"));
+            .Add(new SimplePromptTemplate("Hello {name}"));
 
         Assert.NotNull(composite);
     }
@@ -34,9 +34,9 @@ public class CompositePromptTemplateTests
     public void AddTemplate_MultipleTemplates_AddsAll()
     {
         var composite = new CompositePromptTemplate()
-            .AddTemplate(new SimplePromptTemplate("Part 1: {a}"))
-            .AddTemplate(new SimplePromptTemplate("Part 2: {b}"))
-            .AddTemplate(new SimplePromptTemplate("Part 3: {c}"));
+            .Add(new SimplePromptTemplate("Part 1: {a}"))
+            .Add(new SimplePromptTemplate("Part 2: {b}"))
+            .Add(new SimplePromptTemplate("Part 3: {c}"));
 
         Assert.NotNull(composite);
     }
@@ -45,7 +45,7 @@ public class CompositePromptTemplateTests
     public void Format_SingleTemplate_FormatsCorrectly()
     {
         var composite = new CompositePromptTemplate()
-            .AddTemplate(new SimplePromptTemplate("Hello {name}"));
+            .Add(new SimplePromptTemplate("Hello {name}"));
         var variables = new Dictionary<string, string>
         {
             ["name"] = "World"
@@ -60,8 +60,8 @@ public class CompositePromptTemplateTests
     public void Format_MultipleTemplates_CombinesWithSeparator()
     {
         var composite = new CompositePromptTemplate("\n---\n")
-            .AddTemplate(new SimplePromptTemplate("Part 1"))
-            .AddTemplate(new SimplePromptTemplate("Part 2"));
+            .Add(new SimplePromptTemplate("Part 1"))
+            .Add(new SimplePromptTemplate("Part 2"));
         var variables = new Dictionary<string, string>();
 
         var result = composite.Format(variables);
@@ -75,8 +75,8 @@ public class CompositePromptTemplateTests
     public void Format_WithVariables_ReplacesInAllTemplates()
     {
         var composite = new CompositePromptTemplate()
-            .AddTemplate(new SimplePromptTemplate("Name: {name}"))
-            .AddTemplate(new SimplePromptTemplate("Hello {name}!"));
+            .Add(new SimplePromptTemplate("Name: {name}"))
+            .Add(new SimplePromptTemplate("Hello {name}!"));
         var variables = new Dictionary<string, string>
         {
             ["name"] = "John"
@@ -92,8 +92,8 @@ public class CompositePromptTemplateTests
     public void Format_DifferentVariables_ReplacesCorrectly()
     {
         var composite = new CompositePromptTemplate()
-            .AddTemplate(new SimplePromptTemplate("First: {a}"))
-            .AddTemplate(new SimplePromptTemplate("Second: {b}"));
+            .Add(new SimplePromptTemplate("First: {a}"))
+            .Add(new SimplePromptTemplate("Second: {b}"));
         var variables = new Dictionary<string, string>
         {
             ["a"] = "Alpha",
@@ -110,8 +110,8 @@ public class CompositePromptTemplateTests
     public void InputVariables_CombinesFromAllTemplates()
     {
         var composite = new CompositePromptTemplate()
-            .AddTemplate(new SimplePromptTemplate("{a} {b}"))
-            .AddTemplate(new SimplePromptTemplate("{c} {d}"));
+            .Add(new SimplePromptTemplate("{a} {b}"))
+            .Add(new SimplePromptTemplate("{c} {d}"));
 
         Assert.Contains("a", composite.InputVariables);
         Assert.Contains("b", composite.InputVariables);
@@ -123,8 +123,8 @@ public class CompositePromptTemplateTests
     public void InputVariables_DeduplicatesVariables()
     {
         var composite = new CompositePromptTemplate()
-            .AddTemplate(new SimplePromptTemplate("{name}"))
-            .AddTemplate(new SimplePromptTemplate("{name}"));
+            .Add(new SimplePromptTemplate("{name}"))
+            .Add(new SimplePromptTemplate("{name}"));
 
         Assert.Single(composite.InputVariables.Where(v => v == "name"));
     }
@@ -133,8 +133,8 @@ public class CompositePromptTemplateTests
     public void Validate_WithAllVariables_ReturnsTrue()
     {
         var composite = new CompositePromptTemplate()
-            .AddTemplate(new SimplePromptTemplate("{a}"))
-            .AddTemplate(new SimplePromptTemplate("{b}"));
+            .Add(new SimplePromptTemplate("{a}"))
+            .Add(new SimplePromptTemplate("{b}"));
         var variables = new Dictionary<string, string>
         {
             ["a"] = "value1",
@@ -150,8 +150,8 @@ public class CompositePromptTemplateTests
     public void Validate_WithMissingVariable_ReturnsFalse()
     {
         var composite = new CompositePromptTemplate()
-            .AddTemplate(new SimplePromptTemplate("{a}"))
-            .AddTemplate(new SimplePromptTemplate("{b}"));
+            .Add(new SimplePromptTemplate("{a}"))
+            .Add(new SimplePromptTemplate("{b}"));
         var variables = new Dictionary<string, string>
         {
             ["a"] = "value1"
@@ -166,7 +166,7 @@ public class CompositePromptTemplateTests
     public void Validate_WithNullVariables_ReturnsFalse()
     {
         var composite = new CompositePromptTemplate()
-            .AddTemplate(new SimplePromptTemplate("{a}"));
+            .Add(new SimplePromptTemplate("{a}"));
 
         var result = composite.Validate(null!);
 
@@ -188,8 +188,8 @@ public class CompositePromptTemplateTests
     public void Format_WithDefaultSeparator_UsesNewlines()
     {
         var composite = new CompositePromptTemplate()
-            .AddTemplate(new SimplePromptTemplate("Line 1"))
-            .AddTemplate(new SimplePromptTemplate("Line 2"));
+            .Add(new SimplePromptTemplate("Line 1"))
+            .Add(new SimplePromptTemplate("Line 2"));
         var variables = new Dictionary<string, string>();
 
         var result = composite.Format(variables);
@@ -202,9 +202,9 @@ public class CompositePromptTemplateTests
     public void Format_WithCustomSeparator_UsesSeparator()
     {
         var composite = new CompositePromptTemplate(" | ")
-            .AddTemplate(new SimplePromptTemplate("A"))
-            .AddTemplate(new SimplePromptTemplate("B"))
-            .AddTemplate(new SimplePromptTemplate("C"));
+            .Add(new SimplePromptTemplate("A"))
+            .Add(new SimplePromptTemplate("B"))
+            .Add(new SimplePromptTemplate("C"));
         var variables = new Dictionary<string, string>();
 
         var result = composite.Format(variables);
@@ -216,7 +216,7 @@ public class CompositePromptTemplateTests
     public void AddTemplate_ReturnsNewInstance()
     {
         var original = new CompositePromptTemplate();
-        var modified = original.AddTemplate(new SimplePromptTemplate("test"));
+        var modified = original.Add(new SimplePromptTemplate("test"));
 
         Assert.NotSame(original, modified);
     }
@@ -224,9 +224,12 @@ public class CompositePromptTemplateTests
     [Fact]
     public void Format_WithMixedTemplateTypes_WorksCorrectly()
     {
+        var chatTemplate = new ChatPromptTemplate()
+            .AddSystemMessage("{system}")
+            .AddUserMessage("{user}");
         var composite = new CompositePromptTemplate()
-            .AddTemplate(new SimplePromptTemplate("Simple: {text}"))
-            .AddTemplate(new ChatPromptTemplate("System: {system}", "User: {user}"));
+            .Add(new SimplePromptTemplate("Simple: {text}"))
+            .Add(chatTemplate);
         var variables = new Dictionary<string, string>
         {
             ["text"] = "Hello",
@@ -237,17 +240,17 @@ public class CompositePromptTemplateTests
         var result = composite.Format(variables);
 
         Assert.Contains("Simple: Hello", result);
-        Assert.Contains("System: Be helpful", result);
-        Assert.Contains("User: Hi there", result);
+        Assert.Contains("Be helpful", result);
+        Assert.Contains("Hi there", result);
     }
 
     [Fact]
     public void FluentChaining_WorksCorrectly()
     {
         var composite = new CompositePromptTemplate()
-            .AddTemplate(new SimplePromptTemplate("Part 1"))
-            .AddTemplate(new SimplePromptTemplate("Part 2"))
-            .AddTemplate(new SimplePromptTemplate("Part 3"));
+            .Add(new SimplePromptTemplate("Part 1"))
+            .Add(new SimplePromptTemplate("Part 2"))
+            .Add(new SimplePromptTemplate("Part 3"));
 
         Assert.NotNull(composite);
     }
@@ -256,9 +259,9 @@ public class CompositePromptTemplateTests
     public void Format_PreservesTemplateOrder()
     {
         var composite = new CompositePromptTemplate(" ")
-            .AddTemplate(new SimplePromptTemplate("First"))
-            .AddTemplate(new SimplePromptTemplate("Second"))
-            .AddTemplate(new SimplePromptTemplate("Third"));
+            .Add(new SimplePromptTemplate("First"))
+            .Add(new SimplePromptTemplate("Second"))
+            .Add(new SimplePromptTemplate("Third"));
         var variables = new Dictionary<string, string>();
 
         var result = composite.Format(variables);
@@ -275,9 +278,9 @@ public class CompositePromptTemplateTests
     public void Format_ComplexRealWorldExample()
     {
         var composite = new CompositePromptTemplate("\n\n")
-            .AddTemplate(new SimplePromptTemplate("## System\nYou are a {role}."))
-            .AddTemplate(new SimplePromptTemplate("## Context\n{context}"))
-            .AddTemplate(new SimplePromptTemplate("## Task\n{task}"));
+            .Add(new SimplePromptTemplate("## System\nYou are a {role}."))
+            .Add(new SimplePromptTemplate("## Context\n{context}"))
+            .Add(new SimplePromptTemplate("## Task\n{task}"));
 
         var variables = new Dictionary<string, string>
         {
