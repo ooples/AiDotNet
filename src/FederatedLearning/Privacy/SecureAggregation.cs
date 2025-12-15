@@ -134,11 +134,20 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
         for (int i = 0; i < clientIds.Count; i++)
         {
             int clientI = clientIds[i];
-            _pairwiseSecrets[clientI] = new Dictionary<int, T[]>();
+            if (!_pairwiseSecrets.TryGetValue(clientI, out var secretsForClientI))
+            {
+                secretsForClientI = new Dictionary<int, T[]>();
+                _pairwiseSecrets[clientI] = secretsForClientI;
+            }
 
             for (int j = i + 1; j < clientIds.Count; j++)
             {
                 int clientJ = clientIds[j];
+                if (!_pairwiseSecrets.TryGetValue(clientJ, out var secretsForClientJ))
+                {
+                    secretsForClientJ = new Dictionary<int, T[]>();
+                    _pairwiseSecrets[clientJ] = secretsForClientJ;
+                }
 
                 // Generate random secret for this pair
                 var secret = new T[_parameterCount];
@@ -149,21 +158,16 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
                 }
 
                 // Store secret for client i with respect to client j
-                _pairwiseSecrets[clientI][clientJ] = secret;
+                secretsForClientI[clientJ] = secret;
 
                 // Store negated secret for client j with respect to client i
                 // This ensures secrets cancel: secret_ij + secret_ji = 0
-                if (!_pairwiseSecrets.ContainsKey(clientJ))
-                {
-                    _pairwiseSecrets[clientJ] = new Dictionary<int, T[]>();
-                }
-
                 var negatedSecret = new T[_parameterCount];
                 for (int k = 0; k < _parameterCount; k++)
                 {
                     negatedSecret[k] = NumOps.Negate(secret[k]);
                 }
-                _pairwiseSecrets[clientJ][clientI] = negatedSecret;
+                secretsForClientJ[clientI] = negatedSecret;
             }
         }
     }

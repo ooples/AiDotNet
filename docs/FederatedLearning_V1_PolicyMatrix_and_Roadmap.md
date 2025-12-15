@@ -30,8 +30,10 @@ It is intentionally **plan-only** (no code) and is designed to be executable by 
 | Tier | Default Delivery | Join Gate | Decrypt Gate | Default Privacy | Notes |
 |---|---|---|---|---|---|
 | Free / OSS | Option A | T1 required | N/A | DP + SecureAgg (conservative defaults) | Server-hosted inference; no artifact download/export |
-| Pro | Option B | T1 required (T2 recommended) | N/A | SecureAgg default on; DP optional | Plaintext artifact is a deliverable; export is tier-gated |
+| Pro | Option B* | T1 required (T2 recommended) | N/A | SecureAgg default on; DP optional | Plaintext artifact is a deliverable; export is tier-gated |
 | Enterprise | Option C | T2 required | T2 required | DP + SecureAgg default on; HE optional/hybrid | Encrypted artifacts; keys released only to attested runtime |
+
+*Pro tier defaults to Option B for desktop/server environments. On mobile, plaintext artifact delivery is **disabled by default** (policy defaults to Option A, with explicit opt-in if the customer accepts the risk).
 
 ## Platform Matrix (Tier × Platform)
 
@@ -44,7 +46,7 @@ Legend:
 |---|---:|---:|---:|---|
 | Windows managed endpoint | ✅ (T1) | ✅ (T1/T2) | ✅ (T2) | First-class enterprise target |
 | Windows consumer endpoint | ✅ (T1) | ⚠ (restricted) | ⚠/✅ (T2 if available; else ❌) | Consumer posture is weaker; defaults should be restrictive |
-| Mobile device (phone/tablet) | ✅ (T1) | ⚠ (typically no plaintext download by default) | ✅ via attested gateway runtime (T2) | Phone participates via integrity gating; gateway holds keys for Option C |
+| Mobile device (phone/tablet) | ✅ (T1) | ⚠ (defaults to Option A; plaintext opt-in) | ✅ via attested gateway runtime (T2) | Phone participates via integrity gating; gateway holds keys for Option C |
 | Enterprise gateway / edge runtime | ✅ | ✅ | ✅ (T2) | Primary mobile enterprise Option C execution boundary |
 | VM/server TEEs | (later) | (later) | ✅ (T2) | Added after device-first path is stable |
 
@@ -94,6 +96,9 @@ The client runtime/library enforces:
 - **US3.6** Implement BFV scheme support
 - **US3.7** Hybrid modes (HE for selected parameter groups + DP/SecureAgg elsewhere)
 - **US3.8** `net471` compatibility validation for HE dependencies and runtime behavior
+- **US3.9** DP mechanism and composition guidance (local vs central DP, subsampling amplification, noise allocation defaults)
+- **US3.10** HE key management architecture (generation, distribution, storage, rotation, compromise recovery; roles: client/gateway/KMS)
+- **US3.11** Performance and tuning guide (DP/HE trade-offs, benchmarking plan, recommended presets, hybrid mode guidance)
 
 ### Epic 4: Robustness, Sampling, Async, and Communication Efficiency
 - **US4.1** Robust aggregation suite: trimmed mean, median, winsorized mean, RFA, Krum/Multi-Krum, Bulyan, filters
@@ -108,6 +113,8 @@ The client runtime/library enforces:
 - **US5.2** PFL implementations: FedRep, FedPer, Ditto, pFedMe, clustered personalization
 - **US5.3** Local adaptation step configurable per client
 - **US5.4** Meta-learning integration: Per-FedAvg + FedMAML (or documented limitations) + optional Reptile-style
+- **US5.5** Privacy impact assessment for personalization (risk analysis + mitigation patterns when DP/SecureAgg/HE are enabled)
+- **US5.6** Privacy-focused tests for personalized variants (DP accounting expectations and leakage-resistance evaluation plan)
 
 ### Epic 6: LEAF + Metrics (Issue #398 success criteria)
 - **US6.1** LEAF dataset loader(s) with offline tiny fixtures for CI

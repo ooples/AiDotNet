@@ -8,7 +8,7 @@ Each item here should be tracked as a dedicated GitHub issue (or issue series) a
 
 - Fully verifiable federated learning (e.g., ZK proofs for update correctness)
 - Advanced MPC for arbitrary training beyond secure aggregation
-- Private set intersection (PSI) based entity alignment for vertical FL
+- Private set intersection (PSI)-based entity-alignment for vertical FL
 
 ## Advanced Federated Data Regimes
 
