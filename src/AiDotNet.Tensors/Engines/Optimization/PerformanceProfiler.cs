@@ -66,12 +66,16 @@ namespace AiDotNet.Tensors.Engines.Optimization
                 },
                 (_, existing) =>
                 {
-                    existing.CallCount++;
-                    existing.TotalTicks += elapsedTicks;
-                    existing.MinTicks = Math.Min(existing.MinTicks, elapsedTicks);
-                    existing.MaxTicks = Math.Max(existing.MaxTicks, elapsedTicks);
-                    existing.TotalMemoryBytes += memoryBytes;
-                    return existing;
+                    // Return new object to ensure thread-safety (avoid mutating existing object)
+                    return new OperationStats
+                    {
+                        OperationName = existing.OperationName,
+                        CallCount = existing.CallCount + 1,
+                        TotalTicks = existing.TotalTicks + elapsedTicks,
+                        MinTicks = Math.Min(existing.MinTicks, elapsedTicks),
+                        MaxTicks = Math.Max(existing.MaxTicks, elapsedTicks),
+                        TotalMemoryBytes = existing.TotalMemoryBytes + memoryBytes
+                    };
                 });
         }
 
@@ -139,15 +143,26 @@ namespace AiDotNet.Tensors.Engines.Optimization
             {
                 _profiler = profiler;
                 _operationName = operationName;
+#if NET6_0_OR_GREATER
+                // Use per-thread allocation tracking for more accurate measurements
+                _startMemory = GC.GetAllocatedBytesForCurrentThread();
+#else
+                // Fallback for .NET Framework - less accurate but functional
                 _startMemory = GC.GetTotalMemory(false);
+#endif
                 _stopwatch = Stopwatch.StartNew();
             }
 
             public void Dispose()
             {
                 _stopwatch.Stop();
+#if NET6_0_OR_GREATER
+                long endMemory = GC.GetAllocatedBytesForCurrentThread();
+#else
                 long endMemory = GC.GetTotalMemory(false);
-                long memoryDelta = endMemory - _startMemory;
+#endif
+                // Only report positive memory delta (allocation), ignore GC effects
+                long memoryDelta = Math.Max(0, endMemory - _startMemory);
 
                 _profiler.RecordOperation(_operationName, _stopwatch.ElapsedTicks, memoryDelta);
             }

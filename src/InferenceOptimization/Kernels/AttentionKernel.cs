@@ -101,7 +101,8 @@ namespace AiDotNet.InferenceOptimization.Kernels
                         if (mask != null)
                         {
                             int maskIdx = batchIdx * seqLenQ * seqLenK + i * seqLenK + j;
-                            if (mask.Data[maskIdx] == 0.0f)
+                            // Use epsilon-based comparison for floating point equality
+                            if (MathF.Abs(mask.Data[maskIdx]) < 1e-6f)
                             {
                                 score = float.NegativeInfinity;
                             }
