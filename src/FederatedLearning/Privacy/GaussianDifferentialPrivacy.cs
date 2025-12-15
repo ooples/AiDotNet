@@ -1,6 +1,5 @@
 namespace AiDotNet.FederatedLearning.Privacy;
 
-using AiDotNet.Interfaces;
 using System;
 
 /// <summary>
@@ -61,8 +60,7 @@ using System;
 /// Abadi, M., et al. (2016). "Deep Learning with Differential Privacy." CCS 2016.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
-public class GaussianDifferentialPrivacy<T> : IPrivacyMechanism<Dictionary<string, T[]>>
-    where T : struct, IComparable<T>, IConvertible
+public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T>
 {
     private double _privacyBudgetConsumed;
     private readonly double _clipNorm;
@@ -145,7 +143,7 @@ public class GaussianDifferentialPrivacy<T> : IPrivacyMechanism<Dictionary<strin
     /// <param name="epsilon">Privacy budget for this operation (smaller = more private).</param>
     /// <param name="delta">Failure probability (typically 1e-5 or smaller).</param>
     /// <returns>The model with differential privacy applied.</returns>
-    public Dictionary<string, T[]> ApplyPrivacy(Dictionary<string, T[]> model, double epsilon, double delta)
+    public override Dictionary<string, T[]> ApplyPrivacy(Dictionary<string, T[]> model, double epsilon, double delta)
     {
         if (model == null || model.Count == 0)
         {
@@ -170,20 +168,20 @@ public class GaussianDifferentialPrivacy<T> : IPrivacyMechanism<Dictionary<strin
         }
 
         // Step 1: Gradient clipping - Calculate L2 norm of all parameters
-        double l2Norm = CalculateL2Norm(noisyModel);
+        var l2Norm = CalculateL2Norm(noisyModel);
+        var clipNormT = NumOps.FromDouble(_clipNorm);
 
         // If norm exceeds clip threshold, scale down
-        if (l2Norm > _clipNorm)
+        if (NumOps.GreaterThan(l2Norm, clipNormT))
         {
-            double scaleFactor = _clipNorm / l2Norm;
+            var scaleFactor = NumOps.Divide(clipNormT, l2Norm);
 
             foreach (var layerName in noisyModel.Keys)
             {
                 var parameters = noisyModel[layerName];
                 for (int i = 0; i < parameters.Length; i++)
                 {
-                    double value = Convert.ToDouble(parameters[i]);
-                    parameters[i] = (T)Convert.ChangeType(value * scaleFactor, typeof(T));
+                    parameters[i] = NumOps.Multiply(parameters[i], scaleFactor);
                 }
             }
         }
@@ -200,9 +198,8 @@ public class GaussianDifferentialPrivacy<T> : IPrivacyMechanism<Dictionary<strin
             var parameters = noisyModel[layerName];
             for (int i = 0; i < parameters.Length; i++)
             {
-                double value = Convert.ToDouble(parameters[i]);
                 double noise = GenerateGaussianNoise(0.0, noiseSigma);
-                parameters[i] = (T)Convert.ChangeType(value + noise, typeof(T));
+                parameters[i] = NumOps.Add(parameters[i], NumOps.FromDouble(noise));
             }
         }
 
@@ -226,20 +223,19 @@ public class GaussianDifferentialPrivacy<T> : IPrivacyMechanism<Dictionary<strin
     /// </remarks>
     /// <param name="model">The model to calculate norm for.</param>
     /// <returns>The L2 norm of all parameters.</returns>
-    private double CalculateL2Norm(Dictionary<string, T[]> model)
+    private T CalculateL2Norm(Dictionary<string, T[]> model)
     {
-        double sumOfSquares = 0.0;
+        var sumOfSquares = NumOps.Zero;
 
         foreach (var layer in model.Values)
         {
             foreach (var param in layer)
             {
-                double value = Convert.ToDouble(param);
-                sumOfSquares += value * value;
+                sumOfSquares = NumOps.Add(sumOfSquares, NumOps.Square(param));
             }
         }
 
-        return Math.Sqrt(sumOfSquares);
+        return NumOps.Sqrt(sumOfSquares);
     }
 
     /// <summary>
@@ -288,8 +284,7 @@ public class GaussianDifferentialPrivacy<T> : IPrivacyMechanism<Dictionary<strin
     /// Note: This uses basic composition. Advanced composition (Rényi DP) gives
     /// tighter bounds and would show less budget consumed.
     /// </remarks>
-    /// <returns>The cumulative privacy budget (epsilon) consumed.</returns>
-    public double GetPrivacyBudgetConsumed()
+    public override double GetPrivacyBudgetConsumed()
     {
         return _privacyBudgetConsumed;
     }
@@ -298,7 +293,7 @@ public class GaussianDifferentialPrivacy<T> : IPrivacyMechanism<Dictionary<strin
     /// Gets the name of the privacy mechanism.
     /// </summary>
     /// <returns>A string describing the mechanism.</returns>
-    public string GetMechanismName()
+    public override string GetMechanismName()
     {
         return $"Gaussian DP (clip={_clipNorm})";
     }

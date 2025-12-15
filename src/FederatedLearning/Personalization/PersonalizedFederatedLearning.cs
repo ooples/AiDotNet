@@ -67,7 +67,6 @@ using System.Linq;
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
 public class PersonalizedFederatedLearning<T>
-    where T : struct, IComparable<T>, IConvertible
 {
     private readonly double _personalizationFraction;
     private readonly HashSet<string> _personalizedLayers;
@@ -309,7 +308,7 @@ public class PersonalizedFederatedLearning<T>
     /// Useful for logging, debugging, and understanding the model split.
     /// </remarks>
     /// <returns>A read-only set of personalized layer names.</returns>
-    public IReadOnlySet<string> GetPersonalizedLayers()
+    public IReadOnlyCollection<string> GetPersonalizedLayers()
     {
         return _personalizedLayers;
     }

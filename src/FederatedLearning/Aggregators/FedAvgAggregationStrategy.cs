@@ -1,7 +1,5 @@
 namespace AiDotNet.FederatedLearning.Aggregators;
 
-using AiDotNet.Interfaces;
-
 /// <summary>
 /// Implements the Federated Averaging (FedAvg) aggregation strategy.
 /// </summary>
@@ -46,8 +44,7 @@ using AiDotNet.Interfaces;
 /// from Decentralized Data." AISTATS 2017.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
-public class FedAvgAggregationStrategy<T> : IAggregationStrategy<Dictionary<string, T[]>>
-    where T : struct, IComparable<T>, IConvertible
+public class FedAvgAggregationStrategy<T> : AggregationStrategyBase<Dictionary<string, T[]>, T>
 {
     /// <summary>
     /// Aggregates client models using weighted averaging based on the number of samples.
@@ -85,7 +82,7 @@ public class FedAvgAggregationStrategy<T> : IAggregationStrategy<Dictionary<stri
     /// <param name="clientModels">Dictionary mapping client IDs to their model parameters.</param>
     /// <param name="clientWeights">Dictionary mapping client IDs to their sample counts (weights).</param>
     /// <returns>The aggregated global model parameters.</returns>
-    public Dictionary<string, T[]> Aggregate(
+    public override Dictionary<string, T[]> Aggregate(
         Dictionary<int, Dictionary<string, T[]>> clientModels,
         Dictionary<int, double> clientWeights)
     {
@@ -100,12 +97,7 @@ public class FedAvgAggregationStrategy<T> : IAggregationStrategy<Dictionary<stri
         }
 
         // Calculate total weight (total number of samples across all clients)
-        double totalWeight = clientWeights.Values.Sum();
-
-        if (totalWeight <= 0)
-        {
-            throw new ArgumentException("Total weight must be positive.", nameof(clientWeights));
-        }
+        double totalWeight = GetTotalWeightOrThrow(clientWeights, clientModels.Keys, nameof(clientWeights));
 
         // Get the first client's model structure to initialize the aggregated model
         var firstClientModel = clientModels.First().Value;
@@ -114,32 +106,50 @@ public class FedAvgAggregationStrategy<T> : IAggregationStrategy<Dictionary<stri
         // Initialize aggregated model with zeros
         foreach (var layerName in firstClientModel.Keys)
         {
-            aggregatedModel[layerName] = new T[firstClientModel[layerName].Length];
+            var layer = new T[firstClientModel[layerName].Length];
+            for (int i = 0; i < layer.Length; i++)
+            {
+                layer[i] = NumOps.Zero;
+            }
+
+            aggregatedModel[layerName] = layer;
         }
 
         // Perform weighted aggregation
         foreach (var clientId in clientModels.Keys)
         {
             var clientModel = clientModels[clientId];
-            var clientWeight = clientWeights[clientId];
+            if (!clientWeights.TryGetValue(clientId, out var clientWeight))
+            {
+                throw new ArgumentException($"Missing weight for client {clientId}.", nameof(clientWeights));
+            }
 
             // Normalized weight for this client
             double normalizedWeight = clientWeight / totalWeight;
+            var normalizedWeightT = NumOps.FromDouble(normalizedWeight);
 
             // Add weighted contribution from this client to the aggregated model
-            foreach (var layerName in clientModel.Keys)
+            foreach (var layerName in firstClientModel.Keys)
             {
-                var clientParams = clientModel[layerName];
+                if (!clientModel.TryGetValue(layerName, out var clientParams))
+                {
+                    throw new ArgumentException($"Client {clientId} is missing layer '{layerName}'.", nameof(clientModels));
+                }
+
                 var aggregatedParams = aggregatedModel[layerName];
+
+                if (clientParams.Length != aggregatedParams.Length)
+                {
+                    throw new ArgumentException(
+                        $"Layer '{layerName}' length mismatch for client {clientId}. Expected {aggregatedParams.Length}, got {clientParams.Length}.",
+                        nameof(clientModels));
+                }
 
                 for (int i = 0; i < clientParams.Length; i++)
                 {
-                    // Convert T to double, perform weighted addition, convert back to T
-                    double currentValue = Convert.ToDouble(aggregatedParams[i]);
-                    double clientValue = Convert.ToDouble(clientParams[i]);
-                    double weightedValue = currentValue + (normalizedWeight * clientValue);
-
-                    aggregatedParams[i] = (T)Convert.ChangeType(weightedValue, typeof(T));
+                    aggregatedParams[i] = NumOps.Add(
+                        aggregatedParams[i],
+                        NumOps.Multiply(clientParams[i], normalizedWeightT));
                 }
             }
         }
@@ -151,7 +161,7 @@ public class FedAvgAggregationStrategy<T> : IAggregationStrategy<Dictionary<stri
     /// Gets the name of the aggregation strategy.
     /// </summary>
     /// <returns>The string "FedAvg".</returns>
-    public string GetStrategyName()
+    public override string GetStrategyName()
     {
         return "FedAvg";
     }

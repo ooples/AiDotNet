@@ -1,7 +1,5 @@
 namespace AiDotNet.FederatedLearning.Aggregators;
 
-using AiDotNet.Interfaces;
-
 /// <summary>
 /// Implements the Federated Batch Normalization (FedBN) aggregation strategy.
 /// </summary>
@@ -62,8 +60,7 @@ using AiDotNet.Interfaces;
 /// ICDE 2021.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
-public class FedBNAggregationStrategy<T> : IAggregationStrategy<Dictionary<string, T[]>>
-    where T : struct, IComparable<T>, IConvertible
+public class FedBNAggregationStrategy<T> : AggregationStrategyBase<Dictionary<string, T[]>, T>
 {
     private readonly HashSet<string> _batchNormLayerPatterns;
 
@@ -138,7 +135,7 @@ public class FedBNAggregationStrategy<T> : IAggregationStrategy<Dictionary<strin
     /// <param name="clientModels">Dictionary mapping client IDs to their model parameters.</param>
     /// <param name="clientWeights">Dictionary mapping client IDs to their sample counts (weights).</param>
     /// <returns>The aggregated global model parameters with BN layers excluded from aggregation.</returns>
-    public Dictionary<string, T[]> Aggregate(
+    public override Dictionary<string, T[]> Aggregate(
         Dictionary<int, Dictionary<string, T[]>> clientModels,
         Dictionary<int, double> clientWeights)
     {
@@ -152,12 +149,7 @@ public class FedBNAggregationStrategy<T> : IAggregationStrategy<Dictionary<strin
             throw new ArgumentException("Client weights cannot be null or empty.", nameof(clientWeights));
         }
 
-        double totalWeight = clientWeights.Values.Sum();
-
-        if (totalWeight <= 0)
-        {
-            throw new ArgumentException("Total weight must be positive.", nameof(clientWeights));
-        }
+        double totalWeight = GetTotalWeightOrThrow(clientWeights, clientModels.Keys, nameof(clientWeights));
 
         var firstClientModel = clientModels.First().Value;
         var aggregatedModel = new Dictionary<string, T[]>();
@@ -177,24 +169,44 @@ public class FedBNAggregationStrategy<T> : IAggregationStrategy<Dictionary<strin
             else
             {
                 // For non-BN layers, perform weighted aggregation (like FedAvg)
-                aggregatedModel[layerName] = new T[firstClientModel[layerName].Length];
+                var layer = new T[firstClientModel[layerName].Length];
+                for (int i = 0; i < layer.Length; i++)
+                {
+                    layer[i] = NumOps.Zero;
+                }
+
+                aggregatedModel[layerName] = layer;
 
                 foreach (var clientId in clientModels.Keys)
                 {
                     var clientModel = clientModels[clientId];
-                    var clientWeight = clientWeights[clientId];
-                    double normalizedWeight = clientWeight / totalWeight;
+                    if (!clientWeights.TryGetValue(clientId, out var clientWeight))
+                    {
+                        throw new ArgumentException($"Missing weight for client {clientId}.", nameof(clientWeights));
+                    }
 
-                    var clientParams = clientModel[layerName];
+                    double normalizedWeight = clientWeight / totalWeight;
+                    var normalizedWeightT = NumOps.FromDouble(normalizedWeight);
+
+                    if (!clientModel.TryGetValue(layerName, out var clientParams))
+                    {
+                        throw new ArgumentException($"Client {clientId} is missing layer '{layerName}'.", nameof(clientModels));
+                    }
+
                     var aggregatedParams = aggregatedModel[layerName];
+
+                    if (clientParams.Length != aggregatedParams.Length)
+                    {
+                        throw new ArgumentException(
+                            $"Layer '{layerName}' length mismatch for client {clientId}. Expected {aggregatedParams.Length}, got {clientParams.Length}.",
+                            nameof(clientModels));
+                    }
 
                     for (int i = 0; i < clientParams.Length; i++)
                     {
-                        double currentValue = Convert.ToDouble(aggregatedParams[i]);
-                        double clientValue = Convert.ToDouble(clientParams[i]);
-                        double weightedValue = currentValue + (normalizedWeight * clientValue);
-
-                        aggregatedParams[i] = (T)Convert.ChangeType(weightedValue, typeof(T));
+                        aggregatedParams[i] = NumOps.Add(
+                            aggregatedParams[i],
+                            NumOps.Multiply(clientParams[i], normalizedWeightT));
                     }
                 }
             }
@@ -220,11 +232,9 @@ public class FedBNAggregationStrategy<T> : IAggregationStrategy<Dictionary<strin
     /// <returns>True if the layer is a batch normalization layer, false otherwise.</returns>
     private bool IsBatchNormalizationLayer(string layerName)
     {
-        string lowerLayerName = layerName.ToLowerInvariant();
-
         foreach (var pattern in _batchNormLayerPatterns)
         {
-            if (lowerLayerName.Contains(pattern.ToLowerInvariant()))
+            if (layerName.Contains(pattern, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
@@ -237,7 +247,7 @@ public class FedBNAggregationStrategy<T> : IAggregationStrategy<Dictionary<strin
     /// Gets the name of the aggregation strategy.
     /// </summary>
     /// <returns>The string "FedBN".</returns>
-    public string GetStrategyName()
+    public override string GetStrategyName()
     {
         return "FedBN";
     }
@@ -250,7 +260,7 @@ public class FedBNAggregationStrategy<T> : IAggregationStrategy<Dictionary<strin
     /// layers are batch normalization layers.
     /// </remarks>
     /// <returns>A set of BN layer patterns.</returns>
-    public IReadOnlySet<string> GetBatchNormPatterns()
+    public IReadOnlyCollection<string> GetBatchNormPatterns()
     {
         return _batchNormLayerPatterns;
     }

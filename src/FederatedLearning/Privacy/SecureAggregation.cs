@@ -1,7 +1,7 @@
 namespace AiDotNet.FederatedLearning.Privacy;
 
 using System;
-using System.Security.Cryptography;
+using AiDotNet.FederatedLearning.Infrastructure;
 
 /// <summary>
 /// Implements secure aggregation for federated learning using cryptographic techniques.
@@ -70,10 +70,9 @@ using System.Security.Cryptography;
 /// Machine Learning." CCS 2017.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
-public class SecureAggregation<T>
-    where T : struct, IComparable<T>, IConvertible
+public class SecureAggregation<T> : FederatedLearningComponentBase<T>
 {
-    private readonly Dictionary<int, Dictionary<int, double[]>> _pairwiseSecrets;
+    private readonly Dictionary<int, Dictionary<int, T[]>> _pairwiseSecrets;
     private readonly Random _random;
     private readonly int _parameterCount;
 
@@ -101,7 +100,7 @@ public class SecureAggregation<T>
         }
 
         _parameterCount = parameterCount;
-        _pairwiseSecrets = new Dictionary<int, Dictionary<int, double[]>>();
+        _pairwiseSecrets = new Dictionary<int, Dictionary<int, T[]>>();
         _random = randomSeed.HasValue ? new Random(randomSeed.Value) : new Random();
     }
 
@@ -135,18 +134,18 @@ public class SecureAggregation<T>
         for (int i = 0; i < clientIds.Count; i++)
         {
             int clientI = clientIds[i];
-            _pairwiseSecrets[clientI] = new Dictionary<int, double[]>();
+            _pairwiseSecrets[clientI] = new Dictionary<int, T[]>();
 
             for (int j = i + 1; j < clientIds.Count; j++)
             {
                 int clientJ = clientIds[j];
 
                 // Generate random secret for this pair
-                double[] secret = new double[_parameterCount];
+                var secret = new T[_parameterCount];
                 for (int k = 0; k < _parameterCount; k++)
                 {
                     // Use cryptographically secure random in production
-                    secret[k] = (_random.NextDouble() - 0.5) * 2.0; // Range: [-1, 1]
+                    secret[k] = NumOps.FromDouble((_random.NextDouble() - 0.5) * 2.0); // Range: [-1, 1]
                 }
 
                 // Store secret for client i with respect to client j
@@ -156,13 +155,13 @@ public class SecureAggregation<T>
                 // This ensures secrets cancel: secret_ij + secret_ji = 0
                 if (!_pairwiseSecrets.ContainsKey(clientJ))
                 {
-                    _pairwiseSecrets[clientJ] = new Dictionary<int, double[]>();
+                    _pairwiseSecrets[clientJ] = new Dictionary<int, T[]>();
                 }
 
-                double[] negatedSecret = new double[_parameterCount];
+                var negatedSecret = new T[_parameterCount];
                 for (int k = 0; k < _parameterCount; k++)
                 {
-                    negatedSecret[k] = -secret[k];
+                    negatedSecret[k] = NumOps.Negate(secret[k]);
                 }
                 _pairwiseSecrets[clientJ][clientI] = negatedSecret;
             }
@@ -209,7 +208,7 @@ public class SecureAggregation<T>
 
         // Flatten all parameters to apply masks
         var flatParams = FlattenParameters(clientUpdate);
-        var maskedFlatParams = new double[flatParams.Length];
+        var maskedFlatParams = new T[flatParams.Length];
         Array.Copy(flatParams, maskedFlatParams, flatParams.Length);
 
         // Add all pairwise secrets for this client
@@ -217,7 +216,7 @@ public class SecureAggregation<T>
         {
             for (int i = 0; i < Math.Min(maskedFlatParams.Length, otherClientSecrets.Length); i++)
             {
-                maskedFlatParams[i] += otherClientSecrets[i];
+                maskedFlatParams[i] = NumOps.Add(maskedFlatParams[i], otherClientSecrets[i]);
             }
         }
 
@@ -230,7 +229,7 @@ public class SecureAggregation<T>
 
             for (int i = 0; i < originalLayer.Length && paramIndex < maskedFlatParams.Length; i++, paramIndex++)
             {
-                maskedLayer[i] = (T)Convert.ChangeType(maskedFlatParams[paramIndex], typeof(T));
+                maskedLayer[i] = maskedFlatParams[paramIndex];
             }
 
             maskedUpdate[layerName] = maskedLayer;
@@ -281,7 +280,13 @@ public class SecureAggregation<T>
         // Initialize aggregated update with zeros
         foreach (var layerName in firstUpdate.Keys)
         {
-            aggregatedUpdate[layerName] = new T[firstUpdate[layerName].Length];
+            var layer = new T[firstUpdate[layerName].Length];
+            for (int i = 0; i < layer.Length; i++)
+            {
+                layer[i] = NumOps.Zero;
+            }
+
+            aggregatedUpdate[layerName] = layer;
         }
 
         // Sum all masked updates
@@ -297,9 +302,7 @@ public class SecureAggregation<T>
 
                 for (int i = 0; i < maskedParams.Length; i++)
                 {
-                    double currentValue = Convert.ToDouble(aggregatedParams[i]);
-                    double maskedValue = Convert.ToDouble(maskedParams[i]);
-                    aggregatedParams[i] = (T)Convert.ChangeType(currentValue + maskedValue, typeof(T));
+                    aggregatedParams[i] = NumOps.Add(aggregatedParams[i], maskedParams[i]);
                 }
             }
         }
@@ -311,14 +314,14 @@ public class SecureAggregation<T>
 
             if (totalWeight > 0)
             {
+                var totalWeightT = NumOps.FromDouble(totalWeight);
                 foreach (var layerName in aggregatedUpdate.Keys)
                 {
                     var aggregatedParams = aggregatedUpdate[layerName];
 
                     for (int i = 0; i < aggregatedParams.Length; i++)
                     {
-                        double value = Convert.ToDouble(aggregatedParams[i]);
-                        aggregatedParams[i] = (T)Convert.ChangeType(value / totalWeight, typeof(T));
+                        aggregatedParams[i] = NumOps.Divide(aggregatedParams[i], totalWeightT);
                     }
                 }
             }
@@ -336,17 +339,17 @@ public class SecureAggregation<T>
     /// </remarks>
     /// <param name="model">The model to flatten.</param>
     /// <returns>A flat array of all parameters.</returns>
-    private double[] FlattenParameters(Dictionary<string, T[]> model)
+    private T[] FlattenParameters(Dictionary<string, T[]> model)
     {
         int totalParams = model.Values.Sum(layer => layer.Length);
-        double[] flatParams = new double[totalParams];
+        var flatParams = new T[totalParams];
 
         int index = 0;
         foreach (var layer in model.Values)
         {
             foreach (var param in layer)
             {
-                flatParams[index++] = Convert.ToDouble(param);
+                flatParams[index++] = param;
             }
         }
 
