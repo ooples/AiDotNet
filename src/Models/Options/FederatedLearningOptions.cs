@@ -124,7 +124,7 @@ public class FederatedLearningOptions
     ///
     /// For example:
     /// - Client has 1000 samples, BatchSize = 32
-    /// - Data is split into 32 batches of ~31 samples each
+    /// - Data is split into approximately 32 batches of 31-32 samples each
     /// - Model is updated after processing each batch
     /// </remarks>
     public int BatchSize { get; set; } = 32;
