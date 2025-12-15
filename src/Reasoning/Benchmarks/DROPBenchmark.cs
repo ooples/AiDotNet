@@ -105,6 +105,7 @@ namespace AiDotNet.Reasoning.Benchmarks;
 /// </remarks>
 public class DROPBenchmark<T> : IBenchmark<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly INumericOperations<T> _numOps;
     private List<BenchmarkProblem>? _cachedProblems;
 
@@ -344,7 +345,7 @@ Question: How many items does the store have now?",
     private List<double> ExtractNumbers(string text)
     {
         var numbers = new List<double>();
-        var matches = Regex.Matches(text, @"-?\d+\.?\d*");
+        var matches = Regex.Matches(text, @"-?\d+\.?\d*", RegexOptions.None, RegexTimeout);
 
         foreach (Match match in matches)
         {
@@ -359,6 +360,6 @@ Question: How many items does the store have now?",
 
     private string NormalizeText(string text)
     {
-        return Regex.Replace(text.ToLowerInvariant(), @"[^\w\s]", " ").Trim();
+        return Regex.Replace(text.ToLowerInvariant(), @"[^\w\s]", " ", RegexOptions.None, RegexTimeout).Trim();
     }
 }

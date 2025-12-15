@@ -97,6 +97,7 @@ namespace AiDotNet.Reasoning.Benchmarks;
 /// </remarks>
 public class MMLUBenchmark<T> : IBenchmark<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly INumericOperations<T> _numOps;
     private List<BenchmarkProblem>? _cachedProblems;
 
@@ -434,7 +435,7 @@ D) Reducing training data",
 
         foreach (var pattern in patterns)
         {
-            var match = Regex.Match(text, pattern, RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            var match = Regex.Match(text, pattern, RegexOptions.IgnoreCase | RegexOptions.Multiline, RegexTimeout);
             if (match.Success)
             {
                 return match.Groups[1].Value.ToUpperInvariant();
@@ -449,7 +450,7 @@ D) Reducing training data",
         }
 
         // Look for any A, B, C, or D in the text (last resort)
-        var anyMatch = Regex.Match(text, @"\b([A-D])\b", RegexOptions.IgnoreCase);
+        var anyMatch = Regex.Match(text, @"\b([A-D])\b", RegexOptions.IgnoreCase, RegexTimeout);
         if (anyMatch.Success)
         {
             return anyMatch.Groups[1].Value.ToUpperInvariant();

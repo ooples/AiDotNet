@@ -98,6 +98,7 @@ namespace AiDotNet.Reasoning.Benchmarks;
 /// </remarks>
 public class MBPPBenchmark<T> : IBenchmark<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly INumericOperations<T> _numOps;
     private List<BenchmarkProblem>? _cachedProblems;
 
@@ -409,7 +410,7 @@ assert unique_char_count('') == 0",
             return null;
 
         // Extract from markdown code blocks
-        var match = Regex.Match(text, @"```(?:python)?\s*\n([\s\S]*?)\n```", RegexOptions.Multiline);
+        var match = Regex.Match(text, @"```(?:python)?\s*\n([\s\S]*?)\n```", RegexOptions.Multiline, RegexTimeout);
         if (match.Success)
         {
             return match.Groups[1].Value.Trim();

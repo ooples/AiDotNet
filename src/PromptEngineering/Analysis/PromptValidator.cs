@@ -36,6 +36,11 @@ namespace AiDotNet.PromptEngineering.Analysis;
 /// </remarks>
 public class PromptValidator
 {
+    /// <summary>
+    /// Regex timeout to prevent ReDoS attacks.
+    /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
     private readonly ValidationOptions _defaultOptions;
     private readonly IPromptAnalyzer _analyzer;
 
@@ -184,7 +189,7 @@ public class PromptValidator
         }
 
         // Check code blocks
-        var codeBlockCount = Regex.Matches(prompt, "```").Count;
+        var codeBlockCount = Regex.Matches(prompt, "```", RegexOptions.None, RegexTimeout).Count;
         if (codeBlockCount % 2 != 0)
         {
             issues.Add(new PromptIssue
@@ -273,7 +278,7 @@ public class PromptValidator
 
         foreach (var (pattern, description) in injectionPatterns)
         {
-            var matches = Regex.Matches(prompt, pattern, RegexOptions.IgnoreCase);
+            var matches = Regex.Matches(prompt, pattern, RegexOptions.IgnoreCase, RegexTimeout);
             foreach (Match match in matches)
             {
                 issues.Add(new PromptIssue
@@ -303,7 +308,7 @@ public class PromptValidator
         var issues = new List<PromptIssue>();
 
         // Find all variables
-        var variables = Regex.Matches(prompt, @"\{([^}]*)\}");
+        var variables = Regex.Matches(prompt, @"\{([^}]*)\}", RegexOptions.None, RegexTimeout);
         var seenVariables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (Match match in variables)
@@ -349,7 +354,7 @@ public class PromptValidator
             }
 
             // Variable name with special characters (unusual)
-            if (Regex.IsMatch(varName, @"[^a-zA-Z0-9_:\s-]"))
+            if (Regex.IsMatch(varName, @"[^a-zA-Z0-9_:\s-]", RegexOptions.None, RegexTimeout))
             {
                 issues.Add(new PromptIssue
                 {
@@ -395,7 +400,7 @@ public class PromptValidator
         }
 
         // Check for very long sentences
-        var sentences = Regex.Split(prompt, @"[.!?]+").Where(s => s.Trim().Length > 0).ToList();
+        var sentences = Regex.Split(prompt, @"[.!?]+", RegexOptions.None, RegexTimeout).Where(s => s.Trim().Length > 0).ToList();
         foreach (var sentence in sentences)
         {
             var sentenceWords = sentence.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
@@ -412,7 +417,7 @@ public class PromptValidator
 
         // Check for missing punctuation at end
         var trimmedPrompt = prompt.TrimEnd();
-        if (trimmedPrompt.Length > 20 && !Regex.IsMatch(trimmedPrompt, @"[.!?:;,}\])""']$"))
+        if (trimmedPrompt.Length > 20 && !Regex.IsMatch(trimmedPrompt, @"[.!?:;,}\])""']$", RegexOptions.None, RegexTimeout))
         {
             issues.Add(new PromptIssue
             {

@@ -40,6 +40,7 @@ namespace AiDotNet.Reasoning.Benchmarks;
 /// </remarks>
 public class MATHBenchmark<T> : IBenchmark<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly INumericOperations<T> _numOps;
     private List<BenchmarkProblem>? _cachedProblems;
 
@@ -273,21 +274,21 @@ public class MATHBenchmark<T> : IBenchmark<T>
             return null;
 
         // Look for boxed answers (LaTeX format)
-        var boxedMatch = Regex.Match(text, @"\\boxed\{([^}]+)\}");
+        var boxedMatch = Regex.Match(text, @"\\boxed\{([^}]+)\}", RegexOptions.None, RegexTimeout);
         if (boxedMatch.Success)
         {
             return boxedMatch.Groups[1].Value.Trim();
         }
 
         // Look for final answer indicators
-        var finalMatch = Regex.Match(text, @"(?:final answer|answer is|therefore)[:\s]+([^\n.]+)", RegexOptions.IgnoreCase);
+        var finalMatch = Regex.Match(text, @"(?:final answer|answer is|therefore)[:\s]+([^\n.]+)", RegexOptions.IgnoreCase, RegexTimeout);
         if (finalMatch.Success)
         {
             return finalMatch.Groups[1].Value.Trim();
         }
 
         // Extract last number or expression
-        var matches = Regex.Matches(text, @"-?[\d,]+\.?\d*|[a-z]\^?\d*");
+        var matches = Regex.Matches(text, @"-?[\d,]+\.?\d*|[a-z]\^?\d*", RegexOptions.None, RegexTimeout);
         if (matches.Count > 0)
         {
             return matches[matches.Count - 1].Value.Trim();  // net462: can't use ^1

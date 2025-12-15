@@ -53,6 +53,7 @@ namespace AiDotNet.Reasoning.Strategies;
 /// </remarks>
 public class ChainOfThoughtStrategy<T> : ReasoningStrategyBase<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly bool _useJsonFormat;
 
     /// <summary>
@@ -271,7 +272,8 @@ Maximum {config.MaxSteps} steps. Think step by step.";
         var stepMatches = Regex.Matches(
             response,
             @"(?:Step\s*\d+:|^\d+\.)\s*(.+?)(?=(?:Step\s*\d+:|\d+\.|Final Answer:|$))",
-            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Singleline
+            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Singleline,
+            RegexTimeout
         );
 
         int stepNum = 1;
@@ -311,14 +313,14 @@ Maximum {config.MaxSteps} steps. Think step by step.";
     private string ExtractJsonFromResponse(string response)
     {
         // Remove markdown code block markers if present
-        var jsonMatch = Regex.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline);
+        var jsonMatch = Regex.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline, RegexTimeout);
         if (jsonMatch.Success)
         {
             return jsonMatch.Groups[1].Value;
         }
 
         // Try to find JSON object without code blocks
-        var jsonObjectMatch = Regex.Match(response, @"\{[\s\S]*?\}");
+        var jsonObjectMatch = Regex.Match(response, @"\{[\s\S]*?\}", RegexOptions.None, RegexTimeout);
         if (jsonObjectMatch.Success)
         {
             return jsonObjectMatch.Value;
@@ -352,7 +354,8 @@ Maximum {config.MaxSteps} steps. Think step by step.";
         var answerMatch = Regex.Match(
             response,
             @"Final\s*Answer\s*:\s*(.+?)(?:\n\n|$)",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline
+            RegexOptions.IgnoreCase | RegexOptions.Singleline,
+            RegexTimeout
         );
 
         if (answerMatch.Success)

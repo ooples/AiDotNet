@@ -31,6 +31,11 @@ namespace AiDotNet.PromptEngineering.Compression;
 public class SentenceCompressor : PromptCompressorBase
 {
     /// <summary>
+    /// Regex timeout to prevent ReDoS attacks.
+    /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
+    /// <summary>
     /// Initializes a new instance of the SentenceCompressor class.
     /// </summary>
     /// <param name="tokenCounter">Optional custom token counter function.</param>
@@ -108,7 +113,7 @@ public class SentenceCompressor : PromptCompressorBase
         var result = text;
         foreach (var pattern in patterns)
         {
-            result = Regex.Replace(result, pattern, "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+            result = Regex.Replace(result, pattern, "", RegexOptions.Multiline | RegexOptions.IgnoreCase, RegexTimeout);
         }
 
         return result;
@@ -141,7 +146,7 @@ public class SentenceCompressor : PromptCompressorBase
         var result = text;
         foreach (var kvp in patterns)
         {
-            result = Regex.Replace(result, kvp.Key, kvp.Value, RegexOptions.IgnoreCase);
+            result = Regex.Replace(result, kvp.Key, kvp.Value, RegexOptions.IgnoreCase, RegexTimeout);
         }
 
         return result;
@@ -153,13 +158,13 @@ public class SentenceCompressor : PromptCompressorBase
     private static string RemoveParentheticalClauses(string text)
     {
         // Remove content in parentheses if short and non-essential
-        var result = Regex.Replace(text, @"\s*\([^)]{1,30}\)", "");
+        var result = Regex.Replace(text, @"\s*\([^)]{1,30}\)", "", RegexOptions.None, RegexTimeout);
 
         // Remove em-dash clauses that appear to be asides
-        result = Regex.Replace(result, @"\s*—[^—]{1,50}—\s*", " ");
+        result = Regex.Replace(result, @"\s*—[^—]{1,50}—\s*", " ", RegexOptions.None, RegexTimeout);
 
         // Remove "which is/are" clauses when they're short
-        result = Regex.Replace(result, @",?\s*which\s+(is|are)\s+[^,.]{1,30}(?=[,.])", "");
+        result = Regex.Replace(result, @",?\s*which\s+(is|are)\s+[^,.]{1,30}(?=[,.])", "", RegexOptions.None, RegexTimeout);
 
         return result;
     }
@@ -195,7 +200,7 @@ public class SentenceCompressor : PromptCompressorBase
         var result = text;
         foreach (var kvp in patterns)
         {
-            result = Regex.Replace(result, kvp.Key, kvp.Value, RegexOptions.IgnoreCase);
+            result = Regex.Replace(result, kvp.Key, kvp.Value, RegexOptions.IgnoreCase, RegexTimeout);
         }
 
         return result;
@@ -230,10 +235,10 @@ public class SentenceCompressor : PromptCompressorBase
     /// </summary>
     private static string ConsolidateWhitespace(string text)
     {
-        var result = Regex.Replace(text, @"[ \t]{2,}", " ");
-        result = Regex.Replace(result, @"\n{3,}", "\n\n");
-        result = Regex.Replace(result, @"^\s+", "", RegexOptions.Multiline);
-        result = Regex.Replace(result, @"\s+$", "", RegexOptions.Multiline);
+        var result = Regex.Replace(text, @"[ \t]{2,}", " ", RegexOptions.None, RegexTimeout);
+        result = Regex.Replace(result, @"\n{3,}", "\n\n", RegexOptions.None, RegexTimeout);
+        result = Regex.Replace(result, @"^\s+", "", RegexOptions.Multiline, RegexTimeout);
+        result = Regex.Replace(result, @"\s+$", "", RegexOptions.Multiline, RegexTimeout);
         return result;
     }
 }

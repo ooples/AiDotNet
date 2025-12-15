@@ -88,6 +88,7 @@ namespace AiDotNet.Reasoning.Benchmarks;
 /// </remarks>
 public class TruthfulQABenchmark<T> : IBenchmark<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly INumericOperations<T> _numOps;
     private List<BenchmarkProblem>? _cachedProblems;
 
@@ -344,7 +345,7 @@ Truthful answer: No, it's not visible to the naked eye from space",
 
     private string NormalizeAnswer(string answer)
     {
-        return Regex.Replace(answer.ToLowerInvariant(), @"[^\w\s]", " ")
+        return Regex.Replace(answer.ToLowerInvariant(), @"[^\w\s]", " ", RegexOptions.None, RegexTimeout)
             .Trim();
     }
 

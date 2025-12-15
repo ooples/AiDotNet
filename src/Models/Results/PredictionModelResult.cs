@@ -721,10 +721,26 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         OptimizationResult<T, TInput, TOutput> optimizationResult,
         NormalizationInfo<T, TInput, TOutput> normalizationInfo)
     {
+        // Validate required parameters to prevent security issues with serializable objects
+        if (model == null)
+        {
+            throw new ArgumentNullException(nameof(model), "Model cannot be null");
+        }
+
+        if (optimizationResult == null)
+        {
+            throw new ArgumentNullException(nameof(optimizationResult), "OptimizationResult cannot be null");
+        }
+
+        if (normalizationInfo == null)
+        {
+            throw new ArgumentNullException(nameof(normalizationInfo), "NormalizationInfo cannot be null");
+        }
+
         Model = model;
         OptimizationResult = optimizationResult;
         NormalizationInfo = normalizationInfo;
-        ModelMetaData = model?.GetModelMetadata() ?? new();
+        ModelMetaData = model.GetModelMetadata() ?? new();
     }
 
     /// <summary>
@@ -766,6 +782,17 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IGraphStore<T>? graphStore = null,
         HybridGraphRetriever<T>? hybridGraphRetriever = null)
     {
+        // Validate required parameters to prevent security issues with serializable objects
+        if (optimizationResult == null)
+        {
+            throw new ArgumentNullException(nameof(optimizationResult), "OptimizationResult cannot be null");
+        }
+
+        if (normalizationInfo == null)
+        {
+            throw new ArgumentNullException(nameof(normalizationInfo), "NormalizationInfo cannot be null");
+        }
+
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
         NormalizationInfo = normalizationInfo;
@@ -849,6 +876,17 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IGraphStore<T>? graphStore = null,
         HybridGraphRetriever<T>? hybridGraphRetriever = null)
     {
+        // Validate required parameters to prevent security issues with serializable objects
+        if (metaLearner == null)
+        {
+            throw new ArgumentNullException(nameof(metaLearner), "MetaLearner cannot be null");
+        }
+
+        if (metaResult == null)
+        {
+            throw new ArgumentNullException(nameof(metaResult), "MetaTrainingResult cannot be null");
+        }
+
         Model = metaLearner.BaseModel;
         MetaLearner = metaLearner;
         MetaTrainingResult = metaResult;

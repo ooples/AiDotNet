@@ -41,6 +41,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// </remarks>
 public class VerifiedReasoningRetriever<T> : RetrieverBase<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IGenerator<T> _generator;
     private readonly RetrieverBase<T> _baseRetriever;
     private readonly double _verificationThreshold;
@@ -280,7 +281,8 @@ Provide only the refined reasoning step:";
             var match = System.Text.RegularExpressions.Regex.Match(
                 trimmed,
                 @"^Step\s+\d+\s*:\s*(.+)$",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase,
+                RegexTimeout
             );
 
             if (match.Success && match.Groups[1].Value.Length > 10)
@@ -292,7 +294,9 @@ Provide only the refined reasoning step:";
             {
                 match = System.Text.RegularExpressions.Regex.Match(
                     trimmed,
-                    @"^\d+[\.\)]\s*(.+)$"
+                    @"^\d+[\.\)]\s*(.+)$",
+                    System.Text.RegularExpressions.RegexOptions.None,
+                    RegexTimeout
                 );
 
                 if (match.Success && match.Groups[1].Value.Length > 10)
@@ -323,7 +327,8 @@ Provide only the refined reasoning step:";
         var scoreMatch = System.Text.RegularExpressions.Regex.Match(
             response,
             @"Score\s*:\s*([0-9]*\.?[0-9]+)",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase,
+            RegexTimeout
         );
 
         if (scoreMatch.Success && double.TryParse(scoreMatch.Groups[1].Value, out double parsedScore))
@@ -335,7 +340,8 @@ Provide only the refined reasoning step:";
         var feedbackMatch = System.Text.RegularExpressions.Regex.Match(
             response,
             @"Feedback\s*:\s*(.+)",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline,
+            RegexTimeout
         );
 
         if (feedbackMatch.Success)

@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using System.Text.RegularExpressions;
 
 namespace AiDotNet.PromptEngineering.Compression;
 
@@ -23,6 +24,11 @@ namespace AiDotNet.PromptEngineering.Compression;
 /// </remarks>
 public abstract class PromptCompressorBase : IPromptCompressor
 {
+    /// <summary>
+    /// Regex timeout to prevent ReDoS attacks.
+    /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
     private readonly Func<string, int>? _tokenCounter;
 
     /// <summary>
@@ -184,7 +190,7 @@ public abstract class PromptCompressorBase : IPromptCompressor
     {
         var variables = new Dictionary<string, string>();
         var pattern = @"\{[^}]+\}";
-        var matches = System.Text.RegularExpressions.Regex.Matches(prompt, pattern);
+        var matches = Regex.Matches(prompt, pattern, RegexOptions.None, RegexTimeout);
 
         for (int i = 0; i < matches.Count; i++)
         {
@@ -236,7 +242,7 @@ public abstract class PromptCompressorBase : IPromptCompressor
     {
         var codeBlocks = new Dictionary<string, string>();
         var pattern = @"```[\s\S]*?```";
-        var matches = System.Text.RegularExpressions.Regex.Matches(prompt, pattern);
+        var matches = Regex.Matches(prompt, pattern, RegexOptions.None, RegexTimeout);
 
         for (int i = 0; i < matches.Count; i++)
         {

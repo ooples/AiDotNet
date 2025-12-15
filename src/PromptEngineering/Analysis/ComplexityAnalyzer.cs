@@ -37,6 +37,11 @@ namespace AiDotNet.PromptEngineering.Analysis;
 public class ComplexityAnalyzer : PromptAnalyzerBase
 {
     /// <summary>
+    /// Regex timeout to prevent ReDoS attacks.
+    /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
+    /// <summary>
     /// Initializes a new instance of the ComplexityAnalyzer class.
     /// </summary>
     /// <param name="tokenCounter">Optional custom token counter function.</param>
@@ -99,7 +104,7 @@ public class ComplexityAnalyzer : PromptAnalyzerBase
         }
 
         // Check sentence length
-        var sentences = Regex.Split(prompt, @"[.!?]+").Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+        var sentences = Regex.Split(prompt, @"[.!?]+", RegexOptions.None, RegexTimeout).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
         var longSentences = sentences.Where(s => CountWords(s) > 40).ToList();
         if (longSentences.Count > 0)
         {
@@ -165,7 +170,7 @@ public class ComplexityAnalyzer : PromptAnalyzerBase
     /// </summary>
     private static int CountSentences(string text)
     {
-        var sentences = Regex.Split(text, @"[.!?]+")
+        var sentences = Regex.Split(text, @"[.!?]+", RegexOptions.None, RegexTimeout)
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .ToList();
         return Math.Max(1, sentences.Count);
@@ -193,7 +198,7 @@ public class ComplexityAnalyzer : PromptAnalyzerBase
         }
 
         // Count vowel groups
-        var vowelGroups = Regex.Matches(word, @"[aeiouy]+").Count;
+        var vowelGroups = Regex.Matches(word, @"[aeiouy]+", RegexOptions.None, RegexTimeout).Count;
 
         // Adjust for silent e at end
         if (word.EndsWith("e") && vowelGroups > 1)
@@ -249,7 +254,7 @@ public class ComplexityAnalyzer : PromptAnalyzerBase
     {
         return Regex.Matches(text,
             @"\b(must|should|need to|required|ensure|make sure|do not|don't|never|always|important|note that|remember|keep in mind)\b",
-            RegexOptions.IgnoreCase).Count;
+            RegexOptions.IgnoreCase, RegexTimeout).Count;
     }
 
 }

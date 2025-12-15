@@ -29,6 +29,8 @@ namespace AiDotNet.FeatureSelectors;
 /// </remarks>
 public class SelectFromModel<T, TInput> : FeatureSelectorBase<T, TInput>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
     /// <summary>
     /// The trained model from which to extract feature importances.
     /// </summary>
@@ -357,7 +359,7 @@ public class SelectFromModel<T, TInput> : FeatureSelectorBase<T, TInput>
 
         foreach (var pattern in patterns)
         {
-            var match = System.Text.RegularExpressions.Regex.Match(featureName, pattern);
+            var match = System.Text.RegularExpressions.Regex.Match(featureName, pattern, System.Text.RegularExpressions.RegexOptions.None, RegexTimeout);
             if (match.Success && int.TryParse(match.Groups[1].Value, out index))
             {
                 return true;

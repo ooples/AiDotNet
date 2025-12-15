@@ -246,7 +246,8 @@ Provide:
         var match = System.Text.RegularExpressions.Regex.Match(
             text,
             @"```(?:[\w]+)?\s*\n([\s\S]*?)\n```",
-            System.Text.RegularExpressions.RegexOptions.Multiline);
+            System.Text.RegularExpressions.RegexOptions.Multiline,
+            TimeSpan.FromSeconds(1));
 
         if (match.Success)
         {

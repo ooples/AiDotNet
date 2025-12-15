@@ -355,7 +355,9 @@ Format your response as a numbered list:
             // Match numbered list items like "1. ", "1) ", "- ", etc.
             var match = System.Text.RegularExpressions.Regex.Match(
                 trimmed,
-                @"^(?:\d+[\.\)]\s*|[-\*]\s*)(.+)$"
+                @"^(?:\d+[\.\)]\s*|[-\*]\s*)(.+)$",
+                System.Text.RegularExpressions.RegexOptions.None,
+                TimeSpan.FromSeconds(1)
             );
 
             if (match.Success && match.Groups[1].Value.Length > 10)

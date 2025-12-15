@@ -30,6 +30,11 @@ namespace AiDotNet.PromptEngineering.Compression;
 /// </remarks>
 public class RedundancyRemovalCompressor : PromptCompressorBase
 {
+    /// <summary>
+    /// Regex timeout to prevent ReDoS attacks.
+    /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
     private readonly List<(Regex Pattern, string Replacement)> _replacements;
 
     /// <summary>
@@ -127,7 +132,7 @@ public class RedundancyRemovalCompressor : PromptCompressorBase
         };
 
         return patterns
-            .Select(p => (new Regex(p.Pattern, RegexOptions.IgnoreCase | RegexOptions.Compiled), p.Replacement))
+            .Select(p => (new Regex(p.Pattern, RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), p.Replacement))
             .ToList();
     }
 
@@ -161,14 +166,14 @@ public class RedundancyRemovalCompressor : PromptCompressorBase
         }
 
         // Clean up multiple spaces
-        result = Regex.Replace(result, @"\s{2,}", " ");
+        result = Regex.Replace(result, @"\s{2,}", " ", RegexOptions.None, RegexTimeout);
 
         // Clean up leading/trailing spaces from lines
-        result = Regex.Replace(result, @"^\s+", "", RegexOptions.Multiline);
-        result = Regex.Replace(result, @"\s+$", "", RegexOptions.Multiline);
+        result = Regex.Replace(result, @"^\s+", "", RegexOptions.Multiline, RegexTimeout);
+        result = Regex.Replace(result, @"\s+$", "", RegexOptions.Multiline, RegexTimeout);
 
         // Remove empty lines
-        result = Regex.Replace(result, @"\n\s*\n", "\n");
+        result = Regex.Replace(result, @"\n\s*\n", "\n", RegexOptions.None, RegexTimeout);
 
         // Restore code blocks
         if (codeBlocks != null)

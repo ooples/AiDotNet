@@ -30,6 +30,11 @@ namespace AiDotNet.PromptEngineering.Compression;
 /// </remarks>
 public class StopWordRemovalCompressor : PromptCompressorBase
 {
+    /// <summary>
+    /// Regex timeout to prevent ReDoS attacks.
+    /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
     private readonly HashSet<string> _stopWords;
     private readonly AggressivenessLevel _level;
 
@@ -164,7 +169,7 @@ public class StopWordRemovalCompressor : PromptCompressorBase
 
         foreach (var line in lines)
         {
-            var words = Regex.Split(line, @"(\s+|[.,!?;:])");
+            var words = Regex.Split(line, @"(\s+|[.,!?;:])", RegexOptions.None, RegexTimeout);
             var filteredWords = new List<string>();
 
             foreach (var word in words)
@@ -172,7 +177,7 @@ public class StopWordRemovalCompressor : PromptCompressorBase
                 var trimmedWord = word.Trim();
 
                 // Keep punctuation and whitespace
-                if (string.IsNullOrWhiteSpace(trimmedWord) || Regex.IsMatch(trimmedWord, @"^[.,!?;:\s]+$"))
+                if (string.IsNullOrWhiteSpace(trimmedWord) || Regex.IsMatch(trimmedWord, @"^[.,!?;:\s]+$", RegexOptions.None, RegexTimeout))
                 {
                     filteredWords.Add(word);
                     continue;
@@ -193,7 +198,7 @@ public class StopWordRemovalCompressor : PromptCompressorBase
             }
 
             var processedLine = string.Join("", filteredWords);
-            processedLine = Regex.Replace(processedLine, @"\s{2,}", " ").Trim();
+            processedLine = Regex.Replace(processedLine, @"\s{2,}", " ", RegexOptions.None, RegexTimeout).Trim();
 
             if (!string.IsNullOrWhiteSpace(processedLine))
             {
@@ -204,7 +209,7 @@ public class StopWordRemovalCompressor : PromptCompressorBase
         result = string.Join("\n", processedLines);
 
         // Clean up multiple punctuation
-        result = Regex.Replace(result, @"([.,!?;:])\s*\1+", "$1");
+        result = Regex.Replace(result, @"([.,!?;:])\s*\1+", "$1", RegexOptions.None, RegexTimeout);
 
         // Restore code blocks
         if (codeBlocks != null)
