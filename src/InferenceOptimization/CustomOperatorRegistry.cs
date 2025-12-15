@@ -65,18 +65,19 @@ namespace AiDotNet.InferenceOptimization
             if (string.IsNullOrEmpty(name))
                 throw new ArgumentException("Operator name cannot be null or empty", nameof(name));
 
-            return _selectedOperators.GetOrAdd(name, key =>
+            var selected = _selectedOperators.GetOrAdd(name, key =>
             {
                 if (!_operators.TryGetValue(key, out var candidates))
                     return new NullOperator();
 
                 lock (candidates)
                 {
-                    // Find the highest priority supported operator
                     var result = candidates.FirstOrDefault(op => op.IsSupported());
                     return result ?? new NullOperator();
                 }
-            }) is NullOperator ? null : _selectedOperators[name];
+            });
+
+            return selected is NullOperator ? null : selected;
         }
 
         /// <summary>
