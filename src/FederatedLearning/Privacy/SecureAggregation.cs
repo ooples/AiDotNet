@@ -271,7 +271,7 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
 
         // Unflatten back to original structure
         int paramIndex = 0;
-        foreach (var layerName in clientUpdate.Keys)
+        foreach (var layerName in clientUpdate.Keys.OrderBy(name => name, StringComparer.Ordinal))
         {
             var originalLayer = clientUpdate[layerName];
             var maskedLayer = new T[originalLayer.Length];
@@ -413,15 +413,17 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
     /// <returns>A flat array of all parameters.</returns>
     private T[] FlattenParameters(Dictionary<string, T[]> model)
     {
-        int totalParams = model.Values.Sum(layer => layer.Length);
+        var orderedLayerNames = model.Keys.OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        int totalParams = orderedLayerNames.Sum(layerName => model[layerName].Length);
         var flatParams = new T[totalParams];
 
         int index = 0;
-        foreach (var layer in model.Values)
+        foreach (var layerName in orderedLayerNames)
         {
-            foreach (var param in layer)
+            var layer = model[layerName];
+            for (int i = 0; i < layer.Length; i++)
             {
-                flatParams[index++] = param;
+                flatParams[index++] = layer[i];
             }
         }
 
