@@ -488,20 +488,7 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
     private T[] FlattenParameters(Dictionary<string, T[]> model)
     {
         var orderedLayerNames = model.Keys.OrderBy(name => name, StringComparer.Ordinal).ToArray();
-        int totalParams = orderedLayerNames.Sum(layerName => model[layerName].Length);
-        var flatParams = new T[totalParams];
-
-        int index = 0;
-        foreach (var layerName in orderedLayerNames)
-        {
-            var layer = model[layerName];
-            for (int i = 0; i < layer.Length; i++)
-            {
-                flatParams[index++] = layer[i];
-            }
-        }
-
-        return flatParams;
+        return orderedLayerNames.SelectMany(layerName => model[layerName]).ToArray();
     }
 
     /// <summary>
