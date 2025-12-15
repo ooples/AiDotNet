@@ -1,11 +1,11 @@
 using System;
 using System.Runtime.CompilerServices;
-using AiDotNet.Tensors.Engines;
 
-namespace AiDotNet.InferenceOptimization.CpuOptimization
+namespace AiDotNet.Tensors.Engines.Optimization
 {
     /// <summary>
-    /// Provides CPU cache optimization utilities including prefetching and cache-aware algorithms
+    /// Provides CPU cache optimization utilities including prefetching and cache-aware algorithms.
+    /// These utilities help maximize cache efficiency for tensor operations.
     /// </summary>
     public static class CacheOptimizer
     {
@@ -53,7 +53,6 @@ namespace AiDotNet.InferenceOptimization.CpuOptimization
         {
             var caps = PlatformDetector.Capabilities;
             int l1Size = caps.L1CacheSize;
-            int l2Size = caps.L2CacheSize;
 
             // We want tiles to fit in L1 cache
             // For matrix multiplication: tileM * tileK + tileK * tileN + tileM * tileN elements

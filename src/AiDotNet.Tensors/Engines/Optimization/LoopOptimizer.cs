@@ -1,11 +1,11 @@
 using System;
 using System.Runtime.CompilerServices;
-using AiDotNet.Tensors.Engines;
 
-namespace AiDotNet.InferenceOptimization.CpuOptimization
+namespace AiDotNet.Tensors.Engines.Optimization
 {
     /// <summary>
-    /// Provides loop optimization techniques including tiling and vectorization hints
+    /// Provides loop optimization techniques including tiling and vectorization hints.
+    /// These utilities help maximize performance for tensor operations.
     /// </summary>
     public static class LoopOptimizer
     {

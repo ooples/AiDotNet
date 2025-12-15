@@ -1,6 +1,7 @@
 using System;
 using AiDotNet.InferenceOptimization.Kernels;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Optimization;
 
 namespace AiDotNet.InferenceOptimization
 {
@@ -23,7 +24,7 @@ namespace AiDotNet.InferenceOptimization
                     return;
 
                 // Enable profiling if requested
-                Profiling.PerformanceProfiler.Instance.Enabled = enableProfiling;
+                PerformanceProfiler.Instance.Enabled = enableProfiling;
 
                 // Register optimized kernels
                 RegisterKernels();
@@ -84,7 +85,7 @@ namespace AiDotNet.InferenceOptimization
             if (!_initialized)
                 return "Optimization system not initialized.";
 
-            var report = Profiling.PerformanceProfiler.Instance.GenerateReport();
+            var report = PerformanceProfiler.Instance.GenerateReport();
             return report;
         }
 
@@ -93,7 +94,7 @@ namespace AiDotNet.InferenceOptimization
         /// </summary>
         public static void ResetStatistics()
         {
-            Profiling.PerformanceProfiler.Instance.Clear();
+            PerformanceProfiler.Instance.Clear();
         }
 
         /// <summary>
@@ -101,7 +102,7 @@ namespace AiDotNet.InferenceOptimization
         /// </summary>
         public static void SetProfilingEnabled(bool enabled)
         {
-            Profiling.PerformanceProfiler.Instance.Enabled = enabled;
+            PerformanceProfiler.Instance.Enabled = enabled;
         }
     }
 }

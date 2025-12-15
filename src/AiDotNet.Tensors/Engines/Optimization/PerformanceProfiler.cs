@@ -3,10 +3,11 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Linq;
 
-namespace AiDotNet.InferenceOptimization.Profiling
+namespace AiDotNet.Tensors.Engines.Optimization
 {
     /// <summary>
-    /// Thread-safe performance profiler for tracking operation timings and statistics
+    /// Thread-safe performance profiler for tracking operation timings and statistics.
+    /// Use this to measure and optimize tensor operations.
     /// </summary>
     public sealed class PerformanceProfiler
     {
@@ -77,7 +78,7 @@ namespace AiDotNet.InferenceOptimization.Profiling
         /// <summary>
         /// Gets statistics for a specific operation
         /// </summary>
-        public OperationStats GetStats(string operationName)
+        public OperationStats? GetStats(string operationName)
         {
             return _stats.TryGetValue(operationName, out var stats) ? stats : null;
         }
@@ -168,7 +169,7 @@ namespace AiDotNet.InferenceOptimization.Profiling
     /// </summary>
     public class OperationStats
     {
-        public string OperationName { get; set; }
+        public string OperationName { get; set; } = string.Empty;
         public long CallCount { get; set; }
         public long TotalTicks { get; set; }
         public long MinTicks { get; set; }
