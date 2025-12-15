@@ -1,5 +1,7 @@
 global using AiDotNet.CrossValidators;
 
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Evaluation;
 
 /// <summary>
@@ -192,7 +194,12 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     private static ModelStats<T, TInput, TOutput> CalculateModelStats(IFullModel<T, TInput, TOutput>? model, TInput xTrain, NormalizationInfo<T, TInput, TOutput> normInfo)
     {
         var optimizationResult = new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
-        var predictionModelResult = new PredictionModelResult<T, TInput, TOutput>(optimizationResult, normInfo);
+        var options = new PredictionModelResultOptions<T, TInput, TOutput>
+        {
+            OptimizationResult = optimizationResult,
+            NormalizationInfo = normInfo
+        };
+        var predictionModelResult = new PredictionModelResult<T, TInput, TOutput>(options);
 
         return new ModelStats<T, TInput, TOutput>(new ModelStatsInputs<T, TInput, TOutput>
         {

@@ -688,135 +688,6 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     #endregion
 
     /// <summary>
-    /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
-    /// </summary>
-    /// <param name="model">The underlying model used for making predictions.</param>
-    /// <param name="optimizationResult">The results of the optimization process that created the model.</param>
-    /// <param name="normalizationInfo">The normalization information used to preprocess input data and postprocess predictions.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a new PredictionModelResult instance with the specified model, optimization results, and
-    /// normalization information. It also initializes the ModelMetadata property by calling the GetModelMetadata method on
-    /// the provided model. This constructor is typically used when a new model has been trained and needs to be packaged
-    /// with all the necessary information for making predictions and for later serialization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This constructor creates a new prediction model result with all the necessary components.
-    ///
-    /// When creating a new PredictionModelResult:
-    /// - You provide the trained model that will make predictions
-    /// - You provide the optimization results that describe how the model was created
-    /// - You provide the normalization information needed to process data
-    /// - The constructor automatically extracts metadata from the model
-    ///
-    /// This constructor is typically used when:
-    /// - You've just finished training a model
-    /// - You want to package it with all the information needed to use it
-    /// - You plan to save it for later use or deploy it in an application
-    ///
-    /// For example, after training a house price prediction model, you would use this constructor
-    /// to create a complete package that can be saved and used for making predictions.
-    /// </para>
-    /// </remarks>
-    public PredictionModelResult(IFullModel<T, TInput, TOutput> model,
-        OptimizationResult<T, TInput, TOutput> optimizationResult,
-        NormalizationInfo<T, TInput, TOutput> normalizationInfo)
-    {
-        // Validate required parameters to prevent security issues with serializable objects
-        if (model == null)
-        {
-            throw new ArgumentNullException(nameof(model), "Model cannot be null");
-        }
-
-        if (optimizationResult == null)
-        {
-            throw new ArgumentNullException(nameof(optimizationResult), "OptimizationResult cannot be null");
-        }
-
-        if (normalizationInfo == null)
-        {
-            throw new ArgumentNullException(nameof(normalizationInfo), "NormalizationInfo cannot be null");
-        }
-
-        Model = model;
-        OptimizationResult = optimizationResult;
-        NormalizationInfo = normalizationInfo;
-        ModelMetaData = model.GetModelMetadata() ?? new();
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the PredictionModelResult class with optimization results and normalization information.
-    /// </summary>
-    /// <param name="optimizationResult">The results of the optimization process that created the model.</param>
-    /// <param name="normalizationInfo">The normalization information used to preprocess input data and postprocess predictions.</param>
-    /// <param name="biasDetector">Optional bias detector for ethical AI evaluation.</param>
-    /// <param name="fairnessEvaluator">Optional fairness evaluator for ethical AI evaluation.</param>
-    /// <param name="ragRetriever">Optional retriever for RAG functionality during inference.</param>
-    /// <param name="ragReranker">Optional reranker for RAG functionality during inference.</param>
-    /// <param name="ragGenerator">Optional generator for RAG functionality during inference.</param>
-    /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
-    /// <param name="loraConfiguration">Optional LoRA configuration for parameter-efficient fine-tuning.</param>
-    /// <param name="crossValidationResult">Optional cross-validation results from training.</param>
-    /// <param name="agentConfig">Optional agent configuration used during model building.</param>
-    /// <param name="agentRecommendation">Optional agent recommendations from model building.</param>
-    /// <param name="deploymentConfiguration">Optional deployment configuration for export, caching, versioning, A/B testing, and telemetry.</param>
-    /// <param name="knowledgeGraph">Optional knowledge graph for graph-enhanced retrieval.</param>
-    /// <param name="graphStore">Optional graph store backend for persistent storage.</param>
-    /// <param name="hybridGraphRetriever">Optional hybrid retriever for combined vector + graph search.</param>
-    public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
-        NormalizationInfo<T, TInput, TOutput> normalizationInfo,
-        IBiasDetector<T>? biasDetector = null,
-        IFairnessEvaluator<T>? fairnessEvaluator = null,
-        IRetriever<T>? ragRetriever = null,
-        IReranker<T>? ragReranker = null,
-        IGenerator<T>? ragGenerator = null,
-        IEnumerable<IQueryProcessor>? queryProcessors = null,
-        ILoRAConfiguration<T>? loraConfiguration = null,
-        CrossValidationResult<T, TInput, TOutput>? crossValidationResult = null,
-        AgentConfiguration<T>? agentConfig = null,
-        AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null,
-        DeploymentConfiguration? deploymentConfiguration = null,
-        Func<Tensor<T>[], Tensor<T>[]>? jitCompiledFunction = null,
-        AiDotNet.Configuration.InferenceOptimizationConfig? inferenceOptimizationConfig = null,
-        ReasoningConfig? reasoningConfig = null,
-        KnowledgeGraph<T>? knowledgeGraph = null,
-        IGraphStore<T>? graphStore = null,
-        HybridGraphRetriever<T>? hybridGraphRetriever = null)
-    {
-        // Validate required parameters to prevent security issues with serializable objects
-        if (optimizationResult == null)
-        {
-            throw new ArgumentNullException(nameof(optimizationResult), "OptimizationResult cannot be null");
-        }
-
-        if (normalizationInfo == null)
-        {
-            throw new ArgumentNullException(nameof(normalizationInfo), "NormalizationInfo cannot be null");
-        }
-
-        Model = optimizationResult.BestSolution;
-        OptimizationResult = optimizationResult;
-        NormalizationInfo = normalizationInfo;
-        ModelMetaData = Model?.GetModelMetadata() ?? new();
-        BiasDetector = biasDetector;
-        FairnessEvaluator = fairnessEvaluator;
-        RagRetriever = ragRetriever;
-        RagReranker = ragReranker;
-        RagGenerator = ragGenerator;
-        QueryProcessors = queryProcessors;
-        LoRAConfiguration = loraConfiguration;
-        CrossValidationResult = crossValidationResult;
-        AgentConfig = agentConfig;
-        AgentRecommendation = agentRecommendation;
-        DeploymentConfiguration = deploymentConfiguration;
-        JitCompiledFunction = jitCompiledFunction;
-        InferenceOptimizationConfig = inferenceOptimizationConfig;
-        ReasoningConfig = reasoningConfig;
-        KnowledgeGraph = knowledgeGraph;
-        GraphStore = graphStore;
-        HybridGraphRetriever = hybridGraphRetriever;
-    }
-
-    /// <summary>
     /// Initializes a new instance of the PredictionModelResult class for a meta-trained model.
     /// </summary>
     /// <param name="metaLearner">The meta-learner containing the trained model and adaptation capabilities.</param>
@@ -859,7 +730,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// - Optional agent configuration (for AI assistance)
     /// </para>
     /// </remarks>
-    public PredictionModelResult(
+    internal PredictionModelResult(
         IMetaLearner<T, TInput, TOutput> metaLearner,
         MetaTrainingResult<T> metaResult,
         ILoRAConfiguration<T>? loraConfiguration = null,
@@ -942,7 +813,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// - IDE auto-completion helps discover available options
     /// </para>
     /// </remarks>
-    public PredictionModelResult(PredictionModelResultOptions<T, TInput, TOutput> options)
+    internal PredictionModelResult(PredictionModelResultOptions<T, TInput, TOutput> options)
     {
         if (options is null)
         {
@@ -1529,25 +1400,40 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Create new result with updated optimization result
         // Preserve all configuration properties to ensure deployment behavior, model adaptation,
         // training history, and Graph RAG configuration are maintained across parameter updates
-        return new PredictionModelResult<T, TInput, TOutput>(
-            updatedOptimizationResult,
-            NormalizationInfo,
-            BiasDetector,
-            FairnessEvaluator,
-            RagRetriever,
-            RagReranker,
-            RagGenerator,
-            QueryProcessors,
-            loraConfiguration: LoRAConfiguration,
-            crossValidationResult: CrossValidationResult,
-            agentConfig: AgentConfig,
-            agentRecommendation: AgentRecommendation,
-            deploymentConfiguration: DeploymentConfiguration,
-            jitCompiledFunction: null, // JIT compilation is parameter-specific, don't copy
-            inferenceOptimizationConfig: InferenceOptimizationConfig,
-            knowledgeGraph: KnowledgeGraph,
-            graphStore: GraphStore,
-            hybridGraphRetriever: HybridGraphRetriever);
+        var options = new PredictionModelResultOptions<T, TInput, TOutput>
+        {
+            OptimizationResult = updatedOptimizationResult,
+            NormalizationInfo = NormalizationInfo,
+            BiasDetector = BiasDetector,
+            FairnessEvaluator = FairnessEvaluator,
+            RagRetriever = RagRetriever,
+            RagReranker = RagReranker,
+            RagGenerator = RagGenerator,
+            QueryProcessors = QueryProcessors,
+            LoRAConfiguration = LoRAConfiguration,
+            CrossValidationResult = CrossValidationResult,
+            AgentConfig = AgentConfig,
+            AgentRecommendation = AgentRecommendation,
+            DeploymentConfiguration = DeploymentConfiguration,
+            // JIT compilation is parameter-specific, don't copy
+            InferenceOptimizationConfig = InferenceOptimizationConfig,
+            ReasoningConfig = ReasoningConfig,
+            KnowledgeGraph = KnowledgeGraph,
+            GraphStore = GraphStore,
+            HybridGraphRetriever = HybridGraphRetriever,
+            MetaLearner = MetaLearner,
+            MetaTrainingResult = MetaTrainingResult,
+            Tokenizer = Tokenizer,
+            TokenizationConfig = TokenizationConfig,
+            PromptTemplate = PromptTemplate,
+            PromptChain = PromptChain,
+            PromptOptimizer = PromptOptimizer,
+            FewShotExampleSelector = FewShotExampleSelector,
+            PromptAnalyzer = PromptAnalyzer,
+            PromptCompressor = PromptCompressor
+        };
+
+        return new PredictionModelResult<T, TInput, TOutput>(options);
     }
 
     /// <summary>
@@ -1635,25 +1521,40 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         // Preserve all configuration properties to ensure deployment behavior, model adaptation,
         // training history, and Graph RAG configuration are maintained across deep copy
-        return new PredictionModelResult<T, TInput, TOutput>(
-            clonedOptimizationResult,
-            clonedNormalizationInfo,
-            BiasDetector,
-            FairnessEvaluator,
-            RagRetriever,
-            RagReranker,
-            RagGenerator,
-            QueryProcessors,
-            loraConfiguration: LoRAConfiguration,
-            crossValidationResult: CrossValidationResult,
-            agentConfig: AgentConfig,
-            agentRecommendation: AgentRecommendation,
-            deploymentConfiguration: DeploymentConfiguration,
-            jitCompiledFunction: null, // JIT compilation is model-specific, don't copy
-            inferenceOptimizationConfig: InferenceOptimizationConfig,
-            knowledgeGraph: KnowledgeGraph,
-            graphStore: GraphStore,
-            hybridGraphRetriever: HybridGraphRetriever);
+        var options = new PredictionModelResultOptions<T, TInput, TOutput>
+        {
+            OptimizationResult = clonedOptimizationResult,
+            NormalizationInfo = clonedNormalizationInfo,
+            BiasDetector = BiasDetector,
+            FairnessEvaluator = FairnessEvaluator,
+            RagRetriever = RagRetriever,
+            RagReranker = RagReranker,
+            RagGenerator = RagGenerator,
+            QueryProcessors = QueryProcessors,
+            LoRAConfiguration = LoRAConfiguration,
+            CrossValidationResult = CrossValidationResult,
+            AgentConfig = AgentConfig,
+            AgentRecommendation = AgentRecommendation,
+            DeploymentConfiguration = DeploymentConfiguration,
+            // JIT compilation is model-specific, don't copy
+            InferenceOptimizationConfig = InferenceOptimizationConfig,
+            ReasoningConfig = ReasoningConfig,
+            KnowledgeGraph = KnowledgeGraph,
+            GraphStore = GraphStore,
+            HybridGraphRetriever = HybridGraphRetriever,
+            MetaLearner = MetaLearner,
+            MetaTrainingResult = MetaTrainingResult,
+            Tokenizer = Tokenizer,
+            TokenizationConfig = TokenizationConfig,
+            PromptTemplate = PromptTemplate,
+            PromptChain = PromptChain,
+            PromptOptimizer = PromptOptimizer,
+            FewShotExampleSelector = FewShotExampleSelector,
+            PromptAnalyzer = PromptAnalyzer,
+            PromptCompressor = PromptCompressor
+        };
+
+        return new PredictionModelResult<T, TInput, TOutput>(options);
     }
 
     /// <summary>

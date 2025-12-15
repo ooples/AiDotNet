@@ -1010,35 +1010,38 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         }
 
         // Return PredictionModelResult with CV results, agent data, JIT compilation, and reasoning config
-        var finalResult = new PredictionModelResult<T, TInput, TOutput>(
-            optimizationResult,
-            normInfo,
-            _biasDetector,
-            _fairnessEvaluator,
-            _ragRetriever,
-            _ragReranker,
-            _ragGenerator,
-            _queryProcessors,
-            _loraConfiguration,
-            cvResults,
-            _agentConfig,
-            agentRecommendation,
-            deploymentConfig,
-            jitCompiledFunction,
-            _inferenceOptimizationConfig,
-            _reasoningConfig,
-            _knowledgeGraph,
-            _graphStore,
-            _hybridGraphRetriever);
-
-        // Attach tokenizer if configured
-        if (_tokenizer != null)
+        var options = new PredictionModelResultOptions<T, TInput, TOutput>
         {
-            finalResult.AttachTokenizer(_tokenizer, _tokenizationConfig);
-        }
+            OptimizationResult = optimizationResult,
+            NormalizationInfo = normInfo,
+            BiasDetector = _biasDetector,
+            FairnessEvaluator = _fairnessEvaluator,
+            RagRetriever = _ragRetriever,
+            RagReranker = _ragReranker,
+            RagGenerator = _ragGenerator,
+            QueryProcessors = _queryProcessors,
+            LoRAConfiguration = _loraConfiguration,
+            CrossValidationResult = cvResults,
+            AgentConfig = _agentConfig,
+            AgentRecommendation = agentRecommendation,
+            DeploymentConfiguration = deploymentConfig,
+            JitCompiledFunction = jitCompiledFunction,
+            InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            ReasoningConfig = _reasoningConfig,
+            KnowledgeGraph = _knowledgeGraph,
+            GraphStore = _graphStore,
+            HybridGraphRetriever = _hybridGraphRetriever,
+            Tokenizer = _tokenizer,
+            TokenizationConfig = _tokenizationConfig,
+            PromptTemplate = _promptTemplate,
+            PromptChain = _promptChain,
+            PromptOptimizer = _promptOptimizer,
+            FewShotExampleSelector = _fewShotExampleSelector,
+            PromptAnalyzer = _promptAnalyzer,
+            PromptCompressor = _promptCompressor
+        };
 
-        // Attach prompt engineering configuration
-        AttachPromptEngineeringConfiguration(finalResult);
+        var finalResult = new PredictionModelResult<T, TInput, TOutput>(options);
 
         return finalResult;
     }
@@ -1316,34 +1319,35 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
         // Return standard PredictionModelResult
         // Note: This Build() overload doesn't perform JIT compilation (only the main Build() does),
-        // so jitCompiledFunction uses its default value of null
-        var result = new PredictionModelResult<T, TInput, TOutput>(
-            optimizationResult,
-            normInfo,
-            _biasDetector,
-            _fairnessEvaluator,
-            _ragRetriever,
-            _ragReranker,
-            _ragGenerator,
-            _queryProcessors,
-            _loraConfiguration,
-            crossValidationResult: null,
-            _agentConfig,
-            agentRecommendation: null,
-            deploymentConfiguration: deploymentConfig,
-            inferenceOptimizationConfig: _inferenceOptimizationConfig,
-            knowledgeGraph: _knowledgeGraph,
-            graphStore: _graphStore,
-            hybridGraphRetriever: _hybridGraphRetriever);
-
-        // Attach tokenizer if configured
-        if (_tokenizer != null)
+        // so JitCompiledFunction is not set
+        var rlOptions = new PredictionModelResultOptions<T, TInput, TOutput>
         {
-            result.AttachTokenizer(_tokenizer, _tokenizationConfig);
-        }
+            OptimizationResult = optimizationResult,
+            NormalizationInfo = normInfo,
+            BiasDetector = _biasDetector,
+            FairnessEvaluator = _fairnessEvaluator,
+            RagRetriever = _ragRetriever,
+            RagReranker = _ragReranker,
+            RagGenerator = _ragGenerator,
+            QueryProcessors = _queryProcessors,
+            LoRAConfiguration = _loraConfiguration,
+            AgentConfig = _agentConfig,
+            DeploymentConfiguration = deploymentConfig,
+            InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            KnowledgeGraph = _knowledgeGraph,
+            GraphStore = _graphStore,
+            HybridGraphRetriever = _hybridGraphRetriever,
+            Tokenizer = _tokenizer,
+            TokenizationConfig = _tokenizationConfig,
+            PromptTemplate = _promptTemplate,
+            PromptChain = _promptChain,
+            PromptOptimizer = _promptOptimizer,
+            FewShotExampleSelector = _fewShotExampleSelector,
+            PromptAnalyzer = _promptAnalyzer,
+            PromptCompressor = _promptCompressor
+        };
 
-        // Attach prompt engineering configuration
-        AttachPromptEngineeringConfiguration(result);
+        var result = new PredictionModelResult<T, TInput, TOutput>(rlOptions);
 
         return result;
     }
