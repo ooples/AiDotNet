@@ -132,8 +132,9 @@ public class CompositePromptTemplate : IPromptTemplate
     {
         if (variables == null) return false;
 
-        // At least one template should be formattable
-        return _templates.Any(t => t.Validate(variables));
+        // All input variables must be present and non-null
+        return InputVariables.All(v =>
+            variables.TryGetValue(v, out var val) && val != null);
     }
 
     /// <summary>

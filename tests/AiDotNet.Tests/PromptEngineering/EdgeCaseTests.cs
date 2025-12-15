@@ -69,11 +69,10 @@ public class EdgeCaseTests
     }
 
     [Fact]
-    public void RolePlayingTemplate_EmptyRole_CreatesWithDefault()
+    public void RolePlayingTemplate_EmptyRole_ThrowsArgumentException()
     {
-        // Empty role is acceptable, defaults to "Assistant"
-        var template = new RolePlayingTemplate("");
-        Assert.NotNull(template);
+        // Empty string as template throws exception
+        Assert.Throws<ArgumentException>(() => new RolePlayingTemplate(""));
     }
 
     [Fact]

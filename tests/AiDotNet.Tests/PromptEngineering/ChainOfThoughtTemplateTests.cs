@@ -8,7 +8,8 @@ public class ChainOfThoughtTemplateTests
     [Fact]
     public void Constructor_WithQuestion_CreatesTemplate()
     {
-        var template = new ChainOfThoughtTemplate("What is 2 + 2?");
+        // Use question constructor by specifying context parameter
+        var template = new ChainOfThoughtTemplate("What is 2 + 2?", context: null);
 
         Assert.NotNull(template);
         Assert.Contains("What is 2 + 2?", template.Template);
@@ -172,7 +173,8 @@ public class ChainOfThoughtTemplateTests
     [Fact]
     public void Template_ContainsStepByStepInstructions()
     {
-        var template = new ChainOfThoughtTemplate("Solve this problem");
+        // Use question constructor by specifying context parameter
+        var template = new ChainOfThoughtTemplate("Solve this problem", context: null);
 
         Assert.Contains("step", template.Template.ToLower());
     }

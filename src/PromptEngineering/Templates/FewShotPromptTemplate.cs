@@ -87,6 +87,28 @@ public class FewShotPromptTemplate : PromptTemplateBase
     }
 
     /// <summary>
+    /// Validates that the provided variables match the template's requirements.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The 'examples' variable is excluded from validation as it is auto-generated
+    /// from the example selector during formatting.
+    /// </para>
+    /// </remarks>
+    public override bool Validate(Dictionary<string, string> variables)
+    {
+        if (variables == null)
+        {
+            return false;
+        }
+
+        // Check all required variables except 'examples' which is auto-generated
+        return InputVariables
+            .Where(v => v != "examples")
+            .All(variable => variables.TryGetValue(variable, out var value) && value != null);
+    }
+
+    /// <summary>
     /// Formats the template with examples and variables.
     /// </summary>
     protected override string FormatCore(Dictionary<string, string> variables)

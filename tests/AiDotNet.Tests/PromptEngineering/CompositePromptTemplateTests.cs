@@ -224,17 +224,16 @@ public class CompositePromptTemplateTests
     [Fact]
     public void Format_WithMixedTemplateTypes_WorksCorrectly()
     {
+        // ChatPromptTemplate messages are literal content, not placeholders
         var chatTemplate = new ChatPromptTemplate()
-            .AddSystemMessage("{system}")
-            .AddUserMessage("{user}");
+            .AddSystemMessage("Be helpful")
+            .AddUserMessage("Hi there");
         var composite = new CompositePromptTemplate()
             .Add(new SimplePromptTemplate("Simple: {text}"))
             .Add(chatTemplate);
         var variables = new Dictionary<string, string>
         {
-            ["text"] = "Hello",
-            ["system"] = "Be helpful",
-            ["user"] = "Hi there"
+            ["text"] = "Hello"
         };
 
         var result = composite.Format(variables);

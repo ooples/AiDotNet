@@ -98,8 +98,10 @@ public class ContextWindowManagerTests
     public void FitsInWindow_WithReserved_AccountsForReserved()
     {
         var manager = new ContextWindowManager(100);
-        var text = "Some text";
+        // "Some longer text that will use more tokens" is 42 chars ≈ 11 tokens
+        var text = "Some longer text that will use more tokens";
 
+        // With 90 reserved, only 10 tokens available, but text uses ~11 tokens
         var result = manager.FitsInWindow(text, 90);
 
         Assert.False(result);

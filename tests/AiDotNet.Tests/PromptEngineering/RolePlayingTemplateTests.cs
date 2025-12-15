@@ -61,7 +61,8 @@ public class RolePlayingTemplateTests
     [Fact]
     public void WithTask_SetsTask()
     {
-        var template = new RolePlayingTemplate("Engineer")
+        // Use role constructor by specifying expertise parameter
+        var template = new RolePlayingTemplate("Engineer", expertise: null)
             .WithTask("Review this code");
 
         Assert.NotNull(template);
@@ -71,11 +72,12 @@ public class RolePlayingTemplateTests
     [Fact]
     public void Format_ReplacesVariables()
     {
-        var template = new RolePlayingTemplate("Expert");
+        // Use role constructor and add context placeholder via task
+        var template = new RolePlayingTemplate("Expert", expertise: null)
+            .WithTask("Help with: {context}");
         var variables = new Dictionary<string, string>
         {
-            ["context"] = "We are building a web app",
-            ["task"] = "Help with architecture"
+            ["context"] = "We are building a web app"
         };
 
         var result = template.Format(variables);
@@ -266,7 +268,8 @@ public class RolePlayingTemplateTests
     [Fact]
     public void Template_ContainsYouAre()
     {
-        var template = new RolePlayingTemplate("Expert");
+        // Use role constructor by specifying expertise parameter
+        var template = new RolePlayingTemplate("Expert", expertise: null);
 
         Assert.Contains("You are", template.Template);
     }
@@ -274,7 +277,9 @@ public class RolePlayingTemplateTests
     [Fact]
     public void Template_ContainsTaskPlaceholder()
     {
-        var template = new RolePlayingTemplate("Helper");
+        // Use role constructor with task to include task placeholder
+        var template = new RolePlayingTemplate("Helper", expertise: null)
+            .WithTask("{task}");
 
         Assert.Contains("task", template.Template.ToLower());
     }

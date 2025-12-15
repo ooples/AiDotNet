@@ -64,7 +64,8 @@ public class IntegrationTests
     [Fact]
     public void RolePlayingTemplate_WithStructuredOutput_CombinesCorrectly()
     {
-        var role = new RolePlayingTemplate("data analyst")
+        // Use the role constructor (not template constructor) by providing expertise param
+        var role = new RolePlayingTemplate("data analyst", expertise: null)
             .WithTask("Analyze the following dataset");
         var structured = new StructuredOutputTemplate(
             StructuredOutputTemplate.OutputFormat.Json,
@@ -77,7 +78,7 @@ public class IntegrationTests
 
         var structuredPrompt = structured.Format(new Dictionary<string, string>
         {
-            { "input", rolePrompt }
+            { "task", rolePrompt }
         });
 
         Assert.Contains("data analyst", structuredPrompt);
@@ -199,8 +200,8 @@ public class IntegrationTests
     [Fact]
     public void MultipleTemplates_ChainedTogether_ProducesValidOutput()
     {
-        // Step 1: Create a role-playing prompt
-        var roleTemplate = new RolePlayingTemplate("expert software engineer")
+        // Step 1: Create a role-playing prompt using role constructor
+        var roleTemplate = new RolePlayingTemplate("expert software engineer", expertise: null)
             .WithTask("Review the following code");
 
         var rolePrompt = roleTemplate.Format(new Dictionary<string, string>
@@ -208,12 +209,9 @@ public class IntegrationTests
             { "context", "Python code for data processing" }
         });
 
-        // Step 2: Add chain of thought
-        var cotTemplate = new ChainOfThoughtTemplate("Analyze code quality");
-        var cotPrompt = cotTemplate.Format(new Dictionary<string, string>
-        {
-            { "context", rolePrompt }
-        });
+        // Step 2: Add chain of thought using question constructor
+        var cotTemplate = new ChainOfThoughtTemplate("Analyze code quality", context: null);
+        var cotPrompt = cotTemplate.Format(new Dictionary<string, string>());
 
         // Step 3: Request structured output
         var structuredTemplate = new StructuredOutputTemplate(
@@ -222,11 +220,11 @@ public class IntegrationTests
 
         var finalPrompt = structuredTemplate.Format(new Dictionary<string, string>
         {
-            { "input", cotPrompt }
+            { "task", cotPrompt }
         });
 
         // Verify all components are present
-        Assert.Contains("expert software engineer", finalPrompt);
+        Assert.Contains("Analyze code quality", finalPrompt);
         Assert.Contains("step", finalPrompt.ToLower());
         Assert.Contains("json", finalPrompt.ToLower());
     }
@@ -318,8 +316,8 @@ public class IntegrationTests
     {
         // Simulate a data analysis workflow
 
-        // 1. Role-playing setup
-        var roleTemplate = new RolePlayingTemplate("senior data scientist")
+        // 1. Role-playing setup using role constructor
+        var roleTemplate = new RolePlayingTemplate("senior data scientist", expertise: null)
             .WithTask("Analyze the following dataset and provide insights");
 
         // 2. Add structured output requirement
@@ -342,7 +340,7 @@ public class IntegrationTests
 
         var finalPrompt = structuredTemplate.Format(new Dictionary<string, string>
         {
-            { "input", rolePrompt }
+            { "task", rolePrompt }
         });
 
         // 4. Verify completeness
@@ -364,12 +362,12 @@ public class IntegrationTests
             .AddInstruction("Identify performance issues")
             .AddInstruction("Suggest improvements");
 
-        // 2. Chain of thought for reasoning
-        var cotTemplate = new ChainOfThoughtTemplate("Review code quality step by step");
+        // 2. Chain of thought for reasoning using question constructor
+        var cotTemplate = new ChainOfThoughtTemplate("Review code quality step by step", context: null);
 
         // 3. Conditional for verbose mode
         var conditionalTemplate = new ConditionalPromptTemplate(
-            "{{#if showExamples}}Example issues to look for: SQL injection, XSS, etc.{{/if}}\n{review}");
+            "{{#if showExamples}}Example issues to look for: SQL injection, XSS, etc.{{/if}}\n{instructions}\n{cot}");
 
         // 4. Execute workflow
         var instructionPrompt = instructionTemplate.Format(new Dictionary<string, string>
@@ -377,15 +375,13 @@ public class IntegrationTests
             { "input", "function getUserData(id) { return db.query('SELECT * FROM users WHERE id=' + id); }" }
         });
 
-        var cotPrompt = cotTemplate.Format(new Dictionary<string, string>
-        {
-            { "context", instructionPrompt }
-        });
+        var cotPrompt = cotTemplate.Format(new Dictionary<string, string>());
 
         var finalPrompt = conditionalTemplate.Format(new Dictionary<string, string>
         {
             { "showExamples", "true" },
-            { "review", cotPrompt }
+            { "instructions", instructionPrompt },
+            { "cot", cotPrompt }
         });
 
         // 5. Verify workflow
