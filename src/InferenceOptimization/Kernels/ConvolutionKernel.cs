@@ -27,9 +27,44 @@ namespace AiDotNet.InferenceOptimization.Kernels
             return 1.5;
         }
 
+        /// <summary>
+        /// Executes convolution on the provided inputs.
+        /// Expects 2-3 inputs: input tensor, kernel tensor, and optional config tensor.
+        /// Config tensor format: [stride, padding] (defaults to stride=1, padding=0)
+        /// </summary>
         public Tensor<float> Execute(params Tensor<float>[] inputs)
         {
-            throw new NotImplementedException("Use specific convolution methods");
+            if (inputs == null || inputs.Length < 2)
+            {
+                throw new ArgumentException(
+                    "ConvolutionKernel requires at least 2 inputs: input tensor and kernel tensor. " +
+                    "Optional 3rd input for config [stride, padding].");
+            }
+
+            var input = inputs[0];
+            var kernel = inputs[1];
+
+            // Extract stride and padding from optional config tensor or use defaults
+            int stride = 1;
+            int padding = 0;
+
+            if (inputs.Length >= 3 && inputs[2] != null && inputs[2].Data.Length >= 2)
+            {
+                stride = Math.Max(1, (int)inputs[2].Data[0]);
+                padding = Math.Max(0, (int)inputs[2].Data[1]);
+            }
+
+            // Determine convolution type based on kernel shape
+            // Standard: kernel[out_channels, in_channels, kH, kW]
+            // Depthwise: kernel[channels, 1, kH, kW]
+            if (kernel.Shape.Length == 4 && kernel.Shape[1] == 1)
+            {
+                // Depthwise convolution (kernel has 1 in_channel dimension)
+                return DepthwiseConv2D(input, kernel, stride, padding);
+            }
+
+            // Default to standard 2D convolution
+            return Conv2D(input, kernel, stride, padding);
         }
 
         /// <summary>

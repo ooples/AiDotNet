@@ -276,15 +276,27 @@ using (profiler.Profile("OperationName"))
 
 ### 7. GPU Optimization Infrastructure
 
-**Components**:
-- `GpuKernelBase<T>`: Abstract base for GPU kernels
-- `CudaKernelBase<T>`: CUDA-specific base
-- `GpuMemoryManager`: Track GPU memory usage
+GPU acceleration is provided by the **AiDotNet.Tensors** project via ILGPU.
 
-**Design**:
-- Placeholder for future CUDA/OpenCL integration
-- Ready for ILGPU or ManagedCuda binding
-- Abstracts device memory transfer and kernel launch
+**Components** (in `AiDotNet.Tensors.Engines` namespace):
+- `GpuEngine`: Full ILGPU implementation with CUDA/OpenCL kernels for tensor operations
+- `GpuMemoryPool<T>`: Buffer pooling with rent/return pattern and size-based bucketing
+- `MultiGpuManager`: Multi-GPU support for distributed tensor operations
+- `AsyncGpuTransfer`: Asynchronous host-device data transfers
+
+**Key Features**:
+- Real ILGPU integration (not placeholders)
+- CUDA and OpenCL backend support
+- Optimized Conv2D, GEMM, and element-wise kernels
+- Memory pooling to reduce allocation overhead (5-10x improvement)
+- Automatic fallback to CPU when GPU unavailable
+
+**Usage**:
+```csharp
+// GPU operations are automatically used when available
+var engine = new GpuEngine();
+var result = engine.MatMul(a, b); // Uses GPU if available
+```
 
 ## Data Flow
 
@@ -403,10 +415,10 @@ Typical cache sizes and optimization targets:
 
 ### Planned Features
 
-1. **GPU Kernels**:
-   - ILGPU integration for portable GPU code
-   - CUDA kernel implementations
+1. **GPU Kernel Enhancements** (base GPU support already implemented in AiDotNet.Tensors):
    - Tensor core utilization (FP16/INT8)
+   - Additional specialized kernels (Winograd convolution, etc.)
+   - Multi-GPU pipeline optimization
 
 2. **Quantization**:
    - INT8 inference

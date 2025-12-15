@@ -71,7 +71,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
         /// <summary>
         /// Cache-blocked GEMM implementation
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private unsafe void GemmBlocked(float[] A, float[] B, float[] C, int M, int N, int K)
         {
             fixed (float* pA = A, pB = B, pC = C)
@@ -111,7 +111,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
         /// <summary>
         /// Parallel GEMM implementation for large matrices
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private unsafe void GemmParallel(float[] A, float[] B, float[] C, int M, int N, int K)
         {
             // Parallelize over rows of A

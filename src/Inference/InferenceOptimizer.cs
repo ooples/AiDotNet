@@ -138,7 +138,8 @@ public class InferenceOptimizer<T>
         var firstLayer = attentionLayers[0];
         int numHeads = firstLayer.HeadCount;
         int headDim = firstLayer.HeadDimension;
-        int maxSeqLen = EstimateMaxSequenceLength();
+        int numLayers = attentionLayers.Count;
+        int maxSeqLen = EstimateMaxSequenceLength(numLayers, numHeads, headDim);
 
         // Create KV cache configuration
         var cacheConfig = new KVCacheConfig
@@ -167,18 +168,57 @@ public class InferenceOptimizer<T>
     /// <summary>
     /// Estimates the maximum sequence length based on config and memory constraints.
     /// </summary>
-    private int EstimateMaxSequenceLength()
+    /// <param name="numLayers">Number of attention layers in the model.</param>
+    /// <param name="numHeads">Number of attention heads per layer.</param>
+    /// <param name="headDim">Dimension of each attention head.</param>
+    /// <returns>Maximum sequence length that fits within the configured memory budget.</returns>
+    private int EstimateMaxSequenceLength(int numLayers, int numHeads, int headDim)
     {
-        // Calculate based on available memory
-        // Formula: maxSeqLen = (maxMemoryMB * 1024 * 1024) / (numLayers * numHeads * headDim * 2 * bytesPerElement)
-        // Using a simplified estimate
+        // KV cache memory per token = numLayers * numHeads * headDim * 2 (K and V) * bytesPerElement
+        // For batch size, multiply by maxBatchSize
+        // Total: maxSeqLen * numLayers * numHeads * headDim * 2 * bytesPerElement * batchSize <= maxMemoryBytes
+
         long maxMemoryBytes = (long)_config.KVCacheMaxSizeMB * 1024 * 1024;
 
-        // Default reasonable sequence length
-        const int defaultMaxSeqLen = 2048;
+        // Estimate bytes per element based on type T
+        int bytesPerElement = EstimateBytesPerElement();
 
-        // Cap at reasonable maximum
-        return Math.Min(defaultMaxSeqLen, 8192);
+        // Memory per token per batch item = numLayers * numHeads * headDim * 2 * bytesPerElement
+        long memoryPerToken = (long)numLayers * numHeads * headDim * 2 * bytesPerElement;
+
+        // Account for batch size
+        long memoryPerTokenWithBatch = memoryPerToken * _config.MaxBatchSize;
+
+        // Prevent division by zero
+        if (memoryPerTokenWithBatch <= 0)
+        {
+            return 2048; // Reasonable default
+        }
+
+        // Calculate maximum sequence length
+        long calculatedMaxSeqLen = maxMemoryBytes / memoryPerTokenWithBatch;
+
+        // Apply reasonable bounds (Math.Clamp not available in net471)
+        const int minSeqLen = 128;
+        const int maxSeqLen = 32768; // Reasonable upper bound
+
+        return (int)Math.Max(minSeqLen, Math.Min(maxSeqLen, calculatedMaxSeqLen));
+    }
+
+    /// <summary>
+    /// Estimates bytes per element based on the generic type T.
+    /// </summary>
+    private static int EstimateBytesPerElement()
+    {
+        // Common numeric types used in neural networks
+        var type = typeof(T);
+        if (type == typeof(float)) return 4;
+        if (type == typeof(double)) return 8;
+        if (type == typeof(Half)) return 2;
+        if (type == typeof(decimal)) return 16;
+
+        // Default to float size if unknown
+        return 4;
     }
 
     /// <summary>
@@ -186,18 +226,26 @@ public class InferenceOptimizer<T>
     /// </summary>
     private bool InitializeSpeculativeDecoding(NeuralNetworkBase<T> model)
     {
+        // For Custom draft models, the user must call SetCustomDraftModel() before Initialize()
+        if (_config.DraftModelType == DraftModelType.Custom)
+        {
+            if (_draftModel == null)
+            {
+                throw new InvalidOperationException(
+                    "DraftModelType.Custom requires calling SetCustomDraftModel() before Initialize(). " +
+                    "Provide your IDraftModel<T> implementation via SetCustomDraftModel(), then call Initialize().");
+            }
+            // Custom draft model already set via SetCustomDraftModel()
+            return true;
+        }
+
         // Create draft model based on configuration
         IDraftModel<T>? draftModel = _config.DraftModelType switch
         {
             DraftModelType.NGram => CreateNGramDraftModel(),
             DraftModelType.SmallNeural => CreateNeuralDraftModel(model),
-            _ => null
+            _ => throw new NotSupportedException($"Unknown DraftModelType: {_config.DraftModelType}")
         };
-
-        if (draftModel == null)
-        {
-            return false;
-        }
 
         // Note: SpeculativeDecoder requires a target forward function
         // This will be set when actually doing inference via CreateSpeculativeDecoder
@@ -217,11 +265,24 @@ public class InferenceOptimizer<T>
     /// <summary>
     /// Creates a small neural network draft model.
     /// </summary>
+    /// <remarks>
+    /// SmallNeural draft models require a pre-trained companion model that is smaller
+    /// and faster than the target model but trained on similar data. This cannot be
+    /// automatically generated from the target model.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">
+    /// Always thrown because SmallNeural draft models require external pre-trained models.
+    /// </exception>
     private IDraftModel<T>? CreateNeuralDraftModel(NeuralNetworkBase<T> model)
     {
-        // For neural draft models, we would need a pre-trained smaller model
-        // This is a placeholder - in production, this would load a companion model
-        return null;
+        // SmallNeural draft models cannot be automatically created from the target model.
+        // They require a separate pre-trained smaller model that approximates the target's behavior.
+        // Use DraftModelType.NGram for automatic draft model creation, or
+        // use DraftModelType.Custom and provide your own IDraftModel<T> implementation.
+        throw new NotSupportedException(
+            "DraftModelType.SmallNeural requires a pre-trained companion model that cannot be " +
+            "automatically generated. Use DraftModelType.NGram for automatic draft model creation, " +
+            "or implement IDraftModel<T> and use DraftModelType.Custom with SetCustomDraftModel().");
     }
 
     /// <summary>
@@ -309,6 +370,34 @@ public class InferenceOptimizer<T>
     /// Gets the draft model if speculative decoding is enabled.
     /// </summary>
     public IDraftModel<T>? DraftModel => _draftModel;
+
+    /// <summary>
+    /// Sets a custom draft model for speculative decoding.
+    /// </summary>
+    /// <param name="draftModel">The custom draft model implementation.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this method when you have your own draft model implementation.
+    ///
+    /// This is required when using DraftModelType.Custom or when you want to replace the
+    /// default NGram draft model with a more sophisticated model.
+    ///
+    /// Your custom draft model must implement IDraftModel&lt;T&gt; and provide:
+    /// - Draft token generation
+    /// - Probability estimation for speculative decoding verification
+    ///
+    /// Example:
+    /// <code>
+    /// var optimizer = new InferenceOptimizer&lt;float&gt;(config);
+    /// optimizer.SetCustomDraftModel(myCustomDraftModel);
+    /// optimizer.Initialize(mainModel);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when draftModel is null.</exception>
+    public void SetCustomDraftModel(IDraftModel<T> draftModel)
+    {
+        _draftModel = draftModel ?? throw new ArgumentNullException(nameof(draftModel));
+    }
 
     /// <summary>
     /// Creates a speculative decoder with the given target forward function.
