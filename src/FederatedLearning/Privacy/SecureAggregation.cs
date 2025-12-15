@@ -380,10 +380,8 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
         }
 
         var totalWeightT = NumOps.FromDouble(totalWeight);
-        foreach (var layerName in aggregatedUpdate.Keys)
+        foreach (var aggregatedParams in aggregatedUpdate.Values)
         {
-            var aggregatedParams = aggregatedUpdate[layerName];
-
             for (int i = 0; i < aggregatedParams.Length; i++)
             {
                 aggregatedParams[i] = NumOps.Divide(aggregatedParams[i], totalWeightT);
