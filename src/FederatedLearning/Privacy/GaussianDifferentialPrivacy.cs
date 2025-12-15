@@ -229,12 +229,9 @@ public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<st
     {
         var sumOfSquares = NumOps.Zero;
 
-        foreach (var layer in model.Values)
+        foreach (var param in model.Values.SelectMany(layer => layer))
         {
-            foreach (var param in layer)
-            {
-                sumOfSquares = NumOps.Add(sumOfSquares, NumOps.Square(param));
-            }
+            sumOfSquares = NumOps.Add(sumOfSquares, NumOps.Square(param));
         }
 
         return NumOps.Sqrt(sumOfSquares);
