@@ -217,12 +217,9 @@ public class DeepCompression<T> : ModelCompressionBase<T>
     /// The metadata contains everything needed to reverse this process.
     /// </para>
     /// </remarks>
-    public override (Vector<T> compressedWeights, object metadata) Compress(Vector<T> weights)
+    public override (Vector<T> compressedWeights, ICompressionMetadata<T> metadata) Compress(Vector<T> weights)
     {
-        if (weights == null)
-        {
-            throw new ArgumentNullException(nameof(weights));
-        }
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
 
         if (weights.Length == 0)
         {
@@ -237,7 +234,7 @@ public class DeepCompression<T> : ModelCompressionBase<T>
         // Stage 2: Quantization (Weight Clustering)
         // Cluster the non-zero weights using k-means
         Vector<T> quantizedWeights;
-        object clusteringMetadata;
+        ICompressionMetadata<T> clusteringMetadata;
 
         if (prunedWeights.Length > 0)
         {
@@ -257,7 +254,7 @@ public class DeepCompression<T> : ModelCompressionBase<T>
         // Stage 3: Huffman Coding
         // Apply entropy coding to the quantized, sparse representation
         Vector<T> huffmanWeights;
-        object huffmanMetadata;
+        ICompressionMetadata<T> huffmanMetadata;
 
         if (quantizedWeights.Length > 0)
         {
@@ -292,17 +289,16 @@ public class DeepCompression<T> : ModelCompressionBase<T>
     /// <param name="compressedWeights">The compressed weights.</param>
     /// <param name="metadata">The Deep Compression metadata.</param>
     /// <returns>The decompressed weights.</returns>
-    public override Vector<T> Decompress(Vector<T> compressedWeights, object metadata)
+    public override Vector<T> Decompress(Vector<T> compressedWeights, ICompressionMetadata<T> metadata)
     {
-        if (compressedWeights == null)
-        {
-            throw new ArgumentNullException(nameof(compressedWeights));
-        }
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
 
-        var deepMetadata = metadata as DeepCompressionMetadata<T>;
-        if (deepMetadata == null)
+        if (metadata is not DeepCompressionMetadata<T> deepMetadata)
         {
-            throw new ArgumentException("Invalid metadata type for Deep Compression.", nameof(metadata));
+            throw new ArgumentException(
+                $"Expected {nameof(DeepCompressionMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
         }
 
         // Stage 3 (reverse): Huffman Decoding
@@ -325,12 +321,16 @@ public class DeepCompression<T> : ModelCompressionBase<T>
     /// <summary>
     /// Gets the total compressed size from all three stages.
     /// </summary>
-    public override long GetCompressedSize(Vector<T> compressedWeights, object metadata)
+    public override long GetCompressedSize(Vector<T> compressedWeights, ICompressionMetadata<T> metadata)
     {
-        var deepMetadata = metadata as DeepCompressionMetadata<T>;
-        if (deepMetadata == null)
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
+
+        if (metadata is not DeepCompressionMetadata<T> deepMetadata)
         {
-            throw new ArgumentException("Invalid metadata type.", nameof(metadata));
+            throw new ArgumentException(
+                $"Expected {nameof(DeepCompressionMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
         }
 
         // The final compressed representation size

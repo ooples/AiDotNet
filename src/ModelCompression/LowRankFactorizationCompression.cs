@@ -103,12 +103,9 @@ public class LowRankFactorizationCompression<T> : ModelCompressionBase<T>
     /// </summary>
     /// <param name="weights">The original model weights.</param>
     /// <returns>Factored representation and metadata.</returns>
-    public override (Vector<T> compressedWeights, object metadata) Compress(Vector<T> weights)
+    public override (Vector<T> compressedWeights, ICompressionMetadata<T> metadata) Compress(Vector<T> weights)
     {
-        if (weights == null)
-        {
-            throw new ArgumentNullException(nameof(weights));
-        }
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
 
         if (weights.Length == 0)
         {
@@ -176,17 +173,16 @@ public class LowRankFactorizationCompression<T> : ModelCompressionBase<T>
     /// <summary>
     /// Decompresses by reconstructing from U, S, V factors.
     /// </summary>
-    public override Vector<T> Decompress(Vector<T> compressedWeights, object metadata)
+    public override Vector<T> Decompress(Vector<T> compressedWeights, ICompressionMetadata<T> metadata)
     {
-        if (compressedWeights == null)
-        {
-            throw new ArgumentNullException(nameof(compressedWeights));
-        }
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
 
-        var lrMetadata = metadata as LowRankFactorizationMetadata<T>;
-        if (lrMetadata == null)
+        if (metadata is not LowRankFactorizationMetadata<T> lrMetadata)
         {
-            throw new ArgumentException("Invalid metadata type for low-rank factorization.", nameof(metadata));
+            throw new ArgumentException(
+                $"Expected {nameof(LowRankFactorizationMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
         }
 
         int rows = lrMetadata.Rows;
@@ -255,17 +251,16 @@ public class LowRankFactorizationCompression<T> : ModelCompressionBase<T>
     /// <summary>
     /// Gets the compressed size.
     /// </summary>
-    public override long GetCompressedSize(Vector<T> compressedWeights, object metadata)
+    public override long GetCompressedSize(Vector<T> compressedWeights, ICompressionMetadata<T> metadata)
     {
-        if (compressedWeights == null)
-        {
-            throw new ArgumentNullException(nameof(compressedWeights));
-        }
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
 
-        var lrMetadata = metadata as LowRankFactorizationMetadata<T>;
-        if (lrMetadata == null)
+        if (metadata is not LowRankFactorizationMetadata<T> lrMetadata)
         {
-            throw new ArgumentException("Invalid metadata type.", nameof(metadata));
+            throw new ArgumentException(
+                $"Expected {nameof(LowRankFactorizationMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
         }
 
         // Size = U (rows × rank) + S (rank) + V (rank × cols)

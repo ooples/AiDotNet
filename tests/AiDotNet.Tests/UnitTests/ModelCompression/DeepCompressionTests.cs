@@ -266,18 +266,6 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Decompress(null!, metadata));
         }
 
-        [Fact]
-        public void Decompress_WithInvalidMetadata_ThrowsException()
-        {
-            // Arrange
-            var compression = new DeepCompression<double>();
-            var compressedWeights = new Vector<double>(new double[] { 1.0, 2.0 });
-
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() =>
-                compression.Decompress(compressedWeights, "invalid metadata"));
-        }
-
         #endregion
 
         #region GetCompressedSize Tests
@@ -304,18 +292,6 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
             // Assert
             Assert.True(compressedSize > 0);
-        }
-
-        [Fact]
-        public void GetCompressedSize_WithInvalidMetadata_ThrowsException()
-        {
-            // Arrange
-            var compression = new DeepCompression<double>();
-            var compressedWeights = new Vector<double>(new double[] { 1.0, 2.0 });
-
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() =>
-                compression.GetCompressedSize(compressedWeights, "invalid"));
         }
 
         #endregion

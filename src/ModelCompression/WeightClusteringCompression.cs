@@ -104,7 +104,7 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
     /// </summary>
     /// <param name="weights">The original model weights.</param>
     /// <returns>Compressed weights and metadata containing cluster centers and assignments.</returns>
-    public override (Vector<T> compressedWeights, object metadata) Compress(Vector<T> weights)
+    public override (Vector<T> compressedWeights, ICompressionMetadata<T> metadata) Compress(Vector<T> weights)
     {
         if (weights == null)
         {
@@ -144,17 +144,16 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
     /// <param name="compressedWeights">The compressed weights (cluster assignments).</param>
     /// <param name="metadata">The metadata containing cluster centers.</param>
     /// <returns>The decompressed weights.</returns>
-    public override Vector<T> Decompress(Vector<T> compressedWeights, object metadata)
+    public override Vector<T> Decompress(Vector<T> compressedWeights, ICompressionMetadata<T> metadata)
     {
-        if (compressedWeights == null)
-        {
-            throw new ArgumentNullException(nameof(compressedWeights));
-        }
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
 
-        var clusterMetadata = metadata as WeightClusteringMetadata<T>;
-        if (clusterMetadata == null)
+        if (metadata is not WeightClusteringMetadata<T> clusterMetadata)
         {
-            throw new ArgumentException("Invalid metadata type for weight clustering.", nameof(metadata));
+            throw new ArgumentException(
+                $"Expected {nameof(WeightClusteringMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
         }
 
         var decompressedArray = new T[compressedWeights.Length];
@@ -178,12 +177,16 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
     /// <param name="compressedWeights">The compressed weights.</param>
     /// <param name="metadata">The compression metadata.</param>
     /// <returns>The total size in bytes.</returns>
-    public override long GetCompressedSize(Vector<T> compressedWeights, object metadata)
+    public override long GetCompressedSize(Vector<T> compressedWeights, ICompressionMetadata<T> metadata)
     {
-        var clusterMetadata = metadata as WeightClusteringMetadata<T>;
-        if (clusterMetadata == null)
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
+
+        if (metadata is not WeightClusteringMetadata<T> clusterMetadata)
         {
-            throw new ArgumentException("Invalid metadata type.", nameof(metadata));
+            throw new ArgumentException(
+                $"Expected {nameof(WeightClusteringMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
         }
 
         // Size of cluster assignments - semantically stored as indices (not full T values)

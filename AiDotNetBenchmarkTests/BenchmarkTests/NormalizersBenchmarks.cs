@@ -10,9 +10,7 @@ namespace AiDotNetBenchmarkTests.BenchmarkTests;
 /// Tests performance of various scaling and normalization techniques
 /// </summary>
 [MemoryDiagnoser]
-[SimpleJob(RuntimeMoniker.Net462, baseline: true)]
-[SimpleJob(RuntimeMoniker.Net60)]
-[SimpleJob(RuntimeMoniker.Net70)]
+[SimpleJob(RuntimeMoniker.Net471, baseline: true)]
 [SimpleJob(RuntimeMoniker.Net80)]
 public class NormalizersBenchmarks
 {

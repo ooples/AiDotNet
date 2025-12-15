@@ -93,12 +93,10 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             var (_, metadata) = compression.Compress(weights);
 
             // Assert
-#pragma warning disable CS0618
-            Assert.IsType<HybridCompressionMetadata>(metadata);
-            var hybridMetadata = (HybridCompressionMetadata)metadata;
+            Assert.IsType<HybridCompressionMetadata<double>>(metadata);
+            var hybridMetadata = (HybridCompressionMetadata<double>)metadata;
             Assert.NotNull(hybridMetadata.ClusteringMetadata);
             Assert.NotNull(hybridMetadata.HuffmanMetadata);
-#pragma warning restore CS0618
         }
 
         #endregion
@@ -150,18 +148,6 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Decompress(weights, null!));
         }
 
-        [Fact]
-        public void Decompress_WithInvalidMetadata_ThrowsException()
-        {
-            // Arrange
-            var compression = new HybridHuffmanClusteringCompression<double>();
-            var weights = new Vector<double>(new double[] { 1.0, 2.0 });
-
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() =>
-                compression.Decompress(weights, "invalid metadata"));
-        }
-
         #endregion
 
         #region GetCompressedSize Tests
@@ -195,7 +181,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                compression.GetCompressedSize(null!, metadata));
+                compression.GetCompressedSize((Vector<double>)null!, metadata));
         }
 
         [Fact]
@@ -208,18 +194,6 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 compression.GetCompressedSize(weights, null!));
-        }
-
-        [Fact]
-        public void GetCompressedSize_WithInvalidMetadata_ThrowsException()
-        {
-            // Arrange
-            var compression = new HybridHuffmanClusteringCompression<double>();
-            var weights = new Vector<double>(new double[] { 1.0, 2.0 });
-
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() =>
-                compression.GetCompressedSize(weights, "invalid"));
         }
 
         #endregion

@@ -80,7 +80,7 @@ public abstract class ModelCompressionBase<T> : IModelCompressionStrategy<T>
     /// </summary>
     /// <param name="weights">The original model weights to compress.</param>
     /// <returns>A tuple containing the compressed weights and compression metadata.</returns>
-    public abstract (Vector<T> compressedWeights, object metadata) Compress(Vector<T> weights);
+    public abstract (Vector<T> compressedWeights, ICompressionMetadata<T> metadata) Compress(Vector<T> weights);
 
     /// <summary>
     /// Decompresses the compressed weights back to their original form.
@@ -88,7 +88,7 @@ public abstract class ModelCompressionBase<T> : IModelCompressionStrategy<T>
     /// <param name="compressedWeights">The compressed weights.</param>
     /// <param name="metadata">The metadata needed for decompression.</param>
     /// <returns>The decompressed weights.</returns>
-    public abstract Vector<T> Decompress(Vector<T> compressedWeights, object metadata);
+    public abstract Vector<T> Decompress(Vector<T> compressedWeights, ICompressionMetadata<T> metadata);
 
     /// <summary>
     /// Calculates the compression ratio achieved.
@@ -124,7 +124,225 @@ public abstract class ModelCompressionBase<T> : IModelCompressionStrategy<T>
     /// <param name="compressedWeights">The compressed weights.</param>
     /// <param name="metadata">The compression metadata.</param>
     /// <returns>The total size in bytes.</returns>
-    public abstract long GetCompressedSize(Vector<T> compressedWeights, object metadata);
+    public abstract long GetCompressedSize(Vector<T> compressedWeights, ICompressionMetadata<T> metadata);
+
+    #region Matrix Operations (2D)
+
+    /// <summary>
+    /// Compresses a 2D matrix of weights.
+    /// Default implementation flattens to vector, compresses, and reshapes back.
+    /// </summary>
+    /// <param name="weights">The original weight matrix to compress.</param>
+    /// <returns>A tuple containing the compressed weights and compression metadata.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method compresses a 2D weight matrix by:
+    ///
+    /// 1. Flattening the matrix into a 1D vector (row by row)
+    /// 2. Applying the vector compression algorithm
+    /// 3. Wrapping the result with shape information
+    ///
+    /// The compressed matrix maintains the original dimensions for convenience,
+    /// but the actual size reduction comes from the underlying vector compression.
+    /// </para>
+    /// </remarks>
+    public virtual (Matrix<T> compressedWeights, ICompressionMetadata<T> metadata) CompressMatrix(Matrix<T> weights)
+    {
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+
+        // Flatten matrix to vector
+        var flatWeights = MatrixToVector(weights);
+
+        // Compress using vector method
+        var (compressedVector, vectorMetadata) = Compress(flatWeights);
+
+        // Create matrix metadata including original shape
+        var matrixMetadata = new MatrixCompressionMetadata<T>(
+            originalRows: weights.Rows,
+            originalColumns: weights.Columns,
+            innerMetadata: vectorMetadata);
+
+        // Reshape compressed data back to matrix (may be different size)
+        var compressedMatrix = VectorToMatrix(compressedVector, weights.Rows, weights.Columns);
+
+        return (compressedMatrix, matrixMetadata);
+    }
+
+    /// <summary>
+    /// Decompresses the compressed matrix weights back to their original form.
+    /// </summary>
+    /// <param name="compressedWeights">The compressed weight matrix.</param>
+    /// <param name="metadata">The metadata needed for decompression.</param>
+    /// <returns>The decompressed weight matrix.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method reverses the compression process:
+    ///
+    /// 1. Flattens the compressed matrix to a vector
+    /// 2. Applies the vector decompression algorithm
+    /// 3. Reshapes back to the original matrix dimensions
+    ///
+    /// The metadata must be the same type returned by CompressMatrix.
+    /// </para>
+    /// </remarks>
+    public virtual Matrix<T> DecompressMatrix(Matrix<T> compressedWeights, ICompressionMetadata<T> metadata)
+    {
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
+
+        if (metadata is not MatrixCompressionMetadata<T> matrixMetadata)
+        {
+            throw new ArgumentException(
+                $"Expected {nameof(MatrixCompressionMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
+        }
+
+        // Flatten to vector
+        var compressedVector = MatrixToVector(compressedWeights);
+
+        // Decompress using vector method
+        var decompressedVector = Decompress(compressedVector, matrixMetadata.InnerMetadata);
+
+        // Reshape back to original matrix dimensions
+        return VectorToMatrix(decompressedVector, matrixMetadata.OriginalRows, matrixMetadata.OriginalColumns);
+    }
+
+    /// <summary>
+    /// Gets the size in bytes of the compressed matrix representation.
+    /// </summary>
+    /// <param name="compressedWeights">The compressed weight matrix.</param>
+    /// <param name="metadata">The compression metadata.</param>
+    /// <returns>The total size in bytes.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This calculates the total storage needed for the compressed matrix,
+    /// including both the compressed data and the metadata overhead (shape information).
+    /// </para>
+    /// </remarks>
+    public virtual long GetCompressedSize(Matrix<T> compressedWeights, ICompressionMetadata<T> metadata)
+    {
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
+
+        if (metadata is not MatrixCompressionMetadata<T> matrixMetadata)
+        {
+            throw new ArgumentException(
+                $"Expected {nameof(MatrixCompressionMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
+        }
+
+        var compressedVector = MatrixToVector(compressedWeights);
+        return GetCompressedSize(compressedVector, matrixMetadata.InnerMetadata) + matrixMetadata.GetMetadataSize();
+    }
+
+    #endregion
+
+    #region Tensor Operations (N-D)
+
+    /// <summary>
+    /// Compresses an N-dimensional tensor of weights.
+    /// Default implementation flattens to vector, compresses, and reshapes back.
+    /// </summary>
+    /// <param name="weights">The original weight tensor to compress.</param>
+    /// <returns>A tuple containing the compressed weights and compression metadata.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method compresses an N-dimensional tensor by:
+    ///
+    /// 1. Flattening the tensor into a 1D vector
+    /// 2. Applying the vector compression algorithm
+    /// 3. Wrapping the result with shape information
+    ///
+    /// Tensors are essential for convolutional layers (4D: [filters, channels, height, width])
+    /// and attention mechanisms. This method preserves the shape for reconstruction.
+    /// </para>
+    /// </remarks>
+    public virtual (Tensor<T> compressedWeights, ICompressionMetadata<T> metadata) CompressTensor(Tensor<T> weights)
+    {
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+
+        // Flatten tensor to vector
+        var flatWeights = TensorToVector(weights);
+
+        // Compress using vector method
+        var (compressedVector, vectorMetadata) = Compress(flatWeights);
+
+        // Create tensor metadata including original shape (clone to avoid external modification)
+        var originalShape = (int[])weights.Shape.Clone();
+        var tensorMetadata = new TensorCompressionMetadata<T>(
+            originalShape: originalShape,
+            innerMetadata: vectorMetadata);
+
+        // Reshape compressed data back to tensor (same shape, values may differ)
+        var compressedTensor = VectorToTensor(compressedVector, originalShape);
+
+        return (compressedTensor, tensorMetadata);
+    }
+
+    /// <summary>
+    /// Decompresses the compressed tensor weights back to their original form.
+    /// </summary>
+    /// <param name="compressedWeights">The compressed weight tensor.</param>
+    /// <param name="metadata">The metadata needed for decompression.</param>
+    /// <returns>The decompressed weight tensor.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method reverses the compression process:
+    ///
+    /// 1. Flattens the compressed tensor to a vector
+    /// 2. Applies the vector decompression algorithm
+    /// 3. Reshapes back to the original tensor dimensions
+    ///
+    /// The metadata must be the same type returned by CompressTensor.
+    /// </para>
+    /// </remarks>
+    public virtual Tensor<T> DecompressTensor(Tensor<T> compressedWeights, ICompressionMetadata<T> metadata)
+    {
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
+
+        if (metadata is not TensorCompressionMetadata<T> tensorMetadata)
+        {
+            throw new ArgumentException(
+                $"Expected {nameof(TensorCompressionMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
+        }
+
+        // Flatten to vector
+        var compressedVector = TensorToVector(compressedWeights);
+
+        // Decompress using vector method
+        var decompressedVector = Decompress(compressedVector, tensorMetadata.InnerMetadata);
+
+        // Reshape back to original tensor dimensions
+        return VectorToTensor(decompressedVector, tensorMetadata.OriginalShape);
+    }
+
+    /// <summary>
+    /// Gets the size in bytes of the compressed tensor representation.
+    /// </summary>
+    /// <param name="compressedWeights">The compressed weight tensor.</param>
+    /// <param name="metadata">The compression metadata.</param>
+    /// <returns>The total size in bytes.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This calculates the total storage needed for the compressed tensor,
+    /// including both the compressed data and the metadata overhead (shape information).
+    /// </para>
+    /// </remarks>
+    public virtual long GetCompressedSize(Tensor<T> compressedWeights, ICompressionMetadata<T> metadata)
+    {
+        if (compressedWeights == null) throw new ArgumentNullException(nameof(compressedWeights));
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
+
+        if (metadata is not TensorCompressionMetadata<T> tensorMetadata)
+        {
+            throw new ArgumentException(
+                $"Expected {nameof(TensorCompressionMetadata<T>)} but received {metadata.GetType().Name}.",
+                nameof(metadata));
+        }
+
+        var compressedVector = TensorToVector(compressedWeights);
+        return GetCompressedSize(compressedVector, tensorMetadata.InnerMetadata) + tensorMetadata.GetMetadataSize();
+    }
+
+    #endregion
+
+    #region Helper Methods
 
     /// <summary>
     /// Gets the size in bytes of a value of type T.
@@ -146,4 +364,69 @@ public abstract class ModelCompressionBase<T> : IModelCompressionStrategy<T>
                typeof(T) == typeof(double) ? 8 :
                System.Runtime.InteropServices.Marshal.SizeOf(typeof(T));
     }
+
+    /// <summary>
+    /// Converts a matrix to a flattened vector.
+    /// </summary>
+    protected Vector<T> MatrixToVector(Matrix<T> matrix)
+    {
+        var data = new T[matrix.Rows * matrix.Columns];
+        int idx = 0;
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                data[idx++] = matrix[i, j];
+            }
+        }
+        return new Vector<T>(data);
+    }
+
+    /// <summary>
+    /// Converts a vector to a matrix with specified dimensions.
+    /// </summary>
+    protected Matrix<T> VectorToMatrix(Vector<T> vector, int rows, int cols)
+    {
+        var matrix = new Matrix<T>(rows, cols);
+        int idx = 0;
+        int length = Math.Min(vector.Length, rows * cols);
+        for (int i = 0; i < rows && idx < length; i++)
+        {
+            for (int j = 0; j < cols && idx < length; j++)
+            {
+                matrix[i, j] = vector[idx++];
+            }
+        }
+        return matrix;
+    }
+
+    /// <summary>
+    /// Converts a tensor to a flattened vector.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method flattens an N-dimensional tensor into a 1D vector,
+    /// preserving all values in row-major order. This is the first step in tensor compression -
+    /// convert to 1D, compress, then convert back.
+    /// </para>
+    /// </remarks>
+    protected Vector<T> TensorToVector(Tensor<T> tensor)
+    {
+        return tensor.ToVector();
+    }
+
+    /// <summary>
+    /// Converts a vector to a tensor with specified shape.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method reshapes a 1D vector into an N-dimensional tensor
+    /// with the specified shape. The vector values are placed in row-major order into the tensor.
+    /// The total number of elements in the vector must match the product of all shape dimensions.
+    /// </para>
+    /// </remarks>
+    protected Tensor<T> VectorToTensor(Vector<T> vector, int[] shape)
+    {
+        return Tensor<T>.FromVector(vector, shape);
+    }
+
+    #endregion
 }
