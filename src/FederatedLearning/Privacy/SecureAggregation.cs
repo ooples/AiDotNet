@@ -232,7 +232,7 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
             throw new ArgumentException("Client update cannot be null or empty.", nameof(clientUpdate));
         }
 
-        if (!_pairwiseSecrets.ContainsKey(clientId))
+        if (!_pairwiseSecrets.TryGetValue(clientId, out var secretsForClient))
         {
             throw new ArgumentException($"No secrets found for client {clientId}. Call GeneratePairwiseSecrets first.", nameof(clientId));
         }
@@ -258,7 +258,7 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
         }
 
         // Add all pairwise secrets for this client
-        foreach (var otherClientSecrets in _pairwiseSecrets[clientId].Values)
+        foreach (var otherClientSecrets in secretsForClient.Values)
         {
             if (otherClientSecrets.Length != maskedFlatParams.Length)
             {
