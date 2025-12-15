@@ -15,7 +15,6 @@ namespace AiDotNet.Tensors.Engines.Optimization
             new Lazy<PerformanceProfiler>(() => new PerformanceProfiler());
 
         private readonly ConcurrentDictionary<string, OperationStats> _stats;
-        private readonly ConcurrentStack<ProfileScope> _scopeStack;
 
         /// <summary>
         /// Gets the singleton instance of the profiler
@@ -30,7 +29,6 @@ namespace AiDotNet.Tensors.Engines.Optimization
         private PerformanceProfiler()
         {
             _stats = new ConcurrentDictionary<string, OperationStats>();
-            _scopeStack = new ConcurrentStack<ProfileScope>();
             Enabled = false;
         }
 
