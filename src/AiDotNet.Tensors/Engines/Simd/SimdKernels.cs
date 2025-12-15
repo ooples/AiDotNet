@@ -137,7 +137,7 @@ namespace AiDotNet.Tensors.Engines.Simd
 
                 // Horizontal sum of vector
                 var high = Avx.ExtractVector128(vsum, 1);
-                var low = Avx.GetLowerHalf(vsum);
+                var low = vsum.GetLower();
                 var sum128 = Sse.Add(high, low);
 
                 // Further reduce 4 floats to 1
@@ -145,7 +145,7 @@ namespace AiDotNet.Tensors.Engines.Simd
                 sum128 = Sse.Add(sum128, shuf);
                 shuf = Sse.Shuffle(sum128, sum128, 0b_01_01_01_01);
                 sum128 = Sse.Add(sum128, shuf);
-                sum = Sse.ConvertToSingle(sum128);
+                sum = sum128.ToScalar();
             }
             else if (Sse.IsSupported && length >= 4)
             {
@@ -164,7 +164,7 @@ namespace AiDotNet.Tensors.Engines.Simd
                 vsum = Sse.Add(vsum, shuf);
                 shuf = Sse.Shuffle(vsum, vsum, 0b_01_01_01_01);
                 vsum = Sse.Add(vsum, shuf);
-                sum = Sse.ConvertToSingle(vsum);
+                sum = vsum.ToScalar();
             }
             else if (AdvSimd.IsSupported && length >= 4)
             {
@@ -178,8 +178,8 @@ namespace AiDotNet.Tensors.Engines.Simd
                     vsum = AdvSimd.Add(vsum, AdvSimd.Multiply(va, vb));
                 }
 
-                // Horizontal sum for ARM
-                sum = AdvSimd.Arm64.AddAcross(vsum).ToScalar();
+                // Horizontal sum for ARM - manual reduction
+                sum = vsum.GetElement(0) + vsum.GetElement(1) + vsum.GetElement(2) + vsum.GetElement(3);
             }
 
             // Scalar remainder
@@ -333,14 +333,14 @@ namespace AiDotNet.Tensors.Engines.Simd
                 }
 
                 var high = Avx.ExtractVector128(vsum, 1);
-                var low = Avx.GetLowerHalf(vsum);
+                var low = vsum.GetLower();
                 var sum128 = Sse.Add(high, low);
 
                 var shuf = Sse.Shuffle(sum128, sum128, 0b_11_10_11_10);
                 sum128 = Sse.Add(sum128, shuf);
                 shuf = Sse.Shuffle(sum128, sum128, 0b_01_01_01_01);
                 sum128 = Sse.Add(sum128, shuf);
-                sum = Sse.ConvertToSingle(sum128);
+                sum = sum128.ToScalar();
             }
             else if (Sse.IsSupported && length >= 4)
             {
@@ -357,7 +357,7 @@ namespace AiDotNet.Tensors.Engines.Simd
                 vsum = Sse.Add(vsum, shuf);
                 shuf = Sse.Shuffle(vsum, vsum, 0b_01_01_01_01);
                 vsum = Sse.Add(vsum, shuf);
-                sum = Sse.ConvertToSingle(vsum);
+                sum = vsum.ToScalar();
             }
             else if (AdvSimd.IsSupported && length >= 4)
             {
@@ -370,7 +370,8 @@ namespace AiDotNet.Tensors.Engines.Simd
                     vsum = AdvSimd.Add(vsum, v);
                 }
 
-                sum = AdvSimd.Arm64.AddAcross(vsum).ToScalar();
+                // Horizontal sum for ARM - manual reduction
+                sum = vsum.GetElement(0) + vsum.GetElement(1) + vsum.GetElement(2) + vsum.GetElement(3);
             }
 
             for (; i < length; i++)

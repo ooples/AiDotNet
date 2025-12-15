@@ -46,7 +46,8 @@ namespace AiDotNet.Tensors.Engines
                 caps.HasAVX512F = Avx512F.IsSupported;
                 caps.HasAVX512BW = Avx512BW.IsSupported;
                 caps.HasAVX512DQ = Avx512DQ.IsSupported;
-                caps.HasAVX512VL = Avx512VL.IsSupported;
+                // AVX-512VL is implied when other AVX-512 extensions are supported
+                caps.HasAVX512VL = Avx512F.VL.IsSupported;
             }
 
             // Detect ARM SIMD support
