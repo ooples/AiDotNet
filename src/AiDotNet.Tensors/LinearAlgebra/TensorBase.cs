@@ -56,6 +56,16 @@ public abstract class TensorBase<T>
     public int Rank => Shape.Length;
 
     /// <summary>
+    /// Gets direct access to the underlying data array for high-performance operations.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Warning:</b> This property provides direct access to internal storage.
+    /// Modifications to this array will affect the tensor. Use with caution in
+    /// performance-critical code paths like SIMD operations.</para>
+    /// </remarks>
+    public T[] Data => _data.Data;
+
+    /// <summary>
     /// Initializes a new instance of the TensorBase class with the specified shape.
     /// </summary>
     /// <param name="shape">The shape of the tensor.</param>

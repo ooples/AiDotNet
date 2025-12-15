@@ -75,6 +75,16 @@ public abstract class VectorBase<T>
     public int Length => _data.Length;
 
     /// <summary>
+    /// Gets direct access to the underlying data array for high-performance operations.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Warning:</b> This property provides direct access to internal storage.
+    /// Modifications to this array will affect the vector. Use with caution in
+    /// performance-critical code paths like SIMD operations.</para>
+    /// </remarks>
+    public T[] Data => _data;
+
+    /// <summary>
     /// Gets a value indicating whether the vector contains no elements.
     /// </summary>
     /// <remarks>
