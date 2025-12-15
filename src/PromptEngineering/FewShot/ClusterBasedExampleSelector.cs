@@ -116,7 +116,6 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
 
         var queryEmbedding = _embeddingFunction(query);
         var selected = new List<FewShotExample>();
-        var usedClusters = new HashSet<int>();
 
         // First pass: select one example from each cluster (round-robin)
         // Sort clusters by relevance to query
@@ -139,7 +138,6 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
                 .First();
 
             selected.Add(bestExample);
-            usedClusters.Add(clusterInfo.Index);
         }
 
         // Second pass: if we need more, cycle through clusters again

@@ -224,7 +224,7 @@ public class SentenceCompressor : PromptCompressorBase
         var result = text;
         foreach (var pattern in patterns)
         {
-            result = Regex.Replace(result, pattern, "", RegexOptions.IgnoreCase);
+            result = Regex.Replace(result, pattern, "", RegexOptions.IgnoreCase, RegexTimeout);
         }
 
         return result;
