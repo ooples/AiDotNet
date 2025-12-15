@@ -190,12 +190,12 @@ namespace AiDotNet.Tensors.Engines.Optimization
         public long TotalMemoryBytes { get; set; }
 
         public double TotalMilliseconds => TotalTicks * 1000.0 / Stopwatch.Frequency;
-        public double AverageMilliseconds => TotalMilliseconds / CallCount;
+        public double AverageMilliseconds => CallCount > 0 ? TotalMilliseconds / CallCount : 0;
         public double MinMilliseconds => MinTicks * 1000.0 / Stopwatch.Frequency;
         public double MaxMilliseconds => MaxTicks * 1000.0 / Stopwatch.Frequency;
         public double TotalMemoryMB => TotalMemoryBytes / (1024.0 * 1024.0);
-        public double AverageMemoryMB => TotalMemoryMB / CallCount;
+        public double AverageMemoryMB => CallCount > 0 ? TotalMemoryMB / CallCount : 0;
 
-        public double ThroughputOpsPerSecond => CallCount / (TotalMilliseconds / 1000.0);
+        public double ThroughputOpsPerSecond => TotalMilliseconds > 0 ? CallCount / (TotalMilliseconds / 1000.0) : 0;
     }
 }
