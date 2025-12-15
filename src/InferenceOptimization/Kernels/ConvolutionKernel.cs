@@ -94,6 +94,10 @@ namespace AiDotNet.InferenceOptimization.Kernels
             int outHeight = (inHeight + 2 * padding - kernelH) / stride + 1;
             int outWidth = (inWidth + 2 * padding - kernelW) / stride + 1;
 
+            if (outHeight <= 0 || outWidth <= 0)
+                throw new ArgumentException(
+                    $"Invalid output dimensions ({outHeight}x{outWidth}). " +
+                    $"Check stride ({stride}), padding ({padding}), and kernel size ({kernelH}x{kernelW}).");
             var output = new Tensor<float>(new[] { batchSize, outChannels, outHeight, outWidth });
 
             // Parallelize over batch and output channels
