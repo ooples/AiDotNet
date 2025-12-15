@@ -45,19 +45,19 @@ namespace AiDotNet.InferenceOptimization.Kernels
             bool useMask = inputs.Length > 3;
             Tensor<float> mask = useMask ? inputs[3] : null;
 
-            if (q.Dimensions.Length != 3 || k.Dimensions.Length != 3 || v.Dimensions.Length != 3)
+            if (q.Shape.Length != 3 || k.Shape.Length != 3 || v.Shape.Length != 3)
                 throw new ArgumentException("Attention requires 3D tensors [batch, seq_len, features]");
 
-            int batchSize = q.Dimensions[0];
-            int seqLenQ = q.Dimensions[1];
-            int seqLenK = k.Dimensions[1];
-            int dK = q.Dimensions[2];
-            int dV = v.Dimensions[2];
+            int batchSize = q.Shape[0];
+            int seqLenQ = q.Shape[1];
+            int seqLenK = k.Shape[1];
+            int dK = q.Shape[2];
+            int dV = v.Shape[2];
 
-            if (k.Dimensions[2] != dK)
+            if (k.Shape[2] != dK)
                 throw new ArgumentException("Q and K must have same feature dimension");
 
-            if (v.Dimensions[1] != seqLenK)
+            if (v.Shape[1] != seqLenK)
                 throw new ArgumentException("K and V must have same sequence length");
 
             var result = new Tensor<float>(new[] { batchSize, seqLenQ, dV });
@@ -192,12 +192,12 @@ namespace AiDotNet.InferenceOptimization.Kernels
             Tensor<float> q, Tensor<float> k, Tensor<float> v,
             int numHeads, Tensor<float>? mask = null)
         {
-            if (q.Dimensions.Length != 3)
+            if (q.Shape.Length != 3)
                 throw new ArgumentException("Multi-head attention requires 3D tensors");
 
-            int batchSize = q.Dimensions[0];
-            int seqLen = q.Dimensions[1];
-            int dModel = q.Dimensions[2];
+            int batchSize = q.Shape[0];
+            int seqLen = q.Shape[1];
+            int dModel = q.Shape[2];
 
             if (dModel % numHeads != 0)
                 throw new ArgumentException("d_model must be divisible by num_heads");
@@ -218,8 +218,8 @@ namespace AiDotNet.InferenceOptimization.Kernels
 
         private Tensor<float> ReshapeForMultiHead(Tensor<float> input, int numHeads, int dK)
         {
-            int batchSize = input.Dimensions[0];
-            int seqLen = input.Dimensions[1];
+            int batchSize = input.Shape[0];
+            int seqLen = input.Shape[1];
             var reshaped = new Tensor<float>(new[] { batchSize * numHeads, seqLen, dK });
 
             for (int b = 0; b < batchSize; b++)
@@ -244,8 +244,8 @@ namespace AiDotNet.InferenceOptimization.Kernels
         private Tensor<float> ReshapeFromMultiHead(Tensor<float> input, int batchSize, int seqLen, int dModel)
         {
             var reshaped = new Tensor<float>(new[] { batchSize, seqLen, dModel });
-            int numHeads = input.Dimensions[0] / batchSize;
-            int dK = input.Dimensions[2];
+            int numHeads = input.Shape[0] / batchSize;
+            int dK = input.Shape[2];
 
             for (int b = 0; b < batchSize; b++)
             {

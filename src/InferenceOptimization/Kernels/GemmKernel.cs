@@ -43,15 +43,15 @@ namespace AiDotNet.InferenceOptimization.Kernels
             var a = inputs[0];
             var b = inputs[1];
 
-            if (a.Dimensions.Length != 2 || b.Dimensions.Length != 2)
+            if (a.Shape.Length != 2 || b.Shape.Length != 2)
                 throw new ArgumentException("GEMM requires 2D tensors (matrices)");
 
-            int m = a.Dimensions[0];
-            int k = a.Dimensions[1];
-            int n = b.Dimensions[1];
+            int m = a.Shape[0];
+            int k = a.Shape[1];
+            int n = b.Shape[1];
 
-            if (k != b.Dimensions[0])
-                throw new ArgumentException($"Matrix dimensions incompatible: ({m}x{k}) * ({b.Dimensions[0]}x{n})");
+            if (k != b.Shape[0])
+                throw new ArgumentException($"Matrix dimensions incompatible: ({m}x{k}) * ({b.Shape[0]}x{n})");
 
             var result = new Tensor<float>(new[] { m, n });
 
@@ -152,14 +152,14 @@ namespace AiDotNet.InferenceOptimization.Kernels
         /// </summary>
         public Tensor<float> GemmTransposeB(Tensor<float> a, Tensor<float> b)
         {
-            if (a.Dimensions.Length != 2 || b.Dimensions.Length != 2)
+            if (a.Shape.Length != 2 || b.Shape.Length != 2)
                 throw new ArgumentException("GemmTransposeB requires 2D tensors");
 
-            int m = a.Dimensions[0];
-            int k = a.Dimensions[1];
-            int n = b.Dimensions[0]; // Note: B is transposed
+            int m = a.Shape[0];
+            int k = a.Shape[1];
+            int n = b.Shape[0]; // Note: B is transposed
 
-            if (k != b.Dimensions[1])
+            if (k != b.Shape[1])
                 throw new ArgumentException("Matrix dimensions incompatible for transpose");
 
             var result = new Tensor<float>(new[] { m, n });

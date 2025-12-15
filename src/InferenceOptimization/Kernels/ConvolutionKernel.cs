@@ -44,17 +44,17 @@ namespace AiDotNet.InferenceOptimization.Kernels
             // Input: [batch, in_channels, height, width]
             // Kernel: [out_channels, in_channels, kernel_h, kernel_w]
 
-            if (input.Dimensions.Length != 4 || kernel.Dimensions.Length != 4)
+            if (input.Shape.Length != 4 || kernel.Shape.Length != 4)
                 throw new ArgumentException("Conv2D requires 4D tensors");
 
-            int batchSize = input.Dimensions[0];
-            int inChannels = input.Dimensions[1];
-            int inHeight = input.Dimensions[2];
-            int inWidth = input.Dimensions[3];
+            int batchSize = input.Shape[0];
+            int inChannels = input.Shape[1];
+            int inHeight = input.Shape[2];
+            int inWidth = input.Shape[3];
 
-            int outChannels = kernel.Dimensions[0];
-            int kernelH = kernel.Dimensions[2];
-            int kernelW = kernel.Dimensions[3];
+            int outChannels = kernel.Shape[0];
+            int kernelH = kernel.Shape[2];
+            int kernelW = kernel.Shape[3];
 
             int outHeight = (inHeight + 2 * padding - kernelH) / stride + 1;
             int outWidth = (inWidth + 2 * padding - kernelW) / stride + 1;
@@ -111,7 +111,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
                             }
                         }
 
-                        int outputIdx = ((batch * output.Dimensions[1] + outChannel) * outHeight + oh) * outWidth + ow;
+                        int outputIdx = ((batch * output.Shape[1] + outChannel) * outHeight + oh) * outWidth + ow;
                         pOutput[outputIdx] = sum;
                     }
                 }
@@ -130,16 +130,16 @@ namespace AiDotNet.InferenceOptimization.Kernels
             // Input: [batch, channels, height, width]
             // Kernel: [channels, 1, kernel_h, kernel_w]
 
-            if (input.Dimensions.Length != 4 || kernel.Dimensions.Length != 4)
+            if (input.Shape.Length != 4 || kernel.Shape.Length != 4)
                 throw new ArgumentException("DepthwiseConv2D requires 4D tensors");
 
-            int batchSize = input.Dimensions[0];
-            int channels = input.Dimensions[1];
-            int inHeight = input.Dimensions[2];
-            int inWidth = input.Dimensions[3];
+            int batchSize = input.Shape[0];
+            int channels = input.Shape[1];
+            int inHeight = input.Shape[2];
+            int inWidth = input.Shape[3];
 
-            int kernelH = kernel.Dimensions[2];
-            int kernelW = kernel.Dimensions[3];
+            int kernelH = kernel.Shape[2];
+            int kernelW = kernel.Shape[3];
 
             int outHeight = (inHeight + 2 * padding - kernelH) / stride + 1;
             int outWidth = (inWidth + 2 * padding - kernelW) / stride + 1;
@@ -182,7 +182,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
 
                                 if (ih >= 0 && ih < inHeight && iw >= 0 && iw < inWidth)
                                 {
-                                    int inputIdx = ((batch * input.Dimensions[1] + channel) * inHeight + ih) * inWidth + iw;
+                                    int inputIdx = ((batch * input.Shape[1] + channel) * inHeight + ih) * inWidth + iw;
                                     int kernelIdx = (channel * kernelH + kh) * kernelW + kw;
 
                                     sum += pInput[inputIdx] * pKernel[kernelIdx];
@@ -190,7 +190,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
                             }
                         }
 
-                        int outputIdx = ((batch * output.Dimensions[1] + channel) * outHeight + oh) * outWidth + ow;
+                        int outputIdx = ((batch * output.Shape[1] + channel) * outHeight + oh) * outWidth + ow;
                         pOutput[outputIdx] = sum;
                     }
                 }
@@ -207,17 +207,17 @@ namespace AiDotNet.InferenceOptimization.Kernels
             int stride = 1,
             int padding = 0)
         {
-            if (input.Dimensions.Length != 4 || kernel.Dimensions.Length != 4)
+            if (input.Shape.Length != 4 || kernel.Shape.Length != 4)
                 throw new ArgumentException("GroupConv2D requires 4D tensors");
 
-            int batchSize = input.Dimensions[0];
-            int inChannels = input.Dimensions[1];
-            int inHeight = input.Dimensions[2];
-            int inWidth = input.Dimensions[3];
+            int batchSize = input.Shape[0];
+            int inChannels = input.Shape[1];
+            int inHeight = input.Shape[2];
+            int inWidth = input.Shape[3];
 
-            int outChannels = kernel.Dimensions[0];
-            int kernelH = kernel.Dimensions[2];
-            int kernelW = kernel.Dimensions[3];
+            int outChannels = kernel.Shape[0];
+            int kernelH = kernel.Shape[2];
+            int kernelW = kernel.Shape[3];
 
             if (inChannels % groups != 0 || outChannels % groups != 0)
                 throw new ArgumentException("Channels must be divisible by groups");
@@ -280,7 +280,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
 
                                     if (ih >= 0 && ih < inHeight && iw >= 0 && iw < inWidth)
                                     {
-                                        int inputIdx = ((batch * input.Dimensions[1] + globalInChannel) * inHeight + ih) * inWidth + iw;
+                                        int inputIdx = ((batch * input.Shape[1] + globalInChannel) * inHeight + ih) * inWidth + iw;
                                         int kernelIdx = ((outChannel * inChannelsPerGroup + ic) * kernelH + kh) * kernelW + kw;
 
                                         sum += pInput[inputIdx] * pKernel[kernelIdx];
@@ -289,7 +289,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
                             }
                         }
 
-                        int outputIdx = ((batch * output.Dimensions[1] + outChannel) * outHeight + oh) * outWidth + ow;
+                        int outputIdx = ((batch * output.Shape[1] + outChannel) * outHeight + oh) * outWidth + ow;
                         pOutput[outputIdx] = sum;
                     }
                 }
