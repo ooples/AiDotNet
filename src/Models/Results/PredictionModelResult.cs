@@ -688,121 +688,39 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     #endregion
 
     /// <summary>
-    /// Initializes a new instance of the PredictionModelResult class for a meta-trained model.
-    /// </summary>
-    /// <param name="metaLearner">The meta-learner containing the trained model and adaptation capabilities.</param>
-    /// <param name="metaResult">The results from the meta-training process.</param>
-    /// <param name="loraConfiguration">Optional LoRA configuration for parameter-efficient adaptation.</param>
-    /// <param name="biasDetector">Optional bias detector for ethical AI evaluation.</param>
-    /// <param name="fairnessEvaluator">Optional fairness evaluator for ethical AI evaluation.</param>
-    /// <param name="ragRetriever">Optional retriever for RAG functionality during inference.</param>
-    /// <param name="ragReranker">Optional reranker for RAG functionality during inference.</param>
-    /// <param name="ragGenerator">Optional generator for RAG functionality during inference.</param>
-    /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
-    /// <param name="agentConfig">Optional agent configuration for AI assistance during inference.</param>
-    /// <param name="deploymentConfiguration">Optional deployment configuration for export, caching, versioning, A/B testing, and telemetry.</param>
-    /// <param name="knowledgeGraph">Optional knowledge graph for graph-enhanced retrieval.</param>
-    /// <param name="graphStore">Optional graph store backend for persistent storage.</param>
-    /// <param name="hybridGraphRetriever">Optional hybrid retriever for combined vector + graph search.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor is used when a model has been trained using meta-learning (e.g., MAML, Reptile, SEAL).
-    /// The resulting PredictionModelResult contains the meta-trained model along with the meta-learner itself,
-    /// enabling quick adaptation to new tasks with just a few examples.
-    /// </para>
-    /// <para><b>For Beginners:</b> This constructor creates a prediction result for a meta-trained model.
-    ///
-    /// Meta-trained models are special because:
-    /// - They've learned how to learn across many different tasks
-    /// - They can quickly adapt to new tasks with just a few examples (few-shot learning)
-    /// - They retain the meta-learner for future adaptation
-    ///
-    /// After meta-training, you can:
-    /// - Use Adapt() to quickly adjust the model to a new task (5-10 examples)
-    /// - Use FineTune() for more extensive adaptation (100+ examples)
-    /// - Save and deploy the model for rapid adaptation in production
-    ///
-    /// This constructor packages everything needed to use a meta-trained model:
-    /// - The trained model (from the meta-learner)
-    /// - The meta-learner itself (for adaptation)
-    /// - Training history (loss curves, performance metrics)
-    /// - Optional LoRA configuration (for efficient adaptation)
-    /// - Optional agent configuration (for AI assistance)
-    /// </para>
-    /// </remarks>
-    internal PredictionModelResult(
-        IMetaLearner<T, TInput, TOutput> metaLearner,
-        MetaTrainingResult<T> metaResult,
-        ILoRAConfiguration<T>? loraConfiguration = null,
-        IBiasDetector<T>? biasDetector = null,
-        IFairnessEvaluator<T>? fairnessEvaluator = null,
-        IRetriever<T>? ragRetriever = null,
-        IReranker<T>? ragReranker = null,
-        IGenerator<T>? ragGenerator = null,
-        IEnumerable<IQueryProcessor>? queryProcessors = null,
-        AgentConfiguration<T>? agentConfig = null,
-        DeploymentConfiguration? deploymentConfiguration = null,
-        ReasoningConfig? reasoningConfig = null,
-        KnowledgeGraph<T>? knowledgeGraph = null,
-        IGraphStore<T>? graphStore = null,
-        HybridGraphRetriever<T>? hybridGraphRetriever = null)
-    {
-        // Validate required parameters to prevent security issues with serializable objects
-        if (metaLearner == null)
-        {
-            throw new ArgumentNullException(nameof(metaLearner), "MetaLearner cannot be null");
-        }
-
-        if (metaResult == null)
-        {
-            throw new ArgumentNullException(nameof(metaResult), "MetaTrainingResult cannot be null");
-        }
-
-        Model = metaLearner.BaseModel;
-        MetaLearner = metaLearner;
-        MetaTrainingResult = metaResult;
-        LoRAConfiguration = loraConfiguration;
-        ModelMetaData = Model?.GetModelMetadata() ?? new();
-        BiasDetector = biasDetector;
-        FairnessEvaluator = fairnessEvaluator;
-        RagRetriever = ragRetriever;
-        RagReranker = ragReranker;
-        RagGenerator = ragGenerator;
-        QueryProcessors = queryProcessors;
-        AgentConfig = agentConfig;
-        DeploymentConfiguration = deploymentConfiguration;
-        ReasoningConfig = reasoningConfig;
-        KnowledgeGraph = knowledgeGraph;
-        GraphStore = graphStore;
-        HybridGraphRetriever = hybridGraphRetriever;
-
-        // Create placeholder OptimizationResult and NormalizationInfo for consistency
-        OptimizationResult = new OptimizationResult<T, TInput, TOutput>();
-        NormalizationInfo = new NormalizationInfo<T, TInput, TOutput>();
-    }
-
-    /// <summary>
     /// Initializes a new instance of the PredictionModelResult class using an options object for clean configuration.
     /// </summary>
     /// <param name="options">The configuration options containing all settings for the prediction model result.</param>
     /// <remarks>
     /// <para>
     /// This constructor provides a cleaner API by accepting a single options object instead of many parameters.
-    /// It is the recommended constructor for most scenarios as it makes code more readable and maintainable.
+    /// It supports two initialization paths:
     /// </para>
-    /// <para><b>For Beginners:</b> This is the cleanest way to create a PredictionModelResult.
+    /// <list type="bullet">
+    ///   <item><description><b>Standard path:</b> Set OptimizationResult and NormalizationInfo for regular trained models</description></item>
+    ///   <item><description><b>Meta-learning path:</b> Set MetaLearner and MetaTrainingResult for meta-trained models</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> This is the only way to create a PredictionModelResult.
     ///
-    /// Instead of passing 20+ parameters to a constructor, you create an options object:
+    /// For a standard trained model:
     /// <code>
     /// var options = new PredictionModelResultOptions&lt;double, double[], double&gt;
     /// {
     ///     OptimizationResult = optimizationResult,
     ///     NormalizationInfo = normInfo,
-    ///     PromptTemplate = myTemplate,
-    ///     PromptChain = myChain,
     ///     BiasDetector = myBiasDetector
     /// };
+    /// var result = new PredictionModelResult&lt;double, double[], double&gt;(options);
+    /// </code>
     ///
+    /// For a meta-trained model:
+    /// <code>
+    /// var options = new PredictionModelResultOptions&lt;double, double[], double&gt;
+    /// {
+    ///     MetaLearner = metaLearner,
+    ///     MetaTrainingResult = metaResult,
+    ///     LoRAConfiguration = loraConfig
+    /// };
     /// var result = new PredictionModelResult&lt;double, double[], double&gt;(options);
     /// </code>
     ///
@@ -820,23 +738,51 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new ArgumentNullException(nameof(options));
         }
 
-        if (options.OptimizationResult is null)
+        // Determine initialization path: meta-learning or standard
+        var isMetaLearningPath = options.MetaLearner is not null;
+
+        if (isMetaLearningPath)
         {
-            throw new ArgumentNullException(nameof(options), "OptimizationResult cannot be null");
+            // Meta-learning path: MetaLearner and MetaTrainingResult are required
+            if (options.MetaLearner is null)
+            {
+                throw new ArgumentNullException(nameof(options), "MetaLearner cannot be null for meta-learning path");
+            }
+
+            if (options.MetaTrainingResult is null)
+            {
+                throw new ArgumentNullException(nameof(options), "MetaTrainingResult cannot be null for meta-learning path");
+            }
+
+            // Get model from meta-learner
+            Model = options.MetaLearner.BaseModel;
+            MetaLearner = options.MetaLearner;
+            MetaTrainingResult = options.MetaTrainingResult;
+
+            // Create placeholder OptimizationResult and NormalizationInfo for consistency
+            OptimizationResult = options.OptimizationResult ?? new OptimizationResult<T, TInput, TOutput>();
+            NormalizationInfo = options.NormalizationInfo ?? new NormalizationInfo<T, TInput, TOutput>();
+        }
+        else
+        {
+            // Standard path: OptimizationResult and NormalizationInfo are required
+            if (options.OptimizationResult is null)
+            {
+                throw new ArgumentNullException(nameof(options), "OptimizationResult cannot be null");
+            }
+
+            if (options.NormalizationInfo is null)
+            {
+                throw new ArgumentNullException(nameof(options), "NormalizationInfo cannot be null");
+            }
+
+            Model = options.OptimizationResult.BestSolution;
+            OptimizationResult = options.OptimizationResult;
+            NormalizationInfo = options.NormalizationInfo;
+            MetaLearner = options.MetaLearner;
+            MetaTrainingResult = options.MetaTrainingResult;
         }
 
-        if (options.NormalizationInfo is null)
-        {
-            throw new ArgumentNullException(nameof(options), "NormalizationInfo cannot be null");
-        }
-
-        // Core model configuration
-        var optimizationResult = options.OptimizationResult;
-        var normalizationInfo = options.NormalizationInfo;
-
-        Model = optimizationResult.BestSolution;
-        OptimizationResult = optimizationResult;
-        NormalizationInfo = normalizationInfo;
         ModelMetaData = Model?.GetModelMetadata() ?? new();
 
         // Ethical AI and fairness
@@ -858,9 +804,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         GraphStore = options.GraphStore;
         HybridGraphRetriever = options.HybridGraphRetriever;
 
-        // Meta-learning
-        MetaLearner = options.MetaLearner;
-        MetaTrainingResult = options.MetaTrainingResult;
+        // Cross-validation
         CrossValidationResult = options.CrossValidationResult;
 
         // Fine-tuning and adaptation

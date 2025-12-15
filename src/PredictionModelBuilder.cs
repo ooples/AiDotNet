@@ -1076,32 +1076,35 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _gpuAccelerationConfig,
             _compressionConfig);
 
-        // Create PredictionModelResult with meta-learning constructor
-        var result = new PredictionModelResult<T, TInput, TOutput>(
-            metaLearner: _metaLearner,
-            metaResult: metaResult,
-            loraConfiguration: _loraConfiguration,
-            biasDetector: _biasDetector,
-            fairnessEvaluator: _fairnessEvaluator,
-            ragRetriever: _ragRetriever,
-            ragReranker: _ragReranker,
-            ragGenerator: _ragGenerator,
-            queryProcessors: _queryProcessors,
-            agentConfig: _agentConfig,
-            deploymentConfiguration: deploymentConfig,
-            reasoningConfig: _reasoningConfig,
-            knowledgeGraph: _knowledgeGraph,
-            graphStore: _graphStore,
-            hybridGraphRetriever: _hybridGraphRetriever);
-
-        // Attach tokenizer if configured
-        if (_tokenizer is not null)
+        // Create PredictionModelResult with meta-learning options
+        var metaOptions = new PredictionModelResultOptions<T, TInput, TOutput>
         {
-            result.AttachTokenizer(_tokenizer, _tokenizationConfig);
-        }
+            MetaLearner = _metaLearner,
+            MetaTrainingResult = metaResult,
+            LoRAConfiguration = _loraConfiguration,
+            BiasDetector = _biasDetector,
+            FairnessEvaluator = _fairnessEvaluator,
+            RagRetriever = _ragRetriever,
+            RagReranker = _ragReranker,
+            RagGenerator = _ragGenerator,
+            QueryProcessors = _queryProcessors,
+            AgentConfig = _agentConfig,
+            DeploymentConfiguration = deploymentConfig,
+            ReasoningConfig = _reasoningConfig,
+            KnowledgeGraph = _knowledgeGraph,
+            GraphStore = _graphStore,
+            HybridGraphRetriever = _hybridGraphRetriever,
+            Tokenizer = _tokenizer,
+            TokenizationConfig = _tokenizationConfig,
+            PromptTemplate = _promptTemplate,
+            PromptChain = _promptChain,
+            PromptOptimizer = _promptOptimizer,
+            FewShotExampleSelector = _fewShotExampleSelector,
+            PromptAnalyzer = _promptAnalyzer,
+            PromptCompressor = _promptCompressor
+        };
 
-        // Attach prompt engineering configuration
-        AttachPromptEngineeringConfiguration(result);
+        var result = new PredictionModelResult<T, TInput, TOutput>(metaOptions);
 
         return result;
     }
