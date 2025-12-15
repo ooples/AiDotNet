@@ -54,6 +54,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// </remarks>
 public class AgenticChunker : ChunkingStrategyBase
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly int _maxChunkSize;
     private readonly double _coherenceThreshold;
 
@@ -108,7 +109,7 @@ public class AgenticChunker : ChunkingStrategyBase
 
         // Detect paragraph breaks (double newlines)
         var paragraphPattern = @"\n\s*\n";
-        var paragraphMatches = Regex.Matches(text, paragraphPattern);
+        var paragraphMatches = Regex.Matches(text, paragraphPattern, RegexOptions.None, RegexTimeout);
         foreach (Match match in paragraphMatches)
         {
             boundaries.Add(match.Index);
@@ -138,7 +139,7 @@ public class AgenticChunker : ChunkingStrategyBase
         position = 0;
         foreach (var line in lines)
         {
-            if (Regex.IsMatch(line, listPattern))
+            if (Regex.IsMatch(line, listPattern, RegexOptions.None, RegexTimeout))
             {
                 boundaries.Add(position);
             }
@@ -330,12 +331,12 @@ public class AgenticChunker : ChunkingStrategyBase
 
         // Check for entity continuity (capitalized words that might be names/entities)
         var entities1 = new HashSet<string>(
-            Regex.Matches(segment1, @"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b")
+            Regex.Matches(segment1, @"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b", RegexOptions.None, RegexTimeout)
                 .Cast<Match>()
                 .Select(m => m.Value));
-            
+
         var entities2 = new HashSet<string>(
-            Regex.Matches(segment2, @"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b")
+            Regex.Matches(segment2, @"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b", RegexOptions.None, RegexTimeout)
                 .Cast<Match>()
                 .Select(m => m.Value));
 

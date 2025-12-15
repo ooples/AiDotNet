@@ -8,6 +8,7 @@ using AiDotNet.Reasoning.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Configuration;
+using AiDotNet.PromptEngineering.FewShot;
 
 namespace AiDotNet.Interfaces;
 
@@ -1279,6 +1280,75 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="dataLoader">The data loader that provides training data.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataLoader(IDataLoader<T> dataLoader);
+
+    /// <summary>
+    /// Configures the prompt template for language model interactions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A prompt template provides a structured way to create prompts for language models by combining
+    /// a template string with runtime variables.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> A prompt template is like a form with blanks to fill in. You define the
+    /// structure once and fill in different values each time you use it.
+    /// </para>
+    /// </remarks>
+    /// <param name="template">The prompt template to use. If null, no template is configured.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptTemplate(IPromptTemplate? template = null);
+
+    /// <summary>
+    /// Configures the prompt chain for composing multiple language model operations.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A chain orchestrates multiple language model calls, tools, and transformations into a cohesive
+    /// workflow. Chains can be sequential, conditional, or parallel.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> A chain connects multiple steps into a complete workflow, like a recipe
+    /// where each step builds on the previous one.
+    /// </para>
+    /// </remarks>
+    /// <param name="chain">The chain to use for processing prompts. If null, no chain is configured.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptChain(IChain<string, string>? chain = null);
+
+    /// <summary>
+    /// Configures the prompt optimizer for automatically improving prompts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A prompt optimizer automatically refines prompts to achieve better performance on a specific task.
+    /// Optimization strategies include discrete search, gradient-based methods, and evolutionary algorithms.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> A prompt optimizer automatically improves your prompts by testing variations
+    /// and keeping the best-performing ones.
+    /// </para>
+    /// </remarks>
+    /// <param name="optimizer">The prompt optimizer to use. If null, no optimizer is configured.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptOptimizer(IPromptOptimizer<T>? optimizer = null);
+
+    /// <summary>
+    /// Configures the few-shot example selector for selecting examples to include in prompts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A few-shot example selector chooses the most relevant examples to include in prompts based
+    /// on the current query. Different strategies include random selection, fixed order, and
+    /// similarity-based selection.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Few-shot learning teaches the model by showing it examples. The selector
+    /// picks which examples to show for each new query.
+    /// </para>
+    /// </remarks>
+    /// <param name="selector">The few-shot example selector to use. If null, no selector is configured.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFewShotExampleSelector(IFewShotExampleSelector<T>? selector = null);
 
     /// <summary>
     /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.

@@ -39,6 +39,7 @@ namespace AiDotNet.Reasoning.Benchmarks;
 /// </remarks>
 public class GSM8KBenchmark<T> : IBenchmark<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly INumericOperations<T> _numOps;
     private List<BenchmarkProblem>? _cachedProblems;
 
@@ -325,7 +326,7 @@ public class GSM8KBenchmark<T> : IBenchmark<T>
             return null;
 
         // Look for numbers, possibly with commas or decimals
-        var matches = Regex.Matches(text, @"-?[\d,]+\.?\d*");
+        var matches = Regex.Matches(text, @"-?[\d,]+\.?\d*", RegexOptions.None, RegexTimeout);
 
         if (matches.Count == 0)
             return null;
