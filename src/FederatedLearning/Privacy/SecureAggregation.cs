@@ -288,11 +288,18 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
     }
 
     /// <summary>
-    /// Aggregates masked updates from all clients, recovering the true sum.
+    /// Aggregates masked updates from all clients, returning a weighted average.
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> This sums up all the masked updates. Because the secret
-    /// masks cancel out, the result is the true sum of client updates.
+    /// masks cancel out, the server recovers the sum of the underlying (possibly weighted)
+    /// client updates without ever seeing any individual update.
+    ///
+    /// To compute a <i>weighted average</i> securely:
+    /// - Each client must apply its weight to its update <i>before</i> masking (use <see cref="MaskUpdate(int, Dictionary{string, T[]}, double)"/>).
+    /// - The server then divides the summed masked updates by the total weight.
+    ///
+    /// If you need the raw (un-normalized) sum of updates, use <see cref="AggregateSumSecurely"/>.
     ///
     /// Mathematical property:
     /// Σ(masked_update_i) = Σ(update_i + secrets_i)
@@ -312,54 +319,17 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
     /// </remarks>
     /// <param name="maskedUpdates">Dictionary of client IDs to their masked updates.</param>
     /// <param name="clientWeights">Dictionary of client IDs to their aggregation weights.</param>
-    /// <returns>The securely aggregated model (sum of original updates with masks cancelled).</returns>
+    /// <returns>The securely aggregated model (weighted average if clients pre-weighted their updates before masking).</returns>
     public Dictionary<string, T[]> AggregateSecurely(
         Dictionary<int, Dictionary<string, T[]>> maskedUpdates,
         Dictionary<int, double> clientWeights)
     {
-        if (maskedUpdates == null || maskedUpdates.Count == 0)
-        {
-            throw new ArgumentException("Masked updates cannot be null or empty.", nameof(maskedUpdates));
-        }
-
         if (clientWeights == null || clientWeights.Count == 0)
         {
             throw new ArgumentException("Client weights cannot be null or empty.", nameof(clientWeights));
         }
 
-        // Get model structure from first client
-        var firstUpdate = maskedUpdates.First().Value;
-        var aggregatedUpdate = new Dictionary<string, T[]>();
-
-        // Initialize aggregated update with zeros
-        foreach (var layerName in firstUpdate.Keys)
-        {
-            var layer = new T[firstUpdate[layerName].Length];
-            for (int i = 0; i < layer.Length; i++)
-            {
-                layer[i] = NumOps.Zero;
-            }
-
-            aggregatedUpdate[layerName] = layer;
-        }
-
-        // Sum all masked updates
-        // The pairwise secrets will cancel out, leaving only the true sum
-        foreach (var clientId in maskedUpdates.Keys)
-        {
-            var maskedUpdate = maskedUpdates[clientId];
-
-            foreach (var layerName in maskedUpdate.Keys)
-            {
-                var maskedParams = maskedUpdate[layerName];
-                var aggregatedParams = aggregatedUpdate[layerName];
-
-                for (int i = 0; i < maskedParams.Length; i++)
-                {
-                    aggregatedParams[i] = NumOps.Add(aggregatedParams[i], maskedParams[i]);
-                }
-            }
-        }
+        var aggregatedUpdate = AggregateSumSecurely(maskedUpdates);
 
         // If the client updates were weighted before masking (recommended for secure weighted averaging),
         // divide by total weight to return a weighted average.
@@ -385,6 +355,57 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
             for (int i = 0; i < aggregatedParams.Length; i++)
             {
                 aggregatedParams[i] = NumOps.Divide(aggregatedParams[i], totalWeightT);
+            }
+        }
+
+        return aggregatedUpdate;
+    }
+
+    /// <summary>
+    /// Aggregates masked updates from all clients, returning the raw sum with masks cancelled.
+    /// </summary>
+    /// <remarks>
+    /// This method does not divide by any weight. It returns the sum of the underlying updates
+    /// after the pairwise masks cancel out.
+    /// </remarks>
+    /// <param name="maskedUpdates">Dictionary of client IDs to their masked updates.</param>
+    /// <returns>The securely aggregated model (sum of underlying updates with masks cancelled).</returns>
+    public Dictionary<string, T[]> AggregateSumSecurely(Dictionary<int, Dictionary<string, T[]>> maskedUpdates)
+    {
+        if (maskedUpdates == null || maskedUpdates.Count == 0)
+        {
+            throw new ArgumentException("Masked updates cannot be null or empty.", nameof(maskedUpdates));
+        }
+
+        // Get model structure from first client
+        var firstUpdate = maskedUpdates.First().Value;
+        var aggregatedUpdate = new Dictionary<string, T[]>();
+
+        // Initialize aggregated update with zeros
+        foreach (var layerName in firstUpdate.Keys)
+        {
+            var layer = new T[firstUpdate[layerName].Length];
+            for (int i = 0; i < layer.Length; i++)
+            {
+                layer[i] = NumOps.Zero;
+            }
+
+            aggregatedUpdate[layerName] = layer;
+        }
+
+        // Sum all masked updates
+        // The pairwise secrets will cancel out, leaving only the true sum
+        foreach (var maskedUpdate in maskedUpdates.Values)
+        {
+            foreach (var layerName in maskedUpdate.Keys)
+            {
+                var maskedParams = maskedUpdate[layerName];
+                var aggregatedParams = aggregatedUpdate[layerName];
+
+                for (int i = 0; i < maskedParams.Length; i++)
+                {
+                    aggregatedParams[i] = NumOps.Add(aggregatedParams[i], maskedParams[i]);
+                }
             }
         }
 
