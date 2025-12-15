@@ -1,6 +1,7 @@
 namespace AiDotNet.FederatedLearning.Privacy;
 
 using System;
+using System.Security.Cryptography;
 using AiDotNet.FederatedLearning.Infrastructure;
 
 /// <summary>
@@ -73,7 +74,8 @@ using AiDotNet.FederatedLearning.Infrastructure;
 public class SecureAggregation<T> : FederatedLearningComponentBase<T>
 {
     private readonly Dictionary<int, Dictionary<int, T[]>> _pairwiseSecrets;
-    private readonly Random _random;
+    private readonly Random? _testRandom;
+    private readonly RandomNumberGenerator? _secureRandom;
     private readonly int _parameterCount;
 
     /// <summary>
@@ -101,7 +103,10 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
 
         _parameterCount = parameterCount;
         _pairwiseSecrets = new Dictionary<int, Dictionary<int, T[]>>();
-        _random = randomSeed.HasValue ? new Random(randomSeed.Value) : new Random();
+
+        // Use cryptographically secure randomness by default. Random is only used when a seed is explicitly provided (tests/reproducibility).
+        _testRandom = randomSeed.HasValue ? new Random(randomSeed.Value) : null;
+        _secureRandom = randomSeed.HasValue ? null : RandomNumberGenerator.Create();
     }
 
     /// <summary>
@@ -153,8 +158,7 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
                 var secret = new T[_parameterCount];
                 for (int k = 0; k < _parameterCount; k++)
                 {
-                    // Use cryptographically secure random in production
-                    secret[k] = NumOps.FromDouble((_random.NextDouble() - 0.5) * 2.0); // Range: [-1, 1]
+                    secret[k] = NumOps.FromDouble((NextUnitIntervalDouble() - 0.5) * 2.0); // Range: [-1, 1]
                 }
 
                 // Store secret for client i with respect to client j
@@ -421,6 +425,21 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
                 "Ensure SecureAggregation is constructed with the correct parameterCount.",
                 paramName);
         }
+    }
+
+    private double NextUnitIntervalDouble()
+    {
+        if (_testRandom != null)
+        {
+            return _testRandom.NextDouble();
+        }
+
+        var bytes = new byte[8];
+        _secureRandom!.GetBytes(bytes);
+
+        // Convert to a uniform double in [0, 1) using 53 bits of randomness (IEEE 754 mantissa).
+        ulong value = BitConverter.ToUInt64(bytes, 0) >> 11;
+        return value / (double)(1UL << 53);
     }
 
     /// <summary>
