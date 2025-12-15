@@ -397,6 +397,40 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>
             aggregatedUpdate[layerName] = layer;
         }
 
+        // Validate all clients have the same structure and parameter counts.
+        foreach (var kvp in maskedUpdates)
+        {
+            int clientId = kvp.Key;
+            var maskedUpdate = kvp.Value;
+
+            if (maskedUpdate == null || maskedUpdate.Count == 0)
+            {
+                throw new ArgumentException($"Masked update for client {clientId} cannot be null or empty.", nameof(maskedUpdates));
+            }
+
+            if (maskedUpdate.Count != firstUpdate.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Client {clientId} has inconsistent model structure. Expected {firstUpdate.Count} layers, got {maskedUpdate.Count}.");
+            }
+
+            foreach (var layerName in firstUpdate.Keys)
+            {
+                if (!maskedUpdate.TryGetValue(layerName, out var clientLayer) || clientLayer == null)
+                {
+                    throw new InvalidOperationException(
+                        $"Client {clientId} is missing layer '{layerName}' or it is null. All clients must send the same layer names.");
+                }
+
+                int expectedLength = firstUpdate[layerName].Length;
+                if (clientLayer.Length != expectedLength)
+                {
+                    throw new InvalidOperationException(
+                        $"Client {clientId} layer '{layerName}' has {clientLayer.Length} parameters but expected {expectedLength}.");
+                }
+            }
+        }
+
         // Sum all masked updates
         // The pairwise secrets will cancel out, leaving only the true sum
         foreach (var maskedUpdate in maskedUpdates.Values)
