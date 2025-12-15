@@ -35,17 +35,22 @@ namespace AiDotNet.InferenceOptimization
             if (op == null)
                 throw new ArgumentNullException(nameof(op));
 
+            // Use AddOrUpdate with factory that always creates a new sorted list
+            // This ensures thread-safety by never mutating existing lists
             _operators.AddOrUpdate(
                 op.Name,
                 _ => new List<ICustomOperator> { op },
-                (_, list) =>
+                (_, existingList) =>
                 {
-                    lock (list)
+                    // Create a new list with all existing operators plus the new one
+                    // This avoids race conditions from modifying the existing list
+                    List<ICustomOperator> newList;
+                    lock (existingList)
                     {
-                        list.Add(op);
-                        list.Sort((a, b) => b.Priority.CompareTo(a.Priority));
+                        newList = new List<ICustomOperator>(existingList) { op };
                     }
-                    return list;
+                    newList.Sort((a, b) => b.Priority.CompareTo(a.Priority));
+                    return newList;
                 });
 
             // Clear cached selection to force re-evaluation

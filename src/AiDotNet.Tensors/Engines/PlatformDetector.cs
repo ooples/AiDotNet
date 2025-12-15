@@ -1,7 +1,9 @@
 using System;
 using System.Runtime.InteropServices;
+#if NET5_0_OR_GREATER
 using System.Runtime.Intrinsics.X86;
 using System.Runtime.Intrinsics.Arm;
+#endif
 
 namespace AiDotNet.Tensors.Engines
 {
@@ -31,6 +33,7 @@ namespace AiDotNet.Tensors.Engines
                 Is64BitOperatingSystem = Environment.Is64BitOperatingSystem
             };
 
+#if NET5_0_OR_GREATER
             // Detect x86/x64 SIMD support
             if (caps.Architecture == Architecture.X64 || caps.Architecture == Architecture.X86)
             {
@@ -59,6 +62,7 @@ namespace AiDotNet.Tensors.Engines
                 caps.HasArmCrc32 = Crc32.IsSupported;
                 caps.HasArmDp = AdvSimd.Arm64.IsSupported;
             }
+#endif
 
             // Detect cache sizes (approximate based on typical values)
             caps.L1CacheSize = EstimateL1CacheSize(caps.Architecture);
@@ -90,10 +94,16 @@ namespace AiDotNet.Tensors.Engines
             return 8 * 1024 * 1024;
         }
 
+        /// <summary>
+        /// Checks if the platform is capable of CUDA support.
+        /// Note: This only checks platform capability (64-bit Windows/Linux),
+        /// not whether CUDA is actually installed. Full CUDA detection would
+        /// require native library calls or checking for CUDA drivers.
+        /// </summary>
         private static bool DetectCudaSupport()
         {
-            // This would require native CUDA library calls
-            // For now, we'll check if we're on Windows/Linux x64
+            // Check platform capability for CUDA support
+            // Actual CUDA availability requires native library detection
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ||
                 RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {

@@ -1,14 +1,17 @@
 using System;
 using System.Runtime.CompilerServices;
+#if NET5_0_OR_GREATER
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using System.Runtime.Intrinsics.Arm;
+#endif
 
 namespace AiDotNet.Tensors.Engines.Simd
 {
     /// <summary>
     /// SIMD-optimized kernels for common operations.
     /// Provides hardware-accelerated implementations using AVX2, SSE, and ARM NEON.
+    /// Falls back to scalar operations on .NET Framework.
     /// </summary>
     public static class SimdKernels
     {
@@ -20,6 +23,7 @@ namespace AiDotNet.Tensors.Engines.Simd
         {
             int i = 0;
 
+#if NET5_0_OR_GREATER
             // AVX2 path (8 floats at a time)
             if (Avx2.IsSupported && length >= 8)
             {
@@ -56,6 +60,7 @@ namespace AiDotNet.Tensors.Engines.Simd
                     AdvSimd.Store(result + i, vr);
                 }
             }
+#endif
 
             // Scalar fallback for remaining elements
             for (; i < length; i++)
@@ -72,6 +77,7 @@ namespace AiDotNet.Tensors.Engines.Simd
         {
             int i = 0;
 
+#if NET5_0_OR_GREATER
             if (Avx2.IsSupported && length >= 8)
             {
                 int simdLength = length & ~7;
@@ -105,6 +111,7 @@ namespace AiDotNet.Tensors.Engines.Simd
                     AdvSimd.Store(result + i, vr);
                 }
             }
+#endif
 
             for (; i < length; i++)
             {
@@ -121,6 +128,7 @@ namespace AiDotNet.Tensors.Engines.Simd
             float sum = 0.0f;
             int i = 0;
 
+#if NET5_0_OR_GREATER
             if (Avx2.IsSupported && length >= 8)
             {
                 var vsum = Vector256<float>.Zero;
@@ -178,9 +186,20 @@ namespace AiDotNet.Tensors.Engines.Simd
                     vsum = AdvSimd.Add(vsum, AdvSimd.Multiply(va, vb));
                 }
 
-                // Horizontal sum for ARM - manual reduction
-                sum = vsum.GetElement(0) + vsum.GetElement(1) + vsum.GetElement(2) + vsum.GetElement(3);
+                // Horizontal sum for ARM - use AddPairwise on ARM64, manual fallback otherwise
+                if (AdvSimd.Arm64.IsSupported)
+                {
+                    // AddPairwise reduces pairs: [a,b,c,d] -> [a+b, c+d, ?, ?] (lower 64 bits)
+                    var pairSum = AdvSimd.Arm64.AddPairwise(vsum, vsum);
+                    var finalSum = AdvSimd.Arm64.AddPairwiseScalar(pairSum.GetLower());
+                    sum = finalSum.ToScalar();
+                }
+                else
+                {
+                    sum = vsum.GetElement(0) + vsum.GetElement(1) + vsum.GetElement(2) + vsum.GetElement(3);
+                }
             }
+#endif
 
             // Scalar remainder
             for (; i < length; i++)
@@ -199,6 +218,7 @@ namespace AiDotNet.Tensors.Engines.Simd
         {
             int i = 0;
 
+#if NET5_0_OR_GREATER
             if (Avx2.IsSupported && length >= 8)
             {
                 var vscalar = Vector256.Create(scalar);
@@ -240,6 +260,7 @@ namespace AiDotNet.Tensors.Engines.Simd
                     AdvSimd.Store(result + i, vr);
                 }
             }
+#endif
 
             for (; i < length; i++)
             {
@@ -255,6 +276,7 @@ namespace AiDotNet.Tensors.Engines.Simd
         {
             int i = 0;
 
+#if NET5_0_OR_GREATER
             if (Avx2.IsSupported && length >= 8)
             {
                 var vzero = Vector256<float>.Zero;
@@ -291,6 +313,7 @@ namespace AiDotNet.Tensors.Engines.Simd
                     AdvSimd.Store(output + i, vr);
                 }
             }
+#endif
 
             for (; i < length; i++)
             {
@@ -308,7 +331,11 @@ namespace AiDotNet.Tensors.Engines.Simd
             // This is a scalar fallback - can be optimized with SVML or custom approximations
             for (int i = 0; i < length; i++)
             {
+#if NET5_0_OR_GREATER
                 output[i] = MathF.Exp(input[i]);
+#else
+                output[i] = (float)Math.Exp(input[i]);
+#endif
             }
         }
 
@@ -321,6 +348,7 @@ namespace AiDotNet.Tensors.Engines.Simd
             float sum = 0.0f;
             int i = 0;
 
+#if NET5_0_OR_GREATER
             if (Avx2.IsSupported && length >= 8)
             {
                 var vsum = Vector256<float>.Zero;
@@ -370,9 +398,20 @@ namespace AiDotNet.Tensors.Engines.Simd
                     vsum = AdvSimd.Add(vsum, v);
                 }
 
-                // Horizontal sum for ARM - manual reduction
-                sum = vsum.GetElement(0) + vsum.GetElement(1) + vsum.GetElement(2) + vsum.GetElement(3);
+                // Horizontal sum for ARM - use AddPairwise on ARM64, manual fallback otherwise
+                if (AdvSimd.Arm64.IsSupported)
+                {
+                    // AddPairwise reduces pairs: [a,b,c,d] -> [a+b, c+d, ?, ?] (lower 64 bits)
+                    var pairSum = AdvSimd.Arm64.AddPairwise(vsum, vsum);
+                    var finalSum = AdvSimd.Arm64.AddPairwiseScalar(pairSum.GetLower());
+                    sum = finalSum.ToScalar();
+                }
+                else
+                {
+                    sum = vsum.GetElement(0) + vsum.GetElement(1) + vsum.GetElement(2) + vsum.GetElement(3);
+                }
             }
+#endif
 
             for (; i < length; i++)
             {

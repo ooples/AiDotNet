@@ -32,11 +32,13 @@ namespace AiDotNet.Tensors.Engines.Optimization
         {
             // This hints the CPU to fetch data into cache
             // Note: .NET JIT may or may not honor this depending on platform
+#if NET5_0_OR_GREATER
             if (System.Runtime.Intrinsics.X86.Sse.IsSupported)
             {
                 System.Runtime.Intrinsics.X86.Sse.Prefetch0(address);
             }
-            // No-op on non-x86 platforms or if SSE is not supported
+#endif
+            // No-op on non-x86 platforms, if SSE is not supported, or on .NET Framework
         }
 
         /// <summary>
@@ -45,11 +47,13 @@ namespace AiDotNet.Tensors.Engines.Optimization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static unsafe void PrefetchNonTemporal(void* address)
         {
+#if NET5_0_OR_GREATER
             if (System.Runtime.Intrinsics.X86.Sse.IsSupported)
             {
                 System.Runtime.Intrinsics.X86.Sse.PrefetchNonTemporal(address);
             }
-            // No-op on non-x86 platforms or if SSE is not supported
+#endif
+            // No-op on non-x86 platforms, if SSE is not supported, or on .NET Framework
         }
 
         /// <summary>
