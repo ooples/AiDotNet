@@ -1327,6 +1327,18 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="parameters">The parameter vector to use.</param>
     /// <returns>A new PredictionModelResult with updated parameters.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new model with updated parameters. The OptimizationResult is deep-copied
+    /// and updated to reference the new model. NormalizationInfo is shared (shallow-copied) since
+    /// normalization parameters don't change when model parameters change.
+    /// </para>
+    /// <para>
+    /// All configuration components (prompt engineering, RAG, agents, etc.) are shallow-copied,
+    /// meaning they are shared between the original and new instance. See <see cref="DeepCopy"/>
+    /// for detailed documentation on which components are deep vs shallow copied.
+    /// </para>
+    /// </remarks>
     public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         if (Model == null)
@@ -1444,9 +1456,44 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
-    /// Creates a deep copy of this PredictionModelResult.
+    /// Creates a copy of this PredictionModelResult with deep-copied core model components.
     /// </summary>
-    /// <returns>A new PredictionModelResult instance that is a deep copy of this one.</returns>
+    /// <returns>A new PredictionModelResult instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Deep-copied components</b> (independent copies, mutations don't affect original):
+    /// <list type="bullet">
+    ///   <item><description>Model - The underlying predictive model</description></item>
+    ///   <item><description>OptimizationResult - Training results and metrics</description></item>
+    ///   <item><description>NormalizationInfo - Data normalization parameters</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Shallow-copied components</b> (shared references, mutations affect both copies):
+    /// <list type="bullet">
+    ///   <item><description>BiasDetector, FairnessEvaluator - Ethical AI components</description></item>
+    ///   <item><description>RagRetriever, RagReranker, RagGenerator, QueryProcessors - RAG components</description></item>
+    ///   <item><description>KnowledgeGraph, GraphStore, HybridGraphRetriever - Graph RAG components</description></item>
+    ///   <item><description>MetaLearner, MetaTrainingResult - Meta-learning components</description></item>
+    ///   <item><description>PromptTemplate, PromptChain, PromptOptimizer - Prompt engineering components</description></item>
+    ///   <item><description>FewShotExampleSelector, PromptAnalyzer, PromptCompressor - Prompt engineering components</description></item>
+    ///   <item><description>Tokenizer, TokenizationConfig - Tokenization components</description></item>
+    ///   <item><description>AgentConfig, AgentRecommendation, ReasoningConfig - Agent/reasoning config</description></item>
+    ///   <item><description>DeploymentConfiguration, InferenceOptimizationConfig - Deployment config</description></item>
+    ///   <item><description>LoRAConfiguration, CrossValidationResult - Training config</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// The shallow-copied components are typically stateless configuration objects or services
+    /// that can be safely shared. If you need independent copies of these components, you should
+    /// create new instances manually before calling DeepCopy.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new model that can be modified independently
+    /// from the original for its core prediction behavior (model weights, normalization).
+    /// However, configuration objects like prompt templates are shared between the original
+    /// and the copy - if you modify them, both copies will see the change.
+    /// </para>
+    /// </remarks>
     public IFullModel<T, TInput, TOutput> DeepCopy()
     {
         if (Model == null)
