@@ -201,6 +201,14 @@ Key parameters in `FederatedLearningOptions`:
 ✅ **Documentation**: Extensive XML documentation with beginner-friendly explanations
 ✅ **Testing**: Unit tests for core algorithms and privacy mechanisms
 
+## v1 Frozen Scope
+
+AiDotNet Federated Learning v1 is defined by a frozen, exhaustive scope snapshot:
+- `docs/FederatedLearning_V1_FrozenScope.md`
+
+Items explicitly deferred to post-v1 work are tracked here:
+- `docs/FederatedLearning_OutOfScope_Backlog.md`
+
 ## Testing
 
 Unit tests are located in `tests/AiDotNet.Tests/FederatedLearning/`:
@@ -214,6 +222,10 @@ dotnet test tests/AiDotNet.Tests/
 ```
 
 ## Future Enhancements
+
+For the frozen v1 scope and post-v1 backlog, see:
+- `docs/FederatedLearning_V1_FrozenScope.md`
+- `docs/FederatedLearning_OutOfScope_Backlog.md`
 
 Potential extensions for future phases:
 
