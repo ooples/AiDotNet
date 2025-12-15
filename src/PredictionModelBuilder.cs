@@ -1337,6 +1337,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             AgentConfig = _agentConfig,
             DeploymentConfiguration = deploymentConfig,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
             GraphStore = _graphStore,
             HybridGraphRetriever = _hybridGraphRetriever,
