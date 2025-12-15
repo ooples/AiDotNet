@@ -162,13 +162,9 @@ public class PersonalizedFederatedLearning<T>
             // Personalize layers matching specific patterns
             foreach (var layerName in modelStructure.Keys)
             {
-                foreach (var pattern in customPatterns)
+                if (customPatterns.Any(pattern => layerName.Contains(pattern, StringComparison.OrdinalIgnoreCase)))
                 {
-                    if (layerName.Contains(pattern, StringComparison.OrdinalIgnoreCase))
-                    {
-                        _personalizedLayers.Add(layerName);
-                        break;
-                    }
+                    _personalizedLayers.Add(layerName);
                 }
             }
         }
