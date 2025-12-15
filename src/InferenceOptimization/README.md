@@ -86,7 +86,8 @@ This module provides low-level kernel optimization for critical operations, enab
 ```csharp
 using AiDotNet.InferenceOptimization;
 using AiDotNet.InferenceOptimization.Kernels;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines.Simd;  // SimdKernels location
+using AiDotNet.Tensors.LinearAlgebra;
 
 // Initialize the optimization system
 OptimizationInitializer.Initialize(enableProfiling: true);
