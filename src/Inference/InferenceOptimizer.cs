@@ -2,6 +2,7 @@ using AiDotNet.Configuration;
 using AiDotNet.Inference.SpeculativeDecoding;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Inference;
@@ -198,11 +199,11 @@ public class InferenceOptimizer<T>
         // Calculate maximum sequence length
         long calculatedMaxSeqLen = maxMemoryBytes / memoryPerTokenWithBatch;
 
-        // Apply reasonable bounds (Math.Clamp not available in net471)
-        const int minSeqLen = 128;
-        const int maxSeqLen = 32768; // Reasonable upper bound
+        // Apply reasonable bounds using MathHelper.Clamp for net471 compatibility
+        const long minSeqLen = 128;
+        const long maxSeqLen = 32768; // Reasonable upper bound
 
-        return (int)Math.Max(minSeqLen, Math.Min(maxSeqLen, calculatedMaxSeqLen));
+        return (int)MathHelper.Clamp(calculatedMaxSeqLen, minSeqLen, maxSeqLen);
     }
 
     /// <summary>
