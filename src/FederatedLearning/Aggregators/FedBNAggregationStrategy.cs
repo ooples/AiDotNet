@@ -232,15 +232,7 @@ public class FedBNAggregationStrategy<T> : AggregationStrategyBase<Dictionary<st
     /// <returns>True if the layer is a batch normalization layer, false otherwise.</returns>
     private bool IsBatchNormalizationLayer(string layerName)
     {
-        foreach (var pattern in _batchNormLayerPatterns)
-        {
-            if (layerName.Contains(pattern, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return _batchNormLayerPatterns.Any(pattern => layerName.Contains(pattern, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
