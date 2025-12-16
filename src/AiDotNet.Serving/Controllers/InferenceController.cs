@@ -153,7 +153,10 @@ public class InferenceController : ControllerBase
         var model = _modelRepository.GetModel<T>(effectiveModelName) ?? _modelRepository.GetModel<T>(modelName);
         if (model == null)
         {
-            throw new InvalidOperationException($"Model '{modelName}' was not found.");
+            string attemptedNames = effectiveModelName != modelName
+                ? $"'{effectiveModelName}' (with adapter) or '{modelName}'"
+                : $"'{modelName}'";
+            throw new InvalidOperationException($"Model {attemptedNames} was not found.");
         }
 
         // Respect per-model inference configuration: bypass batching when disabled.
