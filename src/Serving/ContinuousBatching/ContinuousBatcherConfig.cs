@@ -36,6 +36,16 @@ public class ContinuousBatcherConfig
     public bool EnableSpeculativeDecoding { get; set; } = false;
 
     /// <summary>
+    /// Policy for when speculative decoding should run (default: Auto).
+    /// </summary>
+    public AiDotNet.Configuration.SpeculationPolicy SpeculationPolicy { get; set; } = AiDotNet.Configuration.SpeculationPolicy.Auto;
+
+    /// <summary>
+    /// Number of tokens to draft ahead when speculative decoding is enabled.
+    /// </summary>
+    public int SpeculationDepth { get; set; } = 4;
+
+    /// <summary>
     /// Creates config for a specific model.
     /// </summary>
     public static ContinuousBatcherConfig ForModel(string modelName, int maxBatchSize = 8)

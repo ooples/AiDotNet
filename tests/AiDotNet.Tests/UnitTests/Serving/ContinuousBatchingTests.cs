@@ -1,4 +1,5 @@
 using AiDotNet.Serving.ContinuousBatching;
+using AiDotNet.Inference.SpeculativeDecoding;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -489,6 +490,110 @@ public class ContinuousBatchingTests
     }
 
     [Fact]
+    public void ContinuousBatcher_SpeculationPolicy_ForceOn_GeneratesMultipleTokensPerStep()
+    {
+        // Arrange
+        var config = new ContinuousBatcherConfig
+        {
+            AutoStart = false,
+            EosTokenId = 2,
+            EnableSpeculativeDecoding = true,
+            SpeculationPolicy = AiDotNet.Configuration.SpeculationPolicy.ForceOn,
+            SpeculationDepth = 3
+        };
+
+        // Target model: always makes token 5 overwhelmingly likely for every position.
+        Tensor<float> mockModel(Tensor<float> input)
+        {
+            var vocabSize = 10;
+            int seqLen = input.Shape[1];
+            var logits = new Tensor<float>(new[] { 1, seqLen, vocabSize });
+            for (int pos = 0; pos < seqLen; pos++)
+            {
+                for (int i = 0; i < vocabSize; i++)
+                {
+                    logits[new[] { 0, pos, i }] = i == 5 ? 100f : -100f;
+                }
+            }
+            return logits;
+        }
+
+        var draft = new DeterministicDraftModel(vocabSize: 10, tokenId: 5);
+        using var batcher = new ContinuousBatcher<float>(config, mockModel, draftModel: draft);
+
+        var request = new GenerationRequest<float>
+        {
+            PromptTokenIds = new List<int> { 1, 2, 3 },
+            MaxNewTokens = 10,
+            Temperature = 1.0f
+        };
+
+        var sequence = new SequenceState<float>(request)
+        {
+            PrefillComplete = true,
+            Status = SequenceStatus.Generating
+        };
+
+        var scheduler = GetSchedulerFromBatcher(batcher);
+        scheduler.AddSequence(sequence);
+
+        // Act
+        int tokensGenerated = batcher.Step();
+
+        // Assert
+        Assert.True(tokensGenerated > 1);
+        Assert.True(batcher.LastStepUsedSpeculation);
+        Assert.True(batcher.LastStepSpeculationTokens > 1);
+    }
+
+    [Fact]
+    public void ContinuousBatcher_SpeculationPolicy_ForceOff_DisablesSpeculation()
+    {
+        // Arrange
+        var config = new ContinuousBatcherConfig
+        {
+            AutoStart = false,
+            EnableSpeculativeDecoding = true,
+            SpeculationPolicy = AiDotNet.Configuration.SpeculationPolicy.ForceOff,
+            SpeculationDepth = 3
+        };
+
+        Tensor<float> mockModel(Tensor<float> input)
+        {
+            var vocabSize = 10;
+            var logits = new Tensor<float>(new[] { 1, 1, vocabSize });
+            logits[new[] { 0, 0, 5 }] = 10f;
+            return logits;
+        }
+
+        var draft = new DeterministicDraftModel(vocabSize: 10, tokenId: 5);
+        using var batcher = new ContinuousBatcher<float>(config, mockModel, draftModel: draft);
+
+        var request = new GenerationRequest<float>
+        {
+            PromptTokenIds = new List<int> { 1 },
+            MaxNewTokens = 10
+        };
+
+        var sequence = new SequenceState<float>(request)
+        {
+            PrefillComplete = true,
+            Status = SequenceStatus.Generating
+        };
+
+        var scheduler = GetSchedulerFromBatcher(batcher);
+        scheduler.AddSequence(sequence);
+
+        // Act
+        int tokensGenerated = batcher.Step();
+
+        // Assert - baseline path generates one token per sequence per step
+        Assert.Equal(1, tokensGenerated);
+        Assert.False(batcher.LastStepUsedSpeculation);
+        Assert.Equal(0, batcher.LastStepSpeculationTokens);
+    }
+
+    [Fact]
     public async Task ContinuousBatcher_GenerateAsync_ReturnsCancellableTask()
     {
         // Arrange
@@ -625,4 +730,46 @@ public class ContinuousBatchingTests
     }
 
     #endregion
+
+    private sealed class DeterministicDraftModel : IDraftModel<float>
+    {
+        public int MaxDraftTokens => 16;
+        public int VocabSize { get; }
+
+        private readonly int _tokenId;
+
+        public DeterministicDraftModel(int vocabSize, int tokenId)
+        {
+            VocabSize = vocabSize;
+            _tokenId = tokenId;
+        }
+
+        public DraftResult<float> GenerateDraft(Vector<int> inputTokens, int numDraftTokens, float temperature)
+        {
+            var tokens = new Vector<int>(numDraftTokens);
+            var tokenProbs = new Vector<float>(numDraftTokens);
+            var probs = new Matrix<float>(numDraftTokens, VocabSize);
+
+            for (int i = 0; i < numDraftTokens; i++)
+            {
+                tokens[i] = _tokenId;
+                tokenProbs[i] = 1.0f;
+                for (int v = 0; v < VocabSize; v++)
+                {
+                    probs[i, v] = v == _tokenId ? 1.0f : 0.0f;
+                }
+            }
+
+            return new DraftResult<float>
+            {
+                Tokens = tokens,
+                TokenProbabilities = tokenProbs,
+                Probabilities = probs
+            };
+        }
+
+        public void Reset()
+        {
+        }
+    }
 }

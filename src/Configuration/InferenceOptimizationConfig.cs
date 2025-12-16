@@ -399,7 +399,37 @@ public class InferenceOptimizationConfig
     /// </remarks>
     public bool UseTreeSpeculation { get; set; } = false;
 
+    /// <summary>
+    /// Gets or sets the policy for when speculative decoding should run.
+    /// </summary>
+    /// <remarks>
+    /// Auto is recommended: it can back off speculative decoding under high load (e.g., large batches)
+    /// to avoid throughput regressions, while still enabling it for latency-sensitive scenarios.
+    /// </remarks>
+    public SpeculationPolicy SpeculationPolicy { get; set; } = SpeculationPolicy.Auto;
+
     #endregion
+}
+
+/// <summary>
+/// Policies for enabling/disabling speculative decoding at runtime.
+/// </summary>
+public enum SpeculationPolicy
+{
+    /// <summary>
+    /// Automatically decide based on runtime conditions (recommended).
+    /// </summary>
+    Auto,
+
+    /// <summary>
+    /// Always enable speculative decoding when configured.
+    /// </summary>
+    ForceOn,
+
+    /// <summary>
+    /// Always disable speculative decoding even if enabled in config.
+    /// </summary>
+    ForceOff
 }
 
 /// <summary>
