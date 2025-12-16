@@ -514,8 +514,23 @@ If `AiDotNet.Serving` has a test harness, add a serving integration test:
 
 ## 9) MVP Sequencing (to raise implementation confidence)
 
-This section turns the backlog into a concrete, low-risk execution order with explicit “first targets” and acceptance checks.
+This section turns the backlog into a concrete, low-risk execution order with explicit "first targets" and acceptance checks.
 It is written so a junior engineer can start implementation without having to make major architectural decisions.
+
+### 9.0) Mapping: Phases A–E vs MVP-0/1/2/3
+
+Phases **A–E** describe the main integration areas (wiring, sessions, paging, batching, speculation). The **MVP-0/1/2/3**
+sequence is the recommended *execution order* that also adds two additional "industry standard" gaps (quantization and multi-LoRA).
+
+| Phase (A–E) | MVP step(s) that implement it | Notes |
+|---|---|---|
+| Phase A (baseline wiring + safety) | MVP-0 | Guardrails + diagnostics + safe fallbacks. |
+| Phase B (session API) | MVP-0 | Session surface remains nested under `PredictionModelResult`. |
+| Phase C (paged KV-cache) | MVP-0 / MVP-1 | Paged cache is a default serving primitive; speculation should work with it. |
+| Phase D (EnableBatching) | MVP-0 / MVP-1 | Batching is serving-first; MVP-1 adds arbitration with speculation. |
+| Phase E (EnableSpeculativeDecoding) | MVP-1 | Implements speculation and its policy so it doesn't regress throughput under load. |
+| (not in A–E) Inference quantization | MVP-2 | Adds quantization beyond the original A–E scope. |
+| (not in A–E) Multi-LoRA | MVP-3 | Adds per-request/per-sequence adapter selection beyond the original A–E scope. |
 
 ### 9.1) MVP-0: Guardrails (do first)
 1) Keep public API surface unchanged:
