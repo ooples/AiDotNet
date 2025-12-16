@@ -586,6 +586,68 @@ public class ContinuousBatchingTests
     }
 
     [Fact]
+    public void ContinuousBatcher_SpeculationPolicy_Auto_BacksOff_WhenAcceptanceRateLow()
+    {
+        // Arrange
+        var config = new ContinuousBatcherConfig
+        {
+            AutoStart = false,
+            EosTokenId = 2,
+            EnableSpeculativeDecoding = true,
+            SpeculationPolicy = AiDotNet.Configuration.SpeculationPolicy.Auto,
+            SpeculationDepth = 8,
+            SchedulerConfig = new BatchSchedulerConfig { MaxBatchSize = 8 }
+        };
+
+        // Target model strongly prefers token 5 at every position.
+        Tensor<float> mockModel(Tensor<float> input)
+        {
+            var vocabSize = 10;
+            int seqLen = input.Shape[1];
+            var logits = new Tensor<float>(new[] { 1, seqLen, vocabSize });
+            for (int pos = 0; pos < seqLen; pos++)
+            {
+                for (int i = 0; i < vocabSize; i++)
+                {
+                    logits[new[] { 0, pos, i }] = i == 5 ? 100f : -100f;
+                }
+            }
+            return logits;
+        }
+
+        // Draft always proposes token 4 => low acceptance.
+        var draft = new DeterministicDraftModel(vocabSize: 10, tokenId: 4);
+        using var batcher = new ContinuousBatcher<float>(config, mockModel, draftModel: draft);
+
+        var request = new GenerationRequest<float>
+        {
+            PromptTokenIds = new List<int> { 1, 2, 3 },
+            MaxNewTokens = 64,
+            Temperature = 1.0f
+        };
+
+        var sequence = new SequenceState<float>(request);
+        var scheduler = GetSchedulerFromBatcher(batcher);
+        scheduler.AddSequence(sequence);
+
+        // Act: run enough steps to gather acceptance-rate evidence and trigger auto backoff.
+        bool sawAutoBackoff = false;
+        for (int i = 0; i < 12; i++)
+        {
+            batcher.Step();
+            if (!batcher.LastStepUsedSpeculation &&
+                batcher.LastStepSpeculationReason.StartsWith("AutoBackoff(LowAcceptanceRate="))
+            {
+                sawAutoBackoff = true;
+                break;
+            }
+        }
+
+        // Assert
+        Assert.True(sawAutoBackoff);
+    }
+
+    [Fact]
     public void ContinuousBatcher_SpeculativeDecoding_DisablesAfterFailure()
     {
         // Arrange

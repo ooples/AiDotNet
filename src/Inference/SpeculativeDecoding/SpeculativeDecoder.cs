@@ -65,6 +65,16 @@ internal class SpeculativeDecoder<T>
         : 0;
 
     /// <summary>
+    /// Gets the total number of draft tokens proposed so far.
+    /// </summary>
+    internal long TotalDraftTokens => _totalDraftTokens;
+
+    /// <summary>
+    /// Gets the total number of verification calls performed so far.
+    /// </summary>
+    internal long TotalVerificationCalls => _totalVerificationCalls;
+
+    /// <summary>
     /// Creates a speculative decoder.
     /// </summary>
     /// <param name="draftModel">The small, fast draft model.</param>

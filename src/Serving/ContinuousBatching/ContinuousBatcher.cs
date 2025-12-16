@@ -46,6 +46,7 @@ internal class ContinuousBatcher<T> : IDisposable
     private SpeculativeDecoder<T>? _speculativeDecoder;
     private readonly object _speculativeLock = new();
     private volatile bool _speculationDisabledDueToFailure;
+    private long _speculationDisabledUntilIteration;
 
     internal bool LastStepUsedSpeculation { get; private set; }
     internal int LastStepSpeculationTokens { get; private set; }
@@ -438,22 +439,49 @@ internal class ContinuousBatcher<T> : IDisposable
             return false;
         }
 
-        bool enabled = _config.SpeculationPolicy switch
+        if (_config.SpeculationPolicy == AiDotNet.Configuration.SpeculationPolicy.ForceOff)
         {
-            AiDotNet.Configuration.SpeculationPolicy.ForceOn => true,
-            AiDotNet.Configuration.SpeculationPolicy.ForceOff => false,
-            _ => batch.Count <= Math.Max(1, _config.SchedulerConfig.MaxBatchSize / 2) && _scheduler.WaitingCount == 0
-        };
+            reason = "ForceOff";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
+            return false;
+        }
 
-        reason = _config.SpeculationPolicy switch
+        if (_config.SpeculationPolicy == AiDotNet.Configuration.SpeculationPolicy.ForceOn)
         {
-            AiDotNet.Configuration.SpeculationPolicy.ForceOn => "ForceOn",
-            AiDotNet.Configuration.SpeculationPolicy.ForceOff => "ForceOff",
-            _ => enabled ? "AutoEnabled" : "AutoBackoff(LoadOrQueue)"
-        };
+            reason = "ForceOn";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: true, reason: reason);
+            return true;
+        }
 
-        InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: enabled, reason: reason);
-        return enabled;
+        // Auto policy: back off under load and when draft acceptance is too low.
+        if (_speculationDisabledUntilIteration > _totalIterations)
+        {
+            reason = "AutoBackoff(Cooldown)";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
+            return false;
+        }
+
+        bool enabled = batch.Count <= Math.Max(1, _config.SchedulerConfig.MaxBatchSize / 2) && _scheduler.WaitingCount == 0;
+        if (!enabled)
+        {
+            reason = "AutoBackoff(LoadOrQueue)";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
+            return false;
+        }
+
+        // If we have enough evidence that the draft model is low-quality, disable speculation for a short cooldown.
+        var decoder = _speculativeDecoder;
+        if (decoder != null && decoder.TotalDraftTokens >= 32 && decoder.AcceptanceRate < 0.25)
+        {
+            _speculationDisabledUntilIteration = _totalIterations + 25;
+            reason = $"AutoBackoff(LowAcceptanceRate={decoder.AcceptanceRate:0.00})";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
+            return false;
+        }
+
+        reason = "AutoEnabled";
+        InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: true, reason: reason);
+        return true;
     }
 
     private bool ShouldSpeculateForThisIteration()
