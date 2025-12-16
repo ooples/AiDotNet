@@ -997,11 +997,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         }
         else
         {
-            // Check if knowledge distillation is configured
-            if (_knowledgeDistillationOptions != null)
-            {
-                // KNOWLEDGE DISTILLATION PATH
-                optimizationResult = await PerformKnowledgeDistillationAsync(
+            // Optimize the final model on the full training set (using knowledge distillation if configured,
+            // otherwise using the distributed optimizer if configured).
+            optimizationResult = _knowledgeDistillationOptions != null
+                ? await PerformKnowledgeDistillationAsync(
                     model,
                     finalOptimizer,
                     XTrain,
@@ -1009,14 +1008,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                     XVal,
                     yVal,
                     XTest,
-                    yTest);
-            }
-            else
-            {
-                // REGULAR TRAINING PATH
-                // Optimize the final model on the full training set (using distributed optimizer if configured)
-                optimizationResult = finalOptimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
-            }
+                    yTest)
+                : finalOptimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
         }
 
         // Create deployment configuration from individual configs
