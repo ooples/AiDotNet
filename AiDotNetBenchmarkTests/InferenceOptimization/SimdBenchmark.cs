@@ -1,4 +1,5 @@
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
 using AiDotNet.InferenceOptimization;
 using AiDotNet.Tensors.Engines.Simd;
@@ -13,6 +14,7 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
     [MemoryDiagnoser]
     [CsvExporter]
     [HtmlExporter]
+    [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
     public class SimdBenchmark
     {
         private float[] _arrayA;
@@ -42,6 +44,7 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
         #region Vector Addition
 
         [Benchmark(Baseline = true)]
+        [BenchmarkCategory("VectorAdd")]
         public void VectorAdd_Scalar()
         {
             for (int i = 0; i < ArraySize; i++)
@@ -51,6 +54,7 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
         }
 
         [Benchmark]
+        [BenchmarkCategory("VectorAdd")]
         public unsafe void VectorAdd_SIMD()
         {
             fixed (float* pA = _arrayA, pB = _arrayB, pR = _result)
@@ -63,7 +67,8 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
 
         #region Vector Multiplication
 
-        [Benchmark]
+        [Benchmark(Baseline = true)]
+        [BenchmarkCategory("VectorMultiply")]
         public void VectorMultiply_Scalar()
         {
             for (int i = 0; i < ArraySize; i++)
@@ -73,6 +78,7 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
         }
 
         [Benchmark]
+        [BenchmarkCategory("VectorMultiply")]
         public unsafe void VectorMultiply_SIMD()
         {
             fixed (float* pA = _arrayA, pB = _arrayB, pR = _result)
@@ -85,7 +91,8 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
 
         #region Dot Product
 
-        [Benchmark]
+        [Benchmark(Baseline = true)]
+        [BenchmarkCategory("DotProduct")]
         public float DotProduct_Scalar()
         {
             float sum = 0.0f;
@@ -97,6 +104,7 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
         }
 
         [Benchmark]
+        [BenchmarkCategory("DotProduct")]
         public unsafe float DotProduct_SIMD()
         {
             fixed (float* pA = _arrayA, pB = _arrayB)
@@ -109,7 +117,8 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
 
         #region ReLU Activation
 
-        [Benchmark]
+        [Benchmark(Baseline = true)]
+        [BenchmarkCategory("ReLU")]
         public void ReLU_Scalar()
         {
             for (int i = 0; i < ArraySize; i++)
@@ -119,6 +128,7 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
         }
 
         [Benchmark]
+        [BenchmarkCategory("ReLU")]
         public unsafe void ReLU_SIMD()
         {
             fixed (float* pA = _arrayA, pR = _result)
@@ -131,7 +141,8 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
 
         #region Sum Reduction
 
-        [Benchmark]
+        [Benchmark(Baseline = true)]
+        [BenchmarkCategory("Sum")]
         public float Sum_Scalar()
         {
             float sum = 0.0f;
@@ -143,6 +154,7 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
         }
 
         [Benchmark]
+        [BenchmarkCategory("Sum")]
         public unsafe float Sum_SIMD()
         {
             fixed (float* pA = _arrayA)
