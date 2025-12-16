@@ -246,38 +246,10 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralN
 
     private (Tensor<T> Q, Tensor<T> K, Tensor<T> V) ComputeQkv(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape[1];
-        int embDim = input.Shape[2];
-
-        var q = new Tensor<T>([batchSize, seqLen, embDim]);
-        var k = new Tensor<T>([batchSize, seqLen, embDim]);
-        var v = new Tensor<T>([batchSize, seqLen, embDim]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                for (int o = 0; o < embDim; o++)
-                {
-                    T sumQ = NumOps.Zero;
-                    T sumK = NumOps.Zero;
-                    T sumV = NumOps.Zero;
-                    for (int i = 0; i < embDim; i++)
-                    {
-                        var x = input[b, s, i];
-                        sumQ = NumOps.Add(sumQ, NumOps.Multiply(x, _queryWeights[i, o]));
-                        sumK = NumOps.Add(sumK, NumOps.Multiply(x, _keyWeights[i, o]));
-                        sumV = NumOps.Add(sumV, NumOps.Multiply(x, _valueWeights[i, o]));
-                    }
-
-                    q[b, s, o] = sumQ;
-                    k[b, s, o] = sumK;
-                    v[b, s, o] = sumV;
-                }
-            }
-        }
-
+        // Use the tensor/matrix multiply path to leverage optimized kernels.
+        var q = input.Multiply(_queryWeights);
+        var k = input.Multiply(_keyWeights);
+        var v = input.Multiply(_valueWeights);
         return (q, k, v);
     }
 
