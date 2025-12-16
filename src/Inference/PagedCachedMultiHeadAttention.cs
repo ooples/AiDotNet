@@ -2,6 +2,7 @@ using AiDotNet.Inference.PagedAttention;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
+using System.Buffers;
 
 namespace AiDotNet.Inference;
 
@@ -35,6 +36,12 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralN
     private int _currentPosition;
 
     private readonly FlashAttentionConfig _flashConfig;
+
+    private readonly object _kernelWeightsLock = new();
+    private float[]? _cachedWQ;
+    private float[]? _cachedWK;
+    private float[]? _cachedWV;
+    private float[]? _cachedWO;
 
     /// <summary>
     /// Gets whether this layer supports training.
@@ -144,40 +151,54 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralN
         // Note: This is intentionally conservative and prioritizes correctness.
         // PagedAttentionKernel's MatVecMul expects matrices stored as [outDim, inDim] row-major.
         // Our weights are stored as [inDim, outDim], so we pass a transposed layout.
-        var wQ = MatrixToFloatForKernel(_queryWeights);
-        var wK = MatrixToFloatForKernel(_keyWeights);
-        var wV = MatrixToFloatForKernel(_valueWeights);
-        var wO = MatrixToFloatForKernel(_outputWeights);
+        EnsureKernelWeightCache();
+        var wQ = _cachedWQ!;
+        var wK = _cachedWK!;
+        var wV = _cachedWV!;
+        var wO = _cachedWO!;
 
         // Process each token sequentially to ensure causal behavior during prefill.
-        for (int t = 0; t < seqLen; t++)
+        var pool = ArrayPool<float>.Shared;
+        var hiddenBuffer = pool.Rent(embDim);
+        var tokenOutBuffer = pool.Rent(embDim);
+
+        try
         {
-            var hidden = new float[embDim];
-            for (int d = 0; d < embDim; d++)
-            {
-                hidden[d] = Convert.ToSingle(input[0, t, d]);
-            }
+            var hidden = hiddenBuffer.AsSpan(0, embDim);
+            var tokenOut = tokenOutBuffer.AsSpan(0, embDim);
 
-            var tokenOut = new float[embDim];
-            Kernel.Forward(
-                hiddenStates: hidden.AsSpan(),
-                wQ: wQ,
-                wK: wK,
-                wV: wV,
-                wO: wO,
-                sequenceId: SequenceId,
-                position: _currentPosition,
-                layer: LayerIndex,
-                output: tokenOut.AsSpan());
-            _currentPosition++;
-
-            // Add bias and activation.
-            for (int d = 0; d < embDim; d++)
+            for (int t = 0; t < seqLen; t++)
             {
-                T value = NumOps.FromDouble(tokenOut[d]);
-                value = NumOps.Add(value, _outputBias[d]);
-                output[0, t, d] = ScalarActivation!.Activate(value);
+                for (int d = 0; d < embDim; d++)
+                {
+                    hidden[d] = Convert.ToSingle(input[0, t, d]);
+                }
+
+                Kernel.Forward(
+                    hiddenStates: hidden,
+                    wQ: wQ,
+                    wK: wK,
+                    wV: wV,
+                    wO: wO,
+                    sequenceId: SequenceId,
+                    position: _currentPosition,
+                    layer: LayerIndex,
+                    output: tokenOut);
+                _currentPosition++;
+
+                // Add bias and activation.
+                for (int d = 0; d < embDim; d++)
+                {
+                    T value = NumOps.FromDouble(tokenOut[d]);
+                    value = NumOps.Add(value, _outputBias[d]);
+                    output[0, t, d] = ScalarActivation!.Activate(value);
+                }
             }
+        }
+        finally
+        {
+            pool.Return(hiddenBuffer);
+            pool.Return(tokenOutBuffer);
         }
 
         _lastOutput = output;
@@ -378,6 +399,35 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralN
         for (int i = 0; i < _outputBias.Length; i++)
         {
             _outputBias[i] = parameters[index++];
+        }
+
+        InvalidateKernelWeightCache();
+    }
+
+    private void EnsureKernelWeightCache()
+    {
+        if (_cachedWQ != null && _cachedWK != null && _cachedWV != null && _cachedWO != null)
+        {
+            return;
+        }
+
+        lock (_kernelWeightsLock)
+        {
+            _cachedWQ ??= MatrixToFloatForKernel(_queryWeights);
+            _cachedWK ??= MatrixToFloatForKernel(_keyWeights);
+            _cachedWV ??= MatrixToFloatForKernel(_valueWeights);
+            _cachedWO ??= MatrixToFloatForKernel(_outputWeights);
+        }
+    }
+
+    private void InvalidateKernelWeightCache()
+    {
+        lock (_kernelWeightsLock)
+        {
+            _cachedWQ = null;
+            _cachedWK = null;
+            _cachedWV = null;
+            _cachedWO = null;
         }
     }
 
