@@ -302,7 +302,7 @@ internal class InferenceOptimizer<T>
     {
         foreach (var layer in model.Layers)
         {
-            if (layer is MultiHeadAttentionLayer<T> || layer is FlashAttentionLayer<T>)
+            if (layer is MultiHeadAttentionLayer<T> || layer is FlashAttentionLayer<T> || layer is SelfAttentionLayer<T>)
                 return true;
         }
 
@@ -328,6 +328,27 @@ internal class InferenceOptimizer<T>
         for (int i = 0; i < model.Layers.Count; i++)
         {
             var layer = model.Layers[i];
+
+            if (layer is SelfAttentionLayer<T> selfAttention && (enableKVCache || enableFlashAttention))
+            {
+                var converted = TryConvertSelfAttentionToMultiHead(selfAttention);
+                if (converted != null)
+                {
+                    model.Layers[i] = converted;
+                    anyRewritten = true;
+
+                    // Re-process this index under MultiHeadAttention rules.
+                    i--;
+                    continue;
+                }
+
+                InferenceDiagnostics.RecordDecision(
+                    area: "InferenceOptimizer",
+                    feature: "SelfAttentionRewrite",
+                    enabled: false,
+                    reason: "UnsupportedSelfAttentionLayer(HeadCountOrShape)");
+                continue;
+            }
 
             if (layer is MultiHeadAttentionLayer<T> mha)
             {
@@ -433,6 +454,74 @@ internal class InferenceOptimizer<T>
         }
 
         return anyRewritten;
+    }
+
+    private MultiHeadAttentionLayer<T>? TryConvertSelfAttentionToMultiHead(SelfAttentionLayer<T> layer)
+    {
+        var inputShape = layer.GetInputShape();
+        if (inputShape.Length < 2)
+            return null;
+
+        int seqLen = inputShape[0];
+        int embDim = inputShape[1];
+        if (seqLen <= 0 || embDim <= 0)
+            return null;
+
+        int headCount = TryGetHeadCountFromMetadata(layer) ?? 0;
+        if (headCount <= 0)
+            return null;
+
+        if (embDim % headCount != 0)
+            return null;
+
+        // SelfAttentionLayer has Q/K/V projections plus bias, but no output projection.
+        // We convert it into a MultiHeadAttentionLayer with an identity output projection so that
+        // downstream inference rewrites (FlashAttention / KV-cache) can be applied consistently.
+        var activation = layer.ScalarActivation;
+        var mha = new MultiHeadAttentionLayer<T>(seqLen, embDim, headCount, activationFunction: activation);
+
+        var selfParams = layer.GetParameters();
+        int projSize = embDim * embDim;
+        int expectedSelf = (3 * projSize) + embDim;
+        if (selfParams.Length != expectedSelf)
+            return null;
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // MultiHead params: Q, K, V, O, bias
+        var combined = new Vector<T>((4 * projSize) + embDim);
+        int idx = 0;
+
+        // Copy Q/K/V (3 * projSize)
+        for (int i = 0; i < 3 * projSize; i++)
+            combined[idx++] = selfParams[i];
+
+        // Output weights: identity matrix (embDim x embDim) flattened row-major
+        for (int r = 0; r < embDim; r++)
+        {
+            for (int c = 0; c < embDim; c++)
+            {
+                combined[idx++] = r == c ? numOps.One : numOps.Zero;
+            }
+        }
+
+        // Output bias (embDim)
+        for (int i = 0; i < embDim; i++)
+            combined[idx++] = selfParams[(3 * projSize) + i];
+
+        mha.SetParameters(combined);
+        return mha;
+    }
+
+    private static int? TryGetHeadCountFromMetadata(ILayer<T> layer)
+    {
+        if (layer is not ILayerSerializationMetadata meta)
+            return null;
+
+        if (!meta.GetSerializationMetadata().TryGetValue("HeadCount", out var raw) || string.IsNullOrWhiteSpace(raw))
+            return null;
+
+        return int.TryParse(raw, out var parsed) ? parsed : null;
     }
 
     private bool ResolveCausalMask(NeuralNetworkBase<T> model)

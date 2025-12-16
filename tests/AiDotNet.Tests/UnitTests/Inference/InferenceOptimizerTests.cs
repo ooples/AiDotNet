@@ -24,7 +24,8 @@ public class InferenceOptimizerTests
         };
 
         var optimizer = new InferenceOptimizer<float>(config);
-        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: true);
+        // Clone relies on serialization of every layer in the graph; this test focuses on rewrite behavior.
+        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: false);
 
         Assert.True(anyApplied);
         Assert.Contains(optimized.Layers, l => l is FlashAttentionLayer<float>);
@@ -62,6 +63,31 @@ public class InferenceOptimizerTests
         }
     }
 
+    [Fact]
+    public void InferenceOptimizer_RewritesSelfAttention_ToCachedAttention_WhenKVCacheEnabled()
+    {
+        var model = CreateTinySelfAttentionModel(taskType: NeuralNetworkTaskType.TextGeneration);
+        Assert.Contains(model.Layers, l => l is SelfAttentionLayer<float>);
+
+        var config = new InferenceOptimizationConfig
+        {
+            EnableKVCache = true,
+            EnablePagedKVCache = false,
+            EnableFlashAttention = false,
+            AttentionMasking = AttentionMaskingMode.Auto
+        };
+
+        var optimizer = new InferenceOptimizer<float>(config);
+        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: false);
+
+        Assert.True(anyApplied);
+        Assert.Contains(optimized.Layers, l => l is CachedMultiHeadAttention<float>);
+        Assert.DoesNotContain(optimized.Layers, l => l is SelfAttentionLayer<float>);
+
+        // In-place rewrite expected when cloneModel=false.
+        Assert.DoesNotContain(model.Layers, l => l is SelfAttentionLayer<float>);
+    }
+
     private static Transformer<float> CreateTinyTransformer(NeuralNetworkTaskType taskType)
     {
         var architecture = new TransformerArchitecture<float>(
@@ -81,5 +107,43 @@ public class InferenceOptimizerTests
             usePositionalEncoding: false);
 
         return new Transformer<float>(architecture);
+    }
+
+    private static NeuralNetworkBase<float> CreateTinySelfAttentionModel(NeuralNetworkTaskType taskType)
+    {
+        const int seqLen = 4;
+        const int embDim = 8;
+        const int headCount = 2;
+        const int flatSize = seqLen * embDim;
+
+        var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
+        {
+            new InputLayer<float>(flatSize),
+            new ReshapeLayer<float>(new[] { flatSize }, new[] { seqLen, embDim }),
+            new SelfAttentionLayer<float>(seqLen, embDim, headCount, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
+            new FlattenLayer<float>(new[] { seqLen, embDim }),
+            new DenseLayer<float>(flatSize, flatSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+        };
+
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: taskType,
+            complexity: NetworkComplexity.Simple,
+            inputSize: flatSize,
+            outputSize: flatSize,
+            layers: layers);
+
+        var model = new NeuralNetwork<float>(architecture);
+
+        // Ensure parameters are initialized deterministically for stable tests.
+        var p = model.GetParameters();
+        var deterministic = new float[p.Length];
+        for (int i = 0; i < deterministic.Length; i++)
+        {
+            deterministic[i] = ((i % 17) - 8) / 8.0f;
+        }
+        model.UpdateParameters(new AiDotNet.Tensors.LinearAlgebra.Vector<float>(deterministic));
+
+        return model;
     }
 }
