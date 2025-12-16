@@ -310,12 +310,19 @@ internal class InferenceOptimizer<T>
         });
 
         // Allocate a fresh sequence ID for this optimized model instance (one model == one sequence).
-        long sequenceId;
-        do
+        if (!TryAllocatePagedSequenceId(_pagedKVCache, initialTokens: 0, out long sequenceId))
         {
-            sequenceId = Interlocked.Increment(ref s_nextPagedSequenceId);
+            InferenceDiagnostics.RecordDecision(
+                area: "InferenceOptimizer",
+                feature: "PagedKVCache",
+                enabled: false,
+                reason: "AllocateSequenceFailed(OutOfMemoryOrExhausted)");
+            _pagedKVCache = null;
+            _pagedKernel = null;
+            _pagedAttentionLayers = null;
+            _pagedSequenceId = null;
+            return false;
         }
-        while (!_pagedKVCache.AllocateSequence(sequenceId, initialTokens: 0));
 
         _pagedSequenceId = sequenceId;
         _pagedAttentionLayers = attentionLayers;
@@ -328,6 +335,37 @@ internal class InferenceOptimizer<T>
         }
 
         return true;
+    }
+
+    private static bool TryAllocatePagedSequenceId(PagedKVCache<T> cache, int initialTokens, out long sequenceId)
+    {
+        const int maxAttempts = 1024;
+        var spin = new SpinWait();
+
+        for (int attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            sequenceId = Interlocked.Increment(ref s_nextPagedSequenceId);
+            if (cache.AllocateSequence(sequenceId, initialTokens))
+            {
+                return true;
+            }
+
+            spin.SpinOnce();
+        }
+
+        sequenceId = 0;
+        return false;
+    }
+
+    private static bool TryAllocatePagedSequenceId(PagedKVCache<T> cache, long preferredId, int initialTokens, out long sequenceId)
+    {
+        if (cache.AllocateSequence(preferredId, initialTokens))
+        {
+            sequenceId = preferredId;
+            return true;
+        }
+
+        return TryAllocatePagedSequenceId(cache, initialTokens, out sequenceId);
     }
 
     private bool HasOptimizableAttentionLayers(NeuralNetworkBase<T> model)
@@ -778,17 +816,30 @@ internal class InferenceOptimizer<T>
             }
 
             // Re-allocate with the same ID if possible; otherwise allocate a new one.
-            if (!_pagedKVCache.AllocateSequence(_pagedSequenceId.Value, initialTokens: 0))
+            if (!TryAllocatePagedSequenceId(_pagedKVCache, _pagedSequenceId.Value, initialTokens: 0, out long allocated))
             {
-                long newId;
-                do
-                {
-                    newId = Interlocked.Increment(ref s_nextPagedSequenceId);
-                }
-                while (!_pagedKVCache.AllocateSequence(newId, initialTokens: 0));
+                InferenceDiagnostics.RecordDecision(
+                    area: "InferenceOptimizer",
+                    feature: "PagedKVCache",
+                    enabled: false,
+                    reason: "ClearCacheAllocateSequenceFailed(OutOfMemoryOrExhausted)");
 
-                _pagedSequenceId = newId;
+                // Safe fallback: disable paged inference mode on layers and keep session alive.
+                if (_pagedAttentionLayers != null)
+                {
+                    foreach (var layer in _pagedAttentionLayers)
+                    {
+                        layer.InferenceMode = false;
+                        layer.Kernel = null;
+                        layer.ResetState();
+                    }
+                }
+
+                _pagedSequenceId = null;
+                return;
             }
+
+            _pagedSequenceId = allocated;
 
             if (_pagedAttentionLayers != null && _pagedSequenceId.HasValue)
             {
