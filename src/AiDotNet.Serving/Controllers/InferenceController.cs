@@ -135,6 +135,12 @@ public class InferenceController : ControllerBase
         catch (ArgumentException ex)
         {
             _logger.LogError(ex, "Invalid argument during prediction for model '{ModelName}'", modelName);
+
+            if (ex.Message.Contains("maximum allowed when batching is disabled", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status413PayloadTooLarge, new { error = ex.Message });
+            }
+
             return BadRequest(new { error = $"Invalid input: {ex.Message}" });
         }
         catch (Exception ex)
@@ -162,6 +168,24 @@ public class InferenceController : ControllerBase
         // Respect per-model inference configuration: bypass batching when disabled.
         if (model is AiDotNet.Serving.Models.IServableModelInferenceOptions opts && !opts.EnableBatching)
         {
+            const int MaxUnbatchedItems = 1000;
+            if (features.Length > MaxUnbatchedItems)
+            {
+                _logger.LogWarning(
+                    "Rejected large unbatched request ({Count} items) for model '{ModelName}' (batching disabled)",
+                    features.Length,
+                    modelName);
+
+                throw new ArgumentException(
+                    $"Request batch size ({features.Length}) exceeds the maximum allowed when batching is disabled ({MaxUnbatchedItems}). " +
+                    $"Enable batching for model '{modelName}' or split the request into smaller batches.");
+            }
+
+            _logger.LogDebug(
+                "Batching disabled for model '{ModelName}', processing {Count} items individually",
+                modelName,
+                features.Length);
+
             var predictions = new double[features.Length][];
             for (int i = 0; i < features.Length; i++)
             {
