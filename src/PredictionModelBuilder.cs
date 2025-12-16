@@ -3427,15 +3427,18 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
     private static TInput ConvertMatrixToInputType(Matrix<T> matrix)
     {
-        if (typeof(TInput) == typeof(Matrix<T>))
+        if (matrix is TInput typedMatrix)
         {
-            return (TInput)(object)matrix;
+            return typedMatrix;
         }
 
         if (typeof(TInput) == typeof(Tensor<T>))
         {
             var tensor = Tensor<T>.FromRowMatrix(matrix);
-            return (TInput)(object)tensor;
+            if (tensor is TInput typedTensor)
+            {
+                return typedTensor;
+            }
         }
 
         throw new InvalidOperationException($"Federated learning currently supports TInput of Matrix<T> or Tensor<T>. Got {typeof(TInput).Name}.");
@@ -3443,15 +3446,18 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
     private static TOutput ConvertVectorToOutputType(Vector<T> vector)
     {
-        if (typeof(TOutput) == typeof(Vector<T>))
+        if (vector is TOutput typedVector)
         {
-            return (TOutput)(object)vector;
+            return typedVector;
         }
 
         if (typeof(TOutput) == typeof(Tensor<T>))
         {
             var tensor = Tensor<T>.FromVector(vector);
-            return (TOutput)(object)tensor;
+            if (tensor is TOutput typedTensor)
+            {
+                return typedTensor;
+            }
         }
 
         throw new InvalidOperationException($"Federated learning currently supports TOutput of Vector<T> or Tensor<T>. Got {typeof(TOutput).Name}.");
