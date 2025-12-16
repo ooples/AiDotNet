@@ -135,9 +135,19 @@ public class InferenceOptimizationConfig
     /// Gets or sets the precision used for KV-cache storage.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Industry-standard serving stores KV-cache in FP16 to halve memory usage and increase cache capacity.
-    /// The default <see cref="KVCachePrecisionMode.Auto"/> selects FP16 when KV-cache is enabled.
-    /// Users can opt out to force FP32.
+    /// The default <see cref="KVCachePrecisionMode.Auto"/> selects FP16 when KV-cache is enabled and the numeric
+    /// type supports it.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This setting controls how much memory your model uses during autoregressive inference.
+    ///
+    /// - FP16: Uses about half the memory (recommended default)
+    /// - FP32: Uses more memory but can be slightly more numerically accurate
+    ///
+    /// Most production systems prefer FP16 KV-cache for capacity and throughput.
+    /// </para>
     /// </remarks>
     public KVCachePrecisionMode KVCachePrecision { get; set; } = KVCachePrecisionMode.Auto;
 
@@ -494,12 +504,23 @@ public enum AttentionMaskingMode
 /// </summary>
 public enum KVCachePrecisionMode
 {
-    /// <summary>Select an industry-standard default (FP16 when KV-cache is enabled).</summary>
+    /// <summary>
+    /// Select an industry-standard default.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Uses FP16 when KV-cache is enabled and the numeric type supports conversion; otherwise falls back to FP32.
+    /// </para>
+    /// </remarks>
     Auto,
 
-    /// <summary>Store KV-cache in FP16 (half precision) to reduce memory use.</summary>
+    /// <summary>
+    /// Store KV-cache in FP16 (half precision) to reduce memory use.
+    /// </summary>
     Float16,
 
-    /// <summary>Store KV-cache in FP32 (single precision) for maximal numerical fidelity.</summary>
+    /// <summary>
+    /// Store KV-cache in FP32 (single precision) for maximal numerical fidelity.
+    /// </summary>
     Float32
 }

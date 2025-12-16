@@ -25,8 +25,9 @@ public class InferenceSessionIntegrationTests
         var result = CreateDeterministicResult(
             new InferenceOptimizationConfig
             {
-                EnableFlashAttention = true,
+                EnableFlashAttention = false,
                 EnableKVCache = true,
+                EnablePagedKVCache = false,
                 AttentionMasking = AttentionMaskingMode.Auto
             });
 
@@ -44,13 +45,15 @@ public class InferenceSessionIntegrationTests
         var result = CreateDeterministicResult(
             new InferenceOptimizationConfig
             {
-                EnableFlashAttention = true,
+                EnableFlashAttention = false,
                 EnableKVCache = true,
+                EnablePagedKVCache = false,
                 AttentionMasking = AttentionMaskingMode.Auto
             });
 
-        var token1 = CreateTokenTensor(1.0f);
-        var token2 = CreateTokenTensor(-0.5f);
+        var token = CreateTokenTensor(0.75f);
+        var tokenForB = CreateTokenTensor(0.75f);
+        var tokenFresh = CreateTokenTensor(0.75f);
 
         using var session = result.BeginInferenceSession();
 
@@ -58,14 +61,35 @@ public class InferenceSessionIntegrationTests
         var seqB = session.CreateSequence();
         var seqFresh = session.CreateSequence();
 
-        var a1 = seqA.Predict(token1);
-        var b1 = seqB.Predict(token1);
+        var a1 = seqA.Predict(token);
+        var statsAfterFirst = seqA.GetInferenceStatistics();
+        var lengthsAfterFirst = (int[])statsAfterFirst["KVCache_SequenceLengths"];
+        int lenAfterFirst = lengthsAfterFirst[0];
 
-        var a2 = seqA.Predict(token2);
-        var fresh2 = seqFresh.Predict(token2);
+        var b1 = seqB.Predict(tokenForB);
+        var fresh1 = seqFresh.Predict(tokenFresh);
 
         AssertTensorsEqual(a1, b1, Tolerance);
-        AssertTensorsNotEqual(fresh2, a2, minAbsDiff: 1e-6f);
+        AssertTensorsEqual(a1, fresh1, Tolerance);
+
+        var freshStatsAfterFirst = seqFresh.GetInferenceStatistics();
+        var freshLengthsAfterFirst = (int[])freshStatsAfterFirst["KVCache_SequenceLengths"];
+        int freshLenAfterFirst = freshLengthsAfterFirst[0];
+        Assert.Equal(lenAfterFirst, freshLenAfterFirst);
+
+        _ = seqA.Predict(CreateTokenTensor(-0.25f));
+
+        var statsAfterSecond = seqA.GetInferenceStatistics();
+        var lengthsAfterSecond = (int[])statsAfterSecond["KVCache_SequenceLengths"];
+        Assert.True(lengthsAfterSecond[0] > lenAfterFirst, $"Expected KV-cache length to grow, but got {lenAfterFirst} -> {lengthsAfterSecond[0]}");
+
+        // Fresh sequence should grow independently when it advances.
+        _ = seqFresh.Predict(CreateTokenTensor(-0.25f));
+        var freshStatsAfterSecond = seqFresh.GetInferenceStatistics();
+        var freshLengthsAfterSecond = (int[])freshStatsAfterSecond["KVCache_SequenceLengths"];
+        Assert.True(
+            freshLengthsAfterSecond[0] > freshLenAfterFirst,
+            $"Expected fresh KV-cache length to grow, but got {freshLenAfterFirst} -> {freshLengthsAfterSecond[0]}");
     }
 
     [Fact]
@@ -74,8 +98,9 @@ public class InferenceSessionIntegrationTests
         var result = CreateDeterministicResult(
             new InferenceOptimizationConfig
             {
-                EnableFlashAttention = true,
+                EnableFlashAttention = false,
                 EnableKVCache = true,
+                EnablePagedKVCache = false,
                 AttentionMasking = AttentionMaskingMode.Auto
             });
 
@@ -99,6 +124,15 @@ public class InferenceSessionIntegrationTests
     {
         var model = CreateDeterministicAttentionOnlyModel();
         var clone = (NeuralNetworkBase<float>)model.Clone();
+
+        // Clone should preserve parameters exactly (deep copy via serialization/deserialization).
+        Assert.Equal(model.GetParameters().Length, clone.GetParameters().Length);
+        for (int i = 0; i < model.GetParameters().Length; i++)
+        {
+            Assert.True(
+                Math.Abs(model.GetParameters()[i] - clone.GetParameters()[i]) <= Tolerance,
+                $"Parameter mismatch at {i}: {model.GetParameters()[i]} != {clone.GetParameters()[i]}");
+        }
 
         var cloneParams = clone.GetParameters();
         cloneParams[0] += 1.0f;

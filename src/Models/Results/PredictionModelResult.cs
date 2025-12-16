@@ -1005,10 +1005,19 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
-    /// Begins an inference session that can manage stateful inference features (e.g., KV-cache) internally.
+    /// Begins an inference session for stateful inference features (e.g., KV-cache).
     /// </summary>
     /// <remarks>
-    /// Use sessions when running multiple sequential inference steps or serving-style workloads.
+    /// <para>
+    /// Sessions are intended for serving-style workloads where you run many sequential inference steps.
+    /// A session can create multiple independent sequences, each maintaining its own state (like KV-cache).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Use a session when you are doing "token-by-token" inference.
+    ///
+    /// - Use <see cref="Predict(TInput)"/> for one-off, stateless predictions.
+    /// - Use <see cref="BeginInferenceSession"/> when you need the model to remember prior calls in the same sequence.
+    /// </para>
     /// </remarks>
     public InferenceSession BeginInferenceSession()
     {
@@ -1076,6 +1085,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <summary>
     /// Facade-friendly inference session that owns stateful inference internals.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This type intentionally keeps inference internals behind the facade. Users create sequences via
+    /// <see cref="CreateSequence"/> and run inference via <see cref="InferenceSequence.Predict(TInput)"/>.
+    /// </para>
+    /// </remarks>
     public sealed class InferenceSession : IDisposable
     {
         private readonly PredictionModelResult<T, TInput, TOutput> _result;
@@ -1093,6 +1108,11 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         /// <summary>
         /// Creates an independent sequence within this session.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Each sequence represents an independent stream (e.g., one chat) and owns its own state.
+        /// </para>
+        /// </remarks>
         public InferenceSequence CreateSequence()
         {
             ThrowIfDisposed();
@@ -1116,6 +1136,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <summary>
     /// Represents one independent, stateful inference sequence (e.g., one chat/generation stream).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A sequence may keep internal state across calls when inference optimizations are enabled (e.g., KV-cache).
+    /// Call <see cref="Reset"/> to start a new logical sequence on the same object.
+    /// </para>
+    /// </remarks>
     public sealed class InferenceSequence : IDisposable
     {
         private readonly PredictionModelResult<T, TInput, TOutput> _result;
@@ -1199,6 +1225,16 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             }
 
             _disposed = true;
+        }
+
+        // Exposed to AiDotNetTests via InternalsVisibleTo for integration verification without expanding the public API surface.
+        internal Dictionary<string, object> GetInferenceStatistics()
+        {
+            ThrowIfDisposed();
+            lock (_sequenceLock)
+            {
+                return _sequenceOptimizer?.GetStatistics() ?? new Dictionary<string, object>();
+            }
         }
 
         private NeuralNetworkBase<T>? EnsureSequenceOptimizationsInitialized(NeuralNetworkBase<T> model)
