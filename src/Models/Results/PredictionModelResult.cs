@@ -893,6 +893,21 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
+    /// Gets federated learning training metadata if this model was produced via federated learning.
+    /// </summary>
+    /// <returns>The federated learning metadata, or null if not available.</returns>
+    public FederatedLearningMetadata? GetFederatedLearningMetadata()
+    {
+        var metadata = GetModelMetadata();
+        if (metadata.Properties.TryGetValue(FederatedLearningMetadata.MetadataKey, out var value))
+        {
+            return value as FederatedLearningMetadata;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Makes predictions using the model on the provided input data.
     /// </summary>
     /// <param name="newData">A matrix of input features, where each row represents an observation and each column represents a feature.</param>

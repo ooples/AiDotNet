@@ -27,6 +27,11 @@ namespace AiDotNet.Models;
 public class FederatedLearningMetadata
 {
     /// <summary>
+    /// The recommended key for storing federated learning metadata inside <see cref="ModelMetadata{T}.Properties"/>.
+    /// </summary>
+    public const string MetadataKey = "FederatedLearning";
+
+    /// <summary>
     /// Gets or sets the number of federated learning rounds completed.
     /// </summary>
     /// <remarks>

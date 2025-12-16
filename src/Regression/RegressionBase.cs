@@ -326,17 +326,37 @@ public abstract class RegressionBase<T> : IRegression<T>
         }
 
         var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var modelDataDict = JsonConvert.DeserializeObject<Dictionary<string, object>>(modelDataString);
+        var modelDataObj = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(modelDataString);
 
-        if (modelDataDict == null)
+        if (modelDataObj == null)
         {
             throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
         }
 
-        Coefficients = new Vector<T>((T[])modelDataDict["Coefficients"]);
-        Intercept = (T)modelDataDict["Intercept"];
+        var coefficientsToken = modelDataObj["Coefficients"];
+        var interceptToken = modelDataObj["Intercept"];
+        if (coefficientsToken == null || interceptToken == null)
+        {
+            throw new InvalidOperationException("Deserialization failed: Missing required regression parameters.");
+        }
 
-        var regularizationOptionsJson = JsonConvert.SerializeObject(modelDataDict["RegularizationOptions"]);
+        var coefficientsAsDoubles = coefficientsToken.ToObject<double[]>() ?? Array.Empty<double>();
+        var coefficients = new Vector<T>(coefficientsAsDoubles.Length);
+        for (int i = 0; i < coefficientsAsDoubles.Length; i++)
+        {
+            coefficients[i] = NumOps.FromDouble(coefficientsAsDoubles[i]);
+        }
+
+        Coefficients = coefficients;
+        Intercept = NumOps.FromDouble(interceptToken.ToObject<double>());
+
+        var regularizationOptionsToken = modelDataObj["RegularizationOptions"];
+        if (regularizationOptionsToken == null)
+        {
+            throw new InvalidOperationException("Deserialization failed: Missing regularization options.");
+        }
+
+        var regularizationOptionsJson = JsonConvert.SerializeObject(regularizationOptionsToken);
         var regularizationOptions = JsonConvert.DeserializeObject<RegularizationOptions>(regularizationOptionsJson)
             ?? throw new InvalidOperationException("Deserialization failed: Unable to deserialize regularization options.");
 

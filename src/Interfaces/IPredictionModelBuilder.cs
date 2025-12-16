@@ -4,6 +4,7 @@ using AiDotNet.Models.Results;
 using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using AiDotNet.Tokenization.Interfaces;
@@ -161,6 +162,20 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="optimizationAlgorithm">The optimization algorithm implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm);
+
+    /// <summary>
+    /// Enables federated learning training using the provided options.
+    /// </summary>
+    /// <remarks>
+    /// Federated learning is orchestrated internally by the builder to preserve the public facade API.
+    /// Users typically only provide an options object; optional strategy injection is available for advanced scenarios.
+    /// </remarks>
+    /// <param name="options">Federated learning configuration options.</param>
+    /// <param name="aggregationStrategy">Optional aggregation strategy override (null uses defaults based on options).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFederatedLearning(
+        FederatedLearningOptions options,
+        IAggregationStrategy<IFullModel<T, TInput, TOutput>>? aggregationStrategy = null);
 
     /// <summary>
     /// Configures the data preprocessing component for the model.

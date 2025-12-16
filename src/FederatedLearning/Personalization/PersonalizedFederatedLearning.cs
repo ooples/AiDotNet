@@ -149,7 +149,9 @@ public class PersonalizedFederatedLearning<T>
             int totalLayers = modelStructure.Count;
             int personalizedCount = (int)Math.Ceiling(totalLayers * _personalizationFraction);
 
-            var layerNames = modelStructure.Keys.ToList();
+            var layerNames = modelStructure.Keys
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToList();
 
             // Take the last personalizedCount layers
             for (int i = totalLayers - personalizedCount; i < totalLayers; i++)
