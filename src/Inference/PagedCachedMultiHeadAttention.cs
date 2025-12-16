@@ -35,7 +35,7 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralN
     /// <summary>
     /// Gets whether this layer supports training.
     /// </summary>
-    public override bool SupportsTraining => true;
+    public override bool SupportsTraining => false;
 
     /// <summary>
     /// Gets the number of attention heads.
