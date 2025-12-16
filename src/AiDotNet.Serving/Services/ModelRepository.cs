@@ -134,15 +134,4 @@ public class ModelRepository : IModelRepository
             SourcePath = entry.SourcePath
         };
     }
-
-    /// <summary>
-    /// Internal class to store model metadata along with the model instance.
-    /// </summary>
-    private class ModelEntry
-    {
-        public object Model { get; set; } = null!;
-        public string NumericType { get; set; } = string.Empty;
-        public DateTime LoadedAt { get; set; }
-        public string? SourcePath { get; set; }
-    }
 }
