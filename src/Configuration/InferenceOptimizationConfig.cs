@@ -448,6 +448,19 @@ public class InferenceOptimizationConfig
     /// </remarks>
     public SpeculationPolicy SpeculationPolicy { get; set; } = SpeculationPolicy.Auto;
 
+    /// <summary>
+    /// Gets or sets the speculative decoding method.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default <see cref="SpeculativeMethod.Auto"/> currently selects <see cref="SpeculativeMethod.ClassicDraftModel"/>.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This chooses the "style" of speculative decoding.
+    /// </para>
+    /// </remarks>
+    public SpeculativeMethod SpeculativeMethod { get; set; } = SpeculativeMethod.Auto;
+
     #endregion
 }
 
@@ -469,7 +482,43 @@ public enum SpeculationPolicy
     /// <summary>
     /// Always disable speculative decoding even if enabled in config.
     /// </summary>
-    ForceOff
+    ForceOff,
+
+    /// <summary>
+    /// Prefer speculative decoding to reduce latency, even under moderate load.
+    /// </summary>
+    LatencyFirst,
+
+    /// <summary>
+    /// Prefer throughput and stability: use speculative decoding only when conditions are ideal.
+    /// </summary>
+    ThroughputFirst
+}
+
+/// <summary>
+/// Selects the speculative decoding method.
+/// </summary>
+public enum SpeculativeMethod
+{
+    /// <summary>
+    /// Automatically select the best available method (defaults to ClassicDraftModel today).
+    /// </summary>
+    Auto,
+
+    /// <summary>
+    /// Classic draft-model speculative decoding (standard).
+    /// </summary>
+    ClassicDraftModel,
+
+    /// <summary>
+    /// Medusa-style multi-head proposals (hook for future internal implementation).
+    /// </summary>
+    Medusa,
+
+    /// <summary>
+    /// EAGLE-style enhanced draft proposals (hook for future internal implementation).
+    /// </summary>
+    Eagle
 }
 
 /// <summary>

@@ -453,6 +453,15 @@ internal class ContinuousBatcher<T> : IDisposable
             return true;
         }
 
+        if (_config.SpeculationPolicy == AiDotNet.Configuration.SpeculationPolicy.ThroughputFirst)
+        {
+            // Extremely conservative: only speculate when there is no queue pressure and batches are tiny.
+            bool ok = batch.Count == 1 && _scheduler.WaitingCount == 0 && _speculationDisabledUntilIteration <= _totalIterations;
+            reason = ok ? "ThroughputFirst(Enabled)" : "ThroughputFirst(Backoff)";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: ok, reason: reason);
+            return ok;
+        }
+
         // Auto policy: back off under load and when draft acceptance is too low.
         if (_speculationDisabledUntilIteration > _totalIterations)
         {
@@ -461,10 +470,19 @@ internal class ContinuousBatcher<T> : IDisposable
             return false;
         }
 
-        bool enabled = batch.Count <= Math.Max(1, _config.SchedulerConfig.MaxBatchSize / 2) && _scheduler.WaitingCount == 0;
+        int maxBatchForSpeculation = _config.SchedulerConfig.MaxBatchSize / 2;
+        if (_config.SpeculationPolicy == AiDotNet.Configuration.SpeculationPolicy.LatencyFirst)
+        {
+            // Allow more speculation under load, but still avoid it when the queue is growing.
+            maxBatchForSpeculation = Math.Max(1, _config.SchedulerConfig.MaxBatchSize);
+        }
+
+        bool enabled = batch.Count <= Math.Max(1, maxBatchForSpeculation) && _scheduler.WaitingCount == 0;
         if (!enabled)
         {
-            reason = "AutoBackoff(LoadOrQueue)";
+            reason = _config.SpeculationPolicy == AiDotNet.Configuration.SpeculationPolicy.LatencyFirst
+                ? "LatencyFirst(Backoff:LoadOrQueue)"
+                : "AutoBackoff(LoadOrQueue)";
             InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
             return false;
         }
