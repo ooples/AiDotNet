@@ -701,5 +701,14 @@ public static class DeserializationHelper
             // Treat them as optional on deserialization and let callers provide sensible defaults.
             return null;
         }
+        catch (TargetInvocationException ex) when (ex.InnerException is MissingMethodException)
+        {
+            // Same as above: no parameterless ctor available.
+            return null;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to instantiate type {typeName}", ex);
+        }
     }
 }
