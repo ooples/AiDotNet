@@ -82,7 +82,7 @@ public sealed class FedBNFullModelAggregationStrategy<T, TInput, TOutput> :
             }
         }
 
-        return (IFullModel<T, TInput, TOutput>)first.WithParameters(aggregated);
+        return first.WithParameters(aggregated);
     }
 
     public override string GetStrategyName() => "FedBN";
@@ -125,4 +125,3 @@ public sealed class FedBNFullModelAggregationStrategy<T, TInput, TOutput> :
         return false;
     }
 }
-
