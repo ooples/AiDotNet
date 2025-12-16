@@ -66,6 +66,28 @@ public class RobustFullModelAggregationStrategyTests
         Assert.True(aggregated.GetParameters()[0] >= 0.0 && aggregated.GetParameters()[0] <= 1.0);
     }
 
+    [Fact]
+    public void WinsorizedMean_Aggregate_ClipsOutlier()
+    {
+        var aggregator = new WinsorizedMeanFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(winsorizeFraction: 0.2);
+        var models = CreateClientModels(new[] { 0.0, 0.0, 0.0, 0.0, 100.0 });
+        var weights = CreateEqualWeights(models.Keys);
+
+        var aggregated = aggregator.Aggregate(models, weights);
+        Assert.True(aggregated.GetParameters()[0] >= 0.0 && aggregated.GetParameters()[0] < 100.0);
+    }
+
+    [Fact]
+    public void Rfa_Aggregate_IsRobustToOutlier()
+    {
+        var aggregator = new RfaFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(maxIterations: 5);
+        var models = CreateClientModels(new[] { 0.0, 0.0, 0.0, 1.0, 100.0 });
+        var weights = CreateEqualWeights(models.Keys);
+
+        var aggregated = aggregator.Aggregate(models, weights);
+        Assert.True(aggregated.GetParameters()[0] >= 0.0 && aggregated.GetParameters()[0] <= 1.0);
+    }
+
     private static Dictionary<int, IFullModel<double, Matrix<double>, Vector<double>>> CreateClientModels(double[] firstParameterValues)
     {
         var models = new Dictionary<int, IFullModel<double, Matrix<double>, Vector<double>>>();
@@ -91,4 +113,3 @@ public class RobustFullModelAggregationStrategyTests
         return weights;
     }
 }
-

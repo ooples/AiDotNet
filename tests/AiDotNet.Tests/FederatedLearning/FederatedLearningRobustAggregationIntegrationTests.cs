@@ -14,6 +14,8 @@ public class FederatedLearningRobustAggregationIntegrationTests
     [Theory]
     [InlineData("Median", 5)]
     [InlineData("TrimmedMean", 5)]
+    [InlineData("WinsorizedMean", 5)]
+    [InlineData("RFA", 5)]
     [InlineData("Krum", 5)]
     [InlineData("MultiKrum", 7)]
     [InlineData("Bulyan", 7)]
@@ -39,7 +41,8 @@ public class FederatedLearningRobustAggregationIntegrationTests
                 TrimFraction = 0.2,
                 ByzantineClientCount = 1,
                 MultiKrumSelectionCount = 0,
-                UseClientWeightsWhenAveragingSelectedUpdates = false
+                UseClientWeightsWhenAveragingSelectedUpdates = false,
+                GeometricMedianMaxIterations = 5
             },
             RandomSeed = 42,
             MinRoundsBeforeConvergence = 1,
@@ -119,4 +122,3 @@ public class FederatedLearningRobustAggregationIntegrationTests
         }
     }
 }
-

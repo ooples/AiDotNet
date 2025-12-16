@@ -52,5 +52,19 @@ public class RobustAggregationOptions
     /// robustness if a malicious client can manipulate its weight. Default is false (unweighted).
     /// </remarks>
     public bool UseClientWeightsWhenAveragingSelectedUpdates { get; set; } = false;
-}
 
+    /// <summary>
+    /// Gets or sets the maximum number of iterations for geometric-median/RFA aggregation.
+    /// </summary>
+    public int GeometricMedianMaxIterations { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets the convergence tolerance for geometric-median/RFA aggregation.
+    /// </summary>
+    public double GeometricMedianTolerance { get; set; } = 1e-6;
+
+    /// <summary>
+    /// Gets or sets a small epsilon used to avoid division-by-zero in RFA (Weiszfeld) updates.
+    /// </summary>
+    public double GeometricMedianEpsilon { get; set; } = 1e-12;
+}

@@ -282,6 +282,8 @@ public class FederatedLearningOptions
     /// - "FedBN": Special handling for batch normalization
     /// - "Median": Coordinate-wise median (robust to outliers)
     /// - "TrimmedMean": Coordinate-wise trimmed mean (robust to outliers)
+    /// - "WinsorizedMean": Coordinate-wise winsorized mean (robust to outliers)
+    /// - "RFA": Geometric median / robust federated aggregation (robust to outliers)
     /// - "Krum": Selects the most central update by distance (robust to Byzantine clients)
     /// - "MultiKrum": Selects m central updates then averages them (robust to Byzantine clients)
     /// - "Bulyan": MultiKrum selection + trimming (strong robustness; higher compute cost)

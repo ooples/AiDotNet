@@ -3496,6 +3496,19 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             return new AiDotNet.FederatedLearning.Aggregators.TrimmedMeanFullModelAggregationStrategy<T, TInput, TOutput>(robust.TrimFraction);
         }
 
+        if (string.Equals(name, "WinsorizedMean", StringComparison.OrdinalIgnoreCase))
+        {
+            var robust = options.RobustAggregation ?? new RobustAggregationOptions();
+            return new AiDotNet.FederatedLearning.Aggregators.WinsorizedMeanFullModelAggregationStrategy<T, TInput, TOutput>(robust.TrimFraction);
+        }
+
+        if (string.Equals(name, "RFA", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "GeometricMedian", StringComparison.OrdinalIgnoreCase))
+        {
+            var robust = options.RobustAggregation ?? new RobustAggregationOptions();
+            return AiDotNet.FederatedLearning.Aggregators.RfaFullModelAggregationStrategy<T, TInput, TOutput>.FromOptions(robust);
+        }
+
         if (string.Equals(name, "Krum", StringComparison.OrdinalIgnoreCase))
         {
             var robust = options.RobustAggregation ?? new RobustAggregationOptions();
