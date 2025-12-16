@@ -149,7 +149,8 @@ public class InferenceController : ControllerBase
     /// </summary>
     private async Task<double[][]> PredictWithType<T>(string modelName, double[][] features)
     {
-        var model = _modelRepository.GetModel<T>(modelName);
+        string effectiveModelName = ResolveModelNameWithAdapter(modelName);
+        var model = _modelRepository.GetModel<T>(effectiveModelName) ?? _modelRepository.GetModel<T>(modelName);
         if (model == null)
         {
             throw new InvalidOperationException($"Model '{modelName}' was not found.");
@@ -173,7 +174,7 @@ public class InferenceController : ControllerBase
         var tasks = features.Select(featureArray =>
         {
             var inputVector = ConvertToVector<T>(featureArray);
-            return _requestBatcher.QueueRequest(modelName, inputVector);
+            return _requestBatcher.QueueRequest(effectiveModelName, inputVector);
         }).ToArray();
 
         // Await all requests together
@@ -187,6 +188,45 @@ public class InferenceController : ControllerBase
         }
 
         return batchedPredictions;
+    }
+
+    private string ResolveModelNameWithAdapter(string modelName)
+    {
+        // Multi-LoRA / adapter routing (serving-first): select a pre-loaded model variant via request header.
+        // This keeps adapter details out of the public model facade while enabling per-request selection.
+        if (Request?.Headers == null)
+        {
+            return modelName;
+        }
+
+        if (!Request.Headers.TryGetValue("X-AiDotNet-Lora", out var adapterValues) &&
+            !Request.Headers.TryGetValue("X-AiDotNet-Adapter", out adapterValues))
+        {
+            return modelName;
+        }
+
+        var adapterId = adapterValues.ToString()?.Trim();
+        if (string.IsNullOrWhiteSpace(adapterId) || adapterId.Length > 64 || !IsSafeAdapterId(adapterId))
+        {
+            return modelName;
+        }
+
+        return $"{modelName}__{adapterId}";
+    }
+
+    private static bool IsSafeAdapterId(string adapterId)
+    {
+        for (int i = 0; i < adapterId.Length; i++)
+        {
+            char c = adapterId[i];
+            bool ok = (c >= 'a' && c <= 'z') ||
+                      (c >= 'A' && c <= 'Z') ||
+                      (c >= '0' && c <= '9') ||
+                      c == '-' || c == '_' || c == '.';
+            if (!ok) return false;
+        }
+
+        return true;
     }
 
     /// <summary>
