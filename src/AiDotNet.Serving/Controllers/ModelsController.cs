@@ -33,6 +33,10 @@ public class ModelsController : ControllerBase
     /// <param name="modelRepository">The model repository service</param>
     /// <param name="logger">Logger for diagnostics</param>
     /// <param name="servingOptions">Configuration options for the serving framework</param>
+    /// <param name="tierResolver">Resolves the subscription tier for the current request</param>
+    /// <param name="tierPolicyProvider">Provides tier policies for artifact/key access</param>
+    /// <param name="artifactService">Artifact service for tier-aware download and key release</param>
+    /// <param name="attestationVerifier">Verifies attestation evidence for key release</param>
     public ModelsController(
         IModelRepository modelRepository,
         ILogger<ModelsController> logger,

@@ -3387,11 +3387,16 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             throw new ArgumentException("Federated partitioning requires X row count to match y length.");
         }
 
-        var indices = Enumerable.Range(0, xMatrix.Rows).ToList();
-        if (randomSeed.HasValue)
+        if (numberOfClients > xMatrix.Rows)
         {
-            ShuffleInPlace(indices, new Random(randomSeed.Value));
+            throw new ArgumentOutOfRangeException(
+                nameof(numberOfClients),
+                "NumberOfClients must not exceed the number of training samples when creating federated partitions.");
         }
+
+        var indices = Enumerable.Range(0, xMatrix.Rows).ToList();
+        var rng = randomSeed.HasValue ? new Random(randomSeed.Value) : new Random();
+        ShuffleInPlace(indices, rng);
 
         var clientIndices = new List<int>[numberOfClients];
         for (int i = 0; i < numberOfClients; i++)
