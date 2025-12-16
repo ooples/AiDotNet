@@ -38,6 +38,13 @@ internal class KVCache<T>
     private readonly Tensor<T>[] _keyCache;
     private readonly Tensor<T>[] _valueCache;
 
+    // Optional FP16 cache storage (used when Config.DataType == Float16 and T is float/double)
+    private readonly Tensor<Half>[]? _keyCacheFp16;
+    private readonly Tensor<Half>[]? _valueCacheFp16;
+    private readonly bool _useFp16Storage;
+    private readonly Func<T, Half>? _toHalf;
+    private readonly Func<Half, T>? _fromHalf;
+
     // Current sequence length for each layer and batch item: [layer][batch]
     private readonly int[][] _sequenceLengths;
 
@@ -86,6 +93,30 @@ internal class KVCache<T>
 
         _keyCache = new Tensor<T>[config.NumLayers];
         _valueCache = new Tensor<T>[config.NumLayers];
+
+        if (config.DataType == CacheDataType.Float16 && typeof(T) != typeof(Half))
+        {
+            // Only enable FP16 storage when we can safely convert between T and Half.
+            if (typeof(T) == typeof(float))
+            {
+                _useFp16Storage = true;
+                _toHalf = value => (Half)(float)(object)value!;
+                _fromHalf = value => (T)(object)(float)value;
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                _useFp16Storage = true;
+                _toHalf = value => (Half)(double)(object)value!;
+                _fromHalf = value => (T)(object)(double)(float)value;
+            }
+        }
+
+        if (_useFp16Storage)
+        {
+            _keyCacheFp16 = new Tensor<Half>[config.NumLayers];
+            _valueCacheFp16 = new Tensor<Half>[config.NumLayers];
+        }
+
         _sequenceLengths = new int[config.NumLayers][];
         for (int layer = 0; layer < config.NumLayers; layer++)
         {
@@ -125,8 +156,16 @@ internal class KVCache<T>
 
         for (int layer = 0; layer < _config.NumLayers; layer++)
         {
-            _keyCache[layer] = new Tensor<T>(shape);
-            _valueCache[layer] = new Tensor<T>(shape);
+            if (_useFp16Storage)
+            {
+                _keyCacheFp16![layer] = new Tensor<Half>(shape);
+                _valueCacheFp16![layer] = new Tensor<Half>(shape);
+            }
+            else
+            {
+                _keyCache[layer] = new Tensor<T>(shape);
+                _valueCache[layer] = new Tensor<T>(shape);
+            }
         }
     }
 
@@ -191,8 +230,16 @@ internal class KVCache<T>
                     int targetPos = currentLen + s;
                     for (int d = 0; d < _config.HeadDimension; d++)
                     {
-                        _keyCache[layerIndex][new[] { b, h, targetPos, d }] = newKeys[new[] { b, h, s, d }];
-                        _valueCache[layerIndex][new[] { b, h, targetPos, d }] = newValues[new[] { b, h, s, d }];
+                        if (_useFp16Storage)
+                        {
+                            _keyCacheFp16![layerIndex][new[] { b, h, targetPos, d }] = _toHalf!(newKeys[new[] { b, h, s, d }]);
+                            _valueCacheFp16![layerIndex][new[] { b, h, targetPos, d }] = _toHalf!(newValues[new[] { b, h, s, d }]);
+                        }
+                        else
+                        {
+                            _keyCache[layerIndex][new[] { b, h, targetPos, d }] = newKeys[new[] { b, h, s, d }];
+                            _valueCache[layerIndex][new[] { b, h, targetPos, d }] = newValues[new[] { b, h, s, d }];
+                        }
                     }
                 }
             }
@@ -215,7 +262,7 @@ internal class KVCache<T>
     {
         ValidateLayerIndex(layerIndex);
 
-        if (_keyCache[layerIndex] == null)
+        if (!IsLayerAllocated(layerIndex))
         {
             throw new InvalidOperationException($"Layer {layerIndex} cache not initialized. Call Append first.");
         }
@@ -249,8 +296,16 @@ internal class KVCache<T>
                 {
                     for (int d = 0; d < _config.HeadDimension; d++)
                     {
-                        keys[new[] { b, h, s, d }] = _keyCache[layerIndex][new[] { b, h, s, d }];
-                        values[new[] { b, h, s, d }] = _valueCache[layerIndex][new[] { b, h, s, d }];
+                        if (_useFp16Storage)
+                        {
+                            keys[new[] { b, h, s, d }] = _fromHalf!(_keyCacheFp16![layerIndex][new[] { b, h, s, d }]);
+                            values[new[] { b, h, s, d }] = _fromHalf!(_valueCacheFp16![layerIndex][new[] { b, h, s, d }]);
+                        }
+                        else
+                        {
+                            keys[new[] { b, h, s, d }] = _keyCache[layerIndex][new[] { b, h, s, d }];
+                            values[new[] { b, h, s, d }] = _valueCache[layerIndex][new[] { b, h, s, d }];
+                        }
                     }
                 }
             }
@@ -289,8 +344,16 @@ internal class KVCache<T>
                 {
                     for (int d = 0; d < _config.HeadDimension; d++)
                     {
-                        _keyCache[layerIndex][new[] { b, h, pos, d }] = keys[new[] { b, h, p, d }];
-                        _valueCache[layerIndex][new[] { b, h, pos, d }] = values[new[] { b, h, p, d }];
+                        if (_useFp16Storage)
+                        {
+                            _keyCacheFp16![layerIndex][new[] { b, h, pos, d }] = _toHalf!(keys[new[] { b, h, p, d }]);
+                            _valueCacheFp16![layerIndex][new[] { b, h, pos, d }] = _toHalf!(values[new[] { b, h, p, d }]);
+                        }
+                        else
+                        {
+                            _keyCache[layerIndex][new[] { b, h, pos, d }] = keys[new[] { b, h, p, d }];
+                            _valueCache[layerIndex][new[] { b, h, pos, d }] = values[new[] { b, h, p, d }];
+                        }
                     }
                 }
             }
@@ -389,9 +452,16 @@ internal class KVCache<T>
         long totalElements = 0;
         for (int layer = 0; layer < _config.NumLayers; layer++)
         {
-            if (_keyCache[layer] != null)
+            if (IsLayerAllocated(layer))
             {
-                totalElements += _keyCache[layer].Length + _valueCache[layer].Length;
+                if (_useFp16Storage)
+                {
+                    totalElements += _keyCacheFp16![layer].Length + _valueCacheFp16![layer].Length;
+                }
+                else
+                {
+                    totalElements += _keyCache[layer].Length + _valueCache[layer].Length;
+                }
             }
         }
 
@@ -440,7 +510,7 @@ internal class KVCache<T>
 
         for (int layer = 0; layer < _config.NumLayers; layer++)
         {
-            if (_keyCache[layer] == null) continue;
+            if (!IsLayerAllocated(layer)) continue;
 
             int seqLen = _sequenceLengths[layer][sourceBatch];
 
@@ -450,10 +520,20 @@ internal class KVCache<T>
                 {
                     for (int d = 0; d < _config.HeadDimension; d++)
                     {
-                        _keyCache[layer][new[] { destBatch, h, s, d }] =
-                            _keyCache[layer][new[] { sourceBatch, h, s, d }];
-                        _valueCache[layer][new[] { destBatch, h, s, d }] =
-                            _valueCache[layer][new[] { sourceBatch, h, s, d }];
+                        if (_useFp16Storage)
+                        {
+                            _keyCacheFp16![layer][new[] { destBatch, h, s, d }] =
+                                _keyCacheFp16![layer][new[] { sourceBatch, h, s, d }];
+                            _valueCacheFp16![layer][new[] { destBatch, h, s, d }] =
+                                _valueCacheFp16![layer][new[] { sourceBatch, h, s, d }];
+                        }
+                        else
+                        {
+                            _keyCache[layer][new[] { destBatch, h, s, d }] =
+                                _keyCache[layer][new[] { sourceBatch, h, s, d }];
+                            _valueCache[layer][new[] { destBatch, h, s, d }] =
+                                _valueCache[layer][new[] { sourceBatch, h, s, d }];
+                        }
                     }
                 }
             }
@@ -501,7 +581,7 @@ internal class KVCache<T>
 
     private void EnsureCacheAllocated(int layerIndex)
     {
-        if (_keyCache[layerIndex] == null)
+        if (!IsLayerAllocated(layerIndex))
         {
             var shape = new[]
             {
@@ -511,8 +591,16 @@ internal class KVCache<T>
                 _config.HeadDimension
             };
 
-            _keyCache[layerIndex] = new Tensor<T>(shape);
-            _valueCache[layerIndex] = new Tensor<T>(shape);
+            if (_useFp16Storage)
+            {
+                _keyCacheFp16![layerIndex] = new Tensor<Half>(shape);
+                _valueCacheFp16![layerIndex] = new Tensor<Half>(shape);
+            }
+            else
+            {
+                _keyCache[layerIndex] = new Tensor<T>(shape);
+                _valueCache[layerIndex] = new Tensor<T>(shape);
+            }
         }
     }
 
@@ -538,10 +626,20 @@ internal class KVCache<T>
                             int srcPos = evictCount + s;
                             for (int d = 0; d < _config.HeadDimension; d++)
                             {
-                                _keyCache[layerIndex][new[] { b, h, s, d }] =
-                                    _keyCache[layerIndex][new[] { b, h, srcPos, d }];
-                                _valueCache[layerIndex][new[] { b, h, s, d }] =
-                                    _valueCache[layerIndex][new[] { b, h, srcPos, d }];
+                                if (_useFp16Storage)
+                                {
+                                    _keyCacheFp16![layerIndex][new[] { b, h, s, d }] =
+                                        _keyCacheFp16![layerIndex][new[] { b, h, srcPos, d }];
+                                    _valueCacheFp16![layerIndex][new[] { b, h, s, d }] =
+                                        _valueCacheFp16![layerIndex][new[] { b, h, srcPos, d }];
+                                }
+                                else
+                                {
+                                    _keyCache[layerIndex][new[] { b, h, s, d }] =
+                                        _keyCache[layerIndex][new[] { b, h, srcPos, d }];
+                                    _valueCache[layerIndex][new[] { b, h, s, d }] =
+                                        _valueCache[layerIndex][new[] { b, h, srcPos, d }];
+                                }
                             }
                         }
                     }
@@ -551,5 +649,10 @@ internal class KVCache<T>
                 _evictions += evictCount;
             }
         }
+    }
+
+    private bool IsLayerAllocated(int layerIndex)
+    {
+        return _useFp16Storage ? _keyCacheFp16![layerIndex] != null : _keyCache[layerIndex] != null;
     }
 }

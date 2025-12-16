@@ -14,6 +14,10 @@ namespace AiDotNet.Tests.IntegrationTests.Inference;
 public class InferenceSessionIntegrationTests
 {
     private const float Tolerance = 1e-4f;
+    private const int SequenceLength = 1;
+    private const int EmbeddingDimension = 8;
+    private const int HeadCount = 2;
+    private const int FlatSize = SequenceLength * EmbeddingDimension;
 
     [Fact]
     public void PredictionModelResult_Predict_IsStateless_WhenInferenceOptimizationsConfigured()
@@ -55,9 +59,9 @@ public class InferenceSessionIntegrationTests
         var seqFresh = session.CreateSequence();
 
         var a1 = seqA.Predict(token1);
-        var a2 = seqA.Predict(token2);
-
         var b1 = seqB.Predict(token1);
+
+        var a2 = seqA.Predict(token2);
         var fresh2 = seqFresh.Predict(token2);
 
         AssertTensorsEqual(a1, b1, Tolerance);
@@ -128,19 +132,24 @@ public class InferenceSessionIntegrationTests
     {
         var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
         {
+            new InputLayer<float>(FlatSize),
+            new ReshapeLayer<float>(new[] { FlatSize }, new[] { SequenceLength, EmbeddingDimension }),
             new MultiHeadAttentionLayer<float>(
-                sequenceLength: 8,
-                embeddingDimension: 8,
-                headCount: 2,
+                sequenceLength: SequenceLength,
+                embeddingDimension: EmbeddingDimension,
+                headCount: HeadCount,
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+            ,
+            new FlattenLayer<float>(new[] { SequenceLength, EmbeddingDimension }),
+            new DenseLayer<float>(FlatSize, FlatSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.TextGeneration,
             complexity: NetworkComplexity.Simple,
-            inputSize: 8,
-            outputSize: 8,
+            inputSize: FlatSize,
+            outputSize: FlatSize,
             layers: layers);
 
         var model = new NeuralNetwork<float>(architecture);
@@ -158,7 +167,7 @@ public class InferenceSessionIntegrationTests
 
     private static Tensor<float> CreateTokenTensor(float scalar)
     {
-        var t = new Tensor<float>(new[] { 1, 1, 8 });
+        var t = new Tensor<float>(new[] { 1, FlatSize });
         for (int i = 0; i < t.Length; i++)
         {
             t[i] = scalar + (i * 0.01f);

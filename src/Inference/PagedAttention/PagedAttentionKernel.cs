@@ -300,15 +300,22 @@ internal class PagedAttentionKernel<T>
         int position,
         int layer)
     {
-        // Ensure capacity
-        if (!_kvCache.HasCapacityFor(sequenceId, 1))
+        // Ensure logical length and capacity for this position.
+        int requiredLength = position + 1;
+        int currentLength = _kvCache.GetSequenceLength(sequenceId);
+        if (requiredLength > currentLength)
         {
-            _kvCache.ExtendSequence(sequenceId, 1);
+            int additionalTokens = requiredLength - currentLength;
+            if (!_kvCache.ExtendSequence(sequenceId, additionalTokens))
+            {
+                throw new InvalidOperationException(
+                    $"Failed to extend PagedKVCache sequence {sequenceId} to length {requiredLength}.");
+            }
         }
 
         // Convert and write
-        var keyT = ConvertSpan(key);
-        var valueT = ConvertSpan(value);
+        var keyT = ConvertArray(key);
+        var valueT = ConvertArray(value);
 
         _kvCache.WriteKey(sequenceId, position, layer, keyT);
         _kvCache.WriteValue(sequenceId, position, layer, valueT);
@@ -405,15 +412,13 @@ internal class PagedAttentionKernel<T>
         return (T)Convert.ChangeType(value, typeof(T))!;
     }
 
-    private static ReadOnlySpan<T> ConvertSpan(ReadOnlySpan<float> source)
+    private static T[] ConvertArray(ReadOnlySpan<float> source)
     {
         if (typeof(T) == typeof(float))
         {
-            // Safe: We've verified T == float at runtime
-            // Reinterpret the array using object cast
-            var floatArray = source.ToArray();
-            var tArray = (T[])(object)floatArray;
-            return new ReadOnlySpan<T>(tArray);
+            // Safe: runtime-verified T == float.
+            // Return a rooted array so GC cannot collect it while spans are in use.
+            return (T[])(object)source.ToArray();
         }
 
         var result = new T[source.Length];

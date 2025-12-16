@@ -106,6 +106,28 @@ public static class DeserializationHelper
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke([inputShape[0], outputShape[0], activation]);
         }
+        else if (genericDef == typeof(InputLayer<>))
+        {
+            // InputLayer(int inputSize)
+            var ctor = type.GetConstructor([typeof(int)]);
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find InputLayer constructor with (int).");
+            }
+
+            instance = ctor.Invoke([inputShape[0]]);
+        }
+        else if (genericDef == typeof(ReshapeLayer<>))
+        {
+            // ReshapeLayer(int[] inputShape, int[] outputShape)
+            var ctor = type.GetConstructor([typeof(int[]), typeof(int[])]);
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find ReshapeLayer constructor with (int[], int[]).");
+            }
+
+            instance = ctor.Invoke([inputShape, outputShape]);
+        }
         else if (genericDef == typeof(EmbeddingLayer<>))
         {
             // EmbeddingLayer(int vocabularySize, int embeddingDimension)

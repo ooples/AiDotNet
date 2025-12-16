@@ -132,6 +132,16 @@ public class InferenceOptimizationConfig
     public int KVCacheWindowSize { get; set; } = 1024;
 
     /// <summary>
+    /// Gets or sets the precision used for KV-cache storage.
+    /// </summary>
+    /// <remarks>
+    /// Industry-standard serving stores KV-cache in FP16 to halve memory usage and increase cache capacity.
+    /// The default <see cref="KVCachePrecisionMode.Auto"/> selects FP16 when KV-cache is enabled.
+    /// Users can opt out to force FP32.
+    /// </remarks>
+    public KVCachePrecisionMode KVCachePrecision { get; set; } = KVCachePrecisionMode.Auto;
+
+    /// <summary>
     /// Gets or sets whether to use a paged KV-cache backend (vLLM-style) for long-context / multi-sequence serving.
     /// </summary>
     /// <remarks>
@@ -477,4 +487,19 @@ public enum AttentionMaskingMode
     /// Apply causal masking (autoregressive decoding).
     /// </summary>
     Causal
+}
+
+/// <summary>
+/// Controls the numeric precision of KV-cache storage.
+/// </summary>
+public enum KVCachePrecisionMode
+{
+    /// <summary>Select an industry-standard default (FP16 when KV-cache is enabled).</summary>
+    Auto,
+
+    /// <summary>Store KV-cache in FP16 (half precision) to reduce memory use.</summary>
+    Float16,
+
+    /// <summary>Store KV-cache in FP32 (single precision) for maximal numerical fidelity.</summary>
+    Float32
 }

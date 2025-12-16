@@ -43,6 +43,7 @@ internal class InferenceOptimizer<T>
     private PagedKVCache<T>? _pagedKVCache;
     private PagedAttentionKernel<T>? _pagedKernel;
     private long? _pagedSequenceId;
+    private List<PagedCachedMultiHeadAttention<T>>? _pagedAttentionLayers;
     private static long s_nextPagedSequenceId = DateTime.UtcNow.Ticks;
     private IDraftModel<T>? _draftModel;
     private SpeculativeDecoder<T>? _speculativeDecoder;
@@ -224,7 +225,8 @@ internal class InferenceOptimizer<T>
             UseSlidingWindow = _config.UseSlidingWindowKVCache,
             WindowSize = _config.UseSlidingWindowKVCache
                 ? Math.Min(_config.KVCacheWindowSize, maxSeqLen)
-                : 1024
+                : 1024,
+            DataType = ResolveKVCacheDataType()
         };
 
         // Create and attach KV cache
@@ -238,6 +240,26 @@ internal class InferenceOptimizer<T>
         }
 
         return true;
+    }
+
+    private CacheDataType ResolveKVCacheDataType()
+    {
+        bool fp16Capable = typeof(T) == typeof(float) || typeof(T) == typeof(double) || typeof(T) == typeof(Half);
+
+        CacheDataType resolved = _config.KVCachePrecision switch
+        {
+            KVCachePrecisionMode.Float32 => CacheDataType.Float32,
+            KVCachePrecisionMode.Float16 => fp16Capable ? CacheDataType.Float16 : CacheDataType.Float32,
+            _ => fp16Capable ? CacheDataType.Float16 : CacheDataType.Float32
+        };
+
+        InferenceDiagnostics.RecordDecision(
+            area: "InferenceOptimizer",
+            feature: "KVCachePrecision",
+            enabled: resolved == CacheDataType.Float16,
+            reason: $"Config={_config.KVCachePrecision};Resolved={resolved};Type={typeof(T).Name}");
+
+        return resolved;
     }
 
     private bool InitializePagedKVCache(NeuralNetworkBase<T> model)
@@ -287,6 +309,7 @@ internal class InferenceOptimizer<T>
         while (!_pagedKVCache.AllocateSequence(sequenceId, initialTokens: 0));
 
         _pagedSequenceId = sequenceId;
+        _pagedAttentionLayers = attentionLayers;
 
         foreach (var layer in attentionLayers)
         {
@@ -735,6 +758,17 @@ internal class InferenceOptimizer<T>
                 while (!_pagedKVCache.AllocateSequence(newId, initialTokens: 0));
 
                 _pagedSequenceId = newId;
+            }
+
+            if (_pagedAttentionLayers != null && _pagedSequenceId.HasValue)
+            {
+                foreach (var layer in _pagedAttentionLayers)
+                {
+                    layer.SequenceId = _pagedSequenceId.Value;
+                    layer.ResetState();
+                    layer.InferenceMode = true;
+                    layer.Kernel ??= _pagedKernel;
+                }
             }
         }
     }
