@@ -27,14 +27,10 @@ public sealed class WeightedRandomClientSelectionStrategy : ClientSelectionStrat
 
         for (int k = 0; k < desired; k++)
         {
-            double total = 0.0;
-            foreach (var id in remaining)
-            {
-                if (weights.TryGetValue(id, out var w) && w > 0.0)
-                {
-                    total += w;
-                }
-            }
+            double total = remaining
+                .Select(id => weights.TryGetValue(id, out var w) ? w : 0.0)
+                .Where(w => w > 0.0)
+                .Sum();
 
             if (total <= 0.0)
             {
@@ -71,4 +67,3 @@ public sealed class WeightedRandomClientSelectionStrategy : ClientSelectionStrat
 
     public override string GetStrategyName() => "WeightedRandom";
 }
-

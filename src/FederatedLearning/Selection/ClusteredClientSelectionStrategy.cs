@@ -176,13 +176,12 @@ public sealed class ClusteredClientSelectionStrategy : ClientSelectionStrategyBa
     {
         int dim = embeddings[members[0]].Length;
         var mean = new double[dim];
-        foreach (var id in members)
+        foreach (var embedding in members.Select(id => embeddings[id]))
         {
-            var e = embeddings[id];
-            int n = Math.Min(dim, e.Length);
+            int n = Math.Min(dim, embedding.Length);
             for (int i = 0; i < n; i++)
             {
-                mean[i] += e[i];
+                mean[i] += embedding[i];
             }
         }
 
@@ -195,4 +194,3 @@ public sealed class ClusteredClientSelectionStrategy : ClientSelectionStrategyBa
         return mean;
     }
 }
-

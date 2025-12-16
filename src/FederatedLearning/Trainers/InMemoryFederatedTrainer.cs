@@ -345,14 +345,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         var weights = new Dictionary<int, double>(allClientIds.Count);
         foreach (var clientId in allClientIds)
         {
-            if (clientData.TryGetValue(clientId, out var dataset))
-            {
-                weights[clientId] = Math.Max(1.0, dataset.SampleCount);
-            }
-            else
-            {
-                weights[clientId] = 1.0;
-            }
+            weights[clientId] = clientData.TryGetValue(clientId, out var dataset)
+                ? Math.Max(1.0, dataset.SampleCount)
+                : 1.0;
         }
 
         var flOptions = _federatedLearningOptions;
@@ -419,14 +414,13 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
     private void UpdateClientPerformanceScores(List<int> selectedClientIds, Dictionary<int, double> clientWeights)
     {
-        foreach (var clientId in selectedClientIds)
+        foreach (var (id, _, weight) in selectedClientIds
+            .Select(id => (Id: id, HasWeight: clientWeights.TryGetValue(id, out var w), Weight: w))
+            .Where(x => x.HasWeight))
         {
             // Initial, simple proxy score: prefer clients that contributed more data.
             // More advanced scoring (e.g., validation improvement per update) can be layered on later.
-            if (clientWeights.TryGetValue(clientId, out var w))
-            {
-                _clientPerformanceScores[clientId] = w;
-            }
+            _clientPerformanceScores[id] = weight;
         }
     }
 
