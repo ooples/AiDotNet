@@ -235,6 +235,15 @@ public class FederatedLearningMetadata
     public string AggregationStrategyUsed { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the server-side federated optimizer used (FedOpt family).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Some federated learning variants apply an optimizer on the server after aggregation
+    /// (for example, FedAvgM, FedAdam, FedYogi). If no server optimizer is used, this is "None".
+    /// </remarks>
+    public string ServerOptimizerUsed { get; set; } = "None";
+
+    /// <summary>
     /// Gets or sets whether differential privacy was enabled.
     /// </summary>
     /// <remarks>

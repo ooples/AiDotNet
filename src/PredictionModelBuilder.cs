@@ -90,6 +90,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private FederatedLearningOptions? _federatedLearningOptions;
     private IAggregationStrategy<IFullModel<T, TInput, TOutput>>? _federatedAggregationStrategy;
     private IClientSelectionStrategy? _federatedClientSelectionStrategy;
+    private IFederatedServerOptimizer<T>? _federatedServerOptimizer;
 
     // Deployment configuration fields
     private QuantizationConfig? _quantizationConfig;
@@ -236,15 +237,18 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// <param name="options">Federated learning configuration options.</param>
     /// <param name="aggregationStrategy">Optional aggregation strategy override (null uses defaults based on options).</param>
     /// <param name="clientSelectionStrategy">Optional client selection strategy override (null uses defaults based on options).</param>
+    /// <param name="serverOptimizer">Optional server-side optimizer override (null uses defaults based on options).</param>
     /// <returns>This builder instance for method chaining.</returns>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFederatedLearning(
         FederatedLearningOptions options,
         IAggregationStrategy<IFullModel<T, TInput, TOutput>>? aggregationStrategy = null,
-        IClientSelectionStrategy? clientSelectionStrategy = null)
+        IClientSelectionStrategy? clientSelectionStrategy = null,
+        IFederatedServerOptimizer<T>? serverOptimizer = null)
     {
         _federatedLearningOptions = options ?? throw new ArgumentNullException(nameof(options));
         _federatedAggregationStrategy = aggregationStrategy;
         _federatedClientSelectionStrategy = clientSelectionStrategy;
+        _federatedServerOptimizer = serverOptimizer;
         return this;
     }
 
@@ -982,7 +986,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 convergenceThreshold: flOptions.ConvergenceThreshold,
                 minRoundsBeforeConvergence: flOptions.MinRoundsBeforeConvergence,
                 federatedLearningOptions: flOptions,
-                clientSelectionStrategy: _federatedClientSelectionStrategy);
+                clientSelectionStrategy: _federatedClientSelectionStrategy,
+                serverOptimizer: _federatedServerOptimizer);
 
             var aggregationStrategy = _federatedAggregationStrategy ?? CreateDefaultFederatedAggregationStrategy(flOptions);
             trainer.SetAggregationStrategy(aggregationStrategy);

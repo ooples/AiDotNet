@@ -8,6 +8,7 @@ using AiDotNet.FederatedLearning.Privacy;
 using AiDotNet.FederatedLearning.Privacy.Accounting;
 using AiDotNet.FederatedLearning.Selection;
 using AiDotNet.FederatedLearning.Infrastructure;
+using AiDotNet.FederatedLearning.ServerOptimizers;
 
 namespace AiDotNet.FederatedLearning.Trainers;
 
@@ -30,6 +31,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     private readonly IPrivacyMechanism<Vector<T>>? _differentialPrivacyMechanismOverride;
     private readonly IPrivacyAccountant? _privacyAccountantOverride;
     private readonly IClientSelectionStrategy? _clientSelectionStrategyOverride;
+    private readonly IFederatedServerOptimizer<T>? _serverOptimizerOverride;
     private readonly Dictionary<int, double> _clientPerformanceScores = new();
     private readonly Dictionary<int, double[]> _clientEmbeddings = new();
 
@@ -42,7 +44,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         FederatedLearningOptions? federatedLearningOptions = null,
         IPrivacyMechanism<Vector<T>>? differentialPrivacyMechanism = null,
         IPrivacyAccountant? privacyAccountant = null,
-        IClientSelectionStrategy? clientSelectionStrategy = null)
+        IClientSelectionStrategy? clientSelectionStrategy = null,
+        IFederatedServerOptimizer<T>? serverOptimizer = null)
     {
         _optimizerPrototype = optimizerPrototype ?? throw new ArgumentNullException(nameof(optimizerPrototype));
         _learningRateOverride = learningRateOverride;
@@ -64,6 +67,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         _differentialPrivacyMechanismOverride = differentialPrivacyMechanism;
         _privacyAccountantOverride = privacyAccountant;
         _clientSelectionStrategyOverride = clientSelectionStrategy;
+        _serverOptimizerOverride = serverOptimizer;
     }
 
     public override FederatedLearningMetadata TrainRound(
@@ -127,6 +131,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         {
             metadata.PrivacyAccountantUsed = privacyAccountant.GetAccountantName();
         }
+
+        var serverOptimizer = _serverOptimizerOverride ?? CreateDefaultServerOptimizer(flOptions?.ServerOptimizer);
+        metadata.ServerOptimizerUsed = serverOptimizer?.GetOptimizerName() ?? "None";
 
         for (int round = 0; round < rounds; round++)
         {
@@ -208,6 +215,12 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 newGlobalModel = aggregator.Aggregate(clientModels, clientWeights);
             }
 
+            if (serverOptimizer != null)
+            {
+                var updatedParams = serverOptimizer.Step(globalBefore.GetParameters(), newGlobalModel.GetParameters());
+                newGlobalModel = newGlobalModel.WithParameters(updatedParams);
+            }
+
             if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
             {
                 var globalParams = newGlobalModel.GetParameters();
@@ -265,6 +278,42 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         metadata.AverageClientsPerRound = metadata.RoundsCompleted > 0 ? (double)metadata.RoundMetrics.Sum(r => r.SelectedClientIds.Count) / metadata.RoundsCompleted : 0.0;
 
         return metadata;
+    }
+
+    private static IFederatedServerOptimizer<T>? CreateDefaultServerOptimizer(FederatedServerOptimizerOptions? options)
+    {
+        if (options == null)
+        {
+            return null;
+        }
+
+        var name = options.Optimizer?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(name) || string.Equals(name, "None", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (string.Equals(name, "FedAvgM", StringComparison.OrdinalIgnoreCase))
+        {
+            return new FedAvgMServerOptimizer<T>(options.LearningRate, options.Momentum);
+        }
+
+        if (string.Equals(name, "FedAdagrad", StringComparison.OrdinalIgnoreCase))
+        {
+            return new FedAdagradServerOptimizer<T>(options.LearningRate, options.Epsilon);
+        }
+
+        if (string.Equals(name, "FedAdam", StringComparison.OrdinalIgnoreCase))
+        {
+            return new FedAdamServerOptimizer<T>(options.LearningRate, options.Beta1, options.Beta2, options.Epsilon);
+        }
+
+        if (string.Equals(name, "FedYogi", StringComparison.OrdinalIgnoreCase))
+        {
+            return new FedYogiServerOptimizer<T>(options.LearningRate, options.Beta1, options.Beta2, options.Epsilon);
+        }
+
+        throw new InvalidOperationException($"Unknown server optimizer '{name}'. Supported values: None, FedAvgM, FedAdagrad, FedAdam, FedYogi.");
     }
 
     private static IPrivacyAccountant CreateDefaultPrivacyAccountant(string name, double clipNorm)

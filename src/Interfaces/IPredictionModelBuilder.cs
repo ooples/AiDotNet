@@ -173,11 +173,13 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="options">Federated learning configuration options.</param>
     /// <param name="aggregationStrategy">Optional aggregation strategy override (null uses defaults based on options).</param>
     /// <param name="clientSelectionStrategy">Optional client selection strategy override (null uses defaults based on options).</param>
+    /// <param name="serverOptimizer">Optional server-side optimizer override (null uses defaults based on options).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureFederatedLearning(
         FederatedLearningOptions options,
         IAggregationStrategy<IFullModel<T, TInput, TOutput>>? aggregationStrategy = null,
-        IClientSelectionStrategy? clientSelectionStrategy = null);
+        IClientSelectionStrategy? clientSelectionStrategy = null,
+        IFederatedServerOptimizer<T>? serverOptimizer = null);
 
     /// <summary>
     /// Configures the data preprocessing component for the model.

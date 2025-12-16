@@ -302,6 +302,15 @@ public class FederatedLearningOptions
     public RobustAggregationOptions? RobustAggregation { get; set; } = null;
 
     /// <summary>
+    /// Gets or sets server-side federated optimization options (FedOpt family).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> FedOpt applies an optimizer step on the server after aggregation.
+    /// If this is null or set to "None", the server uses the aggregated parameters directly (FedAvg-style).
+    /// </remarks>
+    public FederatedServerOptimizerOptions? ServerOptimizer { get; set; } = null;
+
+    /// <summary>
     /// Gets or sets the proximal term coefficient for FedProx algorithm.
     /// </summary>
     /// <remarks>
