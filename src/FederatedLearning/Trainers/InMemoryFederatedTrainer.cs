@@ -177,7 +177,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 }
                 else
                 {
-                    clientModels[clientId] = (IFullModel<T, TInput, TOutput>)trainedModel.WithParameters(parameters);
+                    clientModels[clientId] = trainedModel.WithParameters(parameters);
                 }
             }
 
@@ -192,7 +192,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             {
                 var averagedParameters = secureAggregation!.AggregateSecurely(maskedParameters, clientWeights);
                 secureAggregation.ClearSecrets();
-                newGlobalModel = (IFullModel<T, TInput, TOutput>)globalBefore.WithParameters(averagedParameters);
+                newGlobalModel = globalBefore.WithParameters(averagedParameters);
             }
             else
             {
@@ -205,7 +205,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 var privateGlobalParams = dpMechanism!.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
                 privacyAccountant!.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
                 privacyEventsThisRound++;
-                newGlobalModel = (IFullModel<T, TInput, TOutput>)newGlobalModel.WithParameters(privateGlobalParams);
+                newGlobalModel = newGlobalModel.WithParameters(privateGlobalParams);
             }
 
             SetGlobalModel(newGlobalModel);

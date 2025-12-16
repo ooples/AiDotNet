@@ -52,10 +52,7 @@ public sealed class SecureAggregationVector<T> : FederatedLearningComponentBase<
 
         foreach (var clientI in clientIds)
         {
-            if (!_pairwiseSecrets.ContainsKey(clientI))
-            {
-                _pairwiseSecrets[clientI] = new Dictionary<int, T[]>();
-            }
+            _pairwiseSecrets[clientI] = new Dictionary<int, T[]>();
         }
 
         for (int i = 0; i < clientIds.Count; i++)
@@ -148,9 +145,8 @@ public sealed class SecureAggregationVector<T> : FederatedLearningComponentBase<
             sum[i] = NumOps.Zero;
         }
 
-        foreach (var kvp in maskedUpdates)
+        foreach (var update in maskedUpdates.Values)
         {
-            var update = kvp.Value;
             EnsureParameterCountMatches(update.Length, nameof(maskedUpdates));
 
             for (int i = 0; i < sum.Length; i++)
@@ -233,4 +229,3 @@ public sealed class SecureAggregationVector<T> : FederatedLearningComponentBase<
         return value / (double)(1UL << 53);
     }
 }
-
