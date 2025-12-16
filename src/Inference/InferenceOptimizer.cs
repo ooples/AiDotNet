@@ -1,6 +1,7 @@
 using AiDotNet.Configuration;
 using AiDotNet.Helpers;
 using AiDotNet.Inference.PagedAttention;
+using AiDotNet.Inference.Quantization;
 using AiDotNet.Inference.SpeculativeDecoding;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Attention;
@@ -101,7 +102,7 @@ internal class InferenceOptimizer<T>
         _config.Validate();
 
         // Clone only when we might rewrite layers; otherwise keep original reference.
-        bool mayRewriteAttention = _config.EnableFlashAttention || _config.EnableKVCache;
+        bool mayRewriteAttention = _config.EnableFlashAttention || _config.EnableKVCache || _config.EnableWeightOnlyQuantization;
         var workingModel = model;
         if (cloneModel && mayRewriteAttention && HasOptimizableAttentionLayers(model))
         {
@@ -126,6 +127,7 @@ internal class InferenceOptimizer<T>
 
         bool anyApplied = ApplyAttentionOptimizations(workingModel);
         InferenceDiagnostics.RecordDecision("InferenceOptimizer", "AttentionRewrites", enabled: anyApplied, reason: anyApplied ? "Applied" : "NoApplicableLayersOrDisabled");
+        anyApplied |= ApplyWeightOnlyQuantization(workingModel);
         anyApplied |= Initialize(workingModel);
 
         return (workingModel, anyApplied);
@@ -374,6 +376,13 @@ internal class InferenceOptimizer<T>
         {
             if (layer is MultiHeadAttentionLayer<T> || layer is FlashAttentionLayer<T> || layer is SelfAttentionLayer<T>)
                 return true;
+
+            if (_config.EnableWeightOnlyQuantization &&
+                typeof(T) == typeof(float) &&
+                layer is DenseLayer<float>)
+            {
+                return true;
+            }
         }
 
         return false;
@@ -524,6 +533,45 @@ internal class InferenceOptimizer<T>
         }
 
         return anyRewritten;
+    }
+
+    private bool ApplyWeightOnlyQuantization(NeuralNetworkBase<T> model)
+    {
+        if (!_config.EnableWeightOnlyQuantization)
+        {
+            InferenceDiagnostics.RecordDecision("InferenceOptimizer", "WeightOnlyQuantization", enabled: false, reason: "DisabledByConfig");
+            return false;
+        }
+
+        if (typeof(T) != typeof(float))
+        {
+            InferenceDiagnostics.RecordDecision("InferenceOptimizer", "WeightOnlyQuantization", enabled: false, reason: $"UnsupportedType({typeof(T).Name})");
+            return false;
+        }
+
+        bool any = false;
+        for (int i = 0; i < model.Layers.Count; i++)
+        {
+            if (model.Layers[i] is DenseLayer<float> dense)
+            {
+                try
+                {
+                    var replacement = dense.VectorActivation != null
+                        ? new QuantizedDenseLayer(dense, dense.VectorActivation)
+                        : new QuantizedDenseLayer(dense);
+
+                    model.Layers[i] = (AiDotNet.Interfaces.ILayer<T>)(object)replacement;
+                    any = true;
+                }
+                catch (Exception ex)
+                {
+                    InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "DenseLayerQuantizationFailed;FallbackToFP");
+                }
+            }
+        }
+
+        InferenceDiagnostics.RecordDecision("InferenceOptimizer", "WeightOnlyQuantization", enabled: any, reason: any ? "Applied(DenseLayer)" : "NoApplicableLayers");
+        return any;
     }
 
     private MultiHeadAttentionLayer<T>? TryConvertSelfAttentionToMultiHead(SelfAttentionLayer<T> layer)

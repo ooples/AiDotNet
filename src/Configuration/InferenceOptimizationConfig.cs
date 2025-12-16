@@ -462,6 +462,28 @@ public class InferenceOptimizationConfig
     public SpeculativeMethod SpeculativeMethod { get; set; } = SpeculativeMethod.Auto;
 
     #endregion
+
+    #region Inference Quantization (Advanced)
+
+    /// <summary>
+    /// Gets or sets whether weight-only INT8 quantization is enabled for inference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Weight-only quantization reduces memory bandwidth and improves cache locality by storing weights in int8
+    /// with per-output scaling. Activations remain in FP32/FP16, and accumulation is performed in float.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This makes your model weights smaller so the CPU/GPU can read them faster.
+    /// </para>
+    /// <para>
+    /// This is disabled by default until validated across more layer types and kernels. When enabled, the optimizer
+    /// will apply it opportunistically and fall back safely when unsupported.
+    /// </para>
+    /// </remarks>
+    public bool EnableWeightOnlyQuantization { get; set; } = false;
+
+    #endregion
 }
 
 /// <summary>

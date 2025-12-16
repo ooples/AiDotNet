@@ -135,6 +135,42 @@ public class InferenceOptimizerTests
         Assert.True(optimizer.DraftModel!.VocabSize > 0);
     }
 
+    [Fact]
+    public void InferenceOptimizer_WeightOnlyQuantization_RewritesDenseLayer_OnClonedModel_AndPreservesOutputs()
+    {
+        var model = CreateTinyDenseModel();
+
+        var input = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 1, 4 });
+        for (int i = 0; i < input.Length; i++)
+        {
+            input[i] = 0.1f * (i + 1);
+        }
+
+        var baseline = model.Predict(input);
+
+        var config = new InferenceOptimizationConfig
+        {
+            EnableKVCache = false,
+            EnableFlashAttention = false,
+            EnableWeightOnlyQuantization = true
+        };
+
+        var optimizer = new InferenceOptimizer<float>(config);
+        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: true);
+
+        Assert.True(anyApplied);
+        Assert.Contains(optimized.Layers, l => l.GetType().Name.Contains("QuantizedDenseLayer"));
+        Assert.Contains(model.Layers, l => l is DenseLayer<float>);
+
+        var y = optimized.Predict(input);
+        Assert.Equal(baseline.Shape, y.Shape);
+
+        for (int i = 0; i < y.Length; i++)
+        {
+            Assert.True(Math.Abs(baseline[i] - y[i]) < 1e-1f, $"Mismatch at {i}: {baseline[i]} vs {y[i]}");
+        }
+    }
+
     private static Transformer<float> CreateTinyTransformer(NeuralNetworkTaskType taskType)
     {
         var architecture = new TransformerArchitecture<float>(
@@ -188,6 +224,38 @@ public class InferenceOptimizerTests
         for (int i = 0; i < deterministic.Length; i++)
         {
             deterministic[i] = ((i % 17) - 8) / 8.0f;
+        }
+        model.UpdateParameters(new AiDotNet.Tensors.LinearAlgebra.Vector<float>(deterministic));
+
+        return model;
+    }
+
+    private static NeuralNetworkBase<float> CreateTinyDenseModel()
+    {
+        const int inSize = 4;
+        const int outSize = 3;
+
+        var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
+        {
+            new InputLayer<float>(inSize),
+            new DenseLayer<float>(inSize, outSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+        };
+
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Simple,
+            inputSize: inSize,
+            outputSize: outSize,
+            layers: layers);
+
+        var model = new NeuralNetwork<float>(architecture);
+
+        var p = model.GetParameters();
+        var deterministic = new float[p.Length];
+        for (int i = 0; i < deterministic.Length; i++)
+        {
+            deterministic[i] = ((i % 13) - 6) / 6.0f;
         }
         model.UpdateParameters(new AiDotNet.Tensors.LinearAlgebra.Vector<float>(deterministic));
 
