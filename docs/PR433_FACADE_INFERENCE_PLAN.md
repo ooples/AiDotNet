@@ -337,6 +337,7 @@ Goal: add inference-side quantization without expanding public surface beyond `I
 ### 4.2.1) What exists today
 - Deployment/quantization configuration exists, but current usage is primarily training/export oriented.
 - PR#433 inference optimizations currently operate on FP32/FP64 tensors and caches.
+- MVP now supports KV-cache int8 storage via `InferenceOptimizationConfig.KVCacheQuantization = Int8` (dequant-on-read).
 
 ### 4.2.2) Target capabilities (industry standard baseline → exceed)
 1) **Weight-only quantization (WOQ)** for inference
@@ -427,6 +428,7 @@ Plan:
 ### 4.4.1) Goals
 - Allow multiple LoRA adapters to be applied per-session/per-sequence without exposing LoRA internals publicly.
 - Make it compatible with serving: per-request adapter selection.
+- MVP interim: serving can route to a pre-loaded per-adapter model variant via `X-AiDotNet-Lora`/`X-AiDotNet-Adapter` headers using `{baseModelName}__{adapterId}`.
 
 ### 4.4.2) Required behaviors
 1) **Selection**

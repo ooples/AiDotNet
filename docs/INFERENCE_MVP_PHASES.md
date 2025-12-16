@@ -128,12 +128,13 @@ This plan breaks down the remaining inference MVP work into phases that can be i
 
 ---
 
-## Phase 7 — Dynamic Speculation & Alternative Speculators (Medusa/EAGLE)
+## Phase 7 - Dynamic Speculation & Alternative Speculators (Medusa/EAGLE)
 
 **Outcome:** Add next-gen speculative methods and dynamic scheduling options.
 
 1. Dynamic scheduling:
    - Adaptive speculation depth based on acceptance rate, queue pressure, and compute budget.
+   - MVP implementation: serving-side `ContinuousBatcher` backs off speculative decoding under load and after observing low draft acceptance rates.
 2. Alternative methods:
    - Add config hooks for Medusa/EAGLE-style multi-head draft proposals as a future opt-in.
 3. Verification:
@@ -141,12 +142,13 @@ This plan breaks down the remaining inference MVP work into phases that can be i
 
 ---
 
-## Phase 8 — Inference Quantization (Gap-Closing)
+## Phase 8 - Inference Quantization (Gap-Closing)
 
 **Outcome:** Extend quantization support beyond training into inference areas where it is industry standard.
 
 1. KV-cache quantization:
    - Optional per-layer KV-cache quantization (e.g., int8) with dequant on read.
+   - MVP implementation: `InferenceOptimizationConfig.KVCacheQuantization = Int8` routes KV-cache storage to int8 quantized backing storage with dequant-on-read.
 2. Weight-only quantization:
    - Optional weight-only quant for inference (e.g., int8/int4) with fast matmul paths.
 3. Weight + activation quantization (advanced):
@@ -156,12 +158,13 @@ This plan breaks down the remaining inference MVP work into phases that can be i
 
 ---
 
-## Phase 9 — Multi-LoRA (Serving-First, Secure Defaults)
+## Phase 9 - Multi-LoRA (Serving-First, Secure Defaults)
 
 **Outcome:** Multi-LoRA can be selected per request without leaking internal implementation details.
 
 1. Serving integration:
    - Prefer selecting LoRA adapters from headers/metadata on serving side.
+   - MVP implementation: serving can route to a pre-loaded per-adapter model variant using `X-AiDotNet-Lora`/`X-AiDotNet-Adapter` headers (`{baseModelName}__{adapterId}`).
 2. Session integration:
    - Optional adapter selection per sequence, but keep surface minimal.
 3. Verification:
@@ -175,4 +178,3 @@ This plan breaks down the remaining inference MVP work into phases that can be i
 - Targeted `dotnet test` runs for touched areas
 - Update docs and XML comments to match project conventions (summary/remarks + “For Beginners” sections where appropriate)
 - Commit with conventional prefix (`feat:`, `fix:`, `test:`, `docs:`, `refactor:`) in small, regular increments
-
