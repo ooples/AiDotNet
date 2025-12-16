@@ -123,6 +123,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
         for (int round = 0; round < rounds; round++)
         {
+            var roundStart = DateTime.UtcNow;
             var globalBefore = GetGlobalModel();
             var selectedClientIds = SelectClients(clientData.Keys.ToList(), clientSelectionFraction);
 
@@ -225,7 +226,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             {
                 RoundNumber = round,
                 SelectedClientIds = selectedClientIds,
-                RoundTimeSeconds = (DateTime.UtcNow - start).TotalSeconds,
+                RoundTimeSeconds = (DateTime.UtcNow - roundStart).TotalSeconds,
                 GlobalLoss = double.NaN,
                 GlobalAccuracy = double.NaN,
                 AverageLocalLoss = double.NaN,
