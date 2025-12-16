@@ -279,8 +279,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
         var rng = _randomSeed.HasValue ? new Random(_randomSeed.Value) : new Random();
         var shuffled = allClientIds.OrderBy(_ => rng.Next()).ToList();
-        shuffled.Sort();
-        return shuffled.Take(countToSelect).ToList();
+        var selected = shuffled.Take(countToSelect).ToList();
+        selected.Sort();
+        return selected;
     }
 
     private IOptimizer<T, TInput, TOutput> CreateOptimizerForModel(IFullModel<T, TInput, TOutput> model)
