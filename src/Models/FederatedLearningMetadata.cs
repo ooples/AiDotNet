@@ -244,6 +244,15 @@ public class FederatedLearningMetadata
     public string ServerOptimizerUsed { get; set; } = "None";
 
     /// <summary>
+    /// Gets or sets the asynchronous federated learning mode used (if any).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> If async FL is enabled, this records which mode was used (FedAsync or FedBuff).
+    /// If training was synchronous, this is "None".
+    /// </remarks>
+    public string AsyncModeUsed { get; set; } = "None";
+
+    /// <summary>
     /// Gets or sets whether differential privacy was enabled.
     /// </summary>
     /// <remarks>

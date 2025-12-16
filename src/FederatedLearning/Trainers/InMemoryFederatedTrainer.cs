@@ -135,6 +135,42 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         var serverOptimizer = _serverOptimizerOverride ?? CreateDefaultServerOptimizer(flOptions?.ServerOptimizer);
         metadata.ServerOptimizerUsed = serverOptimizer?.GetOptimizerName() ?? "None";
 
+        var asyncOptions = flOptions?.AsyncFederatedLearning;
+        string asyncMode = asyncOptions?.Mode?.Trim() ?? "None";
+        metadata.AsyncModeUsed = string.IsNullOrWhiteSpace(asyncMode) ? "None" : asyncMode;
+
+        if (!string.Equals(metadata.AsyncModeUsed, "None", StringComparison.OrdinalIgnoreCase))
+        {
+            if (useSecureAggregation)
+            {
+                throw new InvalidOperationException("Secure aggregation is currently not supported with asynchronous federated learning modes.");
+            }
+
+            TrainAsyncInMemory(
+                clientData,
+                rounds,
+                clientSelectionFraction,
+                localEpochs,
+                metadata,
+                uniqueParticipants,
+                previousGlobalParams,
+                aggregator,
+                serverOptimizer,
+                useDifferentialPrivacy,
+                dpMechanism,
+                privacyAccountant,
+                dpMode,
+                dpEpsilon,
+                dpDelta,
+                asyncOptions);
+
+            var asyncElapsed = DateTime.UtcNow - start;
+            metadata.TotalTrainingTimeSeconds = asyncElapsed.TotalSeconds;
+            metadata.AverageRoundTimeSeconds = metadata.RoundsCompleted > 0 ? asyncElapsed.TotalSeconds / metadata.RoundsCompleted : 0.0;
+            metadata.AverageClientsPerRound = metadata.RoundsCompleted > 0 ? (double)metadata.RoundMetrics.Sum(r => r.SelectedClientIds.Count) / metadata.RoundsCompleted : 0.0;
+            return metadata;
+        }
+
         for (int round = 0; round < rounds; round++)
         {
             var roundStart = DateTime.UtcNow;
@@ -278,6 +314,291 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         metadata.AverageClientsPerRound = metadata.RoundsCompleted > 0 ? (double)metadata.RoundMetrics.Sum(r => r.SelectedClientIds.Count) / metadata.RoundsCompleted : 0.0;
 
         return metadata;
+    }
+
+    private void TrainAsyncInMemory(
+        Dictionary<int, FederatedClientDataset<TInput, TOutput>> clientData,
+        int serverSteps,
+        double clientSelectionFraction,
+        int localEpochs,
+        FederatedLearningMetadata metadata,
+        HashSet<int> uniqueParticipants,
+        Vector<T> previousGlobalParams,
+        IAggregationStrategy<IFullModel<T, TInput, TOutput>> aggregator,
+        IFederatedServerOptimizer<T>? serverOptimizer,
+        bool useDifferentialPrivacy,
+        IPrivacyMechanism<Vector<T>>? dpMechanism,
+        IPrivacyAccountant? privacyAccountant,
+        DifferentialPrivacyMode dpMode,
+        double dpEpsilon,
+        double dpDelta,
+        AsyncFederatedLearningOptions? asyncOptions)
+    {
+        string mode = asyncOptions?.Mode?.Trim() ?? "None";
+        int maxDelay = Math.Max(0, asyncOptions?.SimulatedMaxClientDelaySteps ?? 0);
+        int rejectStale = Math.Max(0, asyncOptions?.RejectUpdatesWithStalenessGreaterThan ?? 0);
+        int bufferSize = Math.Max(1, asyncOptions?.FedBuffBufferSize ?? 5);
+        double mixingRate = asyncOptions?.FedAsyncMixingRate ?? 0.5;
+
+        var pending = new List<(int ClientId, Vector<T> Parameters, double Weight, int StartStep, int ArrivalStep)>();
+        var bufferModels = new Dictionary<int, IFullModel<T, TInput, TOutput>>();
+        var bufferWeights = new Dictionary<int, double>();
+        int bufferedUpdateKey = 0;
+
+        for (int step = 0; step < serverSteps; step++)
+        {
+            var stepStart = DateTime.UtcNow;
+            var globalAtStepStart = GetGlobalModel();
+            var selectedClientIds = SelectClients(clientData, step, clientSelectionFraction);
+
+            foreach (var id in selectedClientIds)
+            {
+                uniqueParticipants.Add(id);
+            }
+
+            var startedClientWeights = new Dictionary<int, double>();
+            int privacyEventsThisStep = 0;
+
+            foreach (var clientId in selectedClientIds)
+            {
+                if (!clientData.TryGetValue(clientId, out var dataset))
+                {
+                    continue;
+                }
+
+                var localModel = CloneModelByParameters(globalAtStepStart);
+                var localOptimizer = CreateOptimizerForModel(localModel);
+                ConfigureLocalOptimizer(localOptimizer, localEpochs);
+
+                var inputData = CreateLocalOptimizationInputData(dataset, globalAtStepStart);
+                OptimizationResult<T, TInput, TOutput> localResult = localOptimizer.Optimize(inputData);
+                var trainedModel = localResult.BestSolution ?? localModel;
+
+                double weight = Math.Max(1.0, dataset.SampleCount);
+                startedClientWeights[clientId] = weight;
+
+                var parameters = trainedModel.GetParameters();
+                UpdateClientEmbedding(clientId, globalAtStepStart.GetParameters(), parameters);
+
+                if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
+                {
+                    parameters = dpMechanism!.ApplyPrivacy(parameters, dpEpsilon, dpDelta);
+                }
+
+                int delay = 0;
+                if (maxDelay > 0)
+                {
+                    var delayRandom = FederatedRandom.CreateClientRandom(_randomSeed, step, clientId, salt: 9001);
+                    delay = delayRandom.Next(0, maxDelay + 1);
+                }
+
+                pending.Add((clientId, parameters, weight, step, step + delay));
+            }
+
+            if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
+            {
+                privacyAccountant!.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
+                privacyEventsThisStep++;
+            }
+
+            var due = pending
+                .Where(u => u.ArrivalStep <= step)
+                .OrderBy(u => u.ArrivalStep)
+                .ThenBy(u => u.ClientId)
+                .ToList();
+
+            pending.RemoveAll(u => u.ArrivalStep <= step);
+
+            if (rejectStale > 0)
+            {
+                due = due.Where(u => (step - u.StartStep) <= rejectStale).ToList();
+            }
+
+            if (string.Equals(mode, "FedAsync", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var update in due)
+                {
+                    int staleness = step - update.StartStep;
+                    double stalenessWeight = ComputeStalenessWeight(staleness, asyncOptions);
+                    double alpha = Clamp01(mixingRate * stalenessWeight);
+
+                    var currentModel = GetGlobalModel();
+                    var mixed = MixParameters(currentModel.GetParameters(), update.Parameters, alpha);
+                    var targetModel = currentModel.WithParameters(mixed);
+
+                    if (serverOptimizer != null)
+                    {
+                        var updatedParams = serverOptimizer.Step(currentModel.GetParameters(), targetModel.GetParameters());
+                        targetModel = targetModel.WithParameters(updatedParams);
+                    }
+
+                    if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
+                    {
+                        var globalParams = targetModel.GetParameters();
+                        var privateGlobalParams = dpMechanism!.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
+                        privacyAccountant!.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
+                        privacyEventsThisStep++;
+                        targetModel = targetModel.WithParameters(privateGlobalParams);
+                    }
+
+                    SetGlobalModel(targetModel);
+                }
+            }
+            else if (string.Equals(mode, "FedBuff", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var update in due)
+                {
+                    bufferModels[bufferedUpdateKey] = globalAtStepStart.WithParameters(update.Parameters);
+                    bufferWeights[bufferedUpdateKey] = update.Weight;
+                    bufferedUpdateKey++;
+                }
+
+                if (bufferModels.Count >= bufferSize)
+                {
+                    var aggregated = aggregator.Aggregate(bufferModels, bufferWeights);
+                    var currentModel = GetGlobalModel();
+                    var newGlobalModel = aggregated;
+
+                    if (serverOptimizer != null)
+                    {
+                        var updatedParams = serverOptimizer.Step(currentModel.GetParameters(), newGlobalModel.GetParameters());
+                        newGlobalModel = newGlobalModel.WithParameters(updatedParams);
+                    }
+
+                    if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
+                    {
+                        var globalParams = newGlobalModel.GetParameters();
+                        var privateGlobalParams = dpMechanism!.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
+                        privacyAccountant!.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
+                        privacyEventsThisStep++;
+                        newGlobalModel = newGlobalModel.WithParameters(privateGlobalParams);
+                    }
+
+                    SetGlobalModel(newGlobalModel);
+                    bufferModels.Clear();
+                    bufferWeights.Clear();
+                }
+            }
+            else
+            {
+                throw new InvalidOperationException($"Unknown async federated learning mode '{mode}'. Supported values: None, FedAsync, FedBuff.");
+            }
+
+            metadata.RoundsCompleted = step + 1;
+            metadata.TotalClientsParticipated = uniqueParticipants.Count;
+            if (privacyAccountant != null)
+            {
+                metadata.TotalPrivacyBudgetConsumed = privacyAccountant.GetTotalEpsilonConsumed();
+                metadata.TotalPrivacyDeltaConsumed = privacyAccountant.GetTotalDeltaConsumed();
+                metadata.ReportedDelta = dpDelta;
+                metadata.ReportedEpsilonAtDelta = privacyAccountant.GetEpsilonAtDelta(dpDelta);
+            }
+
+            var newParams = GetGlobalModel().GetParameters();
+            var deltaNorm = ComputeL2Distance(previousGlobalParams, newParams);
+
+            UpdateClientPerformanceScores(selectedClientIds, startedClientWeights);
+
+            double stepCommunicationMB = EstimateRoundCommunicationMB(selectedClientIds.Count, globalAtStepStart.ParameterCount);
+            metadata.TotalCommunicationMB += stepCommunicationMB;
+            metadata.RoundMetrics.Add(new RoundMetadata
+            {
+                RoundNumber = step,
+                SelectedClientIds = selectedClientIds,
+                RoundTimeSeconds = (DateTime.UtcNow - stepStart).TotalSeconds,
+                GlobalLoss = double.NaN,
+                GlobalAccuracy = double.NaN,
+                AverageLocalLoss = double.NaN,
+                CommunicationMB = stepCommunicationMB,
+                PrivacyBudgetConsumed = useDifferentialPrivacy ? privacyEventsThisStep * dpEpsilon : 0.0
+            });
+
+            previousGlobalParams = newParams;
+
+            if (step + 1 >= _minRoundsBeforeConvergence && deltaNorm <= _convergenceThreshold)
+            {
+                metadata.Converged = true;
+                metadata.ConvergenceRound = step + 1;
+                metadata.Notes = $"Converged by parameter delta L2 <= {_convergenceThreshold:0.########}.";
+                break;
+            }
+        }
+    }
+
+    private static double Clamp01(double value)
+    {
+        if (value < 0.0)
+        {
+            return 0.0;
+        }
+
+        if (value > 1.0)
+        {
+            return 1.0;
+        }
+
+        return value;
+    }
+
+    private static double ComputeStalenessWeight(int staleness, AsyncFederatedLearningOptions? options)
+    {
+        if (staleness <= 0)
+        {
+            return 1.0;
+        }
+
+        string mode = options?.StalenessWeighting?.Trim() ?? "Inverse";
+        double rate = options?.StalenessDecayRate ?? 1.0;
+
+        if (string.Equals(mode, "Constant", StringComparison.OrdinalIgnoreCase))
+        {
+            return 1.0;
+        }
+
+        if (string.Equals(mode, "Inverse", StringComparison.OrdinalIgnoreCase))
+        {
+            return 1.0 / (1.0 + staleness);
+        }
+
+        if (string.Equals(mode, "Exponential", StringComparison.OrdinalIgnoreCase))
+        {
+            return Math.Exp(-rate * staleness);
+        }
+
+        if (string.Equals(mode, "Polynomial", StringComparison.OrdinalIgnoreCase))
+        {
+            return 1.0 / Math.Pow(1.0 + staleness, rate);
+        }
+
+        throw new InvalidOperationException($"Unknown staleness weighting '{mode}'. Supported values: Constant, Inverse, Exponential, Polynomial.");
+    }
+
+    private Vector<T> MixParameters(Vector<T> current, Vector<T> target, double alpha)
+    {
+        if (current.Length != target.Length)
+        {
+            throw new ArgumentException("Parameter vectors must have the same length for async mixing.");
+        }
+
+        if (alpha <= 0.0)
+        {
+            return current;
+        }
+
+        if (alpha >= 1.0)
+        {
+            return target;
+        }
+
+        var result = new Vector<T>(current.Length);
+        var alphaT = NumOps.FromDouble(alpha);
+        for (int i = 0; i < current.Length; i++)
+        {
+            var diff = NumOps.Subtract(target[i], current[i]);
+            result[i] = NumOps.Add(current[i], NumOps.Multiply(alphaT, diff));
+        }
+
+        return result;
     }
 
     private static IFederatedServerOptimizer<T>? CreateDefaultServerOptimizer(FederatedServerOptimizerOptions? options)

@@ -311,6 +311,15 @@ public class FederatedLearningOptions
     public FederatedServerOptimizerOptions? ServerOptimizer { get; set; } = null;
 
     /// <summary>
+    /// Gets or sets asynchronous federated learning options (FedAsync / FedBuff).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Async FL can reduce waiting on slow clients by applying updates as they arrive
+    /// (FedAsync) or in small buffers (FedBuff). If not set or set to "None", training is synchronous.
+    /// </remarks>
+    public AsyncFederatedLearningOptions? AsyncFederatedLearning { get; set; } = null;
+
+    /// <summary>
     /// Gets or sets the proximal term coefficient for FedProx algorithm.
     /// </summary>
     /// <remarks>
