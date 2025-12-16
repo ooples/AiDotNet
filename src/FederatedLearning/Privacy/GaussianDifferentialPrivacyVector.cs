@@ -60,14 +60,14 @@ public sealed class GaussianDifferentialPrivacyVector<T> : PrivacyMechanismBase<
 
         // Gaussian noise sigma: (clipNorm/epsilon)*sqrt(2*ln(1.25/delta)).
         double sigma = (_clipNorm / epsilon) * Math.Sqrt(2.0 * Math.Log(1.25 / delta));
-        for (int i = 0; i < noisy.Length; i++)
-        {
-            double noise = GenerateGaussianNoise(0.0, sigma);
-            noisy[i] = NumOps.Add(noisy[i], NumOps.FromDouble(noise));
-        }
-
         lock (_sync)
         {
+            for (int i = 0; i < noisy.Length; i++)
+            {
+                double noise = GenerateGaussianNoise(0.0, sigma);
+                noisy[i] = NumOps.Add(noisy[i], NumOps.FromDouble(noise));
+            }
+
             _privacyBudgetConsumed += epsilon;
         }
 
@@ -104,4 +104,3 @@ public sealed class GaussianDifferentialPrivacyVector<T> : PrivacyMechanismBase<
         return mean + stdDev * randStdNormal;
     }
 }
-

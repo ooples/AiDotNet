@@ -77,6 +77,12 @@ public abstract class RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
             throw new ArgumentException("Selected client IDs cannot be null or empty.", nameof(selectedClientIds));
         }
 
+        var missing = selectedClientIds.Where(id => !clientParameters.ContainsKey(id)).ToList();
+        if (missing.Count > 0)
+        {
+            throw new ArgumentException($"Missing parameters for selected clients: {string.Join(", ", missing)}.", nameof(selectedClientIds));
+        }
+
         int parameterCount = clientParameters[selectedClientIds[0]].Length;
         var aggregated = new Vector<T>(parameterCount);
         for (int i = 0; i < aggregated.Length; i++)
@@ -122,4 +128,3 @@ public abstract class RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
         return aggregated;
     }
 }
-
