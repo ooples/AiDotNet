@@ -329,6 +329,87 @@ public static class DeserializationHelper
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke([seqLen, embDim, headCount, useCausal, activation]);
         }
+        else if (genericDef == typeof(AiDotNet.LoRA.Adapters.MultiLoRAAdapter<>))
+        {
+            // MultiLoRAAdapter(ILayer<T> baseLayer, string defaultTaskName, int defaultRank, double alpha = -1, bool freezeBaseLayer = true)
+            bool freezeBaseLayer = TryGetBool(additionalParams, "FreezeBaseLayer") ?? true;
+
+            string? encodedBaseLayerId = additionalParams?.TryGetValue("BaseLayerTypeId", out var baseType) == true ? baseType as string : null;
+            string baseLayerIdentifier = !string.IsNullOrWhiteSpace(encodedBaseLayerId)
+                ? Uri.UnescapeDataString(encodedBaseLayerId)
+                : "DenseLayer`1";
+
+            var baseLayer = CreateLayerFromType<T>(baseLayerIdentifier, inputShape, outputShape, null);
+
+            static string[] ParseList(string? raw)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) return Array.Empty<string>();
+                return raw!.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+            }
+
+            static int[] ParseIntList(string? raw)
+            {
+                var parts = ParseList(raw);
+                var result = new int[parts.Length];
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    result[i] = int.TryParse(parts[i], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 1;
+                }
+                return result;
+            }
+
+            static double[] ParseDoubleList(string? raw)
+            {
+                var parts = ParseList(raw);
+                var result = new double[parts.Length];
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    result[i] = double.TryParse(parts[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : -1;
+                }
+                return result;
+            }
+
+            string? tasksRaw = additionalParams?.TryGetValue("Tasks", out var tasksObj) == true ? tasksObj as string : null;
+            var encodedTasks = ParseList(tasksRaw);
+            if (encodedTasks.Length == 0)
+            {
+                encodedTasks = ["default"];
+            }
+
+            var tasks = encodedTasks.Select(Uri.UnescapeDataString).ToArray();
+            var ranks = ParseIntList(additionalParams?.TryGetValue("TaskRanks", out var ranksObj) == true ? ranksObj as string : null);
+            var alphas = ParseDoubleList(additionalParams?.TryGetValue("TaskAlphas", out var alphasObj) == true ? alphasObj as string : null);
+
+            int defaultRank = ranks.Length > 0 ? ranks[0] : 1;
+            double defaultAlpha = alphas.Length > 0 ? alphas[0] : -1;
+
+            var iLayerType = typeof(ILayer<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor([iLayerType, typeof(string), typeof(int), typeof(double), typeof(bool)]);
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find MultiLoRAAdapter constructor with expected signature.");
+            }
+
+            instance = ctor.Invoke([baseLayer, tasks[0], defaultRank, defaultAlpha, freezeBaseLayer]);
+            var multi = (AiDotNet.LoRA.Adapters.MultiLoRAAdapter<T>)instance;
+
+            for (int taskIndex = 1; taskIndex < tasks.Length; taskIndex++)
+            {
+                int rank = taskIndex < ranks.Length ? ranks[taskIndex] : defaultRank;
+                double alpha = taskIndex < alphas.Length ? alphas[taskIndex] : -1;
+                multi.AddTask(tasks[taskIndex], rank, alpha);
+            }
+
+            if (additionalParams?.TryGetValue("CurrentTask", out var currentTaskObj) == true &&
+                currentTaskObj is string currentTaskEncoded)
+            {
+                string currentTask = Uri.UnescapeDataString(currentTaskEncoded);
+                if (!string.IsNullOrWhiteSpace(currentTask))
+                {
+                    multi.SetCurrentTask(currentTask);
+                }
+            }
+        }
         else if (genericDef == typeof(ConvolutionalLayer<>))
         {
             // ConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth, int stride, int padding, IActivationFunction<T>?)

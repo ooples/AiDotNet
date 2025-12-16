@@ -1118,7 +1118,14 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         public InferenceSequence CreateSequence()
         {
             ThrowIfDisposed();
-            return new InferenceSequence(_result, _config);
+            return new InferenceSequence(_result, _config, multiLoRATask: null);
+        }
+
+        // Internal (serving/tests): allow selecting a Multi-LoRA task per sequence without expanding public API surface.
+        internal InferenceSequence CreateSequence(string? multiLoRATask)
+        {
+            ThrowIfDisposed();
+            return new InferenceSequence(_result, _config, multiLoRATask);
         }
 
         public void Dispose()
@@ -1158,11 +1165,15 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         internal InferenceSequence(
             PredictionModelResult<T, TInput, TOutput> result,
-            AiDotNet.Configuration.InferenceOptimizationConfig? config)
+            AiDotNet.Configuration.InferenceOptimizationConfig? config,
+            string? multiLoRATask)
         {
             _result = result ?? throw new ArgumentNullException(nameof(result));
             _config = config;
+            _multiLoRATask = multiLoRATask;
         }
+
+        private string? _multiLoRATask;
 
         public TOutput Predict(TInput newData)
         {
@@ -1207,6 +1218,32 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             lock (_sequenceLock)
             {
                 _sequenceOptimizer?.ClearCache();
+            }
+        }
+
+        // Internal: switch Multi-LoRA task for this sequence, resetting state to avoid cache leakage.
+        internal void SetMultiLoRATask(string? taskName)
+        {
+            ThrowIfDisposed();
+            lock (_sequenceLock)
+            {
+                if (string.Equals(_multiLoRATask, taskName, StringComparison.Ordinal))
+                    return;
+
+                _multiLoRATask = taskName;
+
+                try
+                {
+                    _sequenceOptimizer?.ClearCache();
+                }
+                catch
+                {
+                    // Best-effort.
+                }
+
+                _sequenceOptimizer = null;
+                _sequenceOptimizedNeuralModel = null;
+                _sequenceInitialized = false;
             }
         }
 
@@ -1257,6 +1294,39 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 {
                     if (_config != null)
                     {
+                        // If Multi-LoRA is in use, isolate per-sequence task selection by cloning and selecting task
+                        // before applying any further inference optimizations.
+                        NeuralNetworkBase<T> modelForSequence = model;
+                        bool hasMultiLoRATask = !string.IsNullOrWhiteSpace(_multiLoRATask);
+                        if (hasMultiLoRATask)
+                        {
+                            try
+                            {
+                                modelForSequence = (NeuralNetworkBase<T>)model.Clone();
+
+                                int appliedCount = 0;
+                                foreach (var layer in modelForSequence.Layers)
+                                {
+                                    if (layer is AiDotNet.LoRA.Adapters.MultiLoRAAdapter<T> multi)
+                                    {
+                                        multi.SetCurrentTask(_multiLoRATask!);
+                                        appliedCount++;
+                                    }
+                                }
+
+                                InferenceDiagnostics.RecordDecision(
+                                    area: "InferenceSession",
+                                    feature: "MultiLoRA",
+                                    enabled: appliedCount > 0,
+                                    reason: appliedCount > 0 ? $"Task={_multiLoRATask}" : $"NoMultiLoRAAdapters(Task={_multiLoRATask})");
+                            }
+                            catch (Exception ex)
+                            {
+                                InferenceDiagnostics.RecordException("InferenceSession", "MultiLoRA", ex, $"Task={_multiLoRATask};FallbackToBaseModel");
+                                modelForSequence = model;
+                            }
+                        }
+
                         // In a session, prefer causal masking defaults when user left it as Auto.
                         var sessionConfig = _config.AttentionMasking == AiDotNet.Configuration.AttentionMaskingMode.Auto
                             ? new AiDotNet.Configuration.InferenceOptimizationConfig
@@ -1268,23 +1338,27 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                                 MaxBatchSize = _config.MaxBatchSize,
                                 KVCacheMaxSizeMB = _config.KVCacheMaxSizeMB,
                                 KVCachePrecision = _config.KVCachePrecision,
+                                KVCacheQuantization = _config.KVCacheQuantization,
                                 UseSlidingWindowKVCache = _config.UseSlidingWindowKVCache,
                                 KVCacheWindowSize = _config.KVCacheWindowSize,
                                 EnableBatching = _config.EnableBatching,
                                 EnableSpeculativeDecoding = _config.EnableSpeculativeDecoding,
                                 SpeculationPolicy = _config.SpeculationPolicy,
+                                SpeculativeMethod = _config.SpeculativeMethod,
                                 DraftModelType = _config.DraftModelType,
                                 SpeculationDepth = _config.SpeculationDepth,
                                 UseTreeSpeculation = _config.UseTreeSpeculation,
+                                EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization,
                                 AttentionMasking = AiDotNet.Configuration.AttentionMaskingMode.Causal
                             }
                             : _config;
 
                         var optimizer = new InferenceOptimizer<T>(sessionConfig);
-                        var (optimizedModel, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: true);
+                        var (optimizedModel, anyApplied) = optimizer.OptimizeForInference(modelForSequence, cloneModel: ReferenceEquals(modelForSequence, model));
 
                         _sequenceOptimizer = optimizer;
-                        _sequenceOptimizedNeuralModel = anyApplied ? optimizedModel : null;
+                        // If Multi-LoRA was requested, keep the per-sequence model even when no other optimizations apply.
+                        _sequenceOptimizedNeuralModel = anyApplied || !ReferenceEquals(modelForSequence, model) ? optimizedModel : null;
                     }
                 }
                 catch (Exception ex)

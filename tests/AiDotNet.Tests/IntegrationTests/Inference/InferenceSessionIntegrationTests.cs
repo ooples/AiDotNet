@@ -154,6 +154,37 @@ public class InferenceSessionIntegrationTests
     }
 
     [Fact]
+    public void BeginInferenceSession_MultiLoRA_TaskSelection_IsIsolatedPerSequence()
+    {
+        var config = new InferenceOptimizationConfig
+        {
+            EnableFlashAttention = false,
+            EnableKVCache = false,
+            EnablePagedKVCache = false,
+            EnableSpeculativeDecoding = false,
+            EnableBatching = false
+        };
+
+        var model = CreateDeterministicMultiLoRAModel();
+        var result = CreateDeterministicResultWithModel(config, model);
+
+        var token = CreateTokenTensor(0.25f);
+
+        using var session = result.BeginInferenceSession();
+        var seqA = session.CreateSequence("taskA");
+        var seqB = session.CreateSequence("taskB");
+
+        var yA = seqA.Predict(token);
+        var yB = seqB.Predict(token);
+
+        AssertTensorsNotEqual(yA, yB, minAbsDiff: 1e-3f);
+
+        seqA.SetMultiLoRATask("taskB");
+        var yA2 = seqA.Predict(token);
+        AssertTensorsNotEqual(yA, yA2, minAbsDiff: 1e-3f);
+    }
+
+    [Fact]
     public void NeuralNetworkBase_Clone_DoesNotShareParameters()
     {
         var model = CreateDeterministicAttentionOnlyModel();
@@ -178,6 +209,14 @@ public class InferenceSessionIntegrationTests
     private static PredictionModelResult<float, Tensor<float>, Tensor<float>> CreateDeterministicResult(InferenceOptimizationConfig config)
     {
         var model = CreateDeterministicAttentionOnlyModel();
+        return CreateDeterministicResultWithModel(config, model);
+    }
+
+    private static PredictionModelResult<float, Tensor<float>, Tensor<float>> CreateDeterministicResultWithModel(
+        InferenceOptimizationConfig config,
+        NeuralNetworkBase<float> model)
+    {
+        if (model == null) throw new ArgumentNullException(nameof(model));
 
         var optimization = new OptimizationResult<float, Tensor<float>, Tensor<float>>
         {
@@ -198,6 +237,62 @@ public class InferenceSessionIntegrationTests
         };
 
         return new PredictionModelResult<float, Tensor<float>, Tensor<float>>(options);
+    }
+
+    private static NeuralNetworkBase<float> CreateDeterministicMultiLoRAModel()
+    {
+        const int inputSize = FlatSize;
+        const int outputSize = FlatSize;
+
+        var baseDense = new DenseLayer<float>(inputSize, outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>());
+        var multi = new AiDotNet.LoRA.Adapters.MultiLoRAAdapter<float>(baseDense, defaultTaskName: "taskA", defaultRank: 1, alpha: 1.0, freezeBaseLayer: true);
+        multi.AddTask("taskB", rank: 1, alpha: 1.0);
+
+        var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
+        {
+            new InputLayer<float>(inputSize),
+            multi,
+            new DenseLayer<float>(outputSize, outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+        };
+
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Simple,
+            inputSize: inputSize,
+            outputSize: outputSize,
+            layers: layers);
+
+        var model = new NeuralNetwork<float>(architecture);
+
+        // Deterministic base weights across the whole model.
+        var p = model.GetParameters();
+        var deterministic = new float[p.Length];
+        for (int i = 0; i < deterministic.Length; i++)
+        {
+            deterministic[i] = ((i % 19) - 9) / 9.0f;
+        }
+        model.UpdateParameters(new Vector<float>(deterministic));
+
+        // Make taskB differ from taskA by setting distinct LoRA parameters.
+        // (Both A and B must be non-zero for the low-rank delta to have an effect.)
+        var taskA = multi.GetTaskAdapter("taskA");
+        var taskB = multi.GetTaskAdapter("taskB");
+
+        var aParams = taskA.GetParameters();
+        var bParams = taskB.GetParameters();
+
+        var a = new float[aParams.Length]; // all zeros => no delta
+        var b = new float[bParams.Length];
+        for (int i = 0; i < b.Length; i++)
+        {
+            b[i] = 0.05f;
+        }
+
+        taskA.UpdateParameters(new Vector<float>(a));
+        taskB.UpdateParameters(new Vector<float>(b));
+
+        return model;
     }
 
     private static NeuralNetworkBase<float> CreateDeterministicAttentionOnlyModel()
