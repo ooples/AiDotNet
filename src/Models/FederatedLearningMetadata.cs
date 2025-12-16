@@ -263,6 +263,11 @@ public class FederatedLearningMetadata
     public string CompressionStrategyUsed { get; set; } = "None";
 
     /// <summary>
+    /// Gets or sets the heterogeneity correction method used (if any).
+    /// </summary>
+    public string HeterogeneityCorrectionUsed { get; set; } = "None";
+
+    /// <summary>
     /// Gets or sets whether differential privacy was enabled.
     /// </summary>
     /// <remarks>

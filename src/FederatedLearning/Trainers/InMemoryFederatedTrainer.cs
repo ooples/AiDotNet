@@ -9,6 +9,7 @@ using AiDotNet.FederatedLearning.Privacy.Accounting;
 using AiDotNet.FederatedLearning.Selection;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.FederatedLearning.ServerOptimizers;
+using AiDotNet.FederatedLearning.Heterogeneity;
 
 namespace AiDotNet.FederatedLearning.Trainers;
 
@@ -32,6 +33,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     private readonly IPrivacyAccountant? _privacyAccountantOverride;
     private readonly IClientSelectionStrategy? _clientSelectionStrategyOverride;
     private readonly IFederatedServerOptimizer<T>? _serverOptimizerOverride;
+    private readonly IFederatedHeterogeneityCorrection<T>? _heterogeneityCorrectionOverride;
     private readonly Dictionary<int, double> _clientPerformanceScores = new();
     private readonly Dictionary<int, double[]> _clientEmbeddings = new();
 
@@ -45,7 +47,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         IPrivacyMechanism<Vector<T>>? differentialPrivacyMechanism = null,
         IPrivacyAccountant? privacyAccountant = null,
         IClientSelectionStrategy? clientSelectionStrategy = null,
-        IFederatedServerOptimizer<T>? serverOptimizer = null)
+        IFederatedServerOptimizer<T>? serverOptimizer = null,
+        IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null)
     {
         _optimizerPrototype = optimizerPrototype ?? throw new ArgumentNullException(nameof(optimizerPrototype));
         _learningRateOverride = learningRateOverride;
@@ -68,6 +71,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         _privacyAccountantOverride = privacyAccountant;
         _clientSelectionStrategyOverride = clientSelectionStrategy;
         _serverOptimizerOverride = serverOptimizer;
+        _heterogeneityCorrectionOverride = heterogeneityCorrection;
     }
 
     public override FederatedLearningMetadata TrainRound(
@@ -135,6 +139,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         var serverOptimizer = _serverOptimizerOverride ?? CreateDefaultServerOptimizer(flOptions?.ServerOptimizer);
         metadata.ServerOptimizerUsed = serverOptimizer?.GetOptimizerName() ?? "None";
 
+        var heterogeneityCorrection = _heterogeneityCorrectionOverride ?? CreateDefaultHeterogeneityCorrection(flOptions?.HeterogeneityCorrection);
+        metadata.HeterogeneityCorrectionUsed = heterogeneityCorrection?.GetCorrectionName() ?? "None";
+
         var compressionOptions = ResolveCompressionOptions(flOptions);
         bool useCompression = compressionOptions != null &&
                               !string.Equals(compressionOptions.Strategy?.Trim() ?? "None", "None", StringComparison.OrdinalIgnoreCase);
@@ -173,7 +180,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 dpDelta,
                 asyncOptions,
                 compressionOptions,
-                compressionResiduals);
+                compressionResiduals,
+                heterogeneityCorrection);
 
             var asyncElapsed = DateTime.UtcNow - start;
             metadata.TotalTrainingTimeSeconds = asyncElapsed.TotalSeconds;
@@ -230,6 +238,16 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 var parameters = trainedModel.GetParameters();
 
                 UpdateClientEmbedding(clientId, globalBefore.GetParameters(), parameters);
+
+                if (heterogeneityCorrection != null)
+                {
+                    parameters = heterogeneityCorrection.Correct(
+                        clientId,
+                        round,
+                        globalBefore.GetParameters(),
+                        parameters,
+                        localEpochs);
+                }
 
                 if (useCompression)
                 {
@@ -365,7 +383,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         double dpDelta,
         AsyncFederatedLearningOptions? asyncOptions,
         FederatedCompressionOptions? compressionOptions,
-        Dictionary<int, Vector<T>>? compressionResiduals)
+        Dictionary<int, Vector<T>>? compressionResiduals,
+        IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection)
     {
         string mode = asyncOptions?.Mode?.Trim() ?? "None";
         int maxDelay = Math.Max(0, asyncOptions?.SimulatedMaxClientDelaySteps ?? 0);
@@ -417,6 +436,16 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                 var parameters = trainedModel.GetParameters();
                 UpdateClientEmbedding(clientId, globalAtStepStart.GetParameters(), parameters);
+
+                if (heterogeneityCorrection != null)
+                {
+                    parameters = heterogeneityCorrection.Correct(
+                        clientId,
+                        step,
+                        globalAtStepStart.GetParameters(),
+                        parameters,
+                        localEpochs);
+                }
 
                 if (useCompression)
                 {
@@ -691,6 +720,37 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         }
 
         throw new InvalidOperationException($"Unknown server optimizer '{name}'. Supported values: None, FedAvgM, FedAdagrad, FedAdam, FedYogi.");
+    }
+
+    private static IFederatedHeterogeneityCorrection<T>? CreateDefaultHeterogeneityCorrection(FederatedHeterogeneityCorrectionOptions? options)
+    {
+        if (options == null)
+        {
+            return null;
+        }
+
+        var name = options.Algorithm?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(name) || string.Equals(name, "None", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (string.Equals(name, "SCAFFOLD", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ScaffoldHeterogeneityCorrection<T>(options.ClientLearningRate);
+        }
+
+        if (string.Equals(name, "FedNova", StringComparison.OrdinalIgnoreCase))
+        {
+            return new FedNovaHeterogeneityCorrection<T>();
+        }
+
+        if (string.Equals(name, "FedDyn", StringComparison.OrdinalIgnoreCase))
+        {
+            return new FedDynHeterogeneityCorrection<T>(options.FedDynAlpha);
+        }
+
+        throw new InvalidOperationException($"Unknown heterogeneity correction '{name}'. Supported values: None, SCAFFOLD, FedNova, FedDyn.");
     }
 
     private static IPrivacyAccountant CreateDefaultPrivacyAccountant(string name, double clipNorm)

@@ -320,6 +320,15 @@ public class FederatedLearningOptions
     public AsyncFederatedLearningOptions? AsyncFederatedLearning { get; set; } = null;
 
     /// <summary>
+    /// Gets or sets federated heterogeneity correction options (SCAFFOLD / FedNova / FedDyn).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> These methods help reduce client drift on non-IID data by transforming
+    /// client updates before aggregation. If not set or set to "None", no correction is applied.
+    /// </remarks>
+    public FederatedHeterogeneityCorrectionOptions? HeterogeneityCorrection { get; set; } = null;
+
+    /// <summary>
     /// Gets or sets the proximal term coefficient for FedProx algorithm.
     /// </summary>
     /// <remarks>
