@@ -223,21 +223,34 @@ public class InferenceController : ControllerBase
         // This keeps adapter details out of the public model facade while enabling per-request selection.
         if (Request?.Headers == null)
         {
+            _logger.LogDebug("No request headers available; routing to base model '{ModelName}'.", modelName);
             return modelName;
         }
 
         if (!Request.Headers.TryGetValue("X-AiDotNet-Lora", out var adapterValues) &&
             !Request.Headers.TryGetValue("X-AiDotNet-Adapter", out adapterValues))
         {
+            _logger.LogDebug("No adapter header present; routing to base model '{ModelName}'.", modelName);
             return modelName;
         }
 
         var adapterId = adapterValues.ToString()?.Trim();
         if (string.IsNullOrWhiteSpace(adapterId) || adapterId.Length > 64 || !IsSafeAdapterId(adapterId))
         {
+            if (!string.IsNullOrWhiteSpace(adapterId))
+            {
+                string reason = adapterId.Length > 64 ? "TooLong" : (!IsSafeAdapterId(adapterId) ? "UnsafeCharacters" : "EmptyOrWhitespace");
+                var level = adapterId.Length > 64 || !IsSafeAdapterId(adapterId) ? LogLevel.Warning : LogLevel.Debug;
+                _logger.Log(level,
+                    "Ignoring invalid adapter ID '{AdapterId}' for model '{ModelName}' (reason: {Reason}).",
+                    adapterId,
+                    modelName,
+                    reason);
+            }
             return modelName;
         }
 
+        _logger.LogDebug("Routing to adapter model '{EffectiveModelName}'.", $"{modelName}__{adapterId}");
         return $"{modelName}__{adapterId}";
     }
 

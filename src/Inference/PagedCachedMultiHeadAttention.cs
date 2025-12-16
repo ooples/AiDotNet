@@ -184,7 +184,6 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralN
                     position: _currentPosition,
                     layer: LayerIndex,
                     output: tokenOut);
-                _currentPosition++;
 
                 // Add bias and activation.
                 for (int d = 0; d < embDim; d++)
@@ -193,6 +192,8 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralN
                     value = NumOps.Add(value, _outputBias[d]);
                     output[0, t, d] = ScalarActivation!.Activate(value);
                 }
+
+                _currentPosition++;
             }
         }
         finally

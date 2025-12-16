@@ -128,8 +128,12 @@ Notes:
      - Never mutate the user's original model object.
      - Any optimized/mutated model instance is owned by the result/session internally.
    - Acceptance criteria:
-     - No runtime errors when inference optimizations are enabled.
-     - No cross-request contamination (weights/caches).
+      - No runtime errors when inference optimizations are enabled.
+      - No cross-request contamination (weights/caches).
+   - Fallback behavior + diagnostics (must be explicit):
+     - If an optimization is unsupported for the current model/layer/platform, it must be **auto-disabled** and inference proceeds with the baseline path (never throw by default).
+     - If an optimization throws at runtime, catch and **fall back to baseline** for that session/sequence where possible.
+     - Record decisions/exceptions via internal diagnostics (e.g., `InferenceDiagnostics.RecordDecision/RecordException`) so we can validate selection in tests and troubleshoot in serving logs without expanding the public API.
 
 2) **Make serialization/deserialization round-trip attention layers (if used by clone)**
    - Inventory layer constructors that require metadata:
@@ -494,6 +498,21 @@ If `AiDotNet.Serving` has a test harness, add a serving integration test:
 - [ ] Multi-LoRA works per-request/per-sequence with cache isolation (KV reset on adapter change).
 - [ ] Unit tests + integration tests cover the end-to-end wiring.
 
+Mapping (so reviewers can quickly validate where each checklist item is implemented):
+
+| Checklist item | Primary phase(s) | Primary MVP step(s) | Notes / validation |
+| --- | --- | --- | --- |
+| Minimal public surface | A–E | MVP-0..3 | Session types nested/hidden; internals remain `internal`. |
+| Config has full effect | A, B | MVP-0 | Builder stores config; result/session consumes it. |
+| KV-cache correctness | B, C | MVP-0 | Per-layer/per-sequence cache isolation; no cross-layer corruption. |
+| Attention layer coverage | A | MVP-0 | Support/skip with diagnostics for `AttentionLayer`, `SelfAttentionLayer`, `GraphAttentionLayer`, etc. |
+| Paged KV-cache integration | C | MVP-0 | Paged backend selection + cached attention bridge. |
+| Batching + speculation usable | D, E | MVP-1 | Serving uses the same internals; session support only if facade stays minimal. |
+| Speculation backoff policy | E | MVP-1 | Auto/LatencyFirst/ThroughputFirst; backs off under batching load. |
+| Inference quantization (WOQ) | (add-on) | MVP-2 | Safe fallback per-layer; deterministic tests. |
+| Multi-LoRA per-request/per-seq | (add-on) | MVP-3 | Adapter selection + cache reset on adapter change. |
+| End-to-end tests | A–E | MVP-0..3 | Integration tests must use facade-only entry points. |
+
 ---
 
 ## 7) Resolved Decisions (from discussion)
@@ -617,7 +636,11 @@ First target behavior:
    - Never mutate base weights.
    - Cache merged weights per adapter ID (and per precision/quantization mode) to avoid recomputing merges.
 3) KV-cache interaction rules:
-   - If adapter changes for a given sequence, **reset KV-cache** for that sequence (deterministic + correctness first).
+    - If adapter changes for a given sequence, **reset KV-cache for that sequence only** (deterministic + correctness first).
+    - Scope of reset (must be consistent across backends):
+      - Reset contiguous `KVCache<T>` *or* paged `PagedKVCache<T>` state for that sequence ID.
+      - Do not clear other sequences' caches.
+      - Also reset any sequence-scoped optimized model state that depends on the adapter (e.g., merged weights / optimizer state), so adapter changes cannot reuse stale K/V pages.
 
 Non-goals for MVP-3 (defer):
 - Multi-adapter composition beyond simple “single adapter at a time” (Phase 2: merge/stack).
