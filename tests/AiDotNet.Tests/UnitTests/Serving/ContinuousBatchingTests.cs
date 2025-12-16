@@ -528,11 +528,7 @@ public class ContinuousBatchingTests
             Temperature = 1.0f
         };
 
-        var sequence = new SequenceState<float>(request)
-        {
-            PrefillComplete = true,
-            Status = SequenceStatus.Generating
-        };
+        var sequence = new SequenceState<float>(request);
 
         var scheduler = GetSchedulerFromBatcher(batcher);
         scheduler.AddSequence(sequence);
@@ -575,11 +571,7 @@ public class ContinuousBatchingTests
             MaxNewTokens = 10
         };
 
-        var sequence = new SequenceState<float>(request)
-        {
-            PrefillComplete = true,
-            Status = SequenceStatus.Generating
-        };
+        var sequence = new SequenceState<float>(request);
 
         var scheduler = GetSchedulerFromBatcher(batcher);
         scheduler.AddSequence(sequence);
@@ -591,6 +583,56 @@ public class ContinuousBatchingTests
         Assert.Equal(1, tokensGenerated);
         Assert.False(batcher.LastStepUsedSpeculation);
         Assert.Equal(0, batcher.LastStepSpeculationTokens);
+    }
+
+    [Fact]
+    public void ContinuousBatcher_SpeculativeDecoding_DisablesAfterFailure()
+    {
+        // Arrange
+        var config = new ContinuousBatcherConfig
+        {
+            AutoStart = false,
+            EnableSpeculativeDecoding = true,
+            SpeculationPolicy = AiDotNet.Configuration.SpeculationPolicy.ForceOn,
+            SpeculationDepth = 3
+        };
+
+        Tensor<float> mockModel(Tensor<float> input)
+        {
+            var vocabSize = 10;
+            var logits = new Tensor<float>(new[] { 1, 1, vocabSize });
+            logits[new[] { 0, 0, 5 }] = 10f;
+            return logits;
+        }
+
+        var throwingDraft = new ThrowingDraftModel(vocabSize: 10);
+        using var batcher = new ContinuousBatcher<float>(config, mockModel, draftModel: throwingDraft);
+
+        var request = new GenerationRequest<float>
+        {
+            PromptTokenIds = new List<int> { 1 },
+            MaxNewTokens = 10
+        };
+
+        var sequence = new SequenceState<float>(request);
+
+        var scheduler = GetSchedulerFromBatcher(batcher);
+        scheduler.AddSequence(sequence);
+
+        // Act
+        int tokensGeneratedFirst = batcher.Step();
+        bool usedSpeculationFirst = batcher.LastStepUsedSpeculation;
+
+        int tokensGeneratedSecond = batcher.Step();
+        bool usedSpeculationSecond = batcher.LastStepUsedSpeculation;
+
+        // Assert
+        Assert.Equal(1, tokensGeneratedFirst); // falls back to baseline
+        Assert.True(usedSpeculationFirst); // ForceOn decision, even though it failed internally
+
+        Assert.Equal(1, tokensGeneratedSecond);
+        Assert.False(usedSpeculationSecond); // disabled after failure
+        Assert.Equal("DisabledDueToFailure", batcher.LastStepSpeculationReason);
     }
 
     [Fact]
@@ -766,6 +808,26 @@ public class ContinuousBatchingTests
                 TokenProbabilities = tokenProbs,
                 Probabilities = probs
             };
+        }
+
+        public void Reset()
+        {
+        }
+    }
+
+    private sealed class ThrowingDraftModel : IDraftModel<float>
+    {
+        public int MaxDraftTokens => 16;
+        public int VocabSize { get; }
+
+        public ThrowingDraftModel(int vocabSize)
+        {
+            VocabSize = vocabSize;
+        }
+
+        public DraftResult<float> GenerateDraft(Vector<int> inputTokens, int numDraftTokens, float temperature)
+        {
+            throw new InvalidOperationException("Draft model failure (test).");
         }
 
         public void Reset()

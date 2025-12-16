@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using AiDotNet.Inference;
 using AiDotNet.Inference.SpeculativeDecoding;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Serving.ContinuousBatching;
@@ -44,9 +45,11 @@ internal class ContinuousBatcher<T> : IDisposable
 
     private SpeculativeDecoder<T>? _speculativeDecoder;
     private readonly object _speculativeLock = new();
+    private volatile bool _speculationDisabledDueToFailure;
 
     internal bool LastStepUsedSpeculation { get; private set; }
     internal int LastStepSpeculationTokens { get; private set; }
+    internal string LastStepSpeculationReason { get; private set; } = string.Empty;
 
     private readonly ConcurrentDictionary<long, TaskCompletionSource<GenerationResult<T>>> _pendingResults;
     private readonly ConcurrentQueue<SequenceState<T>> _incomingRequests;
@@ -212,9 +215,10 @@ internal class ContinuousBatcher<T> : IDisposable
         if (batch.Count == 0)
             return 0;
 
-        bool useSpeculation = ShouldUseSpeculativeDecoding(batch);
+        bool useSpeculation = ShouldUseSpeculativeDecoding(batch, out var speculationReason);
         LastStepUsedSpeculation = useSpeculation;
         LastStepSpeculationTokens = 0;
+        LastStepSpeculationReason = speculationReason;
 
         _totalIterations++;
         int tokensGenerated = 0;
@@ -241,7 +245,8 @@ internal class ContinuousBatcher<T> : IDisposable
                     {
                         tokensGenerated++;
                         _totalTokensGenerated++;
-                        LastStepSpeculationTokens++;
+                        if (useSpeculation)
+                            LastStepSpeculationTokens++;
 
                         // Fire token generated event
                         TokenGenerated?.Invoke(this, new TokenGeneratedEventArgs<T>
@@ -379,11 +384,30 @@ internal class ContinuousBatcher<T> : IDisposable
         var inputTokens = new Vector<int>(sequence.TokenIds.ToArray());
         int maxNew = Math.Min(remaining, Math.Max(1, _config.SpeculationDepth + 1));
 
-        var result = decoder.Generate(
-            inputTokens,
-            maxNewTokens: maxNew,
-            temperature: temperature,
-            eosToken: _config.EosTokenId);
+        SpeculativeResult result;
+        try
+        {
+            result = decoder.Generate(
+                inputTokens,
+                maxNewTokens: maxNew,
+                temperature: temperature,
+                eosToken: _config.EosTokenId);
+        }
+        catch (Exception ex)
+        {
+            _speculationDisabledDueToFailure = true;
+            InferenceDiagnostics.RecordException(
+                area: "Serving.ContinuousBatching",
+                feature: "SpeculativeDecoding",
+                ex: ex,
+                reason: "Speculative decoder execution failed; falling back to baseline decode.");
+            InferenceDiagnostics.RecordDecision(
+                area: "Serving.ContinuousBatching",
+                feature: "SpeculativeDecoding",
+                enabled: false,
+                reason: "DisabledDueToFailure");
+            return RunDecodeStep(sequence);
+        }
 
         if (result.NewTokens.Length == 0)
             return Array.Empty<int>();
@@ -398,27 +422,54 @@ internal class ContinuousBatcher<T> : IDisposable
         return newTokens;
     }
 
-    private bool ShouldUseSpeculativeDecoding(IReadOnlyCollection<SequenceState<T>> batch)
+    private bool ShouldUseSpeculativeDecoding(IReadOnlyCollection<SequenceState<T>> batch, out string reason)
     {
-        if (!_config.EnableSpeculativeDecoding)
+        if (_speculationDisabledDueToFailure)
+        {
+            reason = "DisabledDueToFailure";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
             return false;
+        }
 
-        return _config.SpeculationPolicy switch
+        if (!_config.EnableSpeculativeDecoding)
+        {
+            reason = "DisabledByConfig";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
+            return false;
+        }
+
+        bool enabled = _config.SpeculationPolicy switch
         {
             AiDotNet.Configuration.SpeculationPolicy.ForceOn => true,
             AiDotNet.Configuration.SpeculationPolicy.ForceOff => false,
             _ => batch.Count <= Math.Max(1, _config.SchedulerConfig.MaxBatchSize / 2) && _scheduler.WaitingCount == 0
         };
+
+        reason = _config.SpeculationPolicy switch
+        {
+            AiDotNet.Configuration.SpeculationPolicy.ForceOn => "ForceOn",
+            AiDotNet.Configuration.SpeculationPolicy.ForceOff => "ForceOff",
+            _ => enabled ? "AutoEnabled" : "AutoBackoff(LoadOrQueue)"
+        };
+
+        InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: enabled, reason: reason);
+        return enabled;
     }
 
     private bool ShouldSpeculateForThisIteration()
     {
         // Defensive: if speculation is enabled but we don't have a model forward, we can't speculate.
-        return _model != null && _config.EnableSpeculativeDecoding && _config.SpeculationPolicy != AiDotNet.Configuration.SpeculationPolicy.ForceOff;
+        return !_speculationDisabledDueToFailure &&
+               _model != null &&
+               _config.EnableSpeculativeDecoding &&
+               _config.SpeculationPolicy != AiDotNet.Configuration.SpeculationPolicy.ForceOff;
     }
 
     private SpeculativeDecoder<T>? EnsureSpeculativeDecoder()
     {
+        if (_speculationDisabledDueToFailure)
+            return null;
+
         if (_speculativeDecoder != null)
             return _speculativeDecoder;
 
@@ -427,11 +478,42 @@ internal class ContinuousBatcher<T> : IDisposable
             if (_speculativeDecoder != null)
                 return _speculativeDecoder;
 
+            if (_speculationDisabledDueToFailure)
+                return null;
+
             if (_model == null)
                 return null;
 
-            int vocabSize = DetectVocabSize();
-            IDraftModel<T> draft = _draftModelOverride ?? new NGramDraftModel<T>(ngramSize: 3, vocabSize: vocabSize, seed: 42);
+            int vocabSize;
+            try
+            {
+                vocabSize = DetectVocabSize();
+            }
+            catch (Exception ex)
+            {
+                _speculationDisabledDueToFailure = true;
+                InferenceDiagnostics.RecordException("Serving.ContinuousBatching", "SpeculativeDecoding", ex, "Vocab size detection failed; disabling speculation.");
+                return null;
+            }
+
+            if (vocabSize <= 0)
+            {
+                _speculationDisabledDueToFailure = true;
+                InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: "DisabledDueToFailure(VocabSizeInvalid)");
+                return null;
+            }
+
+            IDraftModel<T> draft;
+            try
+            {
+                draft = _draftModelOverride ?? new NGramDraftModel<T>(ngramSize: 3, vocabSize: vocabSize, seed: 42);
+            }
+            catch (Exception ex)
+            {
+                _speculationDisabledDueToFailure = true;
+                InferenceDiagnostics.RecordException("Serving.ContinuousBatching", "SpeculativeDecoding", ex, "Draft model init failed; disabling speculation.");
+                return null;
+            }
 
             Matrix<T> TargetForward(Vector<int> tokens)
             {
@@ -480,8 +562,18 @@ internal class ContinuousBatcher<T> : IDisposable
                 Seed = 42
             };
 
-            _speculativeDecoder = new SpeculativeDecoder<T>(draft, TargetForward, config);
-            return _speculativeDecoder;
+            try
+            {
+                _speculativeDecoder = new SpeculativeDecoder<T>(draft, TargetForward, config);
+                InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: true, reason: "DecoderInitialized");
+                return _speculativeDecoder;
+            }
+            catch (Exception ex)
+            {
+                _speculationDisabledDueToFailure = true;
+                InferenceDiagnostics.RecordException("Serving.ContinuousBatching", "SpeculativeDecoding", ex, "Decoder init failed; disabling speculation.");
+                return null;
+            }
         }
     }
 

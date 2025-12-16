@@ -1,4 +1,5 @@
 using AiDotNet.Configuration;
+using AiDotNet.Helpers;
 using AiDotNet.Inference.PagedAttention;
 using AiDotNet.Inference.SpeculativeDecoding;
 using AiDotNet.NeuralNetworks;
@@ -113,11 +114,17 @@ internal class InferenceOptimizer<T>
                 // Some layer types may not yet support serialization-based cloning.
                 // Do not mutate the user's original model; just skip optimizations.
                 Console.WriteLine($"Warning: model cloning failed for inference optimizations: {ex.Message}. Skipping inference optimizations for this model instance.");
+                InferenceDiagnostics.RecordException(
+                    area: "InferenceOptimizer",
+                    feature: "CloneForRewrite",
+                    ex: ex,
+                    reason: "Clone failed; skipping all inference optimizations to avoid mutating user model.");
                 return (model, false);
             }
         }
 
         bool anyApplied = ApplyAttentionOptimizations(workingModel);
+        InferenceDiagnostics.RecordDecision("InferenceOptimizer", "AttentionRewrites", enabled: anyApplied, reason: anyApplied ? "Applied" : "NoApplicableLayersOrDisabled");
         anyApplied |= Initialize(workingModel);
 
         return (workingModel, anyApplied);
@@ -154,11 +161,19 @@ internal class InferenceOptimizer<T>
                 ? InitializePagedKVCache(model)
                 : InitializeKVCache(model);
         }
+        else
+        {
+            InferenceDiagnostics.RecordDecision("InferenceOptimizer", "KVCache", enabled: false, reason: "DisabledByConfig");
+        }
 
         // Initialize speculative decoding if enabled
         if (_config.EnableSpeculativeDecoding)
         {
             anyOptimizationsApplied |= InitializeSpeculativeDecoding(model);
+        }
+        else
+        {
+            InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDecoding", enabled: false, reason: "DisabledByConfig");
         }
 
         _isInitialized = true;
@@ -297,6 +312,11 @@ internal class InferenceOptimizer<T>
     private bool ApplyAttentionOptimizations(NeuralNetworkBase<T> model)
     {
         bool useCausalMask = ResolveCausalMask(model);
+        InferenceDiagnostics.RecordDecision(
+            area: "InferenceOptimizer",
+            feature: "CausalMask",
+            enabled: useCausalMask,
+            reason: _config.AttentionMasking == AttentionMaskingMode.Auto ? "Auto" : _config.AttentionMasking.ToString());
 
         // KV-cache is only beneficial for incremental decoding patterns; default to enabling it only when causal masking applies.
         bool enableKVCache = _config.EnableKVCache && useCausalMask;
@@ -425,10 +445,15 @@ internal class InferenceOptimizer<T>
         };
     }
 
-    private static bool InferCausalFromModel(NeuralNetworkBase<T> model)
+    private bool InferCausalFromModel(NeuralNetworkBase<T> model)
     {
-        // Keep heuristics conservative to avoid changing semantics for non-generative models.
-        // Users can force causal masking via AttentionMaskingMode.Causal when needed.
+        // Default to causal when the user enables generation-oriented inference features.
+        // This matches industry-standard expectations for autoregressive decoding and avoids
+        // relying on users to set TaskType explicitly.
+        if (_config.EnableKVCache || _config.EnableSpeculativeDecoding)
+            return true;
+
+        // Otherwise, keep heuristics conservative to avoid changing semantics for non-generative models.
         return model.Architecture.TaskType == NeuralNetworkTaskType.TextGeneration;
     }
 
