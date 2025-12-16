@@ -899,7 +899,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     public FederatedLearningMetadata? GetFederatedLearningMetadata()
     {
         var metadata = GetModelMetadata();
-        if (metadata.Properties.TryGetValue(FederatedLearningMetadata.MetadataKey, out var value))
+        if (metadata.Properties != null &&
+            metadata.Properties.TryGetValue(FederatedLearningMetadata.MetadataKey, out var value))
         {
             return value as FederatedLearningMetadata;
         }
