@@ -108,7 +108,7 @@ public class InferenceOptimizerTests
 
         Assert.True(anyApplied);
         Assert.NotNull(optimizer.DraftModel);
-        Assert.Equal(DraftModelType.SmallNeural, config.DraftModelType);
+        Assert.Contains("NGramDraftModel", optimizer.DraftModel!.GetType().Name);
         Assert.True(optimizer.DraftModel!.VocabSize > 0);
     }
 

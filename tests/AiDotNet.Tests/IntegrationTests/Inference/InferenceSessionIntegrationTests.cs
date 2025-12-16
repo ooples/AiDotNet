@@ -2,6 +2,7 @@ using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -156,10 +157,14 @@ public class InferenceSessionIntegrationTests
             YParams = new NormalizationParameters<float> { Method = NormalizationMethod.None }
         };
 
-        return new PredictionModelResult<float, Tensor<float>, Tensor<float>>(
-            optimization,
-            normalization,
-            inferenceOptimizationConfig: config);
+        var options = new PredictionModelResultOptions<float, Tensor<float>, Tensor<float>>
+        {
+            OptimizationResult = optimization,
+            NormalizationInfo = normalization,
+            InferenceOptimizationConfig = config
+        };
+
+        return new PredictionModelResult<float, Tensor<float>, Tensor<float>>(options);
     }
 
     private static NeuralNetworkBase<float> CreateDeterministicAttentionOnlyModel()
