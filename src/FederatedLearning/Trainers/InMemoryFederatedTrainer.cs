@@ -2,7 +2,10 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Inputs;
+using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
+using AiDotNet.FederatedLearning.Privacy;
+using AiDotNet.FederatedLearning.Privacy.Accounting;
 
 namespace AiDotNet.FederatedLearning.Trainers;
 
@@ -21,13 +24,19 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     private readonly int? _randomSeed;
     private readonly double _convergenceThreshold;
     private readonly int _minRoundsBeforeConvergence;
+    private readonly FederatedLearningOptions? _federatedLearningOptions;
+    private readonly IPrivacyMechanism<Vector<T>>? _differentialPrivacyMechanismOverride;
+    private readonly IPrivacyAccountant? _privacyAccountantOverride;
 
     public InMemoryFederatedTrainer(
         IOptimizer<T, TInput, TOutput> optimizerPrototype,
         double? learningRateOverride = null,
         int? randomSeed = null,
         double convergenceThreshold = 0.001,
-        int minRoundsBeforeConvergence = 10)
+        int minRoundsBeforeConvergence = 10,
+        FederatedLearningOptions? federatedLearningOptions = null,
+        IPrivacyMechanism<Vector<T>>? differentialPrivacyMechanism = null,
+        IPrivacyAccountant? privacyAccountant = null)
     {
         _optimizerPrototype = optimizerPrototype ?? throw new ArgumentNullException(nameof(optimizerPrototype));
         _learningRateOverride = learningRateOverride;
@@ -45,6 +54,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         _randomSeed = randomSeed;
         _convergenceThreshold = convergenceThreshold;
         _minRoundsBeforeConvergence = minRoundsBeforeConvergence;
+        _federatedLearningOptions = federatedLearningOptions;
+        _differentialPrivacyMechanismOverride = differentialPrivacyMechanism;
+        _privacyAccountantOverride = privacyAccountant;
     }
 
     public override FederatedLearningMetadata TrainRound(
@@ -52,58 +64,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         double clientSelectionFraction = 1.0,
         int localEpochs = 1)
     {
-        if (clientData == null || clientData.Count == 0)
-        {
-            throw new ArgumentException("Client data cannot be null or empty.", nameof(clientData));
-        }
-
-        if (clientSelectionFraction <= 0.0 || clientSelectionFraction > 1.0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(clientSelectionFraction), "Client selection fraction must be in (0, 1].");
-        }
-
-        if (localEpochs <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(localEpochs), "Local epochs must be positive.");
-        }
-
-        var globalModelBefore = GetGlobalModel();
-        var selectedClientIds = SelectClients(clientData.Keys.ToList(), clientSelectionFraction);
-
-        var clientModels = new Dictionary<int, IFullModel<T, TInput, TOutput>>();
-        var clientWeights = new Dictionary<int, double>();
-
-        foreach (var clientId in selectedClientIds)
-        {
-            if (!clientData.TryGetValue(clientId, out var dataset))
-            {
-                continue;
-            }
-
-            var localModel = CloneModelByParameters(globalModelBefore);
-            var localOptimizer = CreateOptimizerForModel(localModel);
-            ConfigureLocalOptimizer(localOptimizer, localEpochs);
-
-            var inputData = CreateLocalOptimizationInputData(dataset, globalModelBefore);
-            OptimizationResult<T, TInput, TOutput> localResult = localOptimizer.Optimize(inputData);
-
-            var trainedModel = localResult.BestSolution ?? localModel;
-
-            clientModels[clientId] = trainedModel;
-            clientWeights[clientId] = Math.Max(1.0, dataset.SampleCount);
-        }
-
-        var aggregator = GetAggregationStrategyOrThrow();
-        var newGlobalModel = aggregator.Aggregate(clientModels, clientWeights);
-        SetGlobalModel(newGlobalModel);
-
-        var metadata = new FederatedLearningMetadata
-        {
-            RoundsCompleted = 1,
-            AggregationStrategyUsed = aggregator.GetStrategyName()
-        };
-
-        return metadata;
+        return Train(clientData, 1, clientSelectionFraction, localEpochs);
     }
 
     public override FederatedLearningMetadata Train(
@@ -123,6 +84,43 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
         var previousGlobalParams = GetGlobalModel().GetParameters();
 
+        var aggregator = GetAggregationStrategyOrThrow();
+        var aggregationName = aggregator.GetStrategyName();
+
+        var flOptions = _federatedLearningOptions;
+        bool useDifferentialPrivacy = flOptions?.UseDifferentialPrivacy == true &&
+                                      flOptions.DifferentialPrivacyMode != DifferentialPrivacyMode.None;
+        bool useSecureAggregation = flOptions?.UseSecureAggregation == true;
+
+        if (useSecureAggregation && !string.Equals(aggregationName, "FedAvg", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(aggregationName, "FedProx", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Secure aggregation is currently only supported with FedAvg/FedProx. Requested strategy: '{aggregationName}'.");
+        }
+
+        var dpMode = flOptions?.DifferentialPrivacyMode ?? DifferentialPrivacyMode.None;
+        double dpEpsilon = flOptions?.PrivacyEpsilon ?? 0.0;
+        double dpDelta = flOptions?.PrivacyDelta ?? 0.0;
+        double dpClipNorm = flOptions?.DifferentialPrivacyClipNorm ?? 1.0;
+        string accountantName = flOptions?.PrivacyAccountant ?? "RDP";
+
+        IPrivacyMechanism<Vector<T>>? dpMechanism = null;
+        IPrivacyAccountant? privacyAccountant = null;
+
+        if (useDifferentialPrivacy)
+        {
+            dpMechanism = _differentialPrivacyMechanismOverride ?? new GaussianDifferentialPrivacyVector<T>(dpClipNorm, _randomSeed);
+            privacyAccountant = _privacyAccountantOverride ?? CreateDefaultPrivacyAccountant(accountantName, dpClipNorm);
+        }
+
+        metadata.DifferentialPrivacyEnabled = useDifferentialPrivacy;
+        metadata.SecureAggregationEnabled = useSecureAggregation;
+        metadata.AggregationStrategyUsed = aggregationName;
+        if (privacyAccountant != null)
+        {
+            metadata.PrivacyAccountantUsed = privacyAccountant.GetAccountantName();
+        }
+
         for (int round = 0; round < rounds; round++)
         {
             var globalBefore = GetGlobalModel();
@@ -135,6 +133,16 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
             var clientModels = new Dictionary<int, IFullModel<T, TInput, TOutput>>();
             var clientWeights = new Dictionary<int, double>();
+            var maskedParameters = new Dictionary<int, Vector<T>>();
+
+            SecureAggregationVector<T>? secureAggregation = null;
+            if (useSecureAggregation)
+            {
+                secureAggregation = new SecureAggregationVector<T>(globalBefore.ParameterCount, _randomSeed);
+                secureAggregation.GeneratePairwiseSecrets(selectedClientIds);
+            }
+
+            int privacyEventsThisRound = 0;
 
             foreach (var clientId in selectedClientIds)
             {
@@ -151,17 +159,65 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 OptimizationResult<T, TInput, TOutput> localResult = localOptimizer.Optimize(inputData);
 
                 var trainedModel = localResult.BestSolution ?? localModel;
-                clientModels[clientId] = trainedModel;
-                clientWeights[clientId] = Math.Max(1.0, dataset.SampleCount);
+
+                double weight = Math.Max(1.0, dataset.SampleCount);
+                clientWeights[clientId] = weight;
+
+                var parameters = trainedModel.GetParameters();
+
+                if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
+                {
+                    parameters = dpMechanism!.ApplyPrivacy(parameters, dpEpsilon, dpDelta);
+                }
+
+                if (useSecureAggregation)
+                {
+                    maskedParameters[clientId] = secureAggregation!.MaskUpdate(clientId, parameters, weight);
+                }
+                else
+                {
+                    clientModels[clientId] = (IFullModel<T, TInput, TOutput>)trainedModel.WithParameters(parameters);
+                }
             }
 
-            var aggregator = GetAggregationStrategyOrThrow();
-            var newGlobalModel = aggregator.Aggregate(clientModels, clientWeights);
+            if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
+            {
+                privacyAccountant!.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
+                privacyEventsThisRound++;
+            }
+
+            IFullModel<T, TInput, TOutput> newGlobalModel;
+            if (useSecureAggregation)
+            {
+                var averagedParameters = secureAggregation!.AggregateSecurely(maskedParameters, clientWeights);
+                secureAggregation.ClearSecrets();
+                newGlobalModel = (IFullModel<T, TInput, TOutput>)globalBefore.WithParameters(averagedParameters);
+            }
+            else
+            {
+                newGlobalModel = aggregator.Aggregate(clientModels, clientWeights);
+            }
+
+            if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
+            {
+                var globalParams = newGlobalModel.GetParameters();
+                var privateGlobalParams = dpMechanism!.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
+                privacyAccountant!.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
+                privacyEventsThisRound++;
+                newGlobalModel = (IFullModel<T, TInput, TOutput>)newGlobalModel.WithParameters(privateGlobalParams);
+            }
+
             SetGlobalModel(newGlobalModel);
 
             metadata.RoundsCompleted = round + 1;
-            metadata.AggregationStrategyUsed = aggregator.GetStrategyName();
             metadata.TotalClientsParticipated = uniqueParticipants.Count;
+            if (privacyAccountant != null)
+            {
+                metadata.TotalPrivacyBudgetConsumed = privacyAccountant.GetTotalEpsilonConsumed();
+                metadata.TotalPrivacyDeltaConsumed = privacyAccountant.GetTotalDeltaConsumed();
+                metadata.ReportedDelta = dpDelta;
+                metadata.ReportedEpsilonAtDelta = privacyAccountant.GetEpsilonAtDelta(dpDelta);
+            }
 
             var newParams = newGlobalModel.GetParameters();
             var deltaNorm = ComputeL2Distance(previousGlobalParams, newParams);
@@ -174,7 +230,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 GlobalAccuracy = double.NaN,
                 AverageLocalLoss = double.NaN,
                 CommunicationMB = 0.0,
-                PrivacyBudgetConsumed = 0.0
+                PrivacyBudgetConsumed = useDifferentialPrivacy ? privacyEventsThisRound * dpEpsilon : 0.0
             });
 
             previousGlobalParams = newParams;
@@ -194,6 +250,21 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         metadata.AverageClientsPerRound = metadata.RoundsCompleted > 0 ? (double)metadata.RoundMetrics.Sum(r => r.SelectedClientIds.Count) / metadata.RoundsCompleted : 0.0;
 
         return metadata;
+    }
+
+    private static IPrivacyAccountant CreateDefaultPrivacyAccountant(string name, double clipNorm)
+    {
+        if (string.Equals(name, "Basic", StringComparison.OrdinalIgnoreCase))
+        {
+            return new BasicCompositionPrivacyAccountant();
+        }
+
+        if (string.Equals(name, "RDP", StringComparison.OrdinalIgnoreCase))
+        {
+            return new RdpPrivacyAccountant(clipNorm);
+        }
+
+        throw new InvalidOperationException($"Unknown privacy accountant '{name}'. Supported values: Basic, RDP.");
     }
 
     private List<int> SelectClients(List<int> allClientIds, double fraction)

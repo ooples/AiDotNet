@@ -976,7 +976,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 learningRateOverride: flOptions.LearningRate,
                 randomSeed: flOptions.RandomSeed,
                 convergenceThreshold: flOptions.ConvergenceThreshold,
-                minRoundsBeforeConvergence: flOptions.MinRoundsBeforeConvergence);
+                minRoundsBeforeConvergence: flOptions.MinRoundsBeforeConvergence,
+                federatedLearningOptions: flOptions);
 
             var aggregationStrategy = _federatedAggregationStrategy ?? CreateDefaultFederatedAggregationStrategy(flOptions);
             trainer.SetAggregationStrategy(aggregationStrategy);

@@ -149,6 +149,36 @@ public class FederatedLearningOptions
     public bool UseDifferentialPrivacy { get; set; } = false;
 
     /// <summary>
+    /// Gets or sets where differential privacy is applied (local, central, or both).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This controls *when* noise is added:
+    /// - Local: noise is added on each device before it sends updates.
+    /// - Central: noise is added after the server combines updates.
+    /// - Both: adds noise in both places for extra protection.
+    /// </remarks>
+    public DifferentialPrivacyMode DifferentialPrivacyMode { get; set; } = DifferentialPrivacyMode.Central;
+
+    /// <summary>
+    /// Gets or sets the clipping norm used by differential privacy mechanisms.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Clipping limits how big an update can be before adding noise.
+    /// This is required to make privacy guarantees meaningful.
+    /// </remarks>
+    public double DifferentialPrivacyClipNorm { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets which privacy accountant to use for reporting privacy spend.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> A privacy accountant tracks how much privacy budget has been spent over rounds.
+    /// - "Basic": adds up epsilon and delta across rounds.
+    /// - "RDP": uses a RĂ©nyi DP accountant for tighter reporting (recommended default when DP is enabled).
+    /// </remarks>
+    public string PrivacyAccountant { get; set; } = "RDP";
+
+    /// <summary>
     /// Gets or sets the epsilon (ε) parameter for differential privacy (privacy budget).
     /// </summary>
     /// <remarks>

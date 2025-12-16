@@ -170,6 +170,34 @@ public class FederatedLearningMetadata
     public double TotalPrivacyBudgetConsumed { get; set; }
 
     /// <summary>
+    /// Gets or sets the total privacy delta consumed (basic composition reporting).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Delta (I') is the probability that the privacy guarantee fails.
+    /// When using simple accounting, deltas add up across rounds.
+    /// </remarks>
+    public double TotalPrivacyDeltaConsumed { get; set; }
+
+    /// <summary>
+    /// Gets or sets which privacy accountant was used for reporting.
+    /// </summary>
+    public string PrivacyAccountantUsed { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the reported epsilon at the reported delta (when supported by the accountant).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Some accountants (like RDP) can report a tighter epsilon for a given delta.
+    /// This value is intended for reporting; it does not change how noise was applied.
+    /// </remarks>
+    public double ReportedEpsilonAtDelta { get; set; }
+
+    /// <summary>
+    /// Gets or sets the delta used when reporting <see cref="ReportedEpsilonAtDelta"/>.
+    /// </summary>
+    public double ReportedDelta { get; set; }
+
+    /// <summary>
     /// Gets or sets whether training converged before reaching maximum rounds.
     /// </summary>
     /// <remarks>
