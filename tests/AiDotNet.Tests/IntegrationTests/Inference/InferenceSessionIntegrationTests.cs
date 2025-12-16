@@ -154,6 +154,31 @@ public class InferenceSessionIntegrationTests
     }
 
     [Fact]
+    public void BeginInferenceSession_KVCacheQuantization_Int8_UsesQuantizedStorage()
+    {
+        var result = CreateDeterministicResult(
+            new InferenceOptimizationConfig
+            {
+                EnableFlashAttention = false,
+                EnableKVCache = true,
+                EnablePagedKVCache = false,
+                KVCacheQuantization = KVCacheQuantizationMode.Int8,
+                AttentionMasking = AttentionMaskingMode.Auto
+            });
+
+        using var session = result.BeginInferenceSession();
+        var seq = session.CreateSequence();
+
+        _ = seq.Predict(CreateTokenTensor(0.1f));
+
+        var stats = seq.GetInferenceStatistics();
+        Assert.True(stats.TryGetValue("KVCache_DataType", out var dataType));
+        Assert.Equal("Int8", dataType);
+        Assert.True(stats.TryGetValue("KVCache_UseInt8Storage", out var useInt8));
+        Assert.True((bool)useInt8);
+    }
+
+    [Fact]
     public void BeginInferenceSession_MultiLoRA_TaskSelection_IsIsolatedPerSequence()
     {
         var config = new InferenceOptimizationConfig

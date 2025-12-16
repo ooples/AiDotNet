@@ -574,6 +574,9 @@ internal class KVCache<T>
     {
         return new Dictionary<string, object>
         {
+            ["DataType"] = _config.DataType.ToString(),
+            ["UseInt8Storage"] = _useInt8Storage,
+            ["UseFp16Storage"] = _useFp16Storage,
             ["CacheHits"] = _cacheHits,
             ["CacheMisses"] = _cacheMisses,
             ["Evictions"] = _evictions,
