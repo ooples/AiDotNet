@@ -382,9 +382,14 @@ public class InferenceOptimizationConfig
     ///
     /// Options:
     /// - <b>NGram:</b> Simple statistical model (fast, no GPU needed)
-    /// - <b>SmallNeural:</b> Smaller version of the main model (more accurate drafts)
+    /// - <b>SmallNeural:</b> Smaller companion model (more accurate drafts)
     ///
     /// NGram is usually sufficient and has near-zero overhead.
+    ///
+    /// <para>
+    /// <b>Note:</b> Small neural draft models require an external companion model. In the MVP, the library
+    /// falls back to <see cref="DraftModelType.NGram"/> when a companion draft model is not available.
+    /// </para>
     /// </para>
     /// </remarks>
     public DraftModelType DraftModelType { get; set; } = DraftModelType.NGram;
@@ -474,7 +479,7 @@ public enum DraftModelType
     NGram,
     /// <summary>Small neural network model (more accurate, uses GPU).</summary>
     SmallNeural,
-    /// <summary>Custom user-provided draft model.</summary>
+    /// <summary>Custom draft model (internal/serving integration).</summary>
     Custom
 }
 

@@ -630,31 +630,56 @@ internal class InferenceOptimizer<T>
     /// </summary>
     private bool InitializeSpeculativeDecoding(NeuralNetworkBase<T> model)
     {
-        // For Custom draft models, the user must call SetCustomDraftModel() before Initialize()
-        if (_config.DraftModelType == DraftModelType.Custom)
+        // Facade-friendly behavior: speculative decoding configuration must never crash inference.
+        // If a requested draft model is unavailable, fall back to an N-gram draft model and record diagnostics.
+        try
         {
-            if (_draftModel == null)
+            // For Custom draft models, an internal caller can provide one via SetCustomDraftModel().
+            if (_config.DraftModelType == DraftModelType.Custom)
             {
-                throw new InvalidOperationException(
-                    "DraftModelType.Custom requires calling SetCustomDraftModel() before Initialize(). " +
-                    "Provide your IDraftModel<T> implementation via SetCustomDraftModel(), then call Initialize().");
+                if (_draftModel != null)
+                {
+                    InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDraftModel", enabled: true, reason: "CustomProvided");
+                    return true;
+                }
+
+                _draftModel = CreateNGramDraftModel();
+                InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDraftModel", enabled: _draftModel != null, reason: "CustomNotProvided_FallbackToNGram");
+                return _draftModel != null;
             }
-            // Custom draft model already set via SetCustomDraftModel()
-            return true;
+
+            IDraftModel<T>? draftModel = _config.DraftModelType switch
+            {
+                DraftModelType.NGram => CreateNGramDraftModel(),
+                DraftModelType.SmallNeural => CreateNeuralDraftModel(model),
+                _ => CreateNGramDraftModel()
+            };
+
+            _draftModel = draftModel ?? CreateNGramDraftModel();
+            InferenceDiagnostics.RecordDecision(
+                "InferenceOptimizer",
+                "SpeculativeDraftModel",
+                enabled: _draftModel != null,
+                reason: draftModel != null ? _config.DraftModelType.ToString() : $"Unavailable({_config.DraftModelType})_FallbackToNGram");
+
+            return _draftModel != null;
         }
-
-        // Create draft model based on configuration
-        IDraftModel<T>? draftModel = _config.DraftModelType switch
+        catch (Exception ex)
         {
-            DraftModelType.NGram => CreateNGramDraftModel(),
-            DraftModelType.SmallNeural => CreateNeuralDraftModel(model),
-            _ => throw new NotSupportedException($"Unknown DraftModelType: {_config.DraftModelType}")
-        };
-
-        // Note: SpeculativeDecoder requires a target forward function
-        // This will be set when actually doing inference via CreateSpeculativeDecoder
-        _draftModel = draftModel;
-        return true;
+            InferenceDiagnostics.RecordException("InferenceOptimizer", "SpeculativeDecoding", ex, "Draft model init failed; falling back to NGram.");
+            try
+            {
+                _draftModel = CreateNGramDraftModel();
+                InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDraftModel", enabled: _draftModel != null, reason: "ExceptionFallbackToNGram");
+                return _draftModel != null;
+            }
+            catch
+            {
+                InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDraftModel", enabled: false, reason: "FallbackFailed");
+                _draftModel = null;
+                return false;
+            }
+        }
     }
 
     /// <summary>
@@ -679,14 +704,10 @@ internal class InferenceOptimizer<T>
     /// </exception>
     private IDraftModel<T>? CreateNeuralDraftModel(NeuralNetworkBase<T> model)
     {
-        // SmallNeural draft models cannot be automatically created from the target model.
-        // They require a separate pre-trained smaller model that approximates the target's behavior.
-        // Use DraftModelType.NGram for automatic draft model creation, or
-        // use DraftModelType.Custom and provide your own IDraftModel<T> implementation.
-        throw new NotSupportedException(
-            "DraftModelType.SmallNeural requires a pre-trained companion model that cannot be " +
-            "automatically generated. Use DraftModelType.NGram for automatic draft model creation, " +
-            "or implement IDraftModel<T> and use DraftModelType.Custom with SetCustomDraftModel().");
+        // SmallNeural draft models require a separate pre-trained smaller model. We do not expose
+        // draft model wiring via the public facade in the MVP, so treat this as unavailable.
+        InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDraftModel", enabled: false, reason: "SmallNeuralUnavailable_FallbackToNGram");
+        return null;
     }
 
     /// <summary>

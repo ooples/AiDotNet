@@ -88,6 +88,53 @@ public class InferenceOptimizerTests
         Assert.DoesNotContain(model.Layers, l => l is SelfAttentionLayer<float>);
     }
 
+    [Fact]
+    public void InferenceOptimizer_SpeculativeDecoding_FallsBackToNGram_WhenSmallNeuralUnavailable()
+    {
+        var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.TextGeneration);
+
+        var config = new InferenceOptimizationConfig
+        {
+            EnableKVCache = false,
+            EnableFlashAttention = false,
+            EnableSpeculativeDecoding = true,
+            DraftModelType = DraftModelType.SmallNeural
+        };
+
+        var optimizer = new InferenceOptimizer<float>(config);
+
+        // Should never throw: SmallNeural draft models are not available in MVP and must fall back.
+        var (_, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: false);
+
+        Assert.True(anyApplied);
+        Assert.NotNull(optimizer.DraftModel);
+        Assert.Equal(DraftModelType.SmallNeural, config.DraftModelType);
+        Assert.True(optimizer.DraftModel!.VocabSize > 0);
+    }
+
+    [Fact]
+    public void InferenceOptimizer_SpeculativeDecoding_FallsBackToNGram_WhenCustomNotProvided()
+    {
+        var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.TextGeneration);
+
+        var config = new InferenceOptimizationConfig
+        {
+            EnableKVCache = false,
+            EnableFlashAttention = false,
+            EnableSpeculativeDecoding = true,
+            DraftModelType = DraftModelType.Custom
+        };
+
+        var optimizer = new InferenceOptimizer<float>(config);
+
+        // Should never throw: the public facade does not wire custom draft models in MVP.
+        var (_, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: false);
+
+        Assert.True(anyApplied);
+        Assert.NotNull(optimizer.DraftModel);
+        Assert.True(optimizer.DraftModel!.VocabSize > 0);
+    }
+
     private static Transformer<float> CreateTinyTransformer(NeuralNetworkTaskType taskType)
     {
         var architecture = new TransformerArchitecture<float>(
