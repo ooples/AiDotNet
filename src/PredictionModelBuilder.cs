@@ -3460,6 +3460,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     {
         var name = options.AggregationStrategy?.Trim() ?? string.Empty;
 
+        if (string.IsNullOrEmpty(name))
+        {
+            return new AiDotNet.FederatedLearning.Aggregators.FedAvgFullModelAggregationStrategy<T, TInput, TOutput>();
+        }
+
         if (string.Equals(name, "FedAvg", StringComparison.OrdinalIgnoreCase))
         {
             return new AiDotNet.FederatedLearning.Aggregators.FedAvgFullModelAggregationStrategy<T, TInput, TOutput>();
