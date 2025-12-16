@@ -40,6 +40,16 @@ namespace AiDotNet.InferenceOptimization.Kernels
             bool useMask = inputs.Length > 3;
             Tensor<float>? mask = useMask ? inputs[3] : null;
 
+            return ExecuteInternal(q, k, v, mask, maskBatchModulo: q.Shape.Length == 3 ? q.Shape[0] : 0);
+        }
+
+        private Tensor<float> ExecuteInternal(
+            Tensor<float> q,
+            Tensor<float> k,
+            Tensor<float> v,
+            Tensor<float>? mask,
+            int maskBatchModulo)
+        {
             if (q.Shape.Length != 3 || k.Shape.Length != 3 || v.Shape.Length != 3)
                 throw new ArgumentException("Attention requires 3D tensors [batch, seq_len, features]");
 
@@ -49,18 +59,41 @@ namespace AiDotNet.InferenceOptimization.Kernels
             int dK = q.Shape[2];
             int dV = v.Shape[2];
 
+            if (k.Shape[0] != batchSize || v.Shape[0] != batchSize)
+                throw new ArgumentException("Q, K, and V must have the same batch size");
+
             if (k.Shape[2] != dK)
                 throw new ArgumentException("Q and K must have same feature dimension");
 
             if (v.Shape[1] != seqLenK)
                 throw new ArgumentException("K and V must have same sequence length");
 
+            if (mask != null)
+            {
+                if (mask.Shape.Length != 3)
+                    throw new ArgumentException("Attention mask must be a 3D tensor [batch, seq_len_q, seq_len_k]");
+
+                if (mask.Shape[1] != seqLenQ || mask.Shape[2] != seqLenK)
+                    throw new ArgumentException("Attention mask must match [batch, seq_len_q, seq_len_k]");
+
+                if (maskBatchModulo <= 0)
+                {
+                    if (mask.Shape[0] != batchSize)
+                        throw new ArgumentException("Attention mask must have the same batch size as Q when used in Execute()");
+                }
+                else
+                {
+                    if (mask.Shape[0] != maskBatchModulo)
+                        throw new ArgumentException("Attention mask batch dimension must match the provided maskBatchModulo");
+                }
+            }
+
             var result = new Tensor<float>(new[] { batchSize, seqLenQ, dV });
 
             // Process each batch in parallel
             Parallel.For(0, batchSize, b =>
             {
-                ProcessBatch(q, k, v, mask, result, b, seqLenQ, seqLenK, dK, dV);
+                ProcessBatch(q, k, v, mask, result, b, seqLenQ, seqLenK, dK, dV, maskBatchModulo);
             });
 
             return result;
@@ -69,7 +102,8 @@ namespace AiDotNet.InferenceOptimization.Kernels
         private unsafe void ProcessBatch(
             Tensor<float> q, Tensor<float> k, Tensor<float> v,
             Tensor<float>? mask, Tensor<float> result,
-            int batchIdx, int seqLenQ, int seqLenK, int dK, int dV)
+            int batchIdx, int seqLenQ, int seqLenK, int dK, int dV,
+            int maskBatchModulo)
         {
             float scale = 1.0f / MathF.Sqrt(dK);
 
@@ -95,7 +129,8 @@ namespace AiDotNet.InferenceOptimization.Kernels
                         // Apply mask if provided
                         if (mask != null)
                         {
-                            int maskIdx = batchIdx * seqLenQ * seqLenK + i * seqLenK + j;
+                            int effectiveMaskBatch = maskBatchModulo > 0 ? (batchIdx % maskBatchModulo) : batchIdx;
+                            int maskIdx = effectiveMaskBatch * seqLenQ * seqLenK + i * seqLenK + j;
                             // Use epsilon-based comparison for floating point equality
                             if (MathF.Abs(mask.Data[maskIdx]) < 1e-6f)
                             {
@@ -188,17 +223,25 @@ namespace AiDotNet.InferenceOptimization.Kernels
             Tensor<float> q, Tensor<float> k, Tensor<float> v,
             int numHeads, Tensor<float>? mask = null)
         {
-            if (q.Shape.Length != 3)
+            if (q.Shape.Length != 3 || k.Shape.Length != 3 || v.Shape.Length != 3)
                 throw new ArgumentException("Multi-head attention requires 3D tensors");
 
             int batchSize = q.Shape[0];
-            int seqLen = q.Shape[1];
             int dModel = q.Shape[2];
+
+            if (k.Shape[0] != batchSize || v.Shape[0] != batchSize)
+                throw new ArgumentException("Q, K, and V must have the same batch size");
 
             if (dModel % numHeads != 0)
                 throw new ArgumentException("d_model must be divisible by num_heads");
 
             int dK = dModel / numHeads;
+
+            if (k.Shape[2] != dModel || v.Shape[2] != dModel)
+                throw new ArgumentException("Q, K, and V must have the same feature dimension (d_model)");
+
+            if (v.Shape[1] != k.Shape[1])
+                throw new ArgumentException("K and V must have the same sequence length");
 
             // Reshape to [batch * num_heads, seq_len, d_k]
             var qReshaped = ReshapeForMultiHead(q, numHeads, dK);
@@ -206,12 +249,33 @@ namespace AiDotNet.InferenceOptimization.Kernels
             var vReshaped = ReshapeForMultiHead(v, numHeads, dK);
 
             // Apply attention
-            var attended = mask is not null
-                ? Execute(qReshaped, kReshaped, vReshaped, mask)
-                : Execute(qReshaped, kReshaped, vReshaped);
+            Tensor<float> attended;
+            if (mask is null)
+            {
+                attended = ExecuteInternal(qReshaped, kReshaped, vReshaped, mask: null, maskBatchModulo: 0);
+            }
+            else
+            {
+                int expectedPerHeadBatch = batchSize * numHeads;
+                if (mask.Shape.Length != 3)
+                    throw new ArgumentException("Multi-head attention mask must be a 3D tensor");
+
+                if (mask.Shape[1] != q.Shape[1] || mask.Shape[2] != k.Shape[1])
+                    throw new ArgumentException("Multi-head attention mask must match [batch, seq_len_q, seq_len_k]");
+
+                // Accept either per-batch mask [B, SQ, SK] (broadcast across heads) or per-head mask [B*H, SQ, SK].
+                int maskBatchModulo = mask.Shape[0] switch
+                {
+                    int b when b == expectedPerHeadBatch => 0,
+                    int b when b == batchSize => batchSize,
+                    _ => throw new ArgumentException("Multi-head attention mask must have batch dimension B or B*numHeads"),
+                };
+
+                attended = ExecuteInternal(qReshaped, kReshaped, vReshaped, mask, maskBatchModulo);
+            }
 
             // Reshape back to [batch, seq_len, d_model]
-            return ReshapeFromMultiHead(attended, batchSize, seqLen, dModel);
+            return ReshapeFromMultiHead(attended, batchSize, q.Shape[1], dModel);
         }
 
         private Tensor<float> ReshapeForMultiHead(Tensor<float> input, int numHeads, int dK)
