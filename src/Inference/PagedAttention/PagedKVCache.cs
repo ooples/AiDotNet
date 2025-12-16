@@ -87,7 +87,21 @@ internal class PagedKVCache<T> : IDisposable
 
         // Allocate physical storage
         long totalElements = _elementsPerBlock * config.NumBlocks;
-        _kvStorage = new T[totalElements];
+        if (totalElements > int.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(config), $"PagedKVCache requires totalElements <= {int.MaxValue}, but got {totalElements}. Reduce NumBlocks or memory size.");
+
+        try
+        {
+            _kvStorage = new T[(int)totalElements];
+        }
+        catch (OutOfMemoryException ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to allocate PagedKVCache storage ({totalElements} elements). " +
+                "This can happen when requesting very large contiguous memory blocks (e.g., multi-GB) in environments with tighter single-object limits. " +
+                "Reduce available memory/NumBlocks or use a runtime that supports larger allocations.",
+                ex);
+        }
 
         _sequenceMetadata = new Dictionary<long, SequenceMetadata>();
     }

@@ -850,8 +850,14 @@ public class PagedAttentionServerTests
         Assert.Equal(4, server.GetStats().ActiveSequences);
     }
 
+#if NET471
+    [Fact(Skip = "4GB contiguous allocation exceeds typical .NET Framework single-object limits; validated on net8.0.")]
+    public void PagedAttentionServer_ForModel_CreatesValidServer()
+    {
+    }
+#else
     [Fact]
-    [Trait("Category", "Integration")]  // Skip on net471 - 4GB allocation exceeds .NET Framework array size limits
+    [Trait("Category", "Integration")]
     public void PagedAttentionServer_ForModel_CreatesValidServer()
     {
         // Act
@@ -861,6 +867,7 @@ public class PagedAttentionServerTests
         Assert.NotNull(server.KVCache);
         Assert.NotNull(server.Kernel);
     }
+#endif
 }
 
 /// <summary>

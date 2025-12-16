@@ -26,6 +26,8 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <param name="outputDimension">The number of output dimensions</param>
     /// <param name="predictFunc">Function to perform single prediction</param>
     /// <param name="predictBatchFunc">Optional function to perform batch prediction. If not provided, batch prediction will use multiple single predictions.</param>
+    /// <param name="enableBatching">Whether this model supports serving-side batching.</param>
+    /// <param name="enableSpeculativeDecoding">Whether this model supports speculative decoding in serving/session workflows.</param>
     public ServableModelWrapper(
         string modelName,
         int inputDimension,
