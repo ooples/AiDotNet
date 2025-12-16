@@ -3,6 +3,8 @@ using Microsoft.Extensions.Options;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
+using AiDotNet.Serving.Security;
+using AiDotNet.Serving.Security.Attestation;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -20,6 +22,10 @@ public class ModelsController : ControllerBase
     private readonly IModelRepository _modelRepository;
     private readonly ILogger<ModelsController> _logger;
     private readonly ServingOptions _servingOptions;
+    private readonly ITierResolver _tierResolver;
+    private readonly ITierPolicyProvider _tierPolicyProvider;
+    private readonly IModelArtifactService _artifactService;
+    private readonly IAttestationVerifier _attestationVerifier;
 
     /// <summary>
     /// Initializes a new instance of the ModelsController.
@@ -30,11 +36,19 @@ public class ModelsController : ControllerBase
     public ModelsController(
         IModelRepository modelRepository,
         ILogger<ModelsController> logger,
-        IOptions<ServingOptions> servingOptions)
+        IOptions<ServingOptions> servingOptions,
+        ITierResolver tierResolver,
+        ITierPolicyProvider tierPolicyProvider,
+        IModelArtifactService artifactService,
+        IAttestationVerifier attestationVerifier)
     {
         _modelRepository = modelRepository ?? throw new ArgumentNullException(nameof(modelRepository));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _servingOptions = servingOptions?.Value ?? throw new ArgumentNullException(nameof(servingOptions));
+        _tierResolver = tierResolver ?? throw new ArgumentNullException(nameof(tierResolver));
+        _tierPolicyProvider = tierPolicyProvider ?? throw new ArgumentNullException(nameof(tierPolicyProvider));
+        _artifactService = artifactService ?? throw new ArgumentNullException(nameof(artifactService));
+        _attestationVerifier = attestationVerifier ?? throw new ArgumentNullException(nameof(attestationVerifier));
     }
 
     /// <summary>
@@ -269,8 +283,100 @@ public class ModelsController : ControllerBase
             return NotFound(new { error = $"Model '{modelName}' not found" });
         }
 
+        _artifactService.RemoveProtectedArtifact(modelName);
+
         _logger.LogInformation("Model '{ModelName}' unloaded successfully", modelName);
         return Ok(new { message = $"Model '{modelName}' unloaded successfully" });
+    }
+
+    /// <summary>
+    /// Downloads the model artifact for the specified model, subject to tier enforcement.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Option A (Free) keeps the model on the server. Higher tiers may download an artifact.
+    /// Enterprise (Option C) receives an encrypted artifact and must request a decryption key using attestation.
+    /// </remarks>
+    [HttpGet("{modelName}/artifact")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult DownloadModelArtifact(string modelName)
+    {
+        var tier = _tierResolver.ResolveTier(HttpContext);
+        var policy = _tierPolicyProvider.GetPolicy(tier);
+
+        if (!policy.AllowArtifactDownload)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Model artifact download is not available for this tier." });
+        }
+
+        try
+        {
+            if (policy.ArtifactIsEncrypted)
+            {
+                var protectedArtifact = _artifactService.GetOrCreateEncryptedArtifact(modelName);
+                Response.Headers["X-AiDotNet-Artifact-Encrypted"] = "true";
+                Response.Headers["X-AiDotNet-Artifact-Algorithm"] = protectedArtifact.Algorithm;
+                Response.Headers["X-AiDotNet-Artifact-KeyId"] = protectedArtifact.KeyId;
+                return PhysicalFile(protectedArtifact.EncryptedPath, "application/octet-stream", $"{modelName}.aidn.enc");
+            }
+
+            var path = _artifactService.GetPlainArtifactPath(modelName);
+            Response.Headers["X-AiDotNet-Artifact-Encrypted"] = "false";
+            return PhysicalFile(path, "application/octet-stream", Path.GetFileName(path));
+        }
+        catch (FileNotFoundException)
+        {
+            return NotFound(new { error = $"Model '{modelName}' not found" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to download model artifact for '{ModelName}'", modelName);
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = $"Failed to download model artifact: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Releases the decryption key for an encrypted model artifact (Enterprise / Option C) after attestation verification.
+    /// </summary>
+    [HttpPost("{modelName}/artifact/key")]
+    [ProducesResponseType(typeof(ModelArtifactKeyResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ReleaseModelArtifactKey(string modelName, [FromBody] AttestationEvidence evidence)
+    {
+        var tier = _tierResolver.ResolveTier(HttpContext);
+        var policy = _tierPolicyProvider.GetPolicy(tier);
+
+        if (!policy.AllowKeyRelease)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Model artifact key release is not available for this tier." });
+        }
+
+        if (policy.RequireAttestationForKeyRelease)
+        {
+            var attestation = await _attestationVerifier.VerifyAsync(evidence, HttpContext.RequestAborted);
+            if (!attestation.IsSuccess)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { error = attestation.FailureReason ?? "Attestation failed." });
+            }
+        }
+
+        try
+        {
+            var protectedArtifact = _artifactService.GetOrCreateEncryptedArtifact(modelName);
+            var response = _artifactService.CreateKeyResponse(protectedArtifact);
+            return Ok(response);
+        }
+        catch (FileNotFoundException)
+        {
+            return NotFound(new { error = $"Model '{modelName}' not found" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to release model artifact key for '{ModelName}'", modelName);
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = $"Failed to release key: {ex.Message}" });
+        }
     }
 
     /// <summary>

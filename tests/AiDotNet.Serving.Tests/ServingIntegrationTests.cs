@@ -10,17 +10,10 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
 using AiDotNet.Helpers;
+using AiDotNet.Serving.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace AiDotNet.Serving.Tests;
-
-/// <summary>
-/// Collection definition for serving integration tests to ensure proper test isolation.
-/// This ensures all tests in this collection run sequentially and clean up the singleton repository.
-/// </summary>
-[CollectionDefinition("ServingIntegrationTests")]
-public class ServingIntegrationTestCollection : ICollectionFixture<WebApplicationFactory<Program>>
-{
-}
 
 /// <summary>
 /// Integration tests for the AiDotNet Serving API.
@@ -348,6 +341,122 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         // Cleanup
         repository.UnloadModel("test-model-5");
+    }
+
+    [Fact]
+    public async Task DownloadModelArtifact_FreeTier_ReturnsForbidden()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IModelRepository>();
+        var servingOptions = scope.ServiceProvider.GetRequiredService<IOptions<ServingOptions>>().Value;
+
+        var modelsRoot = Path.GetFullPath(servingOptions.ModelDirectory);
+        Directory.CreateDirectory(modelsRoot);
+
+        var artifactPath = Path.Combine(modelsRoot, "artifact-free.bin");
+        File.WriteAllBytes(artifactPath, new byte[] { 1, 2, 3, 4 });
+
+        var modelName = "artifact-model-free";
+        repository.LoadModel(modelName, CreateSimpleTestModel(modelName), sourcePath: artifactPath);
+
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/models/{modelName}/artifact");
+        request.Headers.Add("X-AiDotNet-Tier", "Free");
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+
+        repository.UnloadModel(modelName);
+        File.Delete(artifactPath);
+    }
+
+    [Fact]
+    public async Task DownloadModelArtifact_ProTier_ReturnsPlainArtifact()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IModelRepository>();
+        var servingOptions = scope.ServiceProvider.GetRequiredService<IOptions<ServingOptions>>().Value;
+
+        var modelsRoot = Path.GetFullPath(servingOptions.ModelDirectory);
+        Directory.CreateDirectory(modelsRoot);
+
+        var artifactPath = Path.Combine(modelsRoot, "artifact-pro.bin");
+        var expected = new byte[] { 10, 20, 30, 40, 50 };
+        File.WriteAllBytes(artifactPath, expected);
+
+        var modelName = "artifact-model-pro";
+        repository.LoadModel(modelName, CreateSimpleTestModel(modelName), sourcePath: artifactPath);
+
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/models/{modelName}/artifact");
+        request.Headers.Add("X-AiDotNet-Tier", "Pro");
+
+        var response = await _client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+
+        Assert.True(response.Headers.TryGetValues("X-AiDotNet-Artifact-Encrypted", out var encryptedHeader));
+        Assert.Equal("false", encryptedHeader!.First());
+
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        Assert.Equal(expected, bytes);
+
+        repository.UnloadModel(modelName);
+        File.Delete(artifactPath);
+    }
+
+    [Fact]
+    public async Task DownloadModelArtifact_EnterpriseTier_ReturnsEncryptedArtifact_AndKeyReleaseSucceeds()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IModelRepository>();
+        var servingOptions = scope.ServiceProvider.GetRequiredService<IOptions<ServingOptions>>().Value;
+
+        var modelsRoot = Path.GetFullPath(servingOptions.ModelDirectory);
+        Directory.CreateDirectory(modelsRoot);
+
+        var artifactPath = Path.Combine(modelsRoot, "artifact-ent.bin");
+        File.WriteAllBytes(artifactPath, Enumerable.Range(0, 128).Select(i => (byte)i).ToArray());
+
+        var modelName = "artifact-model-ent";
+        repository.LoadModel(modelName, CreateSimpleTestModel(modelName), sourcePath: artifactPath);
+
+        var artifactRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/models/{modelName}/artifact");
+        artifactRequest.Headers.Add("X-AiDotNet-Tier", "Enterprise");
+        var artifactResponse = await _client.SendAsync(artifactRequest);
+
+        artifactResponse.EnsureSuccessStatusCode();
+        Assert.True(artifactResponse.Headers.TryGetValues("X-AiDotNet-Artifact-Encrypted", out var encryptedHeader));
+        Assert.Equal("true", encryptedHeader!.First());
+
+        var encryptedBytes = await artifactResponse.Content.ReadAsByteArrayAsync();
+        Assert.NotEmpty(encryptedBytes);
+
+        var keyRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/models/{modelName}/artifact/key");
+        keyRequest.Headers.Add("X-AiDotNet-Tier", "Enterprise");
+        keyRequest.Content = JsonContent.Create(new AttestationEvidence
+        {
+            Platform = "Windows",
+            TeeType = "Test",
+            Nonce = "nonce",
+            AttestationToken = "token"
+        });
+
+        var keyResponse = await _client.SendAsync(keyRequest);
+        keyResponse.EnsureSuccessStatusCode();
+
+        var keyPayload = await keyResponse.Content.ReadFromJsonAsync<ModelArtifactKeyResponse>();
+        Assert.NotNull(keyPayload);
+        Assert.False(string.IsNullOrWhiteSpace(keyPayload!.KeyId));
+        Assert.False(string.IsNullOrWhiteSpace(keyPayload.KeyBase64));
+        Assert.False(string.IsNullOrWhiteSpace(keyPayload.NonceBase64));
+
+        repository.UnloadModel(modelName);
+        File.Delete(artifactPath);
+
+        var protectedDir = Path.Combine(modelsRoot, ".protected");
+        var protectedPath = Path.Combine(protectedDir, $"{modelName}.aidn.enc");
+        if (File.Exists(protectedPath))
+        {
+            File.Delete(protectedPath);
+        }
     }
 
     /// <summary>

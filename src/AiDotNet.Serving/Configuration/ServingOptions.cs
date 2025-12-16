@@ -1,57 +1,6 @@
 namespace AiDotNet.Serving.Configuration;
 
 /// <summary>
-/// Batching strategies for request processing.
-/// </summary>
-public enum BatchingStrategyType
-{
-    /// <summary>Process batch after timeout expires.</summary>
-    Timeout,
-
-    /// <summary>Process batch when it reaches a certain size.</summary>
-    Size,
-
-    /// <summary>Group requests by sequence length into buckets.</summary>
-    Bucket,
-
-    /// <summary>Dynamically adjust batch size based on latency and throughput.</summary>
-    Adaptive,
-
-    /// <summary>Continuous batching - process requests as capacity becomes available.</summary>
-    Continuous
-}
-
-/// <summary>
-/// Padding strategies for variable-length sequences.
-/// </summary>
-public enum PaddingStrategyType
-{
-    /// <summary>Pad to the minimum required length for each batch.</summary>
-    Minimal,
-
-    /// <summary>Pad to predefined bucket sizes for better batching efficiency.</summary>
-    Bucket,
-
-    /// <summary>Pad all sequences to a fixed size.</summary>
-    Fixed
-}
-
-/// <summary>
-/// Numeric types supported for model inference.
-/// </summary>
-public enum NumericType
-{
-    /// <summary>64-bit floating point (double precision).</summary>
-    Double,
-
-    /// <summary>32-bit floating point (single precision).</summary>
-    Float,
-
-    /// <summary>128-bit decimal type.</summary>
-    Decimal
-}
-
-/// <summary>
 /// Configuration options for the model serving framework.
 /// This class defines settings for server behavior, request batching, and startup model loading.
 /// </summary>
@@ -169,25 +118,3 @@ public class ServingOptions
     public List<StartupModel> StartupModels { get; set; } = new();
 }
 
-/// <summary>
-/// Represents a model to be loaded when the server starts.
-/// </summary>
-public class StartupModel
-{
-    /// <summary>
-    /// Gets or sets the name of the model.
-    /// This will be used as the identifier for API requests.
-    /// </summary>
-    public string Name { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets the file path to the serialized model.
-    /// </summary>
-    public string Path { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets the numeric type used by the model.
-    /// Default is Double.
-    /// </summary>
-    public NumericType NumericType { get; set; } = NumericType.Double;
-}

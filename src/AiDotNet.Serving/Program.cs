@@ -1,5 +1,7 @@
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Services;
+using AiDotNet.Serving.Security;
+using AiDotNet.Serving.Security.Attestation;
 
 namespace AiDotNet.Serving;
 
@@ -17,6 +19,10 @@ public class Program
         // Configure options
         builder.Services.Configure<ServingOptions>(
             builder.Configuration.GetSection("ServingOptions"));
+        builder.Services.Configure<TierEnforcementOptions>(
+            builder.Configuration.GetSection("TierEnforcementOptions"));
+        builder.Services.Configure<AttestationOptions>(
+            builder.Configuration.GetSection("AttestationOptions"));
 
         // Get serving options to configure Kestrel
         var servingOptions = new ServingOptions();
@@ -31,6 +37,12 @@ public class Program
         // Register services as singletons for thread-safe shared access
         builder.Services.AddSingleton<IModelRepository, ModelRepository>();
         builder.Services.AddSingleton<IRequestBatcher, RequestBatcher>();
+        builder.Services.AddSingleton<ITierResolver, HeaderTierResolver>();
+        builder.Services.AddSingleton<ITierPolicyProvider, DefaultTierPolicyProvider>();
+        builder.Services.AddSingleton<IModelArtifactStore, InMemoryModelArtifactStore>();
+        builder.Services.AddSingleton<IModelArtifactProtector, AesGcmModelArtifactProtector>();
+        builder.Services.AddSingleton<IModelArtifactService, ModelArtifactService>();
+        builder.Services.AddSingleton<IAttestationVerifier, DevelopmentAttestationVerifier>();
 
         // Register hosted service to load startup models at application start
         builder.Services.AddHostedService<ModelStartupService>();
