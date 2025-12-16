@@ -1,9 +1,12 @@
 using AiDotNet.Configuration;
+using AiDotNet.Inference.PagedAttention;
 using AiDotNet.Inference.SpeculativeDecoding;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using System.Threading;
 
 namespace AiDotNet.Inference;
 
@@ -32,10 +35,14 @@ namespace AiDotNet.Inference;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations.</typeparam>
-public class InferenceOptimizer<T>
+internal class InferenceOptimizer<T>
 {
     private readonly InferenceOptimizationConfig _config;
     private KVCache<T>? _kvCache;
+    private PagedKVCache<T>? _pagedKVCache;
+    private PagedAttentionKernel<T>? _pagedKernel;
+    private long? _pagedSequenceId;
+    private static long s_nextPagedSequenceId = DateTime.UtcNow.Ticks;
     private IDraftModel<T>? _draftModel;
     private SpeculativeDecoder<T>? _speculativeDecoder;
     private bool _isInitialized;
@@ -73,6 +80,50 @@ public class InferenceOptimizer<T>
     }
 
     /// <summary>
+    /// Creates an inference-optimized model instance based on the current configuration.
+    /// </summary>
+    /// <param name="model">The neural network to optimize.</param>
+    /// <param name="cloneModel">Whether to clone the model before applying layer-level rewrites.</param>
+    /// <returns>The optimized model and whether any optimizations were applied.</returns>
+    /// <remarks>
+    /// This method can apply stateless layer rewrites (e.g., MultiHeadAttention -> FlashAttentionLayer)
+    /// and then initialize stateful inference features (e.g., KV-cache) on the resulting model.
+    /// </remarks>
+    public (NeuralNetworkBase<T> OptimizedModel, bool AnyOptimizationsApplied) OptimizeForInference(
+        NeuralNetworkBase<T> model,
+        bool cloneModel = true)
+    {
+        if (model == null)
+            throw new ArgumentNullException(nameof(model));
+
+        _config.Validate();
+
+        // Clone only when we might rewrite layers; otherwise keep original reference.
+        bool mayRewriteAttention = _config.EnableFlashAttention || _config.EnableKVCache;
+        var workingModel = model;
+        if (cloneModel && mayRewriteAttention && HasOptimizableAttentionLayers(model))
+        {
+            try
+            {
+                // NeuralNetworkBase.Clone performs a deep copy via serialization.
+                workingModel = (NeuralNetworkBase<T>)model.Clone();
+            }
+            catch (Exception ex)
+            {
+                // Some layer types may not yet support serialization-based cloning.
+                // Do not mutate the user's original model; just skip optimizations.
+                Console.WriteLine($"Warning: model cloning failed for inference optimizations: {ex.Message}. Skipping inference optimizations for this model instance.");
+                return (model, false);
+            }
+        }
+
+        bool anyApplied = ApplyAttentionOptimizations(workingModel);
+        anyApplied |= Initialize(workingModel);
+
+        return (workingModel, anyApplied);
+    }
+
+    /// <summary>
     /// Initializes inference optimizations for a neural network model.
     /// </summary>
     /// <param name="model">The neural network to optimize.</param>
@@ -92,12 +143,16 @@ public class InferenceOptimizer<T>
         if (model == null)
             throw new ArgumentNullException(nameof(model));
 
+        _config.Validate();
+
         bool anyOptimizationsApplied = false;
 
         // Find and configure attention layers for KV caching
         if (_config.EnableKVCache)
         {
-            anyOptimizationsApplied |= InitializeKVCache(model);
+            anyOptimizationsApplied |= _config.EnablePagedKVCache
+                ? InitializePagedKVCache(model)
+                : InitializeKVCache(model);
         }
 
         // Initialize speculative decoding if enabled
@@ -150,7 +205,11 @@ public class InferenceOptimizer<T>
             HeadDimension = headDim,
             MaxSequenceLength = maxSeqLen,
             MaxBatchSize = _config.MaxBatchSize,
-            PreAllocate = true
+            PreAllocate = true,
+            UseSlidingWindow = _config.UseSlidingWindowKVCache,
+            WindowSize = _config.UseSlidingWindowKVCache
+                ? Math.Min(_config.KVCacheWindowSize, maxSeqLen)
+                : 1024
         };
 
         // Create and attach KV cache
@@ -164,6 +223,213 @@ public class InferenceOptimizer<T>
         }
 
         return true;
+    }
+
+    private bool InitializePagedKVCache(NeuralNetworkBase<T> model)
+    {
+        var attentionLayers = new List<PagedCachedMultiHeadAttention<T>>();
+        int layerIndex = 0;
+
+        foreach (var layer in model.Layers)
+        {
+            if (layer is PagedCachedMultiHeadAttention<T> pagedAttention)
+            {
+                pagedAttention.LayerIndex = layerIndex;
+                attentionLayers.Add(pagedAttention);
+                layerIndex++;
+            }
+        }
+
+        if (attentionLayers.Count == 0)
+        {
+            // No paged attention layers present; fall back to contiguous cache if applicable.
+            return InitializeKVCache(model);
+        }
+
+        var firstLayer = attentionLayers[0];
+        int numHeads = firstLayer.HeadCount;
+        int headDim = firstLayer.HeadDimension;
+        int numLayers = attentionLayers.Count;
+
+        long availableBytes = (long)_config.KVCacheMaxSizeMB * 1024 * 1024;
+        int blockSize = _config.PagedKVCacheBlockSize;
+
+        _pagedKVCache = PagedKVCache<T>.FromMemorySize(availableBytes, numLayers, numHeads, headDim, blockSize);
+        _pagedKernel = new PagedAttentionKernel<T>(_pagedKVCache, new PagedAttentionConfig
+        {
+            NumHeads = numHeads,
+            HeadDimension = headDim,
+            BlockSize = blockSize,
+            MaxBatchSize = _config.MaxBatchSize
+        });
+
+        // Allocate a fresh sequence ID for this optimized model instance (one model == one sequence).
+        long sequenceId;
+        do
+        {
+            sequenceId = Interlocked.Increment(ref s_nextPagedSequenceId);
+        }
+        while (!_pagedKVCache.AllocateSequence(sequenceId, initialTokens: 0));
+
+        _pagedSequenceId = sequenceId;
+
+        foreach (var layer in attentionLayers)
+        {
+            layer.Kernel = _pagedKernel;
+            layer.SequenceId = sequenceId;
+            layer.InferenceMode = true;
+        }
+
+        return true;
+    }
+
+    private bool HasOptimizableAttentionLayers(NeuralNetworkBase<T> model)
+    {
+        foreach (var layer in model.Layers)
+        {
+            if (layer is MultiHeadAttentionLayer<T> || layer is FlashAttentionLayer<T>)
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool ApplyAttentionOptimizations(NeuralNetworkBase<T> model)
+    {
+        bool useCausalMask = ResolveCausalMask(model);
+
+        // KV-cache is only beneficial for incremental decoding patterns; default to enabling it only when causal masking applies.
+        bool enableKVCache = _config.EnableKVCache && useCausalMask;
+        bool enablePagedKVCache = enableKVCache && _config.EnablePagedKVCache;
+        bool enableFlashAttention = _config.EnableFlashAttention;
+
+        bool anyRewritten = false;
+
+        for (int i = 0; i < model.Layers.Count; i++)
+        {
+            var layer = model.Layers[i];
+
+            if (layer is MultiHeadAttentionLayer<T> mha)
+            {
+                var inputShape = mha.GetInputShape();
+                if (inputShape.Length < 2)
+                {
+                    continue;
+                }
+
+                int seqLen = inputShape[0];
+                int embDim = inputShape[1];
+                int headCount = mha.HeadCount;
+                var activation = mha.ScalarActivation;
+
+                if (enableKVCache)
+                {
+                    if (enablePagedKVCache)
+                    {
+                        var paged = new PagedCachedMultiHeadAttention<T>(
+                            sequenceLength: seqLen,
+                            embeddingDimension: embDim,
+                            headCount: headCount,
+                            useCausalMask: useCausalMask,
+                            activationFunction: activation);
+                        paged.SetParameters(mha.GetParameters());
+                        model.Layers[i] = paged;
+                    }
+                    else
+                    {
+                        var cached = new CachedMultiHeadAttention<T>(
+                            sequenceLength: seqLen,
+                            embeddingDimension: embDim,
+                            headCount: headCount,
+                            useFlashAttention: enableFlashAttention,
+                            layerIndex: 0,
+                            useCausalMask: useCausalMask,
+                            activationFunction: activation);
+                        cached.SetParameters(mha.GetParameters());
+                        model.Layers[i] = cached;
+                    }
+                    anyRewritten = true;
+                    continue;
+                }
+
+                if (enableFlashAttention)
+                {
+                    var flashConfig = FlashAttentionConfig.Default;
+                    flashConfig.UseCausalMask = useCausalMask;
+
+                    var flashLayer = new FlashAttentionLayer<T>(
+                        sequenceLength: seqLen,
+                        embeddingDimension: embDim,
+                        headCount: headCount,
+                        config: flashConfig,
+                        activationFunction: activation);
+                    flashLayer.SetParameters(mha.GetParameters());
+                    model.Layers[i] = flashLayer;
+                    anyRewritten = true;
+                }
+
+                continue;
+            }
+
+            if (layer is FlashAttentionLayer<T> flash && enableKVCache)
+            {
+                var inputShape = flash.GetInputShape();
+                if (inputShape.Length < 2)
+                {
+                    continue;
+                }
+
+                int seqLen = inputShape[0];
+                int embDim = inputShape[1];
+                int headCount = flash.HeadCount;
+                var activation = flash.ScalarActivation;
+
+                if (enablePagedKVCache)
+                {
+                    var paged = new PagedCachedMultiHeadAttention<T>(
+                        sequenceLength: seqLen,
+                        embeddingDimension: embDim,
+                        headCount: headCount,
+                        useCausalMask: useCausalMask,
+                        activationFunction: activation);
+                    paged.SetParameters(flash.GetParameters());
+                    model.Layers[i] = paged;
+                }
+                else
+                {
+                    var cached = new CachedMultiHeadAttention<T>(
+                        sequenceLength: seqLen,
+                        embeddingDimension: embDim,
+                        headCount: headCount,
+                        useFlashAttention: enableFlashAttention,
+                        layerIndex: 0,
+                        useCausalMask: useCausalMask,
+                        activationFunction: activation);
+                    cached.SetParameters(flash.GetParameters());
+                    model.Layers[i] = cached;
+                }
+                anyRewritten = true;
+            }
+        }
+
+        return anyRewritten;
+    }
+
+    private bool ResolveCausalMask(NeuralNetworkBase<T> model)
+    {
+        return _config.AttentionMasking switch
+        {
+            AttentionMaskingMode.Causal => true,
+            AttentionMaskingMode.Disabled => false,
+            _ => InferCausalFromModel(model)
+        };
+    }
+
+    private static bool InferCausalFromModel(NeuralNetworkBase<T> model)
+    {
+        // Keep heuristics conservative to avoid changing semantics for non-generative models.
+        // Users can force causal masking via AttentionMaskingMode.Causal when needed.
+        return model.Architecture.TaskType == NeuralNetworkTaskType.TextGeneration;
     }
 
     /// <summary>
@@ -320,6 +586,10 @@ public class InferenceOptimizer<T>
             {
                 cachedAttention.InferenceMode = false;
             }
+            else if (layer is PagedCachedMultiHeadAttention<T> pagedAttention)
+            {
+                pagedAttention.InferenceMode = false;
+            }
         }
     }
 
@@ -329,6 +599,30 @@ public class InferenceOptimizer<T>
     public void ClearCache()
     {
         _kvCache?.Clear();
+        if (_pagedKVCache != null && _pagedSequenceId.HasValue)
+        {
+            try
+            {
+                _pagedKVCache.FreeSequence(_pagedSequenceId.Value);
+            }
+            catch
+            {
+                // Best-effort cleanup.
+            }
+
+            // Re-allocate with the same ID if possible; otherwise allocate a new one.
+            if (!_pagedKVCache.AllocateSequence(_pagedSequenceId.Value, initialTokens: 0))
+            {
+                long newId;
+                do
+                {
+                    newId = Interlocked.Increment(ref s_nextPagedSequenceId);
+                }
+                while (!_pagedKVCache.AllocateSequence(newId, initialTokens: 0));
+
+                _pagedSequenceId = newId;
+            }
+        }
     }
 
     /// <summary>

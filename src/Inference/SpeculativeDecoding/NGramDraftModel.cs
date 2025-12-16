@@ -17,7 +17,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class NGramDraftModel<T> : IDraftModel<T>
+internal class NGramDraftModel<T> : IDraftModel<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

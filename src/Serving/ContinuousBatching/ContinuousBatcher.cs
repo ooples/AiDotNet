@@ -33,7 +33,7 @@ namespace AiDotNet.Serving.ContinuousBatching;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-public class ContinuousBatcher<T> : IDisposable
+internal class ContinuousBatcher<T> : IDisposable
 {
     private readonly ContinuousBatcherConfig _config;
     private readonly BatchScheduler<T> _scheduler;

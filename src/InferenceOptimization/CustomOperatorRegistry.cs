@@ -14,7 +14,8 @@ namespace AiDotNet.InferenceOptimization
             new Lazy<CustomOperatorRegistry>(() => new CustomOperatorRegistry());
 
         private readonly ConcurrentDictionary<string, List<ICustomOperator>> _operators;
-        private readonly ConcurrentDictionary<string, ICustomOperator> _selectedOperators;
+        private readonly ConcurrentDictionary<string, SelectedOperatorEntry> _selectedOperators;
+        private readonly ConcurrentDictionary<string, long> _operatorVersions;
 
         /// <summary>
         /// Gets the singleton instance of the registry
@@ -24,7 +25,8 @@ namespace AiDotNet.InferenceOptimization
         private CustomOperatorRegistry()
         {
             _operators = new ConcurrentDictionary<string, List<ICustomOperator>>();
-            _selectedOperators = new ConcurrentDictionary<string, ICustomOperator>();
+            _selectedOperators = new ConcurrentDictionary<string, SelectedOperatorEntry>();
+            _operatorVersions = new ConcurrentDictionary<string, long>();
         }
 
         /// <summary>
@@ -34,6 +36,10 @@ namespace AiDotNet.InferenceOptimization
         {
             if (op == null)
                 throw new ArgumentNullException(nameof(op));
+
+            // Bump the version after the operator set is updated.
+            // This avoids stale cached selections without requiring coarse locking.
+            void BumpVersion() => _operatorVersions.AddOrUpdate(op.Name, 1, (_, v) => v + 1);
 
             // Use AddOrUpdate with factory that always creates a new sorted list
             // This ensures thread-safety by never mutating existing lists
@@ -53,8 +59,7 @@ namespace AiDotNet.InferenceOptimization
                     return newList;
                 });
 
-            // Clear cached selection to force re-evaluation
-            _selectedOperators.TryRemove(op.Name, out _);
+            BumpVersion();
         }
 
         /// <summary>
@@ -65,19 +70,39 @@ namespace AiDotNet.InferenceOptimization
             if (string.IsNullOrEmpty(name))
                 throw new ArgumentException("Operator name cannot be null or empty", nameof(name));
 
-            var selected = _selectedOperators.GetOrAdd(name, key =>
+            while (true)
             {
-                if (!_operators.TryGetValue(key, out var candidates))
-                    return new NullOperator();
+                long version = _operatorVersions.GetOrAdd(name, 0);
 
-                lock (candidates)
+                if (_selectedOperators.TryGetValue(name, out var existing) && existing.Version == version)
                 {
-                    var result = candidates.FirstOrDefault(op => op.IsSupported());
-                    return result ?? new NullOperator();
+                    return existing.Operator is NullOperator ? null : existing.Operator;
                 }
-            });
 
-            return selected is NullOperator ? null : selected;
+                var selected = SelectOperatorOrNull(name);
+
+                // Only publish the cached selection if the operator set version did not change while we were selecting.
+                if (_operatorVersions.TryGetValue(name, out var current) && current == version)
+                {
+                    _selectedOperators[name] = new SelectedOperatorEntry(version, selected);
+                    return selected is NullOperator ? null : selected;
+                }
+
+                // Operator set changed while selecting; retry to avoid caching a stale choice.
+            }
+        }
+
+        private ICustomOperator SelectOperatorOrNull(string name)
+        {
+            if (!_operators.TryGetValue(name, out var candidates))
+                return new NullOperator();
+
+            lock (candidates)
+            {
+                // Find the highest priority supported operator
+                var result = candidates.FirstOrDefault(op => op.IsSupported());
+                return result ?? new NullOperator();
+            }
         }
 
         /// <summary>
@@ -115,6 +140,7 @@ namespace AiDotNet.InferenceOptimization
         {
             _operators.TryRemove(name, out _);
             _selectedOperators.TryRemove(name, out _);
+            _operatorVersions.TryRemove(name, out _);
         }
 
         /// <summary>
@@ -158,7 +184,10 @@ namespace AiDotNet.InferenceOptimization
         {
             _operators.Clear();
             _selectedOperators.Clear();
+            _operatorVersions.Clear();
         }
+
+        private readonly record struct SelectedOperatorEntry(long Version, ICustomOperator Operator);
     }
 
     /// <summary>

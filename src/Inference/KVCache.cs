@@ -28,7 +28,7 @@ namespace AiDotNet.Inference;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for cache storage (typically float or double).</typeparam>
-public class KVCache<T>
+internal class KVCache<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -38,8 +38,8 @@ public class KVCache<T>
     private readonly Tensor<T>[] _keyCache;
     private readonly Tensor<T>[] _valueCache;
 
-    // Current sequence length for each batch item
-    private readonly int[] _sequenceLengths;
+    // Current sequence length for each layer and batch item: [layer][batch]
+    private readonly int[][] _sequenceLengths;
 
     // Statistics
     private long _cacheHits;
@@ -54,7 +54,7 @@ public class KVCache<T>
     /// <summary>
     /// Gets the current number of cached tokens for batch item 0.
     /// </summary>
-    public int CurrentLength => _sequenceLengths[0];
+    public int CurrentLength => _sequenceLengths.Length > 0 ? _sequenceLengths[0][0] : 0;
 
     /// <summary>
     /// Gets the maximum sequence length this cache can hold.
@@ -86,7 +86,11 @@ public class KVCache<T>
 
         _keyCache = new Tensor<T>[config.NumLayers];
         _valueCache = new Tensor<T>[config.NumLayers];
-        _sequenceLengths = new int[config.MaxBatchSize];
+        _sequenceLengths = new int[config.NumLayers][];
+        for (int layer = 0; layer < config.NumLayers; layer++)
+        {
+            _sequenceLengths[layer] = new int[config.MaxBatchSize];
+        }
 
         if (config.PreAllocate)
         {
@@ -169,7 +173,7 @@ public class KVCache<T>
         // Append new entries
         for (int b = 0; b < batchSize; b++)
         {
-            int currentLen = _sequenceLengths[b];
+            int currentLen = _sequenceLengths[layerIndex][b];
             int newLen = currentLen + newSeqLen;
 
             if (newLen > _config.MaxSequenceLength)
@@ -193,7 +197,7 @@ public class KVCache<T>
                 }
             }
 
-            _sequenceLengths[b] = newLen;
+            _sequenceLengths[layerIndex][b] = newLen;
             _cacheMisses += newSeqLen;
         }
 
@@ -220,7 +224,7 @@ public class KVCache<T>
         int maxLen = 0;
         for (int b = 0; b < batchSize; b++)
         {
-            if (_sequenceLengths[b] > maxLen) maxLen = _sequenceLengths[b];
+            if (_sequenceLengths[layerIndex][b] > maxLen) maxLen = _sequenceLengths[layerIndex][b];
         }
 
         if (maxLen == 0)
@@ -238,7 +242,7 @@ public class KVCache<T>
         // Copy cached values
         for (int b = 0; b < batchSize; b++)
         {
-            int seqLen = _sequenceLengths[b];
+            int seqLen = _sequenceLengths[layerIndex][b];
             for (int h = 0; h < _config.NumHeads; h++)
             {
                 for (int s = 0; s < seqLen; s++)
@@ -307,18 +311,25 @@ public class KVCache<T>
 
         if (batchIndex == -1)
         {
-            for (int b = 0; b < _sequenceLengths.Length; b++)
+            for (int layer = 0; layer < _sequenceLengths.Length; layer++)
             {
-                _sequenceLengths[b] = Math.Min(_sequenceLengths[b], newLength);
+                for (int b = 0; b < _sequenceLengths[layer].Length; b++)
+                {
+                    _sequenceLengths[layer][b] = Math.Min(_sequenceLengths[layer][b], newLength);
+                }
             }
         }
         else
         {
-            if (batchIndex < 0 || batchIndex >= _sequenceLengths.Length)
+            if (batchIndex < 0 || (_sequenceLengths.Length > 0 && batchIndex >= _sequenceLengths[0].Length))
             {
                 throw new ArgumentOutOfRangeException(nameof(batchIndex));
             }
-            _sequenceLengths[batchIndex] = Math.Min(_sequenceLengths[batchIndex], newLength);
+
+            for (int layer = 0; layer < _sequenceLengths.Length; layer++)
+            {
+                _sequenceLengths[layer][batchIndex] = Math.Min(_sequenceLengths[layer][batchIndex], newLength);
+            }
         }
     }
 
@@ -327,9 +338,12 @@ public class KVCache<T>
     /// </summary>
     public void Clear()
     {
-        for (int b = 0; b < _sequenceLengths.Length; b++)
+        for (int layer = 0; layer < _sequenceLengths.Length; layer++)
         {
-            _sequenceLengths[b] = 0;
+            for (int b = 0; b < _sequenceLengths[layer].Length; b++)
+            {
+                _sequenceLengths[layer][b] = 0;
+            }
         }
 
         // Reset statistics
@@ -343,11 +357,15 @@ public class KVCache<T>
     /// </summary>
     public void Clear(int batchIndex)
     {
-        if (batchIndex < 0 || batchIndex >= _sequenceLengths.Length)
+        if (batchIndex < 0 || (_sequenceLengths.Length > 0 && batchIndex >= _sequenceLengths[0].Length))
         {
             throw new ArgumentOutOfRangeException(nameof(batchIndex));
         }
-        _sequenceLengths[batchIndex] = 0;
+
+        for (int layer = 0; layer < _sequenceLengths.Length; layer++)
+        {
+            _sequenceLengths[layer][batchIndex] = 0;
+        }
     }
 
     /// <summary>
@@ -355,11 +373,12 @@ public class KVCache<T>
     /// </summary>
     public int GetSequenceLength(int batchIndex = 0)
     {
-        if (batchIndex < 0 || batchIndex >= _sequenceLengths.Length)
+        if (batchIndex < 0 || (_sequenceLengths.Length > 0 && batchIndex >= _sequenceLengths[0].Length))
         {
             throw new ArgumentOutOfRangeException(nameof(batchIndex));
         }
-        return _sequenceLengths[batchIndex];
+
+        return _sequenceLengths.Length > 0 ? _sequenceLengths[0][batchIndex] : 0;
     }
 
     /// <summary>
@@ -403,7 +422,9 @@ public class KVCache<T>
                 : 0.0,
             ["CurrentMemoryMB"] = GetCurrentMemoryUsage() / (1024.0 * 1024.0),
             ["MaxMemoryMB"] = _config.EstimateMemoryBytes() / (1024.0 * 1024.0),
-            ["SequenceLengths"] = _sequenceLengths.ToArray()
+            ["SequenceLengths"] = _sequenceLengths.Length > 0
+                ? _sequenceLengths[0].ToArray()
+                : Array.Empty<int>()
         };
     }
 
@@ -417,11 +438,11 @@ public class KVCache<T>
         if (destBatch < 0 || destBatch >= _config.MaxBatchSize)
             throw new ArgumentOutOfRangeException(nameof(destBatch));
 
-        int seqLen = _sequenceLengths[sourceBatch];
-
         for (int layer = 0; layer < _config.NumLayers; layer++)
         {
             if (_keyCache[layer] == null) continue;
+
+            int seqLen = _sequenceLengths[layer][sourceBatch];
 
             for (int h = 0; h < _config.NumHeads; h++)
             {
@@ -436,9 +457,9 @@ public class KVCache<T>
                     }
                 }
             }
-        }
 
-        _sequenceLengths[destBatch] = seqLen;
+            _sequenceLengths[layer][destBatch] = seqLen;
+        }
     }
 
     private void ValidateLayerIndex(int layerIndex)
@@ -499,7 +520,7 @@ public class KVCache<T>
     {
         for (int b = 0; b < batchSize; b++)
         {
-            int currentLen = _sequenceLengths[b];
+            int currentLen = _sequenceLengths[layerIndex][b];
             int newLen = currentLen + newSeqLen;
 
             if (newLen > _config.WindowSize)
@@ -526,7 +547,7 @@ public class KVCache<T>
                     }
                 }
 
-                _sequenceLengths[b] = keepCount;
+                _sequenceLengths[layerIndex][b] = keepCount;
                 _evictions += evictCount;
             }
         }

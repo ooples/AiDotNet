@@ -200,6 +200,10 @@ public class ModelStartupService : IHostedService
         var modelResult = new PredictionModelResult<T, Matrix<T>, Vector<T>>();
         modelResult.LoadFromFile(path);
 
+        var inferenceConfig = modelResult.GetInferenceOptimizationConfigForServing();
+        bool enableBatching = inferenceConfig?.EnableBatching ?? true;
+        bool enableSpeculativeDecoding = inferenceConfig?.EnableSpeculativeDecoding ?? false;
+
         // Get dimensions from the model metadata
         var metadata = modelResult.GetModelMetadata();
         var inputDim = metadata.FeatureCount > 0 ? metadata.FeatureCount : 1;
@@ -267,7 +271,9 @@ public class ModelStartupService : IHostedService
             inputDim,
             outputDim,
             predictFunc,
-            predictBatchFunc);
+            predictBatchFunc,
+            enableBatching: enableBatching,
+            enableSpeculativeDecoding: enableSpeculativeDecoding);
 
         // Register with the repository
         var success = _modelRepository.LoadModel(name, servableModel, path);

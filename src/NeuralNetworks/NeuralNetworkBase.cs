@@ -1270,7 +1270,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         foreach (var layer in Layers)
         {
             // Write layer type
-            writer.Write(layer.GetType().Name);
+            writer.Write(GetSerializedLayerTypeIdentifier(layer));
 
             // Write input shape
             var inputShape = layer.GetInputShape();
@@ -1306,6 +1306,47 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         SerializeNetworkSpecificData(writer);
 
         return ms.ToArray();
+    }
+
+    private static string GetSerializedLayerTypeIdentifier(ILayer<T> layer)
+    {
+        string typeName = layer.GetType().Name;
+
+        var metadata = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        if (layer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationMetadata metadataProvider)
+        {
+            foreach (var kvp in metadataProvider.GetSerializationMetadata())
+            {
+                metadata[kvp.Key] = kvp.Value;
+            }
+        }
+
+        // Persist activation types for LayerBase-derived layers so Clone/DeepCopy round-trips behavior.
+        if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layerBase)
+        {
+            if (layerBase.VectorActivation != null)
+            {
+                metadata["VectorActivationType"] = layerBase.VectorActivation.GetType().AssemblyQualifiedName ?? layerBase.VectorActivation.GetType().FullName ?? string.Empty;
+            }
+            else if (layerBase.ScalarActivation != null)
+            {
+                metadata["ScalarActivationType"] = layerBase.ScalarActivation.GetType().AssemblyQualifiedName ?? layerBase.ScalarActivation.GetType().FullName ?? string.Empty;
+            }
+        }
+
+        if (metadata.Count == 0)
+        {
+            return typeName;
+        }
+
+        // Stable ordering for deterministic serialization.
+        foreach (var kvp in metadata.OrderBy(k => k.Key, StringComparer.Ordinal))
+        {
+            typeName += $";{kvp.Key}={kvp.Value}";
+        }
+
+        return typeName;
     }
 
     /// <summary>

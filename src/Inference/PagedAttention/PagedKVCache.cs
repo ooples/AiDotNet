@@ -23,7 +23,7 @@ namespace AiDotNet.Inference.PagedAttention;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-public class PagedKVCache<T> : IDisposable
+internal class PagedKVCache<T> : IDisposable
 {
     private readonly PagedKVCacheConfig _config;
     private readonly BlockManager<T> _blockManager;
@@ -120,7 +120,10 @@ public class PagedKVCache<T> : IDisposable
             if (_sequenceMetadata.ContainsKey(sequenceId))
                 return false;
 
-            int blocksNeeded = _blockManager.BlocksForTokens(initialTokens);
+            // Allocate at least one block up-front so the first token write (position 0) always has capacity.
+            // Actual "current length" bookkeeping still starts at initialTokens.
+            int blocksNeeded = _blockManager.BlocksForTokens(Math.Max(1, initialTokens));
+            blocksNeeded = Math.Max(1, blocksNeeded);
             var table = _blockTableManager.CreateBlockTable(sequenceId, blocksNeeded);
 
             if (table == null)
@@ -444,7 +447,7 @@ public class PagedKVCache<T> : IDisposable
 /// <summary>
 /// Configuration for PagedKVCache.
 /// </summary>
-public class PagedKVCacheConfig
+internal class PagedKVCacheConfig
 {
     /// <summary>
     /// Number of tokens per block.
@@ -521,7 +524,7 @@ public class PagedKVCacheConfig
 /// <summary>
 /// Statistics about the paged KV cache.
 /// </summary>
-public class PagedKVCacheStats
+internal class PagedKVCacheStats
 {
     /// <summary>Number of active sequences.</summary>
     public int ActiveSequences { get; set; }

@@ -83,12 +83,12 @@ BenchmarkDotNet produces detailed reports including:
 - **Allocated**: Total memory allocated
 
 ### Speedup Calculation
-```
+```text
 Speedup = Baseline Time / Optimized Time
 ```
 
 Example output:
-```
+```text
 |                Method | MatrixSize |      Mean |    Error |   StdDev | Ratio |
 |---------------------- |----------- |----------:|---------:|---------:|------:|
 |             NaiveGemm |        256 | 27.45 ms  | 0.421 ms | 0.394 ms |  1.00 |

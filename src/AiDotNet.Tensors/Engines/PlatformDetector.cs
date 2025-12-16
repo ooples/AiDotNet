@@ -95,22 +95,61 @@ namespace AiDotNet.Tensors.Engines
         }
 
         /// <summary>
-        /// Checks if the platform is capable of CUDA support.
-        /// Note: This only checks platform capability (64-bit Windows/Linux),
-        /// not whether CUDA is actually installed. Full CUDA detection would
-        /// require native library calls or checking for CUDA drivers.
+        /// Checks whether CUDA driver support appears to be available on this machine.
+        ///
+        /// Notes:
+        /// - This attempts a lightweight runtime check for the CUDA driver library (not the toolkit).
+        /// - It is intentionally conservative: if we cannot verify CUDA driver presence, we return false.
+        /// - This does not guarantee that higher-level CUDA compute is usable (device selection, permissions, etc.).
         /// </summary>
         private static bool DetectCudaSupport()
         {
-            // Check platform capability for CUDA support
-            // Actual CUDA availability requires native library detection
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ||
-                RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            if (!Environment.Is64BitProcess)
+                return false;
+
+#if NET5_0_OR_GREATER
+            // Prefer checking for the CUDA driver library:
+            // - Windows: nvcuda.dll
+            // - Linux: libcuda.so.1 (or libcuda.so)
+            try
             {
-                return Environment.Is64BitProcess;
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    return TryLoadNativeLibrary("nvcuda.dll");
+                }
+
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                {
+                    return TryLoadNativeLibrary("libcuda.so.1") || TryLoadNativeLibrary("libcuda.so");
+                }
+
+                return false;
             }
+            catch
+            {
+                return false;
+            }
+#else
+            // .NET Framework builds are conservative here; implement a native check if/when CUDA support is added for net471.
+            return false;
+#endif
+        }
+
+#if NET5_0_OR_GREATER
+        private static bool TryLoadNativeLibrary(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return false;
+
+            if (NativeLibrary.TryLoad(name, out var handle))
+            {
+                NativeLibrary.Free(handle);
+                return true;
+            }
+
             return false;
         }
+#endif
 
         private static bool DetectOpenCLSupport()
         {

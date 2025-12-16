@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class LayerNormalizationLayer<T> : LayerBase<T>
+public class LayerNormalizationLayer<T> : LayerBase<T>, ILayerSerializationMetadata
 {
     /// <summary>
     /// A small value added to the variance for numerical stability.
@@ -593,5 +593,13 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
             // No running statistics needed (unlike BatchNorm)
             return _gamma != null && _beta != null;
         }
+    }
+
+    Dictionary<string, string> ILayerSerializationMetadata.GetSerializationMetadata()
+    {
+        return new Dictionary<string, string>
+        {
+            ["Epsilon"] = Convert.ToDouble(_epsilon).ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
     }
 }

@@ -149,6 +149,26 @@ public class InferenceController : ControllerBase
     /// </summary>
     private async Task<double[][]> PredictWithType<T>(string modelName, double[][] features)
     {
+        var model = _modelRepository.GetModel<T>(modelName);
+        if (model == null)
+        {
+            throw new InvalidOperationException($"Model '{modelName}' was not found.");
+        }
+
+        // Respect per-model inference configuration: bypass batching when disabled.
+        if (model is AiDotNet.Serving.Models.IServableModelInferenceOptions opts && !opts.EnableBatching)
+        {
+            var predictions = new double[features.Length][];
+            for (int i = 0; i < features.Length; i++)
+            {
+                var inputVector = ConvertToVector<T>(features[i]);
+                var resultVector = model.Predict(inputVector);
+                predictions[i] = ConvertFromVector(resultVector);
+            }
+
+            return predictions;
+        }
+
         // Queue all requests first to enable batching
         var tasks = features.Select(featureArray =>
         {
@@ -160,13 +180,13 @@ public class InferenceController : ControllerBase
         var resultVectors = await Task.WhenAll(tasks);
 
         // Convert results back to double arrays
-        var predictions = new double[resultVectors.Length][];
+        var batchedPredictions = new double[resultVectors.Length][];
         for (int i = 0; i < resultVectors.Length; i++)
         {
-            predictions[i] = ConvertFromVector(resultVectors[i]);
+            batchedPredictions[i] = ConvertFromVector(resultVectors[i]);
         }
 
-        return predictions;
+        return batchedPredictions;
     }
 
     /// <summary>

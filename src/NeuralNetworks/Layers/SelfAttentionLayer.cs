@@ -33,7 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ILayerSerializationMetadata
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (attention sparsity regularization) should be used during training.
@@ -1370,5 +1370,13 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                    _keyWeights.Shape.Length >= 2 && _keyWeights.Shape[0] > 0 &&
                    _valueWeights.Shape.Length >= 2 && _valueWeights.Shape[0] > 0;
         }
+    }
+
+    Dictionary<string, string> ILayerSerializationMetadata.GetSerializationMetadata()
+    {
+        return new Dictionary<string, string>
+        {
+            ["HeadCount"] = _headCount.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
     }
 }

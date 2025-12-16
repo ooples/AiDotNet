@@ -30,7 +30,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, ILayerSerializationMetadata
 {
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
@@ -1206,5 +1206,15 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         return output;
+    }
+
+    Dictionary<string, string> ILayerSerializationMetadata.GetSerializationMetadata()
+    {
+        return new Dictionary<string, string>
+        {
+            ["NumHeads"] = _numHeads.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["Alpha"] = Convert.ToDouble(_alpha).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["DropoutRate"] = _dropoutRate.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
     }
 }

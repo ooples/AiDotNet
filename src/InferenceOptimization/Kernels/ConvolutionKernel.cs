@@ -183,6 +183,19 @@ namespace AiDotNet.InferenceOptimization.Kernels
             int outHeight = (inHeight + 2 * padding - kernelH) / stride + 1;
             int outWidth = (inWidth + 2 * padding - kernelW) / stride + 1;
 
+            if (outHeight <= 0 || outWidth <= 0)
+                throw new ArgumentException(
+                    $"Invalid output dimensions ({outHeight}x{outWidth}). " +
+                    $"Check stride ({stride}), padding ({padding}), and kernel size ({kernelH}x{kernelW}).");
+
+            if (kernel.Shape[1] != 1)
+                throw new ArgumentException(
+                    $"Depthwise convolution requires kernel.Shape[1] == 1, but got {kernel.Shape[1]}");
+
+            if (kernel.Shape[0] != channels)
+                throw new ArgumentException(
+                    $"Depthwise convolution requires kernel.Shape[0] == channels ({channels}), but got {kernel.Shape[0]}");
+
             var output = new Tensor<float>(new[] { batchSize, channels, outHeight, outWidth });
 
             Parallel.For(0, batchSize * channels, idx =>
@@ -258,14 +271,27 @@ namespace AiDotNet.InferenceOptimization.Kernels
             int kernelH = kernel.Shape[2];
             int kernelW = kernel.Shape[3];
 
+            if (groups <= 0)
+                throw new ArgumentOutOfRangeException(nameof(groups), "groups must be positive.");
+
             if (inChannels % groups != 0 || outChannels % groups != 0)
                 throw new ArgumentException("Channels must be divisible by groups");
 
             int inChannelsPerGroup = inChannels / groups;
             int outChannelsPerGroup = outChannels / groups;
 
+            if (kernel.Shape[1] != inChannelsPerGroup)
+                throw new ArgumentException(
+                    $"Group convolution requires kernel.Shape[1] == inChannelsPerGroup ({inChannelsPerGroup}), " +
+                    $"but got {kernel.Shape[1]}");
+
             int outHeight = (inHeight + 2 * padding - kernelH) / stride + 1;
             int outWidth = (inWidth + 2 * padding - kernelW) / stride + 1;
+
+            if (outHeight <= 0 || outWidth <= 0)
+                throw new ArgumentException(
+                    $"Invalid output dimensions ({outHeight}x{outWidth}). " +
+                    $"Check stride ({stride}), padding ({padding}), and kernel size ({kernelH}x{kernelW}).");
 
             var output = new Tensor<float>(new[] { batchSize, outChannels, outHeight, outWidth });
 

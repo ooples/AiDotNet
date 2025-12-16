@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ILayerSerializationMetadata
 {
     /// <summary>
     /// The embedding tensor that stores vector representations for each token in the vocabulary.
@@ -754,5 +754,14 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Use EmbeddingLookup operation which supports gradients
         return Autodiff.TensorOperations<T>.EmbeddingLookup(embeddingNode, inputNode);
+    }
+
+    Dictionary<string, string> ILayerSerializationMetadata.GetSerializationMetadata()
+    {
+        return new Dictionary<string, string>
+        {
+            ["VocabularySize"] = _embeddingTensor.Shape[0].ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["EmbeddingDimension"] = _embeddingTensor.Shape[1].ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
     }
 }

@@ -116,6 +116,62 @@ public class InferenceOptimizationConfig
     /// <value>Cache eviction policy (default: LRU).</value>
     public CacheEvictionPolicy KVCacheEvictionPolicy { get; set; } = CacheEvictionPolicy.LRU;
 
+    /// <summary>
+    /// Gets or sets whether to use a sliding window KV-cache for long contexts.
+    /// </summary>
+    /// <remarks>
+    /// When enabled, only the most recent <see cref="KVCacheWindowSize"/> tokens are kept.
+    /// This is a common industry approach for long-context serving to cap memory usage.
+    /// </remarks>
+    public bool UseSlidingWindowKVCache { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the sliding window size in tokens when <see cref="UseSlidingWindowKVCache"/> is enabled.
+    /// </summary>
+    /// <value>Window size in tokens (default: 1024).</value>
+    public int KVCacheWindowSize { get; set; } = 1024;
+
+    /// <summary>
+    /// Gets or sets whether to use a paged KV-cache backend (vLLM-style) for long-context / multi-sequence serving.
+    /// </summary>
+    /// <remarks>
+    /// When enabled, the system may choose a paged cache implementation that allocates KV memory in fixed-size blocks.
+    /// This is the industry-standard approach for high-throughput serving where many sequences are active concurrently.
+    /// Users can disable this to force the traditional contiguous KV-cache.
+    /// </remarks>
+    public bool EnablePagedKVCache { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the block size (in tokens) for the paged KV-cache when enabled.
+    /// </summary>
+    /// <remarks>
+    /// Common values are 16 or 32. Smaller blocks reduce internal fragmentation; larger blocks reduce table overhead.
+    /// </remarks>
+    public int PagedKVCacheBlockSize { get; set; } = 16;
+
+    #endregion
+
+    #region Attention Settings
+
+    /// <summary>
+    /// Gets or sets whether Flash Attention is enabled (when applicable).
+    /// </summary>
+    /// <remarks>
+    /// Flash Attention computes exact attention without materializing the full N×N attention matrix,
+    /// reducing memory bandwidth pressure and improving throughput for long sequences.
+    /// </remarks>
+    public bool EnableFlashAttention { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets how attention masking should be applied for optimized attention implementations.
+    /// </summary>
+    /// <remarks>
+    /// - Auto: Applies causal masking for known autoregressive models (e.g., text generation), otherwise no mask.
+    /// - Disabled: Never applies causal masking.
+    /// - Causal: Always applies causal masking (GPT-style).
+    /// </remarks>
+    public AttentionMaskingMode AttentionMasking { get; set; } = AttentionMaskingMode.Auto;
+
     #endregion
 
     #region Batching Settings
@@ -251,6 +307,18 @@ public class InferenceOptimizationConfig
             throw new InvalidOperationException(
                 $"SpeculationDepth must be non-negative. Got: {SpeculationDepth}");
         }
+
+        if (UseSlidingWindowKVCache && KVCacheWindowSize <= 0)
+        {
+            throw new InvalidOperationException(
+                $"KVCacheWindowSize must be positive when UseSlidingWindowKVCache is enabled. Got: {KVCacheWindowSize}");
+        }
+
+        if (EnablePagedKVCache && PagedKVCacheBlockSize <= 0)
+        {
+            throw new InvalidOperationException(
+                $"PagedKVCacheBlockSize must be positive when EnablePagedKVCache is enabled. Got: {PagedKVCacheBlockSize}");
+        }
     }
 
     #endregion
@@ -358,4 +426,25 @@ public enum DraftModelType
     SmallNeural,
     /// <summary>Custom user-provided draft model.</summary>
     Custom
+}
+
+/// <summary>
+/// Controls how attention masking is applied for optimized attention implementations.
+/// </summary>
+public enum AttentionMaskingMode
+{
+    /// <summary>
+    /// Automatically select masking based on model/task heuristics.
+    /// </summary>
+    Auto,
+
+    /// <summary>
+    /// Do not apply causal masking.
+    /// </summary>
+    Disabled,
+
+    /// <summary>
+    /// Apply causal masking (autoregressive decoding).
+    /// </summary>
+    Causal
 }

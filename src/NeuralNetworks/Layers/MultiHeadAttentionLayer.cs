@@ -14,7 +14,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// several friends for advice on a decision - each person might notice different important factors.
 /// </para>
 /// </remarks>
-public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ILayerSerializationMetadata
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (attention regularization) should be used during training.
@@ -474,6 +474,14 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             { "NumberOfHeads", _headCount.ToString() },
             { "AttentionScoresCached", (_lastAttentionScores != null).ToString() },
             { "HeadOutputsCached", (_lastHeadOutputs != null).ToString() }
+        };
+    }
+
+    Dictionary<string, string> ILayerSerializationMetadata.GetSerializationMetadata()
+    {
+        return new Dictionary<string, string>
+        {
+            ["HeadCount"] = _headCount.ToString()
         };
     }
 

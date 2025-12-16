@@ -11,16 +11,11 @@ namespace AiDotNet.InferenceOptimization.Kernels
     /// </summary>
     public class AttentionKernel : ICustomOperator<float>
     {
-        private readonly GemmKernel _gemmKernel;
-
         public string Name => "FusedAttention";
         public string Version => "1.0.0";
         public int Priority => 100;
 
-        public AttentionKernel()
-        {
-            _gemmKernel = new GemmKernel();
-        }
+        public AttentionKernel() { }
 
         public bool IsSupported()
         {

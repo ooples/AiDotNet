@@ -3,7 +3,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// <summary>
 /// Overall statistics for speculative decoding.
 /// </summary>
-public class SpeculativeDecodingStats
+internal class SpeculativeDecodingStats
 {
     /// <summary>Total tokens generated.</summary>
     public long TotalTokensGenerated { get; set; }
