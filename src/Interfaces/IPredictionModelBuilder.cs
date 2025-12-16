@@ -180,7 +180,8 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
         IAggregationStrategy<IFullModel<T, TInput, TOutput>>? aggregationStrategy = null,
         IClientSelectionStrategy? clientSelectionStrategy = null,
         IFederatedServerOptimizer<T>? serverOptimizer = null,
-        IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null);
+        IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
+        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null);
 
     /// <summary>
     /// Configures the data preprocessing component for the model.

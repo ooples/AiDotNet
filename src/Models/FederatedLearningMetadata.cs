@@ -268,6 +268,26 @@ public class FederatedLearningMetadata
     public string HeterogeneityCorrectionUsed { get; set; } = "None";
 
     /// <summary>
+    /// Gets or sets whether homomorphic encryption was enabled.
+    /// </summary>
+    public bool HomomorphicEncryptionEnabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets the HE scheme used (CKKS or BFV).
+    /// </summary>
+    public string HomomorphicEncryptionSchemeUsed { get; set; } = "None";
+
+    /// <summary>
+    /// Gets or sets the HE mode used (HEOnly or Hybrid).
+    /// </summary>
+    public string HomomorphicEncryptionModeUsed { get; set; } = "None";
+
+    /// <summary>
+    /// Gets or sets the HE provider used.
+    /// </summary>
+    public string HomomorphicEncryptionProviderUsed { get; set; } = "None";
+
+    /// <summary>
     /// Gets or sets whether differential privacy was enabled.
     /// </summary>
     /// <remarks>

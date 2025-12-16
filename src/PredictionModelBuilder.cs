@@ -92,6 +92,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IClientSelectionStrategy? _federatedClientSelectionStrategy;
     private IFederatedServerOptimizer<T>? _federatedServerOptimizer;
     private IFederatedHeterogeneityCorrection<T>? _federatedHeterogeneityCorrection;
+    private IHomomorphicEncryptionProvider<T>? _federatedHomomorphicEncryptionProvider;
 
     // Deployment configuration fields
     private QuantizationConfig? _quantizationConfig;
@@ -245,13 +246,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         IAggregationStrategy<IFullModel<T, TInput, TOutput>>? aggregationStrategy = null,
         IClientSelectionStrategy? clientSelectionStrategy = null,
         IFederatedServerOptimizer<T>? serverOptimizer = null,
-        IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null)
+        IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
+        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null)
     {
         _federatedLearningOptions = options ?? throw new ArgumentNullException(nameof(options));
         _federatedAggregationStrategy = aggregationStrategy;
         _federatedClientSelectionStrategy = clientSelectionStrategy;
         _federatedServerOptimizer = serverOptimizer;
         _federatedHeterogeneityCorrection = heterogeneityCorrection;
+        _federatedHomomorphicEncryptionProvider = homomorphicEncryptionProvider;
         return this;
     }
 
@@ -991,7 +994,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 federatedLearningOptions: flOptions,
                 clientSelectionStrategy: _federatedClientSelectionStrategy,
                 serverOptimizer: _federatedServerOptimizer,
-                heterogeneityCorrection: _federatedHeterogeneityCorrection);
+                heterogeneityCorrection: _federatedHeterogeneityCorrection,
+                homomorphicEncryptionProvider: _federatedHomomorphicEncryptionProvider);
 
             var aggregationStrategy = _federatedAggregationStrategy ?? CreateDefaultFederatedAggregationStrategy(flOptions);
             trainer.SetAggregationStrategy(aggregationStrategy);

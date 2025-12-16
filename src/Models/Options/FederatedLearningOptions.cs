@@ -329,6 +329,14 @@ public class FederatedLearningOptions
     public FederatedHeterogeneityCorrectionOptions? HeterogeneityCorrection { get; set; } = null;
 
     /// <summary>
+    /// Gets or sets homomorphic encryption options for federated aggregation (CKKS/BFV).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> If enabled, the server aggregates encrypted updates without seeing individual updates in plaintext.
+    /// </remarks>
+    public HomomorphicEncryptionOptions? HomomorphicEncryption { get; set; } = null;
+
+    /// <summary>
     /// Gets or sets the proximal term coefficient for FedProx algorithm.
     /// </summary>
     /// <remarks>

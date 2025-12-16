@@ -10,6 +10,7 @@ using AiDotNet.FederatedLearning.Selection;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.FederatedLearning.ServerOptimizers;
 using AiDotNet.FederatedLearning.Heterogeneity;
+using AiDotNet.FederatedLearning.Cryptography;
 
 namespace AiDotNet.FederatedLearning.Trainers;
 
@@ -34,6 +35,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     private readonly IClientSelectionStrategy? _clientSelectionStrategyOverride;
     private readonly IFederatedServerOptimizer<T>? _serverOptimizerOverride;
     private readonly IFederatedHeterogeneityCorrection<T>? _heterogeneityCorrectionOverride;
+    private readonly IHomomorphicEncryptionProvider<T>? _homomorphicEncryptionProviderOverride;
     private readonly Dictionary<int, double> _clientPerformanceScores = new();
     private readonly Dictionary<int, double[]> _clientEmbeddings = new();
 
@@ -48,7 +50,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         IPrivacyAccountant? privacyAccountant = null,
         IClientSelectionStrategy? clientSelectionStrategy = null,
         IFederatedServerOptimizer<T>? serverOptimizer = null,
-        IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null)
+        IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
+        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null)
     {
         _optimizerPrototype = optimizerPrototype ?? throw new ArgumentNullException(nameof(optimizerPrototype));
         _learningRateOverride = learningRateOverride;
@@ -72,6 +75,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         _clientSelectionStrategyOverride = clientSelectionStrategy;
         _serverOptimizerOverride = serverOptimizer;
         _heterogeneityCorrectionOverride = heterogeneityCorrection;
+        _homomorphicEncryptionProviderOverride = homomorphicEncryptionProvider;
     }
 
     public override FederatedLearningMetadata TrainRound(
@@ -151,6 +155,20 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             ? new Dictionary<int, Vector<T>>()
             : null;
 
+        var heOptions = flOptions?.HomomorphicEncryption;
+        bool useHomomorphicEncryption = heOptions?.Enabled == true;
+        string heScheme = useHomomorphicEncryption ? (heOptions!.Scheme?.Trim() ?? "CKKS") : "None";
+        string heMode = useHomomorphicEncryption ? (heOptions!.Mode?.Trim() ?? "HEOnly") : "None";
+        var heProvider = useHomomorphicEncryption ? (_homomorphicEncryptionProviderOverride ?? new SealHomomorphicEncryptionProvider<T>()) : null;
+        var encryptedIndices = useHomomorphicEncryption
+            ? ResolveEncryptedIndices(heOptions!, GetGlobalModel().ParameterCount, heMode)
+            : Array.Empty<int>();
+
+        metadata.HomomorphicEncryptionEnabled = useHomomorphicEncryption;
+        metadata.HomomorphicEncryptionSchemeUsed = useHomomorphicEncryption ? heScheme : "None";
+        metadata.HomomorphicEncryptionModeUsed = useHomomorphicEncryption ? heMode : "None";
+        metadata.HomomorphicEncryptionProviderUsed = heProvider?.GetProviderName() ?? "None";
+
         var asyncOptions = flOptions?.AsyncFederatedLearning;
         string asyncMode = asyncOptions?.Mode?.Trim() ?? "None";
         metadata.AsyncModeUsed = string.IsNullOrWhiteSpace(asyncMode) ? "None" : asyncMode;
@@ -160,6 +178,11 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             if (useSecureAggregation)
             {
                 throw new InvalidOperationException("Secure aggregation is currently not supported with asynchronous federated learning modes.");
+            }
+
+            if (useHomomorphicEncryption && string.Equals(heMode, "HEOnly", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("HE-only aggregation is currently not supported with asynchronous federated learning modes in the in-memory simulator.");
             }
 
             TrainAsyncInMemory(
@@ -181,7 +204,10 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 asyncOptions,
                 compressionOptions,
                 compressionResiduals,
-                heterogeneityCorrection);
+                heterogeneityCorrection,
+                heProvider,
+                heOptions,
+                encryptedIndices);
 
             var asyncElapsed = DateTime.UtcNow - start;
             metadata.TotalTrainingTimeSeconds = asyncElapsed.TotalSeconds;
@@ -204,6 +230,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             var clientModels = new Dictionary<int, IFullModel<T, TInput, TOutput>>();
             var clientWeights = new Dictionary<int, double>();
             var maskedParameters = new Dictionary<int, Vector<T>>();
+            var heClientParameters = useHomomorphicEncryption ? new Dictionary<int, Vector<T>>() : null;
             double uploadRatioSum = 0.0;
             int uploadRatioCount = 0;
 
@@ -270,13 +297,35 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     parameters = dpMechanism!.ApplyPrivacy(parameters, dpEpsilon, dpDelta);
                 }
 
+                var parametersForAggregation = parameters;
+                if (useHomomorphicEncryption)
+                {
+                    heClientParameters![clientId] = parameters;
+
+                    if (string.Equals(heMode, "HEOnly", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Plain pipeline is skipped; keep baseline values for any non-HE steps.
+                        parametersForAggregation = globalBefore.GetParameters();
+                    }
+                    else
+                    {
+                        parametersForAggregation = MaskEncryptedIndices(parameters, globalBefore.GetParameters(), encryptedIndices);
+                    }
+                }
+
+                if (useHomomorphicEncryption && string.Equals(heMode, "HEOnly", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Do not add to plaintext aggregation dictionaries in HE-only mode.
+                    continue;
+                }
+
                 if (useSecureAggregation)
                 {
-                    maskedParameters[clientId] = secureAggregation!.MaskUpdate(clientId, parameters, weight);
+                    maskedParameters[clientId] = secureAggregation!.MaskUpdate(clientId, parametersForAggregation, weight);
                 }
                 else
                 {
-                    clientModels[clientId] = trainedModel.WithParameters(parameters);
+                    clientModels[clientId] = trainedModel.WithParameters(parametersForAggregation);
                 }
             }
 
@@ -287,7 +336,23 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             }
 
             IFullModel<T, TInput, TOutput> newGlobalModel;
-            if (useSecureAggregation)
+            if (useHomomorphicEncryption && string.Equals(heMode, "HEOnly", StringComparison.OrdinalIgnoreCase))
+            {
+                if (useSecureAggregation)
+                {
+                    throw new InvalidOperationException("Secure aggregation is not applicable when HE-only aggregation is enabled.");
+                }
+
+                var heAggregated = heProvider!.AggregateEncryptedWeightedAverage(
+                    heClientParameters!,
+                    clientWeights,
+                    globalBefore.GetParameters(),
+                    encryptedIndices,
+                    heOptions!);
+
+                newGlobalModel = globalBefore.WithParameters(heAggregated);
+            }
+            else if (useSecureAggregation)
             {
                 var averagedParameters = secureAggregation!.AggregateSecurely(maskedParameters, clientWeights);
                 secureAggregation.ClearSecrets();
@@ -296,6 +361,24 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             else
             {
                 newGlobalModel = aggregator.Aggregate(clientModels, clientWeights);
+            }
+
+            if (useHomomorphicEncryption && !string.Equals(heMode, "HEOnly", StringComparison.OrdinalIgnoreCase))
+            {
+                var heAggregated = heProvider!.AggregateEncryptedWeightedAverage(
+                    heClientParameters!,
+                    clientWeights,
+                    globalBefore.GetParameters(),
+                    encryptedIndices,
+                    heOptions!);
+
+                var merged = newGlobalModel.GetParameters();
+                foreach (var idx in encryptedIndices)
+                {
+                    merged[idx] = heAggregated[idx];
+                }
+
+                newGlobalModel = newGlobalModel.WithParameters(merged);
             }
 
             if (serverOptimizer != null)
@@ -384,7 +467,10 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         AsyncFederatedLearningOptions? asyncOptions,
         FederatedCompressionOptions? compressionOptions,
         Dictionary<int, Vector<T>>? compressionResiduals,
-        IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection)
+        IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection,
+        IHomomorphicEncryptionProvider<T>? heProvider,
+        HomomorphicEncryptionOptions? heOptions,
+        int[] encryptedIndices)
     {
         string mode = asyncOptions?.Mode?.Trim() ?? "None";
         int maxDelay = Math.Max(0, asyncOptions?.SimulatedMaxClientDelaySteps ?? 0);
@@ -395,10 +481,17 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         var pending = new List<(int ClientId, Vector<T> Parameters, double Weight, int StartStep, int ArrivalStep)>();
         var bufferModels = new Dictionary<int, IFullModel<T, TInput, TOutput>>();
         var bufferWeights = new Dictionary<int, double>();
+        var bufferHeParameters = heProvider != null && heOptions?.Enabled == true && encryptedIndices.Length > 0
+            ? new Dictionary<int, Vector<T>>()
+            : null;
         int bufferedUpdateKey = 0;
 
         bool useCompression = compressionOptions != null &&
                               !string.Equals(compressionOptions.Strategy?.Trim() ?? "None", "None", StringComparison.OrdinalIgnoreCase);
+        bool useHomomorphicEncryption = heProvider != null &&
+                                        heOptions?.Enabled == true &&
+                                        encryptedIndices.Length > 0 &&
+                                        string.Equals(heOptions.Mode?.Trim() ?? "Hybrid", "Hybrid", StringComparison.OrdinalIgnoreCase);
 
         for (int step = 0; step < serverSteps; step++)
         {
@@ -506,7 +599,29 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     double alpha = Clamp01(mixingRate * stalenessWeight);
 
                     var currentModel = GetGlobalModel();
-                    var mixed = MixParameters(currentModel.GetParameters(), update.Parameters, alpha);
+
+                    var targetParameters = update.Parameters;
+                    if (useHomomorphicEncryption)
+                    {
+                        var singleParams = new Dictionary<int, Vector<T>> { [update.ClientId] = update.Parameters };
+                        var singleWeights = new Dictionary<int, double> { [update.ClientId] = update.Weight };
+                        var heAggregated = heProvider!.AggregateEncryptedWeightedAverage(
+                            singleParams,
+                            singleWeights,
+                            currentModel.GetParameters(),
+                            encryptedIndices,
+                            heOptions!);
+
+                        var maskedPlain = MaskEncryptedIndices(update.Parameters, currentModel.GetParameters(), encryptedIndices);
+                        foreach (var idx in encryptedIndices)
+                        {
+                            maskedPlain[idx] = heAggregated[idx];
+                        }
+
+                        targetParameters = maskedPlain;
+                    }
+
+                    var mixed = MixParameters(currentModel.GetParameters(), targetParameters, alpha);
                     var targetModel = currentModel.WithParameters(mixed);
 
                     if (serverOptimizer != null)
@@ -531,8 +646,16 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             {
                 foreach (var update in due)
                 {
-                    bufferModels[bufferedUpdateKey] = globalAtStepStart.WithParameters(update.Parameters);
+                    var parametersForPlain = useHomomorphicEncryption
+                        ? MaskEncryptedIndices(update.Parameters, globalAtStepStart.GetParameters(), encryptedIndices)
+                        : update.Parameters;
+
+                    bufferModels[bufferedUpdateKey] = globalAtStepStart.WithParameters(parametersForPlain);
                     bufferWeights[bufferedUpdateKey] = update.Weight;
+                    if (useHomomorphicEncryption)
+                    {
+                        bufferHeParameters![bufferedUpdateKey] = update.Parameters;
+                    }
                     bufferedUpdateKey++;
                 }
 
@@ -541,6 +664,24 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     var aggregated = aggregator.Aggregate(bufferModels, bufferWeights);
                     var currentModel = GetGlobalModel();
                     var newGlobalModel = aggregated;
+
+                    if (useHomomorphicEncryption)
+                    {
+                        var heAggregated = heProvider!.AggregateEncryptedWeightedAverage(
+                            bufferHeParameters!,
+                            bufferWeights,
+                            globalAtStepStart.GetParameters(),
+                            encryptedIndices,
+                            heOptions!);
+
+                        var merged = newGlobalModel.GetParameters();
+                        foreach (var idx in encryptedIndices)
+                        {
+                            merged[idx] = heAggregated[idx];
+                        }
+
+                        newGlobalModel = newGlobalModel.WithParameters(merged);
+                    }
 
                     if (serverOptimizer != null)
                     {
@@ -560,6 +701,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     SetGlobalModel(newGlobalModel);
                     bufferModels.Clear();
                     bufferWeights.Clear();
+                    bufferHeParameters?.Clear();
                 }
             }
             else
@@ -920,6 +1062,77 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         }
 
         return null;
+    }
+
+    private static int[] ResolveEncryptedIndices(HomomorphicEncryptionOptions options, int parameterCount, string mode)
+    {
+        if (options == null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        if (parameterCount <= 0)
+        {
+            return Array.Empty<int>();
+        }
+
+        if (string.Equals(mode, "HEOnly", StringComparison.OrdinalIgnoreCase))
+        {
+            var all = new int[parameterCount];
+            for (int i = 0; i < parameterCount; i++)
+            {
+                all[i] = i;
+            }
+            return all;
+        }
+
+        var indices = new List<int>();
+        foreach (var range in options.EncryptedRanges ?? new List<ParameterIndexRange>())
+        {
+            if (range == null || range.Length <= 0)
+            {
+                continue;
+            }
+
+            int start = Math.Max(0, range.Start);
+            int endExclusive = start + range.Length;
+            if (endExclusive <= 0)
+            {
+                continue;
+            }
+
+            endExclusive = Math.Min(parameterCount, endExclusive);
+            for (int i = start; i < endExclusive; i++)
+            {
+                indices.Add(i);
+            }
+        }
+
+        return indices.Distinct().OrderBy(i => i).ToArray();
+    }
+
+    private Vector<T> MaskEncryptedIndices(Vector<T> parameters, Vector<T> baseline, int[] encryptedIndices)
+    {
+        if (parameters.Length != baseline.Length)
+        {
+            throw new ArgumentException("Baseline and parameter vectors must have the same length for masking.");
+        }
+
+        if (encryptedIndices == null || encryptedIndices.Length == 0)
+        {
+            return parameters;
+        }
+
+        var masked = parameters.Clone();
+        foreach (var idx in encryptedIndices)
+        {
+            if (idx >= 0 && idx < masked.Length)
+            {
+                masked[idx] = baseline[idx];
+            }
+        }
+
+        return masked;
     }
 
     private Vector<T> ApplyCompressionToParameters(
