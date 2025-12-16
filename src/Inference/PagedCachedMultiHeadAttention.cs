@@ -221,9 +221,12 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralN
         // Merge heads back to [B, S, E]
         var merged = MergeHeads(attn);
 
-        // Output projection + bias + activation
-        int batch = merged.Shape[0];
-        int seqLen = merged.Shape[1];
+        // Output projection + bias + activation.
+        // Use the tensor/matrix multiply path to leverage optimized kernels.
+        var projected = merged.Multiply(_outputWeights);
+
+        int batch = projected.Shape[0];
+        int seqLen = projected.Shape[1];
         var output = new Tensor<T>([batch, seqLen, _embeddingDimension]);
 
         for (int b = 0; b < batch; b++)
@@ -232,14 +235,8 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralN
             {
                 for (int o = 0; o < _embeddingDimension; o++)
                 {
-                    T sum = NumOps.Zero;
-                    for (int i = 0; i < _embeddingDimension; i++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(merged[b, s, i], _outputWeights[i, o]));
-                    }
-
-                    sum = NumOps.Add(sum, _outputBias[o]);
-                    output[b, s, o] = ScalarActivation!.Activate(sum);
+                    T value = NumOps.Add(projected[b, s, o], _outputBias[o]);
+                    output[b, s, o] = ScalarActivation!.Activate(value);
                 }
             }
         }
