@@ -91,6 +91,9 @@ namespace AiDotNet.InferenceOptimization.Kernels
             int kernelH = kernel.Shape[2];
             int kernelW = kernel.Shape[3];
 
+            if (kernel.Shape[1] != inChannels)
+                throw new ArgumentException($"Conv2D requires kernel.Shape[1] == inChannels ({inChannels}), but got {kernel.Shape[1]}");
+
             int outHeight = (inHeight + 2 * padding - kernelH) / stride + 1;
             int outWidth = (inWidth + 2 * padding - kernelW) / stride + 1;
 
