@@ -271,10 +271,24 @@ public class FederatedLearningOptions
     /// - "FedAvg": Weighted average (standard choice)
     /// - "FedProx": Handles system heterogeneity
     /// - "FedBN": Special handling for batch normalization
+    /// - "Median": Coordinate-wise median (robust to outliers)
+    /// - "TrimmedMean": Coordinate-wise trimmed mean (robust to outliers)
+    /// - "Krum": Selects the most central update by distance (robust to Byzantine clients)
+    /// - "MultiKrum": Selects m central updates then averages them (robust to Byzantine clients)
+    /// - "Bulyan": MultiKrum selection + trimming (strong robustness; higher compute cost)
     ///
     /// Different strategies work better for different scenarios.
     /// </remarks>
     public string AggregationStrategy { get; set; } = "FedAvg";
+
+    /// <summary>
+    /// Gets or sets options for robust aggregation strategies (Median, TrimmedMean, Krum, MultiKrum, Bulyan).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Most users can ignore this unless they select a robust aggregation strategy.
+    /// If not provided, industry-standard defaults are used.
+    /// </remarks>
+    public RobustAggregationOptions? RobustAggregation { get; set; } = null;
 
     /// <summary>
     /// Gets or sets the proximal term coefficient for FedProx algorithm.

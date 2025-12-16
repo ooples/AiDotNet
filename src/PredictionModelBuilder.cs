@@ -3480,6 +3480,40 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             return new AiDotNet.FederatedLearning.Aggregators.FedBNFullModelAggregationStrategy<T, TInput, TOutput>();
         }
 
+        if (string.Equals(name, "Median", StringComparison.OrdinalIgnoreCase))
+        {
+            return new AiDotNet.FederatedLearning.Aggregators.MedianFullModelAggregationStrategy<T, TInput, TOutput>();
+        }
+
+        if (string.Equals(name, "TrimmedMean", StringComparison.OrdinalIgnoreCase))
+        {
+            var robust = options.RobustAggregation ?? new RobustAggregationOptions();
+            return new AiDotNet.FederatedLearning.Aggregators.TrimmedMeanFullModelAggregationStrategy<T, TInput, TOutput>(robust.TrimFraction);
+        }
+
+        if (string.Equals(name, "Krum", StringComparison.OrdinalIgnoreCase))
+        {
+            var robust = options.RobustAggregation ?? new RobustAggregationOptions();
+            return new AiDotNet.FederatedLearning.Aggregators.KrumFullModelAggregationStrategy<T, TInput, TOutput>(robust.ByzantineClientCount);
+        }
+
+        if (string.Equals(name, "MultiKrum", StringComparison.OrdinalIgnoreCase))
+        {
+            var robust = options.RobustAggregation ?? new RobustAggregationOptions();
+            return new AiDotNet.FederatedLearning.Aggregators.MultiKrumFullModelAggregationStrategy<T, TInput, TOutput>(
+                robust.ByzantineClientCount,
+                robust.MultiKrumSelectionCount,
+                robust.UseClientWeightsWhenAveragingSelectedUpdates);
+        }
+
+        if (string.Equals(name, "Bulyan", StringComparison.OrdinalIgnoreCase))
+        {
+            var robust = options.RobustAggregation ?? new RobustAggregationOptions();
+            return new AiDotNet.FederatedLearning.Aggregators.BulyanFullModelAggregationStrategy<T, TInput, TOutput>(
+                robust.ByzantineClientCount,
+                robust.UseClientWeightsWhenAveragingSelectedUpdates);
+        }
+
         throw new InvalidOperationException($"Unsupported federated aggregation strategy '{options.AggregationStrategy}'.");
     }
 
