@@ -457,6 +457,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     [JsonIgnore]  // Don't serialize - will need to be recompiled after deserialization
     private Func<Tensor<T>[], Tensor<T>[]>? JitCompiledFunction { get; set; }
+
+    [JsonProperty]
     private AiDotNet.Configuration.InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
     [JsonIgnore]
@@ -1313,6 +1315,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Gets the default loss function used by this model for gradient computation.
     /// </summary>
     /// <exception cref="InvalidOperationException">If Model is not initialized.</exception>
+    [JsonIgnore]
     public ILossFunction<T> DefaultLossFunction
     {
         get
@@ -2027,6 +2030,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 ModelMetaData = deserializedObject.ModelMetaData;
                 BiasDetector = deserializedObject.BiasDetector;
                 FairnessEvaluator = deserializedObject.FairnessEvaluator;
+                InferenceOptimizationConfig = deserializedObject.InferenceOptimizationConfig;
 
                 // Preserve RAG components and all configuration properties
                 RagRetriever = deserializedObject.RagRetriever;
@@ -2038,6 +2042,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 AgentConfig = deserializedObject.AgentConfig;
                 AgentRecommendation = deserializedObject.AgentRecommendation;
                 DeploymentConfiguration = deserializedObject.DeploymentConfiguration;
+
+                // Reset transient runtime state (will be reinitialized lazily)
+                JitCompiledFunction = null;
+                _inferenceOptimizer = null;
+                _inferenceOptimizedNeuralModel = null;
+                _inferenceOptimizationsInitialized = false;
             }
             else
             {

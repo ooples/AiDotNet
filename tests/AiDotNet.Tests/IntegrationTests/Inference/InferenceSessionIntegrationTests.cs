@@ -41,6 +41,39 @@ public class InferenceSessionIntegrationTests
     }
 
     [Fact]
+    public void PredictionModelResult_SerializeDeserialize_PreservesInferenceOptimizationConfig()
+    {
+        var config = new InferenceOptimizationConfig
+        {
+            EnableFlashAttention = false,
+            EnableKVCache = true,
+            EnablePagedKVCache = false,
+            AttentionMasking = AttentionMaskingMode.Auto
+        };
+
+        var original = CreateDeterministicResult(config);
+        var bytes = original.Serialize();
+
+        var loaded = CreateDeterministicResult(
+            new InferenceOptimizationConfig
+            {
+                EnableFlashAttention = true,
+                EnableKVCache = false,
+                EnablePagedKVCache = true,
+                AttentionMasking = AttentionMaskingMode.Causal
+            });
+
+        loaded.Deserialize(bytes);
+
+        var loadedConfig = loaded.GetInferenceOptimizationConfigForServing();
+        Assert.NotNull(loadedConfig);
+        Assert.Equal(config.EnableFlashAttention, loadedConfig!.EnableFlashAttention);
+        Assert.Equal(config.EnableKVCache, loadedConfig.EnableKVCache);
+        Assert.Equal(config.EnablePagedKVCache, loadedConfig.EnablePagedKVCache);
+        Assert.Equal(config.AttentionMasking, loadedConfig.AttentionMasking);
+    }
+
+    [Fact]
     public void BeginInferenceSession_SequencesAreIndependent()
     {
         var result = CreateDeterministicResult(
