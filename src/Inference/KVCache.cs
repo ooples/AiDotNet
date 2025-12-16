@@ -668,11 +668,11 @@ internal class KVCache<T>
             }
         }
 
-        EnsureInt8ScaleForLayer(layerIndex, isKey: true, maxAbs: maxAbsK, batchSize: batchSize);
-        EnsureInt8ScaleForLayer(layerIndex, isKey: false, maxAbs: maxAbsV, batchSize: batchSize);
+        EnsureInt8ScaleForLayer(layerIndex, isKey: true, maxAbs: maxAbsK);
+        EnsureInt8ScaleForLayer(layerIndex, isKey: false, maxAbs: maxAbsV);
     }
 
-    private void EnsureInt8ScaleForLayer(int layerIndex, bool isKey, float maxAbs, int batchSize)
+    private void EnsureInt8ScaleForLayer(int layerIndex, bool isKey, float maxAbs)
     {
         float requiredScale = maxAbs > 0f ? (maxAbs / 127f) : 1f;
         if (requiredScale <= 0f) requiredScale = 1f;
@@ -688,13 +688,13 @@ internal class KVCache<T>
 
         if (requiredScale > currentScale)
         {
-            RescaleInt8Layer(layerIndex, isKey, currentScale, requiredScale, batchSize);
+            RescaleInt8Layer(layerIndex, isKey, currentScale, requiredScale);
             if (isKey) _keyScaleInt8![layerIndex] = requiredScale;
             else _valueScaleInt8![layerIndex] = requiredScale;
         }
     }
 
-    private void RescaleInt8Layer(int layerIndex, bool isKey, float oldScale, float newScale, int batchSize)
+    private void RescaleInt8Layer(int layerIndex, bool isKey, float oldScale, float newScale)
     {
         if (oldScale <= 0f || newScale <= 0f || Math.Abs(newScale - oldScale) < float.Epsilon)
         {
@@ -703,7 +703,7 @@ internal class KVCache<T>
 
         var cache = isKey ? _keyCacheInt8![layerIndex] : _valueCacheInt8![layerIndex];
 
-        for (int b = 0; b < batchSize; b++)
+        for (int b = 0; b < _sequenceLengths[layerIndex].Length; b++)
         {
             int seqLen = _sequenceLengths[layerIndex][b];
             for (int h = 0; h < _config.NumHeads; h++)
