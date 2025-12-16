@@ -245,19 +245,28 @@ internal class InferenceOptimizer<T>
     private CacheDataType ResolveKVCacheDataType()
     {
         bool fp16Capable = typeof(T) == typeof(float) || typeof(T) == typeof(double) || typeof(T) == typeof(Half);
+        bool int8Capable = fp16Capable;
 
-        CacheDataType resolved = _config.KVCachePrecision switch
+        CacheDataType resolved;
+        if (_config.KVCacheQuantization == KVCacheQuantizationMode.Int8 && int8Capable)
         {
-            KVCachePrecisionMode.Float32 => CacheDataType.Float32,
-            KVCachePrecisionMode.Float16 => fp16Capable ? CacheDataType.Float16 : CacheDataType.Float32,
-            _ => fp16Capable ? CacheDataType.Float16 : CacheDataType.Float32
-        };
+            resolved = CacheDataType.Int8;
+        }
+        else
+        {
+            resolved = _config.KVCachePrecision switch
+            {
+                KVCachePrecisionMode.Float32 => CacheDataType.Float32,
+                KVCachePrecisionMode.Float16 => fp16Capable ? CacheDataType.Float16 : CacheDataType.Float32,
+                _ => fp16Capable ? CacheDataType.Float16 : CacheDataType.Float32
+            };
+        }
 
         InferenceDiagnostics.RecordDecision(
             area: "InferenceOptimizer",
             feature: "KVCachePrecision",
-            enabled: resolved == CacheDataType.Float16,
-            reason: $"Config={_config.KVCachePrecision};Resolved={resolved};Type={typeof(T).Name}");
+            enabled: resolved == CacheDataType.Float16 || resolved == CacheDataType.Int8,
+            reason: $"Precision={_config.KVCachePrecision};Quant={_config.KVCacheQuantization};Resolved={resolved};Type={typeof(T).Name}");
 
         return resolved;
     }

@@ -113,14 +113,15 @@ internal class KVCacheConfig
         long elementsPerLayer = (long)MaxBatchSize * NumHeads * MaxSequenceLength * HeadDimension;
         long totalElements = elementsPerLayer * NumLayers * 2; // K and V
 
-        int bytesPerElement = DataType switch
-        {
-            CacheDataType.Float16 => 2,
-            CacheDataType.Float32 => 4,
-            CacheDataType.Float64 => 8,
-            CacheDataType.BFloat16 => 2,
-            _ => 4
-        };
+    int bytesPerElement = DataType switch
+    {
+        CacheDataType.Int8 => 1,
+        CacheDataType.Float16 => 2,
+        CacheDataType.Float32 => 4,
+        CacheDataType.Float64 => 8,
+        CacheDataType.BFloat16 => 2,
+        _ => 4
+    };
 
         return totalElements * bytesPerElement;
     }
@@ -189,6 +190,9 @@ internal class KVCacheConfig
 /// </summary>
 internal enum CacheDataType
 {
+    /// <summary>Signed 8-bit integer quantization (int8) with scaling.</summary>
+    Int8,
+
     /// <summary>Half precision (16-bit float).</summary>
     Float16,
 

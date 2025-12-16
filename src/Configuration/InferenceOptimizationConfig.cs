@@ -152,6 +152,21 @@ public class InferenceOptimizationConfig
     public KVCachePrecisionMode KVCachePrecision { get; set; } = KVCachePrecisionMode.Auto;
 
     /// <summary>
+    /// Gets or sets the quantization mode used for KV-cache storage.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// KV-cache quantization can further reduce memory beyond FP16 by storing keys/values in int8 with scaling.
+    /// This is an opt-in advanced feature because it can introduce small numerical error.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// - None (default): Store KV-cache in FP16/FP32 depending on <see cref="KVCachePrecision"/>.
+    /// - Int8: Store KV-cache in 8-bit integers to save memory (advanced).
+    /// </para>
+    /// </remarks>
+    public KVCacheQuantizationMode KVCacheQuantization { get; set; } = KVCacheQuantizationMode.None;
+
+    /// <summary>
     /// Gets or sets whether to use a paged KV-cache backend (vLLM-style) for long-context / multi-sequence serving.
     /// </summary>
     /// <remarks>
@@ -528,4 +543,16 @@ public enum KVCachePrecisionMode
     /// Store KV-cache in FP32 (single precision) for maximal numerical fidelity.
     /// </summary>
     Float32
+}
+
+/// <summary>
+/// Controls optional KV-cache quantization for inference.
+/// </summary>
+public enum KVCacheQuantizationMode
+{
+    /// <summary>No quantization (default).</summary>
+    None,
+
+    /// <summary>Signed int8 quantization with scaling (advanced, opt-in).</summary>
+    Int8
 }

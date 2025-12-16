@@ -45,6 +45,15 @@ internal class KVCache<T>
     private readonly Func<T, Half>? _toHalf;
     private readonly Func<Half, T>? _fromHalf;
 
+    // Optional int8 quantized cache storage (used when Config.DataType == Int8).
+    private readonly Tensor<sbyte>[]? _keyCacheInt8;
+    private readonly Tensor<sbyte>[]? _valueCacheInt8;
+    private readonly bool _useInt8Storage;
+    private readonly float[]? _keyScaleInt8;
+    private readonly float[]? _valueScaleInt8;
+    private readonly Func<T, float>? _toFloat;
+    private readonly Func<float, T>? _fromFloat;
+
     // Current sequence length for each layer and batch item: [layer][batch]
     private readonly int[][] _sequenceLengths;
 
@@ -94,6 +103,29 @@ internal class KVCache<T>
         _keyCache = new Tensor<T>[config.NumLayers];
         _valueCache = new Tensor<T>[config.NumLayers];
 
+        if (config.DataType == CacheDataType.Int8)
+        {
+            // Only enable int8 storage when we can safely convert between T and float.
+            if (typeof(T) == typeof(float))
+            {
+                _useInt8Storage = true;
+                _toFloat = value => (float)(object)value!;
+                _fromFloat = value => (T)(object)value;
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                _useInt8Storage = true;
+                _toFloat = value => (float)(double)(object)value!;
+                _fromFloat = value => (T)(object)(double)value;
+            }
+            else if (typeof(T) == typeof(Half))
+            {
+                _useInt8Storage = true;
+                _toFloat = value => (float)(Half)(object)value!;
+                _fromFloat = value => (T)(object)(Half)value;
+            }
+        }
+
         if (config.DataType == CacheDataType.Float16 && typeof(T) != typeof(Half))
         {
             // Only enable FP16 storage when we can safely convert between T and Half.
@@ -115,6 +147,14 @@ internal class KVCache<T>
         {
             _keyCacheFp16 = new Tensor<Half>[config.NumLayers];
             _valueCacheFp16 = new Tensor<Half>[config.NumLayers];
+        }
+
+        if (_useInt8Storage)
+        {
+            _keyCacheInt8 = new Tensor<sbyte>[config.NumLayers];
+            _valueCacheInt8 = new Tensor<sbyte>[config.NumLayers];
+            _keyScaleInt8 = new float[config.NumLayers];
+            _valueScaleInt8 = new float[config.NumLayers];
         }
 
         _sequenceLengths = new int[config.NumLayers][];
@@ -156,7 +196,14 @@ internal class KVCache<T>
 
         for (int layer = 0; layer < _config.NumLayers; layer++)
         {
-            if (_useFp16Storage)
+            if (_useInt8Storage)
+            {
+                _keyCacheInt8![layer] = new Tensor<sbyte>(shape);
+                _valueCacheInt8![layer] = new Tensor<sbyte>(shape);
+                _keyScaleInt8![layer] = 0f;
+                _valueScaleInt8![layer] = 0f;
+            }
+            else if (_useFp16Storage)
             {
                 _keyCacheFp16![layer] = new Tensor<Half>(shape);
                 _valueCacheFp16![layer] = new Tensor<Half>(shape);
@@ -209,6 +256,11 @@ internal class KVCache<T>
             HandleSlidingWindowEviction(layerIndex, batchSize, newSeqLen);
         }
 
+        if (_useInt8Storage)
+        {
+            EnsureInt8Scales(layerIndex, newKeys, newValues, batchSize, newSeqLen);
+        }
+
         // Append new entries
         for (int b = 0; b < batchSize; b++)
         {
@@ -230,7 +282,14 @@ internal class KVCache<T>
                     int targetPos = currentLen + s;
                     for (int d = 0; d < _config.HeadDimension; d++)
                     {
-                        if (_useFp16Storage)
+                        if (_useInt8Storage)
+                        {
+                            var keyScale = _keyScaleInt8![layerIndex];
+                            var valueScale = _valueScaleInt8![layerIndex];
+                            _keyCacheInt8![layerIndex][new[] { b, h, targetPos, d }] = QuantizeToInt8(_toFloat!(newKeys[new[] { b, h, s, d }]), keyScale);
+                            _valueCacheInt8![layerIndex][new[] { b, h, targetPos, d }] = QuantizeToInt8(_toFloat!(newValues[new[] { b, h, s, d }]), valueScale);
+                        }
+                        else if (_useFp16Storage)
                         {
                             _keyCacheFp16![layerIndex][new[] { b, h, targetPos, d }] = _toHalf!(newKeys[new[] { b, h, s, d }]);
                             _valueCacheFp16![layerIndex][new[] { b, h, targetPos, d }] = _toHalf!(newValues[new[] { b, h, s, d }]);
@@ -296,7 +355,14 @@ internal class KVCache<T>
                 {
                     for (int d = 0; d < _config.HeadDimension; d++)
                     {
-                        if (_useFp16Storage)
+                        if (_useInt8Storage)
+                        {
+                            float keyScale = _keyScaleInt8![layerIndex];
+                            float valueScale = _valueScaleInt8![layerIndex];
+                            keys[new[] { b, h, s, d }] = _fromFloat!(DequantizeInt8(_keyCacheInt8![layerIndex][new[] { b, h, s, d }], keyScale));
+                            values[new[] { b, h, s, d }] = _fromFloat!(DequantizeInt8(_valueCacheInt8![layerIndex][new[] { b, h, s, d }], valueScale));
+                        }
+                        else if (_useFp16Storage)
                         {
                             keys[new[] { b, h, s, d }] = _fromHalf!(_keyCacheFp16![layerIndex][new[] { b, h, s, d }]);
                             values[new[] { b, h, s, d }] = _fromHalf!(_valueCacheFp16![layerIndex][new[] { b, h, s, d }]);
@@ -329,6 +395,12 @@ internal class KVCache<T>
         int batchSize = keys.Shape[0];
         int numPositions = positions.Length;
 
+        if (_useInt8Storage)
+        {
+            EnsureCacheAllocated(layerIndex);
+            EnsureInt8Scales(layerIndex, keys, values, batchSize, numPositions);
+        }
+
         for (int b = 0; b < batchSize; b++)
         {
             for (int p = 0; p < numPositions; p++)
@@ -344,7 +416,14 @@ internal class KVCache<T>
                 {
                     for (int d = 0; d < _config.HeadDimension; d++)
                     {
-                        if (_useFp16Storage)
+                        if (_useInt8Storage)
+                        {
+                            var keyScale = _keyScaleInt8![layerIndex];
+                            var valueScale = _valueScaleInt8![layerIndex];
+                            _keyCacheInt8![layerIndex][new[] { b, h, pos, d }] = QuantizeToInt8(_toFloat!(keys[new[] { b, h, p, d }]), keyScale);
+                            _valueCacheInt8![layerIndex][new[] { b, h, pos, d }] = QuantizeToInt8(_toFloat!(values[new[] { b, h, p, d }]), valueScale);
+                        }
+                        else if (_useFp16Storage)
                         {
                             _keyCacheFp16![layerIndex][new[] { b, h, pos, d }] = _toHalf!(keys[new[] { b, h, p, d }]);
                             _valueCacheFp16![layerIndex][new[] { b, h, pos, d }] = _toHalf!(values[new[] { b, h, p, d }]);
@@ -407,6 +486,12 @@ internal class KVCache<T>
             {
                 _sequenceLengths[layer][b] = 0;
             }
+
+            if (_useInt8Storage)
+            {
+                _keyScaleInt8![layer] = 0f;
+                _valueScaleInt8![layer] = 0f;
+            }
         }
 
         // Reset statistics
@@ -454,7 +539,11 @@ internal class KVCache<T>
         {
             if (IsLayerAllocated(layer))
             {
-                if (_useFp16Storage)
+                if (_useInt8Storage)
+                {
+                    totalElements += _keyCacheInt8![layer].Length + _valueCacheInt8![layer].Length;
+                }
+                else if (_useFp16Storage)
                 {
                     totalElements += _keyCacheFp16![layer].Length + _valueCacheFp16![layer].Length;
                 }
@@ -467,6 +556,7 @@ internal class KVCache<T>
 
         int bytesPerElement = _config.DataType switch
         {
+            CacheDataType.Int8 => 1,
             CacheDataType.Float16 => 2,
             CacheDataType.Float32 => 4,
             CacheDataType.Float64 => 8,
@@ -520,7 +610,14 @@ internal class KVCache<T>
                 {
                     for (int d = 0; d < _config.HeadDimension; d++)
                     {
-                        if (_useFp16Storage)
+                        if (_useInt8Storage)
+                        {
+                            _keyCacheInt8![layer][new[] { destBatch, h, s, d }] =
+                                _keyCacheInt8![layer][new[] { sourceBatch, h, s, d }];
+                            _valueCacheInt8![layer][new[] { destBatch, h, s, d }] =
+                                _valueCacheInt8![layer][new[] { sourceBatch, h, s, d }];
+                        }
+                        else if (_useFp16Storage)
                         {
                             _keyCacheFp16![layer][new[] { destBatch, h, s, d }] =
                                 _keyCacheFp16![layer][new[] { sourceBatch, h, s, d }];
@@ -540,6 +637,103 @@ internal class KVCache<T>
 
             _sequenceLengths[layer][destBatch] = seqLen;
         }
+    }
+
+    private void EnsureInt8Scales(int layerIndex, Tensor<T> newKeys, Tensor<T> newValues, int batchSize, int newSeqLen)
+    {
+        if (!_useInt8Storage)
+        {
+            return;
+        }
+
+        float maxAbsK = 0f;
+        float maxAbsV = 0f;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < _config.NumHeads; h++)
+            {
+                for (int s = 0; s < newSeqLen; s++)
+                {
+                    for (int d = 0; d < _config.HeadDimension; d++)
+                    {
+                        float k = _toFloat!(newKeys[new[] { b, h, s, d }]);
+                        float v = _toFloat!(newValues[new[] { b, h, s, d }]);
+                        float ak = Math.Abs(k);
+                        float av = Math.Abs(v);
+                        if (ak > maxAbsK) maxAbsK = ak;
+                        if (av > maxAbsV) maxAbsV = av;
+                    }
+                }
+            }
+        }
+
+        EnsureInt8ScaleForLayer(layerIndex, isKey: true, maxAbs: maxAbsK, batchSize: batchSize);
+        EnsureInt8ScaleForLayer(layerIndex, isKey: false, maxAbs: maxAbsV, batchSize: batchSize);
+    }
+
+    private void EnsureInt8ScaleForLayer(int layerIndex, bool isKey, float maxAbs, int batchSize)
+    {
+        float requiredScale = maxAbs > 0f ? (maxAbs / 127f) : 1f;
+        if (requiredScale <= 0f) requiredScale = 1f;
+
+        float currentScale = isKey ? _keyScaleInt8![layerIndex] : _valueScaleInt8![layerIndex];
+
+        if (currentScale <= 0f)
+        {
+            if (isKey) _keyScaleInt8![layerIndex] = requiredScale;
+            else _valueScaleInt8![layerIndex] = requiredScale;
+            return;
+        }
+
+        if (requiredScale > currentScale)
+        {
+            RescaleInt8Layer(layerIndex, isKey, currentScale, requiredScale, batchSize);
+            if (isKey) _keyScaleInt8![layerIndex] = requiredScale;
+            else _valueScaleInt8![layerIndex] = requiredScale;
+        }
+    }
+
+    private void RescaleInt8Layer(int layerIndex, bool isKey, float oldScale, float newScale, int batchSize)
+    {
+        if (oldScale <= 0f || newScale <= 0f || Math.Abs(newScale - oldScale) < float.Epsilon)
+        {
+            return;
+        }
+
+        var cache = isKey ? _keyCacheInt8![layerIndex] : _valueCacheInt8![layerIndex];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int seqLen = _sequenceLengths[layerIndex][b];
+            for (int h = 0; h < _config.NumHeads; h++)
+            {
+                for (int s = 0; s < seqLen; s++)
+                {
+                    for (int d = 0; d < _config.HeadDimension; d++)
+                    {
+                        sbyte q = cache[new[] { b, h, s, d }];
+                        float value = q * oldScale;
+                        cache[new[] { b, h, s, d }] = QuantizeToInt8(value, newScale);
+                    }
+                }
+            }
+        }
+    }
+
+    private static sbyte QuantizeToInt8(float value, float scale)
+    {
+        if (scale <= 0f) scale = 1f;
+        int q = (int)Math.Round(value / scale);
+        if (q > 127) q = 127;
+        if (q < -127) q = -127;
+        return (sbyte)q;
+    }
+
+    private static float DequantizeInt8(sbyte value, float scale)
+    {
+        if (scale <= 0f) scale = 1f;
+        return value * scale;
     }
 
     private void ValidateLayerIndex(int layerIndex)
@@ -596,6 +790,13 @@ internal class KVCache<T>
                 _keyCacheFp16![layerIndex] = new Tensor<Half>(shape);
                 _valueCacheFp16![layerIndex] = new Tensor<Half>(shape);
             }
+            else if (_useInt8Storage)
+            {
+                _keyCacheInt8![layerIndex] = new Tensor<sbyte>(shape);
+                _valueCacheInt8![layerIndex] = new Tensor<sbyte>(shape);
+                _keyScaleInt8![layerIndex] = 0f;
+                _valueScaleInt8![layerIndex] = 0f;
+            }
             else
             {
                 _keyCache[layerIndex] = new Tensor<T>(shape);
@@ -626,7 +827,14 @@ internal class KVCache<T>
                             int srcPos = evictCount + s;
                             for (int d = 0; d < _config.HeadDimension; d++)
                             {
-                                if (_useFp16Storage)
+                                if (_useInt8Storage)
+                                {
+                                    _keyCacheInt8![layerIndex][new[] { b, h, s, d }] =
+                                        _keyCacheInt8![layerIndex][new[] { b, h, srcPos, d }];
+                                    _valueCacheInt8![layerIndex][new[] { b, h, s, d }] =
+                                        _valueCacheInt8![layerIndex][new[] { b, h, srcPos, d }];
+                                }
+                                else if (_useFp16Storage)
                                 {
                                     _keyCacheFp16![layerIndex][new[] { b, h, s, d }] =
                                         _keyCacheFp16![layerIndex][new[] { b, h, srcPos, d }];
@@ -653,6 +861,9 @@ internal class KVCache<T>
 
     private bool IsLayerAllocated(int layerIndex)
     {
+        if (_useInt8Storage)
+            return _keyCacheInt8![layerIndex] != null;
+
         return _useFp16Storage ? _keyCacheFp16![layerIndex] != null : _keyCache[layerIndex] != null;
     }
 }

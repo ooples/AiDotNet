@@ -91,4 +91,41 @@ public class KVCacheTests
         Assert.Equal(5f, cachedValues[new[] { 0, 0, 0, 0 }]);
         Assert.Equal(8f, cachedValues[new[] { 0, 0, 1, 1 }]);
     }
+
+    [Fact]
+    public void KVCache_Int8Storage_RoundTripsApproximately()
+    {
+        var config = new KVCacheConfig
+        {
+            NumLayers = 1,
+            NumHeads = 1,
+            HeadDimension = 2,
+            MaxSequenceLength = 8,
+            MaxBatchSize = 1,
+            PreAllocate = true,
+            DataType = CacheDataType.Int8
+        };
+
+        var cache = new KVCache<float>(config);
+
+        var keys = new Tensor<float>(new[] { 1, 1, 2, 2 });
+        var values = new Tensor<float>(new[] { 1, 1, 2, 2 });
+        keys[new[] { 0, 0, 0, 0 }] = 1f;
+        keys[new[] { 0, 0, 0, 1 }] = 2f;
+        keys[new[] { 0, 0, 1, 0 }] = 3f;
+        keys[new[] { 0, 0, 1, 1 }] = 4f;
+        values[new[] { 0, 0, 0, 0 }] = 5f;
+        values[new[] { 0, 0, 0, 1 }] = 6f;
+        values[new[] { 0, 0, 1, 0 }] = 7f;
+        values[new[] { 0, 0, 1, 1 }] = 8f;
+
+        var (cachedKeys, cachedValues) = cache.Append(0, keys, values);
+        Assert.Equal(2, cachedKeys.Shape[2]);
+
+        // Int8 quantization is approximate; tolerate small error.
+        Assert.InRange(Math.Abs(cachedKeys[new[] { 0, 0, 0, 0 }] - 1f), 0f, 0.1f);
+        Assert.InRange(Math.Abs(cachedKeys[new[] { 0, 0, 1, 1 }] - 4f), 0f, 0.1f);
+        Assert.InRange(Math.Abs(cachedValues[new[] { 0, 0, 0, 0 }] - 5f), 0f, 0.1f);
+        Assert.InRange(Math.Abs(cachedValues[new[] { 0, 0, 1, 1 }] - 8f), 0f, 0.1f);
+    }
 }
