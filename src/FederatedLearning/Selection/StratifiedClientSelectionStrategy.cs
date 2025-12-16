@@ -18,7 +18,7 @@ public sealed class StratifiedClientSelectionStrategy : ClientSelectionStrategyB
             throw new ArgumentNullException(nameof(request));
         }
 
-        var candidates = request.CandidateClientIds ?? Array.Empty<int>();
+        var candidates = (request.CandidateClientIds ?? Array.Empty<int>()).Distinct().ToArray();
         int desired = GetDesiredClientCount(candidates, request.FractionToSelect);
 
         var groupKeys = request.ClientGroupKeys;
@@ -28,7 +28,7 @@ public sealed class StratifiedClientSelectionStrategy : ClientSelectionStrategyB
         }
 
         var groups = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var id in candidates.Distinct())
+        foreach (var id in candidates)
         {
             if (!groupKeys.TryGetValue(id, out var group) || string.IsNullOrWhiteSpace(group))
             {
@@ -49,7 +49,7 @@ public sealed class StratifiedClientSelectionStrategy : ClientSelectionStrategyB
             return ShuffleAndTake(candidates, desired, request.Random);
         }
 
-        int total = candidates.Count;
+        int total = candidates.Length;
         var groupAllocations = new List<(string Group, int Count)>(groups.Count);
         int allocated = 0;
 
@@ -146,4 +146,3 @@ public sealed class StratifiedClientSelectionStrategy : ClientSelectionStrategyB
 
     public override string GetStrategyName() => "Stratified";
 }
-
