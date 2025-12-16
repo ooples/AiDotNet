@@ -135,6 +135,15 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         var serverOptimizer = _serverOptimizerOverride ?? CreateDefaultServerOptimizer(flOptions?.ServerOptimizer);
         metadata.ServerOptimizerUsed = serverOptimizer?.GetOptimizerName() ?? "None";
 
+        var compressionOptions = ResolveCompressionOptions(flOptions);
+        bool useCompression = compressionOptions != null &&
+                              !string.Equals(compressionOptions.Strategy?.Trim() ?? "None", "None", StringComparison.OrdinalIgnoreCase);
+        metadata.CompressionEnabled = useCompression;
+        metadata.CompressionStrategyUsed = useCompression ? (compressionOptions!.Strategy?.Trim() ?? "None") : "None";
+        Dictionary<int, Vector<T>>? compressionResiduals = useCompression && compressionOptions!.UseErrorFeedback
+            ? new Dictionary<int, Vector<T>>()
+            : null;
+
         var asyncOptions = flOptions?.AsyncFederatedLearning;
         string asyncMode = asyncOptions?.Mode?.Trim() ?? "None";
         metadata.AsyncModeUsed = string.IsNullOrWhiteSpace(asyncMode) ? "None" : asyncMode;
@@ -162,7 +171,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 dpMode,
                 dpEpsilon,
                 dpDelta,
-                asyncOptions);
+                asyncOptions,
+                compressionOptions,
+                compressionResiduals);
 
             var asyncElapsed = DateTime.UtcNow - start;
             metadata.TotalTrainingTimeSeconds = asyncElapsed.TotalSeconds;
@@ -185,6 +196,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             var clientModels = new Dictionary<int, IFullModel<T, TInput, TOutput>>();
             var clientWeights = new Dictionary<int, double>();
             var maskedParameters = new Dictionary<int, Vector<T>>();
+            double uploadRatioSum = 0.0;
+            int uploadRatioCount = 0;
 
             SecureAggregationVector<T>? secureAggregation = null;
             if (useSecureAggregation)
@@ -217,6 +230,22 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 var parameters = trainedModel.GetParameters();
 
                 UpdateClientEmbedding(clientId, globalBefore.GetParameters(), parameters);
+
+                if (useCompression)
+                {
+                    var clientRandom = FederatedRandom.CreateClientRandom(_randomSeed, round, clientId, salt: 4242);
+                    parameters = ApplyCompressionToParameters(
+                        clientId,
+                        globalBefore.GetParameters(),
+                        parameters,
+                        compressionOptions!,
+                        compressionResiduals,
+                        clientRandom,
+                        out var uploadRatio);
+
+                    uploadRatioSum += uploadRatio;
+                    uploadRatioCount++;
+                }
 
                 if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
                 {
@@ -283,7 +312,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
             UpdateClientPerformanceScores(selectedClientIds, clientWeights);
 
-            double roundCommunicationMB = EstimateRoundCommunicationMB(selectedClientIds.Count, globalBefore.ParameterCount);
+            double averageUploadRatio = uploadRatioCount > 0 ? uploadRatioSum / uploadRatioCount : 1.0;
+            double roundCommunicationMB = EstimateRoundCommunicationMB(selectedClientIds.Count, globalBefore.ParameterCount, averageUploadRatio);
             metadata.TotalCommunicationMB += roundCommunicationMB;
             metadata.RoundMetrics.Add(new RoundMetadata
             {
@@ -294,6 +324,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 GlobalAccuracy = double.NaN,
                 AverageLocalLoss = double.NaN,
                 CommunicationMB = roundCommunicationMB,
+                UploadCompressionRatio = averageUploadRatio,
                 PrivacyBudgetConsumed = useDifferentialPrivacy ? privacyEventsThisRound * dpEpsilon : 0.0
             });
 
@@ -332,7 +363,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         DifferentialPrivacyMode dpMode,
         double dpEpsilon,
         double dpDelta,
-        AsyncFederatedLearningOptions? asyncOptions)
+        AsyncFederatedLearningOptions? asyncOptions,
+        FederatedCompressionOptions? compressionOptions,
+        Dictionary<int, Vector<T>>? compressionResiduals)
     {
         string mode = asyncOptions?.Mode?.Trim() ?? "None";
         int maxDelay = Math.Max(0, asyncOptions?.SimulatedMaxClientDelaySteps ?? 0);
@@ -344,6 +377,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         var bufferModels = new Dictionary<int, IFullModel<T, TInput, TOutput>>();
         var bufferWeights = new Dictionary<int, double>();
         int bufferedUpdateKey = 0;
+
+        bool useCompression = compressionOptions != null &&
+                              !string.Equals(compressionOptions.Strategy?.Trim() ?? "None", "None", StringComparison.OrdinalIgnoreCase);
 
         for (int step = 0; step < serverSteps; step++)
         {
@@ -357,6 +393,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             }
 
             var startedClientWeights = new Dictionary<int, double>();
+            double uploadRatioSum = 0.0;
+            int uploadRatioCount = 0;
             int privacyEventsThisStep = 0;
 
             foreach (var clientId in selectedClientIds)
@@ -379,6 +417,22 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                 var parameters = trainedModel.GetParameters();
                 UpdateClientEmbedding(clientId, globalAtStepStart.GetParameters(), parameters);
+
+                if (useCompression)
+                {
+                    var clientRandom = FederatedRandom.CreateClientRandom(_randomSeed, step, clientId, salt: 4242);
+                    parameters = ApplyCompressionToParameters(
+                        clientId,
+                        globalAtStepStart.GetParameters(),
+                        parameters,
+                        compressionOptions!,
+                        compressionResiduals,
+                        clientRandom,
+                        out var uploadRatio);
+
+                    uploadRatioSum += uploadRatio;
+                    uploadRatioCount++;
+                }
 
                 if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
                 {
@@ -499,7 +553,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
             UpdateClientPerformanceScores(selectedClientIds, startedClientWeights);
 
-            double stepCommunicationMB = EstimateRoundCommunicationMB(selectedClientIds.Count, globalAtStepStart.ParameterCount);
+            double averageUploadRatio = uploadRatioCount > 0 ? uploadRatioSum / uploadRatioCount : 1.0;
+            double stepCommunicationMB = EstimateRoundCommunicationMB(selectedClientIds.Count, globalAtStepStart.ParameterCount, averageUploadRatio);
             metadata.TotalCommunicationMB += stepCommunicationMB;
             metadata.RoundMetrics.Add(new RoundMetadata
             {
@@ -510,6 +565,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 GlobalAccuracy = double.NaN,
                 AverageLocalLoss = double.NaN,
                 CommunicationMB = stepCommunicationMB,
+                UploadCompressionRatio = averageUploadRatio,
                 PrivacyBudgetConsumed = useDifferentialPrivacy ? privacyEventsThisStep * dpEpsilon : 0.0
             });
 
@@ -764,19 +820,241 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         _clientEmbeddings[clientId] = embedding;
     }
 
-    private static double EstimateRoundCommunicationMB(int selectedClientCount, int parameterCount)
+    private static double EstimateRoundCommunicationMB(int selectedClientCount, int parameterCount, double uploadRatio = 1.0)
     {
         if (selectedClientCount <= 0 || parameterCount <= 0)
         {
             return 0.0;
         }
 
+        uploadRatio = Math.Max(0.0, Math.Min(1.0, uploadRatio));
         int bytesPerParam = EstimateBytesPerNumericType(typeof(T));
         long bytesPerVector = (long)parameterCount * bytesPerParam;
 
-        // Approximate: each selected client downloads global params + uploads one update vector.
-        long totalBytes = (long)selectedClientCount * (bytesPerVector + bytesPerVector);
+        // Approximate: each selected client downloads global params (uncompressed) + uploads one update vector (optionally compressed).
+        long uploadBytes = (long)Math.Round(bytesPerVector * uploadRatio);
+        long totalBytes = (long)selectedClientCount * (bytesPerVector + uploadBytes);
         return totalBytes / 1_000_000.0;
+    }
+
+    private static FederatedCompressionOptions? ResolveCompressionOptions(FederatedLearningOptions? options)
+    {
+        if (options == null)
+        {
+            return null;
+        }
+
+        if (options.Compression != null)
+        {
+            return options.Compression;
+        }
+
+        if (options.UseCompression)
+        {
+            return new FederatedCompressionOptions
+            {
+                Strategy = "TopK",
+                Ratio = options.CompressionRatio,
+                UseErrorFeedback = true
+            };
+        }
+
+        return null;
+    }
+
+    private Vector<T> ApplyCompressionToParameters(
+        int clientId,
+        Vector<T> globalParameters,
+        Vector<T> localParameters,
+        FederatedCompressionOptions options,
+        Dictionary<int, Vector<T>>? residuals,
+        Random random,
+        out double uploadRatio)
+    {
+        if (globalParameters.Length != localParameters.Length)
+        {
+            throw new ArgumentException("Global and local parameter vectors must have the same length for compression.");
+        }
+
+        int n = globalParameters.Length;
+        var delta = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            delta[i] = NumOps.Subtract(localParameters[i], globalParameters[i]);
+        }
+
+        if (residuals != null && residuals.TryGetValue(clientId, out var residual) && residual.Length == n)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                delta[i] = NumOps.Add(delta[i], residual[i]);
+            }
+        }
+
+        var compressedDelta = CompressDelta(delta, options, random, out uploadRatio);
+
+        if (residuals != null && options.UseErrorFeedback)
+        {
+            var newResidual = new Vector<T>(n);
+            for (int i = 0; i < n; i++)
+            {
+                newResidual[i] = NumOps.Subtract(delta[i], compressedDelta[i]);
+            }
+
+            residuals[clientId] = newResidual;
+        }
+
+        var parametersToSend = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            parametersToSend[i] = NumOps.Add(globalParameters[i], compressedDelta[i]);
+        }
+
+        return parametersToSend;
+    }
+
+    private Vector<T> CompressDelta(Vector<T> delta, FederatedCompressionOptions options, Random random, out double uploadRatio)
+    {
+        string strategy = options.Strategy?.Trim() ?? "None";
+        int n = delta.Length;
+
+        if (n == 0 || string.Equals(strategy, "None", StringComparison.OrdinalIgnoreCase))
+        {
+            uploadRatio = 1.0;
+            return delta;
+        }
+
+        if (string.Equals(strategy, "TopK", StringComparison.OrdinalIgnoreCase))
+        {
+            double ratio = Math.Max(0.0, Math.Min(1.0, options.Ratio));
+            int k = Math.Max(1, (int)Math.Round(ratio * n));
+            k = Math.Min(k, n);
+
+            var magnitudes = new double[n];
+            var indices = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                indices[i] = i;
+                magnitudes[i] = Math.Abs(NumOps.ToDouble(delta[i]));
+            }
+
+            Array.Sort(magnitudes, indices);
+
+            var result = new Vector<T>(n);
+            for (int t = n - k; t < n; t++)
+            {
+                int idx = indices[t];
+                result[idx] = delta[idx];
+            }
+
+            uploadRatio = (double)k / n;
+            return result;
+        }
+
+        if (string.Equals(strategy, "RandomK", StringComparison.OrdinalIgnoreCase))
+        {
+            double ratio = Math.Max(0.0, Math.Min(1.0, options.Ratio));
+            int k = Math.Max(1, (int)Math.Round(ratio * n));
+            k = Math.Min(k, n);
+
+            var indices = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                indices[i] = i;
+            }
+
+            for (int i = 0; i < k; i++)
+            {
+                int j = i + random.Next(n - i);
+                (indices[i], indices[j]) = (indices[j], indices[i]);
+            }
+
+            var result = new Vector<T>(n);
+            for (int i = 0; i < k; i++)
+            {
+                int idx = indices[i];
+                result[idx] = delta[idx];
+            }
+
+            uploadRatio = (double)k / n;
+            return result;
+        }
+
+        if (string.Equals(strategy, "Threshold", StringComparison.OrdinalIgnoreCase))
+        {
+            double threshold = Math.Abs(options.Threshold);
+            int kept = 0;
+            var result = new Vector<T>(n);
+            for (int i = 0; i < n; i++)
+            {
+                double v = NumOps.ToDouble(delta[i]);
+                if (Math.Abs(v) >= threshold)
+                {
+                    result[i] = delta[i];
+                    kept++;
+                }
+            }
+
+            uploadRatio = n > 0 ? (double)kept / n : 1.0;
+            return result;
+        }
+
+        if (string.Equals(strategy, "UniformQuantization", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(strategy, "StochasticQuantization", StringComparison.OrdinalIgnoreCase))
+        {
+            int bits = Math.Max(1, Math.Min(16, options.QuantizationBits));
+            int levels = (1 << bits) - 1;
+
+            double maxAbs = 0.0;
+            for (int i = 0; i < n; i++)
+            {
+                maxAbs = Math.Max(maxAbs, Math.Abs(NumOps.ToDouble(delta[i])));
+            }
+
+            if (maxAbs <= 0.0)
+            {
+                uploadRatio = ComputeQuantizationRatio(bits);
+                return delta;
+            }
+
+            var result = new Vector<T>(n);
+            for (int i = 0; i < n; i++)
+            {
+                double v = NumOps.ToDouble(delta[i]);
+                double normalized = v / maxAbs;
+                normalized = Math.Max(-1.0, Math.Min(1.0, normalized));
+                double qReal = (normalized + 1.0) * 0.5 * levels;
+
+                double q;
+                if (string.Equals(strategy, "StochasticQuantization", StringComparison.OrdinalIgnoreCase))
+                {
+                    double floor = Math.Floor(qReal);
+                    double prob = qReal - floor;
+                    q = (random.NextDouble() < prob) ? floor + 1.0 : floor;
+                }
+                else
+                {
+                    q = Math.Round(qReal);
+                }
+
+                q = Math.Max(0.0, Math.Min(levels, q));
+                double deNormalized = (q / levels) * 2.0 - 1.0;
+                double dequantized = deNormalized * maxAbs;
+                result[i] = NumOps.FromDouble(dequantized);
+            }
+
+            uploadRatio = ComputeQuantizationRatio(bits);
+            return result;
+        }
+
+        throw new InvalidOperationException($"Unknown compression strategy '{strategy}'. Supported values: None, TopK, RandomK, Threshold, UniformQuantization, StochasticQuantization.");
+    }
+
+    private static double ComputeQuantizationRatio(int bits)
+    {
+        int bytesPerParam = EstimateBytesPerNumericType(typeof(T));
+        int fullBits = Math.Max(1, bytesPerParam * 8);
+        return Math.Max(0.0, Math.Min(1.0, (double)bits / fullBits));
     }
 
     private static int EstimateBytesPerNumericType(Type numericType)

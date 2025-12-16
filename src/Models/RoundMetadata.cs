@@ -39,6 +39,15 @@ public class RoundMetadata
     public double CommunicationMB { get; set; }
 
     /// <summary>
+    /// Gets or sets the effective upload compression ratio for this round (1.0 means no compression).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is the fraction of upload bandwidth used compared to sending a full update.
+    /// For example, 0.1 means uploads were about 10% of the uncompressed size.
+    /// </remarks>
+    public double UploadCompressionRatio { get; set; } = 1.0;
+
+    /// <summary>
     /// Gets or sets the average local loss across selected clients.
     /// </summary>
     /// <remarks>
@@ -52,4 +61,3 @@ public class RoundMetadata
     /// </summary>
     public double PrivacyBudgetConsumed { get; set; }
 }
-

@@ -392,6 +392,15 @@ public class FederatedLearningOptions
     public bool UseCompression { get; set; } = false;
 
     /// <summary>
+    /// Gets or sets federated compression options.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is the preferred way to configure compression. If null,
+    /// the legacy <see cref="UseCompression"/> / <see cref="CompressionRatio"/> properties are used.
+    /// </remarks>
+    public FederatedCompressionOptions? Compression { get; set; } = null;
+
+    /// <summary>
     /// Gets or sets the compression ratio (0.0 to 1.0) if compression is enabled.
     /// </summary>
     /// <remarks>

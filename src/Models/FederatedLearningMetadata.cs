@@ -253,6 +253,16 @@ public class FederatedLearningMetadata
     public string AsyncModeUsed { get; set; } = "None";
 
     /// <summary>
+    /// Gets or sets whether compression was enabled for client updates.
+    /// </summary>
+    public bool CompressionEnabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets the compression strategy used for client updates (if enabled).
+    /// </summary>
+    public string CompressionStrategyUsed { get; set; } = "None";
+
+    /// <summary>
     /// Gets or sets whether differential privacy was enabled.
     /// </summary>
     /// <remarks>
