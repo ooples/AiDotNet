@@ -6,6 +6,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.FederatedLearning.Privacy;
 using AiDotNet.FederatedLearning.Privacy.Accounting;
+using AiDotNet.FederatedLearning.Selection;
+using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Trainers;
 
@@ -27,6 +29,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     private readonly FederatedLearningOptions? _federatedLearningOptions;
     private readonly IPrivacyMechanism<Vector<T>>? _differentialPrivacyMechanismOverride;
     private readonly IPrivacyAccountant? _privacyAccountantOverride;
+    private readonly IClientSelectionStrategy? _clientSelectionStrategyOverride;
+    private readonly Dictionary<int, double> _clientPerformanceScores = new();
+    private readonly Dictionary<int, double[]> _clientEmbeddings = new();
 
     public InMemoryFederatedTrainer(
         IOptimizer<T, TInput, TOutput> optimizerPrototype,
@@ -36,7 +41,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         int minRoundsBeforeConvergence = 10,
         FederatedLearningOptions? federatedLearningOptions = null,
         IPrivacyMechanism<Vector<T>>? differentialPrivacyMechanism = null,
-        IPrivacyAccountant? privacyAccountant = null)
+        IPrivacyAccountant? privacyAccountant = null,
+        IClientSelectionStrategy? clientSelectionStrategy = null)
     {
         _optimizerPrototype = optimizerPrototype ?? throw new ArgumentNullException(nameof(optimizerPrototype));
         _learningRateOverride = learningRateOverride;
@@ -57,6 +63,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         _federatedLearningOptions = federatedLearningOptions;
         _differentialPrivacyMechanismOverride = differentialPrivacyMechanism;
         _privacyAccountantOverride = privacyAccountant;
+        _clientSelectionStrategyOverride = clientSelectionStrategy;
     }
 
     public override FederatedLearningMetadata TrainRound(
@@ -125,7 +132,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         {
             var roundStart = DateTime.UtcNow;
             var globalBefore = GetGlobalModel();
-            var selectedClientIds = SelectClients(clientData.Keys.ToList(), clientSelectionFraction);
+            var selectedClientIds = SelectClients(clientData, round, clientSelectionFraction);
 
             foreach (var id in selectedClientIds)
             {
@@ -165,6 +172,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 clientWeights[clientId] = weight;
 
                 var parameters = trainedModel.GetParameters();
+
+                UpdateClientEmbedding(clientId, globalBefore.GetParameters(), parameters);
 
                 if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
                 {
@@ -222,6 +231,11 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
             var newParams = newGlobalModel.GetParameters();
             var deltaNorm = ComputeL2Distance(previousGlobalParams, newParams);
+
+            UpdateClientPerformanceScores(selectedClientIds, clientWeights);
+
+            double roundCommunicationMB = EstimateRoundCommunicationMB(selectedClientIds.Count, globalBefore.ParameterCount);
+            metadata.TotalCommunicationMB += roundCommunicationMB;
             metadata.RoundMetrics.Add(new RoundMetadata
             {
                 RoundNumber = round,
@@ -230,7 +244,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 GlobalLoss = double.NaN,
                 GlobalAccuracy = double.NaN,
                 AverageLocalLoss = double.NaN,
-                CommunicationMB = 0.0,
+                CommunicationMB = roundCommunicationMB,
                 PrivacyBudgetConsumed = useDifferentialPrivacy ? privacyEventsThisRound * dpEpsilon : 0.0
             });
 
@@ -268,21 +282,150 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         throw new InvalidOperationException($"Unknown privacy accountant '{name}'. Supported values: Basic, RDP.");
     }
 
-    private List<int> SelectClients(List<int> allClientIds, double fraction)
+    private List<int> SelectClients(
+        Dictionary<int, FederatedClientDataset<TInput, TOutput>> clientData,
+        int roundNumber,
+        double fraction)
     {
-        allClientIds.Sort();
-
-        int countToSelect = Math.Max(1, (int)Math.Ceiling(allClientIds.Count * fraction));
-        if (countToSelect >= allClientIds.Count)
+        var allClientIds = clientData.Keys.OrderBy(id => id).ToList();
+        if (allClientIds.Count == 0)
         {
-            return allClientIds;
+            return new List<int>();
         }
 
-        var rng = _randomSeed.HasValue ? new Random(_randomSeed.Value) : new Random();
-        var shuffled = allClientIds.OrderBy(_ => rng.Next()).ToList();
-        var selected = shuffled.Take(countToSelect).ToList();
-        selected.Sort();
-        return selected;
+        var weights = new Dictionary<int, double>(allClientIds.Count);
+        foreach (var clientId in allClientIds)
+        {
+            if (clientData.TryGetValue(clientId, out var dataset))
+            {
+                weights[clientId] = Math.Max(1.0, dataset.SampleCount);
+            }
+            else
+            {
+                weights[clientId] = 1.0;
+            }
+        }
+
+        var flOptions = _federatedLearningOptions;
+        var selectionOptions = flOptions?.ClientSelection;
+        var strategyName = selectionOptions?.Strategy?.Trim() ?? "UniformRandom";
+
+        var random = FederatedRandom.CreateRoundRandom(_randomSeed, roundNumber, salt: 1337);
+
+        var request = new ClientSelectionRequest
+        {
+            RoundNumber = roundNumber,
+            FractionToSelect = fraction,
+            CandidateClientIds = allClientIds,
+            ClientWeights = weights,
+            ClientGroupKeys = selectionOptions?.ClientGroupKeys,
+            ClientAvailabilityProbabilities = selectionOptions?.ClientAvailabilityProbabilities,
+            ClientPerformanceScores = _clientPerformanceScores.Count > 0 ? _clientPerformanceScores : null,
+            ClientEmbeddings = _clientEmbeddings.Count > 0 ? _clientEmbeddings : null,
+            Random = random
+        };
+
+        var strategy = _clientSelectionStrategyOverride ?? CreateBuiltInSelectionStrategy(strategyName, selectionOptions);
+        return strategy.SelectClients(request);
+    }
+
+    private static IClientSelectionStrategy CreateBuiltInSelectionStrategy(string name, ClientSelectionOptions? options)
+    {
+        if (string.Equals(name, "UniformRandom", StringComparison.OrdinalIgnoreCase))
+        {
+            return new UniformRandomClientSelectionStrategy();
+        }
+
+        if (string.Equals(name, "WeightedRandom", StringComparison.OrdinalIgnoreCase))
+        {
+            return new WeightedRandomClientSelectionStrategy();
+        }
+
+        if (string.Equals(name, "Stratified", StringComparison.OrdinalIgnoreCase))
+        {
+            return new StratifiedClientSelectionStrategy();
+        }
+
+        if (string.Equals(name, "AvailabilityAware", StringComparison.OrdinalIgnoreCase))
+        {
+            var threshold = options?.AvailabilityThreshold ?? 0.0;
+            return new AvailabilityAwareClientSelectionStrategy(threshold);
+        }
+
+        if (string.Equals(name, "PerformanceAware", StringComparison.OrdinalIgnoreCase))
+        {
+            var rate = options?.ExplorationRate ?? 0.1;
+            return new PerformanceAwareClientSelectionStrategy(rate);
+        }
+
+        if (string.Equals(name, "Clustered", StringComparison.OrdinalIgnoreCase))
+        {
+            int clusters = options?.ClusterCount ?? 3;
+            int iterations = options?.KMeansIterations ?? 5;
+            return new ClusteredClientSelectionStrategy(clusters, iterations);
+        }
+
+        throw new InvalidOperationException($"Unknown client selection strategy '{name}'. Supported values: UniformRandom, WeightedRandom, Stratified, AvailabilityAware, PerformanceAware, Clustered.");
+    }
+
+    private void UpdateClientPerformanceScores(List<int> selectedClientIds, Dictionary<int, double> clientWeights)
+    {
+        foreach (var clientId in selectedClientIds)
+        {
+            // Initial, simple proxy score: prefer clients that contributed more data.
+            // More advanced scoring (e.g., validation improvement per update) can be layered on later.
+            if (clientWeights.TryGetValue(clientId, out var w))
+            {
+                _clientPerformanceScores[clientId] = w;
+            }
+        }
+    }
+
+    private void UpdateClientEmbedding(int clientId, Vector<T> globalParams, Vector<T> localParams)
+    {
+        if (globalParams.Length != localParams.Length)
+        {
+            return;
+        }
+
+        // Lightweight embedding: take the first few parameter deltas (as doubles) as a coarse signature.
+        int dim = Math.Min(8, globalParams.Length);
+        var embedding = new double[dim];
+        for (int i = 0; i < dim; i++)
+        {
+            var delta = NumOps.Subtract(localParams[i], globalParams[i]);
+            embedding[i] = NumOps.ToDouble(delta);
+        }
+
+        _clientEmbeddings[clientId] = embedding;
+    }
+
+    private static double EstimateRoundCommunicationMB(int selectedClientCount, int parameterCount)
+    {
+        if (selectedClientCount <= 0 || parameterCount <= 0)
+        {
+            return 0.0;
+        }
+
+        int bytesPerParam = EstimateBytesPerNumericType(typeof(T));
+        long bytesPerVector = (long)parameterCount * bytesPerParam;
+
+        // Approximate: each selected client downloads global params + uploads one update vector.
+        long totalBytes = (long)selectedClientCount * (bytesPerVector + bytesPerVector);
+        return totalBytes / 1_000_000.0;
+    }
+
+    private static int EstimateBytesPerNumericType(Type numericType)
+    {
+        try
+        {
+            return System.Runtime.InteropServices.Marshal.SizeOf(numericType);
+        }
+        catch
+        {
+            // Conservative default for unknown numeric types (treat as double-like).
+            return 8;
+        }
     }
 
     private IOptimizer<T, TInput, TOutput> CreateOptimizerForModel(IFullModel<T, TInput, TOutput> model)

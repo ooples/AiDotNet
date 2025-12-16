@@ -89,6 +89,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     // Federated learning configuration (facade-first: orchestration is internal)
     private FederatedLearningOptions? _federatedLearningOptions;
     private IAggregationStrategy<IFullModel<T, TInput, TOutput>>? _federatedAggregationStrategy;
+    private IClientSelectionStrategy? _federatedClientSelectionStrategy;
 
     // Deployment configuration fields
     private QuantizationConfig? _quantizationConfig;
@@ -234,13 +235,16 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </summary>
     /// <param name="options">Federated learning configuration options.</param>
     /// <param name="aggregationStrategy">Optional aggregation strategy override (null uses defaults based on options).</param>
+    /// <param name="clientSelectionStrategy">Optional client selection strategy override (null uses defaults based on options).</param>
     /// <returns>This builder instance for method chaining.</returns>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFederatedLearning(
         FederatedLearningOptions options,
-        IAggregationStrategy<IFullModel<T, TInput, TOutput>>? aggregationStrategy = null)
+        IAggregationStrategy<IFullModel<T, TInput, TOutput>>? aggregationStrategy = null,
+        IClientSelectionStrategy? clientSelectionStrategy = null)
     {
         _federatedLearningOptions = options ?? throw new ArgumentNullException(nameof(options));
         _federatedAggregationStrategy = aggregationStrategy;
+        _federatedClientSelectionStrategy = clientSelectionStrategy;
         return this;
     }
 
@@ -977,7 +981,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 randomSeed: flOptions.RandomSeed,
                 convergenceThreshold: flOptions.ConvergenceThreshold,
                 minRoundsBeforeConvergence: flOptions.MinRoundsBeforeConvergence,
-                federatedLearningOptions: flOptions);
+                federatedLearningOptions: flOptions,
+                clientSelectionStrategy: _federatedClientSelectionStrategy);
 
             var aggregationStrategy = _federatedAggregationStrategy ?? CreateDefaultFederatedAggregationStrategy(flOptions);
             trainer.SetAggregationStrategy(aggregationStrategy);

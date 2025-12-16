@@ -60,6 +60,15 @@ public class FederatedLearningOptions
     public double ClientSelectionFraction { get; set; } = 1.0;
 
     /// <summary>
+    /// Gets or sets client selection options (strategy and related parameters).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> If this is null, the trainer uses uniform random sampling with
+    /// <see cref="ClientSelectionFraction"/>.
+    /// </remarks>
+    public ClientSelectionOptions? ClientSelection { get; set; } = null;
+
+    /// <summary>
     /// Gets or sets the number of local training epochs each client performs per round.
     /// </summary>
     /// <remarks>
