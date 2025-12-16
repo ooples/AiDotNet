@@ -12,6 +12,10 @@ namespace AiDotNet.Inference;
 /// This layer is intended for inference-time usage. When <see cref="InferenceMode"/> is enabled
 /// and a <see cref="Kernel"/> is attached, it uses PagedKVCache to avoid reallocations and
 /// allow many independent sequences to grow efficiently.
+/// <para>
+/// <b>Limitation:</b> This layer currently supports <c>batchSize == 1</c> per sequence to avoid cache mixing.
+/// For concurrent serving, create one sequence per request (distinct <see cref="SequenceId"/> values).
+/// </para>
 /// </remarks>
 internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralNetworks.Layers.ILayerSerializationMetadata
 {
