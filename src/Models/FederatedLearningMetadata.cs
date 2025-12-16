@@ -173,7 +173,7 @@ public class FederatedLearningMetadata
     /// Gets or sets the total privacy delta consumed (basic composition reporting).
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> Delta (I') is the probability that the privacy guarantee fails.
+    /// <b>For Beginners:</b> Delta (δ) is the probability that the privacy guarantee fails.
     /// When using simple accounting, deltas add up across rounds.
     /// </remarks>
     public double TotalPrivacyDeltaConsumed { get; set; }
