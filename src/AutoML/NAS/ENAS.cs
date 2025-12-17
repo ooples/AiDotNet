@@ -38,6 +38,7 @@ namespace AiDotNet.AutoML.NAS
 
         // Controller hyperparameters
         private readonly int _controllerHiddenSize;
+        private readonly int _controllerMaxChoices;
         private readonly T _entropyWeight;
 
         protected override INumericOperations<T> NumOps => _ops;
@@ -54,6 +55,7 @@ namespace AiDotNet.AutoML.NAS
             _random = new Random(42);
 
             _controllerHiddenSize = controllerHiddenSize;
+            _controllerMaxChoices = Math.Max(_numNodes, _numOperations);
             _baselineDecay = _ops.FromDouble(baselineDecay);
             _entropyWeight = _ops.FromDouble(entropyWeight);
             _baseline = _ops.Zero;
@@ -66,13 +68,13 @@ namespace AiDotNet.AutoML.NAS
             int numDecisions = _numNodes * 2;  // For each node: which prev node + which operation
             for (int i = 0; i < numDecisions; i++)
             {
-                var weight = new Vector<T>(_controllerHiddenSize);
+                var weight = new Vector<T>(_controllerMaxChoices * _controllerHiddenSize);
                 for (int j = 0; j < weight.Length; j++)
                 {
                     weight[j] = _ops.FromDouble((_random.NextDouble() - 0.5) * 0.1);
                 }
                 _controllerWeights.Add(weight);
-                _controllerGradients.Add(new Vector<T>(_controllerHiddenSize));
+                _controllerGradients.Add(new Vector<T>(weight.Length));
             }
 
             // Initialize shared weights
@@ -99,7 +101,8 @@ namespace AiDotNet.AutoML.NAS
             {
                 // Sample which previous node to connect from
                 int maxPrevNodes = nodeIdx;
-                var prevNodeProbs = ComputeProbabilities(hiddenState, maxPrevNodes);
+                int prevDecisionIdx = (nodeIdx - 1) * 2;
+                var prevNodeProbs = ComputeProbabilities(hiddenState, maxPrevNodes, prevDecisionIdx);
                 int selectedPrevNode = SampleFromDistribution(prevNodeProbs);
 
                 // Update log probability and entropy
@@ -110,7 +113,8 @@ namespace AiDotNet.AutoML.NAS
                 UpdateHiddenState(hiddenState, selectedPrevNode);
 
                 // Sample which operation to apply
-                var opProbs = ComputeProbabilities(hiddenState, _numOperations);
+                int opDecisionIdx = prevDecisionIdx + 1;
+                var opProbs = ComputeProbabilities(hiddenState, _numOperations, opDecisionIdx);
                 int selectedOp = SampleFromDistribution(opProbs);
 
                 // Update log probability and entropy
@@ -134,18 +138,20 @@ namespace AiDotNet.AutoML.NAS
         /// <summary>
         /// Computes probability distribution over choices using controller
         /// </summary>
-        private List<T> ComputeProbabilities(Vector<T> hiddenState, int numChoices)
+        private List<T> ComputeProbabilities(Vector<T> hiddenState, int numChoices, int decisionIdx)
         {
-            // Simplified: use linear layer + softmax
+            // Simplified: per-decision linear projection + softmax
+            var weights = _controllerWeights[decisionIdx % _controllerWeights.Count];
             var logits = new T[numChoices];
             for (int i = 0; i < numChoices; i++)
             {
                 T logit = _ops.Zero;
                 for (int j = 0; j < Math.Min(hiddenState.Length, _controllerHiddenSize); j++)
                 {
-                    logit = _ops.Add(logit, hiddenState[j]);
+                    int weightIdx = (i * _controllerHiddenSize) + j;
+                    logit = _ops.Add(logit, _ops.Multiply(hiddenState[j], weights[weightIdx]));
                 }
-                logits[i] = _ops.Divide(logit, _ops.FromDouble(hiddenState.Length));
+                logits[i] = logit;
             }
 
             // Apply softmax
@@ -234,13 +240,20 @@ namespace AiDotNet.AutoML.NAS
 
             // REINFORCE gradient: (reward - baseline) * logProb + entropy_weight * entropy
             T advantage = _ops.Subtract(reward, _baseline);
-            _ = _ops.Subtract(
+            T loss = _ops.Subtract(
                 _ops.Multiply(advantage, logProb),
                 _ops.Multiply(_entropyWeight, entropy)
             );
 
             // Gradient is stored for optimizer to use
             // In practice, this would use backpropagation through the controller
+            for (int i = 0; i < _controllerGradients.Count; i++)
+            {
+                for (int j = 0; j < _controllerGradients[i].Length; j++)
+                {
+                    _controllerGradients[i][j] = _ops.Multiply(loss, _controllerWeights[i][j]);
+                }
+            }
         }
 
         /// <summary>
