@@ -44,6 +44,7 @@ public interface IChatModel<T> : ILanguageModel<T>
     /// </summary>
     /// <param name="prompt">The input text prompt to send to the language model.
     /// This can be a question, instruction, or any text that requires a response.</param>
+    /// <param name="cancellationToken">Optional cancellation token to cancel the operation.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains
     /// the model's generated response as a string.</returns>
     /// <remarks>
@@ -72,5 +73,5 @@ public interface IChatModel<T> : ILanguageModel<T>
     /// - Respect rate limits and timeouts
     /// - Sanitize sensitive information from logs
     /// </remarks>
-    Task<string> GenerateResponseAsync(string prompt);
+    Task<string> GenerateResponseAsync(string prompt, CancellationToken cancellationToken = default);
 }

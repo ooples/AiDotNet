@@ -5,7 +5,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para>
 /// Activation functions introduce non-linearity to neural networks. Non-linearity means the output isn't 
 /// simply proportional to the input (like y = 2x). Instead, it can follow curves or more complex patterns.
-/// Without non-linearity, a neural network�no matter how many layers�would behave just like a single layer,
+/// Without non-linearity, a neural network—no matter how many layers—would behave just like a single layer,
 /// severely limiting what it can learn.
 /// </para>
 /// <para>
@@ -98,7 +98,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// For example:
     /// ```csharp
     /// // Create a ReLU activation layer for 28x28 images
-    /// var reluLayer = new ActivationLayer<float>(new[] { 32, 28, 28, 1 }, new ReLU<float>());
+    /// var reluLayer = new ActivationLayer<float>(new[] { 32, 28, 28, 1 }, new ReLUActivation<float>());
     /// ```
     /// 
     /// The inputShape parameter defines the dimensions of your data:
@@ -253,7 +253,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // Autodiff supports all scalar activations via generic TensorOperations.ApplyActivation
+        // Autodiff supports all scalar activations via generic TensorOperations<T>.ApplyActivation
         // Only vector activations need manual path
         if (UseAutodiff && !_useVectorActivation)
             return BackwardViaAutodiff(outputGradient);
@@ -277,8 +277,16 @@ public class ActivationLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Backward pass implementation using automatic differentiation.
+    /// Backward pass implementation using automatic differentiation with production-grade optimizations.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method uses a production-grade pattern for computing gradients:
+    /// - Uses cached _lastInput from forward pass (locality caching)
+    /// - Builds minimal autodiff graph only for gradient routing
+    /// - Executes inline topological sort for graph traversal
+    /// </para>
+    /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
         if (_lastInput == null)
@@ -286,17 +294,49 @@ public class ActivationLayer<T> : LayerBase<T>
 
         TensorValidator.ValidateShapesMatch(_lastInput, outputGradient, "Activation Layer", "Backward Pass");
 
-        // Create computation node for input
-        var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        // 1. Create variable nodes for inputs that need gradients
+        var inputNode = AiDotNet.Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
-        // Apply activation using autodiff
-        var output = ApplyActivationAutodiff(input);
+        // 2. Build computation graph
+        var activation = ScalarActivation ?? (IActivationFunction<T>?)VectorActivation;
+        if (activation == null) return outputGradient;
 
-        // Set the gradient and propagate backward
-        output.Gradient = outputGradient;
+        var outputNode = activation.ApplyToGraph(inputNode);
 
-        // Perform backward pass
-        var topoOrder = GetTopologicalOrder(output);
+        // 3. Set output gradient
+        outputNode.Gradient = outputGradient;
+
+        // 4. Inline topological sort
+        var visited = new HashSet<AiDotNet.Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<AiDotNet.Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(AiDotNet.Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // 5. Execute backward pass
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -306,64 +346,8 @@ public class ActivationLayer<T> : LayerBase<T>
             }
         }
 
-        return input.Gradient!;
-    }
-
-    /// <summary>
-    /// Applies activation function using autodiff operations.
-    /// </summary>
-    /// <remarks>
-    /// This method uses the generic TensorOperations.ApplyActivation which supports ALL 39 built-in
-    /// activation functions automatically. Only truly custom user-defined activations would fail.
-    /// </remarks>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (ScalarActivation == null)
-            return input;
-
-        return Autodiff.TensorOperations<T>.ApplyActivation(input, ScalarActivation);
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
+        // 6. Extract gradient
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>
@@ -372,12 +356,13 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <param name="input">The input tensor to transform</param>
     /// <returns>A new tensor with the activation function applied to each element</returns>
     /// <remarks>
-    /// This private helper method applies the scalar activation function to each element of the input tensor
-    /// independently. It uses the Transform method of the Tensor class to apply the function element-wise.
+    /// This private helper method applies the scalar activation function to the input tensor.
+    /// It delegates to the activation function's Activate(Tensor) method, allowing for potential
+    /// optimizations (like GPU acceleration) implemented within the activation function class.
     /// </remarks>
     private Tensor<T> ApplyScalarActivation(Tensor<T> input)
     {
-        return input.Transform((x, _) => ScalarActivation!.Activate(x));
+        return ScalarActivation!.Activate(input);
     }
 
     /// <summary>
@@ -402,13 +387,12 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <returns>The gradient with respect to this layer's input</returns>
     /// <remarks>
     /// This private helper method calculates the gradient for the backward pass when using a scalar activation function.
-    /// It applies the derivative of the activation function to each element of the last input, then multiplies
-    /// the result by the corresponding element of the output gradient.
+    /// It uses the activation function's vectorized Derivative method and Engine.TensorMultiply for efficient
+    /// element-wise computation.
     /// </remarks>
     private Tensor<T> BackwardScalarActivation(Tensor<T> outputGradient)
     {
-        return _lastInput!.Transform((x, indices) => 
-            NumOps.Multiply(ScalarActivation!.Derivative(x), outputGradient[indices]));
+        return ScalarActivation!.Backward(_lastInput!, outputGradient);
     }
 
 
@@ -442,7 +426,8 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardVectorActivation(Tensor<T> outputGradient)
     {
-        return VectorActivation!.Derivative(_lastInput!) * outputGradient;
+        // Now unified via IVectorActivationFunction.Backward
+        return VectorActivation!.Backward(_lastInput!, outputGradient);
     }
 
     /// <summary>
@@ -569,5 +554,87 @@ public class ActivationLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _lastInput = null;
+    }
+
+    /// <summary>
+    /// Exports the activation layer's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the activation function applied to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method constructs a computation graph representation of the activation layer by:
+    /// 1. Validating input parameters and layer configuration
+    /// 2. Creating a symbolic input node with proper batch dimension
+    /// 3. Applying the activation function to the symbolic input
+    /// </para>
+    /// <para><b>For Beginners:</b> This method converts the activation layer into a computation graph for JIT compilation.
+    ///
+    /// The computation graph describes:
+    /// - Input: A symbolic tensor with batch size = 1 plus the layer's input shape
+    /// - Operation: Apply the activation function (ReLU, Sigmoid, etc.)
+    /// - Output: The activated tensor
+    ///
+    /// JIT compilation can make inference 5-10x faster by optimizing this graph into native code.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        IActivationFunction<T>? activation = ScalarActivation;
+        if (activation == null && VectorActivation != null)
+            activation = (IActivationFunction<T>)VectorActivation;
+
+        if (activation == null)
+            throw new InvalidOperationException("No activation function configured.");
+
+        if (!activation.SupportsJitCompilation)
+        {
+            throw new NotSupportedException(
+                $"Activation function '{activation.GetType().Name}' does not support JIT compilation yet.");
+        }
+
+        // Create symbolic input node (shape definition only, batch size adapts at runtime)
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Build symbolic computation graph by applying activation function
+        return activation.ApplyToGraph(inputNode);
+    }
+
+    /// <summary>
+    /// Gets whether this activation layer supports JIT compilation.
+    /// </summary>
+    /// <value>True if the activation function supports JIT compilation, false otherwise.</value>
+    /// <remarks>
+    /// <para>
+    /// This property checks whether the configured activation function supports JIT compilation.
+    /// Returns false if no activation is configured or if the activation doesn't support JIT.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you if this layer can use JIT compilation for faster inference.
+    ///
+    /// The layer can be JIT compiled if:
+    /// - The activation function (ReLU, Sigmoid, etc.) has JIT support implemented
+    /// - The activation's gradient computation is available
+    ///
+    /// Common activations like ReLU, Sigmoid, and Tanh typically support JIT.
+    /// Custom or exotic activations may not support it yet.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            IActivationFunction<T>? activation = ScalarActivation;
+            if (activation == null && VectorActivation != null)
+                activation = (IActivationFunction<T>)VectorActivation;
+            return activation?.SupportsJitCompilation ?? false;
+        }
     }
 }

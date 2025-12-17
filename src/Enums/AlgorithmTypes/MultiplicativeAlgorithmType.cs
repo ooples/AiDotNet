@@ -46,7 +46,7 @@ public enum MultiplicativeAlgorithmType
     /// 
     /// For example, if an investment grows by 10% one year and 20% the next:
     /// - The arithmetic average is (10% + 20%)/2 = 15%
-    /// - The geometric average is v(1.10 × 1.20) - 1 = 14.89%
+    /// - The geometric average is v(1.10 Ã— 1.20) - 1 = 14.89%
     /// 
     /// The geometric average is slightly lower but more accurate for compounding growth.
     /// 
@@ -83,7 +83,7 @@ public enum MultiplicativeAlgorithmType
     /// 3. Seasonality (repeating patterns)
     /// 
     /// But instead of adding these components (Level + Trend + Seasonality), it multiplies them 
-    /// (Level × Trend × Seasonality).
+    /// (Level Ã— Trend Ã— Seasonality).
     /// 
     /// Multiplicative Exponential Smoothing:
     /// 

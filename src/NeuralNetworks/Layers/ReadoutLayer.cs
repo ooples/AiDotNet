@@ -31,54 +31,64 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public class ReadoutLayer<T> : LayerBase<T>
 {
     /// <summary>
-    /// Matrix storing the weight parameters for connections between inputs and outputs.
+    /// Tensor storing the weight parameters for connections between inputs and outputs.
     /// </summary>
     /// <remarks>
-    /// This matrix has dimensions [outputSize, inputSize], where each row represents the weights
+    /// This tensor has shape [outputSize, inputSize], where each row represents the weights
     /// for one output neuron. These weights determine how strongly each input feature influences
     /// each output neuron and are the primary trainable parameters of the layer.
     /// </remarks>
-    private Matrix<T> _weights;
-    
+    private Tensor<T> _weights;
+
     /// <summary>
-    /// Vector storing the bias parameters for each output neuron.
+    /// Tensor storing the bias parameters for each output neuron.
     /// </summary>
     /// <remarks>
-    /// This vector has length outputSize, where each element is a constant value added to the
+    /// This tensor has shape [outputSize], where each element is a constant value added to the
     /// weighted sum for the corresponding output neuron. Biases allow the network to shift the
     /// activation function, giving it more flexibility to fit the data.
     /// </remarks>
-    private Vector<T> _bias;
-    
+    private Tensor<T> _bias;
+
     /// <summary>
-    /// Matrix storing the gradients of the loss with respect to the weight parameters.
+    /// Tensor storing the gradients of the loss with respect to the weight parameters.
     /// </summary>
     /// <remarks>
-    /// This matrix has the same dimensions as the _weights matrix and stores the accumulated
+    /// This tensor has the same shape as the _weights tensor and stores the accumulated
     /// gradients for all weight parameters during the backward pass. These gradients are used
     /// to update the weights during the parameter update step.
     /// </remarks>
-    private Matrix<T> _weightGradients;
-    
+    private Tensor<T> _weightGradients;
+
     /// <summary>
-    /// Vector storing the gradients of the loss with respect to the bias parameters.
+    /// Tensor storing the gradients of the loss with respect to the bias parameters.
     /// </summary>
     /// <remarks>
-    /// This vector has the same length as the _bias vector and stores the accumulated
+    /// This tensor has the same shape as the _bias tensor and stores the accumulated
     /// gradients for all bias parameters during the backward pass. These gradients are used
     /// to update the biases during the parameter update step.
     /// </remarks>
-    private Vector<T> _biasGradients;
+    private Tensor<T> _biasGradients;
     
     /// <summary>
-    /// Stores the input vector from the most recent forward pass for use in backpropagation.
+    /// Stores the input tensor from the most recent forward pass for use in backpropagation.
     /// </summary>
     /// <remarks>
     /// This cached input is needed during the backward pass to compute gradients. It holds the
-    /// input vector that was processed in the most recent forward pass. The vector is null
+    /// input tensor that was processed in the most recent forward pass. The tensor is null
     /// before the first forward pass or after a reset.
     /// </remarks>
-    private Vector<T>? _lastInput;
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stores the output tensor (post-activation) from the most recent forward pass for use in backpropagation.
+    /// </summary>
+    private Tensor<T>? _lastOutput;
+
+    /// <summary>
+    /// Stores the pre-activation output tensor from the most recent forward pass.
+    /// </summary>
+    private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -131,13 +141,13 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// The layer starts with small random weights and zero biases that will be refined during training.
     /// </para>
     /// </remarks>
-    public ReadoutLayer(int inputSize, int outputSize, IActivationFunction<T> scalarActivation) 
+    public ReadoutLayer(int inputSize, int outputSize, IActivationFunction<T> scalarActivation)
         : base([inputSize], [outputSize], scalarActivation)
     {
-        _weights = new Matrix<T>(outputSize, inputSize);
-        _bias = new Vector<T>(outputSize);
-        _weightGradients = new Matrix<T>(outputSize, inputSize);
-        _biasGradients = new Vector<T>(outputSize);
+        _weights = new Tensor<T>([outputSize, inputSize]);
+        _bias = new Tensor<T>([outputSize]);
+        _weightGradients = new Tensor<T>([outputSize, inputSize]);
+        _biasGradients = new Tensor<T>([outputSize]);
 
         InitializeParameters(inputSize, outputSize);
     }
@@ -173,13 +183,13 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// The layer starts with small random weights and zero biases that will be refined during training.
     /// </para>
     /// </remarks>
-    public ReadoutLayer(int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivation) 
+    public ReadoutLayer(int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivation)
         : base([inputSize], [outputSize], vectorActivation)
     {
-        _weights = new Matrix<T>(outputSize, inputSize);
-        _bias = new Vector<T>(outputSize);
-        _weightGradients = new Matrix<T>(outputSize, inputSize);
-        _biasGradients = new Vector<T>(outputSize);
+        _weights = new Tensor<T>([outputSize, inputSize]);
+        _bias = new Tensor<T>([outputSize]);
+        _weightGradients = new Tensor<T>([outputSize, inputSize]);
+        _biasGradients = new Tensor<T>([outputSize]);
 
         InitializeParameters(inputSize, outputSize);
     }
@@ -214,17 +224,39 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input.ToVector();
-        var output = _weights * _lastInput + _bias;
+        // Flatten to 1D tensor if needed
+        _lastInput = input.Shape.Length == 1
+            ? input
+            : input.Reshape([input.Length]);
+
+        // Use Engine operations for matrix-vector multiplication
+        // Reshape input to [inputSize, 1] for matrix multiplication
+        var inputTensor = _lastInput.Reshape([_lastInput.Length, 1]);
+
+        // weights: [outputSize, inputSize], input: [inputSize, 1] -> result: [outputSize, 1]
+        var product = Engine.TensorMatMul(_weights, inputTensor);
+
+        // Add bias: reshape bias to [outputSize, 1] for addition
+        var biasReshaped = _bias.Reshape([_bias.Shape[0], 1]);
+        var withBias = Engine.TensorAdd(product, biasReshaped);
+
+        // Flatten to [outputSize] for activation
+        _lastPreActivation = withBias.Reshape([_bias.Shape[0]]);
 
         if (UsingVectorActivation)
         {
-            return Tensor<T>.FromVector(VectorActivation!.Activate(output));
+            _lastOutput = VectorActivation!.Activate(_lastPreActivation);
+            return _lastOutput;
         }
-        else
+
+        var activated = new Tensor<T>(_lastPreActivation.Shape);
+        for (int i = 0; i < activated.Length; i++)
         {
-            return Tensor<T>.FromVector(output.Transform(x => ScalarActivation!.Activate(x)));
+            activated[i] = ScalarActivation!.Activate(_lastPreActivation[i]);
         }
+
+        _lastOutput = activated;
+        return _lastOutput;
     }
 
     /// <summary>
@@ -271,28 +303,42 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null)
+        if (_lastInput == null || _lastPreActivation == null)
         {
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        var gradient = outputGradient.ToVector();
-
+        Tensor<T> gradTensor;
         if (UsingVectorActivation)
         {
-            var activationDerivative = VectorActivation!.Derivative(_weights * _lastInput + _bias);
-            var diagonalDerivative = activationDerivative.Diagonal();
-            gradient = gradient.PointwiseMultiply(diagonalDerivative);
+            var activationDerivative = VectorActivation!.Derivative(_lastPreActivation);
+            gradTensor = Engine.TensorMultiply(outputGradient, activationDerivative);
         }
         else
         {
-            gradient = gradient.PointwiseMultiply((_weights * _lastInput + _bias).Transform(x => ScalarActivation!.Derivative(x)));
+            gradTensor = new Tensor<T>(_lastPreActivation.Shape);
+            for (int i = 0; i < gradTensor.Length; i++)
+            {
+                gradTensor[i] = NumOps.Multiply(outputGradient[i], ScalarActivation!.Derivative(_lastPreActivation[i]));
+            }
         }
 
-        _weightGradients = Matrix<T>.OuterProduct(gradient, _lastInput);
-        _biasGradients = gradient;
+        // Compute weight gradients using outer product via Engine: gradient outer input
+        // gradient: [outputSize], input: [inputSize] -> outer product: [outputSize, inputSize]
+        var gradReshaped = gradTensor.Reshape([gradTensor.Length, 1]);
+        var inputReshaped = _lastInput.Reshape([1, _lastInput.Length]);
+        _weightGradients = Engine.TensorMatMul(gradReshaped, inputReshaped);
 
-        return Tensor<T>.FromVector(_weights.Transpose() * gradient);
+        // Bias gradients are just the gradient tensor
+        _biasGradients = gradTensor;
+
+        // Compute input gradients using weights transpose
+        // weights^T: [inputSize, outputSize], gradient: [outputSize, 1] -> result: [inputSize, 1]
+        var weightsT = Engine.TensorTranspose(_weights);
+        var gradCol = gradTensor.Reshape([gradTensor.Length, 1]);
+        var inputGrad = Engine.TensorMatMul(weightsT, gradCol);
+
+        return inputGrad.Reshape([_lastInput.Length]);
     }
 
     /// <summary>
@@ -302,67 +348,85 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation via MatMul and Add operations.
-    /// The computation graph is: output = activation(weights * input + bias).
+    /// This method uses automatic differentiation with production-grade pattern:
+    /// - Uses cached forward pass values for activation derivative computation
+    /// - Uses Tensor.FromRowMatrix/FromVector for efficient conversions
+    /// - Builds minimal autodiff graph for gradient routing
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null)
+        if (_lastInput == null || _lastPreActivation == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Convert input to 2D tensor [1, inputSize]
-        var inputTensor = new Tensor<T>([1, _lastInput.Length]);
-        for (int i = 0; i < _lastInput.Length; i++)
-            inputTensor[0, i] = _lastInput[i];
+        // Compute activation derivative on tensors
+        Tensor<T> preActGradTensor;
+        if (UsingVectorActivation)
+        {
+            var activationDerivative = VectorActivation!.Derivative(_lastPreActivation);
+            preActGradTensor = Engine.TensorMultiply(outputGradient, activationDerivative);
+        }
+        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            preActGradTensor = new Tensor<T>(_lastPreActivation.Shape);
+            for (int i = 0; i < preActGradTensor.Length; i++)
+            {
+                preActGradTensor[i] = NumOps.Multiply(outputGradient[i], ScalarActivation!.Derivative(_lastPreActivation[i]));
+            }
+        }
+        else
+        {
+            preActGradTensor = outputGradient;
+        }
 
-        // Convert weights to tensor [outputSize, inputSize]
-        var weightsTensor = new Tensor<T>([_weights.Rows, _weights.Columns]);
-        for (int i = 0; i < _weights.Rows; i++)
-            for (int j = 0; j < _weights.Columns; j++)
-                weightsTensor[i, j] = _weights[i, j];
+        var inputTensor = _lastInput.Reshape([1, _lastInput.Length]);
 
-        // Convert bias to tensor [outputSize]
-        var biasTensor = new Tensor<T>([_bias.Length]);
-        for (int i = 0; i < _bias.Length; i++)
-            biasTensor[i] = _bias[i];
-
-        // Create computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(
-            inputTensor,
-            "input",
-            requiresGradient: true);
-
+        // Build minimal autodiff graph for linear part only (gradient routing)
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputTensor, "input", requiresGradient: true);
         var weightsNode = Autodiff.TensorOperations<T>.Variable(
-            weightsTensor,
-            "weights",
-            requiresGradient: true);
-
+            _weights, "weights", requiresGradient: true);
         var biasNode = Autodiff.TensorOperations<T>.Variable(
-            biasTensor,
-            "bias",
-            requiresGradient: true);
+            _bias, "bias", requiresGradient: true);
 
-        // Forward pass: output = weights * input + bias
+        // Forward pass for linear part: output = weights * input.T + bias
         var matmulNode = Autodiff.TensorOperations<T>.MatrixMultiply(weightsNode, Autodiff.TensorOperations<T>.Transpose(inputNode));
 
-        // Reshape matmul result from [outputSize, 1] to [outputSize]
-        var matmulFlat = new Tensor<T>([_weights.Rows]);
-        for (int i = 0; i < _weights.Rows; i++)
-            matmulFlat[i] = matmulNode.Value[i, 0];
-        var flatNode = Autodiff.TensorOperations<T>.Constant(matmulFlat);
+        var matmulFlatNode = Autodiff.TensorOperations<T>.Reshape(matmulNode, _bias.Shape[0]);
+        var preActivationNode = Autodiff.TensorOperations<T>.Add(matmulFlatNode, biasNode);
 
-        // Add bias
-        var preActivationNode = Autodiff.TensorOperations<T>.Add(flatNode, biasNode);
+        // Set pre-activation gradient (activation derivative already applied)
+        preActivationNode.Gradient = preActGradTensor;
 
-        // Apply activation
-        var outputNode = ApplyActivationAutodiff(preActivationNode);
+        // Inline topological sort and backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((preActivationNode, false));
 
-        // Set the output gradient
-        outputNode.Gradient = outputGradient;
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
 
-        // Perform backward pass
-        var topoOrder = GetTopologicalOrder(outputNode);
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -372,18 +436,15 @@ public class ReadoutLayer<T> : LayerBase<T>
             }
         }
 
-        // Update parameter gradients
+        // Update parameter gradients (already in Tensor<T> format)
         if (weightsNode.Gradient != null)
         {
-            for (int i = 0; i < _weights.Rows; i++)
-                for (int j = 0; j < _weights.Columns; j++)
-                    _weightGradients[i, j] = weightsNode.Gradient[i, j];
+            _weightGradients = weightsNode.Gradient;
         }
 
         if (biasNode.Gradient != null)
         {
-            for (int i = 0; i < _bias.Length; i++)
-                _biasGradients[i] = biasNode.Gradient[i];
+            _biasGradients = biasNode.Gradient;
         }
 
         // Convert input gradient back to tensor
@@ -395,70 +456,6 @@ public class ReadoutLayer<T> : LayerBase<T>
         }
 
         return inputGradient;
-    }
-
-    /// <summary>
-    /// Applies the activation function using autodiff operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (UsingVectorActivation)
-        {
-            // For vector activations like Softmax, use the specialized operation
-            if (VectorActivation is SoftmaxActivation<T>)
-            {
-                return Autodiff.TensorOperations<T>.Softmax(input, axis: 0);
-            }
-            // For other vector activations, fall back to element-wise if they're actually element-wise
-            return ApplyScalarActivationAutodiff(input);
-        }
-        else
-        {
-            return ApplyScalarActivationAutodiff(input);
-        }
-    }
-
-    /// <summary>
-    /// Applies scalar activation functions element-wise.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        var activation = UsingVectorActivation ? (object)VectorActivation! : ScalarActivation!;
-
-        return activation switch
-        {
-            ReLUActivation<T> => Autodiff.TensorOperations<T>.ReLU(input),
-            SigmoidActivation<T> => Autodiff.TensorOperations<T>.Sigmoid(input),
-            TanhActivation<T> => Autodiff.TensorOperations<T>.Tanh(input),
-            _ => input  // Identity for unknown activations
-        };
-    }
-
-    /// <summary>
-    /// Gets the computation nodes in topological order for backward pass.
-    /// </summary>
-    /// <param name="outputNode">The output node to start from.</param>
-    /// <returns>List of nodes in topological order.</returns>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> outputNode)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var order = new List<Autodiff.ComputationNode<T>>();
-
-        void Visit(Autodiff.ComputationNode<T> node)
-        {
-            if (visited.Contains(node)) return;
-            visited.Add(node);
-
-            foreach (var parent in node.Parents)
-            {
-                Visit(parent);
-            }
-
-            order.Add(node);
-        }
-
-        Visit(outputNode);
-        return order;
     }
 
 
@@ -490,15 +487,13 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        for (int i = 0; i < _weights.Rows; i++)
-        {
-            for (int j = 0; j < _weights.Columns; j++)
-            {
-                _weights[i, j] = NumOps.Subtract(_weights[i, j], NumOps.Multiply(learningRate, _weightGradients[i, j]));
-            }
+        // Update weights using Engine operations: w = w - lr * gradient
+        var scaledWeightGradients = Engine.TensorMultiplyScalar(_weightGradients, learningRate);
+        _weights = Engine.TensorSubtract(_weights, scaledWeightGradients);
 
-            _bias[i] = NumOps.Subtract(_bias[i], NumOps.Multiply(learningRate, _biasGradients[i]));
-        }
+        // Update biases using Engine operations: b = b - lr * gradient
+        var scaledBiasGradients = Engine.TensorMultiplyScalar(_biasGradients, learningRate);
+        _bias = Engine.TensorSubtract(_bias, scaledBiasGradients);
     }
 
     /// <summary>
@@ -528,28 +523,10 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _weights.Rows * _weights.Columns + _bias.Length;
-    
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-    
-        // Copy weights
-        for (int i = 0; i < _weights.Rows; i++)
-        {
-            for (int j = 0; j < _weights.Columns; j++)
-            {
-                parameters[index++] = _weights[i, j];
-            }
-        }
-    
-        // Copy bias
-        for (int i = 0; i < _bias.Length; i++)
-        {
-            parameters[index++] = _bias[i];
-        }
-    
-        return parameters;
+        // Use Vector<T>.Concatenate for efficient parameter collection
+        var flatWeights = new Vector<T>(_weights.ToArray());
+        var flatBias = new Vector<T>(_bias.ToArray());
+        return Vector<T>.Concatenate(flatWeights, flatBias);
     }
 
     /// <summary>
@@ -580,29 +557,31 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int totalParams = _weights.Rows * _weights.Columns + _bias.Length;
-    
+        int outputSize = _weights.Shape[0];
+        int inputSize = _weights.Shape[1];
+        int weightCount = outputSize * inputSize;
+        int totalParams = weightCount + _bias.Shape[0];
+
         if (parameters.Length != totalParams)
         {
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
-    
-        int index = 0;
-    
-        // Set weights
-        for (int i = 0; i < _weights.Rows; i++)
+
+        // Extract weight parameters and reshape using Tensor<T>.FromVector
+        var weightParams = new Vector<T>(weightCount);
+        for (int i = 0; i < weightCount; i++)
         {
-            for (int j = 0; j < _weights.Columns; j++)
-            {
-                _weights[i, j] = parameters[index++];
-            }
+            weightParams[i] = parameters[i];
         }
-    
-        // Set bias
-        for (int i = 0; i < _bias.Length; i++)
+        _weights = Tensor<T>.FromVector(weightParams).Reshape([outputSize, inputSize]);
+
+        // Extract bias parameters
+        var biasParams = new Vector<T>(_bias.Shape[0]);
+        for (int i = 0; i < _bias.Shape[0]; i++)
         {
-            _bias[i] = parameters[index++];
+            biasParams[i] = parameters[weightCount + i];
         }
+        _bias = Tensor<T>.FromVector(biasParams);
     }
 
     /// <summary>
@@ -634,10 +613,14 @@ public class ReadoutLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward pass
         _lastInput = null;
-    
-        // Reset gradients
-        _weightGradients = new Matrix<T>(_weights.Rows, _weights.Columns);
-        _biasGradients = new Vector<T>(_bias.Length);
+        _lastOutput = null;
+        _lastPreActivation = null;
+
+        // Reset gradients using Tensor<T>
+        _weightGradients = new Tensor<T>([_weights.Shape[0], _weights.Shape[1]]);
+        _weightGradients.Fill(NumOps.Zero);
+        _biasGradients = new Tensor<T>([_bias.Shape[0]]);
+        _biasGradients.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -652,14 +635,57 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters(int inputSize, int outputSize)
     {
-        for (int i = 0; i < _weights.Rows; i++)
+        // Initialize weights with small random values centered around zero
+        for (int i = 0; i < outputSize; i++)
         {
-            for (int j = 0; j < _weights.Columns; j++)
+            for (int j = 0; j < inputSize; j++)
             {
                 _weights[i, j] = NumOps.FromDouble((Random.NextDouble() - 0.5) * 0.1);
             }
-
-            _bias[i] = NumOps.Zero;
         }
+
+        // Initialize biases to zero
+        _bias.Fill(NumOps.Zero);
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_weights == null || _bias == null)
+            throw new InvalidOperationException("Layer weights not initialized. Initialize the layer before compiling.");
+
+        // Create symbolic input
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Use weights and bias tensors directly
+        var weightsNode = TensorOperations<T>.Constant(_weights, "readout_weights");
+        var biasNode = TensorOperations<T>.Constant(_bias, "readout_bias");
+
+        // Compute output = weights * input + bias
+        var matmulNode = TensorOperations<T>.MatrixMultiply(weightsNode, inputNode);
+        var outputNode = TensorOperations<T>.Add(matmulNode, biasNode);
+
+        // Apply activation if specified
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+        {
+            outputNode = ScalarActivation.ApplyToGraph(outputNode);
+        }
+        else if (VectorActivation != null && VectorActivation.SupportsJitCompilation)
+        {
+            outputNode = VectorActivation.ApplyToGraph(outputNode);
+        }
+
+        return outputNode;
+    }
+
+    public override bool SupportsJitCompilation =>
+        _weights != null && _bias != null;
+
 }

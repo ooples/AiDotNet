@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
+
 namespace AiDotNet.Autodiff;
 
 /// <summary>
@@ -535,7 +538,7 @@ public class GradientTape<T> : IDisposable
 
         // Initialize root gradient to ones (for final node)
         target.Gradient = new Tensor<T>(target.Value.Shape);
-        var numOps = Helpers.MathHelper.GetNumericOperations<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < target.Gradient.Length; i++)
         {
             target.Gradient[i] = numOps.One;

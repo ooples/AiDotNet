@@ -104,6 +104,15 @@ public class CatmullRomSplineInterpolation<T> : IInterpolation<T>
     /// <returns>The interpolated y-value at the specified x-coordinate.</returns>
     public T Interpolate(T x)
     {
+        // Check if x exactly matches a known point
+        for (int k = 0; k < _x.Length; k++)
+        {
+            if (_numOps.Equals(x, _x[k]))
+            {
+                return _y[k];
+            }
+        }
+
         int i = FindInterval(x);
 
         // Get the four points needed for the spline calculation
@@ -158,7 +167,7 @@ public class CatmullRomSplineInterpolation<T> : IInterpolation<T>
     /// The method takes four points and a position parameter (t) between 0 and 1, and calculates
     /// the exact y-value on the smooth curve at that position.
     /// 
-    /// The formula uses cubic polynomials (equations with terms up to t³) to create a curve
+    /// The formula uses cubic polynomials (equations with terms up to tÂ³) to create a curve
     /// that not only passes through the middle two points but also maintains a smooth direction
     /// as it passes through them.
     /// </remarks>
@@ -171,8 +180,8 @@ public class CatmullRomSplineInterpolation<T> : IInterpolation<T>
     private T CatmullRomSpline(T y0, T y1, T y2, T y3, T t)
     {
         // Calculate powers of t for the cubic polynomial
-        T t2 = _numOps.Multiply(t, t);      // t²
-        T t3 = _numOps.Multiply(t2, t);     // t³
+        T t2 = _numOps.Multiply(t, t);      // tÂ²
+        T t3 = _numOps.Multiply(t2, t);     // tÂ³
 
         // Calculate the coefficients of the cubic polynomial
         // These formulas implement the Catmull-Rom spline equations
@@ -199,7 +208,7 @@ public class CatmullRomSplineInterpolation<T> : IInterpolation<T>
             )
         );
 
-        // Evaluate the cubic polynomial: y = c3*t³ + c2*t² + c1*t + y1
+        // Evaluate the cubic polynomial: y = c3*tÂ³ + c2*tÂ² + c1*t + y1
         return _numOps.Add(
             _numOps.Add(
                 _numOps.Multiply(c3, t3),

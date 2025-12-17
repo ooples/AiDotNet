@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.Interfaces;
@@ -85,6 +85,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 public class SelfCorrectingRetriever<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IGenerator<T> _generator;
     private readonly RetrieverBase<T> _baseRetriever;
     private readonly int _maxIterations;
@@ -265,10 +266,11 @@ Provide a brief critique.";
         foreach (var pattern in patterns)
         {
             var match = System.Text.RegularExpressions.Regex.Match(
-                critique, 
-                pattern, 
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                
+                critique,
+                pattern,
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase,
+                RegexTimeout);
+
             if (match.Success)
             {
                 return match.Groups[1].Value.Trim();

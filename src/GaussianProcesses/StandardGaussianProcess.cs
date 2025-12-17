@@ -202,7 +202,7 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     /// and make predictions based on those patterns.
     /// 
     /// This method computes this similarity for every possible pair of points between the two sets X1 and X2,
-    /// resulting in a matrix of size (X1.Rows × X2.Rows).
+    /// resulting in a matrix of size (X1.Rows Ã— X2.Rows).
     /// </para>
     /// </remarks>
     private Matrix<T> CalculateKernelMatrix(Matrix<T> X1, Matrix<T> X2)

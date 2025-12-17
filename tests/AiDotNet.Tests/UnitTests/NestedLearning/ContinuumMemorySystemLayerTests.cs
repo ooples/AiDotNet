@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using System;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
@@ -148,7 +149,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 hiddenDim: 128,
                 numFrequencyLevels: 3);
 
-            var input = new Tensor<double>(new[] { 64 });
+            var input = new Tensor<double>(new[] { 1, 64 });
             for (int i = 0; i < input.Length; i++)
             {
                 input[i] = 0.1;
@@ -159,8 +160,9 @@ namespace AiDotNetTests.UnitTests.NestedLearning
 
             // Assert
             Assert.NotNull(output);
-            Assert.Equal(1, output.Rank);
-            Assert.Equal(128, output.Shape[0]); // Hidden dim
+            Assert.Equal(2, output.Rank);
+            Assert.Equal(1, output.Shape[0]); // Batch size
+            Assert.Equal(128, output.Shape[1]); // Hidden dim
         }
 
         [Fact]
@@ -185,7 +187,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 hiddenDim: 128,
                 numFrequencyLevels: 3);
 
-            var input = new Tensor<double>(new[] { 64 });
+            var input = new Tensor<double>(new[] { 1, 64 });
             for (int i = 0; i < input.Length; i++)
             {
                 input[i] = (double)i / 100.0;
@@ -215,7 +217,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 hiddenDim: 128,
                 numFrequencyLevels: 2); // Use 2 levels for simpler test
 
-            var input = new Tensor<double>(new[] { 64 });
+            var input = new Tensor<double>(new[] { 1, 64 });
             for (int i = 0; i < input.Length; i++)
             {
                 input[i] = 0.5;
@@ -259,7 +261,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 hiddenDim: 128,
                 numFrequencyLevels: 3);
 
-            var input = new Tensor<double>(new[] { 64 });
+            var input = new Tensor<double>(new[] { 1, 64 });
             for (int i = 0; i < input.Length; i++)
             {
                 input[i] = 0.5;
@@ -285,7 +287,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 hiddenDim: 128,
                 numFrequencyLevels: 3);
 
-            var input = new Tensor<double>(new[] { 64 });
+            var input = new Tensor<double>(new[] { 1, 64 });
             for (int i = 0; i < input.Length; i++)
             {
                 input[i] = 0.5;

@@ -1,10 +1,12 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+
+// Note: Use fully qualified names for RagModels.ThoughtNode<T> to avoid ambiguity with AiDotNet.Reasoning.Models.RagModels.ThoughtNode<T>
+using RagModels = AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -107,7 +109,7 @@ public class TreeOfThoughtsRetriever<T> : RetrieverBase<T>
     protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
     {
         // Build the reasoning tree
-        var rootNode = new ThoughtNode<T> { Thought = query, Depth = 0 };
+        var rootNode = new RagModels.ThoughtNode<T> { Thought = query, Depth = 0 };
         EvaluateAndRetrieve(rootNode, metadataFilters);
         ExpandTree(rootNode, _searchStrategy, metadataFilters);
 
@@ -125,7 +127,7 @@ public class TreeOfThoughtsRetriever<T> : RetrieverBase<T>
     /// <summary>
     /// Expands the reasoning tree using the specified search strategy.
     /// </summary>
-    private void ExpandTree(ThoughtNode<T> root, TreeSearchStrategy strategy, Dictionary<string, object> metadataFilters)
+    private void ExpandTree(RagModels.ThoughtNode<T> root, TreeSearchStrategy strategy, Dictionary<string, object> metadataFilters)
     {
         switch (strategy)
         {
@@ -144,9 +146,9 @@ public class TreeOfThoughtsRetriever<T> : RetrieverBase<T>
     /// <summary>
     /// Breadth-first tree expansion: explores all nodes at each level.
     /// </summary>
-    private void ExpandBreadthFirst(ThoughtNode<T> root, Dictionary<string, object> metadataFilters)
+    private void ExpandBreadthFirst(RagModels.ThoughtNode<T> root, Dictionary<string, object> metadataFilters)
     {
-        var queue = new Queue<ThoughtNode<T>>();
+        var queue = new Queue<RagModels.ThoughtNode<T>>();
         queue.Enqueue(root);
 
         while (queue.Count > 0)
@@ -170,9 +172,9 @@ public class TreeOfThoughtsRetriever<T> : RetrieverBase<T>
     /// <summary>
     /// Depth-first tree expansion: explores one branch fully before backtracking.
     /// </summary>
-    private void ExpandDepthFirst(ThoughtNode<T> root, Dictionary<string, object> metadataFilters)
+    private void ExpandDepthFirst(RagModels.ThoughtNode<T> root, Dictionary<string, object> metadataFilters)
     {
-        var stack = new Stack<ThoughtNode<T>>();
+        var stack = new Stack<RagModels.ThoughtNode<T>>();
         stack.Push(root);
 
         while (stack.Count > 0)
@@ -184,7 +186,7 @@ public class TreeOfThoughtsRetriever<T> : RetrieverBase<T>
 
             // Generate and evaluate child thoughts
             var children = GenerateChildThoughts(node);
-            foreach (var child in children.Reverse<ThoughtNode<T>>()) // Reverse to maintain left-to-right order
+            foreach (var child in children.Reverse<RagModels.ThoughtNode<T>>()) // Reverse to maintain left-to-right order
             {
                 EvaluateAndRetrieve(child, metadataFilters);
                 node.Children.Add(child);
@@ -196,11 +198,11 @@ public class TreeOfThoughtsRetriever<T> : RetrieverBase<T>
     /// <summary>
     /// Best-first tree expansion: always explores the highest-scored node next.
     /// </summary>
-    private void ExpandBestFirst(ThoughtNode<T> root, Dictionary<string, object> metadataFilters)
+    private void ExpandBestFirst(RagModels.ThoughtNode<T> root, Dictionary<string, object> metadataFilters)
     {
         // Use a list to simulate priority queue (compatible with .NET Framework)
         // Sort by score descending (highest score first), with node ID for tie-breaking
-        var nodesToExplore = new List<(ThoughtNode<T> node, double score, int id)>();
+        var nodesToExplore = new List<(RagModels.ThoughtNode<T> node, double score, int id)>();
         int nodeIdCounter = 0;
         nodesToExplore.Add((root, 1.0, nodeIdCounter++)); // Start with root
 
@@ -233,9 +235,9 @@ public class TreeOfThoughtsRetriever<T> : RetrieverBase<T>
     /// <summary>
     /// Generates alternative child thoughts for a given node.
     /// </summary>
-    private List<ThoughtNode<T>> GenerateChildThoughts(ThoughtNode<T> parent)
+    private List<RagModels.ThoughtNode<T>> GenerateChildThoughts(RagModels.ThoughtNode<T> parent)
     {
-        var children = new List<ThoughtNode<T>>();
+        var children = new List<RagModels.ThoughtNode<T>>();
 
         // Build context from parent chain
         var context = BuildThoughtContext(parent);
@@ -255,7 +257,7 @@ Format your response as a numbered list:
 
         foreach (var thought in thoughts.Take(_branchingFactor))
         {
-            children.Add(new ThoughtNode<T>
+            children.Add(new RagModels.ThoughtNode<T>
             {
                 Thought = thought,
                 Depth = parent.Depth + 1,
@@ -269,7 +271,7 @@ Format your response as a numbered list:
     /// <summary>
     /// Evaluates a thought node and retrieves relevant documents.
     /// </summary>
-    private void EvaluateAndRetrieve(ThoughtNode<T> node, Dictionary<string, object> metadataFilters)
+    private void EvaluateAndRetrieve(RagModels.ThoughtNode<T> node, Dictionary<string, object> metadataFilters)
     {
         // Retrieve documents for this thought
         var documents = _baseRetriever.Retrieve(node.Thought, topK: 5, metadataFilters).ToList();
@@ -282,7 +284,7 @@ Format your response as a numbered list:
     /// <summary>
     /// Evaluates the quality of a thought based on retrieved documents and coherence.
     /// </summary>
-    private double EvaluateThought(ThoughtNode<T> node)
+    private double EvaluateThought(RagModels.ThoughtNode<T> node)
     {
         // Evaluation criteria:
         // 1. Number of relevant documents found (0-1 normalized)
@@ -314,7 +316,7 @@ Format your response as a numbered list:
     /// <summary>
     /// Builds a context string from the parent chain of thoughts.
     /// </summary>
-    private string BuildThoughtContext(ThoughtNode<T> node)
+    private string BuildThoughtContext(RagModels.ThoughtNode<T> node)
     {
         var chain = new List<string>();
         var current = node;
@@ -353,7 +355,9 @@ Format your response as a numbered list:
             // Match numbered list items like "1. ", "1) ", "- ", etc.
             var match = System.Text.RegularExpressions.Regex.Match(
                 trimmed,
-                @"^(?:\d+[\.\)]\s*|[-\*]\s*)(.+)$"
+                @"^(?:\d+[\.\)]\s*|[-\*]\s*)(.+)$",
+                System.Text.RegularExpressions.RegexOptions.None,
+                TimeSpan.FromSeconds(1)
             );
 
             if (match.Success && match.Groups[1].Value.Length > 10)
@@ -368,7 +372,7 @@ Format your response as a numbered list:
     /// <summary>
     /// Collects all documents from the tree, keeping track of the best score for each.
     /// </summary>
-    private void CollectDocuments(ThoughtNode<T> node, Dictionary<string, (Document<T> doc, double maxScore)> allDocuments)
+    private void CollectDocuments(RagModels.ThoughtNode<T> node, Dictionary<string, (Document<T> doc, double maxScore)> allDocuments)
     {
         // Add documents from this node
         foreach (var doc in node.RetrievedDocuments)

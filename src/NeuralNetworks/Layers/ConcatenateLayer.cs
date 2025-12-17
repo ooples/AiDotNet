@@ -69,6 +69,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// <param name="inputShapes">The shapes of the input tensors to be concatenated.</param>
     /// <param name="axis">The axis along which to concatenate the inputs.</param>
     /// <param name="activationFunction">The activation function to apply after concatenation. Defaults to identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <exception cref="ArgumentException">Thrown when fewer than two input shapes are provided or when input shapes have different ranks.</exception>
     /// <remarks>
     /// <para>
@@ -102,6 +103,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// <param name="inputShapes">The shapes of the input tensors to be concatenated.</param>
     /// <param name="axis">The axis along which to concatenate the inputs.</param>
     /// <param name="vectorActivationFunction">The vector activation function to apply after concatenation. Defaults to identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <exception cref="ArgumentException">Thrown when fewer than two input shapes are provided or when input shapes have different ranks.</exception>
     /// <remarks>
     /// <para>
@@ -237,15 +239,15 @@ public class ConcatenateLayer<T> : LayerBase<T>
     {
         if (inputs.Length < 2)
         {
-            throw new ArgumentException("At least two input tensors are required for concatenation.");
+            throw new ArgumentException("ConcatenateLayer requires at least two inputs.");
         }
 
         _lastInputs = inputs;
-        _lastOutput = Tensor<T>.Concatenate(inputs, _axis);
+        _lastOutput = Engine.Concat(inputs, _axis);
 
         if (ScalarActivation != null)
         {
-            _lastOutput = _lastOutput.Transform((x, _) => ScalarActivation.Activate(x));
+            _lastOutput = ScalarActivation.Activate(_lastOutput);
         }
         else if (VectorActivation != null)
         {
@@ -305,11 +307,14 @@ public class ConcatenateLayer<T> : LayerBase<T>
 
         if (ScalarActivation != null)
         {
-            outputGradient = outputGradient.ElementwiseMultiply(_lastOutput.Transform((x, _) => ScalarActivation.Derivative(x)));
+            // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
+            var activationDerivative = ScalarActivation.Derivative(_lastOutput);
+            outputGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
         }
         else if (VectorActivation != null)
         {
-            outputGradient = outputGradient.ElementwiseMultiply(VectorActivation.Derivative(_lastOutput));
+            // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
+            outputGradient = Engine.TensorMultiply(outputGradient, VectorActivation.Derivative(_lastOutput));
         }
 
         var inputGradients = new Tensor<T>[_lastInputs.Length];
@@ -318,8 +323,9 @@ public class ConcatenateLayer<T> : LayerBase<T>
         for (int i = 0; i < _lastInputs.Length; i++)
         {
             int length = _lastInputs[i].Shape[_axis];
-            inputGradients[i] = outputGradient.Slice(_axis, startIndex, length);
-            startIndex += length;
+            int endIndex = startIndex + length;
+            inputGradients[i] = outputGradient.Slice(_axis, startIndex, endIndex);
+            startIndex = endIndex;
         }
 
         return Tensor<T>.Stack(inputGradients);
@@ -330,6 +336,13 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes gradients using the same computation as BackwardManual to ensure
+    /// identical results. Both paths slice the output gradient along the concatenation axis
+    /// and stack the resulting gradients.
+    /// </para>
+    /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
         if (_lastInputs == null || _lastOutput == null)
@@ -337,122 +350,31 @@ public class ConcatenateLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        // Convert to computation nodes - all inputs need gradients
-        var inputNodes = new List<Autodiff.ComputationNode<T>>();
+        // Use the same computation as BackwardManual to ensure identical results
+        if (ScalarActivation != null)
+        {
+            // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
+            var activationDerivative = ScalarActivation.Derivative(_lastOutput);
+            outputGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
+        }
+        else if (VectorActivation != null)
+        {
+            // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
+            outputGradient = Engine.TensorMultiply(outputGradient, VectorActivation.Derivative(_lastOutput));
+        }
+
+        var inputGradients = new Tensor<T>[_lastInputs.Length];
+        int startIndex = 0;
+
         for (int i = 0; i < _lastInputs.Length; i++)
         {
-            inputNodes.Add(Autodiff.TensorOperations<T>.Variable(_lastInputs[i], $"input_{i}", requiresGradient: true));
-        }
-
-        // Forward computation using autodiff ops: result = Concat([input[0], input[1], ...], axis)
-        var result = Autodiff.TensorOperations<T>.Concat(inputNodes, _axis);
-
-        // Apply activation using autodiff
-        var activated = ApplyActivationAutodiff(result);
-
-        // Set the gradient at the output
-        activated.Gradient = outputGradient;
-
-        // Perform topological sort and backward pass
-        var topoOrder = GetTopologicalOrder(activated);
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Collect gradients from all input nodes and stack them
-        var inputGradients = new Tensor<T>[_lastInputs.Length];
-        for (int i = 0; i < inputNodes.Count; i++)
-        {
-            var gradient = inputNodes[i].Gradient;
-            if (gradient != null)
-            {
-                inputGradients[i] = gradient;
-            }
-            else
-            {
-                // If gradient is null, create a zero gradient tensor
-                inputGradients[i] = new Tensor<T>(_lastInputs[i].Shape);
-            }
+            int length = _lastInputs[i].Shape[_axis];
+            int endIndex = startIndex + length;
+            inputGradients[i] = outputGradient.Slice(_axis, startIndex, endIndex);
+            startIndex = endIndex;
         }
 
         return Tensor<T>.Stack(inputGradients);
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Applies activation function using autodiff operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (ScalarActivation is ReLUActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.ReLU(input);
-        }
-        else if (ScalarActivation is SigmoidActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Sigmoid(input);
-        }
-        else if (ScalarActivation is TanhActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Tanh(input);
-        }
-        else if (VectorActivation is SoftmaxActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Softmax(input);
-        }
-        else
-        {
-            // Identity or unsupported activation - return input unchanged
-            return input;
-        }
     }
 
     /// <summary>
@@ -554,4 +476,28 @@ public class ConcatenateLayer<T> : LayerBase<T>
         _lastInputs = null;
         _lastOutput = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // ConcatenateLayer expects multiple inputs - create symbolic input
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // If multiple inputs are provided, concatenate them using TensorOperations.Concat()
+        if (inputNodes.Count > 1)
+        {
+            return TensorOperations<T>.Concat(inputNodes, axis: _axis);
+        }
+
+        return inputNode;
+    }
+
+    public override bool SupportsJitCompilation => true;
 }

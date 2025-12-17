@@ -1,11 +1,31 @@
 global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
-using AiDotNet.Data.Abstractions;
+using AiDotNet.Data.Structures;
 using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using AiDotNet.Interpretability;
 using AiDotNet.Serialization;
 using AiDotNet.Agents;
 using AiDotNet.Models;
+using AiDotNet.Deployment.Configuration;
+using AiDotNet.Deployment.Export;
+using AiDotNet.Deployment.Export.Onnx;
+using AiDotNet.Deployment.TensorRT;
+using AiDotNet.Deployment.Mobile.CoreML;
+using AiDotNet.Deployment.Mobile.TensorFlowLite;
+using AiDotNet.Deployment.Runtime;
+using AiDotNet.Reasoning;
+using AiDotNet.Reasoning.Models;
+using AiDotNet.LanguageModels;
+using AiDotNet.Enums;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Tokenization.Configuration;
+using AiDotNet.Tokenization.Models;
+using AiDotNet.Helpers;
+using AiDotNet.Models.Options;
+using AiDotNet.PromptEngineering;
+using AiDotNet.PromptEngineering.Analysis;
+using AiDotNet.PromptEngineering.Compression;
 
 namespace AiDotNet.Models.Results;
 
@@ -179,6 +199,32 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal IFairnessEvaluator<T>? FairnessEvaluator { get; private set; }
 
     /// <summary>
+    /// Gets or sets the tokenizer used for text processing.
+    /// </summary>
+    /// <value>An implementation of ITokenizer for encoding/decoding text, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The tokenizer converts text into tokens (numbers) that the model can process.
+    ///
+    /// When working with text-based models:
+    /// - Text must be tokenized before being fed into the model
+    /// - The tokenizer stores the vocabulary mapping between tokens and IDs
+    /// - Use the Tokenize() method to convert text to tokens for inference
+    ///
+    /// Example usage:
+    /// <code>
+    /// var result = modelResult.Tokenize("Hello world");
+    /// // result contains token IDs, attention masks, etc.
+    /// </code>
+    /// </para>
+    /// </remarks>
+    internal ITokenizer? Tokenizer { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the tokenization configuration.
+    /// </summary>
+    internal TokenizationConfig? TokenizationConfig { get; private set; }
+
+    /// <summary>
     /// Gets or sets the retriever used for RAG document retrieval during inference.
     /// </summary>
     /// <value>An implementation of IRetriever&lt;T&gt; for retrieving documents, or null if RAG is not configured.</value>
@@ -201,6 +247,53 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     /// <value>Query processors for preprocessing queries, or null if not configured.</value>
     internal IEnumerable<IQueryProcessor>? QueryProcessors { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the knowledge graph for graph-enhanced retrieval.
+    /// </summary>
+    /// <value>A knowledge graph containing entities and relationships, or null if Graph RAG is not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The knowledge graph stores entities (like people, places, concepts) and their
+    /// relationships. When you query the model, it can traverse these relationships to find related context
+    /// that pure vector similarity might miss.
+    /// </para>
+    /// <para>
+    /// This property is excluded from JSON serialization because it contains runtime infrastructure
+    /// (graph store, file handles) that should be reconfigured when the model is loaded.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal KnowledgeGraph<T>? KnowledgeGraph { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the graph store backend for persistent graph storage.
+    /// </summary>
+    /// <value>The graph storage backend, or null if Graph RAG is not configured.</value>
+    /// <remarks>
+    /// <para>
+    /// This property is excluded from JSON serialization because it represents runtime storage
+    /// infrastructure (file handles, WAL) that must be reconfigured when the model is loaded.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal IGraphStore<T>? GraphStore { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the hybrid graph retriever for combined vector + graph retrieval.
+    /// </summary>
+    /// <value>A hybrid retriever combining vector similarity with graph traversal, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The hybrid retriever first finds similar documents using vector search,
+    /// then expands the context by traversing the knowledge graph to find related entities. This provides
+    /// richer context than pure vector search alone.
+    /// </para>
+    /// <para>
+    /// This property is excluded from JSON serialization because it contains references to
+    /// runtime infrastructure (knowledge graph, document store) that must be reconfigured when loaded.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal HybridGraphRetriever<T>? HybridGraphRetriever { get; private set; }
 
     /// <summary>
     /// Gets or sets the meta-learner used for few-shot adaptation and fine-tuning.
@@ -318,156 +411,424 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal AgentRecommendation<T, TInput, TOutput>? AgentRecommendation { get; private set; }
 
     /// <summary>
-    /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
+    /// Gets the deployment configuration for model export, caching, versioning, A/B testing, and telemetry.
     /// </summary>
-    /// <param name="model">The underlying model used for making predictions.</param>
-    /// <param name="optimizationResult">The results of the optimization process that created the model.</param>
-    /// <param name="normalizationInfo">The normalization information used to preprocess input data and postprocess predictions.</param>
+    /// <value>Deployment configuration aggregating all deployment-related settings, or null if not configured.</value>
     /// <remarks>
-    /// <para>
-    /// This constructor creates a new PredictionModelResult instance with the specified model, optimization results, and
-    /// normalization information. It also initializes the ModelMetadata property by calling the GetModelMetadata method on
-    /// the provided model. This constructor is typically used when a new model has been trained and needs to be packaged
-    /// with all the necessary information for making predictions and for later serialization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This constructor creates a new prediction model result with all the necessary components.
+    /// <para><b>For Beginners:</b> This contains all deployment-related settings configured during model building,
+    /// including:
+    /// - Quantization: Model compression settings (Float16/Int8)
+    /// - Caching: Model caching and eviction policies
+    /// - Versioning: Model version management
+    /// - A/B Testing: Traffic splitting between model versions
+    /// - Telemetry: Performance monitoring and metrics
+    /// - Export: Platform-specific export settings
     ///
-    /// When creating a new PredictionModelResult:
-    /// - You provide the trained model that will make predictions
-    /// - You provide the optimization results that describe how the model was created
-    /// - You provide the normalization information needed to process data
-    /// - The constructor automatically extracts metadata from the model
+    /// These settings enable advanced deployment features like exporting models for mobile devices,
+    /// managing multiple model versions, and monitoring production performance.
     ///
-    /// This constructor is typically used when:
-    /// - You've just finished training a model
-    /// - You want to package it with all the information needed to use it
-    /// - You plan to save it for later use or deploy it in an application
-    ///
-    /// For example, after training a house price prediction model, you would use this constructor
-    /// to create a complete package that can be saved and used for making predictions.
+    /// If null, deployment features were not configured and will use defaults when needed.
     /// </para>
     /// </remarks>
-    public PredictionModelResult(IFullModel<T, TInput, TOutput> model,
-        OptimizationResult<T, TInput, TOutput> optimizationResult,
-        NormalizationInfo<T, TInput, TOutput> normalizationInfo)
-    {
-        Model = model;
-        OptimizationResult = optimizationResult;
-        NormalizationInfo = normalizationInfo;
-        ModelMetaData = model?.GetModelMetadata() ?? new();
-    }
+    internal DeploymentConfiguration? DeploymentConfiguration { get; private set; }
 
     /// <summary>
-    /// Initializes a new instance of the PredictionModelResult class with optimization results and normalization information.
+    /// Gets the JIT-compiled prediction function for accelerated inference.
     /// </summary>
-    /// <param name="optimizationResult">The results of the optimization process that created the model.</param>
-    /// <param name="normalizationInfo">The normalization information used to preprocess input data and postprocess predictions.</param>
-    /// <param name="biasDetector">Optional bias detector for ethical AI evaluation.</param>
-    /// <param name="fairnessEvaluator">Optional fairness evaluator for ethical AI evaluation.</param>
-    /// <param name="ragRetriever">Optional retriever for RAG functionality during inference.</param>
-    /// <param name="ragReranker">Optional reranker for RAG functionality during inference.</param>
-    /// <param name="ragGenerator">Optional generator for RAG functionality during inference.</param>
-    /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
-    /// <param name="loraConfiguration">Optional LoRA configuration for parameter-efficient fine-tuning.</param>
-    /// <param name="crossValidationResult">Optional cross-validation results from training.</param>
-    /// <param name="agentConfig">Optional agent configuration used during model building.</param>
-    /// <param name="agentRecommendation">Optional agent recommendations from model building.</param>
-    public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
-        NormalizationInfo<T, TInput, TOutput> normalizationInfo,
-        IBiasDetector<T>? biasDetector = null,
-        IFairnessEvaluator<T>? fairnessEvaluator = null,
-        IRetriever<T>? ragRetriever = null,
-        IReranker<T>? ragReranker = null,
-        IGenerator<T>? ragGenerator = null,
-        IEnumerable<IQueryProcessor>? queryProcessors = null,
-        ILoRAConfiguration<T>? loraConfiguration = null,
-        CrossValidationResult<T, TInput, TOutput>? crossValidationResult = null,
-        AgentConfiguration<T>? agentConfig = null,
-        AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null)
-    {
-        Model = optimizationResult.BestSolution;
-        OptimizationResult = optimizationResult;
-        NormalizationInfo = normalizationInfo;
-        ModelMetaData = Model?.GetModelMetadata() ?? new();
-        BiasDetector = biasDetector;
-        FairnessEvaluator = fairnessEvaluator;
-        RagRetriever = ragRetriever;
-        RagReranker = ragReranker;
-        RagGenerator = ragGenerator;
-        QueryProcessors = queryProcessors;
-        LoRAConfiguration = loraConfiguration;
-        CrossValidationResult = crossValidationResult;
-        AgentConfig = agentConfig;
-        AgentRecommendation = agentRecommendation;
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the PredictionModelResult class for a meta-trained model.
-    /// </summary>
-    /// <param name="metaLearner">The meta-learner containing the trained model and adaptation capabilities.</param>
-    /// <param name="metaResult">The results from the meta-training process.</param>
-    /// <param name="loraConfiguration">Optional LoRA configuration for parameter-efficient adaptation.</param>
-    /// <param name="biasDetector">Optional bias detector for ethical AI evaluation.</param>
-    /// <param name="fairnessEvaluator">Optional fairness evaluator for ethical AI evaluation.</param>
-    /// <param name="ragRetriever">Optional retriever for RAG functionality during inference.</param>
-    /// <param name="ragReranker">Optional reranker for RAG functionality during inference.</param>
-    /// <param name="ragGenerator">Optional generator for RAG functionality during inference.</param>
-    /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
-    /// <param name="agentConfig">Optional agent configuration for AI assistance during inference.</param>
+    /// <value>A compiled function for fast predictions, or null if JIT compilation was not enabled or not supported.</value>
     /// <remarks>
-    /// <para>
-    /// This constructor is used when a model has been trained using meta-learning (e.g., MAML, Reptile, SEAL).
-    /// The resulting PredictionModelResult contains the meta-trained model along with the meta-learner itself,
-    /// enabling quick adaptation to new tasks with just a few examples.
-    /// </para>
-    /// <para><b>For Beginners:</b> This constructor creates a prediction result for a meta-trained model.
+    /// <para><b>For Beginners:</b> This is an optimized, pre-compiled version of your model's prediction logic.
     ///
-    /// Meta-trained models are special because:
-    /// - They've learned how to learn across many different tasks
-    /// - They can quickly adapt to new tasks with just a few examples (few-shot learning)
-    /// - They retain the meta-learner for future adaptation
+    /// When JIT compilation is enabled and the model supports it:
+    /// - The model's computation graph is compiled to fast native code during building
+    /// - This compiled function is stored here
+    /// - Predict() automatically uses it for 5-10x faster predictions
     ///
-    /// After meta-training, you can:
-    /// - Use Adapt() to quickly adjust the model to a new task (5-10 examples)
-    /// - Use FineTune() for more extensive adaptation (100+ examples)
-    /// - Save and deploy the model for rapid adaptation in production
+    /// If this is null:
+    /// - JIT was not enabled during model building, OR
+    /// - The model doesn't support JIT compilation (e.g., layer-based neural networks)
+    /// - Predictions use the normal execution path (still works, just not JIT-accelerated)
     ///
-    /// This constructor packages everything needed to use a meta-trained model:
-    /// - The trained model (from the meta-learner)
-    /// - The meta-learner itself (for adaptation)
-    /// - Training history (loss curves, performance metrics)
-    /// - Optional LoRA configuration (for efficient adaptation)
-    /// - Optional agent configuration (for AI assistance)
+    /// The JIT-compiled function takes an array of Tensor&lt;T&gt; inputs and returns an array of Tensor&lt;T&gt; outputs,
+    /// matching the model's computation graph structure.
     /// </para>
     /// </remarks>
-    public PredictionModelResult(
-        IMetaLearner<T, TInput, TOutput> metaLearner,
-        MetaTrainingResult<T> metaResult,
-        ILoRAConfiguration<T>? loraConfiguration = null,
-        IBiasDetector<T>? biasDetector = null,
-        IFairnessEvaluator<T>? fairnessEvaluator = null,
-        IRetriever<T>? ragRetriever = null,
-        IReranker<T>? ragReranker = null,
-        IGenerator<T>? ragGenerator = null,
-        IEnumerable<IQueryProcessor>? queryProcessors = null,
-        AgentConfiguration<T>? agentConfig = null)
-    {
-        Model = metaLearner.BaseModel;
-        MetaLearner = metaLearner;
-        MetaTrainingResult = metaResult;
-        LoRAConfiguration = loraConfiguration;
-        ModelMetaData = Model?.GetModelMetadata() ?? new();
-        BiasDetector = biasDetector;
-        FairnessEvaluator = fairnessEvaluator;
-        RagRetriever = ragRetriever;
-        RagReranker = ragReranker;
-        RagGenerator = ragGenerator;
-        QueryProcessors = queryProcessors;
-        AgentConfig = agentConfig;
+    [JsonIgnore]  // Don't serialize - will need to be recompiled after deserialization
+    private Func<Tensor<T>[], Tensor<T>[]>? JitCompiledFunction { get; set; }
+    private AiDotNet.Configuration.InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
-        // Create placeholder OptimizationResult and NormalizationInfo for consistency
-        OptimizationResult = new OptimizationResult<T, TInput, TOutput>();
-        NormalizationInfo = new NormalizationInfo<T, TInput, TOutput>();
+    /// <summary>
+    /// Gets the reasoning configuration for advanced Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency reasoning.
+    /// </summary>
+    /// <value>Reasoning configuration for advanced reasoning capabilities, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This configuration enables advanced reasoning capabilities that make AI
+    /// models "think step by step" instead of giving quick answers that might be wrong.
+    ///
+    /// When reasoning is configured:
+    /// - Use ReasonAsync() to solve complex problems with step-by-step reasoning
+    /// - Use QuickReasonAsync() for fast answers to simple problems
+    /// - Use DeepReasonAsync() for thorough analysis of complex problems
+    ///
+    /// The reasoning configuration controls:
+    /// - How many reasoning steps to take
+    /// - Whether to explore multiple solution paths (Tree-of-Thoughts)
+    /// - Whether to verify answers with multiple attempts (Self-Consistency)
+    /// - Step verification and refinement options
+    ///
+    /// If null, reasoning features were not configured. You can still use reasoning by providing
+    /// configuration directly to ReasonAsync(), but you must have agent configuration set up.
+    /// </para>
+    /// </remarks>
+    internal ReasoningConfig? ReasoningConfig { get; private set; }
+
+    #region Prompt Engineering Properties
+
+    /// <summary>
+    /// Gets or sets the prompt template used for generating prompts during inference.
+    /// </summary>
+    /// <value>An implementation of IPromptTemplate for structured prompt generation, or null if not configured.</value>
+    /// <remarks>
+    /// <para>
+    /// The prompt template defines the structure and format of prompts sent to language models.
+    /// It supports variable interpolation, allowing dynamic content to be inserted into a predefined template.
+    /// </para>
+    /// <para><b>For Beginners:</b> A prompt template is like a form letter with blanks that get filled in.
+    ///
+    /// Instead of writing a complete prompt every time, you create a template:
+    /// <code>
+    /// "Translate {text} from {source_language} to {target_language}"
+    /// </code>
+    ///
+    /// Then fill in the blanks at runtime:
+    /// <code>
+    /// var result = model.FormatPrompt(new {
+    ///     text = "Hello",
+    ///     source_language = "English",
+    ///     target_language = "Spanish"
+    /// });
+    /// // Result: "Translate Hello from English to Spanish"
+    /// </code>
+    ///
+    /// Benefits:
+    /// - Consistent prompt structure
+    /// - Easy to update prompts without changing code
+    /// - Supports complex multi-part prompts (system, user, assistant)
+    /// </para>
+    /// </remarks>
+    internal IPromptTemplate? PromptTemplate { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the prompt chain used for multi-step inference workflows.
+    /// </summary>
+    /// <value>An implementation of IPromptChain for sequential prompt processing, or null if not configured.</value>
+    /// <remarks>
+    /// <para>
+    /// Prompt chains enable complex multi-step workflows where the output of one prompt
+    /// becomes the input to the next. This supports patterns like:
+    /// - Sequential processing (translate → summarize → format)
+    /// - Conditional branching based on intermediate results
+    /// - Parallel execution of independent steps
+    /// - Map-reduce patterns for processing multiple items
+    /// </para>
+    /// <para><b>For Beginners:</b> A prompt chain is like an assembly line where each step does one thing.
+    ///
+    /// Example workflow:
+    /// <code>
+    /// // Chain: Translate → Summarize → Format
+    /// Step 1: Translate document from Spanish to English
+    /// Step 2: Summarize the translated document
+    /// Step 3: Format the summary as bullet points
+    /// </code>
+    ///
+    /// Each step takes the previous step's output as input, making complex tasks manageable.
+    /// Chains can also:
+    /// - Run steps in parallel when they don't depend on each other
+    /// - Branch based on conditions (if sentiment is negative, escalate)
+    /// - Loop over collections (summarize each chapter)
+    /// </para>
+    /// </remarks>
+    internal IChain<string, string>? PromptChain { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the prompt optimizer used for automatic prompt improvement.
+    /// </summary>
+    /// <value>An implementation of IPromptOptimizer&lt;T&gt; for prompt optimization, or null if not configured.</value>
+    /// <remarks>
+    /// <para>
+    /// The prompt optimizer automatically improves prompts to achieve better results.
+    /// Different optimization strategies include:
+    /// - Gradient-based optimization (GRIPS, APE)
+    /// - Evolutionary algorithms (genetic algorithms, particle swarm)
+    /// - Bayesian optimization for efficient hyperparameter tuning
+    /// - OPRO (Optimization by PRompting) using LLMs to improve prompts
+    /// </para>
+    /// <para><b>For Beginners:</b> A prompt optimizer automatically improves your prompts.
+    ///
+    /// Instead of manually tweaking prompts through trial and error, the optimizer:
+    /// <code>
+    /// // Before optimization:
+    /// "Summarize this text"
+    /// // Accuracy: 65%
+    ///
+    /// // After optimization:
+    /// "Provide a concise summary of the main points in the following text,
+    /// focusing on key facts and conclusions. Be specific and avoid generalities."
+    /// // Accuracy: 89%
+    /// </code>
+    ///
+    /// The optimizer uses various strategies to find the best prompt wording,
+    /// structure, and examples for your specific task.
+    /// </para>
+    /// </remarks>
+    internal IPromptOptimizer<T>? PromptOptimizer { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the few-shot example selector for dynamic example selection.
+    /// </summary>
+    /// <value>An implementation of IFewShotExampleSelector for selecting examples, or null if not configured.</value>
+    /// <remarks>
+    /// <para>
+    /// The few-shot example selector dynamically chooses the most relevant examples
+    /// to include in prompts based on the current input. Selection strategies include:
+    /// - Semantic similarity (embedding-based matching)
+    /// - MMR (Maximal Marginal Relevance) for diverse examples
+    /// - N-gram overlap for lexical similarity
+    /// - Random selection for baseline comparison
+    /// </para>
+    /// <para><b>For Beginners:</b> Few-shot learning shows the AI examples of what you want.
+    ///
+    /// Instead of explaining in words, you show examples:
+    /// <code>
+    /// // Without examples:
+    /// "Classify the sentiment of this review"
+    ///
+    /// // With few-shot examples:
+    /// "Classify sentiment:
+    ///  Review: 'Loved it!' → Positive
+    ///  Review: 'Terrible waste of money' → Negative
+    ///  Review: 'It was okay, nothing special' → Neutral
+    ///  Review: 'Best purchase ever!'"
+    /// </code>
+    ///
+    /// The example selector automatically picks the best examples for each input,
+    /// choosing examples that are similar or relevant to the current query.
+    /// </para>
+    /// </remarks>
+    internal IFewShotExampleSelector<T>? FewShotExampleSelector { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the prompt analyzer for measuring prompt metrics.
+    /// </summary>
+    /// <value>An implementation of IPromptAnalyzer for prompt analysis, or null if not configured.</value>
+    /// <remarks>
+    /// <para>
+    /// The prompt analyzer provides metrics and validation for prompts before
+    /// they are sent to the model. Analysis includes:
+    /// - Token counting for cost estimation
+    /// - Complexity scoring for prompt difficulty
+    /// - Pattern detection (instruction, question, few-shot, etc.)
+    /// - Validation for potential issues (injection, length, etc.)
+    /// </para>
+    /// <para><b>For Beginners:</b> The analyzer is like a spell-checker for prompts.
+    ///
+    /// Before sending a prompt to the AI (which costs money), the analyzer tells you:
+    /// <code>
+    /// var metrics = model.AnalyzePrompt("Your prompt here...");
+    ///
+    /// Console.WriteLine($"Tokens: {metrics.TokenCount}");      // How many tokens
+    /// Console.WriteLine($"Cost: ${metrics.EstimatedCost}");    // Estimated API cost
+    /// Console.WriteLine($"Complexity: {metrics.ComplexityScore}"); // How complex (0-1)
+    /// Console.WriteLine($"Patterns: {string.Join(", ", metrics.DetectedPatterns)}");
+    /// </code>
+    ///
+    /// This helps you:
+    /// - Avoid exceeding token limits
+    /// - Estimate and control costs
+    /// - Catch potential issues before API calls
+    /// </para>
+    /// </remarks>
+    internal IPromptAnalyzer? PromptAnalyzer { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the prompt compressor for reducing prompt length.
+    /// </summary>
+    /// <value>An implementation of IPromptCompressor for prompt compression, or null if not configured.</value>
+    /// <remarks>
+    /// <para>
+    /// The prompt compressor reduces prompt length while preserving semantic meaning.
+    /// Compression strategies include:
+    /// - Redundancy removal (eliminate repetitive phrases)
+    /// - Summarization (condense verbose content)
+    /// - Selective context (keep most relevant information)
+    /// - Token optimization (use shorter synonyms)
+    /// </para>
+    /// <para><b>For Beginners:</b> The compressor makes prompts shorter to save money.
+    ///
+    /// Shorter prompts = fewer tokens = lower costs:
+    /// <code>
+    /// // Before compression (80 tokens):
+    /// "Please analyze the following document and provide a summary.
+    ///  The document that you need to analyze is provided below.
+    ///  When you analyze the document, focus on the main points."
+    ///
+    /// // After compression (25 tokens):
+    /// "Summarize this document, focusing on main points:"
+    /// </code>
+    ///
+    /// The compressor automatically:
+    /// - Removes redundant phrases
+    /// - Shortens verbose instructions
+    /// - Preserves essential meaning
+    /// - Reports compression metrics (tokens saved, cost savings)
+    /// </para>
+    /// </remarks>
+    internal IPromptCompressor? PromptCompressor { get; private set; }
+
+    #endregion
+
+    /// <summary>
+    /// Initializes a new instance of the PredictionModelResult class using an options object for clean configuration.
+    /// </summary>
+    /// <param name="options">The configuration options containing all settings for the prediction model result.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor provides a cleaner API by accepting a single options object instead of many parameters.
+    /// It supports two initialization paths:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description><b>Standard path:</b> Set OptimizationResult and NormalizationInfo for regular trained models</description></item>
+    ///   <item><description><b>Meta-learning path:</b> Set MetaLearner and MetaTrainingResult for meta-trained models</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> This is the only way to create a PredictionModelResult.
+    ///
+    /// For a standard trained model:
+    /// <code>
+    /// var options = new PredictionModelResultOptions&lt;double, double[], double&gt;
+    /// {
+    ///     OptimizationResult = optimizationResult,
+    ///     NormalizationInfo = normInfo,
+    ///     BiasDetector = myBiasDetector
+    /// };
+    /// var result = new PredictionModelResult&lt;double, double[], double&gt;(options);
+    /// </code>
+    ///
+    /// For a meta-trained model:
+    /// <code>
+    /// var options = new PredictionModelResultOptions&lt;double, double[], double&gt;
+    /// {
+    ///     MetaLearner = metaLearner,
+    ///     MetaTrainingResult = metaResult,
+    ///     LoRAConfiguration = loraConfig
+    /// };
+    /// var result = new PredictionModelResult&lt;double, double[], double&gt;(options);
+    /// </code>
+    ///
+    /// Benefits:
+    /// - Only set the options you need
+    /// - Clear property names make code self-documenting
+    /// - Easy to add new options without breaking existing code
+    /// - IDE auto-completion helps discover available options
+    /// </para>
+    /// </remarks>
+    internal PredictionModelResult(PredictionModelResultOptions<T, TInput, TOutput> options)
+    {
+        if (options is null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        // Determine initialization path: meta-learning or standard
+        var isMetaLearningPath = options.MetaLearner is not null;
+
+        if (isMetaLearningPath)
+        {
+            // Meta-learning path: MetaLearner and MetaTrainingResult are required
+            if (options.MetaLearner is null)
+            {
+                throw new ArgumentNullException(nameof(options), "MetaLearner cannot be null for meta-learning path");
+            }
+
+            if (options.MetaTrainingResult is null)
+            {
+                throw new ArgumentNullException(nameof(options), "MetaTrainingResult cannot be null for meta-learning path");
+            }
+
+            // Get model from meta-learner
+            Model = options.MetaLearner.BaseModel;
+            MetaLearner = options.MetaLearner;
+            MetaTrainingResult = options.MetaTrainingResult;
+
+            // Create placeholder OptimizationResult and NormalizationInfo for consistency
+            OptimizationResult = options.OptimizationResult ?? new OptimizationResult<T, TInput, TOutput>();
+            NormalizationInfo = options.NormalizationInfo ?? new NormalizationInfo<T, TInput, TOutput>();
+        }
+        else
+        {
+            // Standard path: OptimizationResult and NormalizationInfo are required
+            if (options.OptimizationResult is null)
+            {
+                throw new ArgumentNullException(nameof(options), "OptimizationResult cannot be null");
+            }
+
+            if (options.NormalizationInfo is null)
+            {
+                throw new ArgumentNullException(nameof(options), "NormalizationInfo cannot be null");
+            }
+
+            Model = options.OptimizationResult.BestSolution;
+            OptimizationResult = options.OptimizationResult;
+            NormalizationInfo = options.NormalizationInfo;
+            MetaLearner = options.MetaLearner;
+            MetaTrainingResult = options.MetaTrainingResult;
+        }
+
+        ModelMetaData = Model?.GetModelMetadata() ?? new();
+
+        // Ethical AI and fairness
+        BiasDetector = options.BiasDetector;
+        FairnessEvaluator = options.FairnessEvaluator;
+
+        // Tokenization
+        Tokenizer = options.Tokenizer;
+        TokenizationConfig = options.TokenizationConfig;
+
+        // RAG (Retrieval Augmented Generation)
+        RagRetriever = options.RagRetriever;
+        RagReranker = options.RagReranker;
+        RagGenerator = options.RagGenerator;
+        QueryProcessors = options.QueryProcessors;
+
+        // Graph RAG
+        KnowledgeGraph = options.KnowledgeGraph;
+        GraphStore = options.GraphStore;
+        HybridGraphRetriever = options.HybridGraphRetriever;
+
+        // Cross-validation
+        CrossValidationResult = options.CrossValidationResult;
+
+        // Fine-tuning and adaptation
+        LoRAConfiguration = options.LoRAConfiguration;
+
+        // Agent assistance
+        AgentConfig = options.AgentConfig;
+        AgentRecommendation = options.AgentRecommendation;
+
+        // Deployment
+        DeploymentConfiguration = options.DeploymentConfiguration;
+        JitCompiledFunction = options.JitCompiledFunction;
+        InferenceOptimizationConfig = options.InferenceOptimizationConfig;
+
+        // Reasoning
+        ReasoningConfig = options.ReasoningConfig;
+
+        // Prompt Engineering
+        PromptTemplate = options.PromptTemplate;
+        PromptChain = options.PromptChain;
+        PromptOptimizer = options.PromptOptimizer;
+        FewShotExampleSelector = options.FewShotExampleSelector;
+        PromptAnalyzer = options.PromptAnalyzer;
+        PromptCompressor = options.PromptCompressor;
     }
 
     /// <summary>
@@ -575,7 +936,28 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         var (normalizedNewData, _) = NormalizationInfo.Normalizer.NormalizeInput(newData);
-        var normalizedPredictions = Model.Predict(normalizedNewData);
+
+        // Use JIT-compiled function if available for 5-10x faster predictions
+        TOutput normalizedPredictions;
+        if (JitCompiledFunction != null && normalizedNewData is Tensor<T> inputTensor)
+        {
+            // JIT PATH: Use compiled function for accelerated inference
+            var jitResult = JitCompiledFunction(new[] { inputTensor });
+            if (jitResult != null && jitResult.Length > 0 && jitResult[0] is TOutput output)
+            {
+                normalizedPredictions = output;
+            }
+            else
+            {
+                // Fallback to model if JIT result is unexpected
+                normalizedPredictions = Model.Predict(normalizedNewData);
+            }
+        }
+        else
+        {
+            // NORMAL PATH: Use model's standard prediction
+            normalizedPredictions = Model.Predict(normalizedNewData);
+        }
 
         return NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, NormalizationInfo.YParams);
     }
@@ -945,6 +1327,18 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="parameters">The parameter vector to use.</param>
     /// <returns>A new PredictionModelResult with updated parameters.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new model with updated parameters. The OptimizationResult is deep-copied
+    /// and updated to reference the new model. NormalizationInfo is shared (shallow-copied) since
+    /// normalization parameters don't change when model parameters change.
+    /// </para>
+    /// <para>
+    /// All configuration components (prompt engineering, RAG, agents, etc.) are shallow-copied,
+    /// meaning they are shared between the original and new instance. See <see cref="DeepCopy"/>
+    /// for detailed documentation on which components are deep vs shallow copied.
+    /// </para>
+    /// </remarks>
     public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         if (Model == null)
@@ -960,16 +1354,42 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         updatedOptimizationResult.BestSolution = newModel;
 
         // Create new result with updated optimization result
-        // Use constructor that preserves BiasDetector, FairnessEvaluator, and RAG components
-        return new PredictionModelResult<T, TInput, TOutput>(
-            updatedOptimizationResult,
-            NormalizationInfo,
-            BiasDetector,
-            FairnessEvaluator,
-            RagRetriever,
-            RagReranker,
-            RagGenerator,
-            QueryProcessors);
+        // Preserve all configuration properties to ensure deployment behavior, model adaptation,
+        // training history, and Graph RAG configuration are maintained across parameter updates
+        var options = new PredictionModelResultOptions<T, TInput, TOutput>
+        {
+            OptimizationResult = updatedOptimizationResult,
+            NormalizationInfo = NormalizationInfo,
+            BiasDetector = BiasDetector,
+            FairnessEvaluator = FairnessEvaluator,
+            RagRetriever = RagRetriever,
+            RagReranker = RagReranker,
+            RagGenerator = RagGenerator,
+            QueryProcessors = QueryProcessors,
+            LoRAConfiguration = LoRAConfiguration,
+            CrossValidationResult = CrossValidationResult,
+            AgentConfig = AgentConfig,
+            AgentRecommendation = AgentRecommendation,
+            DeploymentConfiguration = DeploymentConfiguration,
+            // JIT compilation is parameter-specific, don't copy
+            InferenceOptimizationConfig = InferenceOptimizationConfig,
+            ReasoningConfig = ReasoningConfig,
+            KnowledgeGraph = KnowledgeGraph,
+            GraphStore = GraphStore,
+            HybridGraphRetriever = HybridGraphRetriever,
+            MetaLearner = MetaLearner,
+            MetaTrainingResult = MetaTrainingResult,
+            Tokenizer = Tokenizer,
+            TokenizationConfig = TokenizationConfig,
+            PromptTemplate = PromptTemplate,
+            PromptChain = PromptChain,
+            PromptOptimizer = PromptOptimizer,
+            FewShotExampleSelector = FewShotExampleSelector,
+            PromptAnalyzer = PromptAnalyzer,
+            PromptCompressor = PromptCompressor
+        };
+
+        return new PredictionModelResult<T, TInput, TOutput>(options);
     }
 
     /// <summary>
@@ -1036,9 +1456,44 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
-    /// Creates a deep copy of this PredictionModelResult.
+    /// Creates a copy of this PredictionModelResult with deep-copied core model components.
     /// </summary>
-    /// <returns>A new PredictionModelResult instance that is a deep copy of this one.</returns>
+    /// <returns>A new PredictionModelResult instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Deep-copied components</b> (independent copies, mutations don't affect original):
+    /// <list type="bullet">
+    ///   <item><description>Model - The underlying predictive model</description></item>
+    ///   <item><description>OptimizationResult - Training results and metrics</description></item>
+    ///   <item><description>NormalizationInfo - Data normalization parameters</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Shallow-copied components</b> (shared references, mutations affect both copies):
+    /// <list type="bullet">
+    ///   <item><description>BiasDetector, FairnessEvaluator - Ethical AI components</description></item>
+    ///   <item><description>RagRetriever, RagReranker, RagGenerator, QueryProcessors - RAG components</description></item>
+    ///   <item><description>KnowledgeGraph, GraphStore, HybridGraphRetriever - Graph RAG components</description></item>
+    ///   <item><description>MetaLearner, MetaTrainingResult - Meta-learning components</description></item>
+    ///   <item><description>PromptTemplate, PromptChain, PromptOptimizer - Prompt engineering components</description></item>
+    ///   <item><description>FewShotExampleSelector, PromptAnalyzer, PromptCompressor - Prompt engineering components</description></item>
+    ///   <item><description>Tokenizer, TokenizationConfig - Tokenization components</description></item>
+    ///   <item><description>AgentConfig, AgentRecommendation, ReasoningConfig - Agent/reasoning config</description></item>
+    ///   <item><description>DeploymentConfiguration, InferenceOptimizationConfig - Deployment config</description></item>
+    ///   <item><description>LoRAConfiguration, CrossValidationResult - Training config</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// The shallow-copied components are typically stateless configuration objects or services
+    /// that can be safely shared. If you need independent copies of these components, you should
+    /// create new instances manually before calling DeepCopy.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new model that can be modified independently
+    /// from the original for its core prediction behavior (model weights, normalization).
+    /// However, configuration objects like prompt templates are shared between the original
+    /// and the copy - if you modify them, both copies will see the change.
+    /// </para>
+    /// </remarks>
     public IFullModel<T, TInput, TOutput> DeepCopy()
     {
         if (Model == null)
@@ -1055,16 +1510,42 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         var clonedNormalizationInfo = NormalizationInfo.DeepCopy();
 
-        // Use constructor that preserves BiasDetector, FairnessEvaluator, and RAG components
-        return new PredictionModelResult<T, TInput, TOutput>(
-            clonedOptimizationResult,
-            clonedNormalizationInfo,
-            BiasDetector,
-            FairnessEvaluator,
-            RagRetriever,
-            RagReranker,
-            RagGenerator,
-            QueryProcessors);
+        // Preserve all configuration properties to ensure deployment behavior, model adaptation,
+        // training history, and Graph RAG configuration are maintained across deep copy
+        var options = new PredictionModelResultOptions<T, TInput, TOutput>
+        {
+            OptimizationResult = clonedOptimizationResult,
+            NormalizationInfo = clonedNormalizationInfo,
+            BiasDetector = BiasDetector,
+            FairnessEvaluator = FairnessEvaluator,
+            RagRetriever = RagRetriever,
+            RagReranker = RagReranker,
+            RagGenerator = RagGenerator,
+            QueryProcessors = QueryProcessors,
+            LoRAConfiguration = LoRAConfiguration,
+            CrossValidationResult = CrossValidationResult,
+            AgentConfig = AgentConfig,
+            AgentRecommendation = AgentRecommendation,
+            DeploymentConfiguration = DeploymentConfiguration,
+            // JIT compilation is model-specific, don't copy
+            InferenceOptimizationConfig = InferenceOptimizationConfig,
+            ReasoningConfig = ReasoningConfig,
+            KnowledgeGraph = KnowledgeGraph,
+            GraphStore = GraphStore,
+            HybridGraphRetriever = HybridGraphRetriever,
+            MetaLearner = MetaLearner,
+            MetaTrainingResult = MetaTrainingResult,
+            Tokenizer = Tokenizer,
+            TokenizationConfig = TokenizationConfig,
+            PromptTemplate = PromptTemplate,
+            PromptChain = PromptChain,
+            PromptOptimizer = PromptOptimizer,
+            FewShotExampleSelector = FewShotExampleSelector,
+            PromptAnalyzer = PromptAnalyzer,
+            PromptCompressor = PromptCompressor
+        };
+
+        return new PredictionModelResult<T, TInput, TOutput>(options);
     }
 
     /// <summary>
@@ -1114,16 +1595,28 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     {
         try
         {
-            // Create JSON settings with custom converters for our types
+            // Create JSON settings with custom converters and safe type binding
+            // Use TypeNameHandling.Auto instead of All to minimize type info exposure
+            // Auto only emits type info when actual type differs from declared type
             var settings = new JsonSerializerSettings
             {
-                TypeNameHandling = TypeNameHandling.All,
+                TypeNameHandling = TypeNameHandling.Auto,
+                SerializationBinder = new SafeSerializationBinder(),
                 Formatting = Formatting.Indented
             };
 
-            // Serialize the object
+            // Serialize the object to JSON bytes
             var jsonString = JsonConvert.SerializeObject(this, settings);
-            return Encoding.UTF8.GetBytes(jsonString);
+            var jsonBytes = Encoding.UTF8.GetBytes(jsonString);
+
+            // Apply compression if configured
+            var compressionConfig = DeploymentConfiguration?.Compression;
+            if (compressionConfig != null && compressionConfig.Mode != ModelCompressionMode.None)
+            {
+                return CompressionHelper.Compress(jsonBytes, compressionConfig);
+            }
+
+            return jsonBytes;
         }
         catch (Exception ex)
         {
@@ -1164,12 +1657,16 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     {
         try
         {
-            var jsonString = Encoding.UTF8.GetString(data);
+            // Decompress if needed (CompressionHelper automatically detects compressed data)
+            var decompressedData = CompressionHelper.DecompressIfNeeded(data);
+            var jsonString = Encoding.UTF8.GetString(decompressedData);
 
-            // Create JSON settings with custom converters for our types
+            // Create JSON settings with custom converters and safe type binding
+            // Use TypeNameHandling.Auto to match serialization and minimize type info exposure
             var settings = new JsonSerializerSettings
             {
-                TypeNameHandling = TypeNameHandling.All
+                TypeNameHandling = TypeNameHandling.Auto,
+                SerializationBinder = new SafeSerializationBinder()
             };
 
             // Deserialize the object
@@ -1183,6 +1680,17 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 ModelMetaData = deserializedObject.ModelMetaData;
                 BiasDetector = deserializedObject.BiasDetector;
                 FairnessEvaluator = deserializedObject.FairnessEvaluator;
+
+                // Preserve RAG components and all configuration properties
+                RagRetriever = deserializedObject.RagRetriever;
+                RagReranker = deserializedObject.RagReranker;
+                RagGenerator = deserializedObject.RagGenerator;
+                QueryProcessors = deserializedObject.QueryProcessors;
+                LoRAConfiguration = deserializedObject.LoRAConfiguration;
+                CrossValidationResult = deserializedObject.CrossValidationResult;
+                AgentConfig = deserializedObject.AgentConfig;
+                AgentRecommendation = deserializedObject.AgentRecommendation;
+                DeploymentConfiguration = deserializedObject.DeploymentConfiguration;
             }
             else
             {
@@ -1338,10 +1846,14 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
     private static ModelMetadata<T> ExtractMetadataFromSerializedData(byte[] data)
     {
-        var jsonString = Encoding.UTF8.GetString(data);
+        // Decompress if needed (CompressionHelper automatically detects compressed data)
+        var decompressedData = CompressionHelper.DecompressIfNeeded(data);
+        var jsonString = Encoding.UTF8.GetString(decompressedData);
+        // Use TypeNameHandling.Auto to match serialization and minimize type info exposure
         var settings = new JsonSerializerSettings
         {
-            TypeNameHandling = TypeNameHandling.All
+            TypeNameHandling = TypeNameHandling.Auto,
+            SerializationBinder = new SafeSerializationBinder()
         };
         var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);
         return deserializedObject?.ModelMetaData ?? new();
@@ -1476,4 +1988,1509 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
         return processedQuery;
     }
+
+    /// <summary>
+    /// Queries the knowledge graph to find related nodes by entity name or label.
+    /// </summary>
+    /// <param name="query">The search query (entity name or partial match).</param>
+    /// <param name="topK">Maximum number of results to return.</param>
+    /// <returns>Collection of matching graph nodes.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when Graph RAG is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method searches the knowledge graph for entities matching your query.
+    /// Unlike vector search which finds similar documents, this finds entities by name or label.
+    ///
+    /// Example:
+    /// <code>
+    /// var nodes = result.QueryKnowledgeGraph("Einstein", topK: 5);
+    /// foreach (var node in nodes)
+    /// {
+    ///     Console.WriteLine($"{node.Label}: {node.Id}");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IEnumerable<GraphNode<T>> QueryKnowledgeGraph(string query, int topK = 10)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or empty", nameof(query));
+
+        return KnowledgeGraph.FindRelatedNodes(query, topK);
+    }
+
+    /// <summary>
+    /// Retrieves results using hybrid vector + graph search for enhanced context retrieval.
+    /// </summary>
+    /// <param name="queryEmbedding">The query embedding vector.</param>
+    /// <param name="topK">Number of initial candidates from vector search.</param>
+    /// <param name="expansionDepth">How many hops to traverse in the graph (0 = no expansion).</param>
+    /// <param name="maxResults">Maximum total results to return.</param>
+    /// <returns>List of retrieval results with scores and source information.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when hybrid retriever is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method combines the best of both worlds:
+    /// 1. First, it finds similar documents using vector similarity (like traditional RAG)
+    /// 2. Then, it expands the context by traversing the knowledge graph to find related entities
+    ///
+    /// For example, searching for "photosynthesis" might:
+    /// - Find documents about photosynthesis via vector search
+    /// - Then traverse the graph to also include chlorophyll, plants, carbon dioxide
+    ///
+    /// This provides richer, more complete context than vector search alone.
+    /// </para>
+    /// </remarks>
+    public List<RetrievalResult<T>> HybridRetrieve(
+        Vector<T> queryEmbedding,
+        int topK = 5,
+        int expansionDepth = 1,
+        int maxResults = 10)
+    {
+        if (HybridGraphRetriever == null)
+        {
+            throw new InvalidOperationException(
+                "Hybrid graph retriever not configured. Configure Graph RAG with a document store using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (queryEmbedding == null || queryEmbedding.Length == 0)
+            throw new ArgumentException("Query embedding cannot be null or empty", nameof(queryEmbedding));
+
+        return HybridGraphRetriever.Retrieve(queryEmbedding, topK, expansionDepth, maxResults);
+    }
+
+    /// <summary>
+    /// Traverses the knowledge graph starting from a node using breadth-first search.
+    /// </summary>
+    /// <param name="startNodeId">The ID of the starting node.</param>
+    /// <param name="maxDepth">Maximum traversal depth.</param>
+    /// <returns>Collection of nodes reachable from the starting node in BFS order.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when knowledge graph is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method explores the graph starting from a specific entity,
+    /// discovering all connected entities up to a specified depth.
+    ///
+    /// Example: Starting from "Paris", depth=2 might find:
+    /// - Depth 1: France, Eiffel Tower, Seine River
+    /// - Depth 2: Europe, Iron, Water
+    ///
+    /// This is useful for understanding the context around a specific entity.
+    /// </para>
+    /// </remarks>
+    public IEnumerable<GraphNode<T>> TraverseGraph(string startNodeId, int maxDepth = 2)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(startNodeId))
+            throw new ArgumentException("Start node ID cannot be null or empty", nameof(startNodeId));
+
+        return KnowledgeGraph.BreadthFirstTraversal(startNodeId, maxDepth);
+    }
+
+    /// <summary>
+    /// Finds the shortest path between two nodes in the knowledge graph.
+    /// </summary>
+    /// <param name="startNodeId">The ID of the starting node.</param>
+    /// <param name="endNodeId">The ID of the target node.</param>
+    /// <returns>List of node IDs representing the path, or empty list if no path exists.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when knowledge graph is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method finds how two entities are connected.
+    ///
+    /// Example: Finding the path between "Einstein" and "Princeton University" might return:
+    /// ["einstein", "worked_at_princeton", "princeton_university"]
+    ///
+    /// This is useful for understanding the relationships between concepts.
+    /// </para>
+    /// </remarks>
+    public List<string> FindPathInGraph(string startNodeId, string endNodeId)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(startNodeId))
+            throw new ArgumentException("Start node ID cannot be null or empty", nameof(startNodeId));
+        if (string.IsNullOrWhiteSpace(endNodeId))
+            throw new ArgumentException("End node ID cannot be null or empty", nameof(endNodeId));
+
+        return KnowledgeGraph.FindShortestPath(startNodeId, endNodeId);
+    }
+
+    /// <summary>
+    /// Gets all edges (relationships) connected to a node in the knowledge graph.
+    /// </summary>
+    /// <param name="nodeId">The ID of the node to query.</param>
+    /// <param name="direction">The direction of edges to retrieve.</param>
+    /// <returns>Collection of edges connected to the node.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when knowledge graph is not configured.</exception>
+    /// <exception cref="ArgumentException">Thrown when nodeId is null or empty.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method finds all relationships connected to an entity.
+    ///
+    /// Example: Getting edges for "Einstein" might return:
+    /// - Outgoing: STUDIED→Physics, WORKED_AT→Princeton, BORN_IN→Germany
+    /// - Incoming: INFLUENCED_BY→Newton
+    /// </para>
+    /// </remarks>
+    public IEnumerable<GraphEdge<T>> GetNodeRelationships(string nodeId, EdgeDirection direction = EdgeDirection.Both)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(nodeId))
+            throw new ArgumentException("Node ID cannot be null or empty", nameof(nodeId));
+
+        var result = new List<GraphEdge<T>>();
+
+        if (direction == EdgeDirection.Outgoing || direction == EdgeDirection.Both)
+        {
+            result.AddRange(KnowledgeGraph.GetOutgoingEdges(nodeId));
+        }
+
+        if (direction == EdgeDirection.Incoming || direction == EdgeDirection.Both)
+        {
+            result.AddRange(KnowledgeGraph.GetIncomingEdges(nodeId));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Attaches Graph RAG components to a PredictionModelResult instance.
+    /// </summary>
+    /// <param name="knowledgeGraph">The knowledge graph to attach.</param>
+    /// <param name="graphStore">The graph store backend to attach.</param>
+    /// <param name="hybridGraphRetriever">The hybrid retriever to attach.</param>
+    /// <remarks>
+    /// This method is internal and used by PredictionModelBuilder when loading/deserializing models.
+    /// Graph RAG components cannot be serialized (they contain file handles, WAL references, etc.),
+    /// so the builder automatically reattaches them when loading a model that was configured with Graph RAG.
+    /// Users should use PredictionModelBuilder.LoadModel() which handles this automatically.
+    /// </remarks>
+    internal void AttachGraphComponents(
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IGraphStore<T>? graphStore = null,
+        HybridGraphRetriever<T>? hybridGraphRetriever = null)
+    {
+        KnowledgeGraph = knowledgeGraph;
+        GraphStore = graphStore;
+        HybridGraphRetriever = hybridGraphRetriever;
+    }
+
+    /// <summary>
+    /// Attaches tokenization components to the model result.
+    /// </summary>
+    /// <param name="tokenizer">The tokenizer to attach.</param>
+    /// <param name="config">Optional tokenization configuration.</param>
+    /// <remarks>
+    /// This method is internal and used by PredictionModelBuilder during model construction.
+    /// </remarks>
+    internal void AttachTokenizer(
+        ITokenizer? tokenizer,
+        TokenizationConfig? config = null)
+    {
+        Tokenizer = tokenizer;
+        TokenizationConfig = config;
+    }
+
+    /// <summary>
+    /// Attaches prompt engineering components to this result.
+    /// </summary>
+    /// <param name="promptTemplate">The prompt template for formatting prompts.</param>
+    /// <param name="promptChain">The chain for multi-step prompt execution.</param>
+    /// <param name="promptOptimizer">The optimizer for improving prompt quality.</param>
+    /// <param name="fewShotExampleSelector">The selector for choosing relevant few-shot examples.</param>
+    /// <param name="promptAnalyzer">The analyzer for prompt metrics and validation.</param>
+    /// <param name="promptCompressor">The compressor for reducing prompt token counts.</param>
+    /// <remarks>
+    /// This method is internal and used by PredictionModelBuilder during model construction.
+    /// </remarks>
+    internal void AttachPromptEngineering(
+        IPromptTemplate? promptTemplate,
+        IChain<string, string>? promptChain,
+        IPromptOptimizer<T>? promptOptimizer,
+        IFewShotExampleSelector<T>? fewShotExampleSelector,
+        IPromptAnalyzer? promptAnalyzer,
+        IPromptCompressor? promptCompressor)
+    {
+        PromptTemplate = promptTemplate;
+        PromptChain = promptChain;
+        PromptOptimizer = promptOptimizer;
+        FewShotExampleSelector = fewShotExampleSelector;
+        PromptAnalyzer = promptAnalyzer;
+        PromptCompressor = promptCompressor;
+    }
+
+    #region Prompt Engineering Inference Methods
+
+    /// <summary>
+    /// Formats a prompt using the configured prompt template.
+    /// </summary>
+    /// <param name="variables">A dictionary of variable names and their values to substitute into the template.</param>
+    /// <returns>The formatted prompt string with all variables substituted.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no prompt template is configured.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method uses the configured IPromptTemplate to render a prompt with the provided
+    /// variable values. The template defines the structure of the prompt, and this method
+    /// fills in the placeholders with actual values.
+    /// </para>
+    /// <para><b>For Beginners:</b> A prompt template is like a fill-in-the-blank form for AI prompts.
+    ///
+    /// Instead of writing different prompts for each use case, you define a template once
+    /// with placeholders like {topic} or {language}, then fill them in as needed.
+    ///
+    /// Example:
+    /// <code>
+    /// // Template: "Translate the following text from {source} to {target}: {text}"
+    /// var variables = new Dictionary&lt;string, string&gt;
+    /// {
+    ///     ["source"] = "English",
+    ///     ["target"] = "Spanish",
+    ///     ["text"] = "Hello, how are you?"
+    /// };
+    ///
+    /// string prompt = modelResult.FormatPrompt(variables);
+    /// // Result: "Translate the following text from English to Spanish: Hello, how are you?"
+    /// </code>
+    ///
+    /// Benefits:
+    /// - Consistent prompt structure across your application
+    /// - Easy to modify prompts without changing code
+    /// - Reusable templates for common tasks
+    /// </para>
+    /// </remarks>
+    public string FormatPrompt(Dictionary<string, string> variables)
+    {
+        if (PromptTemplate == null)
+            throw new InvalidOperationException(
+                "No prompt template configured. Use ConfigurePromptTemplate() in PredictionModelBuilder.");
+
+        return PromptTemplate.Format(variables);
+    }
+
+    /// <summary>
+    /// Analyzes a prompt and returns detailed metrics about its structure and characteristics.
+    /// </summary>
+    /// <param name="prompt">The prompt text to analyze.</param>
+    /// <returns>A PromptMetrics object containing token count, cost estimate, complexity score, and detected patterns.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no prompt analyzer is configured.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method uses the configured IPromptAnalyzer to examine a prompt and extract
+    /// metrics such as token count, estimated cost, complexity score, variable count,
+    /// example count, and detected prompt patterns.
+    /// </para>
+    /// <para><b>For Beginners:</b> Prompt analysis helps you understand and optimize your prompts.
+    ///
+    /// When you analyze a prompt, you learn:
+    /// - Token count: How many "words" the AI sees (affects cost and limits)
+    /// - Estimated cost: How much this prompt will cost in API fees
+    /// - Complexity score: How complicated the prompt is (0 = simple, 1 = complex)
+    /// - Variable count: How many {placeholders} need to be filled
+    /// - Detected patterns: What type of prompt this is (question, instruction, etc.)
+    ///
+    /// Example:
+    /// <code>
+    /// string prompt = "You are a helpful assistant. Translate {text} from English to Spanish.";
+    /// var metrics = modelResult.AnalyzePrompt(prompt);
+    ///
+    /// Console.WriteLine($"Tokens: {metrics.TokenCount}");           // e.g., 15
+    /// Console.WriteLine($"Estimated cost: ${metrics.EstimatedCost}"); // e.g., $0.0001
+    /// Console.WriteLine($"Complexity: {metrics.ComplexityScore}");   // e.g., 0.3
+    /// Console.WriteLine($"Variables: {metrics.VariableCount}");      // e.g., 1
+    /// Console.WriteLine($"Patterns: {string.Join(", ", metrics.DetectedPatterns)}");
+    /// // e.g., "translation, instruction"
+    /// </code>
+    ///
+    /// Use this to:
+    /// - Estimate costs before sending to AI
+    /// - Identify overly complex prompts that might confuse the model
+    /// - Validate that all required variables are present
+    /// </para>
+    /// </remarks>
+    public PromptMetrics AnalyzePrompt(string prompt)
+    {
+        if (PromptAnalyzer == null)
+            throw new InvalidOperationException(
+                "No prompt analyzer configured. Use ConfigurePromptAnalyzer() in PredictionModelBuilder.");
+
+        return PromptAnalyzer.Analyze(prompt);
+    }
+
+    /// <summary>
+    /// Validates a prompt and returns any detected issues or warnings.
+    /// </summary>
+    /// <param name="prompt">The prompt text to validate.</param>
+    /// <param name="options">Optional validation options to customize the validation behavior.</param>
+    /// <returns>A list of PromptIssue objects describing any problems found.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no prompt analyzer is configured.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method uses the configured IPromptAnalyzer to check a prompt for common issues
+    /// such as unclosed variables, excessive length, potential injection vulnerabilities,
+    /// and other problems that could affect prompt quality or safety.
+    /// </para>
+    /// <para><b>For Beginners:</b> Validation catches problems with your prompts before you send them.
+    ///
+    /// Common issues that validation detects:
+    /// - Unclosed variable placeholders: "{text" instead of "{text}"
+    /// - Prompts that are too long for the model's context window
+    /// - Potential prompt injection attempts in user input
+    /// - Missing required sections or unclear instructions
+    ///
+    /// Example:
+    /// <code>
+    /// string prompt = "Translate {text from English to Spanish."; // Note: unclosed {
+    /// var issues = modelResult.ValidatePrompt(prompt);
+    ///
+    /// foreach (var issue in issues)
+    /// {
+    ///     Console.WriteLine($"[{issue.Severity}] {issue.Message}");
+    ///     // Output: "[Error] Unclosed variable placeholder at position 10"
+    /// }
+    ///
+    /// if (issues.Any(i => i.Severity == IssueSeverity.Error))
+    /// {
+    ///     // Don't send the prompt - fix the errors first
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<PromptIssue> ValidatePrompt(string prompt, ValidationOptions? options = null)
+    {
+        if (PromptAnalyzer == null)
+            throw new InvalidOperationException(
+                "No prompt analyzer configured. Use ConfigurePromptAnalyzer() in PredictionModelBuilder.");
+
+        return PromptAnalyzer.ValidatePrompt(prompt, options).ToList();
+    }
+
+    /// <summary>
+    /// Compresses a prompt to reduce its token count while preserving essential meaning.
+    /// </summary>
+    /// <param name="prompt">The prompt text to compress.</param>
+    /// <param name="options">Optional compression options to control the compression behavior.</param>
+    /// <returns>A CompressionResult containing the compressed prompt and compression metrics.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no prompt compressor is configured.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method uses the configured IPromptCompressor to reduce the token count of a prompt
+    /// while attempting to preserve its essential meaning and effectiveness. Compression can
+    /// help reduce API costs and fit longer content into limited context windows.
+    /// </para>
+    /// <para><b>For Beginners:</b> Prompt compression makes your prompts shorter to save money and fit limits.
+    ///
+    /// AI APIs charge per token, and models have maximum context sizes. Compression helps by:
+    /// - Removing redundant words and phrases
+    /// - Shortening verbose explanations
+    /// - Eliminating unnecessary whitespace
+    /// - Using more concise phrasing
+    ///
+    /// Example:
+    /// <code>
+    /// string longPrompt = @"
+    ///     Please take the following text and translate it from the English language
+    ///     to the Spanish language. Make sure to preserve the original meaning and
+    ///     tone of the text as much as possible. Here is the text: {text}";
+    ///
+    /// var result = modelResult.CompressPrompt(longPrompt);
+    ///
+    /// Console.WriteLine($"Original tokens: {result.OriginalTokenCount}");    // e.g., 50
+    /// Console.WriteLine($"Compressed tokens: {result.CompressedTokenCount}"); // e.g., 20
+    /// Console.WriteLine($"Saved: {result.TokensSaved} tokens ({result.CompressionRatio:P0})");
+    /// Console.WriteLine($"Compressed: {result.CompressedPrompt}");
+    /// // e.g., "Translate English to Spanish, preserving meaning and tone: {text}"
+    /// </code>
+    ///
+    /// Use compression options to control behavior:
+    /// <code>
+    /// var options = new CompressionOptions
+    /// {
+    ///     TargetReduction = 0.3,      // Try to reduce by 30%
+    ///     PreserveVariables = true,   // Don't remove {placeholders}
+    ///     PreserveCodeBlocks = true   // Don't modify code examples
+    /// };
+    /// var result = modelResult.CompressPrompt(longPrompt, options);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public CompressionResult CompressPrompt(string prompt, CompressionOptions? options = null)
+    {
+        if (PromptCompressor == null)
+            throw new InvalidOperationException(
+                "No prompt compressor configured. Use ConfigurePromptCompressor() in PredictionModelBuilder.");
+
+        return PromptCompressor.CompressWithMetrics(prompt, options ?? CompressionOptions.Default);
+    }
+
+    /// <summary>
+    /// Executes a prompt chain synchronously with the given input.
+    /// </summary>
+    /// <param name="input">The initial input to the chain.</param>
+    /// <returns>The output string from the chain execution.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no prompt chain is configured.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method executes a multi-step prompt workflow where each step's output becomes
+    /// the next step's input. Chains enable complex workflows like translation followed
+    /// by summarization, or analysis followed by formatting.
+    /// </para>
+    /// <para><b>For Beginners:</b> A prompt chain runs multiple AI steps in sequence.
+    ///
+    /// Instead of doing everything in one big prompt, chains break tasks into steps:
+    /// <code>
+    /// // Chain example: Translate → Summarize → Extract Keywords
+    /// // Step 1: Translate document from Spanish to English
+    /// // Step 2: Summarize the translated document
+    /// // Step 3: Extract key points as bullet points
+    /// </code>
+    ///
+    /// Each step takes the previous step's output as input.
+    ///
+    /// Benefits of chains:
+    /// - Simpler prompts (each does one thing well)
+    /// - Better quality (specialized prompts perform better)
+    /// - Easier debugging (inspect intermediate results)
+    /// - Flexible workflows (add/remove/modify steps)
+    ///
+    /// Example:
+    /// <code>
+    /// string spanishDocument = "Documento en español...";
+    /// string result = modelResult.RunChain(spanishDocument);
+    ///
+    /// Console.WriteLine($"Result: {result}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public string RunChain(string input)
+    {
+        if (PromptChain == null)
+            throw new InvalidOperationException(
+                "No prompt chain configured. Use ConfigurePromptChain() in PredictionModelBuilder.");
+
+        return PromptChain.Run(input);
+    }
+
+    /// <summary>
+    /// Executes a prompt chain asynchronously with the given input.
+    /// </summary>
+    /// <param name="input">The initial input to the chain.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A task that resolves to the output string from the chain execution.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no prompt chain is configured.</exception>
+    /// <remarks>
+    /// <para>
+    /// Async version of RunChain for non-blocking execution. Essential for chains
+    /// that make API calls to language models or perform other I/O operations.
+    /// </para>
+    /// <para><b>For Beginners:</b> Same as RunChain but doesn't block your program.
+    ///
+    /// Use this version when:
+    /// - Running in a web application (keeps server responsive)
+    /// - Processing many documents in parallel
+    /// - Making actual API calls to language models
+    ///
+    /// Example:
+    /// <code>
+    /// string result = await modelResult.RunChainAsync("Input text...");
+    /// Console.WriteLine(result);
+    /// </code>
+    ///
+    /// For parallel processing:
+    /// <code>
+    /// var documents = new[] { "Doc 1", "Doc 2", "Doc 3" };
+    /// var tasks = documents.Select(doc => modelResult.RunChainAsync(doc));
+    /// var results = await Task.WhenAll(tasks);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public Task<string> RunChainAsync(string input, CancellationToken cancellationToken = default)
+    {
+        if (PromptChain == null)
+            throw new InvalidOperationException(
+                "No prompt chain configured. Use ConfigurePromptChain() in PredictionModelBuilder.");
+
+        return PromptChain.RunAsync(input, cancellationToken);
+    }
+
+    /// <summary>
+    /// Selects relevant few-shot examples for a given query or context.
+    /// </summary>
+    /// <param name="query">The query or context to find relevant examples for.</param>
+    /// <param name="maxExamples">The maximum number of examples to return.</param>
+    /// <returns>A list of FewShotExample objects most relevant to the query.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no few-shot example selector is configured.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method uses the configured IFewShotExampleSelector to find the most relevant
+    /// examples from a pool of available examples. The selection can be based on similarity,
+    /// diversity, or other strategies depending on the selector implementation.
+    /// </para>
+    /// <para><b>For Beginners:</b> Few-shot examples teach the AI what you want by showing examples.
+    ///
+    /// Instead of just describing what you want, you show the AI examples:
+    /// <code>
+    /// // Without few-shot: "Translate English to Spanish"
+    /// // With few-shot: "Translate English to Spanish. Examples:
+    /// //   'Hello' -> 'Hola'
+    /// //   'Goodbye' -> 'Adiós'
+    /// //   Now translate: 'Good morning'"
+    /// </code>
+    ///
+    /// The challenge is choosing which examples to include. This method automatically
+    /// selects the most relevant examples for your specific input.
+    ///
+    /// Example:
+    /// <code>
+    /// // You have a pool of 100 translation examples
+    /// // For the input "How are you?", select the 3 most relevant
+    /// var examples = modelResult.SelectFewShotExamples("How are you?", maxExamples: 3);
+    ///
+    /// // Build your prompt with the selected examples
+    /// var prompt = "Translate English to Spanish. Examples:\n";
+    /// foreach (var ex in examples)
+    /// {
+    ///     prompt += $"  '{ex.Input}' -> '{ex.Output}'\n";
+    /// }
+    /// prompt += "Now translate: How are you?";
+    /// </code>
+    ///
+    /// Selection strategies include:
+    /// - Similarity-based: Choose examples most similar to the query
+    /// - Diversity-based: Choose examples covering different cases
+    /// - Hybrid: Balance similarity and diversity
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<FewShotExample> SelectFewShotExamples(string query, int maxExamples = 5)
+    {
+        if (FewShotExampleSelector == null)
+            throw new InvalidOperationException(
+                "No few-shot example selector configured. Use ConfigureFewShotExampleSelector() in PredictionModelBuilder.");
+
+        return FewShotExampleSelector.SelectExamples(query, maxExamples);
+    }
+
+    /// <summary>
+    /// Optimizes a prompt to improve its effectiveness using an evaluation function.
+    /// </summary>
+    /// <param name="initialPrompt">The initial prompt to optimize.</param>
+    /// <param name="evaluationFunction">A function that scores prompt performance (higher scores are better).</param>
+    /// <param name="maxIterations">Maximum number of optimization iterations.</param>
+    /// <returns>An optimized IPromptTemplate.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no prompt optimizer is configured.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method uses the configured IPromptOptimizer to iteratively improve a prompt.
+    /// The optimizer generates variations, evaluates them using your scoring function,
+    /// and selects better-performing candidates over multiple iterations.
+    /// </para>
+    /// <para><b>For Beginners:</b> Prompt optimization automatically improves your prompts through testing.
+    ///
+    /// How it works:
+    /// 1. Start with your initial prompt
+    /// 2. Generate variations (different wordings, structures)
+    /// 3. Test each variation using your evaluation function
+    /// 4. Keep the best-performing versions
+    /// 5. Repeat until maxIterations is reached
+    ///
+    /// You provide the evaluation function that scores how well a prompt works:
+    /// <code>
+    /// // Evaluation function that tests accuracy
+    /// Func&lt;string, double&gt; evaluate = (prompt) =>
+    /// {
+    ///     double correctCount = 0;
+    ///     foreach (var testCase in testSet)
+    ///     {
+    ///         var result = model.Generate(prompt + testCase.Input);
+    ///         if (result == testCase.ExpectedOutput)
+    ///             correctCount++;
+    ///     }
+    ///     return correctCount / testSet.Count; // Returns accuracy 0.0 to 1.0
+    /// };
+    ///
+    /// var optimized = modelResult.OptimizePrompt(
+    ///     "Classify sentiment:",
+    ///     evaluate,
+    ///     maxIterations: 50);
+    ///
+    /// // Use the optimized template
+    /// string finalPrompt = optimized.Format(new Dictionary&lt;string, string&gt; { ["input"] = text });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPromptTemplate OptimizePrompt(string initialPrompt, Func<string, T> evaluationFunction, int maxIterations = 100)
+    {
+        if (PromptOptimizer == null)
+            throw new InvalidOperationException(
+                "No prompt optimizer configured. Use ConfigurePromptOptimizer() in PredictionModelBuilder.");
+
+        return PromptOptimizer.Optimize(initialPrompt, evaluationFunction, maxIterations);
+    }
+
+    /// <summary>
+    /// Optimizes a prompt asynchronously using an async evaluation function.
+    /// </summary>
+    /// <param name="initialPrompt">The initial prompt to optimize.</param>
+    /// <param name="evaluationFunction">An async function that scores prompt performance (higher scores are better).</param>
+    /// <param name="maxIterations">Maximum number of optimization iterations.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A task that resolves to an optimized IPromptTemplate.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no prompt optimizer is configured.</exception>
+    /// <remarks>
+    /// <para>
+    /// Async version of OptimizePrompt for when your evaluation function involves
+    /// asynchronous operations like API calls or I/O operations.
+    /// </para>
+    /// <para><b>For Beginners:</b> Use this when your scoring function calls APIs.
+    ///
+    /// Example with async evaluation:
+    /// <code>
+    /// // Async evaluation function that calls an API
+    /// Func&lt;string, Task&lt;double&gt;&gt; evaluateAsync = async (prompt) =>
+    /// {
+    ///     var results = await TestWithApiAsync(prompt);
+    ///     return CalculateAccuracy(results);
+    /// };
+    ///
+    /// var optimized = await modelResult.OptimizePromptAsync(
+    ///     "Classify sentiment:",
+    ///     evaluateAsync,
+    ///     maxIterations: 50);
+    /// </code>
+    ///
+    /// Benefits:
+    /// - Doesn't block your program during optimization
+    /// - Can be cancelled if needed
+    /// - Handles async API calls efficiently
+    /// </para>
+    /// </remarks>
+    public Task<IPromptTemplate> OptimizePromptAsync(
+        string initialPrompt,
+        Func<string, Task<T>> evaluationFunction,
+        int maxIterations = 100,
+        CancellationToken cancellationToken = default)
+    {
+        if (PromptOptimizer == null)
+            throw new InvalidOperationException(
+                "No prompt optimizer configured. Use ConfigurePromptOptimizer() in PredictionModelBuilder.");
+
+        return PromptOptimizer.OptimizeAsync(initialPrompt, evaluationFunction, maxIterations, cancellationToken);
+    }
+
+    /// <summary>
+    /// Checks whether a prompt template is configured and available for use.
+    /// </summary>
+    /// <returns>True if a prompt template is configured; otherwise, false.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this to check if you can call FormatPrompt().
+    ///
+    /// Example:
+    /// <code>
+    /// if (modelResult.HasPromptTemplate)
+    /// {
+    ///     var prompt = modelResult.FormatPrompt(variables);
+    /// }
+    /// else
+    /// {
+    ///     // Use a default prompt or throw an error
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public bool HasPromptTemplate => PromptTemplate != null;
+
+    /// <summary>
+    /// Checks whether a prompt analyzer is configured and available for use.
+    /// </summary>
+    /// <returns>True if a prompt analyzer is configured; otherwise, false.</returns>
+    public bool HasPromptAnalyzer => PromptAnalyzer != null;
+
+    /// <summary>
+    /// Checks whether a prompt compressor is configured and available for use.
+    /// </summary>
+    /// <returns>True if a prompt compressor is configured; otherwise, false.</returns>
+    public bool HasPromptCompressor => PromptCompressor != null;
+
+    /// <summary>
+    /// Checks whether a prompt chain is configured and available for use.
+    /// </summary>
+    /// <returns>True if a prompt chain is configured; otherwise, false.</returns>
+    public bool HasPromptChain => PromptChain != null;
+
+    /// <summary>
+    /// Checks whether a few-shot example selector is configured and available for use.
+    /// </summary>
+    /// <returns>True if a few-shot example selector is configured; otherwise, false.</returns>
+    public bool HasFewShotExampleSelector => FewShotExampleSelector != null;
+
+    /// <summary>
+    /// Checks whether a prompt optimizer is configured and available for use.
+    /// </summary>
+    /// <returns>True if a prompt optimizer is configured; otherwise, false.</returns>
+    public bool HasPromptOptimizer => PromptOptimizer != null;
+
+    #endregion
+
+    /// <summary>
+    /// Tokenizes text using the configured tokenizer.
+    /// </summary>
+    /// <param name="text">The text to tokenize.</param>
+    /// <returns>The tokenization result containing token IDs, attention mask, etc.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no tokenizer is configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method converts your text into the format the model needs.
+    ///
+    /// Example:
+    /// <code>
+    /// var result = modelResult.Tokenize("Hello, how are you?");
+    /// // result.TokenIds contains [101, 7592, 1010, 2129, 2024, 2017, 1029, 102]
+    /// // result.AttentionMask contains [1, 1, 1, 1, 1, 1, 1, 1]
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public TokenizationResult Tokenize(string text)
+    {
+        if (Tokenizer == null)
+            throw new InvalidOperationException("No tokenizer configured. Use ConfigureTokenizer() in PredictionModelBuilder.");
+
+        var options = TokenizationConfig?.ToEncodingOptions();
+        return Tokenizer.Encode(text, options);
+    }
+
+    /// <summary>
+    /// Tokenizes multiple texts in a batch.
+    /// </summary>
+    /// <param name="texts">The texts to tokenize.</param>
+    /// <returns>A list of tokenization results.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no tokenizer is configured.</exception>
+    public List<TokenizationResult> TokenizeBatch(List<string> texts)
+    {
+        if (Tokenizer == null)
+            throw new InvalidOperationException("No tokenizer configured. Use ConfigureTokenizer() in PredictionModelBuilder.");
+
+        var options = TokenizationConfig?.ToEncodingOptions();
+        return Tokenizer.EncodeBatch(texts, options);
+    }
+
+    /// <summary>
+    /// Decodes token IDs back into text.
+    /// </summary>
+    /// <param name="tokenIds">The token IDs to decode.</param>
+    /// <param name="skipSpecialTokens">Whether to skip special tokens in the output.</param>
+    /// <returns>The decoded text.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no tokenizer is configured.</exception>
+    public string Detokenize(List<int> tokenIds, bool skipSpecialTokens = true)
+    {
+        if (Tokenizer == null)
+            throw new InvalidOperationException("No tokenizer configured. Use ConfigureTokenizer() in PredictionModelBuilder.");
+
+        return Tokenizer.Decode(tokenIds, skipSpecialTokens);
+    }
+
+    /// <summary>
+    /// Gets whether a tokenizer is configured for this model.
+    /// </summary>
+    public bool HasTokenizer => Tokenizer != null;
+
+    /// <summary>
+    /// Saves the prediction model result's current state to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the model state to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the entire PredictionModelResult, including the underlying model,
+    /// optimization results, normalization information, and metadata. It uses the existing
+    /// Serialize method and writes the data to the provided stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a snapshot of your complete trained model package.
+    ///
+    /// When you call SaveState:
+    /// - The trained model and all its parameters are written to the stream
+    /// - Training results and metrics are saved
+    /// - Normalization settings are preserved
+    /// - All metadata is included
+    ///
+    /// This is particularly useful for:
+    /// - Checkpointing during long optimization runs
+    /// - Saving the best model found during training
+    /// - Knowledge distillation workflows
+    /// - Creating model backups before deployment
+    ///
+    /// You can later use LoadState to restore the complete model package.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+    public virtual void SaveState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanWrite)
+            throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+        try
+        {
+            var data = this.Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to save prediction model result state to stream: {ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Unexpected error while saving prediction model result state: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads the prediction model result's state from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the model state from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes a complete PredictionModelResult that was previously saved with SaveState,
+    /// restoring the model, optimization results, normalization information, and all metadata.
+    /// It uses the existing Deserialize method after reading data from the stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your complete trained model package.
+    ///
+    /// When you call LoadState:
+    /// - The trained model and all its parameters are read from the stream
+    /// - Training results and metrics are restored
+    /// - Normalization settings are reapplied
+    /// - All metadata is recovered
+    ///
+    /// After loading, the model package can:
+    /// - Make predictions using the restored model
+    /// - Access training history and metrics
+    /// - Apply the same normalization as during training
+    /// - Be deployed to production
+    ///
+    /// This is essential for:
+    /// - Resuming interrupted optimization
+    /// - Loading the best model after training
+    /// - Deploying trained models to production
+    /// - Knowledge distillation workflows
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
+    public virtual void LoadState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanRead)
+            throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+        try
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            var data = ms.ToArray();
+
+            if (data.Length == 0)
+                throw new InvalidOperationException("Stream contains no data.");
+
+            this.Deserialize(data);
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to read prediction model result state from stream: {ex.Message}", ex);
+        }
+        catch (InvalidOperationException)
+        {
+            // Re-throw InvalidOperationException from Deserialize
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to deserialize prediction model result state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Exports the model to ONNX format for cross-platform deployment.
+    /// </summary>
+    /// <param name="outputPath">The file path where the ONNX model will be saved.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> ONNX (Open Neural Network Exchange) is a universal format for AI models
+    /// that works across different frameworks and platforms. Use this for:
+    /// - Cross-platform deployment (Windows, Linux, macOS)
+    /// - Cloud deployment
+    /// - General-purpose production serving
+    ///
+    /// The exported model will use the export configuration specified during model building,
+    /// or sensible defaults if no configuration was provided.
+    ///
+    /// Example:
+    /// <code>
+    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CPU })
+    ///     .BuildAsync(x, y);
+    /// model.ExportToOnnx("model.onnx");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void ExportToOnnx(string outputPath)
+    {
+        if (Model == null)
+            throw new InvalidOperationException("Cannot export: Model is null");
+
+        var exportConfig = DeploymentConfiguration?.Export ?? new ExportConfig();
+
+        var onnxConfig = new ExportConfiguration
+        {
+            ModelName = exportConfig.ModelName,
+            TargetPlatform = exportConfig.TargetPlatform,
+            OptimizeModel = exportConfig.OptimizeModel,
+            BatchSize = exportConfig.BatchSize
+        };
+
+        var exporter = new OnnxModelExporter<T, TInput, TOutput>();
+        exporter.Export(Model, outputPath, onnxConfig);
+    }
+
+    /// <summary>
+    /// Exports the model to TensorRT format for high-performance inference on NVIDIA GPUs.
+    /// </summary>
+    /// <param name="outputPath">The file path where the TensorRT model will be saved.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> TensorRT is NVIDIA's high-performance inference engine.
+    /// Use this when:
+    /// - Deploying to servers with NVIDIA GPUs
+    /// - Maximum inference speed is required
+    /// - You need GPU-optimized inference
+    ///
+    /// TensorRT provides 2-4x faster inference than ONNX on NVIDIA hardware.
+    /// Requires NVIDIA GPU to run.
+    ///
+    /// Example:
+    /// <code>
+    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TensorRT, Quantization = QuantizationMode.Float16 })
+    ///     .BuildAsync(x, y);
+    /// model.ExportToTensorRT("model.trt");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void ExportToTensorRT(string outputPath)
+    {
+        if (Model == null)
+            throw new InvalidOperationException("Cannot export: Model is null");
+
+        var exportConfig = DeploymentConfiguration?.Export ?? new ExportConfig { TargetPlatform = TargetPlatform.TensorRT };
+
+        var tensorRTConfig = new TensorRTConfiguration
+        {
+            MaxBatchSize = exportConfig.BatchSize,
+            UseFp16 = exportConfig.Quantization == QuantizationMode.Float16,
+            UseInt8 = exportConfig.Quantization == QuantizationMode.Int8
+        };
+
+        var converter = new TensorRTConverter<T, TInput, TOutput>();
+        converter.ConvertToTensorRT(Model, outputPath, tensorRTConfig);
+    }
+
+    /// <summary>
+    /// Exports the model to CoreML format for deployment on Apple devices (iOS, macOS).
+    /// </summary>
+    /// <param name="outputPath">The file path where the CoreML model will be saved.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> CoreML is Apple's machine learning framework.
+    /// Use this when deploying to:
+    /// - iPhone/iPad apps
+    /// - macOS applications
+    /// - Apple Watch apps
+    ///
+    /// CoreML models are optimized for Apple Silicon and Neural Engine,
+    /// providing excellent performance on Apple devices.
+    ///
+    /// Example:
+    /// <code>
+    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CoreML, Quantization = QuantizationMode.Float16 })
+    ///     .BuildAsync(x, y);
+    /// model.ExportToCoreML("model.mlmodel");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void ExportToCoreML(string outputPath)
+    {
+        if (Model == null)
+            throw new InvalidOperationException("Cannot export: Model is null");
+
+        var exportConfig = DeploymentConfiguration?.Export ?? new ExportConfig { TargetPlatform = TargetPlatform.CoreML };
+
+        var coreMLConfig = new ExportConfiguration
+        {
+            ModelName = exportConfig.ModelName,
+            TargetPlatform = exportConfig.TargetPlatform,
+            OptimizeModel = exportConfig.OptimizeModel,
+            BatchSize = exportConfig.BatchSize
+        };
+
+        var exporter = new CoreMLExporter<T, TInput, TOutput>();
+        exporter.Export(Model, outputPath, coreMLConfig);
+    }
+
+    /// <summary>
+    /// Exports the model to TensorFlow Lite format for mobile and edge deployment.
+    /// </summary>
+    /// <param name="outputPath">The file path where the TFLite model will be saved.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> TensorFlow Lite is designed for mobile and edge devices.
+    /// Use this when deploying to:
+    /// - Android apps
+    /// - Raspberry Pi and edge devices
+    /// - Embedded systems
+    /// - IoT devices
+    ///
+    /// TFLite models are highly optimized for size and speed on resource-constrained devices.
+    ///
+    /// Example:
+    /// <code>
+    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TFLite, Quantization = QuantizationMode.Int8 })
+    ///     .BuildAsync(x, y);
+    /// model.ExportToTFLite("model.tflite");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void ExportToTFLite(string outputPath)
+    {
+        if (Model == null)
+            throw new InvalidOperationException("Cannot export: Model is null");
+
+        var exportConfig = DeploymentConfiguration?.Export ?? new ExportConfig { TargetPlatform = TargetPlatform.TFLite };
+
+        var tfliteConfig = new ExportConfiguration
+        {
+            ModelName = exportConfig.ModelName,
+            TargetPlatform = exportConfig.TargetPlatform,
+            OptimizeModel = exportConfig.OptimizeModel,
+            BatchSize = exportConfig.BatchSize
+        };
+
+        var exporter = new TFLiteExporter<T, TInput, TOutput>();
+        exporter.Export(Model, outputPath, tfliteConfig);
+    }
+
+    /// <summary>
+    /// Creates a deployment runtime for production features like versioning, A/B testing, caching, and telemetry.
+    /// </summary>
+    /// <param name="modelPath">The path to the exported ONNX model file.</param>
+    /// <param name="modelName">The name of the model (e.g., "HousePricePredictor").</param>
+    /// <param name="version">The version identifier (e.g., "1.0.0").</param>
+    /// <returns>A deployment runtime instance.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The deployment runtime provides production features:
+    /// - **Model Versioning**: Manage multiple model versions and roll back if needed
+    /// - **A/B Testing**: Split traffic between different model versions
+    /// - **Telemetry**: Track latency, throughput, errors, and metrics
+    /// - **Caching**: Keep frequently-used models in memory for faster inference
+    ///
+    /// Before using this, you must first export your model to ONNX format.
+    ///
+    /// Example:
+    /// <code>
+    /// // Export model to ONNX
+    /// model.ExportToOnnx("model.onnx");
+    ///
+    /// // Create runtime with deployed model
+    /// var runtime = model.CreateDeploymentRuntime("model.onnx", "MyModel", "1.0.0");
+    ///
+    /// // Use runtime for inference with production features
+    /// var prediction = await runtime.InferAsync("MyModel", "1.0.0", inputData);
+    /// var stats = runtime.GetModelStatistics("MyModel");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public DeploymentRuntime<T> CreateDeploymentRuntime(string modelPath, string modelName, string version)
+    {
+        var runtimeConfig = new RuntimeConfiguration
+        {
+            EnableCaching = DeploymentConfiguration?.Caching?.Enabled ?? true,
+            EnableTelemetry = DeploymentConfiguration?.Telemetry?.Enabled ?? true,
+            EnableGpuAcceleration = DeploymentConfiguration?.Export?.TargetPlatform == TargetPlatform.GPU
+                                    || DeploymentConfiguration?.Export?.TargetPlatform == TargetPlatform.TensorRT
+        };
+
+        var runtime = new DeploymentRuntime<T>(runtimeConfig);
+        runtime.RegisterModel(modelName, version, modelPath);
+
+        return runtime;
+    }
+
+    #region Reasoning Methods
+
+    /// <summary>
+    /// Solves a problem using advanced reasoning strategies like Chain-of-Thought, Tree-of-Thoughts, or Self-Consistency.
+    /// </summary>
+    /// <param name="problem">The problem or question to solve.</param>
+    /// <param name="mode">The reasoning mode to use (default: Auto selects based on problem complexity).</param>
+    /// <param name="config">Optional reasoning configuration (uses pre-configured settings if null).</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A complete reasoning result with answer, steps, and metrics.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method uses advanced AI reasoning to solve problems step by step,
+    /// just like how a human would "show their work" on a complex problem.
+    ///
+    /// **What it does:**
+    /// - Breaks down the problem into logical steps
+    /// - Can explore multiple solution paths (Tree-of-Thoughts)
+    /// - Can verify answers with multiple attempts (Self-Consistency)
+    /// - Returns detailed reasoning chain for transparency
+    ///
+    /// **Reasoning modes:**
+    /// - Auto: Automatically selects the best strategy
+    /// - ChainOfThought: Step-by-step linear reasoning
+    /// - TreeOfThoughts: Explores multiple paths, backtracks if needed
+    /// - SelfConsistency: Solves multiple times, uses majority voting
+    ///
+    /// **Example:**
+    /// <code>
+    /// var result = await modelResult.ReasonAsync(
+    ///     "If a train travels 60 mph for 2.5 hours, how far does it go?",
+    ///     ReasoningMode.ChainOfThought
+    /// );
+    /// Console.WriteLine(result.FinalAnswer);  // "150 miles"
+    /// Console.WriteLine(result.ReasoningChain);  // Shows step-by-step work
+    /// </code>
+    ///
+    /// **Requirements:**
+    /// - Agent configuration must be set (ConfigureAgentAssistance during building)
+    /// - API key for LLM provider (OpenAI, Anthropic, etc.)
+    /// </para>
+    /// </remarks>
+    public async Task<ReasoningResult<T>> ReasonAsync(
+        string problem,
+        ReasoningMode mode = ReasoningMode.Auto,
+        ReasoningConfig? config = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (AgentConfig == null || !AgentConfig.IsEnabled)
+        {
+            throw new InvalidOperationException(
+                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building " +
+                "to set up the LLM provider and API key required for reasoning capabilities.");
+        }
+
+        // Use stored config if none provided
+        var effectiveConfig = config ?? ReasoningConfig ?? new ReasoningConfig();
+
+        // Create chat model from agent config
+        var chatModel = CreateChatModelFromAgentConfig();
+
+        // Create internal Reasoner and delegate
+        var reasoner = new Reasoner<T>(chatModel);
+        return await reasoner.SolveAsync(problem, mode, effectiveConfig, cancellationToken);
+    }
+
+    /// <summary>
+    /// Quickly solves a problem with minimal reasoning overhead for fast answers.
+    /// </summary>
+    /// <param name="problem">The problem or question to solve.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The final answer as a string.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this for simple problems where you need a fast answer
+    /// without detailed reasoning steps. It's optimized for speed over thoroughness.
+    ///
+    /// **When to use:**
+    /// - Simple math problems
+    /// - Quick factual questions
+    /// - When speed matters more than detailed explanation
+    ///
+    /// **Example:**
+    /// <code>
+    /// string answer = await modelResult.QuickReasonAsync("What is 15% of 240?");
+    /// Console.WriteLine(answer);  // "36"
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public async Task<string> QuickReasonAsync(
+        string problem,
+        CancellationToken cancellationToken = default)
+    {
+        if (AgentConfig == null || !AgentConfig.IsEnabled)
+        {
+            throw new InvalidOperationException(
+                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
+        }
+
+        var chatModel = CreateChatModelFromAgentConfig();
+        var reasoner = new Reasoner<T>(chatModel);
+        return await reasoner.QuickSolveAsync(problem, cancellationToken);
+    }
+
+    /// <summary>
+    /// Performs deep, thorough reasoning on a complex problem using extensive exploration and verification.
+    /// </summary>
+    /// <param name="problem">The complex problem to analyze.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A comprehensive reasoning result with extensive exploration.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this for complex problems that need careful analysis.
+    /// It explores multiple approaches, verifies reasoning, and provides high-confidence answers.
+    ///
+    /// **What it does:**
+    /// - Uses Tree-of-Thoughts to explore multiple solution paths
+    /// - Applies verification at each step
+    /// - Uses self-refinement to improve answers
+    /// - Takes longer but produces more reliable results
+    ///
+    /// **When to use:**
+    /// - Complex multi-step problems
+    /// - Important decisions requiring high confidence
+    /// - Problems with multiple valid approaches
+    /// - When you need to understand all possibilities
+    ///
+    /// **Example:**
+    /// <code>
+    /// var result = await modelResult.DeepReasonAsync(
+    ///     "Design an algorithm to find the shortest path in a weighted graph"
+    /// );
+    /// // Result includes multiple explored approaches and verification
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public async Task<ReasoningResult<T>> DeepReasonAsync(
+        string problem,
+        CancellationToken cancellationToken = default)
+    {
+        if (AgentConfig == null || !AgentConfig.IsEnabled)
+        {
+            throw new InvalidOperationException(
+                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
+        }
+
+        var chatModel = CreateChatModelFromAgentConfig();
+        var reasoner = new Reasoner<T>(chatModel);
+        return await reasoner.DeepSolveAsync(problem, cancellationToken);
+    }
+
+    /// <summary>
+    /// Solves a problem multiple times using different approaches and returns the consensus answer.
+    /// </summary>
+    /// <param name="problem">The problem to solve.</param>
+    /// <param name="numAttempts">Number of independent solving attempts (default: 5).</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The consensus result with voting statistics.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method solves the same problem multiple times independently
+    /// and picks the most common answer. It's like asking 5 experts and going with the majority.
+    ///
+    /// **How it works:**
+    /// - Solves the problem N times independently
+    /// - Each attempt may use slightly different reasoning
+    /// - Uses majority voting to pick the final answer
+    /// - Reports confidence based on agreement level
+    ///
+    /// **When to use:**
+    /// - Math problems where errors are common
+    /// - When you need high confidence in the answer
+    /// - Problems where reasoning paths can vary
+    ///
+    /// **Example:**
+    /// <code>
+    /// var result = await modelResult.ReasonWithConsensusAsync(
+    ///     "What is the derivative of x^3?",
+    ///     numAttempts: 5
+    /// );
+    /// // If 4 out of 5 attempts say "3x^2", that's the answer
+    /// Console.WriteLine($"Consensus: {result.Metrics["consensus_ratio"]:P0}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public async Task<ReasoningResult<T>> ReasonWithConsensusAsync(
+        string problem,
+        int numAttempts = 5,
+        CancellationToken cancellationToken = default)
+    {
+        if (AgentConfig == null || !AgentConfig.IsEnabled)
+        {
+            throw new InvalidOperationException(
+                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
+        }
+
+        var chatModel = CreateChatModelFromAgentConfig();
+        var reasoner = new Reasoner<T>(chatModel);
+        return await reasoner.SolveWithConsensusAsync(problem, numAttempts, cancellationToken);
+    }
+
+    /// <summary>
+    /// Creates a chat model from the agent configuration.
+    /// </summary>
+    private IChatModel<T> CreateChatModelFromAgentConfig()
+    {
+        if (AgentConfig == null)
+            throw new InvalidOperationException("Agent configuration is required.");
+
+        var apiKey = AgentKeyResolver.ResolveApiKey(
+            AgentConfig.ApiKey,
+            AgentConfig,
+            AgentConfig.Provider);
+
+        return AgentConfig.Provider switch
+        {
+            LLMProvider.OpenAI => new OpenAIChatModel<T>(apiKey),
+            LLMProvider.Anthropic => new AnthropicChatModel<T>(apiKey),
+            LLMProvider.AzureOpenAI => new AzureOpenAIChatModel<T>(
+                AgentConfig.AzureEndpoint ?? throw new InvalidOperationException("Azure endpoint required"),
+                apiKey,
+                AgentConfig.AzureDeployment ?? "gpt-4"),
+            _ => throw new ArgumentException($"Unknown provider: {AgentConfig.Provider}")
+        };
+    }
+
+    #endregion
+
+    #region IJitCompilable Implementation
+
+    /// <summary>
+    /// Gets whether the underlying model currently supports JIT compilation.
+    /// </summary>
+    /// <value>Returns true if the wrapped model implements IJitCompilable and supports JIT, false otherwise.</value>
+    /// <remarks>
+    /// <para>
+    /// This property delegates to the wrapped model's SupportsJitCompilation property if the model
+    /// implements IJitCompilable. If the model does not implement this interface or does not support
+    /// JIT compilation, this returns false.
+    /// </para>
+    /// <para><b>For Beginners:</b> Whether you can use JIT compilation depends on the type of model you trained.
+    ///
+    /// Models that support JIT compilation (SupportsJitCompilation = true):
+    /// - Linear regression models
+    /// - Polynomial regression models
+    /// - Ridge/Lasso regression models
+    /// - Models using differentiable operations
+    ///
+    /// Models that do NOT support JIT (SupportsJitCompilation = false):
+    /// - Decision trees
+    /// - Random forests
+    /// - Gradient boosted trees
+    /// - Models using discrete logic
+    ///
+    /// If your model supports JIT:
+    /// - Predictions will be 5-10x faster
+    /// - The computation graph is compiled to optimized native code
+    /// - You get this speedup automatically when calling Predict()
+    ///
+    /// If your model doesn't support JIT:
+    /// - Predictions still work normally
+    /// - No JIT acceleration, but still optimized for the model type
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when Model is null.</exception>
+    public bool SupportsJitCompilation
+    {
+        get
+        {
+            if (Model == null)
+            {
+                throw new InvalidOperationException("Model is not initialized.");
+            }
+
+            // Check if the model implements IJitCompilable and supports JIT
+            if (Model is IJitCompilable<T> jitModel)
+            {
+                return jitModel.SupportsJitCompilation;
+            }
+
+            // Model doesn't implement IJitCompilable
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Exports the underlying model's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the model's prediction.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when Model is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the underlying model does not support JIT compilation.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method delegates to the wrapped model's ExportComputationGraph method if the model
+    /// implements IJitCompilable and supports JIT compilation. If the model does not implement
+    /// this interface or does not support JIT, this throws NotSupportedException.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a "recipe" of your model's calculations for JIT compilation.
+    ///
+    /// If your model supports JIT (SupportsJitCompilation = true):
+    /// - This method creates a computation graph from your model
+    /// - The graph represents all the mathematical operations your model performs
+    /// - The JIT compiler uses this to create fast optimized code
+    ///
+    /// If your model doesn't support JIT (SupportsJitCompilation = false):
+    /// - This method will throw an exception
+    /// - Check SupportsJitCompilation before calling this
+    /// - Decision trees, random forests, etc. cannot export computation graphs
+    ///
+    /// You typically don't call this method directly. It's used internally by:
+    /// - PredictionModelBuilder when building models with JIT enabled
+    /// - The prediction pipeline to compile models for faster inference
+    ///
+    /// Example of what happens inside:
+    /// - Linear model: Creates graph with MatMul(X, Coefficients) + Intercept
+    /// - Neural network: Creates graph with all layers and activations
+    /// - Decision tree: Throws exception - cannot create computation graph
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Autodiff.ComputationNode<T> ExportComputationGraph(List<AiDotNet.Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        // Check if the model implements IJitCompilable
+        if (Model is IJitCompilable<T> jitModel)
+        {
+            // Check if it actually supports JIT before delegating
+            if (!jitModel.SupportsJitCompilation)
+            {
+                throw new NotSupportedException(
+                    $"The underlying model type ({Model.GetType().Name}) does not support JIT compilation. " +
+                    "Check SupportsJitCompilation property before calling ExportComputationGraph.");
+            }
+
+            // Delegate to the wrapped model
+            return jitModel.ExportComputationGraph(inputNodes);
+        }
+
+        // Model doesn't implement IJitCompilable at all
+        throw new NotSupportedException(
+            $"The underlying model type ({Model.GetType().Name}) does not implement IJitCompilable<T>. " +
+            "JIT compilation is only supported for models that use differentiable computation graphs, such as " +
+            "linear models, polynomial models, and neural networks. Tree-based models (decision trees, random forests, " +
+            "gradient boosting) cannot be JIT compiled due to their discrete branching logic.");
+    }
+
+    #endregion
 }

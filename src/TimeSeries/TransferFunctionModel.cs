@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.TimeSeries;
+namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Implements a Transfer Function Model for time series analysis, which combines ARIMA modeling with
@@ -142,7 +142,7 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
         _outputLags = new Vector<T>(s);
 
         // Initialize with small random values
-        Random rand = new Random();
+        Random rand = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < p; i++) _arParameters[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
         for (int i = 0; i < q; i++) _maParameters[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
         for (int i = 0; i < r; i++) _inputLags[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
@@ -255,12 +255,7 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     private void ComputeResiduals(Matrix<T> x, Vector<T> y)
     {
         _fitted = Predict(x);
-        _residuals = new Vector<T>(y.Length);
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            _residuals[i] = NumOps.Subtract(y[i], _fitted[i]);
-        }
+        _residuals = (Vector<T>)Engine.Subtract(y, _fitted);
     }
 
     /// <summary>

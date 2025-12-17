@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using System.Text.RegularExpressions;
 
 namespace AiDotNet.Tools;
 
@@ -38,6 +39,7 @@ namespace AiDotNet.Tools;
 /// </remarks>
 public class VectorSearchTool<T> : ITool
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IRetriever<T> _retriever;
     private readonly int _defaultTopK;
     private readonly bool _includeMetadata;
@@ -151,10 +153,11 @@ public class VectorSearchTool<T> : ITool
         if (parts.Length > 1)
         {
             // Try to extract topK parameter
-            var paramMatch = System.Text.RegularExpressions.Regex.Match(
+            var paramMatch = Regex.Match(
                 parts[1],
                 @"topK\s*=\s*(\d+)",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                RegexOptions.IgnoreCase,
+                RegexTimeout);
 
             if (paramMatch.Success && int.TryParse(paramMatch.Groups[1].Value, out var parsedTopK))
             {

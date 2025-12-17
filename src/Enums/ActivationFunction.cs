@@ -213,7 +213,7 @@ public enum ActivationFunction
     /// - Similar to ELU but with carefully chosen scaling parameters
     /// - For positive inputs: output equals input multiplied by a scale factor ?
     /// - For negative inputs: output equals ? * a * (e^x - 1)
-    ///   where ? ˜ 1.0507 and a ˜ 1.6733 are specific constants
+    ///   where ? â‰ˆ 1.0507 and a â‰ˆ 1.6733 are specific constants
     /// 
     /// Formula: f(x) = ? * x if x > 0, ? * a * (e^x - 1) if x = 0
     /// 
@@ -420,5 +420,35 @@ public enum ActivationFunction
     /// or when you want to debug a network by temporarily removing non-linearities.
     /// </para>
     /// </remarks>
-    Identity
+    Identity,
+
+    /// <summary>
+    /// Linearly Scaled Hyperbolic Tangent - a self-regularized activation function.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> LiSHT (Linearly Scaled Hyperbolic Tangent) is an activation function
+    /// that combines the benefits of linear and tanh functions.
+    ///
+    /// How it works:
+    /// - Multiplies the input by its own tanh: f(x) = x * tanh(x)
+    /// - For positive inputs, behaves similarly to the input itself
+    /// - For negative inputs, output is negative but bounded
+    ///
+    /// Formula: f(x) = x * tanh(x)
+    ///
+    /// Advantages:
+    /// - Non-monotonic function that can help with learning complex patterns
+    /// - Smooth and differentiable everywhere
+    /// - Self-regularized, helping prevent overfitting
+    /// - Has bounded gradient properties
+    ///
+    /// Limitations:
+    /// - More computationally expensive than ReLU
+    /// - Relatively new, so less extensively tested
+    ///
+    /// LiSHT is useful when you need a self-regularizing activation function with good gradient properties.
+    /// </para>
+    /// </remarks>
+    LiSHT
 }

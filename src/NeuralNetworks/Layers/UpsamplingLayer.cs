@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -180,29 +182,8 @@ public class UpsamplingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[1];
-        int inputHeight = input.Shape[2];
-        int inputWidth = input.Shape[3];
-        int outputHeight = inputHeight * _scaleFactor;
-        int outputWidth = inputWidth * _scaleFactor;
-        var output = new Tensor<T>([batchSize, channels, outputHeight, outputWidth]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < outputHeight; h++)
-                {
-                    for (int w = 0; w < outputWidth; w++)
-                    {
-                        int sourceH = h / _scaleFactor;
-                        int sourceW = w / _scaleFactor;
-                        output[b, c, h, w] = input[b, c, sourceH, sourceW];
-                    }
-                }
-            }
-        }
-        return output;
+
+        return Engine.Upsample(input, _scaleFactor, _scaleFactor);
     }
 
     /// <summary>
@@ -246,35 +227,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        int batchSize = _lastInput.Shape[0];
-        int channels = _lastInput.Shape[1];
-        int inputHeight = _lastInput.Shape[2];
-        int inputWidth = _lastInput.Shape[3];
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < inputHeight; h++)
-                {
-                    for (int w = 0; w < inputWidth; w++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int i = 0; i < _scaleFactor; i++)
-                        {
-                            for (int j = 0; j < _scaleFactor; j++)
-                            {
-                                int outputH = h * _scaleFactor + i;
-                                int outputW = w * _scaleFactor + j;
-                                sum = NumOps.Add(sum, outputGradient[b, c, outputH, outputW]);
-                            }
-                        }
-                        inputGradient[b, c, h, w] = sum;
-                    }
-                }
-            }
-        }
-        return inputGradient;
+        return Engine.UpsampleBackward(outputGradient, _lastInput.Shape, _scaleFactor, _scaleFactor);
     }
 
     /// <summary>
@@ -298,28 +251,14 @@ public class UpsamplingLayer<T> : LayerBase<T>
         // Apply upsampling operation
         var outputNode = Autodiff.TensorOperations<T>.Upsample(inputNode, _scaleFactor);
 
-        // Perform backward pass
+        // Perform backward pass with inline topological sort
         outputNode.Gradient = outputGradient;
-        var topoOrder = GetTopologicalOrder(outputNode);
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
 
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-    }
-
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
+        // Production-grade: Inline topological sort for backward pass
         var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
         var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
+        stack.Push((outputNode, false));
 
         while (stack.Count > 0)
         {
@@ -331,22 +270,34 @@ public class UpsamplingLayer<T> : LayerBase<T>
             if (processed)
             {
                 visited.Add(node);
-                result.Add(node);
+                topoOrder.Add(node);
             }
             else
             {
                 stack.Push((node, true));
-                foreach (var parent in node.Parents)
+                if (node.Parents != null)
                 {
-                    if (!visited.Contains(parent))
-                        stack.Push((parent, false));
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
                 }
             }
         }
 
-        return result;
-    }
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
 
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.
@@ -401,6 +352,61 @@ public class UpsamplingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Exports this layer's computation as a differentiable computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to which input variable nodes should be added.</param>
+    /// <returns>The output computation node representing this layer's operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representation of the upsampling operation using nearest-neighbor
+    /// interpolation. The operation repeats each value in the input based on the scale factor.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an optimized version of the upsampling operation.
+    ///
+    /// For upsampling layers:
+    /// - Creates a placeholder for the input tensor
+    /// - Applies the upsampling operation (repeat values)
+    /// - Returns a computation graph for efficient execution
+    ///
+    /// This allows for faster inference by pre-compiling the upsampling operation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create placeholder for input tensor
+        // Input shape: [channels, height, width]
+        var inputPlaceholder = new Tensor<T>(InputShape);
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+        inputNodes.Add(inputNode);
+
+        // Apply upsampling operation
+        var outputNode = TensorOperations<T>.Upsample(inputNode, _scaleFactor);
+
+        // Upsampling layers typically don't use activation, but we return the result
+        // No activation to apply for upsampling layers (they use identity by default)
+        return outputNode;
+    }
+
+    /// <summary>
+    /// Gets whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>Always returns true as upsampling operations can be efficiently compiled.</value>
+    /// <remarks>
+    /// <para>
+    /// Upsampling layers support JIT compilation since the nearest-neighbor interpolation
+    /// is a straightforward operation that can be optimized at compile time.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -409,12 +415,12 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// This is useful when starting to process a new, unrelated input.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory of what it last processed.
-    /// 
+    ///
     /// When resetting the state:
     /// - The layer forgets what input it recently processed
     /// - This helps prepare it for processing new, unrelated inputs
     /// - It's like clearing a workspace before starting a new project
-    /// 
+    ///
     /// This is mostly important during training, where the layer needs to
     /// maintain consistency between forward and backward passes.
     /// </para>

@@ -200,10 +200,11 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        _lastInput = input;
         if (IsTrainingMode)
         {
             _lastNoise = GenerateNoise(input.Shape);
-            return input.Add(_lastNoise);
+            return Engine.TensorAdd(input, _lastNoise);
         }
 
         return input; // During inference, no noise is added
@@ -316,19 +317,9 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> GenerateNoise(int[] shape)
     {
-        var noise = new Tensor<T>(shape);
-        for (int i = 0; i < noise.Length; i++)
-        {
-            T u1 = NumOps.FromDouble(Random.NextDouble());
-            T u2 = NumOps.FromDouble(Random.NextDouble());
-            T z = NumOps.Multiply(
-                NumOps.Sqrt(NumOps.Multiply(NumOps.FromDouble(-2.0), NumOps.Log(u1))),
-                MathHelper.Cos(NumOps.Multiply(NumOps.FromDouble(2.0 * Math.PI), u2))
-            );
-            noise[i] = NumOps.Add(_mean, NumOps.Multiply(_standardDeviation, z));
-        }
-
-        return noise;
+        // Use Engine to generate Gaussian noise in a vectorized manner
+        var noiseVector = Engine.GenerateGaussianNoise(new Tensor<T>(shape).Length, _mean, _standardDeviation);
+        return new Tensor<T>(shape, noiseVector);
     }
 
     /// <summary>
@@ -394,17 +385,17 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// or when switching between training and inference modes.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - The saved noise tensor is cleared
     /// - This frees up memory
     /// - The layer will generate new random noise next time
-    /// 
+    ///
     /// This is typically called:
     /// - Between training batches
     /// - When switching from training to evaluation mode
     /// - When starting to process completely new data
-    /// 
+    ///
     /// It's like wiping a whiteboard clean before starting a new experiment.
     /// </para>
     /// </remarks>
@@ -413,5 +404,44 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastNoise = null;
         _lastInput = null;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because the JIT-compiled version uses inference mode (no noise added).
+    /// </value>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Exports the Gaussian noise layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node (same as input for inference mode).</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph for the Gaussian noise layer. During JIT compilation
+    /// (which is typically for inference), no noise is added, so the layer simply passes through
+    /// the input unchanged. This matches the behavior of Forward() when IsTrainingMode is false.
+    /// </para>
+    /// </remarks>
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create placeholder for input data
+        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input");
+
+        inputNodes.Add(inputNode);
+
+        // For JIT compilation (inference mode), Gaussian noise layer is identity: output = input
+        // No noise is added during inference
+        return inputNode;
     }
 }

@@ -18,7 +18,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - A pass-through that doesn't change your data
 /// 
 /// For example, if you're processing images that are 28x28 pixels, you would use an InputLayer
-/// with inputSize=784 (28�28) to tell the network about the size of each image.
+/// with inputSize=784 (28×28) to tell the network about the size of each image.
 /// 
 /// Unlike other layers, the InputLayer doesn't learn or transform anything - it just
 /// passes your data into the network.
@@ -232,4 +232,21 @@ public class InputLayer<T> : LayerBase<T>
     {
         // InputLayer has no state to reset
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        return inputNode; // Identity - pass through unchanged
+    }
+
+    public override bool SupportsJitCompilation => true; // Always supports JIT (identity operation)
 }

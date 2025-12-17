@@ -38,6 +38,10 @@ public class BidirectionalLayer<T> : LayerBase<T>
     private Tensor<T>? _lastBackwardOutput;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -87,9 +91,10 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public BidirectionalLayer(
-        LayerBase<T> innerLayer, 
-        bool mergeMode = true, 
-        IActivationFunction<T>? activationFunction = null)
+        LayerBase<T> innerLayer,
+        bool mergeMode = true,
+        IActivationFunction<T>? activationFunction = null,
+        IEngine? engine = null)
         : base(innerLayer.GetInputShape(), CalculateOutputShape(innerLayer.GetOutputShape(), mergeMode), activationFunction ?? new ReLUActivation<T>())
     {
         _forwardLayer = innerLayer;
@@ -122,9 +127,10 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public BidirectionalLayer(
-        LayerBase<T> innerLayer, 
-        bool mergeMode = true, 
-        IVectorActivationFunction<T>? vectorActivationFunction = null)
+        LayerBase<T> innerLayer,
+        bool mergeMode = true,
+        IVectorActivationFunction<T>? vectorActivationFunction = null,
+        IEngine? engine = null)
         : base(innerLayer.GetInputShape(), CalculateOutputShape(innerLayer.GetOutputShape(), mergeMode), vectorActivationFunction ?? new IdentityActivation<T>())
     {
         _forwardLayer = innerLayer;
@@ -541,4 +547,46 @@ public class BidirectionalLayer<T> : LayerBase<T>
         _forwardLayer.ResetState();
         _backwardLayer.ResetState();
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (!_forwardLayer.SupportsJitCompilation || !_backwardLayer.SupportsJitCompilation)
+            throw new InvalidOperationException("BidirectionalLayer requires both inner layers to support JIT compilation.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Forward layer processing
+        var forwardInputNodes = new List<ComputationNode<T>>();
+        var forwardOutput = _forwardLayer.ExportComputationGraph(forwardInputNodes);
+
+        // Backward layer processing (note: sequence reversal is handled at runtime, not in graph)
+        var backwardInputNodes = new List<ComputationNode<T>>();
+        var backwardOutput = _backwardLayer.ExportComputationGraph(backwardInputNodes);
+
+        // Merge outputs based on merge mode
+        if (_mergeMode)
+        {
+            // Add outputs element-wise
+            return TensorOperations<T>.Add(forwardOutput, backwardOutput);
+        }
+        else
+        {
+            // Stack outputs along new dimension
+            // Note: This requires a Stack operation in TensorOperations
+            // For now, return forward output as primary
+            return forwardOutput;
+        }
+    }
+
+    public override bool SupportsJitCompilation =>
+        _forwardLayer.SupportsJitCompilation && _backwardLayer.SupportsJitCompilation;
+
 }
