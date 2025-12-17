@@ -11,15 +11,18 @@ internal static class InferenceDiagnostics
 {
     private const int MaxEntries = 1024;
 
-    private static readonly bool Enabled =
-        string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_DIAGNOSTICS"), "1", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_DIAGNOSTICS"), "true", StringComparison.OrdinalIgnoreCase);
-
     private static readonly ConcurrentQueue<InferenceDiagnosticEntry> Entries = new();
+
+    private static bool IsEnabled()
+    {
+        var value = Environment.GetEnvironmentVariable("AIDOTNET_DIAGNOSTICS");
+        return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+    }
 
     internal static void RecordDecision(string area, string feature, bool enabled, string reason)
     {
-        if (!Enabled)
+        if (!IsEnabled())
             return;
 
         Entries.Enqueue(new InferenceDiagnosticEntry(
@@ -36,7 +39,7 @@ internal static class InferenceDiagnostics
 
     internal static void RecordException(string area, string feature, Exception ex, string reason)
     {
-        if (!Enabled)
+        if (!IsEnabled())
             return;
 
         Entries.Enqueue(new InferenceDiagnosticEntry(
@@ -54,10 +57,17 @@ internal static class InferenceDiagnostics
     // Intentionally internal-only: serving can use InternalsVisibleTo to read these if needed later.
     internal static InferenceDiagnosticEntry[] Snapshot()
     {
-        if (!Enabled)
+        if (!IsEnabled())
             return Array.Empty<InferenceDiagnosticEntry>();
 
         return Entries.ToArray();
+    }
+
+    internal static void Clear()
+    {
+        while (Entries.TryDequeue(out _))
+        {
+        }
     }
 
     private static void TrimIfNeeded()
