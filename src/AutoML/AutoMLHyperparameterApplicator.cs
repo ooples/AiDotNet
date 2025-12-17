@@ -107,7 +107,23 @@ internal static class AutoMLHyperparameterApplicator
         {
             return Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
         }
-        catch
+        catch (InvalidCastException)
+        {
+            return null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+        catch (OverflowException)
+        {
+            return null;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+        catch (NotSupportedException)
         {
             return null;
         }
