@@ -1,8 +1,8 @@
 using AiDotNet.Enums;
-using AiDotNet.Evaluation;
 using AiDotNet.Exceptions;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.AutoML.Policies;
 
 namespace AiDotNet.AutoML;
 
@@ -151,19 +151,9 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
             return;
         }
 
-        var inferredPredictionType = PredictionTypeInference.Infer(ConversionsHelper.ConvertToVector<T, TOutput>(targets));
-        switch (inferredPredictionType)
-        {
-            case PredictionType.Binary:
-            case PredictionType.MultiClass:
-            case PredictionType.MultiLabel:
-                SetOptimizationMetric(MetricType.Accuracy, maximize: true);
-                break;
-
-            default:
-                SetOptimizationMetric(MetricType.RMSE, maximize: false);
-                break;
-        }
+        var taskFamily = AutoMLTaskFamilyInference.InferFromTargets<T, TOutput>(targets);
+        var (metric, maximize) = AutoMLDefaultMetricPolicy.GetDefault(taskFamily);
+        SetOptimizationMetric(metric, maximize);
 
         _optimizationMetricExplicitlySet = false;
     }

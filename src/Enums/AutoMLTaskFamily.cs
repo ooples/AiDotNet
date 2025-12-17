@@ -21,12 +21,12 @@ namespace AiDotNet.Enums;
 public enum AutoMLTaskFamily
 {
     /// <summary>
-    /// Supervised regression.
+    /// Supervised regression (predicting continuous numeric values).
     /// </summary>
     Regression,
 
     /// <summary>
-    /// Binary classification.
+    /// Binary (two-class) classification.
     /// </summary>
     BinaryClassification,
 
@@ -36,13 +36,92 @@ public enum AutoMLTaskFamily
     MultiClassClassification,
 
     /// <summary>
-    /// Time-series forecasting.
+    /// Multi-label classification (multiple labels can be true for one sample).
+    /// </summary>
+    MultiLabelClassification,
+
+    /// <summary>
+    /// Time-series forecasting (predicting future values from past time-ordered values).
     /// </summary>
     TimeSeriesForecasting,
+
+    /// <summary>
+    /// Time-series anomaly detection (detecting rare/abnormal events in time-ordered data).
+    /// </summary>
+    TimeSeriesAnomalyDetection,
+
+    /// <summary>
+    /// Ranking (ordering items by relevance, e.g., search results).
+    /// </summary>
+    Ranking,
+
+    /// <summary>
+    /// Recommendation (ranking or scoring items for users).
+    /// </summary>
+    Recommendation,
+
+    /// <summary>
+    /// Graph node classification.
+    /// </summary>
+    GraphNodeClassification,
+
+    /// <summary>
+    /// Graph (whole-graph) classification.
+    /// </summary>
+    GraphClassification,
+
+    /// <summary>
+    /// Graph link prediction.
+    /// </summary>
+    GraphLinkPrediction,
+
+    /// <summary>
+    /// Graph generation.
+    /// </summary>
+    GraphGeneration,
+
+    /// <summary>
+    /// Text classification.
+    /// </summary>
+    TextClassification,
+
+    /// <summary>
+    /// Sequence tagging (token-level labels like NER, POS).
+    /// </summary>
+    SequenceTagging,
+
+    /// <summary>
+    /// Machine translation.
+    /// </summary>
+    Translation,
+
+    /// <summary>
+    /// Text generation (language modeling / free-form generation).
+    /// </summary>
+    TextGeneration,
+
+    /// <summary>
+    /// Speech recognition (ASR).
+    /// </summary>
+    SpeechRecognition,
+
+    /// <summary>
+    /// Image classification.
+    /// </summary>
+    ImageClassification,
+
+    /// <summary>
+    /// Object detection.
+    /// </summary>
+    ObjectDetection,
+
+    /// <summary>
+    /// Image segmentation.
+    /// </summary>
+    ImageSegmentation,
 
     /// <summary>
     /// Reinforcement learning.
     /// </summary>
     ReinforcementLearning
 }
-

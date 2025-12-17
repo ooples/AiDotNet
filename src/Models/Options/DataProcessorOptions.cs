@@ -80,6 +80,23 @@ public class DataProcessorOptions
     public int RandomSeed { get; set; } = 42;
 
     /// <summary>
+    /// Gets or sets whether data should be shuffled before splitting into train/validation/test sets.
+    /// </summary>
+    /// <value>True to shuffle before splitting, false to preserve the original order; defaults to true.</value>
+    /// <remarks>
+    /// <para>
+    /// Most supervised ML problems benefit from shuffling before splitting to reduce accidental ordering bias.
+    /// However, for time-series and other sequential datasets, shuffling can invalidate the evaluation because it leaks
+    /// future information into the training set. In those cases, set this to false to preserve chronological order.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// If your data is time-ordered (like daily sales), you usually want to keep it in order when splitting so the model
+    /// trains on the past and is tested on the future.
+    /// </para>
+    /// </remarks>
+    public bool ShuffleBeforeSplit { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets whether data normalization should be performed before feature selection.
     /// </summary>
     /// <value>True to normalize before feature selection, false to normalize after; defaults to true.</value>

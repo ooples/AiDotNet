@@ -1,9 +1,8 @@
 using AiDotNet.Enums;
-using AiDotNet.Evaluation;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.Models.Options;
-using AiDotNet.Regression;
+using AiDotNet.AutoML.Policies;
+using AiDotNet.AutoML.Registry;
 
 namespace AiDotNet.AutoML;
 
@@ -143,239 +142,14 @@ public class RandomSearchAutoML<T, TInput, TOutput> : SupervisedAutoMLModelBase<
                 $"RandomSearchAutoML currently supports Matrix<T>/Vector<T> supervised tasks. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
         }
 
-        IFullModel<T, Matrix<T>, Vector<T>> model = modelType switch
-        {
-            ModelType.SimpleRegression => CreateWithOptions(
-                (RegressionOptions<T> options) => new SimpleRegression<T>(options),
-                new RegressionOptions<T>(),
-                parameters),
-
-            ModelType.MultipleRegression => CreateWithOptions(
-                (RegressionOptions<T> options) => new MultipleRegression<T>(options),
-                new RegressionOptions<T>(),
-                parameters),
-
-            ModelType.PolynomialRegression => CreateWithOptions(
-                (PolynomialRegressionOptions<T> options) => new PolynomialRegression<T>(options),
-                new PolynomialRegressionOptions<T>(),
-                parameters),
-
-            ModelType.LogisticRegression => CreateWithOptions(
-                (LogisticRegressionOptions<T> options) => new LogisticRegression<T>(options),
-                new LogisticRegressionOptions<T>(),
-                parameters),
-
-            ModelType.MultinomialLogisticRegression => CreateWithOptions(
-                (MultinomialLogisticRegressionOptions<T> options) => new MultinomialLogisticRegression<T>(options),
-                new MultinomialLogisticRegressionOptions<T>(),
-                parameters),
-
-            ModelType.RandomForest => CreateWithOptions(
-                (RandomForestRegressionOptions options) => new RandomForestRegression<T>(options),
-                new RandomForestRegressionOptions(),
-                parameters),
-
-            ModelType.GradientBoosting => CreateWithOptions(
-                (GradientBoostingRegressionOptions options) => new GradientBoostingRegression<T>(options),
-                new GradientBoostingRegressionOptions(),
-                parameters),
-
-            ModelType.KNearestNeighbors => CreateWithOptions(
-                (KNearestNeighborsOptions options) => new KNearestNeighborsRegression<T>(options),
-                new KNearestNeighborsOptions(),
-                parameters),
-
-            ModelType.SupportVectorRegression => CreateWithOptions(
-                (SupportVectorRegressionOptions options) => new SupportVectorRegression<T>(options),
-                new SupportVectorRegressionOptions(),
-                parameters),
-
-            ModelType.NeuralNetworkRegression => new NeuralNetworkRegression<T>(),
-
-            _ => throw new NotSupportedException($"AutoML model type '{modelType}' is not currently supported by RandomSearchAutoML.")
-        };
+        var model = AutoMLTabularModelFactory<T>.Create(modelType, parameters);
 
         return Task.FromResult((IFullModel<T, TInput, TOutput>)model);
     }
 
     protected override Dictionary<string, ParameterRange> GetDefaultSearchSpace(ModelType modelType)
     {
-        return modelType switch
-        {
-            ModelType.PolynomialRegression => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
-            {
-                ["Degree"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 1,
-                    MaxValue = 6,
-                    Step = 1,
-                    DefaultValue = 2
-                }
-            },
-
-            ModelType.LogisticRegression => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
-            {
-                ["MaxIterations"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 100,
-                    MaxValue = 5000,
-                    Step = 100,
-                    DefaultValue = 1000
-                },
-                ["LearningRate"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 1e-4,
-                    MaxValue = 0.1,
-                    UseLogScale = true,
-                    DefaultValue = 0.01
-                },
-                ["Tolerance"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 1e-6,
-                    MaxValue = 1e-2,
-                    UseLogScale = true,
-                    DefaultValue = 1e-4
-                }
-            },
-
-            ModelType.MultinomialLogisticRegression => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
-            {
-                ["MaxIterations"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 100,
-                    MaxValue = 5000,
-                    Step = 100,
-                    DefaultValue = 1000
-                },
-                ["LearningRate"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 1e-4,
-                    MaxValue = 0.1,
-                    UseLogScale = true,
-                    DefaultValue = 0.01
-                },
-                ["Tolerance"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 1e-6,
-                    MaxValue = 1e-2,
-                    UseLogScale = true,
-                    DefaultValue = 1e-4
-                }
-            },
-
-            ModelType.RandomForest => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
-            {
-                ["NumberOfTrees"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 50,
-                    MaxValue = 500,
-                    Step = 10,
-                    DefaultValue = 100
-                },
-                ["MaxDepth"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 2,
-                    MaxValue = 50,
-                    Step = 1,
-                    DefaultValue = 10
-                },
-                ["MinSamplesSplit"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 2,
-                    MaxValue = 50,
-                    Step = 1,
-                    DefaultValue = 2
-                },
-                ["MaxFeatures"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 0.2,
-                    MaxValue = 1.0,
-                    Step = 0.05,
-                    DefaultValue = 1.0
-                }
-            },
-
-            ModelType.GradientBoosting => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
-            {
-                ["NumberOfTrees"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 50,
-                    MaxValue = 500,
-                    Step = 10,
-                    DefaultValue = 100
-                },
-                ["LearningRate"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 0.01,
-                    MaxValue = 0.3,
-                    UseLogScale = true,
-                    DefaultValue = 0.1
-                },
-                ["SubsampleRatio"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 0.5,
-                    MaxValue = 1.0,
-                    Step = 0.05,
-                    DefaultValue = 1.0
-                },
-                ["MaxDepth"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 2,
-                    MaxValue = 20,
-                    Step = 1,
-                    DefaultValue = 10
-                }
-            },
-
-            ModelType.KNearestNeighbors => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
-            {
-                ["K"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 1,
-                    MaxValue = 50,
-                    Step = 1,
-                    DefaultValue = 5
-                }
-            },
-
-            ModelType.SupportVectorRegression => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
-            {
-                ["C"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 0.1,
-                    MaxValue = 100.0,
-                    UseLogScale = true,
-                    DefaultValue = 1.0
-                },
-                ["Epsilon"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 0.001,
-                    MaxValue = 1.0,
-                    UseLogScale = true,
-                    DefaultValue = 0.1
-                }
-            },
-
-            _ => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
-        };
+        return AutoMLTabularSearchSpaceRegistry.GetDefaultSearchSpace(modelType);
     }
 
     protected override AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy()
@@ -395,52 +169,13 @@ public class RandomSearchAutoML<T, TInput, TOutput> : SupervisedAutoMLModelBase<
             if (typeof(TInput) == typeof(Matrix<T>) && typeof(TOutput) == typeof(Vector<T>))
             {
                 int featureCount = InputHelper<T, TInput>.GetInputSize(inputs);
-                var predictionType = PredictionTypeInference.Infer(ConversionsHelper.ConvertToVector<T, TOutput>(targets));
-                bool isClassification =
-                    predictionType == PredictionType.Binary
-                    || predictionType == PredictionType.MultiClass
-                    || predictionType == PredictionType.MultiLabel;
-
-                if (!isClassification)
+                var taskFamily = AutoMLTaskFamilyInference.InferFromTargets<T, TOutput>(targets);
+                foreach (var candidate in AutoMLDefaultCandidateModelsPolicy.GetDefaultCandidates(taskFamily, featureCount))
                 {
-                    if (featureCount == 1)
-                    {
-                        _candidateModels.Add(ModelType.SimpleRegression);
-                    }
-
-                    _candidateModels.Add(ModelType.MultipleRegression);
-                    _candidateModels.Add(ModelType.PolynomialRegression);
-                    _candidateModels.Add(ModelType.RandomForest);
-                    _candidateModels.Add(ModelType.GradientBoosting);
-                    _candidateModels.Add(ModelType.KNearestNeighbors);
-                    _candidateModels.Add(ModelType.SupportVectorRegression);
-                    _candidateModels.Add(ModelType.NeuralNetworkRegression);
-                }
-                else
-                {
-                    _candidateModels.Add(ModelType.LogisticRegression);
-                    _candidateModels.Add(ModelType.MultinomialLogisticRegression);
+                    _candidateModels.Add(candidate);
                 }
             }
         }
     }
 
-    private static TModel CreateWithOptions<TOptions, TModel>(
-        Func<TOptions, TModel> factory,
-        TOptions options,
-        IReadOnlyDictionary<string, object> parameters)
-    {
-        if (factory is null)
-        {
-            throw new ArgumentNullException(nameof(factory));
-        }
-
-        if (options is null)
-        {
-            throw new ArgumentNullException(nameof(options));
-        }
-
-        AutoMLHyperparameterApplicator.ApplyToOptions(options, parameters);
-        return factory(options);
-    }
 }

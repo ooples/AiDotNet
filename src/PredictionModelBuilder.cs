@@ -30,6 +30,9 @@ global using AiDotNet.PromptEngineering.Chains;
 global using AiDotNet.PromptEngineering.Optimization;
 global using AiDotNet.PromptEngineering.FewShot;
 
+using AiDotNet.AutoML.Policies;
+using AiDotNet.Models.Options;
+
 namespace AiDotNet;
 
 /// <summary>
@@ -754,8 +757,16 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             var autoMLNormalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
             var autoMLFeatureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
             var autoMLOutlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
+
+            var autoMLDataProcessorOptions = new DataProcessorOptions();
+            if (_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
+                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection)
+            {
+                autoMLDataProcessorOptions.ShuffleBeforeSplit = false;
+            }
+
             var autoMLPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(
-                autoMLNormalizer, autoMLFeatureSelector, autoMLOutlierRemoval);
+                autoMLNormalizer, autoMLFeatureSelector, autoMLOutlierRemoval, autoMLDataProcessorOptions);
 
             // Preprocess and split data for AutoML search
             var (autoMLPreprocessedX, autoMLPreprocessedY, _) = autoMLPreprocessor.PreprocessData(x, y);
@@ -766,6 +777,22 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             if (_modelEvaluator != null)
             {
                 _autoMLModel.SetModelEvaluator(_modelEvaluator);
+            }
+
+            if (_autoMLOptions?.TaskFamilyOverride is AutoMLTaskFamily taskFamilyOverride)
+            {
+                int featureCount = InputHelper<T, TInput>.GetInputSize(autoMLXTrain);
+                var candidates = AutoMLDefaultCandidateModelsPolicy.GetDefaultCandidates(taskFamilyOverride, featureCount);
+                if (candidates.Count > 0)
+                {
+                    _autoMLModel.SetCandidateModels(candidates.ToList());
+                }
+
+                if (!_autoMLOptions.OptimizationMetricOverride.HasValue)
+                {
+                    var (metric, maximize) = AutoMLDefaultMetricPolicy.GetDefault(taskFamilyOverride);
+                    _autoMLModel.SetOptimizationMetric(metric, maximize);
+                }
             }
 
             // Run AutoML search to find the best model
@@ -1836,6 +1863,14 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             return this;
         }
 
+        if (_autoMLOptions.TaskFamilyOverride is AutoMLTaskFamily taskFamilyOverride
+            && !IsBuiltInSupervisedTaskFamilySupported(taskFamilyOverride))
+        {
+            throw new NotSupportedException(
+                $"Facade AutoML options currently support only Regression/Binary/MultiClass/TimeSeries task families. " +
+                $"Received '{taskFamilyOverride}'. Use {nameof(ConfigureAutoML)}(IAutoMLModel<...>) to plug in a custom implementation.");
+        }
+
         _autoMLModel = CreateBuiltInAutoMLModel(_autoMLOptions.SearchStrategy);
         _autoMLModel.TimeLimit = timeLimit;
         _autoMLModel.TrialLimit = trialLimit;
@@ -1844,6 +1879,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         {
             var metric = _autoMLOptions.OptimizationMetricOverride.Value;
             _autoMLModel.SetOptimizationMetric(metric, maximize: IsHigherBetter(metric));
+        }
+        else if (_autoMLOptions.TaskFamilyOverride is AutoMLTaskFamily familyOverride)
+        {
+            var (metric, maximize) = AutoMLDefaultMetricPolicy.GetDefault(familyOverride);
+            _autoMLModel.SetOptimizationMetric(metric, maximize);
         }
 
         return this;
@@ -1859,8 +1899,24 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             MetricType.MSE => false,
             MetricType.RMSE => false,
             MetricType.MAE => false,
+            MetricType.MAPE => false,
+            MetricType.SMAPE => false,
+            MetricType.MeanSquaredLogError => false,
+            MetricType.CrossEntropyLoss => false,
+            MetricType.AIC => false,
+            MetricType.BIC => false,
+            MetricType.AICAlt => false,
+            MetricType.Perplexity => false,
             _ => true
         };
+    }
+
+    private static bool IsBuiltInSupervisedTaskFamilySupported(AutoMLTaskFamily taskFamily)
+    {
+        return taskFamily == AutoMLTaskFamily.Regression
+               || taskFamily == AutoMLTaskFamily.BinaryClassification
+               || taskFamily == AutoMLTaskFamily.MultiClassClassification
+               || taskFamily == AutoMLTaskFamily.TimeSeriesForecasting;
     }
 
     private IAutoMLModel<T, TInput, TOutput> CreateBuiltInAutoMLModel(AutoMLSearchStrategy strategy)
