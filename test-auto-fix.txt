@@ -1,0 +1,2 @@
+This is a test file to verify auto-fix workflows are working.
+It will be deleted after the test.
