@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.Evaluation;
+using AiDotNet.Exceptions;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
@@ -92,7 +93,31 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
             Status = AutoMLStatus.Cancelled;
             throw;
         }
-        catch (Exception ex)
+        catch (AiDotNetException ex)
+        {
+            var duration = DateTime.UtcNow - trialStart;
+            await ReportTrialFailureAsync(trialParameters, ex, duration);
+            return _maximize ? double.NegativeInfinity : double.PositiveInfinity;
+        }
+        catch (ArgumentException ex)
+        {
+            var duration = DateTime.UtcNow - trialStart;
+            await ReportTrialFailureAsync(trialParameters, ex, duration);
+            return _maximize ? double.NegativeInfinity : double.PositiveInfinity;
+        }
+        catch (InvalidOperationException ex)
+        {
+            var duration = DateTime.UtcNow - trialStart;
+            await ReportTrialFailureAsync(trialParameters, ex, duration);
+            return _maximize ? double.NegativeInfinity : double.PositiveInfinity;
+        }
+        catch (NotSupportedException ex)
+        {
+            var duration = DateTime.UtcNow - trialStart;
+            await ReportTrialFailureAsync(trialParameters, ex, duration);
+            return _maximize ? double.NegativeInfinity : double.PositiveInfinity;
+        }
+        catch (ArithmeticException ex)
         {
             var duration = DateTime.UtcNow - trialStart;
             await ReportTrialFailureAsync(trialParameters, ex, duration);
