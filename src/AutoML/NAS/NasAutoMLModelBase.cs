@@ -53,9 +53,11 @@ namespace AiDotNet.AutoML.NAS
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
+                var searchStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 var architecture = await Task.Run(
                     () => SearchArchitecture(inputs, targets, validationInputs, validationTargets, timeLimit, cancellationToken),
                     cancellationToken);
+                searchStopwatch.Stop();
 
                 BestArchitecture = architecture;
 
@@ -71,7 +73,7 @@ namespace AiDotNet.AutoML.NAS
                 await ReportTrialResultAsync(
                     new Dictionary<string, object> { ["Architecture"] = architecture.GetDescription() },
                     score,
-                    TimeSpan.Zero);
+                    searchStopwatch.Elapsed);
 
                 Status = AutoMLStatus.Completed;
                 return model;
