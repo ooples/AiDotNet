@@ -228,7 +228,7 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         };
     }
 
-    private Func<T[], T[]> FinetuneWithRL(Func<T[], T[]> baseModel, AlignmentFeedbackData<T> feedbackData, Func<T[], T[], double> rewardModel)
+    private Func<T[], T[]> FinetuneWithRL(Func<T[], T[]> baseModel, AlignmentFeedbackData<T> feedbackData, Func<T[], T[], double> rewardModelFunc)
     {
         // Simplified PPO-like fine-tuning
         // Real implementation would integrate with a RL framework
@@ -238,12 +238,12 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
             var output = baseModel(input);
 
             // Apply KL penalty to stay close to base model
-            var klPenalty = options.KLCoefficient;
+            _ = options.KLCoefficient;
 
             // Adjust output based on reward (simplified)
             for (int i = 0; i < output.Length; i++)
             {
-                var reward = rewardModel(input, output);
+                var reward = rewardModelFunc(input, output);
                 var adjustment = NumOps.FromDouble(reward * 0.1); // Small adjustment
                 output[i] = Clip01(NumOps.Add(output[i], adjustment));
             }

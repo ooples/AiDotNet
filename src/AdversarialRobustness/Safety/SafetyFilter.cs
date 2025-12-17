@@ -297,12 +297,11 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 
         foreach (var category in options.HarmfulContentCategories)
         {
-            if (!harmfulContentPatterns.ContainsKey(category))
+            if (!harmfulContentPatterns.TryGetValue(category, out var patterns))
             {
                 continue;
             }
 
-            var patterns = harmfulContentPatterns[category];
             var matchCount = 0;
 
             foreach (var pattern in patterns)
@@ -332,7 +331,19 @@ public class SafetyFilter<T> : ISafetyFilter<T>
         if (result.CategoryScores.Count > 0)
         {
             result.HarmfulContentDetected = true;
-            result.PrimaryHarmCategory = result.CategoryScores.OrderByDescending(kv => kv.Value).First().Key;
+
+            var primaryCategory = string.Empty;
+            var maxScore = double.NegativeInfinity;
+            foreach (var kv in result.CategoryScores)
+            {
+                if (kv.Value > maxScore)
+                {
+                    maxScore = kv.Value;
+                    primaryCategory = kv.Key;
+                }
+            }
+
+            result.PrimaryHarmCategory = primaryCategory;
             result.DetectedCategories = result.CategoryScores.Keys.ToArray();
             result.RecommendedAction = result.HarmScore > 0.7 ? "Block" : result.HarmScore > 0.4 ? "Warn" : "Allow";
         }
@@ -389,15 +400,8 @@ public class SafetyFilter<T> : ISafetyFilter<T>
         if (data == null || data.Length == 0)
             return string.Empty;
 
-        try
-        {
-            // This is a placeholder - in practice, you'd have proper encoding/decoding
-            return string.Join(" ", data.Select(x => x is null ? "" : (x.ToString() ?? "")));
-        }
-        catch
-        {
-            return string.Empty;
-        }
+        // This is a placeholder - in practice, you'd have proper encoding/decoding.
+        return string.Join(" ", data.Select(x => x is null ? "" : (x.ToString() ?? "")));
     }
 
     private T[] SanitizeOutput(T[] output, HarmfulContentResult<T> harmfulResult)
@@ -416,10 +420,14 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 
         try
         {
-            var logPath = "safety_filter_logs.txt";
+            var logPath = string.IsNullOrWhiteSpace(options.LogFilePath) ? "safety_filter_logs.txt" : options.LogFilePath;
             File.AppendAllText(logPath, logEntry);
         }
-        catch
+        catch (IOException)
+        {
+            // Silent fail for logging
+        }
+        catch (UnauthorizedAccessException)
         {
             // Silent fail for logging
         }

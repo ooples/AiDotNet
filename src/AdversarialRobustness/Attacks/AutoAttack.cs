@@ -81,7 +81,11 @@ public class AutoAttack<T> : AdversarialAttackBase<T>
             var pgdSuccess = IsSuccessfulAttack(targetModel(pgdAdversarial), trueLabel);
             candidates.Add((pgdAdversarial, pgdPerturbation, pgdSuccess));
         }
-        catch (Exception)
+        catch (ArgumentException)
+        {
+            // Continue if one attack fails
+        }
+        catch (InvalidOperationException)
         {
             // Continue if one attack fails
         }
@@ -94,7 +98,11 @@ public class AutoAttack<T> : AdversarialAttackBase<T>
             var cwSuccess = IsSuccessfulAttack(targetModel(cwAdversarial), trueLabel);
             candidates.Add((cwAdversarial, cwPerturbation, cwSuccess));
         }
-        catch (Exception)
+        catch (ArgumentException)
+        {
+            // Continue if one attack fails
+        }
+        catch (InvalidOperationException)
         {
             // Continue if one attack fails
         }
@@ -107,7 +115,11 @@ public class AutoAttack<T> : AdversarialAttackBase<T>
             var fgsmSuccess = IsSuccessfulAttack(targetModel(fgsmAdversarial), trueLabel);
             candidates.Add((fgsmAdversarial, fgsmPerturbation, fgsmSuccess));
         }
-        catch (Exception)
+        catch (ArgumentException)
+        {
+            // Continue if one attack fails
+        }
+        catch (InvalidOperationException)
         {
             // Continue if one attack fails
         }

@@ -77,7 +77,7 @@ public class CWAttack<T> : AdversarialAttackBase<T>
 
             // Compute objective and gradient
             var output = targetModel(adversarial);
-            var (objective, gradient) = ComputeObjectiveAndGradient(w, input, output, trueLabel, c, targetModel);
+            var (_, gradient) = ComputeObjectiveAndGradient(w, input, output, trueLabel, c, targetModel);
 
             // Update w using gradient descent
             for (int i = 0; i < w.Length; i++)

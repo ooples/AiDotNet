@@ -52,40 +52,8 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
     /// <inheritdoc/>
     public Func<T[], T[]> ApplyDefense(T[][] trainingData, int[] labels, Func<T[], T[]> model)
     {
-        // This is a simplified version - in practice, you'd integrate with a training framework
-        // The defended model would be trained on a mix of clean and adversarial examples
-
-        // Create augmented training set with adversarial examples
-        var augmentedData = new List<T[]>();
-        var augmentedLabels = new List<int>();
-
-        for (int i = 0; i < trainingData.Length; i++)
-        {
-            // Add original clean example
-            augmentedData.Add(trainingData[i]);
-            augmentedLabels.Add(labels[i]);
-
-            // Generate and add adversarial example
-            if (new Random().NextDouble() < options.AdversarialRatio)
-            {
-                try
-                {
-                    var adversarial = attackMethod.GenerateAdversarialExample(
-                        trainingData[i],
-                        labels[i],
-                        model);
-                    augmentedData.Add(adversarial);
-                    augmentedLabels.Add(labels[i]);
-                }
-                catch (Exception)
-                {
-                    // Skip if adversarial generation fails
-                }
-            }
-        }
-
-        // In a real implementation, you would retrain the model on augmentedData
-        // For now, return a wrapper that applies preprocessing
+        // Training-time adversarial example augmentation requires integration with a trainer.
+        // For now, return a runtime defense wrapper that applies preprocessing before inference.
         return (input) =>
         {
             var preprocessed = PreprocessInput(input);
@@ -154,7 +122,12 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
                 var l2Norm = ComputeL2Norm(perturbation);
                 perturbationSizes.Add(NumOps.ToDouble(l2Norm));
             }
-            catch (Exception)
+            catch (ArgumentException)
+            {
+                // Count as defended if attack fails
+                adversarialCorrect++;
+            }
+            catch (InvalidOperationException)
             {
                 // Count as defended if attack fails
                 adversarialCorrect++;

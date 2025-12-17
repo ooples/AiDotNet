@@ -101,4 +101,13 @@ public class SafetyFilterOptions<T>
     /// improve the filtering over time.</para>
     /// </remarks>
     public bool LogFilteredContent { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the file path used when logging filtered content.
+    /// </summary>
+    /// <remarks>
+    /// When null or empty, a default relative path is used.
+    /// Prefer an absolute path in production deployments or integrate with a logging framework.
+    /// </remarks>
+    public string? LogFilePath { get; set; }
 }

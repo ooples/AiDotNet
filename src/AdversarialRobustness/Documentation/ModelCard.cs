@@ -20,6 +20,11 @@ namespace AiDotNet.AdversarialRobustness.Documentation;
 /// </remarks>
 public class ModelCard
 {
+    public ModelCard()
+    {
+        Date = DateTime.UtcNow;
+    }
+
     /// <summary>
     /// Gets or sets the model name and version.
     /// </summary>
@@ -33,7 +38,7 @@ public class ModelCard
     /// <summary>
     /// Gets or sets the date the model was created or last updated.
     /// </summary>
-    public DateTime Date { get; set; } = DateTime.UtcNow;
+    public DateTime Date { get; set; }
 
     /// <summary>
     /// Gets or sets the model developers or organization.
