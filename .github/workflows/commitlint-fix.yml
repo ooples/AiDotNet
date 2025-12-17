@@ -35,7 +35,7 @@ jobs:
 
           # Get all commits in PR
           COMMITS=$(git rev-list --reverse "origin/$BASE_BRANCH..HEAD")
-          COMMITS_COUNT=$(echo "$COMMITS" | grep -c .)
+          COMMITS_COUNT=$(echo "$COMMITS" | grep -c . || echo 0)
 
           echo "commits<<EOF" >> $GITHUB_OUTPUT
           echo "$COMMITS" >> $GITHUB_OUTPUT
@@ -65,7 +65,7 @@ jobs:
 
             # Check if commit follows conventional commits
             # Valid types: feat, fix, docs, refactor, perf, test, chore, ci, style, deps
-            if [[ "$FIRST_LINE" =~ ^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)(\(.+\))?!?:\ .+ ]]; then
+            if [[ "$FIRST_LINE" =~ ^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)\(([^)]+)\)\?:\ .+ ]]; then
               # Check if subject is lowercase (except for deps type which we allow)
               if [[ "$FIRST_LINE" =~ ^deps: ]]; then
                 echo "✅ Valid deps commit: $FIRST_LINE"
@@ -73,9 +73,23 @@ jobs:
                 echo "✅ Valid commit: $FIRST_LINE"
               else
                 echo "❌ Invalid subject case: $FIRST_LINE"
-                NEEDS_FIX=true
+                INVALID_SUBJECT=true
 
-                # Fix the subject case
+                # Check if subject is lowercase (including deps type)
+                DESCRIPTION=$(echo "$FIRST_LINE" | cut -d':' -f2- | sed 's/^ *//')
+                if [[ "$FIRST_LINE" =~ ^deps: ]]; then
+                  if [[ "$DESCRIPTION" =~ ^[a-z] ]]; then
+                    echo "✅ Valid deps commit: $FIRST_LINE"
+                  else
+                    echo "❌ Invalid deps subject case: $FIRST_LINE"
+                    INVALID_SUBJECT=true
+                  fi
+                elif [[ "$FIRST_LINE" =~ ^[a-z].*:[[:space:]].* ]]; then
+                  echo "✅ Valid commit: $FIRST_LINE"
+                fi
+
+                if [ "$INVALID_SUBJECT" = true ]; then
+                  # Fix the subject case
                 TYPE=$(echo "$FIRST_LINE" | cut -d':' -f1)
                 DESCRIPTION=$(echo "$FIRST_LINE" | cut -d':' -f2- | sed 's/^ *//')
                 FIXED_DESCRIPTION=$(echo "$DESCRIPTION" | sed 's/./\L&/')
@@ -153,7 +167,8 @@ jobs:
           # Note: This is a simplified approach - in practice, we might want to preserve the original commit structure
           echo "All changes have been staged. Creating a single commit with fixes..."
 
-          git commit -m "chore: fix commit messages for conventional compliance
+          git commit -F- <<'EOF'
+chore: fix commit messages for conventional compliance
 
 This commit fixes one or more commit messages that didn't follow
 conventional commits format. The original commits have been
@@ -164,7 +179,8 @@ Original issues fixed:
 - Subject line now follows lowercase convention
 - Type now uses valid conventional commit types
 
-Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
+EOF
 
       - name: Force push fixes
         if: steps.check-commits.outputs.needs_fix == 'true'
@@ -266,8 +282,8 @@ The PR branch has been force-pushed with the fixed commits. If you had local cha
             NEW_MSG="$NEW_SUBJECT"
           fi
 
-          # Amend the commit
-          echo -e "$NEW_MSG" | git commit --amend --file=-
+          # Amend the commit using printf for better portability
+          printf '%b\n' "$NEW_MSG" | git commit --amend --file=-
 
       - name: Force push fix
         if: steps.check-needs-fix.outputs.needs_fix == 'true'
