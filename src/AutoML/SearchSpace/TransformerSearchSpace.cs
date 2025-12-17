@@ -1,13 +1,13 @@
 using System.Collections.Generic;
 
-namespace AiDotNet.AutoML.NAS
+namespace AiDotNet.AutoML.SearchSpace
 {
     /// <summary>
     /// Defines the Transformer-based search space for neural architecture search.
     /// Includes attention mechanisms, feed-forward networks, and various architectural choices.
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
-    public class TransformerSearchSpace<T> : SearchSpace<T>
+    public class TransformerSearchSpace<T> : SearchSpaceBase<T>
     {
         public TransformerSearchSpace()
         {

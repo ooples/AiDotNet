@@ -1,13 +1,13 @@
 using System.Collections.Generic;
 
-namespace AiDotNet.AutoML.NAS
+namespace AiDotNet.AutoML.SearchSpace
 {
     /// <summary>
     /// Defines the MobileNet-based search space for neural architecture search.
     /// Includes inverted residual blocks, depthwise separable convolutions, and squeeze-excitation.
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
-    public class MobileNetSearchSpace<T> : SearchSpace<T>
+    public class MobileNetSearchSpace<T> : SearchSpaceBase<T>
     {
         public MobileNetSearchSpace()
         {

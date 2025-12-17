@@ -1,3 +1,5 @@
+using AiDotNet.AutoML.SearchSpace;
+
 namespace AiDotNet.AutoML;
 
 /// <summary>
@@ -8,7 +10,7 @@ public class NeuralArchitectureSearch<T>
 {
     private readonly INumericOperations<T> _ops;
     private readonly NeuralArchitectureSearchStrategy _strategy;
-    private readonly SearchSpace<T> _searchSpace;
+    private readonly SearchSpaceBase<T> _searchSpace;
     private readonly int _maxEpochs;
     private readonly Random _random;
 
@@ -22,7 +24,7 @@ public class NeuralArchitectureSearch<T>
     {
         _ops = MathHelper.GetNumericOperations<T>();
         _strategy = strategy;
-        _searchSpace = new SearchSpace<T>();
+        _searchSpace = new SearchSpaceBase<T>();
         _maxEpochs = maxEpochs;
         _random = RandomHelper.CreateSecureRandom();
         BestScore = _ops.Zero;

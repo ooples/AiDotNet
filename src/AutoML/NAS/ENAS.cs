@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NumericOperations;
 
 namespace AiDotNet.AutoML.NAS
 {
@@ -15,10 +16,10 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "Efficient Neural Architecture Search via Parameter Sharing" (ICML 2018)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
-    public class ENAS<T>
+    public class ENAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;
-        private readonly SearchSpace<T> _searchSpace;
+        private readonly SearchSpaceBase<T> _nasSearchSpace;
         private readonly int _numNodes;
         private readonly int _numOperations;
         private readonly Random _random;
@@ -39,11 +40,15 @@ namespace AiDotNet.AutoML.NAS
         private readonly int _controllerHiddenSize;
         private readonly T _entropyWeight;
 
-        public ENAS(SearchSpace<T> searchSpace, int numNodes = 4,
+        protected override INumericOperations<T> NumOps => _ops;
+        protected override SearchSpaceBase<T> NasSearchSpace => _nasSearchSpace;
+        protected override int NasNumNodes => _numNodes;
+
+        public ENAS(SearchSpaceBase<T> searchSpace, int numNodes = 4,
             int controllerHiddenSize = 100, double baselineDecay = 0.95, double entropyWeight = 0.01)
         {
             _ops = MathHelper.GetNumericOperations<T>();
-            _searchSpace = searchSpace;
+            _nasSearchSpace = searchSpace;
             _numNodes = numNodes;
             _numOperations = searchSpace.Operations?.Count ?? 5;
             _random = new Random(42);
@@ -116,9 +121,9 @@ namespace AiDotNet.AutoML.NAS
                 UpdateHiddenState(hiddenState, selectedOp);
 
                 // Add to architecture
-                if (_searchSpace.Operations != null && selectedOp < _searchSpace.Operations.Count)
+                if (_nasSearchSpace.Operations != null && selectedOp < _nasSearchSpace.Operations.Count)
                 {
-                    var operation = _searchSpace.Operations[selectedOp];
+                    var operation = _nasSearchSpace.Operations[selectedOp];
                     architecture.AddOperation(nodeIdx, selectedPrevNode, operation);
                 }
             }
@@ -194,10 +199,10 @@ namespace AiDotNet.AutoML.NAS
             T entropy = _ops.Zero;
             foreach (var p in probs)
             {
-                if (_ops.GreaterThan(p, _ops.Zero))
-                {
-                    entropy = _ops.Subtract(entropy, _ops.Multiply(p, _ops.Log(p)));
-                }
+                if (!_ops.GreaterThan(p, _ops.Zero))
+                    continue;
+
+                entropy = _ops.Subtract(entropy, _ops.Multiply(p, _ops.Log(p)));
             }
             return entropy;
         }
@@ -229,7 +234,7 @@ namespace AiDotNet.AutoML.NAS
 
             // REINFORCE gradient: (reward - baseline) * logProb + entropy_weight * entropy
             T advantage = _ops.Subtract(reward, _baseline);
-            T loss = _ops.Subtract(
+            _ = _ops.Subtract(
                 _ops.Multiply(advantage, logProb),
                 _ops.Multiply(_entropyWeight, entropy)
             );
@@ -282,5 +287,26 @@ namespace AiDotNet.AutoML.NAS
         /// Gets current baseline value
         /// </summary>
         public T GetBaseline() => _baseline;
+
+        protected override Architecture<T> SearchArchitecture(
+            Tensor<T> inputs,
+            Tensor<T> targets,
+            Tensor<T> validationInputs,
+            Tensor<T> validationTargets,
+            TimeSpan timeLimit,
+            CancellationToken cancellationToken)
+        {
+            return SampleArchitecture().architecture;
+        }
+
+        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
+        {
+            return new ENAS<T>(
+                _nasSearchSpace,
+                _numNodes,
+                _controllerHiddenSize,
+                baselineDecay: _ops.ToDouble(_baselineDecay),
+                entropyWeight: _ops.ToDouble(_entropyWeight));
+        }
     }
 }

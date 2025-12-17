@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NumericOperations;
 
 namespace AiDotNet.AutoML.NAS
 {
@@ -15,11 +16,11 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "AttentiveNAS: Improving Neural Architecture Search via Attentive Sampling" (CVPR 2021)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
-    public class AttentiveNAS<T>
-    {
-        private readonly INumericOperations<T> _ops;
-        private readonly SearchSpace<T> _searchSpace;
-        private readonly Random _random;
+        public class AttentiveNAS<T> : NasAutoMLModelBase<T>
+        {
+            private readonly INumericOperations<T> _ops;
+            private readonly SearchSpaceBase<T> _nasSearchSpace;
+            private readonly Random _random;
 
         // Super-network with elastic dimensions
         private readonly List<int> _elasticDepths;
@@ -32,24 +33,23 @@ namespace AiDotNet.AutoML.NAS
         private readonly int _attentionHiddenSize;
 
         // Architecture sampling parameters
-        private readonly List<Vector<T>> _architectureEmbeddings;
         private readonly Dictionary<string, T> _performanceMemory;
-
-        // Shared weights
-        private readonly Dictionary<string, Matrix<T>> _sharedWeights;
-        private readonly Dictionary<string, Matrix<T>> _sharedGradients;
 
         // Hardware cost model
         private readonly HardwareCostModel<T> _hardwareCostModel;
 
-        public AttentiveNAS(SearchSpace<T> searchSpace,
+        protected override INumericOperations<T> NumOps => _ops;
+        protected override SearchSpaceBase<T> NasSearchSpace => _nasSearchSpace;
+        protected override int NasNumNodes => Math.Max(_nasSearchSpace.MaxNodes, _elasticDepths.Max());
+
+        public AttentiveNAS(SearchSpaceBase<T> searchSpace,
             List<int>? elasticDepths = null,
             List<double>? elasticWidthMultipliers = null,
             List<int>? elasticKernelSizes = null,
             int attentionHiddenSize = 128)
         {
             _ops = MathHelper.GetNumericOperations<T>();
-            _searchSpace = searchSpace;
+            _nasSearchSpace = searchSpace;
             _random = new Random(42);
 
             _elasticDepths = elasticDepths ?? new List<int> { 2, 3, 4, 5 };
@@ -71,11 +71,7 @@ namespace AiDotNet.AutoML.NAS
                 }
             }
 
-            _architectureEmbeddings = new List<Vector<T>>();
             _performanceMemory = new Dictionary<string, T>();
-
-            _sharedWeights = new Dictionary<string, Matrix<T>>();
-            _sharedGradients = new Dictionary<string, Matrix<T>>();
 
             _hardwareCostModel = new HardwareCostModel<T>();
         }
@@ -84,13 +80,13 @@ namespace AiDotNet.AutoML.NAS
         /// Samples architecture using attention-based sampling strategy.
         /// The attention module learns to focus on high-performing architecture regions.
         /// </summary>
-        public AttentiveNASConfig AttentiveSample(Vector<T> contextVector)
+        public AttentiveNASConfig<T> AttentiveSample(Vector<T> contextVector)
         {
             // Compute attention scores for different architecture choices
             var attentionScores = ComputeAttentionScores(contextVector);
 
             // Sample based on attention distribution
-            var config = new AttentiveNASConfig();
+            var config = new AttentiveNASConfig<T>();
 
             // Sample depth
             int depthStartIdx = 0;
@@ -141,7 +137,7 @@ namespace AiDotNet.AutoML.NAS
         /// <summary>
         /// Creates an embedding for an architecture configuration
         /// </summary>
-        private Vector<T> CreateArchitectureEmbedding(AttentiveNASConfig config)
+        private Vector<T> CreateArchitectureEmbedding(AttentiveNASConfig<T> config)
         {
             var embedding = new Vector<T>(_attentionHiddenSize);
 
@@ -246,7 +242,7 @@ namespace AiDotNet.AutoML.NAS
         /// Updates the attention module based on architecture performance.
         /// High-performing architectures increase attention to similar regions.
         /// </summary>
-        public void UpdateAttention(AttentiveNASConfig config, T performance, T learningRate)
+        public void UpdateAttention(AttentiveNASConfig<T> config, T performance, T learningRate)
         {
             // Store performance in memory
             string configKey = $"{config.Depth}_{config.WidthMultiplier}_{config.KernelSize}";
@@ -308,10 +304,10 @@ namespace AiDotNet.AutoML.NAS
         /// <summary>
         /// Searches for optimal architecture using attentive sampling
         /// </summary>
-        public AttentiveNASConfig Search(HardwareConstraints<T> constraints,
+        public AttentiveNASConfig<T> Search(HardwareConstraints<T> constraints,
             int inputChannels, int spatialSize, int numIterations = 100)
         {
-            AttentiveNASConfig? bestConfig = null;
+            AttentiveNASConfig<T>? bestConfig = null;
             T bestFitness = _ops.FromDouble(double.MinValue);
 
             for (int iter = 0; iter < numIterations; iter++)
@@ -345,10 +341,10 @@ namespace AiDotNet.AutoML.NAS
                 UpdateAttention(config, fitness, learningRate);
             }
 
-            return bestConfig ?? new AttentiveNASConfig { Depth = 3, WidthMultiplier = 1.0, KernelSize = 3 };
+            return bestConfig ?? new AttentiveNASConfig<T> { Depth = 3, WidthMultiplier = 1.0, KernelSize = 3, Embedding = new Vector<T>(_attentionHiddenSize) };
         }
 
-        private Architecture<T> ConfigToArchitecture(AttentiveNASConfig config)
+        private Architecture<T> ConfigToArchitecture(AttentiveNASConfig<T> config)
         {
             var architecture = new Architecture<T>();
             for (int i = 0; i < config.Depth; i++)
@@ -368,16 +364,29 @@ namespace AiDotNet.AutoML.NAS
         /// Gets the performance memory
         /// </summary>
         public Dictionary<string, T> GetPerformanceMemory() => _performanceMemory;
+
+        protected override Architecture<T> SearchArchitecture(
+            Tensor<T> inputs,
+            Tensor<T> targets,
+            Tensor<T> validationInputs,
+            Tensor<T> validationTargets,
+            TimeSpan timeLimit,
+            CancellationToken cancellationToken)
+        {
+            var context = new Vector<T>(_attentionHiddenSize);
+            var config = AttentiveSample(context);
+            return ConfigToArchitecture(config);
+        }
+
+        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
+        {
+            return new AttentiveNAS<T>(
+                _nasSearchSpace,
+                elasticDepths: new List<int>(_elasticDepths),
+                elasticWidthMultipliers: new List<double>(_elasticWidthMultipliers),
+                elasticKernelSizes: new List<int>(_elasticKernelSizes),
+                attentionHiddenSize: _attentionHiddenSize);
+        }
     }
 
-    /// <summary>
-    /// Configuration for an AttentiveNAS sub-network
-    /// </summary>
-    public class AttentiveNASConfig
-    {
-        public int Depth { get; set; }
-        public double WidthMultiplier { get; set; }
-        public int KernelSize { get; set; }
-        public Vector<double>? Embedding { get; set; }
-    }
 }

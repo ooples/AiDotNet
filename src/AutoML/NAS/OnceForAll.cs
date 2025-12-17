@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NumericOperations;
 
 namespace AiDotNet.AutoML.NAS
 {
@@ -15,15 +16,15 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "Once for All: Train One Network and Specialize it for Efficient Deployment" (ICLR 2020)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
-    public class OnceForAll<T>
+    public class OnceForAll<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;
-        private readonly SearchSpace<T> _searchSpace;
+        private readonly SearchSpaceBase<T> _nasSearchSpace;
         private readonly Random _random;
 
         // Elastic dimensions for OFA
         private readonly List<int> _elasticDepths;      // Number of layers
-        private readonly List<int> _elasticWidths;      // Channel multipliers
+        private readonly List<double> _elasticWidths;      // Channel multipliers
         private readonly List<int> _elasticKernelSizes; // Kernel sizes (3, 5, 7)
         private readonly List<int> _elasticExpansionRatios; // Expansion ratios for inverted residuals
 
@@ -38,19 +39,23 @@ namespace AiDotNet.AutoML.NAS
         // Hardware cost model for specialization
         private readonly HardwareCostModel<T> _hardwareCostModel;
 
-        public OnceForAll(SearchSpace<T> searchSpace,
+        protected override INumericOperations<T> NumOps => _ops;
+        protected override SearchSpaceBase<T> NasSearchSpace => _nasSearchSpace;
+        protected override int NasNumNodes => Math.Max(_nasSearchSpace.MaxNodes, _elasticDepths.Max());
+
+        public OnceForAll(SearchSpaceBase<T> searchSpace,
             List<int>? elasticDepths = null,
-            List<int>? elasticWidths = null,
+            List<double>? elasticWidths = null,
             List<int>? elasticKernelSizes = null,
             List<int>? elasticExpansionRatios = null)
         {
             _ops = MathHelper.GetNumericOperations<T>();
-            _searchSpace = searchSpace;
+            _nasSearchSpace = searchSpace;
             _random = new Random(42);
 
             // Default elastic dimensions
             _elasticDepths = elasticDepths ?? new List<int> { 2, 3, 4 };
-            _elasticWidths = elasticWidths ?? new List<int> { 4, 6 };  // Width multipliers (e.g., 0.75x, 1.0x, 1.25x)
+            _elasticWidths = elasticWidths ?? new List<double> { 0.75, 1.0, 1.25 };  // Width multipliers
             _elasticKernelSizes = elasticKernelSizes ?? new List<int> { 3, 5, 7 };
             _elasticExpansionRatios = elasticExpansionRatios ?? new List<int> { 3, 4, 6 };
 
@@ -86,34 +91,19 @@ namespace AiDotNet.AutoML.NAS
             config.KernelSize = _elasticKernelSizes[_random.Next(_elasticKernelSizes.Count)];
 
             // Stage 2+: Add elastic depth
-            if (_currentTrainingStage >= 2)
-            {
-                config.Depth = _elasticDepths[_random.Next(_elasticDepths.Count)];
-            }
-            else
-            {
-                config.Depth = _elasticDepths[_elasticDepths.Count - 1];  // Largest depth
-            }
+            config.Depth = (_currentTrainingStage >= 2)
+                ? _elasticDepths[_random.Next(_elasticDepths.Count)]
+                : _elasticDepths[_elasticDepths.Count - 1];  // Largest depth
 
             // Stage 3+: Add elastic expansion ratio
-            if (_currentTrainingStage >= 3)
-            {
-                config.ExpansionRatio = _elasticExpansionRatios[_random.Next(_elasticExpansionRatios.Count)];
-            }
-            else
-            {
-                config.ExpansionRatio = _elasticExpansionRatios[_elasticExpansionRatios.Count - 1];  // Largest expansion
-            }
+            config.ExpansionRatio = (_currentTrainingStage >= 3)
+                ? _elasticExpansionRatios[_random.Next(_elasticExpansionRatios.Count)]
+                : _elasticExpansionRatios[_elasticExpansionRatios.Count - 1];  // Largest expansion
 
             // Stage 4: Add elastic width
-            if (_currentTrainingStage >= 4)
-            {
-                config.WidthMultiplier = _elasticWidths[_random.Next(_elasticWidths.Count)];
-            }
-            else
-            {
-                config.WidthMultiplier = _elasticWidths[_elasticWidths.Count - 1];  // Largest width
-            }
+            config.WidthMultiplier = (_currentTrainingStage >= 4)
+                ? _elasticWidths[_random.Next(_elasticWidths.Count)]
+                : _elasticWidths[_elasticWidths.Count - 1];  // Largest width
 
             return config;
         }
@@ -139,7 +129,7 @@ namespace AiDotNet.AutoML.NAS
             for (int gen = 0; gen < generations; gen++)
             {
                 // Sort by fitness (higher is better)
-                population.Sort((a, b) => _ops.Compare(b.fitness, a.fitness));
+                population.Sort((a, b) => CompareDescending(a.fitness, b.fitness));
 
                 // Keep top 50%
                 population = population.Take(populationSize / 2).ToList();
@@ -159,8 +149,23 @@ namespace AiDotNet.AutoML.NAS
             }
 
             // Return best configuration
-            population.Sort((a, b) => _ops.Compare(b.fitness, a.fitness));
+            population.Sort((a, b) => CompareDescending(a.fitness, b.fitness));
             return population[0].config;
+        }
+
+        private int CompareDescending(T left, T right)
+        {
+            if (_ops.GreaterThan(left, right))
+            {
+                return -1;
+            }
+
+            if (_ops.LessThan(left, right))
+            {
+                return 1;
+            }
+
+            return 0;
         }
 
         /// <summary>
@@ -208,8 +213,8 @@ namespace AiDotNet.AutoML.NAS
 
             // Fitness = estimated accuracy - penalty
             // For simplicity, we estimate accuracy based on network capacity
-            T estimatedAccuracy = _ops.FromDouble(
-                config.Depth * config.WidthMultiplier * config.ExpansionRatio / 100.0);
+            double estimatedAccuracyValue = ((double)config.Depth * config.WidthMultiplier * config.ExpansionRatio) / 100.0;
+            T estimatedAccuracy = _ops.FromDouble(estimatedAccuracyValue);
 
             return _ops.Subtract(estimatedAccuracy, penalty);
         }
@@ -302,16 +307,27 @@ namespace AiDotNet.AutoML.NAS
 
             return _sharedWeights[layerKey];
         }
+
+        protected override Architecture<T> SearchArchitecture(
+            Tensor<T> inputs,
+            Tensor<T> targets,
+            Tensor<T> validationInputs,
+            Tensor<T> validationTargets,
+            TimeSpan timeLimit,
+            CancellationToken cancellationToken)
+        {
+            return ConfigToArchitecture(SampleSubNetwork());
+        }
+
+        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
+        {
+            return new OnceForAll<T>(
+                _nasSearchSpace,
+                elasticDepths: new List<int>(_elasticDepths),
+                elasticWidths: new List<double>(_elasticWidths),
+                elasticKernelSizes: new List<int>(_elasticKernelSizes),
+                elasticExpansionRatios: new List<int>(_elasticExpansionRatios));
+        }
     }
 
-    /// <summary>
-    /// Configuration for a sub-network sampled from OFA
-    /// </summary>
-    public class SubNetworkConfig
-    {
-        public int Depth { get; set; }
-        public int KernelSize { get; set; }
-        public int WidthMultiplier { get; set; }
-        public int ExpansionRatio { get; set; }
-    }
 }

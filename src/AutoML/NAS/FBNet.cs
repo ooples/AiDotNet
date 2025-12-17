@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NumericOperations;
 
 namespace AiDotNet.AutoML.NAS
 {
@@ -15,10 +16,10 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "FBNet: Hardware-Aware Efficient ConvNet Design via Differentiable NAS" (CVPR 2019)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
-    public class FBNet<T>
+    public class FBNet<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;
-        private readonly SearchSpace<T> _searchSpace;
+        private readonly SearchSpaceBase<T> _nasSearchSpace;
         private readonly int _numLayers;
         private readonly int _numOperations;
         private readonly Random _random;
@@ -28,8 +29,9 @@ namespace AiDotNet.AutoML.NAS
         private readonly List<Vector<T>> _architectureGradients;
 
         // Hardware cost model
+        private readonly HardwarePlatform _targetPlatform;
         private readonly HardwareCostModel<T> _hardwareCostModel;
-        private readonly HardwareConstraints<T> _constraints;
+        private readonly HardwareConstraints<T> _hardwareConstraints;
 
         // FBNet-specific parameters
         private T _temperature;
@@ -37,17 +39,22 @@ namespace AiDotNet.AutoML.NAS
         private readonly int _inputChannels;
         private readonly int _spatialSize;
 
-        public FBNet(SearchSpace<T> searchSpace, int numLayers = 20,
+        protected override INumericOperations<T> NumOps => _ops;
+        protected override SearchSpaceBase<T> NasSearchSpace => _nasSearchSpace;
+        protected override int NasNumNodes => _numLayers;
+
+        public FBNet(SearchSpaceBase<T> searchSpace, int numLayers = 20,
             HardwarePlatform targetPlatform = HardwarePlatform.Mobile,
             double latencyWeight = 0.2, double initialTemperature = 5.0,
             int inputChannels = 16, int spatialSize = 224)
         {
             _ops = MathHelper.GetNumericOperations<T>();
-            _searchSpace = searchSpace;
+            _nasSearchSpace = searchSpace;
             _numLayers = numLayers;
             _numOperations = searchSpace.Operations?.Count ?? 5;
             _random = new Random(42);
 
+            _targetPlatform = targetPlatform;
             _hardwareCostModel = new HardwareCostModel<T>(targetPlatform);
             _latencyWeight = _ops.FromDouble(latencyWeight);
             _temperature = _ops.FromDouble(initialTemperature);
@@ -55,7 +62,7 @@ namespace AiDotNet.AutoML.NAS
             _spatialSize = spatialSize;
 
             // Default hardware constraints (can be customized)
-            _constraints = new HardwareConstraints<T>
+            _hardwareConstraints = new HardwareConstraints<T>
             {
                 MaxLatency = _ops.FromDouble(100.0),  // 100ms
                 MaxMemory = _ops.FromDouble(100.0),    // 100MB
@@ -83,68 +90,7 @@ namespace AiDotNet.AutoML.NAS
         /// </summary>
         public Vector<T> GumbelSoftmax(Vector<T> theta, bool hard = false)
         {
-            var result = new Vector<T>(theta.Length);
-
-            // Sample Gumbel noise
-            var gumbel = new T[theta.Length];
-            for (int i = 0; i < theta.Length; i++)
-            {
-                double u = _random.NextDouble() * 0.99 + 0.005;
-                gumbel[i] = _ops.FromDouble(-Math.Log(-Math.Log(u)));
-            }
-
-            // Add Gumbel noise and divide by temperature
-            var logits = new T[theta.Length];
-            for (int i = 0; i < theta.Length; i++)
-            {
-                logits[i] = _ops.Divide(
-                    _ops.Add(theta[i], gumbel[i]),
-                    _temperature
-                );
-            }
-
-            // Apply softmax
-            T maxLogit = logits[0];
-            for (int i = 1; i < theta.Length; i++)
-            {
-                if (_ops.GreaterThan(logits[i], maxLogit))
-                    maxLogit = logits[i];
-            }
-
-            T sumExp = _ops.Zero;
-            var expValues = new T[theta.Length];
-            for (int i = 0; i < theta.Length; i++)
-            {
-                expValues[i] = _ops.Exp(_ops.Subtract(logits[i], maxLogit));
-                sumExp = _ops.Add(sumExp, expValues[i]);
-            }
-
-            for (int i = 0; i < theta.Length; i++)
-            {
-                result[i] = _ops.Divide(expValues[i], sumExp);
-            }
-
-            // Hard Gumbel-Softmax: convert to one-hot
-            if (hard)
-            {
-                int maxIdx = 0;
-                T maxVal = result[0];
-                for (int i = 1; i < result.Length; i++)
-                {
-                    if (_ops.GreaterThan(result[i], maxVal))
-                    {
-                        maxVal = result[i];
-                        maxIdx = i;
-                    }
-                }
-
-                for (int i = 0; i < result.Length; i++)
-                {
-                    result[i] = i == maxIdx ? _ops.One : _ops.Zero;
-                }
-            }
-
-            return result;
+            return NasSamplingHelper.GumbelSoftmax(theta, _temperature, _ops, _random, hard);
         }
 
         /// <summary>
@@ -162,9 +108,9 @@ namespace AiDotNet.AutoML.NAS
                 // Compute expected latency for this layer
                 for (int opIdx = 0; opIdx < _numOperations; opIdx++)
                 {
-                    if (_searchSpace.Operations != null && opIdx < _searchSpace.Operations.Count)
+                    if (_nasSearchSpace.Operations != null && opIdx < _nasSearchSpace.Operations.Count)
                     {
-                        var operation = _searchSpace.Operations[opIdx];
+                        var operation = _nasSearchSpace.Operations[opIdx];
                         var cost = _hardwareCostModel.EstimateOperationCost(
                             operation, _inputChannels, _inputChannels, _spatialSize);
 
@@ -217,9 +163,9 @@ namespace AiDotNet.AutoML.NAS
                     }
                 }
 
-                if (_searchSpace.Operations != null && selectedOp < _searchSpace.Operations.Count)
+                if (_nasSearchSpace.Operations != null && selectedOp < _nasSearchSpace.Operations.Count)
                 {
-                    var operation = _searchSpace.Operations[selectedOp];
+                    var operation = _nasSearchSpace.Operations[selectedOp];
                     // In FBNet, each layer is a node connecting to the previous layer
                     architecture.AddOperation(layerIdx + 1, layerIdx, operation);
                 }
@@ -234,7 +180,7 @@ namespace AiDotNet.AutoML.NAS
         public bool MeetsConstraints()
         {
             var architecture = DeriveArchitecture();
-            return _hardwareCostModel.MeetsConstraints(architecture, _constraints, _inputChannels, _spatialSize);
+            return _hardwareCostModel.MeetsConstraints(architecture, _hardwareConstraints, _inputChannels, _spatialSize);
         }
 
         /// <summary>
@@ -263,11 +209,11 @@ namespace AiDotNet.AutoML.NAS
         public void SetConstraints(HardwareConstraints<T> constraints)
         {
             if (constraints.MaxLatency != null)
-                _constraints.MaxLatency = constraints.MaxLatency;
+                _hardwareConstraints.MaxLatency = constraints.MaxLatency;
             if (constraints.MaxMemory != null)
-                _constraints.MaxMemory = constraints.MaxMemory;
+                _hardwareConstraints.MaxMemory = constraints.MaxMemory;
             if (constraints.MaxEnergy != null)
-                _constraints.MaxEnergy = constraints.MaxEnergy;
+                _hardwareConstraints.MaxEnergy = constraints.MaxEnergy;
         }
 
         /// <summary>
@@ -284,5 +230,28 @@ namespace AiDotNet.AutoML.NAS
         /// Gets current temperature
         /// </summary>
         public T GetTemperature() => _temperature;
+
+        protected override Architecture<T> SearchArchitecture(
+            Tensor<T> inputs,
+            Tensor<T> targets,
+            Tensor<T> validationInputs,
+            Tensor<T> validationTargets,
+            TimeSpan timeLimit,
+            CancellationToken cancellationToken)
+        {
+            return DeriveArchitecture();
+        }
+
+        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
+        {
+            return new FBNet<T>(
+                _nasSearchSpace,
+                _numLayers,
+                targetPlatform: _targetPlatform,
+                latencyWeight: _ops.ToDouble(_latencyWeight),
+                initialTemperature: _ops.ToDouble(_temperature),
+                inputChannels: _inputChannels,
+                spatialSize: _spatialSize);
+        }
     }
 }

@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NumericOperations;
 
 namespace AiDotNet.AutoML.NAS
 {
@@ -15,10 +16,10 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "ProxylessNAS: Direct Neural Architecture Search on Target Task and Hardware" (ICLR 2019)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
-    public class ProxylessNAS<T>
+    public class ProxylessNAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;
-        private readonly SearchSpace<T> _searchSpace;
+        private readonly SearchSpaceBase<T> _nasSearchSpace;
         private readonly int _numNodes;
         private readonly int _numOperations;
         private readonly Random _random;
@@ -28,6 +29,7 @@ namespace AiDotNet.AutoML.NAS
         private readonly List<Matrix<T>> _architectureGradients;
 
         // Hardware cost model for latency-aware optimization
+        private readonly HardwarePlatform _targetPlatform;
         private readonly HardwareCostModel<T> _hardwareCostModel;
         private readonly T _latencyWeight;
 
@@ -35,16 +37,21 @@ namespace AiDotNet.AutoML.NAS
         private readonly bool _useBinarization;
         private T _binarizationTemperature;
 
-        public ProxylessNAS(SearchSpace<T> searchSpace, int numNodes = 4,
+        protected override INumericOperations<T> NumOps => _ops;
+        protected override SearchSpaceBase<T> NasSearchSpace => _nasSearchSpace;
+        protected override int NasNumNodes => _numNodes;
+
+        public ProxylessNAS(SearchSpaceBase<T> searchSpace, int numNodes = 4,
             HardwarePlatform targetPlatform = HardwarePlatform.Mobile,
             double latencyWeight = 0.1, bool useBinarization = true)
         {
             _ops = MathHelper.GetNumericOperations<T>();
-            _searchSpace = searchSpace;
+            _nasSearchSpace = searchSpace;
             _numNodes = numNodes;
             _numOperations = searchSpace.Operations?.Count ?? 5;
             _random = new Random(42);
 
+            _targetPlatform = targetPlatform;
             _hardwareCostModel = new HardwareCostModel<T>(targetPlatform);
             _latencyWeight = _ops.FromDouble(latencyWeight);
             _useBinarization = useBinarization;
@@ -76,34 +83,13 @@ namespace AiDotNet.AutoML.NAS
         public Matrix<T> BinarizePaths(Matrix<T> alpha)
         {
             if (!_useBinarization)
-                return ApplySoftmax(alpha);
+                return NasSamplingHelper.SoftmaxRowsWithTemperature(alpha, _binarizationTemperature, _ops);
 
             var result = new Matrix<T>(alpha.Rows, alpha.Columns);
+            var probabilities = NasSamplingHelper.SoftmaxRowsWithTemperature(alpha, _binarizationTemperature, _ops);
 
             for (int row = 0; row < alpha.Rows; row++)
             {
-                // Compute softmax probabilities
-                var probs = new T[alpha.Columns];
-                T maxVal = alpha[row, 0];
-                for (int col = 1; col < alpha.Columns; col++)
-                {
-                    if (_ops.GreaterThan(alpha[row, col], maxVal))
-                        maxVal = alpha[row, col];
-                }
-
-                T sumExp = _ops.Zero;
-                var expValues = new T[alpha.Columns];
-                for (int col = 0; col < alpha.Columns; col++)
-                {
-                    expValues[col] = _ops.Exp(_ops.Subtract(alpha[row, col], maxVal));
-                    sumExp = _ops.Add(sumExp, expValues[col]);
-                }
-
-                for (int col = 0; col < alpha.Columns; col++)
-                {
-                    probs[col] = _ops.Divide(expValues[col], sumExp);
-                }
-
                 // Sample one path based on probabilities (binarization)
                 double rand = _random.NextDouble();
                 double cumulative = 0.0;
@@ -111,7 +97,7 @@ namespace AiDotNet.AutoML.NAS
 
                 for (int col = 0; col < alpha.Columns; col++)
                 {
-                    cumulative += Convert.ToDouble(probs[col]);
+                    cumulative += Convert.ToDouble(probabilities[row, col]);
                     if (rand <= cumulative)
                     {
                         selectedPath = col;
@@ -130,39 +116,6 @@ namespace AiDotNet.AutoML.NAS
         }
 
         /// <summary>
-        /// Standard softmax for non-binarized mode
-        /// </summary>
-        private Matrix<T> ApplySoftmax(Matrix<T> alpha)
-        {
-            var result = new Matrix<T>(alpha.Rows, alpha.Columns);
-
-            for (int row = 0; row < alpha.Rows; row++)
-            {
-                T maxVal = alpha[row, 0];
-                for (int col = 1; col < alpha.Columns; col++)
-                {
-                    if (_ops.GreaterThan(alpha[row, col], maxVal))
-                        maxVal = alpha[row, col];
-                }
-
-                T sumExp = _ops.Zero;
-                var expValues = new T[alpha.Columns];
-                for (int col = 0; col < alpha.Columns; col++)
-                {
-                    expValues[col] = _ops.Exp(_ops.Subtract(alpha[row, col], maxVal));
-                    sumExp = _ops.Add(sumExp, expValues[col]);
-                }
-
-                for (int col = 0; col < alpha.Columns; col++)
-                {
-                    result[row, col] = _ops.Divide(expValues[col], sumExp);
-                }
-            }
-
-            return result;
-        }
-
-        /// <summary>
         /// Computes the expected latency cost of the architecture
         /// </summary>
         public T ComputeExpectedLatency(int inputChannels, int spatialSize)
@@ -172,15 +125,15 @@ namespace AiDotNet.AutoML.NAS
             for (int nodeIdx = 0; nodeIdx < _numNodes; nodeIdx++)
             {
                 var alpha = _architectureParams[nodeIdx];
-                var probs = ApplySoftmax(alpha);
+                var probs = NasSamplingHelper.SoftmaxRowsWithTemperature(alpha, _binarizationTemperature, _ops);
 
                 for (int row = 0; row < alpha.Rows; row++)
                 {
                     for (int col = 0; col < alpha.Columns; col++)
                     {
-                        if (_searchSpace.Operations != null && col < _searchSpace.Operations.Count)
+                        if (_nasSearchSpace.Operations != null && col < _nasSearchSpace.Operations.Count)
                         {
-                            var operation = _searchSpace.Operations[col];
+                            var operation = _nasSearchSpace.Operations[col];
                             var cost = _hardwareCostModel.EstimateOperationCost(operation, inputChannels, inputChannels, spatialSize);
 
                             // Weighted latency by operation probability
@@ -213,7 +166,7 @@ namespace AiDotNet.AutoML.NAS
             for (int nodeIdx = 0; nodeIdx < _numNodes; nodeIdx++)
             {
                 var alpha = _architectureParams[nodeIdx];
-                var weights = ApplySoftmax(alpha);
+                var weights = NasSamplingHelper.SoftmaxRowsWithTemperature(alpha, _binarizationTemperature, _ops);
 
                 // Select top-2 predecessors for each node
                 var edgeScores = new List<(int prevNode, int opIdx, T score)>();
@@ -236,21 +189,36 @@ namespace AiDotNet.AutoML.NAS
                 }
 
                 // Sort by score and keep top-2
-                edgeScores.Sort((a, b) => _ops.Compare(b.score, a.score));
+                edgeScores.Sort((a, b) => CompareDescending(a.score, b.score));
                 int numEdgesToKeep = Math.Min(2, edgeScores.Count);
 
                 for (int i = 0; i < numEdgesToKeep; i++)
                 {
                     var (prevNode, opIdx, _) = edgeScores[i];
-                    if (_searchSpace.Operations != null && opIdx < _searchSpace.Operations.Count)
+                    if (_nasSearchSpace.Operations != null && opIdx < _nasSearchSpace.Operations.Count)
                     {
-                        var operation = _searchSpace.Operations[opIdx];
+                        var operation = _nasSearchSpace.Operations[opIdx];
                         architecture.AddOperation(nodeIdx + 1, prevNode, operation);
                     }
                 }
             }
 
             return architecture;
+        }
+
+        private int CompareDescending(T left, T right)
+        {
+            if (_ops.GreaterThan(left, right))
+            {
+                return -1;
+            }
+
+            if (_ops.LessThan(left, right))
+            {
+                return 1;
+            }
+
+            return 0;
         }
 
         /// <summary>
@@ -278,6 +246,27 @@ namespace AiDotNet.AutoML.NAS
         public void SetBinarizationTemperature(double temperature)
         {
             _binarizationTemperature = _ops.FromDouble(temperature);
+        }
+
+        protected override Architecture<T> SearchArchitecture(
+            Tensor<T> inputs,
+            Tensor<T> targets,
+            Tensor<T> validationInputs,
+            Tensor<T> validationTargets,
+            TimeSpan timeLimit,
+            CancellationToken cancellationToken)
+        {
+            return DeriveArchitecture();
+        }
+
+        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
+        {
+            return new ProxylessNAS<T>(
+                _nasSearchSpace,
+                _numNodes,
+                targetPlatform: _targetPlatform,
+                latencyWeight: _ops.ToDouble(_latencyWeight),
+                useBinarization: _useBinarization);
         }
     }
 }

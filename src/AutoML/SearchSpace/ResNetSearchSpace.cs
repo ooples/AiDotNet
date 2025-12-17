@@ -1,13 +1,13 @@
 using System.Collections.Generic;
 
-namespace AiDotNet.AutoML.NAS
+namespace AiDotNet.AutoML.SearchSpace
 {
     /// <summary>
     /// Defines the ResNet-based search space for neural architecture search.
     /// Includes residual blocks, bottleneck blocks, and various skip connections.
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
-    public class ResNetSearchSpace<T> : SearchSpace<T>
+    public class ResNetSearchSpace<T> : SearchSpaceBase<T>
     {
         public ResNetSearchSpace()
         {

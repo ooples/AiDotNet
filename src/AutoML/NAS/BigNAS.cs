@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NumericOperations;
 
 namespace AiDotNet.AutoML.NAS
 {
@@ -15,11 +16,11 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "BigNAS: Scaling Up Neural Architecture Search with Big Single-Stage Models"
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
-    public class BigNAS<T>
-    {
-        private readonly INumericOperations<T> _ops;
-        private readonly SearchSpace<T> _searchSpace;
-        private readonly Random _random;
+        public class BigNAS<T> : NasAutoMLModelBase<T>
+        {
+            private readonly INumericOperations<T> _ops;
+            private readonly SearchSpaceBase<T> _nasSearchSpace;
+            private readonly Random _random;
 
         // Elastic search space dimensions (larger than OFA)
         private readonly List<int> _elasticDepths;
@@ -28,10 +29,6 @@ namespace AiDotNet.AutoML.NAS
         private readonly List<int> _elasticExpansionRatios;
         private readonly List<int> _elasticResolutions;  // Input resolutions
 
-        // Shared weights for the super-network
-        private readonly Dictionary<string, Matrix<T>> _sharedWeights;
-        private readonly Dictionary<string, Matrix<T>> _sharedGradients;
-
         // Sandwich sampling parameters
         private readonly bool _useSandwichSampling;
         private readonly T _distillationWeight;
@@ -39,7 +36,11 @@ namespace AiDotNet.AutoML.NAS
         // Hardware cost model
         private readonly HardwareCostModel<T> _hardwareCostModel;
 
-        public BigNAS(SearchSpace<T> searchSpace,
+        protected override INumericOperations<T> NumOps => _ops;
+        protected override SearchSpaceBase<T> NasSearchSpace => _nasSearchSpace;
+        protected override int NasNumNodes => Math.Max(_nasSearchSpace.MaxNodes, _elasticDepths.Max());
+
+        public BigNAS(SearchSpaceBase<T> searchSpace,
             List<int>? elasticDepths = null,
             List<double>? elasticWidthMultipliers = null,
             List<int>? elasticKernelSizes = null,
@@ -49,7 +50,7 @@ namespace AiDotNet.AutoML.NAS
             double distillationWeight = 0.5)
         {
             _ops = MathHelper.GetNumericOperations<T>();
-            _searchSpace = searchSpace;
+            _nasSearchSpace = searchSpace;
             _random = new Random(42);
 
             // BigNAS supports larger search spaces than OFA
@@ -58,9 +59,6 @@ namespace AiDotNet.AutoML.NAS
             _elasticKernelSizes = elasticKernelSizes ?? new List<int> { 3, 5, 7 };
             _elasticExpansionRatios = elasticExpansionRatios ?? new List<int> { 3, 4, 6 };
             _elasticResolutions = elasticResolutions ?? new List<int> { 128, 160, 192, 224, 256 };
-
-            _sharedWeights = new Dictionary<string, Matrix<T>>();
-            _sharedGradients = new Dictionary<string, Matrix<T>>();
 
             _useSandwichSampling = useSandwichSampling;
             _distillationWeight = _ops.FromDouble(distillationWeight);
@@ -145,8 +143,8 @@ namespace AiDotNet.AutoML.NAS
             }
 
             // Compute soft targets from teacher using temperature scaling
-            var teacherSoftTargets = SoftmaxWithTemperature(teacherLogits, temperature);
-            var studentSoftTargets = SoftmaxWithTemperature(studentLogits, temperature);
+            var teacherSoftTargets = NasSamplingHelper.SoftmaxWithTemperature(teacherLogits, temperature, _ops);
+            var studentSoftTargets = NasSamplingHelper.SoftmaxWithTemperature(studentLogits, temperature, _ops);
 
             // KL divergence loss
             T loss = _ops.Zero;
@@ -165,40 +163,6 @@ namespace AiDotNet.AutoML.NAS
             // Scale by temperature squared (following Hinton et al.)
             T tempSquared = _ops.Multiply(temperature, temperature);
             return _ops.Multiply(loss, tempSquared);
-        }
-
-        /// <summary>
-        /// Applies softmax with temperature scaling
-        /// </summary>
-        private Vector<T> SoftmaxWithTemperature(Vector<T> logits, T temperature)
-        {
-            var result = new Vector<T>(logits.Length);
-
-            // Scale by temperature
-            var scaledLogits = new T[logits.Length];
-            T maxLogit = logits[0];
-            for (int i = 0; i < logits.Length; i++)
-            {
-                scaledLogits[i] = _ops.Divide(logits[i], temperature);
-                if (_ops.GreaterThan(scaledLogits[i], maxLogit))
-                    maxLogit = scaledLogits[i];
-            }
-
-            // Apply softmax with numerical stability
-            T sumExp = _ops.Zero;
-            var expValues = new T[logits.Length];
-            for (int i = 0; i < logits.Length; i++)
-            {
-                expValues[i] = _ops.Exp(_ops.Subtract(scaledLogits[i], maxLogit));
-                sumExp = _ops.Add(sumExp, expValues[i]);
-            }
-
-            for (int i = 0; i < logits.Length; i++)
-            {
-                result[i] = _ops.Divide(expValues[i], sumExp);
-            }
-
-            return result;
         }
 
         /// <summary>
@@ -240,7 +204,7 @@ namespace AiDotNet.AutoML.NAS
             // Evolve
             for (int gen = 0; gen < generations; gen++)
             {
-                population.Sort((a, b) => _ops.Compare(b.fitness, a.fitness));
+                population.Sort((a, b) => CompareDescending(a.fitness, b.fitness));
                 population = population.Take(populationSize / 2).ToList();
 
                 while (population.Count < populationSize)
@@ -256,8 +220,23 @@ namespace AiDotNet.AutoML.NAS
                 }
             }
 
-            population.Sort((a, b) => _ops.Compare(b.fitness, a.fitness));
+            population.Sort((a, b) => CompareDescending(a.fitness, b.fitness));
             return population[0].config;
+        }
+
+        private int CompareDescending(T left, T right)
+        {
+            if (_ops.GreaterThan(left, right))
+            {
+                return -1;
+            }
+
+            if (_ops.LessThan(left, right))
+            {
+                return 1;
+            }
+
+            return 0;
         }
 
         /// <summary>
@@ -323,18 +302,32 @@ namespace AiDotNet.AutoML.NAS
 
             return mutated;
         }
+
+        protected override Architecture<T> SearchArchitecture(
+            Tensor<T> inputs,
+            Tensor<T> targets,
+            Tensor<T> validationInputs,
+            Tensor<T> validationTargets,
+            TimeSpan timeLimit,
+            CancellationToken cancellationToken)
+        {
+            var samples = SandwichSample();
+            var config = samples.Count > 0 ? samples[0] : GenerateRandomConfig();
+            return ConfigToArchitecture(config);
+        }
+
+        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
+        {
+            return new BigNAS<T>(
+                _nasSearchSpace,
+                elasticDepths: new List<int>(_elasticDepths),
+                elasticWidthMultipliers: new List<double>(_elasticWidthMultipliers),
+                elasticKernelSizes: new List<int>(_elasticKernelSizes),
+                elasticExpansionRatios: new List<int>(_elasticExpansionRatios),
+                elasticResolutions: new List<int>(_elasticResolutions),
+                useSandwichSampling: _useSandwichSampling,
+                distillationWeight: _ops.ToDouble(_distillationWeight));
+        }
     }
 
-    /// <summary>
-    /// Configuration for a BigNAS sub-network
-    /// </summary>
-    public class BigNASConfig
-    {
-        public int Depth { get; set; }
-        public double WidthMultiplier { get; set; }
-        public int KernelSize { get; set; }
-        public int ExpansionRatio { get; set; }
-        public int Resolution { get; set; }
-        public bool IsTeacher { get; set; }
-    }
 }

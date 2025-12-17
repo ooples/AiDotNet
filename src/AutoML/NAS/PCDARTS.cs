@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NumericOperations;
 
 namespace AiDotNet.AutoML.NAS
 {
@@ -15,10 +16,10 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "PC-DARTS: Partial Channel Connections for Memory-Efficient Architecture Search" (ICLR 2020)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
-    public class PCDARTS<T>
+    public class PCDARTS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;
-        private readonly SearchSpace<T> _searchSpace;
+        private readonly SearchSpaceBase<T> _nasSearchSpace;
         private readonly int _numNodes;
         private readonly int _numOperations;
         private readonly Random _random;
@@ -31,11 +32,15 @@ namespace AiDotNet.AutoML.NAS
         private readonly double _channelSamplingRatio;
         private readonly bool _useEdgeNormalization;
 
-        public PCDARTS(SearchSpace<T> searchSpace, int numNodes = 4,
+        protected override INumericOperations<T> NumOps => _ops;
+        protected override SearchSpaceBase<T> NasSearchSpace => _nasSearchSpace;
+        protected override int NasNumNodes => _numNodes;
+
+        public PCDARTS(SearchSpaceBase<T> searchSpace, int numNodes = 4,
             double channelSamplingRatio = 0.25, bool useEdgeNormalization = true)
         {
             _ops = MathHelper.GetNumericOperations<T>();
-            _searchSpace = searchSpace;
+            _nasSearchSpace = searchSpace;
             _numNodes = numNodes;
             _numOperations = searchSpace.Operations?.Count ?? 5;
             _random = new Random(42);
@@ -70,16 +75,15 @@ namespace AiDotNet.AutoML.NAS
             int numSampledChannels = Math.Max(1, (int)(totalChannels * _channelSamplingRatio));
             var allChannels = Enumerable.Range(0, totalChannels).ToList();
 
-            // Randomly sample channels
-            var sampledChannels = new List<int>();
-            for (int i = 0; i < numSampledChannels; i++)
+            for (int i = allChannels.Count - 1; i > 0; i--)
             {
-                int idx = _random.Next(allChannels.Count);
-                sampledChannels.Add(allChannels[idx]);
-                allChannels.RemoveAt(idx);
+                int j = _random.Next(i + 1);
+                (allChannels[i], allChannels[j]) = (allChannels[j], allChannels[i]);
             }
 
-            return sampledChannels.OrderBy(x => x).ToList();
+            var sampledChannels = allChannels.Take(numSampledChannels).ToList();
+            sampledChannels.Sort();
+            return sampledChannels;
         }
 
         /// <summary>
@@ -88,34 +92,9 @@ namespace AiDotNet.AutoML.NAS
         public Matrix<T> ApplyEdgeNormalization(Matrix<T> alpha)
         {
             if (!_useEdgeNormalization)
-                return ApplySoftmax(alpha);
+                return NasSamplingHelper.SoftmaxRows(alpha, _ops);
 
-            var result = new Matrix<T>(alpha.Rows, alpha.Columns);
-
-            // For each edge (row), normalize across operations
-            for (int row = 0; row < alpha.Rows; row++)
-            {
-                // Compute softmax for this edge
-                T maxVal = alpha[row, 0];
-                for (int col = 1; col < alpha.Columns; col++)
-                {
-                    if (_ops.GreaterThan(alpha[row, col], maxVal))
-                        maxVal = alpha[row, col];
-                }
-
-                T sumExp = _ops.Zero;
-                var expValues = new T[alpha.Columns];
-                for (int col = 0; col < alpha.Columns; col++)
-                {
-                    expValues[col] = _ops.Exp(_ops.Subtract(alpha[row, col], maxVal));
-                    sumExp = _ops.Add(sumExp, expValues[col]);
-                }
-
-                for (int col = 0; col < alpha.Columns; col++)
-                {
-                    result[row, col] = _ops.Divide(expValues[col], sumExp);
-                }
-            }
+            var result = NasSamplingHelper.SoftmaxRows(alpha, _ops);
 
             // Apply edge normalization: scale by 1/sqrt(num_edges)
             T edgeNormalizationFactor = _ops.FromDouble(1.0 / Math.Sqrt(alpha.Rows));
@@ -124,39 +103,6 @@ namespace AiDotNet.AutoML.NAS
                 for (int col = 0; col < result.Columns; col++)
                 {
                     result[row, col] = _ops.Multiply(result[row, col], edgeNormalizationFactor);
-                }
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// Standard softmax operation
-        /// </summary>
-        private Matrix<T> ApplySoftmax(Matrix<T> alpha)
-        {
-            var result = new Matrix<T>(alpha.Rows, alpha.Columns);
-
-            for (int row = 0; row < alpha.Rows; row++)
-            {
-                T maxVal = alpha[row, 0];
-                for (int col = 1; col < alpha.Columns; col++)
-                {
-                    if (_ops.GreaterThan(alpha[row, col], maxVal))
-                        maxVal = alpha[row, col];
-                }
-
-                T sumExp = _ops.Zero;
-                var expValues = new T[alpha.Columns];
-                for (int col = 0; col < alpha.Columns; col++)
-                {
-                    expValues[col] = _ops.Exp(_ops.Subtract(alpha[row, col], maxVal));
-                    sumExp = _ops.Add(sumExp, expValues[col]);
-                }
-
-                for (int col = 0; col < alpha.Columns; col++)
-                {
-                    result[row, col] = _ops.Divide(expValues[col], sumExp);
                 }
             }
 
@@ -196,25 +142,36 @@ namespace AiDotNet.AutoML.NAS
                 }
 
                 // Select top-2 edges
-                edgeScores.Sort((a, b) => _ops.Compare(b.score, a.score));
+                edgeScores.Sort((a, b) => CompareDescending(a.score, b.score));
                 int numEdgesToKeep = Math.Min(2, edgeScores.Count);
 
                 for (int i = 0; i < numEdgesToKeep; i++)
                 {
                     var (prevNode, opIdx, _) = edgeScores[i];
-                    if (_searchSpace.Operations != null && opIdx < _searchSpace.Operations.Count)
+                    if (_nasSearchSpace.Operations != null && opIdx < _nasSearchSpace.Operations.Count)
                     {
-                        var operation = _searchSpace.Operations[opIdx];
-                        // Skip identity operations in final architecture
-                        if (operation != "identity")
-                        {
-                            architecture.AddOperation(nodeIdx + 1, prevNode, operation);
-                        }
+                        var operation = _nasSearchSpace.Operations[opIdx];
+                        architecture.AddOperation(nodeIdx + 1, prevNode, operation);
                     }
                 }
             }
 
             return architecture;
+        }
+
+        private int CompareDescending(T left, T right)
+        {
+            if (_ops.GreaterThan(left, right))
+            {
+                return -1;
+            }
+
+            if (_ops.LessThan(left, right))
+            {
+                return 1;
+            }
+
+            return 0;
         }
 
         /// <summary>
@@ -239,5 +196,25 @@ namespace AiDotNet.AutoML.NAS
         /// Gets the channel sampling ratio
         /// </summary>
         public double GetChannelSamplingRatio() => _channelSamplingRatio;
+
+        protected override Architecture<T> SearchArchitecture(
+            Tensor<T> inputs,
+            Tensor<T> targets,
+            Tensor<T> validationInputs,
+            Tensor<T> validationTargets,
+            TimeSpan timeLimit,
+            CancellationToken cancellationToken)
+        {
+            return DeriveArchitecture();
+        }
+
+        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
+        {
+            return new PCDARTS<T>(
+                _nasSearchSpace,
+                _numNodes,
+                channelSamplingRatio: _channelSamplingRatio,
+                useEdgeNormalization: _useEdgeNormalization);
+        }
     }
 }

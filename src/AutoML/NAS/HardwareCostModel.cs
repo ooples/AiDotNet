@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AiDotNet.Helpers;
-using AiDotNet.NumericOperations;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.AutoML.NAS
 {
@@ -32,7 +32,7 @@ namespace AiDotNet.AutoML.NAS
             if (_operationCosts.TryGetValue(operation, out var baseCost))
             {
                 // Scale cost based on actual parameters
-                var scaleFactor = _ops.FromDouble((inputChannels * outputChannels * spatialSize * spatialSize) / 1000.0);
+                var scaleFactor = _ops.FromDouble(((double)inputChannels * outputChannels * spatialSize * spatialSize) / 1000.0);
 
                 return new HardwareCost<T>
                 {
@@ -163,36 +163,5 @@ namespace AiDotNet.AutoML.NAS
                 Memory = _ops.FromDouble(0.08 * platformMultiplier)
             };
         }
-    }
-
-    /// <summary>
-    /// Represents the hardware cost of an operation or architecture
-    /// </summary>
-    public class HardwareCost<T>
-    {
-        public T Latency { get; set; } = default!;
-        public T Energy { get; set; } = default!;
-        public T Memory { get; set; } = default!;
-    }
-
-    /// <summary>
-    /// Hardware constraints for NAS
-    /// </summary>
-    public class HardwareConstraints<T>
-    {
-        public T? MaxLatency { get; set; }
-        public T? MaxEnergy { get; set; }
-        public T? MaxMemory { get; set; }
-    }
-
-    /// <summary>
-    /// Supported hardware platforms
-    /// </summary>
-    public enum HardwarePlatform
-    {
-        Mobile,
-        GPU,
-        EdgeTPU,
-        CPU
     }
 }
