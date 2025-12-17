@@ -640,7 +640,7 @@ public static class StatisticsHelper<T>
               _numOps.FromDouble(9.9843695780195716e-6),
               _numOps.FromDouble(1.5056327351493116e-7) };
 
-        if (_numOps.LessThanOrEquals(x, _numOps.FromDouble(0.5)))
+        if (_numOps.LessThan(x, _numOps.FromDouble(0.5)))
         {
             return _numOps.Divide(
                 MathHelper.Pi<T>(),
