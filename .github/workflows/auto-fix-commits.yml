@@ -168,31 +168,35 @@ jobs:
 
             let message;
             if (commitCount > 1) {
-              message = `### Commit Messages Auto-Fixed
-
-The commitlint check failed because one or more commit messages didn't follow [Conventional Commits](https://www.conventionalcommits.org/) format.
-
-**Action taken** — Squashed ${commitCount} commits into a single commit using the PR title as the commit message.
-
-**New commit message**
-\`\`\`
-${prTitle}
-\`\`\`
-
-The PR branch has been force-pushed with the fixed commit. If you had local changes, you may need to \`git pull --rebase\`.`;
+              message = [
+                '### Commit Messages Auto-Fixed',
+                '',
+                "The commitlint check failed because one or more commit messages didn't follow [Conventional Commits](https://www.conventionalcommits.org/) format.",
+                '',
+                `**Action taken** — Squashed ${commitCount} commits into a single commit using the PR title as the commit message.`,
+                '',
+                '**New commit message**',
+                '```',
+                prTitle,
+                '```',
+                '',
+                'The PR branch has been force-pushed with the fixed commit. If you had local changes, you may need to `git pull --rebase`.'
+              ].join('\n');
             } else {
-              message = `### Commit Message Auto-Fixed
-
-The commitlint check failed because the commit message didn't follow [Conventional Commits](https://www.conventionalcommits.org/) format.
-
-**Action taken** — Amended the commit message to use the PR title.
-
-**New commit message**
-\`\`\`
-${prTitle}
-\`\`\`
-
-The PR branch has been force-pushed with the fixed commit. If you had local changes, you may need to \`git pull --rebase\`.`;
+              message = [
+                '### Commit Message Auto-Fixed',
+                '',
+                "The commitlint check failed because the commit message didn't follow [Conventional Commits](https://www.conventionalcommits.org/) format.",
+                '',
+                '**Action taken** — Amended the commit message to use the PR title.',
+                '',
+                '**New commit message**',
+                '```',
+                prTitle,
+                '```',
+                '',
+                'The PR branch has been force-pushed with the fixed commit. If you had local changes, you may need to `git pull --rebase`.'
+              ].join('\n');
             }
 
             await github.rest.issues.createComment({

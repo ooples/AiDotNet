@@ -154,25 +154,27 @@ jobs:
           # Note: This is a simplified approach - in practice, we might want to preserve the original commit structure
           echo "All changes have been staged. Creating a single commit with fixes..."
 
-          git commit -F- <<'EOF'
-chore: fix commit messages for conventional compliance
-
-This commit fixes one or more commit messages that didn't follow
-conventional commits format. The original commits have been
-squashed and their messages updated to comply with the project's
-standards.
-
-Original issues fixed:
-- Subject line now follows lowercase convention
-- Type now uses valid conventional commit types
-
-Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
-EOF
+          cat <<'EOF' | sed 's/^__MSG__//' | git commit -F-
+          __MSG__chore: fix commit messages for conventional compliance
+          __MSG__
+          __MSG__This commit fixes one or more commit messages that didn't follow
+          __MSG__conventional commits format. The original commits have been
+          __MSG__squashed and their messages updated to comply with the project's
+          __MSG__standards.
+          __MSG__
+          __MSG__Original issues fixed:
+          __MSG__- Subject line now follows lowercase convention
+          __MSG__- Type now uses valid conventional commit types
+          __MSG__
+          __MSG__Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
+          EOF
 
       - name: Force push fixes
         if: steps.check-commits.outputs.needs_fix == 'true'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          BRANCH="${{ github.head_ref }}"
+          BRANCH="$HEAD_REF"
           git push origin "$BRANCH" --force-with-lease
 
       - name: Comment on PR
@@ -184,17 +186,19 @@ EOF
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `### 🤖 Commit Messages Auto-Fixed
-
-The commitlint check failed because one or more commit messages didn't follow [Conventional Commits](https://www.conventionalcommits.org/) format.
-
-**Action taken** — All non-compliant commits have been fixed to follow the conventional commits format.
-
-**Changes made:**
-- Subject lines are now lowercase (except 'deps' type)
-- Types are now one of: \`feat\`, \`fix\`, \`docs\`, \`refactor\`, \`perf\`, \`test\`, \`chore\`, \`ci\`, \`style\`, or \`deps\`
-
-The PR branch has been force-pushed with the fixed commits. If you had local changes, you may need to \`git pull --rebase\`.`
+              body: [
+                '### 🤖 Commit Messages Auto-Fixed',
+                '',
+                "The commitlint check failed because one or more commit messages didn't follow [Conventional Commits](https://www.conventionalcommits.org/) format.",
+                '',
+                '**Action taken** — All non-compliant commits have been fixed to follow the conventional commits format.',
+                '',
+                '**Changes made:**',
+                \"- Subject lines are now lowercase (except 'deps' type)\",
+                '- Types are now one of: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `chore`, `ci`, `style`, or `deps`',
+                '',
+                'The PR branch has been force-pushed with the fixed commits. If you had local changes, you may need to `git pull --rebase`.'
+              ].join('\\n')
             });
 
   handle-dependabot:
@@ -274,8 +278,10 @@ The PR branch has been force-pushed with the fixed commits. If you had local cha
 
       - name: Force push fix
         if: steps.check-needs-fix.outputs.needs_fix == 'true'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          BRANCH="${{ github.head_ref }}"
+          BRANCH="$HEAD_REF"
           git push origin "$BRANCH" --force-with-lease
 
       - name: Comment on PR
@@ -288,14 +294,16 @@ The PR branch has been force-pushed with the fixed commits. If you had local cha
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `### 🤖 Dependabot Commit Message Fixed
-
-The commitlint check failed because the dependabot commit message didn't follow the required format.
-
-**Action taken** — Fixed the subject line to be lowercase.
-
-**Original:** \`${{ steps.get-commit.outputs.first_line }}\`
-**Fixed:** \`${newSubject}\`
-
-The PR branch has been force-pushed with the fixed commit.`
+              body: [
+                '### 🤖 Dependabot Commit Message Fixed',
+                '',
+                "The commitlint check failed because the dependabot commit message didn't follow the required format.",
+                '',
+                '**Action taken** — Fixed the subject line to be lowercase.',
+                '',
+                `**Original:** \\`${{ steps.get-commit.outputs.first_line }}\\``,
+                `**Fixed:** \\`${newSubject}\\``,
+                '',
+                'The PR branch has been force-pushed with the fixed commit.'
+              ].join('\\n')
             });
