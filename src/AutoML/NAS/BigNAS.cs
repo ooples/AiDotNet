@@ -178,7 +178,14 @@ namespace AiDotNet.AutoML.NAS
             foreach (var (name, constraints) in targetDevices)
             {
                 // Run evolutionary search for each target device
-                var bestConfig = EvolutionarySearch(constraints, inputChannels, spatialSize, populationSize, generations);
+                var bestConfig = EvolutionarySearch(
+                    constraints,
+                    inputChannels,
+                    spatialSize,
+                    populationSize,
+                    generations,
+                    deadlineUtc: DateTime.MaxValue,
+                    cancellationToken: CancellationToken.None);
                 results[name] = bestConfig;
             }
 
@@ -188,27 +195,36 @@ namespace AiDotNet.AutoML.NAS
         /// <summary>
         /// Evolutionary search for finding optimal sub-network
         /// </summary>
-        private BigNASConfig EvolutionarySearch(HardwareConstraints<T> constraints,
-            int inputChannels, int spatialSize, int populationSize, int generations)
+        private BigNASConfig EvolutionarySearch(
+            HardwareConstraints<T> constraints,
+            int inputChannels,
+            int spatialSize,
+            int populationSize,
+            int generations,
+            DateTime deadlineUtc,
+            CancellationToken cancellationToken)
         {
             var population = new List<(BigNASConfig config, T fitness)>();
 
             // Initialize population
-            for (int i = 0; i < populationSize; i++)
+            for (int i = 0; i < populationSize && DateTime.UtcNow < deadlineUtc; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var config = GenerateRandomConfig();
                 var fitness = EvaluateConfig(config, constraints, inputChannels, spatialSize);
                 population.Add((config, fitness));
             }
 
             // Evolve
-            for (int gen = 0; gen < generations; gen++)
+            for (int gen = 0; gen < generations && DateTime.UtcNow < deadlineUtc; gen++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 population.Sort((a, b) => CompareDescending(a.fitness, b.fitness));
                 population = population.Take(populationSize / 2).ToList();
 
-                while (population.Count < populationSize)
+                while (population.Count < populationSize && DateTime.UtcNow < deadlineUtc)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     int p1 = _random.Next(population.Count / 2);
                     int p2 = _random.Next(population.Count / 2);
 
@@ -218,6 +234,11 @@ namespace AiDotNet.AutoML.NAS
                     var fitness = EvaluateConfig(offspring, constraints, inputChannels, spatialSize);
                     population.Add((offspring, fitness));
                 }
+            }
+
+            if (population.Count == 0)
+            {
+                return GenerateRandomConfig();
             }
 
             population.Sort((a, b) => CompareDescending(a.fitness, b.fitness));
@@ -311,8 +332,23 @@ namespace AiDotNet.AutoML.NAS
             TimeSpan timeLimit,
             CancellationToken cancellationToken)
         {
-            var samples = SandwichSample();
-            var config = samples.Count > 0 ? samples[0] : GenerateRandomConfig();
+            var constraints = new HardwareConstraints<T>();
+
+            int inputChannels = inputs.Shape.Length > 1 ? inputs.Shape[1] : 3;
+            int spatialSize = inputs.Shape.Length > 2 ? inputs.Shape[2] : 224;
+
+            var deadlineUtc = timeLimit <= TimeSpan.Zero
+                ? DateTime.UtcNow
+                : DateTime.UtcNow.Add(timeLimit);
+
+            var config = EvolutionarySearch(
+                constraints,
+                inputChannels,
+                spatialSize,
+                populationSize: 50,
+                generations: 20,
+                deadlineUtc: deadlineUtc,
+                cancellationToken: cancellationToken);
             return ConfigToArchitecture(config);
         }
 
