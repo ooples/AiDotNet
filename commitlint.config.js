@@ -3,6 +3,11 @@ export default {
   rules: {
     // Allow longer body lines (default is 100, increase to 200 for detailed technical explanations)
     'body-max-line-length': [1, 'always', 200],
+    // Add 'deps' as valid type for dependabot commits
+    'type-enum': [2, 'always', [
+      'feat', 'fix', 'docs', 'refactor', 'perf', 'test', 'chore', 'ci', 'style', 'revert',
+      'deps'  // For dependency updates (dependabot)
+    ]],
   },
   ignores: [
     // ===== Merge Commits ONLY =====

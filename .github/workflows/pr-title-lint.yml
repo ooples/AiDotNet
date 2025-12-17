@@ -27,7 +27,7 @@ jobs:
         with:
           script: |
             const prTitle = context.payload.pull_request.title;
-            const pattern = /^(feat|fix|docs|refactor|perf|test|chore|ci|style)(\(.+\))?!?: .+/;
+            const pattern = /^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)(\(.+\))?!?: .+/;
 
             if (pattern.test(prTitle)) {
               core.info(`✅ PR title already valid: ${prTitle}`);
@@ -74,6 +74,9 @@ jobs:
             } else if (lowerTitle.match(/^(refactor|restructure|reorganize)/)) {
               type = 'refactor';
               reasoning = 'title starts with refactor/restructure/reorganize';
+            } else if (lowerTitle.match(/^(deps|dependency|bump)/)) {
+              type = 'deps';
+              reasoning = 'title mentions dependency update';
             } else if (hasDocsFiles && filenames.length === filenames.filter(f => f.match(/\.(md|txt)$/)).length) {
               type = 'docs';
               reasoning = 'only documentation files changed';
@@ -144,6 +147,7 @@ jobs:
             - \`chore:\` - Build/tooling (no release)
             - \`ci:\` - CI/CD changes (no release)
             - \`style:\` - Code formatting (no release)
+            - \`deps:\` - Dependency update (no release)
 
             If the detected type is incorrect, you can manually edit the PR title.`;
 
