@@ -1,4 +1,3 @@
-using System.Numerics;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.AdversarialRobustness.Attacks;
@@ -22,7 +21,6 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 public class CWAttack<T> : AdversarialAttackBase<T>
-    where T : struct, INumber<T>
 {
     /// <summary>
     /// Initializes a new instance of the C&amp;W attack.
@@ -51,18 +49,19 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     /// <returns>The adversarial example.</returns>
     public override T[] GenerateAdversarialExample(T[] input, int trueLabel, Func<T[], T[]> targetModel)
     {
-        var c = T.CreateChecked(1.0); // Confidence parameter
-        var learningRate = T.CreateChecked(0.01);
+        var c = 1.0; // Confidence parameter
+        var learningRate = 0.01;
         var bestAdversarial = (T[])input.Clone();
-        var bestPerturbation = T.CreateChecked(double.MaxValue);
+        var bestPerturbation = double.PositiveInfinity;
 
         // Initialize perturbation variable (in tanh space for box constraints)
-        var w = new T[input.Length];
+        var w = new double[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
             // Initialize w such that tanh(w) ≈ x
-            var twoXMinusOne = T.CreateChecked(2.0) * input[i] - T.One;
-            w[i] = T.CreateChecked(Math.Atanh(Math.Clamp(double.CreateChecked(twoXMinusOne), -0.9999, 0.9999)));
+            var x = NumOps.ToDouble(input[i]);
+            var twoXMinusOne = 2.0 * x - 1.0;
+            w[i] = Atanh(Clamp(twoXMinusOne, -0.9999, 0.9999));
         }
 
         // Optimization loop
@@ -72,13 +71,13 @@ public class CWAttack<T> : AdversarialAttackBase<T>
             var adversarial = new T[input.Length];
             for (int i = 0; i < input.Length; i++)
             {
-                var tanhW = T.CreateChecked(Math.Tanh(double.CreateChecked(w[i])));
-                adversarial[i] = (tanhW + T.One) / T.CreateChecked(2.0);
+                var tanhW = Math.Tanh(w[i]);
+                adversarial[i] = NumOps.FromDouble((tanhW + 1.0) / 2.0);
             }
 
             // Compute objective and gradient
             var output = targetModel(adversarial);
-            var (objective, gradient) = ComputeObjectiveAndGradient(adversarial, input, output, trueLabel, c);
+            var (objective, gradient) = ComputeObjectiveAndGradient(w, input, output, trueLabel, c, targetModel);
 
             // Update w using gradient descent
             for (int i = 0; i < w.Length; i++)
@@ -87,7 +86,7 @@ public class CWAttack<T> : AdversarialAttackBase<T>
             }
 
             // Track best solution
-            var perturbationNorm = ComputeL2Norm(CalculatePerturbation(input, adversarial));
+            var perturbationNorm = NumOps.ToDouble(ComputeL2Norm(CalculatePerturbation(input, adversarial)));
             if (IsSuccessfulAttack(output, trueLabel) && perturbationNorm < bestPerturbation)
             {
                 bestAdversarial = (T[])adversarial.Clone();
@@ -101,35 +100,34 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     /// <summary>
     /// Computes the objective function and its gradient.
     /// </summary>
-    private (T objective, T[] gradient) ComputeObjectiveAndGradient(T[] adversarial, T[] original, T[] output, int trueLabel, T c)
+    private (double objective, double[] gradient) ComputeObjectiveAndGradient(
+        double[] w,
+        T[] original,
+        T[] output,
+        int trueLabel,
+        double c,
+        Func<T[], T[]> targetModel)
     {
-        // Compute L2 distance term
-        var perturbation = CalculatePerturbation(original, adversarial);
-        var l2Distance = ComputeL2Norm(perturbation);
-        var l2DistanceSquared = l2Distance * l2Distance;
+        var objective = ComputeObjective(w, original, output, trueLabel, c);
 
-        // Compute attack loss (measures attack success)
-        var attackLoss = ComputeAttackLoss(output, trueLabel);
+        // Approximate gradient in w-space using finite differences.
+        var gradient = new double[w.Length];
+        const double delta = 0.001;
 
-        // Total objective
-        var objective = l2DistanceSquared + c * attackLoss;
-
-        // Approximate gradient using finite differences
-        var gradient = new T[adversarial.Length];
-        var delta = T.CreateChecked(0.001);
-
-        for (int i = 0; i < adversarial.Length; i++)
+        for (int i = 0; i < w.Length; i++)
         {
-            var perturbedAdv = (T[])adversarial.Clone();
-            perturbedAdv[i] += delta;
+            var wPerturbed = (double[])w.Clone();
+            wPerturbed[i] += delta;
 
-            var perturbedOutput = targetModel(perturbedAdv);
-            var perturbedPert = CalculatePerturbation(original, perturbedAdv);
-            var perturbedL2 = ComputeL2Norm(perturbedPert);
-            var perturbedL2Sq = perturbedL2 * perturbedL2;
-            var perturbedLoss = ComputeAttackLoss(perturbedOutput, trueLabel);
-            var perturbedObjective = perturbedL2Sq + c * perturbedLoss;
+            var advPerturbed = new T[wPerturbed.Length];
+            for (int j = 0; j < wPerturbed.Length; j++)
+            {
+                var tanhW = Math.Tanh(wPerturbed[j]);
+                advPerturbed[j] = NumOps.FromDouble((tanhW + 1.0) / 2.0);
+            }
 
+            var outputPerturbed = targetModel(advPerturbed);
+            var perturbedObjective = ComputeObjective(wPerturbed, original, outputPerturbed, trueLabel, c);
             gradient[i] = (perturbedObjective - objective) / delta;
         }
 
@@ -137,24 +135,72 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     }
 
     /// <summary>
-    /// Computes the attack loss for C&amp;W.
+    /// Computes the objective value for a given w.
     /// </summary>
-    private T ComputeAttackLoss(T[] output, int trueLabel)
+    private double ComputeObjective(double[] w, T[] original, T[] output, int trueLabel, double c)
     {
-        // Find the maximum logit that isn't the true class
-        T maxOtherLogit = T.CreateChecked(double.MinValue);
-        for (int i = 0; i < output.Length; i++)
+        var adversarial = new T[w.Length];
+        for (int i = 0; i < w.Length; i++)
         {
-            if (i != trueLabel && output[i] > maxOtherLogit)
-            {
-                maxOtherLogit = output[i];
-            }
+            var tanhW = Math.Tanh(w[i]);
+            adversarial[i] = NumOps.FromDouble((tanhW + 1.0) / 2.0);
         }
 
-        // f(x) = max(max(Z(x)_i for i != t) - Z(x)_t, -κ)
-        // where κ is confidence parameter (we use 0 for simplicity)
-        var loss = T.Max(maxOtherLogit - output[trueLabel], T.Zero);
-        return loss;
+        var perturbation = CalculatePerturbation(original, adversarial);
+        var l2Distance = NumOps.ToDouble(ComputeL2Norm(perturbation));
+        var l2DistanceSquared = l2Distance * l2Distance;
+
+        var attackLoss = ComputeAttackLoss(output, trueLabel);
+        return l2DistanceSquared + c * attackLoss;
+    }
+
+    /// <summary>
+    /// Computes the attack loss for C&amp;W.
+    /// </summary>
+    private double ComputeAttackLoss(T[] output, int trueLabel)
+    {
+        var trueLogit = NumOps.ToDouble(output[trueLabel]);
+
+        // Find the maximum logit that isn't the true class
+        var maxOtherLogit = double.NegativeInfinity;
+        for (int i = 0; i < output.Length; i++)
+        {
+            if (i == trueLabel)
+                continue;
+
+            maxOtherLogit = Math.Max(maxOtherLogit, NumOps.ToDouble(output[i]));
+        }
+
+        // Untargeted: maximize maxOther - true. Targeted: maximize true - target (i.e., push toward target).
+        if (Options.IsTargeted)
+        {
+            var targetIndex = ClampInt(Options.TargetClass, 0, output.Length - 1);
+            var targetLogit = NumOps.ToDouble(output[targetIndex]);
+            return Math.Max(maxOtherLogit - targetLogit, 0.0);
+        }
+
+        return Math.Max(maxOtherLogit - trueLogit, 0.0);
+    }
+
+    private static double Clamp(double value, double min, double max)
+    {
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
+    }
+
+    private static int ClampInt(int value, int min, int max)
+    {
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
+    }
+
+    private static double Atanh(double x)
+    {
+        // net471: Math.Atanh not available.
+        // atanh(x) = 0.5 * ln((1+x)/(1-x))
+        return 0.5 * Math.Log((1.0 + x) / (1.0 - x));
     }
 
     /// <summary>
@@ -163,26 +209,20 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     private bool IsSuccessfulAttack(T[] output, int trueLabel)
     {
         var predictedClass = 0;
-        var maxValue = output[0];
+        var maxValue = NumOps.ToDouble(output[0]);
 
         for (int i = 1; i < output.Length; i++)
         {
-            if (output[i] > maxValue)
+            var v = NumOps.ToDouble(output[i]);
+            if (v > maxValue)
             {
-                maxValue = output[i];
+                maxValue = v;
                 predictedClass = i;
             }
         }
 
-        if (Options.IsTargeted)
-        {
-            return predictedClass == Options.TargetClass;
-        }
-        else
-        {
-            return predictedClass != trueLabel;
-        }
+        return Options.IsTargeted
+            ? predictedClass == Options.TargetClass
+            : predictedClass != trueLabel;
     }
-
-    private Func<T[], T[]> targetModel = null!;
 }

@@ -1,8 +1,9 @@
-using System.Numerics;
 using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.AdversarialRobustness.Safety;
 
@@ -21,8 +22,9 @@ namespace AiDotNet.AdversarialRobustness.Safety;
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 public class SafetyFilter<T> : ISafetyFilter<T>
-    where T : struct, INumber<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     private readonly SafetyFilterOptions<T> options;
     private readonly List<string> jailbreakPatterns;
     private readonly Dictionary<string, List<string>> harmfulContentPatterns;
@@ -99,7 +101,8 @@ public class SafetyFilter<T> : ISafetyFilter<T>
         // Check for NaN or infinite values
         for (int i = 0; i < input.Length; i++)
         {
-            if (!T.IsFinite(input[i]))
+            var d = NumOps.ToDouble(input[i]);
+            if (double.IsNaN(d) || double.IsInfinity(d))
             {
                 result.IsValid = false;
                 result.SafetyScore = Math.Min(result.SafetyScore, 0.3);
@@ -348,7 +351,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
                            (1.0 - harmfulContent.HarmScore) * 0.4 +
                            (1.0 - jailbreak.Severity) * 0.2;
 
-        return T.CreateChecked(Math.Max(0.0, Math.Min(1.0, combinedScore)));
+        return NumOps.FromDouble(Math.Max(0.0, Math.Min(1.0, combinedScore)));
     }
 
     /// <inheritdoc/>
@@ -383,10 +386,13 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     {
         // For text data represented as numeric arrays (e.g., token IDs),
         // you would decode to text. For demonstration, we create a simple representation
+        if (data == null || data.Length == 0)
+            return string.Empty;
+
         try
         {
             // This is a placeholder - in practice, you'd have proper encoding/decoding
-            return string.Join(" ", data.Select(x => x.ToString() ?? ""));
+            return string.Join(" ", data.Select(x => x is null ? "" : (x.ToString() ?? "")));
         }
         catch
         {

@@ -1,4 +1,3 @@
-using System.Numerics;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.AdversarialRobustness.Attacks;
@@ -25,7 +24,6 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 public class PGDAttack<T> : AdversarialAttackBase<T>
-    where T : struct, INumber<T>
 {
     /// <summary>
     /// Initializes a new instance of the PGD attack.
@@ -57,21 +55,13 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
     /// <returns>The adversarial example.</returns>
     public override T[] GenerateAdversarialExample(T[] input, int trueLabel, Func<T[], T[]> targetModel)
     {
-        var epsilon = T.CreateChecked(Options.Epsilon);
-        var stepSize = T.CreateChecked(Options.StepSize);
+        var epsilon = NumOps.FromDouble(Options.Epsilon);
+        var stepSize = NumOps.FromDouble(Options.StepSize);
 
         // Initialize adversarial example
-        T[] adversarial;
-        if (Options.UseRandomStart)
-        {
-            // Start from a random point in the epsilon-ball
-            adversarial = RandomStartingPoint(input, epsilon);
-        }
-        else
-        {
-            // Start from the original input
-            adversarial = (T[])input.Clone();
-        }
+        var adversarial = Options.UseRandomStart
+            ? RandomStartingPoint(input, epsilon)
+            : (T[])input.Clone();
 
         // Perform iterative PGD steps
         for (int iteration = 0; iteration < Options.Iterations; iteration++)
@@ -82,18 +72,8 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
             // Take a step in the gradient direction
             for (int i = 0; i < adversarial.Length; i++)
             {
-                var perturbation = stepSize * Sign(gradient[i]);
-
-                if (Options.IsTargeted)
-                {
-                    // For targeted attacks, minimize loss for target class
-                    adversarial[i] -= perturbation;
-                }
-                else
-                {
-                    // For untargeted attacks, maximize loss for true class
-                    adversarial[i] += perturbation;
-                }
+                var perturbation = NumOps.Multiply(stepSize, Sign(gradient[i]));
+                adversarial[i] = NumOps.Add(adversarial[i], Options.IsTargeted ? NumOps.Negate(perturbation) : perturbation);
             }
 
             // Project back into the epsilon-ball around the original input
@@ -102,7 +82,7 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
             // Clip to valid range
             for (int i = 0; i < adversarial.Length; i++)
             {
-                adversarial[i] = Clip(adversarial[i], T.Zero, T.One);
+                adversarial[i] = Clip(adversarial[i], NumOps.Zero, NumOps.One);
             }
         }
 
@@ -119,11 +99,11 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
         for (int i = 0; i < input.Length; i++)
         {
             // Generate random perturbation in [-epsilon, epsilon]
-            var randomValue = T.CreateChecked(Random.NextDouble() * 2.0 - 1.0);
-            var perturbation = epsilon * randomValue;
+            var randomValue = NumOps.FromDouble(Random.NextDouble() * 2.0 - 1.0);
+            var perturbation = NumOps.Multiply(epsilon, randomValue);
 
-            randomStart[i] = input[i] + perturbation;
-            randomStart[i] = Clip(randomStart[i], T.Zero, T.One);
+            randomStart[i] = NumOps.Add(input[i], perturbation);
+            randomStart[i] = Clip(randomStart[i], NumOps.Zero, NumOps.One);
         }
 
         return randomStart;
@@ -140,23 +120,18 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
         // Compute current perturbation
         for (int i = 0; i < adversarial.Length; i++)
         {
-            perturbation[i] = adversarial[i] - original[i];
+            perturbation[i] = NumOps.Subtract(adversarial[i], original[i]);
         }
 
         // Project based on norm type
-        if (Options.NormType == "L2")
-        {
-            perturbation = ProjectL2(perturbation, epsilon);
-        }
-        else // Default to L-infinity
-        {
-            perturbation = ProjectLInfinity(perturbation, epsilon);
-        }
+        perturbation = Options.NormType == "L2"
+            ? ProjectL2(perturbation, epsilon)
+            : ProjectLInfinity(perturbation, epsilon);
 
         // Apply projected perturbation
         for (int i = 0; i < adversarial.Length; i++)
         {
-            projected[i] = original[i] + perturbation[i];
+            projected[i] = NumOps.Add(original[i], perturbation[i]);
         }
 
         return projected;
@@ -168,7 +143,7 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
     private T[] ComputeGradient(T[] input, int trueLabel, Func<T[], T[]> targetModel)
     {
         var gradient = new T[input.Length];
-        var delta = T.CreateChecked(0.001);
+        var delta = NumOps.FromDouble(0.001);
 
         var originalOutput = targetModel(input);
         var originalLoss = ComputeLoss(originalOutput, Options.IsTargeted ? Options.TargetClass : trueLabel);
@@ -176,12 +151,12 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
         for (int i = 0; i < input.Length; i++)
         {
             var perturbedInput = (T[])input.Clone();
-            perturbedInput[i] += delta;
+            perturbedInput[i] = NumOps.Add(perturbedInput[i], delta);
 
             var perturbedOutput = targetModel(perturbedInput);
             var perturbedLoss = ComputeLoss(perturbedOutput, Options.IsTargeted ? Options.TargetClass : trueLabel);
 
-            gradient[i] = (perturbedLoss - originalLoss) / delta;
+            gradient[i] = NumOps.Divide(NumOps.Subtract(perturbedLoss, originalLoss), delta);
         }
 
         return gradient;
@@ -196,13 +171,11 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
 
         if (targetClass >= 0 && targetClass < probabilities.Length)
         {
-            var prob = probabilities[targetClass];
-            var epsilon = T.CreateChecked(1e-10);
-            prob = T.Max(prob, epsilon);
-            return -T.CreateChecked(Math.Log(double.CreateChecked(prob)));
+            var prob = Math.Max(NumOps.ToDouble(probabilities[targetClass]), 1e-10);
+            return NumOps.FromDouble(-Math.Log(prob));
         }
 
-        return T.Zero;
+        return NumOps.Zero;
     }
 
     /// <summary>
@@ -211,27 +184,28 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
     private T[] Softmax(T[] logits)
     {
         var probabilities = new T[logits.Length];
-        T maxLogit = logits[0];
+        double maxLogit = NumOps.ToDouble(logits[0]);
 
         for (int i = 1; i < logits.Length; i++)
         {
-            if (logits[i] > maxLogit)
-            {
-                maxLogit = logits[i];
-            }
+            maxLogit = Math.Max(maxLogit, NumOps.ToDouble(logits[i]));
         }
 
-        T sum = T.Zero;
+        double sum = 0.0;
         for (int i = 0; i < logits.Length; i++)
         {
-            var shifted = logits[i] - maxLogit;
-            probabilities[i] = T.CreateChecked(Math.Exp(double.CreateChecked(shifted)));
-            sum += probabilities[i];
+            var shifted = NumOps.ToDouble(logits[i]) - maxLogit;
+            var expVal = Math.Exp(shifted);
+            probabilities[i] = NumOps.FromDouble(expVal);
+            sum += expVal;
         }
+
+        if (sum <= 0.0)
+            return probabilities;
 
         for (int i = 0; i < probabilities.Length; i++)
         {
-            probabilities[i] /= sum;
+            probabilities[i] = NumOps.FromDouble(NumOps.ToDouble(probabilities[i]) / sum);
         }
 
         return probabilities;

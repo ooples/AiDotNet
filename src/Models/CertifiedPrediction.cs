@@ -17,7 +17,7 @@ public class CertifiedPrediction<T>
     /// <remarks>
     /// The prediction is guaranteed to remain the same for all inputs within this radius.
     /// </remarks>
-    public T CertifiedRadius { get; set; }
+    public T CertifiedRadius { get; set; } = default!;
 
     /// <summary>
     /// Gets or sets whether the prediction could be certified.

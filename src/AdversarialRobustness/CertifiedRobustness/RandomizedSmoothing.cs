@@ -1,7 +1,8 @@
-using System.Numerics;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.AdversarialRobustness.CertifiedRobustness;
 
@@ -24,8 +25,9 @@ namespace AiDotNet.AdversarialRobustness.CertifiedRobustness;
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 public class RandomizedSmoothing<T> : ICertifiedDefense<T>
-    where T : struct, INumber<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     private readonly CertifiedDefenseOptions<T> options;
     private readonly Random random;
 
@@ -42,7 +44,7 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
     /// <inheritdoc/>
     public CertifiedPrediction<T> CertifyPrediction(T[] input, Func<T[], T[]> model)
     {
-        var sigma = T.CreateChecked(options.NoiseSigma);
+        var sigma = NumOps.FromDouble(options.NoiseSigma);
 
         // Sample predictions with Gaussian noise
         var classCounts = new Dictionary<int, int>();
@@ -51,19 +53,26 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
         {
             var noisyInput = AddGaussianNoise(input, sigma);
             var output = model(noisyInput);
-            var predictedClass = ArgMax(output);
+            var sampledClass = ArgMax(output);
 
-            if (!classCounts.ContainsKey(predictedClass))
+            if (!classCounts.ContainsKey(sampledClass))
             {
-                classCounts[predictedClass] = 0;
+                classCounts[sampledClass] = 0;
             }
-            classCounts[predictedClass]++;
+            classCounts[sampledClass]++;
         }
 
         // Find the most frequently predicted class
-        var topClass = classCounts.OrderByDescending(kv => kv.Value).First();
-        var topCount = topClass.Value;
-        var predictedClass = topClass.Key;
+        var topClassLabel = -1;
+        var topCount = -1;
+        foreach (var kv in classCounts)
+        {
+            if (kv.Value > topCount)
+            {
+                topClassLabel = kv.Key;
+                topCount = kv.Value;
+            }
+        }
 
         // Compute certified radius using concentration inequalities
         var pA = (double)topCount / options.NumSamples;
@@ -71,8 +80,8 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
 
         var result = new CertifiedPrediction<T>
         {
-            PredictedClass = predictedClass,
-            CertifiedRadius = T.CreateChecked(certifiedRadius),
+            PredictedClass = topClassLabel,
+            CertifiedRadius = NumOps.FromDouble(certifiedRadius),
             IsCertified = certifiedRadius > 0,
             Confidence = pA,
             LowerBound = ComputeLowerBound(pA, options.NumSamples, options.ConfidenceLevel),
@@ -129,14 +138,14 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
             // Certified prediction
             var certResult = CertifyPrediction(testData[i], model);
 
-            if (certResult.PredictedClass == labels[i] && certResult.CertifiedRadius >= radius)
+            if (certResult.PredictedClass == labels[i] && NumOps.GreaterThanOrEquals(certResult.CertifiedRadius, radius))
             {
                 certified++;
             }
 
             if (certResult.IsCertified)
             {
-                certifiedRadii.Add(double.CreateChecked(certResult.CertifiedRadius));
+                certifiedRadii.Add(NumOps.ToDouble(certResult.CertifiedRadius));
             }
         }
 
@@ -147,9 +156,9 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
 
         if (certifiedRadii.Count > 0)
         {
-            metrics.AverageCertifiedRadius = T.CreateChecked(certifiedRadii.Average());
+            metrics.AverageCertifiedRadius = NumOps.FromDouble(certifiedRadii.Average());
             certifiedRadii.Sort();
-            metrics.MedianCertifiedRadius = T.CreateChecked(certifiedRadii[certifiedRadii.Count / 2]);
+            metrics.MedianCertifiedRadius = NumOps.FromDouble(certifiedRadii[certifiedRadii.Count / 2]);
         }
 
         return metrics;
@@ -193,10 +202,9 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
             var u1 = random.NextDouble();
             var u2 = random.NextDouble();
             var randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            var noise = T.CreateChecked(randStdNormal) * sigma;
+            var noise = NumOps.Multiply(NumOps.FromDouble(randStdNormal), sigma);
 
-            noisy[i] = input[i] + noise;
-            noisy[i] = T.Min(T.Max(noisy[i], T.Zero), T.One); // Clip to valid range
+            noisy[i] = Clip01(NumOps.Add(input[i], noise)); // Clip to valid range
         }
 
         return noisy;
@@ -212,7 +220,7 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
             return 0.0; // No certification possible
         }
 
-        var sigmaValue = double.CreateChecked(sigma);
+        var sigmaValue = NumOps.ToDouble(sigma);
         var radius = sigmaValue * InverseNormalCDF(pA);
         return Math.Max(radius, 0.0);
     }
@@ -250,7 +258,7 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
 
         for (int i = 1; i < array.Length; i++)
         {
-            if (array[i] > maxValue)
+            if (NumOps.GreaterThan(array[i], maxValue))
             {
                 maxValue = array[i];
                 maxIndex = i;
@@ -258,5 +266,12 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
         }
 
         return maxIndex;
+    }
+
+    private static T Clip01(T value)
+    {
+        if (NumOps.LessThan(value, NumOps.Zero)) return NumOps.Zero;
+        if (NumOps.GreaterThan(value, NumOps.One)) return NumOps.One;
+        return value;
     }
 }

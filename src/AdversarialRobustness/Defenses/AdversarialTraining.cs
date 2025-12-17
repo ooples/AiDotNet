@@ -1,8 +1,9 @@
-using System.Numerics;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.AdversarialRobustness.Attacks;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.AdversarialRobustness.Defenses;
 
@@ -21,8 +22,9 @@ namespace AiDotNet.AdversarialRobustness.Defenses;
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 public class AdversarialTraining<T> : IAdversarialDefense<T>
-    where T : struct, INumber<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     private readonly AdversarialDefenseOptions<T> options;
     private readonly IAdversarialAttack<T> attackMethod;
 
@@ -75,7 +77,7 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
                     augmentedData.Add(adversarial);
                     augmentedLabels.Add(labels[i]);
                 }
-                catch
+                catch (Exception)
                 {
                     // Skip if adversarial generation fails
                 }
@@ -147,12 +149,12 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
                 var perturbation = new T[testData[i].Length];
                 for (int j = 0; j < testData[i].Length; j++)
                 {
-                    perturbation[j] = adversarial[j] - testData[i][j];
+                    perturbation[j] = NumOps.Subtract(adversarial[j], testData[i][j]);
                 }
                 var l2Norm = ComputeL2Norm(perturbation);
-                perturbationSizes.Add(double.CreateChecked(l2Norm));
+                perturbationSizes.Add(NumOps.ToDouble(l2Norm));
             }
-            catch
+            catch (Exception)
             {
                 // Count as defended if attack fails
                 adversarialCorrect++;
@@ -200,12 +202,13 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
     {
         // Simplified JPEG-like compression: quantize values
         var compressed = new T[input.Length];
-        var quantizationLevel = T.CreateChecked(0.1);
+        var quantizationLevel = 0.1;
 
         for (int i = 0; i < input.Length; i++)
         {
-            var quantized = T.Floor(input[i] / quantizationLevel) * quantizationLevel;
-            compressed[i] = T.Min(T.Max(quantized, T.Zero), T.One);
+            var v = NumOps.ToDouble(input[i]);
+            var quantized = Math.Floor(v / quantizationLevel) * quantizationLevel;
+            compressed[i] = NumOps.FromDouble(Math.Min(Math.Max(quantized, 0.0), 1.0));
         }
 
         return compressed;
@@ -215,12 +218,13 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
     {
         // Reduce bit depth to remove fine-grained adversarial perturbations
         var reduced = new T[input.Length];
-        var levels = T.CreateChecked(16); // Reduce to 4-bit color depth
+        var levels = 16.0; // Reduce to 4-bit color depth
 
         for (int i = 0; i < input.Length; i++)
         {
-            var quantized = T.Round(input[i] * levels) / levels;
-            reduced[i] = T.Min(T.Max(quantized, T.Zero), T.One);
+            var v = NumOps.ToDouble(input[i]);
+            var quantized = Math.Round(v * levels) / levels;
+            reduced[i] = NumOps.FromDouble(Math.Min(Math.Max(quantized, 0.0), 1.0));
         }
 
         return reduced;
@@ -236,13 +240,14 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
     private static int ArgMax(T[] array)
     {
         int maxIndex = 0;
-        T maxValue = array[0];
+        double maxValue = NumOps.ToDouble(array[0]);
 
         for (int i = 1; i < array.Length; i++)
         {
-            if (array[i] > maxValue)
+            var v = NumOps.ToDouble(array[i]);
+            if (v > maxValue)
             {
-                maxValue = array[i];
+                maxValue = v;
                 maxIndex = i;
             }
         }
@@ -252,11 +257,12 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
 
     private static T ComputeL2Norm(T[] vector)
     {
-        T sumSquares = T.Zero;
+        double sumSquares = 0.0;
         foreach (var value in vector)
         {
-            sumSquares += value * value;
+            var d = NumOps.ToDouble(value);
+            sumSquares += d * d;
         }
-        return T.CreateChecked(Math.Sqrt(double.CreateChecked(sumSquares)));
+        return NumOps.FromDouble(Math.Sqrt(sumSquares));
     }
 }

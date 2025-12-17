@@ -1,7 +1,8 @@
-using System.Numerics;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.AdversarialRobustness.Alignment;
 
@@ -24,8 +25,9 @@ namespace AiDotNet.AdversarialRobustness.Alignment;
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 public class RLHFAlignment<T> : IAlignmentMethod<T>
-    where T : struct, INumber<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     private readonly AlignmentMethodOptions<T> options;
     private Func<T[], T[], double>? rewardModel;
 
@@ -213,12 +215,16 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         return (input, output) =>
         {
             // Simple reward heuristic based on output characteristics
-            var outputSum = output.Sum(x => double.CreateChecked(x));
-            var outputMean = outputSum / output.Length;
+            double sum = 0.0;
+            for (int i = 0; i < output.Length; i++)
+            {
+                sum += NumOps.ToDouble(output[i]);
+            }
+            var outputMean = output.Length > 0 ? (sum / output.Length) : 0.0;
 
             // Higher reward for moderate values (heuristic for "reasonable" outputs)
             var reward = 1.0 - Math.Abs(outputMean - 0.5);
-            return Math.Clamp(reward, 0.0, 1.0);
+            return Clamp(reward, 0.0, 1.0);
         };
     }
 
@@ -238,8 +244,8 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
             for (int i = 0; i < output.Length; i++)
             {
                 var reward = rewardModel(input, output);
-                var adjustment = T.CreateChecked(reward * 0.1); // Small adjustment
-                output[i] = T.Clamp(output[i] + adjustment, T.Zero, T.One);
+                var adjustment = NumOps.FromDouble(reward * 0.1); // Small adjustment
+                output[i] = Clip01(NumOps.Add(output[i], adjustment));
             }
 
             return output;
@@ -270,9 +276,15 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     private bool IsHarmless(T[] output)
     {
         // Check for harmful patterns (simplified)
-        var maxValue = output.Max(x => double.CreateChecked(x));
-        var minValue = output.Min(x => double.CreateChecked(x));
-        return maxValue - minValue < 0.9; // Heuristic for extremity
+        double maxValue = double.NegativeInfinity;
+        double minValue = double.PositiveInfinity;
+        for (int i = 0; i < output.Length; i++)
+        {
+            var v = NumOps.ToDouble(output[i]);
+            if (v > maxValue) maxValue = v;
+            if (v < minValue) minValue = v;
+        }
+        return (maxValue - minValue) < 0.9; // Heuristic for extremity
     }
 
     private bool IsHonest(T[] output, T[] input)
@@ -284,8 +296,20 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     private (bool isVulnerable, double severity, string type) AnalyzeResponseForVulnerability(T[] response)
     {
         // Analyze response for potential misalignment
-        var mean = response.Average(x => double.CreateChecked(x));
-        var variance = response.Average(x => Math.Pow(double.CreateChecked(x) - mean, 2));
+        double sum = 0.0;
+        for (int i = 0; i < response.Length; i++)
+        {
+            sum += NumOps.ToDouble(response[i]);
+        }
+        var mean = response.Length > 0 ? (sum / response.Length) : 0.0;
+
+        double varianceSum = 0.0;
+        for (int i = 0; i < response.Length; i++)
+        {
+            var delta = NumOps.ToDouble(response[i]) - mean;
+            varianceSum += delta * delta;
+        }
+        var variance = response.Length > 0 ? (varianceSum / response.Length) : 0.0;
 
         if (variance > 0.3)
         {
@@ -310,8 +334,8 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
 
         for (int i = 0; i < a.Length; i++)
         {
-            var aVal = double.CreateChecked(a[i]);
-            var bVal = double.CreateChecked(b[i]);
+            var aVal = NumOps.ToDouble(a[i]);
+            var bVal = NumOps.ToDouble(b[i]);
             dotProduct += aVal * bVal;
             normA += aVal * aVal;
             normB += bVal * bVal;
@@ -322,6 +346,23 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
 
     private string ConvertToString(T[] data)
     {
-        return string.Join(",", data.Select(x => x.ToString() ?? ""));
+        if (data == null || data.Length == 0)
+            return string.Empty;
+
+        return string.Join(",", data.Select(x => x is null ? "" : (x.ToString() ?? "")));
+    }
+
+    private static T Clip01(T value)
+    {
+        if (NumOps.LessThan(value, NumOps.Zero)) return NumOps.Zero;
+        if (NumOps.GreaterThan(value, NumOps.One)) return NumOps.One;
+        return value;
+    }
+
+    private static double Clamp(double value, double min, double max)
+    {
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
     }
 }

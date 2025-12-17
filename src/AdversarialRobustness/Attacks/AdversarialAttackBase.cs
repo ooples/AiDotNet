@@ -1,7 +1,8 @@
-using System.Numerics;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.AdversarialRobustness.Attacks;
 
@@ -10,8 +11,9 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
-    where T : struct, INumber<T>
 {
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Configuration options for the attack.
     /// </summary>
@@ -57,7 +59,7 @@ public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
         var perturbation = new T[original.Length];
         for (int i = 0; i < original.Length; i++)
         {
-            perturbation[i] = adversarial[i] - original[i];
+            perturbation[i] = NumOps.Subtract(adversarial[i], original[i]);
         }
         return perturbation;
     }
@@ -106,8 +108,8 @@ public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
     /// </summary>
     protected static T Clip(T value, T min, T max)
     {
-        if (value < min) return min;
-        if (value > max) return max;
+        if (NumOps.LessThan(value, min)) return min;
+        if (NumOps.GreaterThan(value, max)) return max;
         return value;
     }
 
@@ -116,9 +118,9 @@ public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
     /// </summary>
     protected static T Sign(T value)
     {
-        if (value > T.Zero) return T.One;
-        if (value < T.Zero) return -T.One;
-        return T.Zero;
+        if (NumOps.GreaterThan(value, NumOps.Zero)) return NumOps.One;
+        if (NumOps.LessThan(value, NumOps.Zero)) return NumOps.Negate(NumOps.One);
+        return NumOps.Zero;
     }
 
     /// <summary>
@@ -126,11 +128,11 @@ public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
     /// </summary>
     protected static T ComputeLInfinityNorm(T[] vector)
     {
-        T maxValue = T.Zero;
+        T maxValue = NumOps.Zero;
         foreach (var value in vector)
         {
-            var absValue = T.Abs(value);
-            if (absValue > maxValue)
+            var absValue = NumOps.Abs(value);
+            if (NumOps.GreaterThan(absValue, maxValue))
             {
                 maxValue = absValue;
             }
@@ -143,12 +145,13 @@ public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
     /// </summary>
     protected static T ComputeL2Norm(T[] vector)
     {
-        T sumSquares = T.Zero;
+        double sumSquares = 0.0;
         foreach (var value in vector)
         {
-            sumSquares += value * value;
+            var d = NumOps.ToDouble(value);
+            sumSquares += d * d;
         }
-        return T.CreateChecked(Math.Sqrt(double.CreateChecked(sumSquares)));
+        return NumOps.FromDouble(Math.Sqrt(sumSquares));
     }
 
     /// <summary>
@@ -159,7 +162,7 @@ public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
         var projected = new T[perturbation.Length];
         for (int i = 0; i < perturbation.Length; i++)
         {
-            projected[i] = Clip(perturbation[i], -epsilon, epsilon);
+            projected[i] = Clip(perturbation[i], NumOps.Negate(epsilon), epsilon);
         }
         return projected;
     }
@@ -170,16 +173,16 @@ public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
     protected T[] ProjectL2(T[] perturbation, T epsilon)
     {
         var norm = ComputeL2Norm(perturbation);
-        if (norm <= epsilon)
+        if (NumOps.LessThanOrEquals(norm, epsilon))
         {
             return perturbation;
         }
 
         var projected = new T[perturbation.Length];
-        var scale = epsilon / norm;
+        var scale = NumOps.Divide(epsilon, norm);
         for (int i = 0; i < perturbation.Length; i++)
         {
-            projected[i] = perturbation[i] * scale;
+            projected[i] = NumOps.Multiply(perturbation[i], scale);
         }
         return projected;
     }

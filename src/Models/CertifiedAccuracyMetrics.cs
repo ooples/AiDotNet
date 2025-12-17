@@ -19,12 +19,12 @@ public class CertifiedAccuracyMetrics<T>
     /// <summary>
     /// Gets or sets the certification radius used.
     /// </summary>
-    public T CertificationRadius { get; set; }
+    public T CertificationRadius { get; set; } = default!;
 
     /// <summary>
     /// Gets or sets the average certified radius across all examples.
     /// </summary>
-    public T AverageCertifiedRadius { get; set; }
+    public T AverageCertifiedRadius { get; set; } = default!;
 
     /// <summary>
     /// Gets or sets the percentage of examples that could be certified.
@@ -34,7 +34,7 @@ public class CertifiedAccuracyMetrics<T>
     /// <summary>
     /// Gets or sets the median certified radius.
     /// </summary>
-    public T MedianCertifiedRadius { get; set; }
+    public T MedianCertifiedRadius { get; set; } = default!;
 
     /// <summary>
     /// Gets or sets additional certification metrics.
