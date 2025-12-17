@@ -66,32 +66,18 @@ jobs:
             # Check if commit follows conventional commits
             # Valid types: feat, fix, docs, refactor, perf, test, chore, ci, style, deps
             if [[ "$FIRST_LINE" =~ ^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)\(([^)]+)\)\?:\ .+ ]]; then
-              # Check if subject is lowercase (except for deps type which we allow)
-              if [[ "$FIRST_LINE" =~ ^deps: ]]; then
-                echo "✅ Valid deps commit: $FIRST_LINE"
-              elif [[ "$FIRST_LINE" =~ ^[a-z].*:[[:space:]].* ]]; then
+              # Extract description after colon
+              DESCRIPTION=$(echo "$FIRST_LINE" | cut -d':' -f2- | sed 's/^ *//')
+
+              # Check if description starts with lowercase
+              if [[ "$DESCRIPTION" =~ ^[a-z] ]]; then
                 echo "✅ Valid commit: $FIRST_LINE"
               else
                 echo "❌ Invalid subject case: $FIRST_LINE"
                 INVALID_SUBJECT=true
 
-                # Check if subject is lowercase (including deps type)
-                DESCRIPTION=$(echo "$FIRST_LINE" | cut -d':' -f2- | sed 's/^ *//')
-                if [[ "$FIRST_LINE" =~ ^deps: ]]; then
-                  if [[ "$DESCRIPTION" =~ ^[a-z] ]]; then
-                    echo "✅ Valid deps commit: $FIRST_LINE"
-                  else
-                    echo "❌ Invalid deps subject case: $FIRST_LINE"
-                    INVALID_SUBJECT=true
-                  fi
-                elif [[ "$FIRST_LINE" =~ ^[a-z].*:[[:space:]].* ]]; then
-                  echo "✅ Valid commit: $FIRST_LINE"
-                fi
-
-                if [ "$INVALID_SUBJECT" = true ]; then
-                  # Fix the subject case
+                # Fix the subject case
                 TYPE=$(echo "$FIRST_LINE" | cut -d':' -f1)
-                DESCRIPTION=$(echo "$FIRST_LINE" | cut -d':' -f2- | sed 's/^ *//')
                 FIXED_DESCRIPTION=$(echo "$DESCRIPTION" | sed 's/./\L&/')
                 NEW_SUBJECT="$TYPE: $FIXED_DESCRIPTION"
 
