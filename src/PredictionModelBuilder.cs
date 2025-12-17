@@ -1243,7 +1243,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             if (_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.ReinforcementLearning)
             {
                 var (selectedAgent, summary) = SelectRLAgentWithAutoML(_rlOptions);
-                _model = (IFullModel<T, TInput, TOutput>)(object)selectedAgent;
+                object boxedAgent = selectedAgent;
+                _model = (IFullModel<T, TInput, TOutput>)boxedAgent;
                 autoMLSummary = summary;
             }
             else
