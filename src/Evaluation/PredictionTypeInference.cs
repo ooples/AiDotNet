@@ -41,7 +41,14 @@ internal static class PredictionTypeInference
 
             if (classes.Count < maxTrackedClasses)
             {
-                classes.Add(Convert.ToInt32(rounded));
+                if (rounded >= int.MinValue && rounded <= int.MaxValue)
+                {
+                    classes.Add((int)rounded);
+                }
+                else
+                {
+                    return PredictionType.Regression;
+                }
             }
         }
 
