@@ -24,6 +24,13 @@ Test your models against various attack methods to identify vulnerabilities:
 - **Reference**: Goodfellow et al. (2014)
 
 ```csharp
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
+
+Vector<double> input = new(new[] { 0.1, 0.2, 0.3 });
+int trueLabel = 0;
+IPredictiveModel<double, Vector<double>, Vector<double>> model = /* your model */;
+
 var attackOptions = new AdversarialAttackOptions<double>
 {
     Epsilon = 0.1,
@@ -80,6 +87,13 @@ Protect your models with proven defense mechanisms:
   - Robustness evaluation
 
 ```csharp
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
+
+Matrix<double> trainingData = /* your training data */;
+Vector<int> labels = /* your labels */;
+IPredictiveModel<double, Vector<double>, Vector<double>> model = /* your model */;
+
 var defenseOptions = new AdversarialDefenseOptions<double>
 {
     AdversarialRatio = 0.5,
@@ -155,6 +169,7 @@ var principles = new[]
 var constitutionalModel = rlhf.ApplyConstitutionalPrinciples(alignedModel, principles);
 
 // Perform red teaming
+Matrix<double> adversarialPrompts = /* adversarial prompts as rows */;
 var redTeamResults = rlhf.PerformRedTeaming(constitutionalModel, adversarialPrompts);
 Console.WriteLine($"Red team success rate: {redTeamResults.SuccessRate:P2}");
 ```
@@ -174,6 +189,11 @@ Detect and prevent harmful content:
   - Safety scoring
 
 ```csharp
+using AiDotNet.Tensors.LinearAlgebra;
+
+Vector<double> input = new(new[] { 1.0, 2.0, 3.0 });
+Vector<double> output = new(new[] { 0.1, 0.2, 0.3 });
+
 var safetyOptions = new SafetyFilterOptions<double>
 {
     SafetyThreshold = 0.8,

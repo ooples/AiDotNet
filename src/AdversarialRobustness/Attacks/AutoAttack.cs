@@ -1,4 +1,6 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AdversarialRobustness.Attacks;
 
@@ -69,16 +71,26 @@ public class AutoAttack<T> : AdversarialAttackBase<T>
     /// <param name="trueLabel">The correct label for the input.</param>
     /// <param name="targetModel">The model to attack.</param>
     /// <returns>The adversarial example.</returns>
-    public override T[] GenerateAdversarialExample(T[] input, int trueLabel, Func<T[], T[]> targetModel)
+    public override Vector<T> GenerateAdversarialExample(Vector<T> input, int trueLabel, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
     {
-        var candidates = new List<(T[] adversarial, double perturbationSize, bool successful)>();
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        if (targetModel == null)
+        {
+            throw new ArgumentNullException(nameof(targetModel));
+        }
+
+        var candidates = new List<(Vector<T> adversarial, double perturbationSize, bool successful)>();
 
         // Run PGD attack (strongest gradient-based attack)
         try
         {
             var pgdAdversarial = pgdAttack.GenerateAdversarialExample(input, trueLabel, targetModel);
             var pgdPerturbation = NumOps.ToDouble(ComputeL2Norm(CalculatePerturbation(input, pgdAdversarial)));
-            var pgdSuccess = IsSuccessfulAttack(targetModel(pgdAdversarial), trueLabel);
+            var pgdSuccess = IsSuccessfulAttack(targetModel.Predict(pgdAdversarial), trueLabel);
             candidates.Add((pgdAdversarial, pgdPerturbation, pgdSuccess));
         }
         catch (ArgumentException)
@@ -95,7 +107,7 @@ public class AutoAttack<T> : AdversarialAttackBase<T>
         {
             var cwAdversarial = cwAttack.GenerateAdversarialExample(input, trueLabel, targetModel);
             var cwPerturbation = NumOps.ToDouble(ComputeL2Norm(CalculatePerturbation(input, cwAdversarial)));
-            var cwSuccess = IsSuccessfulAttack(targetModel(cwAdversarial), trueLabel);
+            var cwSuccess = IsSuccessfulAttack(targetModel.Predict(cwAdversarial), trueLabel);
             candidates.Add((cwAdversarial, cwPerturbation, cwSuccess));
         }
         catch (ArgumentException)
@@ -112,7 +124,7 @@ public class AutoAttack<T> : AdversarialAttackBase<T>
         {
             var fgsmAdversarial = fgsmAttack.GenerateAdversarialExample(input, trueLabel, targetModel);
             var fgsmPerturbation = NumOps.ToDouble(ComputeL2Norm(CalculatePerturbation(input, fgsmAdversarial)));
-            var fgsmSuccess = IsSuccessfulAttack(targetModel(fgsmAdversarial), trueLabel);
+            var fgsmSuccess = IsSuccessfulAttack(targetModel.Predict(fgsmAdversarial), trueLabel);
             candidates.Add((fgsmAdversarial, fgsmPerturbation, fgsmSuccess));
         }
         catch (ArgumentException)
@@ -126,7 +138,7 @@ public class AutoAttack<T> : AdversarialAttackBase<T>
 
         // Select the best adversarial example
         // Prioritize: 1) Successful attacks, 2) Smallest perturbation
-        T[] bestAdversarial = input;
+        Vector<T> bestAdversarial = input;
         double bestPerturbation = double.PositiveInfinity;
         bool foundSuccessful = false;
 
@@ -159,7 +171,7 @@ public class AutoAttack<T> : AdversarialAttackBase<T>
     /// <summary>
     /// Checks if an attack was successful based on the model's output.
     /// </summary>
-    private bool IsSuccessfulAttack(T[] output, int trueLabel)
+    private bool IsSuccessfulAttack(Vector<T> output, int trueLabel)
     {
         var predictedClass = 0;
         var maxValue = NumOps.ToDouble(output[0]);

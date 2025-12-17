@@ -1,4 +1,7 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AdversarialRobustness.Attacks;
 
@@ -47,11 +50,21 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     /// <param name="trueLabel">The correct label for the input.</param>
     /// <param name="targetModel">The model to attack.</param>
     /// <returns>The adversarial example.</returns>
-    public override T[] GenerateAdversarialExample(T[] input, int trueLabel, Func<T[], T[]> targetModel)
+    public override Vector<T> GenerateAdversarialExample(Vector<T> input, int trueLabel, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
     {
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        if (targetModel == null)
+        {
+            throw new ArgumentNullException(nameof(targetModel));
+        }
+
         var c = 1.0; // Confidence parameter
         var learningRate = 0.01;
-        var bestAdversarial = (T[])input.Clone();
+        var bestAdversarial = CloneInput(input);
         var bestPerturbation = double.PositiveInfinity;
 
         // Initialize perturbation variable (in tanh space for box constraints)
@@ -68,7 +81,7 @@ public class CWAttack<T> : AdversarialAttackBase<T>
         for (int iteration = 0; iteration < Options.Iterations; iteration++)
         {
             // Convert from tanh space to valid input range [0, 1]
-            var adversarial = new T[input.Length];
+            var adversarial = new Vector<T>(input.Length);
             for (int i = 0; i < input.Length; i++)
             {
                 var tanhW = Math.Tanh(w[i]);
@@ -76,7 +89,7 @@ public class CWAttack<T> : AdversarialAttackBase<T>
             }
 
             // Compute objective and gradient
-            var output = targetModel(adversarial);
+            var output = targetModel.Predict(adversarial);
             var (_, gradient) = ComputeObjectiveAndGradient(w, input, output, trueLabel, c, targetModel);
 
             // Update w using gradient descent
@@ -89,7 +102,7 @@ public class CWAttack<T> : AdversarialAttackBase<T>
             var perturbationNorm = NumOps.ToDouble(ComputeL2Norm(CalculatePerturbation(input, adversarial)));
             if (IsSuccessfulAttack(output, trueLabel) && perturbationNorm < bestPerturbation)
             {
-                bestAdversarial = (T[])adversarial.Clone();
+                bestAdversarial = CloneInput(adversarial);
                 bestPerturbation = perturbationNorm;
             }
         }
@@ -97,16 +110,26 @@ public class CWAttack<T> : AdversarialAttackBase<T>
         return bestAdversarial;
     }
 
+    private static Vector<T> CloneInput(Vector<T> input)
+    {
+        var clone = new Vector<T>(input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            clone[i] = input[i];
+        }
+        return clone;
+    }
+
     /// <summary>
     /// Computes the objective function and its gradient.
     /// </summary>
     private (double objective, double[] gradient) ComputeObjectiveAndGradient(
         double[] w,
-        T[] original,
-        T[] output,
+        Vector<T> original,
+        Vector<T> output,
         int trueLabel,
         double c,
-        Func<T[], T[]> targetModel)
+        IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
     {
         var objective = ComputeObjective(w, original, output, trueLabel, c);
 
@@ -119,14 +142,14 @@ public class CWAttack<T> : AdversarialAttackBase<T>
             var wPerturbed = (double[])w.Clone();
             wPerturbed[i] += delta;
 
-            var advPerturbed = new T[wPerturbed.Length];
+            var advPerturbed = new Vector<T>(wPerturbed.Length);
             for (int j = 0; j < wPerturbed.Length; j++)
             {
                 var tanhW = Math.Tanh(wPerturbed[j]);
                 advPerturbed[j] = NumOps.FromDouble((tanhW + 1.0) / 2.0);
             }
 
-            var outputPerturbed = targetModel(advPerturbed);
+            var outputPerturbed = targetModel.Predict(advPerturbed);
             var perturbedObjective = ComputeObjective(wPerturbed, original, outputPerturbed, trueLabel, c);
             gradient[i] = (perturbedObjective - objective) / delta;
         }
@@ -137,9 +160,9 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     /// <summary>
     /// Computes the objective value for a given w.
     /// </summary>
-    private double ComputeObjective(double[] w, T[] original, T[] output, int trueLabel, double c)
+    private double ComputeObjective(double[] w, Vector<T> original, Vector<T> output, int trueLabel, double c)
     {
-        var adversarial = new T[w.Length];
+        var adversarial = new Vector<T>(w.Length);
         for (int i = 0; i < w.Length; i++)
         {
             var tanhW = Math.Tanh(w[i]);
@@ -157,7 +180,7 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     /// <summary>
     /// Computes the attack loss for C&amp;W.
     /// </summary>
-    private double ComputeAttackLoss(T[] output, int trueLabel)
+    private double ComputeAttackLoss(Vector<T> output, int trueLabel)
     {
         var trueLogit = NumOps.ToDouble(output[trueLabel]);
 
@@ -185,7 +208,7 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     /// <summary>
     /// Checks if the attack was successful.
     /// </summary>
-    private bool IsSuccessfulAttack(T[] output, int trueLabel)
+    private bool IsSuccessfulAttack(Vector<T> output, int trueLabel)
     {
         var predictedClass = 0;
         var maxValue = NumOps.ToDouble(output[0]);

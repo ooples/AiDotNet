@@ -1,5 +1,7 @@
 namespace AiDotNet.Interfaces;
 
+using AiDotNet.Tensors.LinearAlgebra;
+
 /// <summary>
 /// Defines the contract for safety filters that detect and prevent harmful or inappropriate model inputs and outputs.
 /// </summary>
@@ -45,7 +47,7 @@ public interface ISafetyFilter<T> : IModelSerializer
     /// </remarks>
     /// <param name="input">The input to validate.</param>
     /// <returns>Validation result indicating if input is safe and any issues found.</returns>
-    SafetyValidationResult<T> ValidateInput(T[] input);
+    SafetyValidationResult<T> ValidateInput(Vector<T> input);
 
     /// <summary>
     /// Filters model outputs to remove or flag harmful content.
@@ -62,7 +64,7 @@ public interface ISafetyFilter<T> : IModelSerializer
     /// </remarks>
     /// <param name="output">The model output to filter.</param>
     /// <returns>Filtered output with harmful content removed or flagged.</returns>
-    SafetyFilterResult<T> FilterOutput(T[] output);
+    SafetyFilterResult<T> FilterOutput(Vector<T> output);
 
     /// <summary>
     /// Detects jailbreak attempts that try to bypass safety measures.
@@ -79,7 +81,7 @@ public interface ISafetyFilter<T> : IModelSerializer
     /// </remarks>
     /// <param name="input">The input to check for jailbreak attempts.</param>
     /// <returns>Detection result indicating if a jailbreak was detected and its severity.</returns>
-    JailbreakDetectionResult<T> DetectJailbreak(T[] input);
+    JailbreakDetectionResult<T> DetectJailbreak(Vector<T> input);
 
     /// <summary>
     /// Identifies harmful or inappropriate content in text or data.
@@ -98,7 +100,7 @@ public interface ISafetyFilter<T> : IModelSerializer
     /// </remarks>
     /// <param name="content">The content to analyze.</param>
     /// <returns>Classification of harmful content types and severity scores.</returns>
-    HarmfulContentResult<T> IdentifyHarmfulContent(T[] content);
+    HarmfulContentResult<T> IdentifyHarmfulContent(Vector<T> content);
 
     /// <summary>
     /// Computes a safety score for model inputs or outputs.
@@ -110,7 +112,7 @@ public interface ISafetyFilter<T> : IModelSerializer
     /// </remarks>
     /// <param name="content">The content to score.</param>
     /// <returns>A safety score between 0 (unsafe) and 1 (completely safe).</returns>
-    T ComputeSafetyScore(T[] content);
+    T ComputeSafetyScore(Vector<T> content);
 
     /// <summary>
     /// Gets the configuration options for the safety filter.

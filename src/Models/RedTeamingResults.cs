@@ -1,5 +1,7 @@
 namespace AiDotNet.Models;
 
+using AiDotNet.Tensors.LinearAlgebra;
+
 /// <summary>
 /// Contains results from red teaming adversarial testing.
 /// </summary>
@@ -9,12 +11,12 @@ public class RedTeamingResults<T>
     /// <summary>
     /// Gets or sets the adversarial prompts that were tested.
     /// </summary>
-    public T[][] AdversarialPrompts { get; set; } = Array.Empty<T[]>();
+    public Matrix<T> AdversarialPrompts { get; set; } = Matrix<T>.Empty();
 
     /// <summary>
     /// Gets or sets the model's responses to adversarial prompts.
     /// </summary>
-    public T[][] ModelResponses { get; set; } = Array.Empty<T[]>();
+    public Matrix<T> ModelResponses { get; set; } = Matrix<T>.Empty();
 
     /// <summary>
     /// Gets or sets which prompts successfully caused misaligned behavior.

@@ -1,5 +1,8 @@
 namespace AiDotNet.Interfaces;
 
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
+
 /// <summary>
 /// Defines the contract for certified defense mechanisms that provide provable robustness guarantees.
 /// </summary>
@@ -45,7 +48,7 @@ public interface ICertifiedDefense<T> : IModelSerializer
     /// <param name="input">The input to make a certified prediction for.</param>
     /// <param name="model">The model to certify.</param>
     /// <returns>Certified prediction result with robustness radius.</returns>
-    CertifiedPrediction<T> CertifyPrediction(T[] input, Func<T[], T[]> model);
+    CertifiedPrediction<T> CertifyPrediction(Vector<T> input, IPredictiveModel<T, Vector<T>, Vector<T>> model);
 
     /// <summary>
     /// Computes certified predictions for a batch of inputs.
@@ -57,7 +60,7 @@ public interface ICertifiedDefense<T> : IModelSerializer
     /// <param name="inputs">The batch of inputs to certify.</param>
     /// <param name="model">The model to certify.</param>
     /// <returns>Batch of certified prediction results.</returns>
-    CertifiedPrediction<T>[] CertifyBatch(T[][] inputs, Func<T[], T[]> model);
+    CertifiedPrediction<T>[] CertifyBatch(Matrix<T> inputs, IPredictiveModel<T, Vector<T>, Vector<T>> model);
 
     /// <summary>
     /// Computes the maximum perturbation radius that can be certified for an input.
@@ -73,7 +76,7 @@ public interface ICertifiedDefense<T> : IModelSerializer
     /// <param name="input">The input to analyze.</param>
     /// <param name="model">The model being certified.</param>
     /// <returns>The maximum certified robustness radius.</returns>
-    T ComputeCertifiedRadius(T[] input, Func<T[], T[]> model);
+    T ComputeCertifiedRadius(Vector<T> input, IPredictiveModel<T, Vector<T>, Vector<T>> model);
 
     /// <summary>
     /// Evaluates certified accuracy on a dataset.
@@ -89,9 +92,9 @@ public interface ICertifiedDefense<T> : IModelSerializer
     /// <param name="radius">The perturbation radius to certify.</param>
     /// <returns>Certified accuracy metrics.</returns>
     CertifiedAccuracyMetrics<T> EvaluateCertifiedAccuracy(
-        T[][] testData,
-        int[] labels,
-        Func<T[], T[]> model,
+        Matrix<T> testData,
+        Vector<int> labels,
+        IPredictiveModel<T, Vector<T>, Vector<T>> model,
         T radius);
 
     /// <summary>

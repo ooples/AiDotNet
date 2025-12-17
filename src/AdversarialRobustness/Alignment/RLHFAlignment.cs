@@ -2,7 +2,9 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
+using System.Text;
 
 namespace AiDotNet.AdversarialRobustness.Alignment;
 
@@ -28,8 +30,8 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    private readonly AlignmentMethodOptions<T> options;
-    private Func<T[], T[], double>? rewardModel;
+    private AlignmentMethodOptions<T> options;
+    private Func<Vector<T>, Vector<T>, double>? rewardModel;
 
     /// <summary>
     /// Initializes a new instance of RLHF alignment.
@@ -37,11 +39,11 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     /// <param name="options">The alignment configuration options.</param>
     public RLHFAlignment(AlignmentMethodOptions<T> options)
     {
-        this.options = options;
+        this.options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
     /// <inheritdoc/>
-    public Func<T[], T[]> AlignModel(Func<T[], T[]> baseModel, AlignmentFeedbackData<T> feedbackData)
+    public IPredictiveModel<T, Vector<T>, Vector<T>> AlignModel(IPredictiveModel<T, Vector<T>, Vector<T>> baseModel, AlignmentFeedbackData<T> feedbackData)
     {
         // Step 1: Train a reward model from human preferences
         rewardModel = TrainRewardModel(feedbackData);
@@ -53,8 +55,18 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     }
 
     /// <inheritdoc/>
-    public AlignmentMetrics<T> EvaluateAlignment(Func<T[], T[]> model, AlignmentEvaluationData<T> evaluationData)
+    public AlignmentMetrics<T> EvaluateAlignment(IPredictiveModel<T, Vector<T>, Vector<T>> model, AlignmentEvaluationData<T> evaluationData)
     {
+        if (model == null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
+        if (evaluationData == null)
+        {
+            throw new ArgumentNullException(nameof(evaluationData));
+        }
+
         var metrics = new AlignmentMetrics<T>();
 
         int helpfulCount = 0;
@@ -62,12 +74,14 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         int honestCount = 0;
         double totalPreferenceMatch = 0.0;
 
-        for (int i = 0; i < evaluationData.TestInputs.Length; i++)
+        for (int i = 0; i < evaluationData.TestInputs.Rows; i++)
         {
-            var output = model(evaluationData.TestInputs[i]);
+            var input = evaluationData.TestInputs.GetRow(i);
+            var expected = evaluationData.ExpectedOutputs.GetRow(i);
+            var output = model.Predict(input);
 
             // Evaluate helpfulness (simplified)
-            if (IsHelpful(output, evaluationData.ExpectedOutputs[i]))
+            if (IsHelpful(output, expected))
             {
                 helpfulCount++;
             }
@@ -79,7 +93,7 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
             }
 
             // Evaluate honesty (simplified)
-            if (IsHonest(output, evaluationData.TestInputs[i]))
+            if (IsHonest(output, input))
             {
                 honestCount++;
             }
@@ -87,13 +101,13 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
             // Preference matching
             if (i < evaluationData.ReferenceScores.Length)
             {
-                var predictedScore = rewardModel?.Invoke(evaluationData.TestInputs[i], output) ?? 0.5;
+                var predictedScore = rewardModel?.Invoke(input, output) ?? 0.5;
                 var referenceScore = evaluationData.ReferenceScores[i];
                 totalPreferenceMatch += 1.0 - Math.Abs(predictedScore - referenceScore);
             }
         }
 
-        int total = evaluationData.TestInputs.Length;
+        int total = evaluationData.TestInputs.Rows;
         metrics.HelpfulnessScore = (double)helpfulCount / total;
         metrics.HarmlessnessScore = (double)harmlessCount / total;
         metrics.HonestyScore = (double)honestCount / total;
@@ -104,45 +118,85 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     }
 
     /// <inheritdoc/>
-    public Func<T[], T[]> ApplyConstitutionalPrinciples(Func<T[], T[]> model, string[] principles)
+    public IPredictiveModel<T, Vector<T>, Vector<T>> ApplyConstitutionalPrinciples(IPredictiveModel<T, Vector<T>, Vector<T>> model, string[] principles)
     {
-        // Wrap the model with constitutional AI principles
-        return (input) =>
+        if (model == null)
         {
-            // Generate initial response
-            var initialResponse = model(input);
+            throw new ArgumentNullException(nameof(model));
+        }
 
-            // Critique and revise based on principles
-            for (int i = 0; i < options.CritiqueIterations; i++)
-            {
-                var critique = GenerateCritique(initialResponse, principles);
-                initialResponse = ReviseBasedOnCritique(model, input, initialResponse, critique);
-            }
+        if (principles == null)
+        {
+            throw new ArgumentNullException(nameof(principles));
+        }
 
-            return initialResponse;
-        };
+        // Wrap the model with constitutional AI principles
+        return new ConstitutionalPredictiveModel(model, this, principles);
     }
 
     /// <inheritdoc/>
-    public RedTeamingResults<T> PerformRedTeaming(Func<T[], T[]> model, T[][] adversarialPrompts)
+    public RedTeamingResults<T> PerformRedTeaming(IPredictiveModel<T, Vector<T>, Vector<T>> model, Matrix<T> adversarialPrompts)
     {
+        if (model == null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
+        if (adversarialPrompts == null)
+        {
+            throw new ArgumentNullException(nameof(adversarialPrompts));
+        }
+
+        if (adversarialPrompts.Rows == 0)
+        {
+            return new RedTeamingResults<T>
+            {
+                AdversarialPrompts = adversarialPrompts,
+                ModelResponses = Matrix<T>.Empty(),
+                SuccessfulAttacks = Array.Empty<bool>(),
+                SeverityScores = Array.Empty<double>(),
+                VulnerabilityTypes = Array.Empty<string>(),
+                Vulnerabilities = new List<VulnerabilityReport>(),
+                SuccessRate = 0.0,
+                AverageSeverity = 0.0
+            };
+        }
+
+        var firstResponse = model.Predict(adversarialPrompts.GetRow(0));
+        var responseLength = firstResponse.Length;
+        var modelResponses = new Matrix<T>(adversarialPrompts.Rows, responseLength);
+        modelResponses.SetRow(0, firstResponse);
+
         var results = new RedTeamingResults<T>
         {
             AdversarialPrompts = adversarialPrompts,
-            ModelResponses = new T[adversarialPrompts.Length][],
-            SuccessfulAttacks = new bool[adversarialPrompts.Length],
-            SeverityScores = new double[adversarialPrompts.Length],
-            VulnerabilityTypes = new string[adversarialPrompts.Length],
+            ModelResponses = modelResponses,
+            SuccessfulAttacks = new bool[adversarialPrompts.Rows],
+            SeverityScores = new double[adversarialPrompts.Rows],
+            VulnerabilityTypes = new string[adversarialPrompts.Rows],
             Vulnerabilities = new List<VulnerabilityReport>()
         };
 
         int successfulAttacks = 0;
         double totalSeverity = 0.0;
 
-        for (int i = 0; i < adversarialPrompts.Length; i++)
+        for (int i = 0; i < adversarialPrompts.Rows; i++)
         {
-            var response = model(adversarialPrompts[i]);
-            results.ModelResponses[i] = response;
+            Vector<T> response;
+            if (i == 0)
+            {
+                response = firstResponse;
+            }
+            else
+            {
+                response = model.Predict(adversarialPrompts.GetRow(i));
+                if (response.Length != responseLength)
+                {
+                    throw new InvalidOperationException("Model output length must be consistent across prompts.");
+                }
+
+                modelResponses.SetRow(i, response);
+            }
 
             // Analyze response for misalignment
             var (isVulnerable, severity, vulnType) = AnalyzeResponseForVulnerability(response);
@@ -161,7 +215,7 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
                     Type = vulnType,
                     Severity = severity,
                     Description = $"Model showed misaligned behavior of type: {vulnType}",
-                    ExamplePrompt = ConvertToString(adversarialPrompts[i]),
+                    ExamplePrompt = ConvertToString(adversarialPrompts.GetRow(i)),
                     ProblematicResponse = ConvertToString(response),
                     Recommendations = new[]
                     {
@@ -173,7 +227,7 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
             }
         }
 
-        results.SuccessRate = (double)successfulAttacks / adversarialPrompts.Length;
+        results.SuccessRate = (double)successfulAttacks / adversarialPrompts.Rows;
         results.AverageSeverity = successfulAttacks > 0 ? totalSeverity / successfulAttacks : 0.0;
 
         return results;
@@ -188,12 +242,21 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     /// <inheritdoc/>
     public byte[] Serialize()
     {
-        var json = System.Text.Json.JsonSerializer.Serialize(options);
-        return System.Text.Encoding.UTF8.GetBytes(json);
+        var json = JsonConvert.SerializeObject(options, Formatting.None);
+        return Encoding.UTF8.GetBytes(json);
     }
 
     /// <inheritdoc/>
-    public void Deserialize(byte[] data) { }
+    public void Deserialize(byte[] data)
+    {
+        if (data == null)
+        {
+            throw new ArgumentNullException(nameof(data));
+        }
+
+        var json = Encoding.UTF8.GetString(data);
+        options = JsonConvert.DeserializeObject<AlignmentMethodOptions<T>>(json) ?? new AlignmentMethodOptions<T>();
+    }
 
     /// <inheritdoc/>
     public void SaveModel(string filePath)
@@ -207,7 +270,7 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         Deserialize(File.ReadAllBytes(filePath));
     }
 
-    private Func<T[], T[], double> TrainRewardModel(AlignmentFeedbackData<T> feedbackData)
+    private Func<Vector<T>, Vector<T>, double> TrainRewardModel(AlignmentFeedbackData<T> feedbackData)
     {
         // Train a reward model from human preference comparisons
         // This is a simplified placeholder - real implementation would use neural networks
@@ -228,52 +291,40 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         };
     }
 
-    private Func<T[], T[]> FinetuneWithRL(Func<T[], T[]> baseModel, AlignmentFeedbackData<T> feedbackData, Func<T[], T[], double> rewardModelFunc)
+    private IPredictiveModel<T, Vector<T>, Vector<T>> FinetuneWithRL(IPredictiveModel<T, Vector<T>, Vector<T>> baseModel, AlignmentFeedbackData<T> feedbackData, Func<Vector<T>, Vector<T>, double> rewardModelFunc)
     {
-        // Simplified PPO-like fine-tuning
-        // Real implementation would integrate with a RL framework
-
-        return (input) =>
-        {
-            var output = baseModel(input);
-
-            // Apply KL penalty to stay close to base model
-            _ = options.KLCoefficient;
-
-            // Adjust output based on reward (simplified)
-            for (int i = 0; i < output.Length; i++)
-            {
-                var reward = rewardModelFunc(input, output);
-                var adjustment = NumOps.FromDouble(reward * 0.1); // Small adjustment
-                output[i] = Clip01(NumOps.Add(output[i], adjustment));
-            }
-
-            return output;
-        };
+        // Simplified PPO-like fine-tuning.
+        // Real implementation would integrate with a RL framework.
+        _ = feedbackData;
+        return new RlhfFineTunedPredictiveModel(baseModel, rewardModelFunc, options.KLCoefficient);
     }
 
-    private string GenerateCritique(T[] response, string[] principles)
+    private static string GenerateCritique(Vector<T> response, string[] principles)
     {
         // Generate critique based on constitutional principles
         // Simplified version - real implementation would use language models
+        _ = response;
         return $"Response evaluated against {principles.Length} constitutional principles";
     }
 
-    private T[] ReviseBasedOnCritique(Func<T[], T[]> model, T[] input, T[] response, string critique)
+    private static Vector<T> ReviseBasedOnCritique(IPredictiveModel<T, Vector<T>, Vector<T>> model, Vector<T> input, Vector<T> response, string critique)
     {
         // Revise response based on critique
         // Simplified version - real implementation would regenerate with critique context
+        _ = model;
+        _ = input;
+        _ = critique;
         return response;
     }
 
-    private bool IsHelpful(T[] output, T[] expected)
+    private bool IsHelpful(Vector<T> output, Vector<T> expected)
     {
         // Simplified helpfulness check
         var similarity = ComputeCosineSimilarity(output, expected);
         return similarity > 0.5;
     }
 
-    private bool IsHarmless(T[] output)
+    private bool IsHarmless(Vector<T> output)
     {
         // Check for harmful patterns (simplified)
         double maxValue = double.NegativeInfinity;
@@ -287,13 +338,15 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         return (maxValue - minValue) < 0.9; // Heuristic for extremity
     }
 
-    private bool IsHonest(T[] output, T[] input)
+    private bool IsHonest(Vector<T> output, Vector<T> input)
     {
         // Simplified honesty check
+        _ = output;
+        _ = input;
         return true; // Placeholder
     }
 
-    private (bool isVulnerable, double severity, string type) AnalyzeResponseForVulnerability(T[] response)
+    private (bool isVulnerable, double severity, string type) AnalyzeResponseForVulnerability(Vector<T> response)
     {
         // Analyze response for potential misalignment
         double sum = 0.0;
@@ -324,7 +377,7 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         return (false, 0.0, "None");
     }
 
-    private double ComputeCosineSimilarity(T[] a, T[] b)
+    private double ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
     {
         if (a.Length != b.Length) return 0.0;
 
@@ -344,19 +397,138 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         return dotProduct / (Math.Sqrt(normA) * Math.Sqrt(normB) + 1e-10);
     }
 
-    private string ConvertToString(T[] data)
+    private static string ConvertToString(Vector<T> data)
     {
         if (data == null || data.Length == 0)
             return string.Empty;
 
-        return string.Join(",", data.Select(x => x is null ? "" : (x.ToString() ?? "")));
+        var builder = new StringBuilder();
+        for (int i = 0; i < data.Length; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append(',');
+            }
+
+            object? value = data[i];
+            builder.Append(value?.ToString() ?? string.Empty);
+        }
+
+        return builder.ToString();
     }
 
     private static T Clip01(T value)
     {
-        if (NumOps.LessThan(value, NumOps.Zero)) return NumOps.Zero;
-        if (NumOps.GreaterThan(value, NumOps.One)) return NumOps.One;
-        return value;
+        return MathHelper.Clamp(value, NumOps.Zero, NumOps.One);
+    }
+
+    private sealed class RlhfFineTunedPredictiveModel : IPredictiveModel<T, Vector<T>, Vector<T>>
+    {
+        private readonly IPredictiveModel<T, Vector<T>, Vector<T>> _baseModel;
+        private readonly Func<Vector<T>, Vector<T>, double> _rewardModel;
+        private readonly double _klCoefficient;
+
+        public RlhfFineTunedPredictiveModel(IPredictiveModel<T, Vector<T>, Vector<T>> baseModel, Func<Vector<T>, Vector<T>, double> rewardModel, double klCoefficient)
+        {
+            _baseModel = baseModel ?? throw new ArgumentNullException(nameof(baseModel));
+            _rewardModel = rewardModel ?? throw new ArgumentNullException(nameof(rewardModel));
+            _klCoefficient = klCoefficient;
+        }
+
+        public Vector<T> Predict(Vector<T> input)
+        {
+            var output = _baseModel.Predict(input);
+
+            // Apply KL penalty to stay close to base model (placeholder, kept for future integration).
+            _ = _klCoefficient;
+
+            var reward = _rewardModel(input, output);
+            var adjusted = new Vector<T>(output.Length);
+            var adjustment = NumOps.FromDouble(reward * 0.1);
+
+            for (int i = 0; i < output.Length; i++)
+            {
+                adjusted[i] = Clip01(NumOps.Add(output[i], adjustment));
+            }
+
+            return adjusted;
+        }
+
+        public ModelMetadata<T> GetModelMetadata()
+        {
+            return _baseModel.GetModelMetadata();
+        }
+
+        public byte[] Serialize()
+        {
+            return _baseModel.Serialize();
+        }
+
+        public void Deserialize(byte[] data)
+        {
+            _baseModel.Deserialize(data);
+        }
+
+        public void SaveModel(string filePath)
+        {
+            _baseModel.SaveModel(filePath);
+        }
+
+        public void LoadModel(string filePath)
+        {
+            _baseModel.LoadModel(filePath);
+        }
+    }
+
+    private sealed class ConstitutionalPredictiveModel : IPredictiveModel<T, Vector<T>, Vector<T>>
+    {
+        private readonly IPredictiveModel<T, Vector<T>, Vector<T>> _inner;
+        private readonly RLHFAlignment<T> _alignment;
+        private readonly string[] _principles;
+
+        public ConstitutionalPredictiveModel(IPredictiveModel<T, Vector<T>, Vector<T>> inner, RLHFAlignment<T> alignment, string[] principles)
+        {
+            _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+            _alignment = alignment ?? throw new ArgumentNullException(nameof(alignment));
+            _principles = principles ?? throw new ArgumentNullException(nameof(principles));
+        }
+
+        public Vector<T> Predict(Vector<T> input)
+        {
+            var response = _inner.Predict(input);
+            for (int i = 0; i < _alignment.options.CritiqueIterations; i++)
+            {
+                var critique = GenerateCritique(response, _principles);
+                response = ReviseBasedOnCritique(_inner, input, response, critique);
+            }
+
+            return response;
+        }
+
+        public ModelMetadata<T> GetModelMetadata()
+        {
+            return _inner.GetModelMetadata();
+        }
+
+        public byte[] Serialize()
+        {
+            return _inner.Serialize();
+        }
+
+        public void Deserialize(byte[] data)
+        {
+            _inner.Deserialize(data);
+        }
+
+        public void SaveModel(string filePath)
+        {
+            _inner.SaveModel(filePath);
+        }
+
+        public void LoadModel(string filePath)
+        {
+            _inner.LoadModel(filePath);
+        }
     }
 
 }

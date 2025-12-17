@@ -1,4 +1,7 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AdversarialRobustness.Attacks;
 
@@ -53,15 +56,25 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
     /// <param name="trueLabel">The correct label for the input.</param>
     /// <param name="targetModel">The model to attack.</param>
     /// <returns>The adversarial example.</returns>
-    public override T[] GenerateAdversarialExample(T[] input, int trueLabel, Func<T[], T[]> targetModel)
+    public override Vector<T> GenerateAdversarialExample(Vector<T> input, int trueLabel, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
     {
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        if (targetModel == null)
+        {
+            throw new ArgumentNullException(nameof(targetModel));
+        }
+
         var epsilon = NumOps.FromDouble(Options.Epsilon);
         var stepSize = NumOps.FromDouble(Options.StepSize);
 
         // Initialize adversarial example
         var adversarial = Options.UseRandomStart
             ? RandomStartingPoint(input, epsilon)
-            : (T[])input.Clone();
+            : CloneInput(input);
 
         // Perform iterative PGD steps
         for (int iteration = 0; iteration < Options.Iterations; iteration++)
@@ -82,19 +95,29 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
             // Clip to valid range
             for (int i = 0; i < adversarial.Length; i++)
             {
-                adversarial[i] = Clip(adversarial[i], NumOps.Zero, NumOps.One);
+                adversarial[i] = MathHelper.Clamp(adversarial[i], NumOps.Zero, NumOps.One);
             }
         }
 
         return adversarial;
     }
 
+    private static Vector<T> CloneInput(Vector<T> input)
+    {
+        var clone = new Vector<T>(input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            clone[i] = input[i];
+        }
+        return clone;
+    }
+
     /// <summary>
     /// Generates a random starting point within the epsilon-ball.
     /// </summary>
-    private T[] RandomStartingPoint(T[] input, T epsilon)
+    private Vector<T> RandomStartingPoint(Vector<T> input, T epsilon)
     {
-        var randomStart = new T[input.Length];
+        var randomStart = new Vector<T>(input.Length);
 
         for (int i = 0; i < input.Length; i++)
         {
@@ -103,7 +126,7 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
             var perturbation = NumOps.Multiply(epsilon, randomValue);
 
             randomStart[i] = NumOps.Add(input[i], perturbation);
-            randomStart[i] = Clip(randomStart[i], NumOps.Zero, NumOps.One);
+            randomStart[i] = MathHelper.Clamp(randomStart[i], NumOps.Zero, NumOps.One);
         }
 
         return randomStart;
@@ -112,10 +135,10 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
     /// <summary>
     /// Projects the adversarial example back into the epsilon-ball around the original input.
     /// </summary>
-    private T[] ProjectToEpsilonBall(T[] adversarial, T[] original, T epsilon)
+    private Vector<T> ProjectToEpsilonBall(Vector<T> adversarial, Vector<T> original, T epsilon)
     {
-        var projected = new T[adversarial.Length];
-        var perturbation = new T[adversarial.Length];
+        var projected = new Vector<T>(adversarial.Length);
+        var perturbation = new Vector<T>(adversarial.Length);
 
         // Compute current perturbation
         for (int i = 0; i < adversarial.Length; i++)
@@ -140,20 +163,20 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
     /// <summary>
     /// Computes an approximation of the gradient using finite differences.
     /// </summary>
-    private T[] ComputeGradient(T[] input, int trueLabel, Func<T[], T[]> targetModel)
+    private Vector<T> ComputeGradient(Vector<T> input, int trueLabel, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
     {
-        var gradient = new T[input.Length];
+        var gradient = new Vector<T>(input.Length);
         var delta = NumOps.FromDouble(0.001);
 
-        var originalOutput = targetModel(input);
+        var originalOutput = targetModel.Predict(input);
         var originalLoss = ComputeLoss(originalOutput, Options.IsTargeted ? Options.TargetClass : trueLabel);
 
         for (int i = 0; i < input.Length; i++)
         {
-            var perturbedInput = (T[])input.Clone();
+            var perturbedInput = CloneInput(input);
             perturbedInput[i] = NumOps.Add(perturbedInput[i], delta);
 
-            var perturbedOutput = targetModel(perturbedInput);
+            var perturbedOutput = targetModel.Predict(perturbedInput);
             var perturbedLoss = ComputeLoss(perturbedOutput, Options.IsTargeted ? Options.TargetClass : trueLabel);
 
             gradient[i] = NumOps.Divide(NumOps.Subtract(perturbedLoss, originalLoss), delta);
@@ -165,7 +188,7 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
     /// <summary>
     /// Computes the cross-entropy loss.
     /// </summary>
-    private T ComputeLoss(T[] output, int targetClass)
+    private T ComputeLoss(Vector<T> output, int targetClass)
     {
         var probabilities = Softmax(output);
 
@@ -181,9 +204,9 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
     /// <summary>
     /// Applies the softmax function.
     /// </summary>
-    private T[] Softmax(T[] logits)
+    private Vector<T> Softmax(Vector<T> logits)
     {
-        var probabilities = new T[logits.Length];
+        var probabilities = new Vector<T>(logits.Length);
         double maxLogit = NumOps.ToDouble(logits[0]);
 
         for (int i = 1; i < logits.Length; i++)

@@ -1,5 +1,7 @@
 namespace AiDotNet.Models;
 
+using AiDotNet.Tensors.LinearAlgebra;
+
 /// <summary>
 /// Contains human feedback data for AI alignment.
 /// </summary>
@@ -9,12 +11,12 @@ public class AlignmentFeedbackData<T>
     /// <summary>
     /// Gets or sets the input prompts or examples.
     /// </summary>
-    public T[][] Inputs { get; set; } = Array.Empty<T[]>();
+    public Matrix<T> Inputs { get; set; } = Matrix<T>.Empty();
 
     /// <summary>
     /// Gets or sets the model outputs for each input.
     /// </summary>
-    public T[][] Outputs { get; set; } = Array.Empty<T[]>();
+    public Matrix<T> Outputs { get; set; } = Matrix<T>.Empty();
 
     /// <summary>
     /// Gets or sets human preference comparisons.

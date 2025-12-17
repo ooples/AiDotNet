@@ -1,5 +1,7 @@
 namespace AiDotNet.Models;
 
+using AiDotNet.Tensors.LinearAlgebra;
+
 /// <summary>
 /// Result of safety validation for an input.
 /// </summary>
@@ -34,7 +36,7 @@ public class SafetyValidationResult<T>
     /// <summary>
     /// Gets or sets the sanitized/cleaned input (if applicable).
     /// </summary>
-    public T[]? SanitizedInput { get; set; }
+    public Vector<T>? SanitizedInput { get; set; }
 
     /// <summary>
     /// Gets or sets additional validation details.

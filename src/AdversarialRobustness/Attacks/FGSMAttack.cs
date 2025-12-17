@@ -1,4 +1,7 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AdversarialRobustness.Attacks;
 
@@ -46,15 +49,25 @@ public class FGSMAttack<T> : AdversarialAttackBase<T>
     /// <param name="trueLabel">The correct label for the input.</param>
     /// <param name="targetModel">The model to attack.</param>
     /// <returns>The adversarial example.</returns>
-    public override T[] GenerateAdversarialExample(T[] input, int trueLabel, Func<T[], T[]> targetModel)
+    public override Vector<T> GenerateAdversarialExample(Vector<T> input, int trueLabel, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
     {
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        if (targetModel == null)
+        {
+            throw new ArgumentNullException(nameof(targetModel));
+        }
+
         var epsilon = NumOps.FromDouble(Options.Epsilon);
 
         // Compute gradient approximation using finite differences
         var gradient = ComputeGradient(input, trueLabel, targetModel);
 
         // Apply FGSM perturbation
-        var adversarial = new T[input.Length];
+        var adversarial = new Vector<T>(input.Length);
         for (int i = 0; i < input.Length; i++)
         {
             var perturbation = NumOps.Multiply(epsilon, Sign(gradient[i]));
@@ -63,7 +76,7 @@ public class FGSMAttack<T> : AdversarialAttackBase<T>
             adversarial[i] = NumOps.Add(input[i], Options.IsTargeted ? NumOps.Negate(perturbation) : perturbation);
 
             // Clip to valid range (typically [0, 1] for images)
-            adversarial[i] = Clip(adversarial[i], NumOps.Zero, NumOps.One);
+            adversarial[i] = MathHelper.Clamp(adversarial[i], NumOps.Zero, NumOps.One);
         }
 
         return adversarial;
@@ -78,24 +91,28 @@ public class FGSMAttack<T> : AdversarialAttackBase<T>
     /// model's output changes. This is like testing the slope of a hill by taking tiny
     /// steps in each direction.</para>
     /// </remarks>
-    private T[] ComputeGradient(T[] input, int trueLabel, Func<T[], T[]> targetModel)
+    private Vector<T> ComputeGradient(Vector<T> input, int trueLabel, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
     {
-        var gradient = new T[input.Length];
+        var gradient = new Vector<T>(input.Length);
         var delta = NumOps.FromDouble(0.001); // Small perturbation for finite differences
 
         // Get the original prediction
-        var originalOutput = targetModel(input);
+        var originalOutput = targetModel.Predict(input);
         var originalLoss = ComputeLoss(originalOutput, trueLabel);
 
         // Compute gradient for each dimension
         for (int i = 0; i < input.Length; i++)
         {
             // Perturb the input slightly in dimension i
-            var perturbedInput = (T[])input.Clone();
+            var perturbedInput = new Vector<T>(input.Length);
+            for (int j = 0; j < input.Length; j++)
+            {
+                perturbedInput[j] = input[j];
+            }
             perturbedInput[i] = NumOps.Add(perturbedInput[i], delta);
 
             // Compute the loss with the perturbed input
-            var perturbedOutput = targetModel(perturbedInput);
+            var perturbedOutput = targetModel.Predict(perturbedInput);
             var perturbedLoss = ComputeLoss(perturbedOutput, Options.IsTargeted ? Options.TargetClass : trueLabel);
 
             // Approximate gradient using finite difference
@@ -112,7 +129,7 @@ public class FGSMAttack<T> : AdversarialAttackBase<T>
     /// <para><b>For Beginners:</b> Loss measures how wrong the model's prediction is.
     /// Higher loss means the model is more confused. We use this to guide our attack.</para>
     /// </remarks>
-    private T ComputeLoss(T[] output, int targetClass)
+    private T ComputeLoss(Vector<T> output, int targetClass)
     {
         // Apply softmax to get probabilities
         var probabilities = Softmax(output);
@@ -130,9 +147,9 @@ public class FGSMAttack<T> : AdversarialAttackBase<T>
     /// <summary>
     /// Applies the softmax function to convert logits to probabilities.
     /// </summary>
-    private T[] Softmax(T[] logits)
+    private Vector<T> Softmax(Vector<T> logits)
     {
-        var probabilities = new T[logits.Length];
+        var probabilities = new Vector<T>(logits.Length);
         double maxLogit = NumOps.ToDouble(logits[0]);
 
         // Find max for numerical stability

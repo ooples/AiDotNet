@@ -1,5 +1,8 @@
 namespace AiDotNet.Interfaces;
 
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
+
 /// <summary>
 /// Defines the contract for adversarial attack algorithms that generate adversarial examples.
 /// </summary>
@@ -44,9 +47,9 @@ public interface IAdversarialAttack<T> : IModelSerializer
     /// </remarks>
     /// <param name="input">The clean input data to be perturbed.</param>
     /// <param name="trueLabel">The correct label for the input.</param>
-    /// <param name="targetModel">A function representing the model to attack.</param>
+    /// <param name="targetModel">The model to attack.</param>
     /// <returns>The generated adversarial example.</returns>
-    T[] GenerateAdversarialExample(T[] input, int trueLabel, Func<T[], T[]> targetModel);
+    Vector<T> GenerateAdversarialExample(Vector<T> input, int trueLabel, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel);
 
     /// <summary>
     /// Generates a batch of adversarial examples from multiple clean inputs.
@@ -58,9 +61,9 @@ public interface IAdversarialAttack<T> : IModelSerializer
     /// </remarks>
     /// <param name="inputs">The batch of clean input data.</param>
     /// <param name="trueLabels">The correct labels for each input.</param>
-    /// <param name="targetModel">A function representing the model to attack.</param>
+    /// <param name="targetModel">The model to attack.</param>
     /// <returns>The batch of generated adversarial examples.</returns>
-    T[][] GenerateAdversarialBatch(T[][] inputs, int[] trueLabels, Func<T[], T[]> targetModel);
+    Matrix<T> GenerateAdversarialBatch(Matrix<T> inputs, Vector<int> trueLabels, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel);
 
     /// <summary>
     /// Calculates the perturbation added to create an adversarial example.
@@ -73,7 +76,7 @@ public interface IAdversarialAttack<T> : IModelSerializer
     /// <param name="original">The original clean input.</param>
     /// <param name="adversarial">The generated adversarial example.</param>
     /// <returns>The perturbation vector (difference between adversarial and original).</returns>
-    T[] CalculatePerturbation(T[] original, T[] adversarial);
+    Vector<T> CalculatePerturbation(Vector<T> original, Vector<T> adversarial);
 
     /// <summary>
     /// Gets the configuration options for the adversarial attack.

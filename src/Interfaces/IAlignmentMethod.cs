@@ -1,5 +1,8 @@
 namespace AiDotNet.Interfaces;
 
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
+
 /// <summary>
 /// Defines the contract for AI alignment methods that ensure models behave according to human values and intentions.
 /// </summary>
@@ -45,7 +48,7 @@ public interface IAlignmentMethod<T> : IModelSerializer
     /// <param name="baseModel">The initial model to align.</param>
     /// <param name="feedbackData">Human feedback or preference data.</param>
     /// <returns>An aligned model that better matches human preferences.</returns>
-    Func<T[], T[]> AlignModel(Func<T[], T[]> baseModel, AlignmentFeedbackData<T> feedbackData);
+    IPredictiveModel<T, Vector<T>, Vector<T>> AlignModel(IPredictiveModel<T, Vector<T>, Vector<T>> baseModel, AlignmentFeedbackData<T> feedbackData);
 
     /// <summary>
     /// Evaluates how well a model is aligned with human values.
@@ -57,7 +60,7 @@ public interface IAlignmentMethod<T> : IModelSerializer
     /// <param name="model">The model to evaluate.</param>
     /// <param name="evaluationData">Test cases for alignment evaluation.</param>
     /// <returns>Alignment metrics including helpfulness, harmlessness, and honesty scores.</returns>
-    AlignmentMetrics<T> EvaluateAlignment(Func<T[], T[]> model, AlignmentEvaluationData<T> evaluationData);
+    AlignmentMetrics<T> EvaluateAlignment(IPredictiveModel<T, Vector<T>, Vector<T>> model, AlignmentEvaluationData<T> evaluationData);
 
     /// <summary>
     /// Applies constitutional principles to guide model behavior.
@@ -75,7 +78,7 @@ public interface IAlignmentMethod<T> : IModelSerializer
     /// <param name="model">The model to apply constitutional principles to.</param>
     /// <param name="principles">The constitutional principles to follow.</param>
     /// <returns>A model that follows the specified principles.</returns>
-    Func<T[], T[]> ApplyConstitutionalPrinciples(Func<T[], T[]> model, string[] principles);
+    IPredictiveModel<T, Vector<T>, Vector<T>> ApplyConstitutionalPrinciples(IPredictiveModel<T, Vector<T>, Vector<T>> model, string[] principles);
 
     /// <summary>
     /// Performs red teaming to identify potential misalignment or harmful behaviors.
@@ -94,7 +97,7 @@ public interface IAlignmentMethod<T> : IModelSerializer
     /// <param name="model">The model to red team.</param>
     /// <param name="adversarialPrompts">Test prompts designed to elicit misaligned behavior.</param>
     /// <returns>Red teaming results identifying vulnerabilities and failure modes.</returns>
-    RedTeamingResults<T> PerformRedTeaming(Func<T[], T[]> model, T[][] adversarialPrompts);
+    RedTeamingResults<T> PerformRedTeaming(IPredictiveModel<T, Vector<T>, Vector<T>> model, Matrix<T> adversarialPrompts);
 
     /// <summary>
     /// Gets the configuration options for the alignment method.

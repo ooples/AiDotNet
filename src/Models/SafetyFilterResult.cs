@@ -1,5 +1,7 @@
 namespace AiDotNet.Models;
 
+using AiDotNet.Tensors.LinearAlgebra;
+
 /// <summary>
 /// Result of safety filtering on model output.
 /// </summary>
@@ -19,7 +21,7 @@ public class SafetyFilterResult<T>
     /// <summary>
     /// Gets or sets the filtered/sanitized output.
     /// </summary>
-    public T[] FilteredOutput { get; set; } = Array.Empty<T>();
+    public Vector<T> FilteredOutput { get; set; } = Vector<T>.Empty();
 
     /// <summary>
     /// Gets or sets whether the output was modified during filtering.

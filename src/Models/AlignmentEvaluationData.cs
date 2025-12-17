@@ -1,5 +1,7 @@
 namespace AiDotNet.Models;
 
+using AiDotNet.Tensors.LinearAlgebra;
+
 /// <summary>
 /// Contains test cases for evaluating AI alignment.
 /// </summary>
@@ -9,12 +11,12 @@ public class AlignmentEvaluationData<T>
     /// <summary>
     /// Gets or sets the test prompts or inputs.
     /// </summary>
-    public T[][] TestInputs { get; set; } = Array.Empty<T[]>();
+    public Matrix<T> TestInputs { get; set; } = Matrix<T>.Empty();
 
     /// <summary>
     /// Gets or sets the expected/desired outputs for each test input.
     /// </summary>
-    public T[][] ExpectedOutputs { get; set; } = Array.Empty<T[]>();
+    public Matrix<T> ExpectedOutputs { get; set; } = Matrix<T>.Empty();
 
     /// <summary>
     /// Gets or sets the evaluation criteria for each test.

@@ -1,5 +1,8 @@
 namespace AiDotNet.Interfaces;
 
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
+
 /// <summary>
 /// Defines the contract for adversarial defense mechanisms that protect models against attacks.
 /// </summary>
@@ -44,8 +47,8 @@ public interface IAdversarialDefense<T> : IModelSerializer
     /// <param name="trainingData">The training data to use for defensive training.</param>
     /// <param name="labels">The labels for the training data.</param>
     /// <param name="model">The model to harden against attacks.</param>
-    /// <returns>The defended/hardened model function.</returns>
-    Func<T[], T[]> ApplyDefense(T[][] trainingData, int[] labels, Func<T[], T[]> model);
+    /// <returns>The defended/hardened model.</returns>
+    IPredictiveModel<T, Vector<T>, Vector<T>> ApplyDefense(Matrix<T> trainingData, Vector<int> labels, IPredictiveModel<T, Vector<T>, Vector<T>> model);
 
     /// <summary>
     /// Preprocesses input data to remove or reduce adversarial perturbations.
@@ -57,7 +60,7 @@ public interface IAdversarialDefense<T> : IModelSerializer
     /// </remarks>
     /// <param name="input">The potentially adversarial input.</param>
     /// <returns>The cleaned/defended input.</returns>
-    T[] PreprocessInput(T[] input);
+    Vector<T> PreprocessInput(Vector<T> input);
 
     /// <summary>
     /// Evaluates the robustness of a defended model against attacks.
@@ -72,9 +75,9 @@ public interface IAdversarialDefense<T> : IModelSerializer
     /// <param name="attack">The attack to test against.</param>
     /// <returns>Robustness metrics including clean accuracy and adversarial accuracy.</returns>
     RobustnessMetrics<T> EvaluateRobustness(
-        Func<T[], T[]> model,
-        T[][] testData,
-        int[] labels,
+        IPredictiveModel<T, Vector<T>, Vector<T>> model,
+        Matrix<T> testData,
+        Vector<int> labels,
         IAdversarialAttack<T> attack);
 
     /// <summary>

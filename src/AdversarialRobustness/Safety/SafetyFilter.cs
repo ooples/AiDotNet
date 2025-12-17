@@ -3,7 +3,9 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
+using System.Text;
 
 namespace AiDotNet.AdversarialRobustness.Safety;
 
@@ -25,7 +27,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    private readonly SafetyFilterOptions<T> options;
+    private SafetyFilterOptions<T> options;
     private readonly List<string> jailbreakPatterns;
     private readonly Dictionary<string, List<string>> harmfulContentPatterns;
 
@@ -35,7 +37,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     /// <param name="options">The safety filter configuration options.</param>
     public SafetyFilter(SafetyFilterOptions<T> options)
     {
-        this.options = options;
+        this.options = options ?? throw new ArgumentNullException(nameof(options));
 
         // Initialize jailbreak detection patterns
         jailbreakPatterns = new List<string>
@@ -57,7 +59,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 
         foreach (var category in options.HarmfulContentCategories)
         {
-            harmfulContentPatterns[category] = category.ToLower() switch
+            harmfulContentPatterns[category] = category.ToLowerInvariant() switch
             {
                 "violence" => new List<string> { @"kill", @"harm", @"weapon", @"attack", @"destroy" },
                 "hatespeech" => new List<string> { @"hate", @"discriminat", @"racist", @"sexist" },
@@ -70,8 +72,13 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     }
 
     /// <inheritdoc/>
-    public SafetyValidationResult<T> ValidateInput(T[] input)
+    public SafetyValidationResult<T> ValidateInput(Vector<T> input)
     {
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
         var result = new SafetyValidationResult<T>
         {
             IsValid = true,
@@ -162,13 +169,18 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     }
 
     /// <inheritdoc/>
-    public SafetyFilterResult<T> FilterOutput(T[] output)
+    public SafetyFilterResult<T> FilterOutput(Vector<T> output)
     {
+        if (output == null)
+        {
+            throw new ArgumentNullException(nameof(output));
+        }
+
         var result = new SafetyFilterResult<T>
         {
             IsSafe = true,
             SafetyScore = 1.0,
-            FilteredOutput = (T[])output.Clone(),
+            FilteredOutput = CloneVector(output),
             WasModified = false,
             Actions = new List<FilterAction>()
         };
@@ -194,7 +206,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
                 if (harmfulResult.HarmScore > 0.8)
                 {
                     // Block entire output for severe violations
-                    result.FilteredOutput = Array.Empty<T>();
+                    result.FilteredOutput = Vector<T>.Empty();
                     result.WasModified = true;
                     result.Actions.Add(new FilterAction
                     {
@@ -229,7 +241,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     }
 
     /// <inheritdoc/>
-    public JailbreakDetectionResult<T> DetectJailbreak(T[] input)
+    public JailbreakDetectionResult<T> DetectJailbreak(Vector<T> input)
     {
         var result = new JailbreakDetectionResult<T>
         {
@@ -245,7 +257,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
             return result;
         }
 
-        text = text.ToLower();
+        text = text.ToLowerInvariant();
         var matchedPatterns = 0;
         var totalPatterns = jailbreakPatterns.Count;
 
@@ -277,7 +289,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     }
 
     /// <inheritdoc/>
-    public HarmfulContentResult<T> IdentifyHarmfulContent(T[] content)
+    public HarmfulContentResult<T> IdentifyHarmfulContent(Vector<T> content)
     {
         var result = new HarmfulContentResult<T>
         {
@@ -293,7 +305,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
             return result;
         }
 
-        text = text.ToLower();
+        text = text.ToLowerInvariant();
 
         foreach (var category in options.HarmfulContentCategories)
         {
@@ -352,7 +364,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     }
 
     /// <inheritdoc/>
-    public T ComputeSafetyScore(T[] content)
+    public T ComputeSafetyScore(Vector<T> content)
     {
         var validation = ValidateInput(content);
         var harmfulContent = IdentifyHarmfulContent(content);
@@ -362,7 +374,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
                            (1.0 - harmfulContent.HarmScore) * 0.4 +
                            (1.0 - jailbreak.Severity) * 0.2;
 
-        return NumOps.FromDouble(Math.Max(0.0, Math.Min(1.0, combinedScore)));
+        return NumOps.FromDouble(MathHelper.Clamp(combinedScore, 0.0, 1.0));
     }
 
     /// <inheritdoc/>
@@ -374,12 +386,21 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     /// <inheritdoc/>
     public byte[] Serialize()
     {
-        var json = System.Text.Json.JsonSerializer.Serialize(options);
-        return System.Text.Encoding.UTF8.GetBytes(json);
+        var json = JsonConvert.SerializeObject(options, Formatting.None);
+        return Encoding.UTF8.GetBytes(json);
     }
 
     /// <inheritdoc/>
-    public void Deserialize(byte[] data) { }
+    public void Deserialize(byte[] data)
+    {
+        if (data == null)
+        {
+            throw new ArgumentNullException(nameof(data));
+        }
+
+        var json = Encoding.UTF8.GetString(data);
+        options = JsonConvert.DeserializeObject<SafetyFilterOptions<T>>(json) ?? new SafetyFilterOptions<T>();
+    }
 
     /// <inheritdoc/>
     public void SaveModel(string filePath)
@@ -393,7 +414,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
         Deserialize(File.ReadAllBytes(filePath));
     }
 
-    private string ConvertToText(T[] data)
+    private static string ConvertToText(Vector<T> data)
     {
         // For text data represented as numeric arrays (e.g., token IDs),
         // you would decode to text. For demonstration, we create a simple representation
@@ -401,19 +422,33 @@ public class SafetyFilter<T> : ISafetyFilter<T>
             return string.Empty;
 
         // This is a placeholder - in practice, you'd have proper encoding/decoding.
-        return string.Join(" ", data.Select(x => x is null ? "" : (x.ToString() ?? "")));
+        var builder = new StringBuilder();
+        for (int i = 0; i < data.Length; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append(' ');
+            }
+
+            object? value = data[i];
+            builder.Append(value?.ToString() ?? string.Empty);
+        }
+
+        return builder.ToString();
     }
 
-    private T[] SanitizeOutput(T[] output, HarmfulContentResult<T> harmfulResult)
+    private Vector<T> SanitizeOutput(Vector<T> output, HarmfulContentResult<T> harmfulResult)
     {
         // Simple sanitization - in practice, would be more sophisticated
         // For now, just return a safe default or masked version
-        return (T[])output.Clone(); // Placeholder
+        _ = harmfulResult;
+        return CloneVector(output); // Placeholder
     }
 
-    private void LogFilteredContent(T[] output, SafetyFilterResult<T> result)
+    private void LogFilteredContent(Vector<T> output, SafetyFilterResult<T> result)
     {
         // Log to file or monitoring system
+        _ = output;
         var logEntry = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] " +
                       $"Filtered content - Categories: {string.Join(", ", result.DetectedHarmCategories)} " +
                       $"- Score: {result.SafetyScore:F3}\n";
@@ -431,5 +466,16 @@ public class SafetyFilter<T> : ISafetyFilter<T>
         {
             // Silent fail for logging
         }
+    }
+
+    private static Vector<T> CloneVector(Vector<T> source)
+    {
+        var clone = new Vector<T>(source.Length);
+        for (int i = 0; i < source.Length; i++)
+        {
+            clone[i] = source[i];
+        }
+
+        return clone;
     }
 }

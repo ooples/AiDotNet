@@ -2,7 +2,9 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
+using System.Text;
 
 namespace AiDotNet.AdversarialRobustness.CertifiedRobustness;
 
@@ -28,7 +30,7 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    private readonly CertifiedDefenseOptions<T> options;
+    private CertifiedDefenseOptions<T> options;
     private readonly Random random;
 
     /// <summary>
@@ -37,13 +39,23 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
     /// <param name="options">The certified defense configuration options.</param>
     public RandomizedSmoothing(CertifiedDefenseOptions<T> options)
     {
-        this.options = options;
-        this.random = new Random(42);
+        this.options = options ?? throw new ArgumentNullException(nameof(options));
+        this.random = RandomHelper.CreateSeededRandom(42);
     }
 
     /// <inheritdoc/>
-    public CertifiedPrediction<T> CertifyPrediction(T[] input, Func<T[], T[]> model)
+    public CertifiedPrediction<T> CertifyPrediction(Vector<T> input, IPredictiveModel<T, Vector<T>, Vector<T>> model)
     {
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        if (model == null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
         var sigma = NumOps.FromDouble(options.NoiseSigma);
 
         // Sample predictions with Gaussian noise
@@ -52,7 +64,7 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
         for (int i = 0; i < options.NumSamples; i++)
         {
             var noisyInput = AddGaussianNoise(input, sigma);
-            var output = model(noisyInput);
+            var output = model.Predict(noisyInput);
             var sampledClass = ArgMax(output);
 
             if (!classCounts.ContainsKey(sampledClass))
@@ -96,18 +108,24 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
     }
 
     /// <inheritdoc/>
-    public CertifiedPrediction<T>[] CertifyBatch(T[][] inputs, Func<T[], T[]> model)
+    public CertifiedPrediction<T>[] CertifyBatch(Matrix<T> inputs, IPredictiveModel<T, Vector<T>, Vector<T>> model)
     {
-        var results = new CertifiedPrediction<T>[inputs.Length];
-        for (int i = 0; i < inputs.Length; i++)
+        if (inputs == null)
         {
-            results[i] = CertifyPrediction(inputs[i], model);
+            throw new ArgumentNullException(nameof(inputs));
         }
+
+        var results = new CertifiedPrediction<T>[inputs.Rows];
+        for (int i = 0; i < inputs.Rows; i++)
+        {
+            results[i] = CertifyPrediction(inputs.GetRow(i), model);
+        }
+
         return results;
     }
 
     /// <inheritdoc/>
-    public T ComputeCertifiedRadius(T[] input, Func<T[], T[]> model)
+    public T ComputeCertifiedRadius(Vector<T> input, IPredictiveModel<T, Vector<T>, Vector<T>> model)
     {
         var prediction = CertifyPrediction(input, model);
         return prediction.CertifiedRadius;
@@ -115,30 +133,53 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
 
     /// <inheritdoc/>
     public CertifiedAccuracyMetrics<T> EvaluateCertifiedAccuracy(
-        T[][] testData,
-        int[] labels,
-        Func<T[], T[]> model,
+        Matrix<T> testData,
+        Vector<int> labels,
+        IPredictiveModel<T, Vector<T>, Vector<T>> model,
         T radius)
     {
+        if (testData == null)
+        {
+            throw new ArgumentNullException(nameof(testData));
+        }
+
+        if (labels == null)
+        {
+            throw new ArgumentNullException(nameof(labels));
+        }
+
+        if (model == null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
+        if (testData.Rows != labels.Length)
+        {
+            throw new ArgumentException("Number of labels must match number of test rows.", nameof(labels));
+        }
+
         var metrics = new CertifiedAccuracyMetrics<T>();
         int cleanCorrect = 0;
         int certified = 0;
         var certifiedRadii = new List<double>();
 
-        for (int i = 0; i < testData.Length; i++)
+        for (int i = 0; i < testData.Rows; i++)
         {
+            var input = testData.GetRow(i);
+            var label = labels[i];
+
             // Clean accuracy
-            var cleanOutput = model(testData[i]);
+            var cleanOutput = model.Predict(input);
             var cleanPrediction = ArgMax(cleanOutput);
-            if (cleanPrediction == labels[i])
+            if (cleanPrediction == label)
             {
                 cleanCorrect++;
             }
 
             // Certified prediction
-            var certResult = CertifyPrediction(testData[i], model);
+            var certResult = CertifyPrediction(input, model);
 
-            if (certResult.PredictedClass == labels[i] && NumOps.GreaterThanOrEquals(certResult.CertifiedRadius, radius))
+            if (certResult.PredictedClass == label && NumOps.GreaterThanOrEquals(certResult.CertifiedRadius, radius))
             {
                 certified++;
             }
@@ -149,10 +190,10 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
             }
         }
 
-        metrics.CleanAccuracy = (double)cleanCorrect / testData.Length;
-        metrics.CertifiedAccuracy = (double)certified / testData.Length;
+        metrics.CleanAccuracy = (double)cleanCorrect / testData.Rows;
+        metrics.CertifiedAccuracy = (double)certified / testData.Rows;
         metrics.CertificationRadius = radius;
-        metrics.CertificationRate = (double)certifiedRadii.Count / testData.Length;
+        metrics.CertificationRate = (double)certifiedRadii.Count / testData.Rows;
 
         if (certifiedRadii.Count > 0)
         {
@@ -173,12 +214,21 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
     /// <inheritdoc/>
     public byte[] Serialize()
     {
-        var json = System.Text.Json.JsonSerializer.Serialize(options);
-        return System.Text.Encoding.UTF8.GetBytes(json);
+        var json = JsonConvert.SerializeObject(options, Formatting.None);
+        return Encoding.UTF8.GetBytes(json);
     }
 
     /// <inheritdoc/>
-    public void Deserialize(byte[] data) { }
+    public void Deserialize(byte[] data)
+    {
+        if (data == null)
+        {
+            throw new ArgumentNullException(nameof(data));
+        }
+
+        var json = Encoding.UTF8.GetString(data);
+        options = JsonConvert.DeserializeObject<CertifiedDefenseOptions<T>>(json) ?? new CertifiedDefenseOptions<T>();
+    }
 
     /// <inheritdoc/>
     public void SaveModel(string filePath)
@@ -192,9 +242,9 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
         Deserialize(File.ReadAllBytes(filePath));
     }
 
-    private T[] AddGaussianNoise(T[] input, T sigma)
+    private Vector<T> AddGaussianNoise(Vector<T> input, T sigma)
     {
-        var noisy = new T[input.Length];
+        var noisy = new Vector<T>(input.Length);
 
         for (int i = 0; i < input.Length; i++)
         {
@@ -251,16 +301,16 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
         return Math.Min(1.0, pA + 1.96 * Math.Sqrt(pA * (1 - pA) / n));
     }
 
-    private static int ArgMax(T[] array)
+    private static int ArgMax(Vector<T> vector)
     {
         int maxIndex = 0;
-        T maxValue = array[0];
+        T maxValue = vector[0];
 
-        for (int i = 1; i < array.Length; i++)
+        for (int i = 1; i < vector.Length; i++)
         {
-            if (NumOps.GreaterThan(array[i], maxValue))
+            if (NumOps.GreaterThan(vector[i], maxValue))
             {
-                maxValue = array[i];
+                maxValue = vector[i];
                 maxIndex = i;
             }
         }
@@ -270,8 +320,6 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
 
     private static T Clip01(T value)
     {
-        if (NumOps.LessThan(value, NumOps.Zero)) return NumOps.Zero;
-        if (NumOps.GreaterThan(value, NumOps.One)) return NumOps.One;
-        return value;
+        return MathHelper.Clamp(value, NumOps.Zero, NumOps.One);
     }
 }
