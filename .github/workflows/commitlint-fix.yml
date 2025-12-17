@@ -75,6 +75,7 @@ jobs:
               else
                 echo "❌ Invalid subject case: $FIRST_LINE"
                 INVALID_SUBJECT=true
+                NEEDS_FIX=true
 
                 # Fix the subject case
                 TYPE=$(echo "$FIRST_LINE" | cut -d':' -f1)
