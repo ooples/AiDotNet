@@ -78,7 +78,19 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         {
             return CalculateModelStats(model, xTrain, normInfo);
         }
-        catch
+        catch (InvalidOperationException)
+        {
+            return ModelStats<T, TInput, TOutput>.Empty();
+        }
+        catch (ArgumentException)
+        {
+            return ModelStats<T, TInput, TOutput>.Empty();
+        }
+        catch (NotSupportedException)
+        {
+            return ModelStats<T, TInput, TOutput>.Empty();
+        }
+        catch (ArithmeticException)
         {
             return ModelStats<T, TInput, TOutput>.Empty();
         }
