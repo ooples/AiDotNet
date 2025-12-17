@@ -402,20 +402,22 @@ public class RandomSearchAutoML<T, TInput, TOutput> : SupervisedAutoMLModelBase<
                     || predictionType == PredictionType.MultiClass
                     || predictionType == PredictionType.MultiLabel;
 
-                if (featureCount == 1)
+                if (!isClassification)
                 {
-                    _candidateModels.Add(ModelType.SimpleRegression);
+                    if (featureCount == 1)
+                    {
+                        _candidateModels.Add(ModelType.SimpleRegression);
+                    }
+
+                    _candidateModels.Add(ModelType.MultipleRegression);
+                    _candidateModels.Add(ModelType.PolynomialRegression);
+                    _candidateModels.Add(ModelType.RandomForest);
+                    _candidateModels.Add(ModelType.GradientBoosting);
+                    _candidateModels.Add(ModelType.KNearestNeighbors);
+                    _candidateModels.Add(ModelType.SupportVectorRegression);
+                    _candidateModels.Add(ModelType.NeuralNetworkRegression);
                 }
-
-                _candidateModels.Add(ModelType.MultipleRegression);
-                _candidateModels.Add(ModelType.PolynomialRegression);
-                _candidateModels.Add(ModelType.RandomForest);
-                _candidateModels.Add(ModelType.GradientBoosting);
-                _candidateModels.Add(ModelType.KNearestNeighbors);
-                _candidateModels.Add(ModelType.SupportVectorRegression);
-                _candidateModels.Add(ModelType.NeuralNetworkRegression);
-
-                if (isClassification)
+                else
                 {
                     _candidateModels.Add(ModelType.LogisticRegression);
                     _candidateModels.Add(ModelType.MultinomialLogisticRegression);
