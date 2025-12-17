@@ -16,6 +16,9 @@ jobs:
     if: |
       github.actor != 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      AUTOFIX_GPG_PRIVATE_KEY: ${{ secrets.AUTOFIX_GPG_PRIVATE_KEY }}
+      AUTOFIX_GPG_PASSPHRASE: ${{ secrets.AUTOFIX_GPG_PASSPHRASE }}
 
     steps:
       - name: Checkout code
@@ -25,6 +28,15 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: false
+
+      - name: Import GPG key for signed commits
+        if: env.AUTOFIX_GPG_PRIVATE_KEY != ''
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ env.AUTOFIX_GPG_PRIVATE_KEY }}
+          passphrase: ${{ env.AUTOFIX_GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
 
       - name: Configure Git
         run: |
@@ -150,6 +162,11 @@ jobs:
       - name: Apply fixes to commits
         if: steps.check-commits.outputs.needs_fix == 'true'
         run: |
+          if [ -z "$AUTOFIX_GPG_PRIVATE_KEY" ]; then
+            echo "::error::Repository rules require signed commits. Configure secrets AUTOFIX_GPG_PRIVATE_KEY and AUTOFIX_GPG_PASSPHRASE so this workflow can create signed rewritten commits."
+            exit 1
+          fi
+
           COMMITS="${{ steps.get-commits.outputs.commits }}"
           BASE_BRANCH="${{ github.base_ref }}"
 
@@ -217,6 +234,9 @@ jobs:
     if: |
       github.actor == 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      AUTOFIX_GPG_PRIVATE_KEY: ${{ secrets.AUTOFIX_GPG_PRIVATE_KEY }}
+      AUTOFIX_GPG_PASSPHRASE: ${{ secrets.AUTOFIX_GPG_PASSPHRASE }}
 
     steps:
       - name: Checkout code
@@ -226,6 +246,15 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: false
+
+      - name: Import GPG key for signed commits
+        if: env.AUTOFIX_GPG_PRIVATE_KEY != ''
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ env.AUTOFIX_GPG_PRIVATE_KEY }}
+          passphrase: ${{ env.AUTOFIX_GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
 
       - name: Configure Git
         run: |
@@ -272,6 +301,11 @@ jobs:
       - name: Fix dependabot commit
         if: steps.check-needs-fix.outputs.needs_fix == 'true'
         run: |
+          if [ -z "$AUTOFIX_GPG_PRIVATE_KEY" ]; then
+            echo "::error::Repository rules require signed commits. Configure secrets AUTOFIX_GPG_PRIVATE_KEY and AUTOFIX_GPG_PASSPHRASE so this workflow can create signed rewritten commits."
+            exit 1
+          fi
+
           COMMIT_SHA="${{ steps.get-commit.outputs.commit_sha }}"
           NEW_SUBJECT="${{ steps.check-needs-fix.outputs.new_subject }}"
           COMMIT_MSG=$(git log -1 --format=%B "$COMMIT_SHA")
