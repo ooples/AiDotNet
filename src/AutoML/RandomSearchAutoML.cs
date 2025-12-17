@@ -195,8 +195,7 @@ public class RandomSearchAutoML<T, TInput, TOutput> : SupervisedAutoMLModelBase<
             _ => throw new NotSupportedException($"AutoML model type '{modelType}' is not currently supported by RandomSearchAutoML.")
         };
 
-        object boxedModel = model;
-        return Task.FromResult((IFullModel<T, TInput, TOutput>)boxedModel);
+        return Task.FromResult((IFullModel<T, TInput, TOutput>)model);
     }
 
     protected override Dictionary<string, ParameterRange> GetDefaultSearchSpace(ModelType modelType)
