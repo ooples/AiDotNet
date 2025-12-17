@@ -22,27 +22,27 @@ public class KochanekBartelsSplineInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the data points (independent variable).
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the data points (dependent variable).
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// Controls how "tight" the curve is. Higher values create tighter curves.
     /// </summary>
     private readonly T _tension;
-    
+
     /// <summary>
     /// Controls whether the curve tends to overshoot (negative values) or undershoot (positive values).
     /// </summary>
     private readonly T _bias;
-    
+
     /// <summary>
     /// Controls the smoothness of transitions between curve segments.
     /// </summary>
     private readonly T _continuity;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
@@ -239,7 +239,7 @@ public class KochanekBartelsSplineInterpolation<T> : IInterpolation<T>
             ),
             onePlusBias
         );
-    
+
         // Calculate coefficient 'b' which controls the influence of the next segment
         // This coefficient is also affected by all three parameters but in a different way
         T b = _numOps.Multiply(

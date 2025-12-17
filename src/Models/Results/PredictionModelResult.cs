@@ -1,31 +1,31 @@
 global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
-using AiDotNet.Data.Structures;
-using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Graph;
-using AiDotNet.Interpretability;
-using AiDotNet.Serialization;
 using AiDotNet.Agents;
-using AiDotNet.Models;
+using AiDotNet.Data.Structures;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.Deployment.Export;
 using AiDotNet.Deployment.Export.Onnx;
-using AiDotNet.Deployment.TensorRT;
 using AiDotNet.Deployment.Mobile.CoreML;
 using AiDotNet.Deployment.Mobile.TensorFlowLite;
 using AiDotNet.Deployment.Runtime;
-using AiDotNet.Reasoning;
-using AiDotNet.Reasoning.Models;
-using AiDotNet.LanguageModels;
+using AiDotNet.Deployment.TensorRT;
 using AiDotNet.Enums;
-using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.Tokenization.Configuration;
-using AiDotNet.Tokenization.Models;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Interpretability;
+using AiDotNet.LanguageModels;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.PromptEngineering;
 using AiDotNet.PromptEngineering.Analysis;
 using AiDotNet.PromptEngineering.Compression;
+using AiDotNet.Reasoning;
+using AiDotNet.Reasoning.Models;
+using AiDotNet.RetrievalAugmentedGeneration.Graph;
+using AiDotNet.Serialization;
+using AiDotNet.Tokenization.Configuration;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Tokenization.Models;
 
 namespace AiDotNet.Models.Results;
 
@@ -1911,7 +1911,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         var rerankedDocs = RagReranker.Rerank(processedQuery, retrievedList);
-        
+
         if (topKAfterRerank.HasValue)
         {
             rerankedDocs = rerankedDocs.Take(topKAfterRerank.Value);

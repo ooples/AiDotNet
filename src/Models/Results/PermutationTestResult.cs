@@ -66,7 +66,7 @@ public class PermutationTestResult<T>
     /// </para>
     /// </remarks>
     public T ObservedDifference { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the p-value associated with the permutation test.
     /// </summary>
@@ -98,7 +98,7 @@ public class PermutationTestResult<T>
     /// </para>
     /// </remarks>
     public T PValue { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the number of permutations performed during the test.
     /// </summary>
@@ -128,7 +128,7 @@ public class PermutationTestResult<T>
     /// </para>
     /// </remarks>
     public int Permutations { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the count of permutations that resulted in a difference as extreme as, or more extreme than, the observed difference.
     /// </summary>
@@ -157,7 +157,7 @@ public class PermutationTestResult<T>
     /// </para>
     /// </remarks>
     public int CountExtremeValues { get; set; }
-    
+
     /// <summary>
     /// Gets or sets a value indicating whether the permutation test result is statistically significant.
     /// </summary>
@@ -187,7 +187,7 @@ public class PermutationTestResult<T>
     /// </para>
     /// </remarks>
     public bool IsSignificant { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the significance level used for the test.
     /// </summary>

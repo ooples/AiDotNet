@@ -40,37 +40,37 @@ public class GraphEdge<T>
     /// Unique identifier for this edge.
     /// </summary>
     public string Id { get; set; }
-    
+
     /// <summary>
     /// The source node ID (where the relationship starts).
     /// </summary>
     public string SourceId { get; set; }
-    
+
     /// <summary>
     /// The target node ID (where the relationship points to).
     /// </summary>
     public string TargetId { get; set; }
-    
+
     /// <summary>
     /// The relationship type (e.g., WORKS_FOR, LOCATED_IN, FRIEND_OF).
     /// </summary>
     public string RelationType { get; set; }
-    
+
     /// <summary>
     /// Additional properties and metadata for this relationship.
     /// </summary>
     public Dictionary<string, object> Properties { get; set; }
-    
+
     /// <summary>
     /// Weight or strength of this relationship (0.0 to 1.0).
     /// </summary>
     public double Weight { get; set; }
-    
+
     /// <summary>
     /// Timestamp when this edge was created.
     /// </summary>
     public DateTime CreatedAt { get; set; }
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GraphEdge{T}"/> class.
     /// </summary>
@@ -88,7 +88,7 @@ public class GraphEdge<T>
             throw new ArgumentException("Relation type cannot be null or whitespace", nameof(relationType));
         if (weight < 0.0 || weight > 1.0)
             throw new ArgumentOutOfRangeException(nameof(weight), "Weight must be between 0.0 and 1.0");
-            
+
         Id = $"{sourceId}_{relationType}_{targetId}";
         SourceId = sourceId;
         TargetId = targetId;
@@ -97,7 +97,7 @@ public class GraphEdge<T>
         Properties = new Dictionary<string, object>();
         CreatedAt = DateTime.UtcNow;
     }
-    
+
     /// <summary>
     /// Adds or updates a property on this edge.
     /// </summary>
@@ -107,7 +107,7 @@ public class GraphEdge<T>
     {
         Properties[key] = value;
     }
-    
+
     /// <summary>
     /// Gets a property value from this edge.
     /// </summary>
@@ -159,17 +159,17 @@ public class GraphEdge<T>
 
         return default;
     }
-    
+
     public override string ToString()
     {
         return $"{SourceId} -{RelationType}-> {TargetId} (weight: {Weight:F2})";
     }
-    
+
     public override bool Equals(object? obj)
     {
         return obj is GraphEdge<T> other && Id == other.Id;
     }
-    
+
     public override int GetHashCode()
     {
         return Id.GetHashCode();

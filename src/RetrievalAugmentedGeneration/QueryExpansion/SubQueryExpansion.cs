@@ -77,10 +77,10 @@ public class SubQueryExpansion : QueryExpansionBase
     {
         _llmEndpoint = llmEndpoint ?? throw new ArgumentNullException(nameof(llmEndpoint));
         _llmApiKey = llmApiKey ?? throw new ArgumentNullException(nameof(llmApiKey));
-        
+
         if (maxSubQueries <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxSubQueries), "Max sub-queries must be positive");
-            
+
         _maxSubQueries = maxSubQueries;
     }
 
@@ -189,7 +189,7 @@ public class SubQueryExpansion : QueryExpansionBase
             if (words[i].Length >= 5)
             {
                 concepts.Add(words[i]);
-                
+
                 // Check for multi-word concepts
                 if (i < words.Count - 1 && words[i + 1].Length >= 5)
                 {
@@ -199,5 +199,6 @@ public class SubQueryExpansion : QueryExpansionBase
         }
 
         return concepts.Distinct().ToList();
-    }}
+    }
+}
 

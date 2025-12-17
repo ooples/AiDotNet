@@ -60,7 +60,7 @@ public class StopWordRemovalQueryProcessor : QueryProcessorBase
             }
 
             var lowerWord = word.ToLowerInvariant();
-            
+
             if (_preserveFirstWord && isFirstContentWord)
             {
                 result.Add(word);

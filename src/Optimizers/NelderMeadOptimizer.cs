@@ -276,11 +276,11 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         var centroidParams = centroid.GetParameters();
         var worstParams = worst.GetParameters();
         var alphaVec = AiDotNetEngine.Current.Fill<T>(centroidParams.Length, _alpha);
-        
+
         var diff = (Vector<T>)AiDotNetEngine.Current.Subtract(centroidParams, worstParams);
         var scaled = (Vector<T>)AiDotNetEngine.Current.Multiply(diff, alphaVec);
         var result = (Vector<T>)AiDotNetEngine.Current.Add(centroidParams, scaled);
-        
+
         return centroid.WithParameters(result);
     }
 
@@ -325,11 +325,11 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         var centroidParams = centroid.GetParameters();
         var worstParams = worst.GetParameters();
         var betaVec = AiDotNetEngine.Current.Fill<T>(centroidParams.Length, _beta);
-        
+
         var diff = (Vector<T>)AiDotNetEngine.Current.Subtract(worstParams, centroidParams);
         var scaled = (Vector<T>)AiDotNetEngine.Current.Multiply(diff, betaVec);
         var result = (Vector<T>)AiDotNetEngine.Current.Add(centroidParams, scaled);
-        
+
         return centroid.WithParameters(result);
     }
 
@@ -351,7 +351,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         var best = simplex[0];
         var bestParams = best.GetParameters();
         var deltaVec = AiDotNetEngine.Current.Fill<T>(bestParams.Length, _delta);
-        
+
         for (int i = 1; i < simplex.Count; i++)
         {
             // Vectorized: result = best + delta * (simplex[i] - best)
@@ -359,7 +359,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
             var diff = (Vector<T>)AiDotNetEngine.Current.Subtract(currentParams, bestParams);
             var scaled = (Vector<T>)AiDotNetEngine.Current.Multiply(diff, deltaVec);
             var result = (Vector<T>)AiDotNetEngine.Current.Add(bestParams, scaled);
-            
+
             simplex[i] = best.WithParameters(result);
         }
     }

@@ -1,6 +1,6 @@
-using AiDotNet.Interfaces;
 using System.Data;
 using System.Globalization;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.Tools;
 

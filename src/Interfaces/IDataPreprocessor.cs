@@ -57,7 +57,7 @@ public interface IDataPreprocessor<T, TInput, TOutput>
     /// - The normInfo stores these details so you can apply consistent transformations
     /// </remarks>
     (TInput X, TOutput y, NormalizationInfo<T, TInput, TOutput> normInfo) PreprocessData(TInput X, TOutput y);
-    
+
     /// <summary>
     /// Splits the dataset into training, validation, and test sets.
     /// </summary>
@@ -91,6 +91,6 @@ public interface IDataPreprocessor<T, TInput, TOutput>
     /// Each set contains both features (X) and targets (y), keeping the relationship between
     /// input data and expected outputs intact for each portion of the data.
     /// </remarks>
-    (TInput XTrain, TOutput yTrain, TInput XValidation, TOutput yValidation, TInput XTest, TOutput yTest) 
+    (TInput XTrain, TOutput yTrain, TInput XValidation, TOutput yValidation, TInput XTest, TOutput yTest)
         SplitData(TInput X, TOutput y);
 }

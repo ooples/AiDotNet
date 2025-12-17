@@ -1,9 +1,9 @@
 using System;
 using AiDotNet;
-using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Tensors;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors;
 
 namespace AiDotNetTestConsole
 {
@@ -32,7 +32,7 @@ namespace AiDotNetTestConsole
             Console.WriteLine($"Input Shape: {string.Join(", ", input.Shape)}");
             Console.WriteLine($"Kernel Size: {kernelSize}, Stride: {stride}, Padding: {padding}");
             Console.WriteLine($"Expected Output H: {(inputH - 1) * stride - 2 * padding + kernelSize}");
-            
+
             // Forward
             var output = layer.Forward(input);
             Console.WriteLine($"Output Shape: {string.Join(", ", output.Shape)}");
@@ -55,7 +55,7 @@ namespace AiDotNetTestConsole
             }
             catch (Exception ex)
             {
-                 Console.WriteLine($"ExportComputationGraph failed: {ex.Message}");
+                Console.WriteLine($"ExportComputationGraph failed: {ex.Message}");
             }
         }
     }

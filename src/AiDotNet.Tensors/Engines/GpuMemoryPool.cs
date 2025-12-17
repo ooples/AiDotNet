@@ -1,8 +1,8 @@
 #if !NET462
-using ILGPU;
-using ILGPU.Runtime;
 using System.Collections.Concurrent;
 using System.Linq;
+using ILGPU;
+using ILGPU.Runtime;
 
 namespace AiDotNet.Tensors.Engines;
 

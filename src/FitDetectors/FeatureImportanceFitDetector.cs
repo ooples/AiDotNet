@@ -118,7 +118,7 @@ public class FeatureImportanceFitDetector<T, TInput, TOutput> : FitDetectorBase<
     protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var featureImportances = CalculateFeatureImportances(evaluationData);
-        var averageImportance =featureImportances.Average();
+        var averageImportance = featureImportances.Average();
         var importanceStdDev = StatisticsHelper<T>.CalculateStandardDeviation(featureImportances);
         _featureCorrelations = CalculateFeatureCorrelations(ConversionsHelper.ConvertToMatrix<T, TInput>(evaluationData.ModelStats.Features));
 

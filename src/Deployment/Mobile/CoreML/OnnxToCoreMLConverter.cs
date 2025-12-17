@@ -1,5 +1,5 @@
-using Google.Protobuf;
 using System.Collections.Generic;
+using Google.Protobuf;
 
 namespace AiDotNet.Deployment.Mobile.CoreML;
 

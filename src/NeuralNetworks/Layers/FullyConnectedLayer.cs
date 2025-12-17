@@ -373,13 +373,13 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         // Compute output = input * weights^T + biases using Engine operations
         // input: [batchSize, inputSize]
         // weights: [outputSize, inputSize]
-        
+
         // Transpose weights to [inputSize, outputSize]
         var weightsT = Engine.TensorTranspose(_weights);
-        
+
         // Matrix multiply: [batch, input] * [input, output] -> [batch, output]
         var linearOutput = Engine.TensorMatMul(input, weightsT);
-        
+
         // Add biases (broadcast)
         var biasBroadcast = _biases.Reshape(1, _biases.Shape[0]);
         var biasedOutput = Engine.TensorBroadcastAdd(linearOutput, biasBroadcast);

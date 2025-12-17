@@ -175,7 +175,7 @@ public class StratifiedKFoldCrossValidationFitDetector<T, TInput, TOutput> : Fit
         return NumOps.GreaterThan(confidence, NumOps.Zero) ? confidence : NumOps.Zero;
     }
 
-        /// <summary>
+    /// <summary>
     /// Generates specific recommendations for improving the model based on the detected fit type.
     /// </summary>
     /// <param name="fitType">The type of fit detected in the model (e.g., GoodFit, Overfit, Underfit).</param>

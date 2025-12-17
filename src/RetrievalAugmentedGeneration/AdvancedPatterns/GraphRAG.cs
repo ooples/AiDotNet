@@ -1,12 +1,12 @@
 
-using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Generators;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
-using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Generators;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -155,7 +155,7 @@ public class GraphRAG<T>
         {
             _knowledgeGraph[normalizedEntity] = new List<(string, string)>();
         }
-        
+
         // Avoid duplicate relations
         if (!_knowledgeGraph[normalizedEntity].Any(r => r.relation == normalizedRelation && r.target == normalizedTarget))
         {
@@ -233,7 +233,7 @@ public class GraphRAG<T>
         foreach (var doc in vectorResults)
         {
             var enrichedContent = doc.Content;
-            
+
             // Check if document mentions any of our graph entities using word boundary matching
             var mentionedEntities = relatedEntities
                 .Where(entity => Regex.IsMatch(
@@ -251,8 +251,8 @@ public class GraphRAG<T>
 
                 // Boost relevance score for documents that match graph entities
                 var boostFactor = 1.0 + (mentionedEntities.Count * 0.1);
-                var originalScore = doc.HasRelevanceScore 
-                    ? Convert.ToDouble(doc.RelevanceScore) 
+                var originalScore = doc.HasRelevanceScore
+                    ? Convert.ToDouble(doc.RelevanceScore)
                     : 0.5;
                 var boostedScore = Math.Min(1.0, originalScore * boostFactor);
 
@@ -300,7 +300,7 @@ public class GraphRAG<T>
             {
                 var extractionPrompt = $"Extract the main entities (people, places, concepts) from: '{text}'\nList them separated by commas.";
                 var llmResponse = _generator.Generate(extractionPrompt);
-                
+
                 if (!string.IsNullOrWhiteSpace(llmResponse))
                 {
                     // Parse comma-separated or newline-separated entities from LLM
@@ -311,7 +311,7 @@ public class GraphRAG<T>
                         .Where(e => !e.StartsWith("[") && !e.StartsWith("-")) // Filter out list markers
                         .Where(e => !e.All(char.IsDigit)) // Filter out pure numbers
                         .Take(10); // Limit to 10 entities to avoid noise
-                    
+
                     entities.AddRange(llmEntities);
                 }
             }

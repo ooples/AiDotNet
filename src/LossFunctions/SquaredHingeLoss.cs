@@ -39,24 +39,24 @@ public class SquaredHingeLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T loss = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
             // Calculate margin: 1 - y*f(x)
             T margin = NumOps.Subtract(
-                NumOps.One, 
+                NumOps.One,
                 NumOps.Multiply(actual[i], predicted[i])
             );
-            
+
             // Apply squared hinge: max(0, margin)²
             T hingeLoss = MathHelper.Max(NumOps.Zero, margin);
             loss = NumOps.Add(loss, NumOps.Power(hingeLoss, NumOps.FromDouble(2)));
         }
-        
+
         return NumOps.Divide(loss, NumOps.FromDouble(predicted.Length));
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Squared Hinge Loss function.
     /// </summary>
@@ -66,13 +66,13 @@ public class SquaredHingeLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
             // Calculate margin: 1 - y*f(x)
             T margin = NumOps.Subtract(NumOps.One, NumOps.Multiply(actual[i], predicted[i]));
-            
+
             if (NumOps.GreaterThan(margin, NumOps.Zero))
             {
                 // If margin > 0, derivative = -2*y*margin
@@ -87,7 +87,7 @@ public class SquaredHingeLoss<T> : LossFunctionBase<T>
                 derivative[i] = NumOps.Zero;
             }
         }
-        
+
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
 }

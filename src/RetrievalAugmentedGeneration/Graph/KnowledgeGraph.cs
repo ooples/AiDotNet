@@ -68,7 +68,7 @@ public class KnowledgeGraph<T>
     public KnowledgeGraph() : this(new MemoryGraphStore<T>())
     {
     }
-    
+
     /// <summary>
     /// Adds a node to the graph or updates it if it already exists.
     /// </summary>
@@ -127,7 +127,7 @@ public class KnowledgeGraph<T>
     {
         return _store.GetIncomingEdges(nodeId);
     }
-    
+
     /// <summary>
     /// Gets all neighbors of a node (nodes connected by outgoing edges).
     /// </summary>
@@ -140,7 +140,7 @@ public class KnowledgeGraph<T>
             .Select(e => _store.GetNode(e.TargetId))
             .OfType<GraphNode<T>>();
     }
-    
+
     /// <summary>
     /// Performs breadth-first search traversal starting from a node.
     /// </summary>
@@ -181,7 +181,7 @@ public class KnowledgeGraph<T>
             }
         }
     }
-    
+
     /// <summary>
     /// Finds the shortest path between two nodes using BFS.
     /// </summary>
@@ -232,7 +232,7 @@ public class KnowledgeGraph<T>
 
         return new List<string>(); // No path found
     }
-    
+
     /// <summary>
     /// Finds nodes related to a query by entity name or property matching.
     /// </summary>

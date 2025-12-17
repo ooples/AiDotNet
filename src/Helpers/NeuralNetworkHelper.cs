@@ -156,7 +156,7 @@ public static class NeuralNetworkHelper<T>
                 // Apply sigmoid to the output
                 ApplySigmoid(output);
                 break;
-                    
+
             case NeuralNetworkTaskType.MultiClassClassification:
             case NeuralNetworkTaskType.ImageClassification:
             case NeuralNetworkTaskType.SequenceClassification:
@@ -167,7 +167,7 @@ public static class NeuralNetworkHelper<T>
                 // Apply softmax to the output
                 ApplySoftmax(output);
                 break;
-                    
+
             case NeuralNetworkTaskType.MultiLabelClassification:
             case NeuralNetworkTaskType.ObjectDetection:
             case NeuralNetworkTaskType.ImageSegmentation:
@@ -175,12 +175,12 @@ public static class NeuralNetworkHelper<T>
                 // Apply sigmoid to each output independently
                 ApplySigmoid(output);
                 break;
-                    
+
             case NeuralNetworkTaskType.ReinforcementLearning:
                 // Apply tanh activation
                 ApplyTanh(output);
                 break;
-                    
+
             // For regression tasks and others, usually no activation or linear activation
             case NeuralNetworkTaskType.Regression:
             case NeuralNetworkTaskType.TimeSeriesForecasting:
@@ -193,7 +193,7 @@ public static class NeuralNetworkHelper<T>
             case NeuralNetworkTaskType.SequenceToSequence:
                 // No activation (identity)
                 break;
-                    
+
             default:
                 // Default to no activation
                 break;

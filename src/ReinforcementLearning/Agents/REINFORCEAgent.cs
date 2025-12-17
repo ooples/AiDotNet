@@ -1,13 +1,12 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.Common;
-
-using AiDotNet.Enums;
 
 namespace AiDotNet.ReinforcementLearning.Agents.REINFORCE;
 
@@ -241,13 +240,13 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
                     var mean = policyOutput[i];
                     var logStd = policyOutput[actionSize + i];
                     var std = NumOps.Exp(logStd);
-                    
+
                     // Gradient of -log π(a|s) * G_t w.r.t. mean: -(a - μ) / σ² * G_t
                     var actionDiff = NumOps.Subtract(action[i], mean);
                     var stdSquared = NumOps.Multiply(std, std);
                     outputGradient[i] = NumOps.Negate(
                         NumOps.Multiply(returnVal, NumOps.Divide(actionDiff, stdSquared)));
-                    
+
                     // Gradient w.r.t. log_std: -((a-μ)² / σ² - 1) * G_t
                     var normalizedDiff = NumOps.Divide(actionDiff, std);
                     var term = NumOps.Subtract(NumOps.Multiply(normalizedDiff, normalizedDiff), NumOps.One);
@@ -260,7 +259,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
                 // Gradient: -G_t * (1_{a=a_t} - softmax(logits))
                 var softmax = ComputeSoftmax(policyOutput);
                 int selectedAction = GetDiscreteAction(action);
-                
+
                 for (int i = 0; i < policyOutput.Length; i++)
                 {
                     var indicator = (i == selectedAction) ? NumOps.One : NumOps.Zero;
@@ -268,7 +267,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
                     outputGradient[i] = NumOps.Negate(NumOps.Multiply(returnVal, grad));
                 }
             }
-            
+
             // Backpropagate through policy network
             var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
             _policyNetwork.Backpropagate(outputGradientTensor);
@@ -484,7 +483,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             if (NumOps.GreaterThan(logits[i], maxLogit))
                 maxLogit = logits[i];
         }
-        
+
         T sumExp = NumOps.Zero;
         for (int i = 0; i < logits.Length; i++)
         {
@@ -492,15 +491,15 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             softmax[i] = exp;
             sumExp = NumOps.Add(sumExp, exp);
         }
-        
+
         for (int i = 0; i < softmax.Length; i++)
         {
             softmax[i] = NumOps.Divide(softmax[i], sumExp);
         }
-        
+
         return softmax;
     }
-    
+
     private int GetDiscreteAction(Vector<T> action)
     {
         // Find the index of the action (assumes one-hot encoding or argmax)

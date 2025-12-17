@@ -37,7 +37,7 @@ public class CauchyKernel<T> : IKernelFunction<T>
     /// will be considered relatively similar.
     /// </remarks>
     private readonly T _sigma;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

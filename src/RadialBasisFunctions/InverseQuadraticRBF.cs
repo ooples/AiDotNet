@@ -34,12 +34,12 @@ public class InverseQuadraticRBF<T> : IRadialBasisFunction<T>
     /// The shape parameter (epsilon) controlling the width of the function.
     /// </summary>
     private readonly T _epsilon;
-    
+
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="InverseQuadraticRBF{T}"/> class with a specified shape parameter.
     /// </summary>
@@ -69,7 +69,7 @@ public class InverseQuadraticRBF<T> : IRadialBasisFunction<T>
         _numOps = MathHelper.GetNumericOperations<T>();
         _epsilon = _numOps.FromDouble(epsilon);
     }
-    
+
     /// <summary>
     /// Computes the value of the Inverse Quadratic Radial Basis Function for a given radius.
     /// </summary>
@@ -102,7 +102,7 @@ public class InverseQuadraticRBF<T> : IRadialBasisFunction<T>
         T denominator = _numOps.Add(_numOps.One, _numOps.Power(epsilonR, _numOps.FromDouble(2)));
         return _numOps.Divide(_numOps.One, denominator);
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Inverse Quadratic RBF with respect to the radius.
     /// </summary>
@@ -131,35 +131,35 @@ public class InverseQuadraticRBF<T> : IRadialBasisFunction<T>
     public T ComputeDerivative(T r)
     {
         // Derivative with respect to r: -2e²r/(1 + (er)²)²
-        
+
         // Calculate er
         T epsilonR = _numOps.Multiply(_epsilon, r);
-        
+
         // Calculate (er)²
         T epsilonRSquared = _numOps.Multiply(epsilonR, epsilonR);
-        
+
         // Calculate 1 + (er)²
         T denominator = _numOps.Add(_numOps.One, epsilonRSquared);
-        
+
         // Calculate (1 + (er)²)²
         T denominatorSquared = _numOps.Multiply(denominator, denominator);
-        
+
         // Calculate e²
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
-        
+
         // Calculate 2e²r
         T twoEpsilonSquaredR = _numOps.Multiply(
             _numOps.Multiply(_numOps.FromDouble(2.0), epsilonSquared),
             r
         );
-        
+
         // Calculate -2e²r
         T negativeTwoEpsilonSquaredR = _numOps.Negate(twoEpsilonSquaredR);
-        
+
         // Return -2e²r/(1 + (er)²)²
         return _numOps.Divide(negativeTwoEpsilonSquaredR, denominatorSquared);
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Inverse Quadratic RBF with respect to the shape parameter epsilon.
     /// </summary>
@@ -189,31 +189,31 @@ public class InverseQuadraticRBF<T> : IRadialBasisFunction<T>
     public T ComputeWidthDerivative(T r)
     {
         // Derivative with respect to e: -2er²/(1 + (er)²)²
-        
+
         // Calculate er
         T epsilonR = _numOps.Multiply(_epsilon, r);
-        
+
         // Calculate (er)²
         T epsilonRSquared = _numOps.Multiply(epsilonR, epsilonR);
-        
+
         // Calculate 1 + (er)²
         T denominator = _numOps.Add(_numOps.One, epsilonRSquared);
-        
+
         // Calculate (1 + (er)²)²
         T denominatorSquared = _numOps.Multiply(denominator, denominator);
-        
+
         // Calculate r²
         T rSquared = _numOps.Multiply(r, r);
-        
+
         // Calculate 2er²
         T twoEpsilonRSquared = _numOps.Multiply(
             _numOps.Multiply(_numOps.FromDouble(2.0), _epsilon),
             rSquared
         );
-        
+
         // Calculate -2er²
         T negativeTwoEpsilonRSquared = _numOps.Negate(twoEpsilonRSquared);
-        
+
         // Return -2er²/(1 + (er)²)²
         return _numOps.Divide(negativeTwoEpsilonRSquared, denominatorSquared);
     }

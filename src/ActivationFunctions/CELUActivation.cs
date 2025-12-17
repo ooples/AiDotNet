@@ -80,7 +80,7 @@ public class CELUActivation<T> : ActivationFunctionBase<T>
         // CELU: max(0, x) + min(0, a * (exp(x/a) - 1))
         T expTerm = NumOps.Subtract(NumOps.Exp(NumOps.Divide(input, _alpha)), NumOps.One);
         T negativepart = NumOps.Multiply(_alpha, expTerm);
-        
+
         return NumOps.Add(
             MathHelper.Max(NumOps.Zero, input),
             MathHelper.Min(NumOps.Zero, negativepart)

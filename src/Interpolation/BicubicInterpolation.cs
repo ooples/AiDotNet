@@ -22,12 +22,12 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
     /// The x-coordinates of the grid points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the grid points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The z-values (heights) at each grid point, organized as a matrix.
     /// </summary>
@@ -36,12 +36,12 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
     /// If you're thinking of a landscape, these would be the heights at each measured location.
     /// </remarks>
     private readonly Matrix<T> _z;
-    
+
     /// <summary>
     /// Helper object for performing numeric operations on generic type T.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// Optional matrix decomposition method used for solving the linear system.
     /// </summary>
@@ -177,7 +177,7 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
         {
             for (int j = 0; j < 4; j++)
             {
-                result = _numOps.Add(result, _numOps.Multiply(a[i, j], 
+                result = _numOps.Add(result, _numOps.Multiply(a[i, j],
                     _numOps.Multiply(_numOps.Power(x, _numOps.FromDouble(i)), _numOps.Power(y, _numOps.FromDouble(j)))));
             }
         }

@@ -56,7 +56,7 @@ public class HingeLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorB
     /// making it simpler to use.
     /// </para>
     /// </remarks>
-    public HingeLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) 
+    public HingeLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
     }
@@ -89,7 +89,7 @@ public class HingeLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorB
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return new HingeLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+        return new HingeLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

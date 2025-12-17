@@ -574,16 +574,16 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     {
         StringBuilder sb = new StringBuilder();
         sb.AppendLine($"AR({_arOrder}) Model");
-    
+
         if (_arCoefficients.Length > 0)
         {
             sb.AppendLine("AR Coefficients:");
             for (int i = 0; i < _arOrder; i++)
             {
-                sb.AppendLine($"  AR[{i+1}] = {Convert.ToDouble(_arCoefficients[i]):F4}");
+                sb.AppendLine($"  AR[{i + 1}] = {Convert.ToDouble(_arCoefficients[i]):F4}");
             }
         }
-    
+
         return sb.ToString();
     }
 
@@ -641,7 +641,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new ARModel<T>((ARModelOptions<T>)Options);
-    
+
         // Copy trained coefficients
         if (_arCoefficients.Length > 0)
         {
@@ -651,7 +651,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
                 clone._arCoefficients[i] = _arCoefficients[i];
             }
         }
-    
+
         return clone;
     }
 

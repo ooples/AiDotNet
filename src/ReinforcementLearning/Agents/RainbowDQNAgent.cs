@@ -1,11 +1,10 @@
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-
-using AiDotNet.Enums;
-using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 

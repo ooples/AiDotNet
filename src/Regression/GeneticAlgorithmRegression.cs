@@ -33,33 +33,33 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// Configuration options for the genetic algorithm optimizer.
     /// </summary>
     private readonly GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>> _gaOptions;
-    
+
     /// <summary>
     /// The genetic algorithm optimizer that finds optimal model parameters.
     /// Created during training when input dimensions are known.
     /// </summary>
     private GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>? _optimizer;
-    
+
     /// <summary>
     /// Component responsible for normalizing feature values to a common scale.
     /// </summary>
     private readonly INormalizer<T, Matrix<T>, Vector<T>> _normalizer;
-    
+
     /// <summary>
     /// Component that selects the most relevant features for the model.
     /// </summary>
     private readonly IFeatureSelector<T, Matrix<T>> _featureSelector;
-    
+
     /// <summary>
     /// Component that identifies and removes outliers from the training data.
     /// </summary>
     private readonly IOutlierRemoval<T, Matrix<T>, Vector<T>> _outlierRemoval;
-    
+
     /// <summary>
     /// Component that handles all data preprocessing steps before training.
     /// </summary>
     private readonly IDataPreprocessor<T, Matrix<T>, Vector<T>> _dataPreprocessor;
-    
+
     /// <summary>
     /// The best model found by the genetic algorithm.
     /// </summary>

@@ -1,10 +1,10 @@
 
-using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 
@@ -138,14 +138,14 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
     {
         _baseModelPath = baseModelPath ?? throw new ArgumentNullException(nameof(baseModelPath));
         _outputModelPath = outputModelPath ?? throw new ArgumentNullException(nameof(outputModelPath));
-        
+
         if (epochs <= 0)
             throw new ArgumentOutOfRangeException(nameof(epochs), "Epochs must be positive");
-            
+
         _epochs = epochs;
         _learningRate = Convert.ToDouble(learningRate);
         _dimension = dimension;
-        
+
         _baseModel = new ONNXSentenceTransformer<T>(_baseModelPath, _dimension, MaxTokens);
         _isFineTuned = false;
         _fineTunedEmbeddingsCache = new Dictionary<string, Vector<T>>();
@@ -203,7 +203,7 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
                 {
                     // Create adjustment to move anchor closer to positive
                     var adjustment = CreateAdjustmentVector(anchorEmb, positiveEmb, _learningRate);
-                    
+
                     // Store adjustment (simplified - in production would update model weights)
                     if (!adjustmentVectors.ContainsKey(anchor))
                     {

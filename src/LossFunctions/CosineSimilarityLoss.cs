@@ -39,7 +39,7 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
     public CosineSimilarityLoss()
     {
     }
-    
+
     /// <summary>
     /// Calculates the Cosine Similarity Loss between two vectors.
     /// </summary>
@@ -49,11 +49,11 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T dotProduct = NumOps.Zero;
         T normPredicted = NumOps.Zero;
         T normActual = NumOps.Zero;
-        
+
         for (int i = 0; i < predicted.Length; i++)
         {
             dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(predicted[i], actual[i]));
@@ -66,11 +66,11 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
             NumOps.Multiply(NumOps.Sqrt(normPredicted), NumOps.Sqrt(normActual)),
             NumericalStabilityHelper.SmallEpsilon
         );
-        
+
         // Loss is 1 - similarity
         return NumOps.Subtract(NumOps.One, cosineSimilarity);
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Cosine Similarity Loss with respect to the predicted values.
     /// </summary>
@@ -80,11 +80,11 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T dotProduct = NumOps.Zero;
         T normPredicted = NumOps.Zero;
         T normActual = NumOps.Zero;
-        
+
         for (int i = 0; i < predicted.Length; i++)
         {
             dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(predicted[i], actual[i]));
@@ -109,7 +109,7 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
             // Derivative of the loss is negative of the derivative of cosine similarity
             derivative[i] = NumOps.Negate(NumericalStabilityHelper.SafeDiv(numerator, denominator, NumericalStabilityHelper.SmallEpsilon));
         }
-        
+
         return derivative;
     }
 }

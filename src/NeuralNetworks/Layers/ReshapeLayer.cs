@@ -41,7 +41,7 @@ public class ReshapeLayer<T> : LayerBase<T>
     /// always the first dimension). It is used to validate input shapes and to perform the reshaping operation.
     /// </remarks>
     private int[] _inputShape;
-    
+
     /// <summary>
     /// The shape of the output tensor, excluding the batch dimension.
     /// </summary>
@@ -50,7 +50,7 @@ public class ReshapeLayer<T> : LayerBase<T>
     /// always the first dimension). It defines the target shape for the reshaping operation.
     /// </remarks>
     private int[] _outputShape;
-    
+
     /// <summary>
     /// Stores the input tensor from the most recent forward pass for use in backpropagation.
     /// </summary>

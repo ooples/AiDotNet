@@ -37,12 +37,12 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// Configuration options for the K-Nearest Neighbors algorithm.
     /// </summary>
     private readonly KNearestNeighborsOptions _options;
-    
+
     /// <summary>
     /// Matrix containing the feature vectors of the training samples.
     /// </summary>
     private Matrix<T> _xTrain;
-    
+
     /// <summary>
     /// Vector containing the target values of the training samples.
     /// </summary>

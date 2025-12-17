@@ -19,7 +19,7 @@ public static class RegressionValidator
     public static void ValidateFeatureCount<T>(Matrix<T> x, int expectedColumns, string component = "", string operation = "")
     {
         var (resolvedComponent, resolvedOperation) = ValidationHelper<T>.ResolveCallerInfo(component, operation);
-        
+
         if (x.Columns != expectedColumns)
         {
             throw new InvalidInputDimensionException(
@@ -44,7 +44,7 @@ public static class RegressionValidator
     public static void ValidateInputOutputDimensions<T>(Matrix<T> x, Vector<T> y, string component = "", string operation = "")
     {
         var (resolvedComponent, resolvedOperation) = ValidationHelper<T>.ResolveCallerInfo(component, operation);
-        
+
         if (x.Rows != y.Length)
         {
             throw new InvalidInputDimensionException(

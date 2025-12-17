@@ -79,7 +79,7 @@ public class TBATSModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int BoxCoxLambda { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the order of the ARMA (AutoRegressive Moving Average) component.
     /// </summary>
@@ -120,7 +120,7 @@ public class TBATSModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int ARMAOrder { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the damping factor for the trend component.
     /// </summary>
@@ -161,7 +161,7 @@ public class TBATSModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int TrendDampingFactor { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the seasonal periods to model.
     /// </summary>
@@ -204,7 +204,7 @@ public class TBATSModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int[] SeasonalPeriods { get; set; } = new int[] { 7, 30, 365 };
-    
+
     /// <summary>
     /// Gets or sets the maximum number of iterations for the optimization algorithm.
     /// </summary>
@@ -244,7 +244,7 @@ public class TBATSModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int MaxIterations { get; set; } = 1000;
-    
+
     /// <summary>
     /// Gets or sets the convergence tolerance for the optimization algorithm.
     /// </summary>

@@ -113,7 +113,7 @@ public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TI
             T mean = vector.Average();
             T variance = vector.Select(x => NumOps.Multiply(NumOps.Subtract(x, mean), NumOps.Subtract(x, mean))).Average();
             T stdDev = NumOps.Sqrt(variance);
-            var normalizedVector = vector.Transform(x => 
+            var normalizedVector = vector.Transform(x =>
                 NumOps.Add(
                     NumOps.Divide(
                         NumOps.Subtract(x, mean),
@@ -129,12 +129,12 @@ public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TI
         {
             // Flatten tensor to apply global contrast normalization
             var flattenedTensor = tensor.ToVector();
-            
+
             T mean = flattenedTensor.Average();
             T variance = flattenedTensor.Select(x => NumOps.Multiply(NumOps.Subtract(x, mean), NumOps.Subtract(x, mean))).Average();
             T stdDev = NumOps.Sqrt(variance);
-            
-            var normalizedVector = flattenedTensor.Transform(x => 
+
+            var normalizedVector = flattenedTensor.Transform(x =>
                 NumOps.Add(
                     NumOps.Divide(
                         NumOps.Subtract(x, mean),
@@ -143,18 +143,18 @@ public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TI
                     NumOps.FromDouble(0.5)
                 )
             );
-            
+
             // Convert back to tensor with the same shape
             var normalizedTensor = Tensor<T>.FromVector(normalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 normalizedTensor = normalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             var parameters = new NormalizationParameters<T> { Mean = mean, StdDev = stdDev, Method = NormalizationMethod.GlobalContrast };
             return ((TOutput)(object)normalizedTensor, parameters);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -196,7 +196,7 @@ public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TI
         {
             var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
             var parametersList = new List<NormalizationParameters<T>>();
-            
+
             for (int i = 0; i < matrix.Columns; i++)
             {
                 var column = matrix.GetColumn(i);
@@ -214,7 +214,7 @@ public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TI
                         $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
                 }
             }
-            
+
             return ((TInput)(object)normalizedMatrix, parametersList);
         }
         else if (data is Tensor<T> tensor && tensor.Shape.Length == 2)
@@ -223,7 +223,7 @@ public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TI
             var rows = tensor.Shape[0];
             var cols = tensor.Shape[1];
             var newMatrix = new Matrix<T>(rows, cols);
-            
+
             for (int i = 0; i < rows; i++)
             {
                 for (int j = 0; j < cols; j++)
@@ -231,11 +231,11 @@ public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TI
                     newMatrix[i, j] = tensor[i, j];
                 }
             }
-            
+
             // Normalize each column separately
             var normalizedColumns = new List<Vector<T>>();
             var parametersList = new List<NormalizationParameters<T>>();
-            
+
             for (int i = 0; i < cols; i++)
             {
                 var column = newMatrix.GetColumn(i);
@@ -253,14 +253,14 @@ public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TI
                         $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
                 }
             }
-            
+
             // Convert back to tensor
             var normalizedMatrix = Matrix<T>.FromColumnVectors(normalizedColumns);
             var normalizedTensor = new Tensor<T>(new[] { normalizedMatrix.Rows, normalizedMatrix.Columns }, normalizedMatrix);
-            
+
             return ((TInput)(object)normalizedTensor, parametersList);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TInput).Name}. " +
             $"Supported types are Matrix<{typeof(T).Name}> and 2D Tensor<{typeof(T).Name}>.");
@@ -301,29 +301,29 @@ public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TI
                 .Transform(x => NumOps.Subtract(x, NumOps.FromDouble(0.5)))
                 .Transform(x => NumOps.Multiply(x, NumOps.Multiply(NumOps.FromDouble(2), parameters.StdDev)))
                 .Transform(x => NumOps.Add(x, parameters.Mean));
-                
+
             return (TOutput)(object)denormalizedVector;
         }
         else if (data is Tensor<T> tensor)
         {
             // Flatten tensor for denormalization
             var flattenedTensor = tensor.ToVector();
-            
+
             var denormalizedVector = flattenedTensor
                 .Transform(x => NumOps.Subtract(x, NumOps.FromDouble(0.5)))
                 .Transform(x => NumOps.Multiply(x, NumOps.Multiply(NumOps.FromDouble(2), parameters.StdDev)))
                 .Transform(x => NumOps.Add(x, parameters.Mean));
-            
+
             // Convert back to tensor with the same shape
             var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             return (TOutput)(object)denormalizedTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -368,13 +368,13 @@ public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TI
     {
         if (coefficients is Vector<T> vector)
         {
-            var scalingFactors = xParams.Select(p => 
+            var scalingFactors = xParams.Select(p =>
                 NumOps.Divide(
                     NumOps.Multiply(NumOps.FromDouble(2), yParams.StdDev),
                     NumOps.Multiply(NumOps.FromDouble(2), p.StdDev)
                 )
             ).ToArray();
-            
+
             var denormalizedCoefficients = vector.PointwiseMultiply(Vector<T>.FromArray(scalingFactors));
             return (TOutput)(object)denormalizedCoefficients;
         }
@@ -382,26 +382,26 @@ public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TI
         {
             // Flatten tensor for denormalization
             var flattenedTensor = tensor.ToVector();
-            
-            var scalingFactors = xParams.Select(p => 
+
+            var scalingFactors = xParams.Select(p =>
                 NumOps.Divide(
                     NumOps.Multiply(NumOps.FromDouble(2), yParams.StdDev),
                     NumOps.Multiply(NumOps.FromDouble(2), p.StdDev)
                 )
             ).ToArray();
-            
+
             var denormalizedVector = flattenedTensor.PointwiseMultiply(Vector<T>.FromArray(scalingFactors));
-            
+
             // Convert back to tensor with the same shape
             var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             return (TOutput)(object)denormalizedTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported coefficients type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -442,7 +442,7 @@ public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TI
     /// gained from training on normalized data.
     /// </para>
     /// </remarks>
-    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, 
+    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients,
         List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
         // Extract vector from coefficients
@@ -461,7 +461,7 @@ public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TI
                 $"Unsupported coefficients type {typeof(TOutput).Name}. " +
                 $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
         }
-        
+
         // Calculate y-intercept
         T denormalizedIntercept = NumOps.Subtract(
             yParams.Mean,
@@ -470,7 +470,7 @@ public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TI
                 NumOps.Multiply(NumOps.FromDouble(2), yParams.StdDev)
             )
         );
-        
+
         for (int i = 0; i < coefficientsVector.Length; i++)
         {
             T term1 = NumOps.Multiply(

@@ -122,7 +122,7 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// during the backward pass for gradient calculation.
     /// </remarks>
     private Tensor<T>? _lastInput;
-    
+
     /// <summary>
     /// The memory tensor from the most recent forward pass.
     /// </summary>
@@ -131,7 +131,7 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// during the backward pass for gradient calculation.
     /// </remarks>
     private Tensor<T>? _lastMemory;
-    
+
     /// <summary>
     /// The output tensor from the most recent forward pass.
     /// </summary>
@@ -140,7 +140,7 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// during the backward pass for gradient calculation.
     /// </remarks>
     private Tensor<T>? _lastOutput;
-    
+
     /// <summary>
     /// The attention scores tensor from the most recent forward pass.
     /// </summary>

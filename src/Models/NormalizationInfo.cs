@@ -59,7 +59,7 @@ public class NormalizationInfo<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public INormalizer<T, TInput, TOutput>? Normalizer { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the normalization parameters for each input feature.
     /// </summary>
@@ -92,7 +92,7 @@ public class NormalizationInfo<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public List<NormalizationParameters<T>> XParams { get; set; } = [];
-    
+
     /// <summary>
     /// Gets or sets the normalization parameters for the target variable.
     /// </summary>

@@ -485,7 +485,7 @@ public abstract class LayerBase<T> : ILayer<T>
         VectorActivation = vectorActivation;
         UsingVectorActivation = true;
     }
-    
+
     /// <summary>
     /// Sets whether the layer is in training mode or inference mode.
     /// </summary>
@@ -956,7 +956,7 @@ public abstract class LayerBase<T> : ILayer<T>
         {
             return VectorActivation.Activate(input);
         }
-        
+
         if (ScalarActivation != null)
         {
             return ScalarActivation.Activate(input);
@@ -1148,7 +1148,7 @@ public abstract class LayerBase<T> : ILayer<T>
     public virtual LayerBase<T> Clone()
     {
         var copy = (LayerBase<T>)this.MemberwiseClone();
-        
+
         // Deep copy any reference type members
         copy.InputShape = (int[])InputShape.Clone();
         copy.OutputShape = (int[])OutputShape.Clone();

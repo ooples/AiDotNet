@@ -270,7 +270,7 @@ public class ModelStats<T, TInput, TOutput>
     /// It's easier to interpret across different datasets. Values closer to 1 indicate better predictions.
     /// </para>
     /// </remarks>
-        public T NormalizedMutualInformation { get; private set; }
+    public T NormalizedMutualInformation { get; private set; }
 
     /// <summary>
     /// Gets the variation of information between actual and predicted values.
@@ -511,18 +511,18 @@ public class ModelStats<T, TInput, TOutput>
     {
         // Convert input matrix to Matrix<T> for statistical calculations
         Matrix<T> matrix = ConversionsHelper.ConvertToMatrix<T, TInput>(inputs.XMatrix);
-    
+
         // Convert actual and predicted values to Vector<T> for statistical calculations
         Vector<T> actual = ConversionsHelper.ConvertToVector<T, TOutput>(inputs.Actual);
         Vector<T> predicted = ConversionsHelper.ConvertToVector<T, TOutput>(inputs.Predicted);
-    
+
         // Convert coefficients if available
         Vector<T> coefficients = Vector<T>.Empty();
         if (inputs.Coefficients != null)
         {
             coefficients = ConversionsHelper.ConvertToVector<T, object>(inputs.Coefficients);
         }
-    
+
         var featureCount = inputs.FeatureCount;
 
         // Calculate all statistical metrics using the converted data types

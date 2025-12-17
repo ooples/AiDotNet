@@ -1,10 +1,9 @@
-using AiDotNet.Enums;
-using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 // Note: Use fully qualified names for RagModels.ThoughtNode<T> to avoid ambiguity with AiDotNet.Reasoning.Models.RagModels.ThoughtNode<T>
 using RagModels = AiDotNet.RetrievalAugmentedGeneration.Models;
 

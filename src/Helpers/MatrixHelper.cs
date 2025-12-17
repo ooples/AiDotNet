@@ -570,7 +570,7 @@ public static class MatrixHelper<T>
         // Use the power iteration method to estimate the spectral norm
         int maxIterations = 100;
         T tolerance = _numOps.FromDouble(1e-10);
-    
+
         Vector<T> v = Vector<T>.CreateRandom(matrix.Columns);
         v = v.Divide(v.Norm());
 

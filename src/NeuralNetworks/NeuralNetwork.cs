@@ -61,7 +61,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     /// - 10 outputs (one for each digit 0-9)
     /// </para>
     /// </remarks>
-    public NeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) : 
+    public NeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         InitializeLayers();
@@ -181,10 +181,10 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
         // Set network to inference mode (not training)
         bool originalTrainingMode = IsTrainingMode;
         SetTrainingMode(false);
-        
+
         // Forward pass through all layers
         Tensor<T> current = input;
-            
+
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
@@ -192,7 +192,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
 
         // Restore original training mode
         SetTrainingMode(originalTrainingMode);
-            
+
         return current;
     }
 
@@ -291,11 +291,11 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Count parameters by layer type
         Dictionary<string, int> layerCounts = [];
-        
+
         foreach (var layer in Layers)
         {
             string layerType = layer.GetType().Name;
-            
+
             if (layerCounts.ContainsKey(layerType))
             {
                 layerCounts[layerType]++;
@@ -305,10 +305,10 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
                 layerCounts[layerType] = 1;
             }
         }
-        
+
         // Get layer sizes
         int[] layerSizes = Architecture.GetLayerSizes();
-        
+
         return new ModelMetadata<T>
         {
             ModelType = ModelType.NeuralNetwork,

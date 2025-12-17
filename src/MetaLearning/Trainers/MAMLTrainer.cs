@@ -1,10 +1,9 @@
+using System.Diagnostics;
 using AiDotNet.Data.Structures;
-
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Config;
 using AiDotNet.Models.Results;
-using System.Diagnostics;
 
 namespace AiDotNet.MetaLearning.Trainers;
 

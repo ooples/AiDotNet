@@ -1,13 +1,13 @@
 // Nullable disabled: This test file has methods that may return null for unsupported model types
 #nullable disable
 
-using Xunit;
-using AiDotNet.TimeSeries;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.JitCompiler;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
-using AiDotNet.Interfaces;
+using AiDotNet.TimeSeries;
+using Xunit;
 using JitCompilerClass = AiDotNet.JitCompiler.JitCompiler;
 
 namespace AiDotNet.Tests.UnitTests.JitCompiler;

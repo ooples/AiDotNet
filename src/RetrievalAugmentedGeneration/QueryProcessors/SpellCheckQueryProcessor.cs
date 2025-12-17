@@ -39,10 +39,10 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
     {
         _maxEditDistance = maxEditDistance;
         _misspellingToCorrect = customDictionary ?? GetDefaultMisspellings();
-        
+
         // Build set of correct words for efficient fuzzy matching
         _correctWords = new HashSet<string>(_misspellingToCorrect.Values, StringComparer.OrdinalIgnoreCase);
-        
+
         // Add all correct words to the set (from common technical vocabulary)
         foreach (var word in GetCommonTechnicalWords())
         {
@@ -70,7 +70,7 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
             var punctuation = Regex.Match(word, @"[^\w]+$", RegexOptions.None, RegexTimeout).Value;
             var leadingPunctuation = Regex.Match(word, @"^[^\w]+", RegexOptions.None, RegexTimeout).Value;
             var cleanWord = word.Trim(leadingPunctuation.ToCharArray()).Trim(punctuation.ToCharArray());
-            
+
             if (string.IsNullOrEmpty(cleanWord))
             {
                 correctedWords.Add(word);
@@ -79,7 +79,7 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
 
             var lowerWord = cleanWord.ToLowerInvariant();
             string correctedWord;
-            
+
             // First try exact misspelling match
             if (_misspellingToCorrect.TryGetValue(lowerWord, out var correction))
             {

@@ -22,12 +22,12 @@ public class CatmullRomSplineInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The tension parameter that controls the curvature of the spline.
     /// </summary>
@@ -38,7 +38,7 @@ public class CatmullRomSplineInterpolation<T> : IInterpolation<T>
     /// The default value of 0.5 provides a balanced curve for most applications.
     /// </remarks>
     private readonly T _tension;
-    
+
     /// <summary>
     /// Helper object for performing numeric operations on generic type T.
     /// </summary>

@@ -1,33 +1,33 @@
+global using AiDotNet.Agents;
 global using AiDotNet.Configuration;
-global using AiDotNet.Helpers;
-global using AiDotNet.FeatureSelectors;
-global using AiDotNet.FitnessCalculators;
-global using AiDotNet.Regularization;
-global using AiDotNet.Optimizers;
-global using AiDotNet.Normalizers;
-global using AiDotNet.OutlierRemoval;
 global using AiDotNet.DataProcessor;
+global using AiDotNet.Deployment.Configuration;
+global using AiDotNet.DistributedTraining;
+global using AiDotNet.Enums;
+global using AiDotNet.FeatureSelectors;
 global using AiDotNet.FitDetectors;
+global using AiDotNet.FitnessCalculators;
+global using AiDotNet.Helpers;
+global using AiDotNet.KnowledgeDistillation;
+global using AiDotNet.LanguageModels;
 global using AiDotNet.LossFunctions;
 global using AiDotNet.MetaLearning.Trainers;
-global using AiDotNet.DistributedTraining;
-global using AiDotNet.Agents;
-global using AiDotNet.LanguageModels;
-global using AiDotNet.Tools;
-global using AiDotNet.Models;
-global using AiDotNet.Enums;
 global using AiDotNet.MixedPrecision;
-global using AiDotNet.KnowledgeDistillation;
-global using AiDotNet.Deployment.Configuration;
+global using AiDotNet.Models;
+global using AiDotNet.Normalizers;
+global using AiDotNet.Optimizers;
+global using AiDotNet.OutlierRemoval;
+global using AiDotNet.PromptEngineering.Chains;
+global using AiDotNet.PromptEngineering.FewShot;
+global using AiDotNet.PromptEngineering.Optimization;
+global using AiDotNet.PromptEngineering.Templates;
 global using AiDotNet.Reasoning.Models;
+global using AiDotNet.Regularization;
 global using AiDotNet.RetrievalAugmentedGeneration.Graph;
-global using AiDotNet.Tokenization.Interfaces;
 global using AiDotNet.Tokenization.Configuration;
 global using AiDotNet.Tokenization.HuggingFace;
-global using AiDotNet.PromptEngineering.Templates;
-global using AiDotNet.PromptEngineering.Chains;
-global using AiDotNet.PromptEngineering.Optimization;
-global using AiDotNet.PromptEngineering.FewShot;
+global using AiDotNet.Tokenization.Interfaces;
+global using AiDotNet.Tools;
 
 namespace AiDotNet;
 
@@ -796,13 +796,13 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         if (_loraConfiguration != null && _model is NeuralNetworks.NeuralNetworkBase<T> neuralNetForLoRA)
         {
             Console.WriteLine("Applying LoRA adapters to neural network layers...");
-            
+
             int adaptedCount = 0;
             for (int i = 0; i < neuralNetForLoRA.Layers.Count; i++)
             {
                 var originalLayer = neuralNetForLoRA.Layers[i];
                 var adaptedLayer = _loraConfiguration.ApplyLoRA(originalLayer);
-                
+
                 // If the layer was adapted (wrapped with LoRA), update the list
                 if (!ReferenceEquals(originalLayer, adaptedLayer))
                 {
@@ -810,7 +810,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                     adaptedCount++;
                 }
             }
-            
+
             Console.WriteLine($"LoRA applied to {adaptedCount} layers (rank={_loraConfiguration.Rank}, alpha={_loraConfiguration.Alpha})");
         }
 
@@ -868,41 +868,41 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             {
                 // Switch on strategy to create appropriate model/optimizer pair
                 (model, finalOptimizer) = _distributedStrategy switch
-            {
-                DistributedStrategy.DDP => (
-                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.DDPModel<T, TInput, TOutput>(_model, shardingConfig),
-                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.DDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                ),
-                DistributedStrategy.FSDP => (
-                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.FSDPModel<T, TInput, TOutput>(_model, shardingConfig),
-                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.FSDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                ),
-                DistributedStrategy.ZeRO1 => (
-                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.ZeRO1Model<T, TInput, TOutput>(_model, shardingConfig),
-                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.ZeRO1Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                ),
-                DistributedStrategy.ZeRO2 => (
-                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.ZeRO2Model<T, TInput, TOutput>(_model, shardingConfig),
-                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.ZeRO2Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                ),
-                DistributedStrategy.ZeRO3 => (
-                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.ZeRO3Model<T, TInput, TOutput>(_model, shardingConfig),
-                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.ZeRO3Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                ),
-                DistributedStrategy.PipelineParallel => (
-                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(_model, shardingConfig),
-                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.PipelineParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                ),
-                DistributedStrategy.TensorParallel => (
-                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.TensorParallelModel<T, TInput, TOutput>(_model, shardingConfig),
-                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.TensorParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                ),
-                DistributedStrategy.Hybrid => (
-                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.HybridShardedModel<T, TInput, TOutput>(_model, shardingConfig),
-                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.HybridShardedOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                ),
-                _ => throw new InvalidOperationException($"Unsupported distributed strategy: {_distributedStrategy}")
-            };
+                {
+                    DistributedStrategy.DDP => (
+                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.DDPModel<T, TInput, TOutput>(_model, shardingConfig),
+                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.DDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    ),
+                    DistributedStrategy.FSDP => (
+                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.FSDPModel<T, TInput, TOutput>(_model, shardingConfig),
+                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.FSDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    ),
+                    DistributedStrategy.ZeRO1 => (
+                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.ZeRO1Model<T, TInput, TOutput>(_model, shardingConfig),
+                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.ZeRO1Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    ),
+                    DistributedStrategy.ZeRO2 => (
+                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.ZeRO2Model<T, TInput, TOutput>(_model, shardingConfig),
+                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.ZeRO2Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    ),
+                    DistributedStrategy.ZeRO3 => (
+                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.ZeRO3Model<T, TInput, TOutput>(_model, shardingConfig),
+                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.ZeRO3Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    ),
+                    DistributedStrategy.PipelineParallel => (
+                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(_model, shardingConfig),
+                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.PipelineParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    ),
+                    DistributedStrategy.TensorParallel => (
+                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.TensorParallelModel<T, TInput, TOutput>(_model, shardingConfig),
+                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.TensorParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    ),
+                    DistributedStrategy.Hybrid => (
+                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.HybridShardedModel<T, TInput, TOutput>(_model, shardingConfig),
+                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.HybridShardedOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    ),
+                    _ => throw new InvalidOperationException($"Unsupported distributed strategy: {_distributedStrategy}")
+                };
             }
         }
 
@@ -2407,8 +2407,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             throw new InvalidOperationException("Knowledge distillation options not configured");
 
         var options = _knowledgeDistillationOptions;
-        
-            
+
+
 
         var NumOps = MathHelper.GetNumericOperations<T>();
 

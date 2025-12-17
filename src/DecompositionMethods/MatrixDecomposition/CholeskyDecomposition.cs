@@ -62,7 +62,7 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
         : base(matrix)
     {
         _algorithm = algorithm;
-    
+
         Decompose();
     }
 

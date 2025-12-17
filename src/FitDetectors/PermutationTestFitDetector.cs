@@ -21,7 +21,7 @@ public class PermutationTestFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// Random number generator used for permutation simulations.
     /// </summary>
     private readonly Random _random;
-    
+
     /// <summary>
     /// Configuration options for the permutation test detector.
     /// </summary>
@@ -101,24 +101,24 @@ public class PermutationTestFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
         var validationPValue = PerformPermutationTest(evaluationData.ValidationSet.PredictionStats);
         var testPValue = PerformPermutationTest(evaluationData.TestSet.PredictionStats);
 
-        if (trainingPValue < _options.SignificanceLevel && 
-            validationPValue < _options.SignificanceLevel && 
+        if (trainingPValue < _options.SignificanceLevel &&
+            validationPValue < _options.SignificanceLevel &&
             testPValue < _options.SignificanceLevel)
         {
             return FitType.GoodFit;
         }
-        else if (trainingPValue < _options.SignificanceLevel && 
+        else if (trainingPValue < _options.SignificanceLevel &&
                  (validationPValue >= _options.SignificanceLevel || testPValue >= _options.SignificanceLevel))
         {
             return FitType.Overfit;
         }
-        else if (trainingPValue >= _options.SignificanceLevel && 
-                 validationPValue >= _options.SignificanceLevel && 
+        else if (trainingPValue >= _options.SignificanceLevel &&
+                 validationPValue >= _options.SignificanceLevel &&
                  testPValue >= _options.SignificanceLevel)
         {
             return FitType.Underfit;
         }
-        else if (Math.Abs(trainingPValue - validationPValue) > _options.HighVarianceThreshold || 
+        else if (Math.Abs(trainingPValue - validationPValue) > _options.HighVarianceThreshold ||
                  Math.Abs(trainingPValue - testPValue) > _options.HighVarianceThreshold)
         {
             return FitType.HighVariance;

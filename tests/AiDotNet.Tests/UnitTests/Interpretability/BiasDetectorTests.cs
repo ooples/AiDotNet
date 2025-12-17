@@ -1,8 +1,8 @@
-using AiDotNet.Tensors.LinearAlgebra;
+using System;
 using AiDotNet.Interpretability;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
-using System;
 
 namespace AiDotNetTests.UnitTests.Interpretability
 {

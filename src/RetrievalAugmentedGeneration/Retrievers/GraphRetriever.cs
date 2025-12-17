@@ -1,5 +1,5 @@
-global using AiDotNet.Interfaces;
 global using System.Text.RegularExpressions;
+global using AiDotNet.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
@@ -170,11 +170,11 @@ public class GraphRetriever<T> : RetrieverBase<T>
         {
             var entityScore = CalculateEntityMatchScore(doc, entities);
             var relationshipScore = CalculateRelationshipScore(doc, entities);
-            
+
             // Combine scores
             var baseScore = Convert.ToDouble(doc.RelevanceScore);
             var enhancedScore = baseScore * (1.0 + entityScore * 0.3 + relationshipScore * 0.2);
-            
+
             return (doc, NumOps.FromDouble(enhancedScore));
         }).ToList();
 

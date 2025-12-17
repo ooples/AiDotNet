@@ -1,7 +1,7 @@
-using AiDotNet.Tensors.LinearAlgebra;
 using System;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.NestedLearning

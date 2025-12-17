@@ -1,5 +1,5 @@
-using AiDotNet.Data.Structures;
 using AiDotNet.Data.Graph;
+using AiDotNet.Data.Structures;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Validation;

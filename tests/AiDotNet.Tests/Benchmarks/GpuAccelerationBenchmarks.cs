@@ -1,10 +1,10 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using AiDotNet.ActivationFunctions;
-using AiDotNet.Interfaces;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
 

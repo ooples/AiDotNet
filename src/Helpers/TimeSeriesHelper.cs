@@ -140,16 +140,16 @@ public static class TimeSeriesHelper<T>
     public static Vector<T> CalculateMultipleAutoCorrelation(Vector<T> y, int maxLag)
     {
         var acf = new Vector<T>(maxLag + 1);
-    
+
         // Lag 0 is always 1.0 (perfect correlation with itself)
         acf[0] = _numOps.One;
-    
+
         // Calculate autocorrelation for each lag using the existing method
         for (int lag = 1; lag <= maxLag; lag++)
         {
             acf[lag] = CalculateAutoCorrelation(y, lag);
         }
-    
+
         return acf;
     }
 

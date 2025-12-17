@@ -53,7 +53,7 @@ public class WeightedRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     private readonly Vector<T> _weights;
-    
+
     /// <summary>
     /// The polynomial order for feature expansion.
     /// </summary>

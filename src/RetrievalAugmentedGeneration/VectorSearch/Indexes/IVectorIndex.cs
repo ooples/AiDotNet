@@ -1,5 +1,5 @@
-using AiDotNet.LinearAlgebra;
 using System.Collections.Generic;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 {

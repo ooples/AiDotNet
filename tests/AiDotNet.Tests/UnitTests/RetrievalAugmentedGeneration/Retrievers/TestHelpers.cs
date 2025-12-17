@@ -1,9 +1,9 @@
-using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 {

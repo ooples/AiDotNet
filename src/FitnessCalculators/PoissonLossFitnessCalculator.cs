@@ -71,7 +71,7 @@ public class PoissonLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculato
     /// - When your data might have occasional large values but mostly smaller values
     /// </para>
     /// </remarks>
-    public PoissonLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) 
+    public PoissonLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
     }
@@ -104,7 +104,7 @@ public class PoissonLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculato
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return new PoissonLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+        return new PoissonLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

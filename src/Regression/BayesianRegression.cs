@@ -50,7 +50,7 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// Options specific to Bayesian regression.
     /// </summary>
     private readonly BayesianRegressionOptions<T> _bayesOptions;
-    
+
     /// <summary>
     /// The covariance matrix of the posterior distribution over model parameters.
     /// </summary>
@@ -83,7 +83,7 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// for many regression problems.
     /// </para>
     /// </remarks>
-    public BayesianRegression(BayesianRegressionOptions<T>? bayesianOptions = null, 
+    public BayesianRegression(BayesianRegressionOptions<T>? bayesianOptions = null,
                               IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(bayesianOptions, regularization)
     {
@@ -158,7 +158,7 @@ public class BayesianRegression<T> : RegressionBase<T>
 
         // Compute posterior precision and covariance
         var posteriorPrecision = priorPrecision.Add(designPrecision);
-        
+
         // Use the factory to create the appropriate decomposition
         var decomposition = MatrixDecompositionFactory.CreateDecomposition(posteriorPrecision, _bayesOptions.DecompositionType);
         _posteriorCovariance = MatrixHelper<T>.InvertUsingDecomposition(decomposition);

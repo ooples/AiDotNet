@@ -161,9 +161,9 @@ public class InformationCriteriaFitDetector<T, TInput, TOutput> : FitDetectorBas
         var validationBic = evaluationData.ValidationSet.ErrorStats.BIC;
         var testBic = evaluationData.TestSet.ErrorStats.BIC;
 
-        var aicConfidence = Math.Exp(-(Convert.ToDouble(NumOps.Subtract(validationAic, trainingAic)) / 2)) * 
+        var aicConfidence = Math.Exp(-(Convert.ToDouble(NumOps.Subtract(validationAic, trainingAic)) / 2)) *
             Math.Exp(-(Convert.ToDouble(NumOps.Subtract(testAic, trainingAic))) / 2);
-        var bicConfidence = Math.Exp(-(Convert.ToDouble(NumOps.Subtract(validationBic, trainingBic)) / 2)) * 
+        var bicConfidence = Math.Exp(-(Convert.ToDouble(NumOps.Subtract(validationBic, trainingBic)) / 2)) *
             Math.Exp(-(Convert.ToDouble(NumOps.Subtract(testBic, trainingBic))) / 2);
 
         var averageConfidence = (aicConfidence + bicConfidence) / 2;

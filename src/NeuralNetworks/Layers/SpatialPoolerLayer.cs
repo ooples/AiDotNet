@@ -48,7 +48,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private readonly int InputSize;
-    
+
     /// <summary>
     /// The number of columns in the spatial pooler.
     /// </summary>
@@ -67,7 +67,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private readonly int ColumnCount;
-    
+
     /// <summary>
     /// The threshold that determines the sparsity of the output.
     /// </summary>
@@ -93,7 +93,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private readonly double SparsityThreshold;
-    
+
     /// <summary>
     /// The connection strengths between input elements and columns.
     /// </summary>
@@ -103,7 +103,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// Gradient of the connections computed during backpropagation.
     /// </summary>
     private Tensor<T>? _connectionsGradient;
-    
+
     /// <summary>
     /// Stores the input tensor from the most recent forward pass or learning step.
     /// </summary>
@@ -137,7 +137,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T>? LastOutput;
-    
+
     /// <summary>
     /// The learning rate used during the learning process.
     /// </summary>
@@ -157,7 +157,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private readonly double LearningRate = 0.01;
-    
+
     /// <summary>
     /// The factor that controls boosting of inactive columns.
     /// </summary>
@@ -513,7 +513,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         {
             var delta = Engine.TensorMultiplyScalar(_connectionsGradient, learningRate);
             Connections = Engine.TensorSubtract(Connections, delta);
-            
+
             // Maintain connection constraints
             NormalizeConnections();
             return;

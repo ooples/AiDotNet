@@ -34,12 +34,12 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
     /// The shape parameter (epsilon) controlling the width of the function.
     /// </summary>
     private readonly T _epsilon;
-    
+
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="InverseMultiquadricRBF{T}"/> class with a specified shape parameter.
     /// </summary>
@@ -69,7 +69,7 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
         _numOps = MathHelper.GetNumericOperations<T>();
         _epsilon = _numOps.FromDouble(epsilon);
     }
-    
+
     /// <summary>
     /// Computes the value of the Inverse Multiquadric Radial Basis Function for a given radius.
     /// </summary>
@@ -104,7 +104,7 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
             _numOps.Sqrt(_numOps.Add(_numOps.Multiply(r, r), _numOps.Multiply(_epsilon, _epsilon)))
         );
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Inverse Multiquadric RBF with respect to the radius.
     /// </summary>
@@ -132,27 +132,27 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
     public T ComputeDerivative(T r)
     {
         // Derivative with respect to r: -r/(r² + e²)^(3/2)
-        
+
         // Calculate r²
         T rSquared = _numOps.Multiply(r, r);
-        
+
         // Calculate e²
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
-        
+
         // Calculate r² + e²
         T sum = _numOps.Add(rSquared, epsilonSquared);
-        
+
         // Calculate (r² + e²)^(3/2)
         T sumSqrt = _numOps.Sqrt(sum);
         T sumPow3_2 = _numOps.Multiply(sum, sumSqrt);
-        
+
         // Calculate -r
         T negativeR = _numOps.Negate(r);
-        
+
         // Return -r/(r² + e²)^(3/2)
         return _numOps.Divide(negativeR, sumPow3_2);
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Inverse Multiquadric RBF with respect to the shape parameter epsilon.
     /// </summary>
@@ -179,23 +179,23 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
     public T ComputeWidthDerivative(T r)
     {
         // Derivative with respect to e: -e/(r² + e²)^(3/2)
-        
+
         // Calculate r²
         T rSquared = _numOps.Multiply(r, r);
-        
+
         // Calculate e²
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
-        
+
         // Calculate r² + e²
         T sum = _numOps.Add(rSquared, epsilonSquared);
-        
+
         // Calculate (r² + e²)^(3/2)
         T sumSqrt = _numOps.Sqrt(sum);
         T sumPow3_2 = _numOps.Multiply(sum, sumSqrt);
-        
+
         // Calculate -e
         T negativeEpsilon = _numOps.Negate(_epsilon);
-        
+
         // Return -e/(r² + e²)^(3/2)
         return _numOps.Divide(negativeEpsilon, sumPow3_2);
     }

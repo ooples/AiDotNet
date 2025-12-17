@@ -44,22 +44,22 @@ public class SymletWavelet<T> : WaveletFunctionBase<T>
     /// The order of the Symlet wavelet.
     /// </summary>
     private readonly int _order;
-    
+
     /// <summary>
     /// The decomposition low-pass filter coefficients.
     /// </summary>
     private readonly Vector<T> _lowDecomp;
-    
+
     /// <summary>
     /// The decomposition high-pass filter coefficients.
     /// </summary>
     private readonly Vector<T> _highDecomp;
-    
+
     /// <summary>
     /// The reconstruction low-pass filter coefficients.
     /// </summary>
     private readonly Vector<T> _lowRecon;
-    
+
     /// <summary>
     /// The reconstruction high-pass filter coefficients.
     /// </summary>

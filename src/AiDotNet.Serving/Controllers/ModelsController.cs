@@ -1,10 +1,10 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
+using AiDotNet.Models.Results;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
-using AiDotNet.Models.Results;
 using AiDotNet.Tensors.LinearAlgebra;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace AiDotNet.Serving.Controllers;
 

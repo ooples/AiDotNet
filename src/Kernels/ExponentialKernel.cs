@@ -43,7 +43,7 @@ public class ExponentialKernel<T> : IKernelFunction<T>
     /// Adjusting sigma lets you control how "picky" your similarity measure is about distance.
     /// </remarks>
     private readonly T _sigma;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

@@ -245,11 +245,11 @@ public class CalibratedProbabilityFitDetector<T, TInput, TOutput> : FitDetectorB
             if (binIndices.Count > 0)
             {
                 expectedCalibration[i] = NumOps.Divide(NumOps.Add(lowerBound, upperBound), NumOps.FromDouble(2));
-    
-                var sum = binIndices.Aggregate(NumOps.Zero, (acc, idx) => 
+
+                var sum = binIndices.Aggregate(NumOps.Zero, (acc, idx) =>
                     NumOps.Add(acc, actual[NumOps.ToInt32(idx)])
                 );
-    
+
                 observedCalibration[i] = NumOps.Divide(
                     sum,
                     NumOps.FromDouble(binIndices.Count)

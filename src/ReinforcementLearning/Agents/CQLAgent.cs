@@ -1,12 +1,12 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
-using AiDotNet.Enums;
 
 namespace AiDotNet.ReinforcementLearning.Agents.CQL;
 
@@ -456,13 +456,13 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Temperature update using entropy target
         // Loss: alpha * (entropy - target_entropy)
         // Gradient: d_loss/d_log_alpha = alpha * (entropy - target_entropy)
-        
+
         T avgEntropy = _numOps.Zero;
         foreach (var experience in batch)
         {
             var policyOutputTensor = _policyNetwork.Predict(Tensor<T>.FromVector(experience.State));
             var policyOutput = policyOutputTensor.ToVector();
-            
+
             T entropy = _numOps.Zero;
             for (int tempIdx = 0; tempIdx < _options.ActionSize; tempIdx++)
             {
@@ -474,17 +474,17 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             avgEntropy = _numOps.Add(avgEntropy, entropy);
         }
         avgEntropy = _numOps.Divide(avgEntropy, _numOps.FromDouble(batch.Count));
-        
+
         // Target entropy: -dim(action_space)
         var targetEntropy = _numOps.FromDouble(-_options.ActionSize);
         var entropyGap = _numOps.Subtract(avgEntropy, targetEntropy);
-        
+
         // Update log_alpha: log_alpha -= lr * alpha * entropy_gap
         var alphaLr = _numOps.FromDouble(0.0003);
         var alphaGrad = _numOps.Multiply(_alpha, entropyGap);
         var alphaUpdate = _numOps.Multiply(alphaLr, alphaGrad);
         _logAlpha = _numOps.Subtract(_logAlpha, alphaUpdate);
-        
+
         // Update alpha from log_alpha
         _alpha = NumOps.Exp(_logAlpha);
     }

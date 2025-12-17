@@ -1,7 +1,7 @@
-using AiDotNet.LinearAlgebra;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 {

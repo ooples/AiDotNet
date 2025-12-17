@@ -166,11 +166,11 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public HTMNetwork(
-        NeuralNetworkArchitecture<T> architecture, 
-        int columnCount = 2048, 
-        int cellsPerColumn = 32, 
+        NeuralNetworkArchitecture<T> architecture,
+        int columnCount = 2048,
+        int cellsPerColumn = 32,
         double sparsityThreshold = 0.02,
-        ILossFunction<T>? lossFunction = null) 
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         var inputShape = Architecture.GetInputShape();
@@ -178,7 +178,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         {
             throw new InvalidOperationException("Input shape must be specified for HTM network.");
         }
-    
+
         _inputSize = inputShape[0];
         _columnCount = columnCount;
         _cellsPerColumn = cellsPerColumn;
@@ -368,29 +368,29 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         // Validate input
         if (input.Length != _inputSize)
             throw new ArgumentException($"Input size mismatch. Expected {_inputSize}, got {input.Length}.");
-            
+
         // Flag to indicate we're in prediction mode (not learning)
         bool originalTrainingMode = IsTrainingMode;
         SetTrainingMode(false);
-        
+
         try
         {
             // Forward pass through the Spatial Pooler
             if (!(Layers[0] is SpatialPoolerLayer<T> spatialPoolerLayer))
                 throw new InvalidOperationException("The first layer is not a SpatialPoolerLayer.");
-                
+
             var spatialPoolerOutput = spatialPoolerLayer.Forward(Tensor<T>.FromVector(input)).ToVector();
-            
+
             // Forward pass through the Temporal Memory
             if (!(Layers[1] is TemporalMemoryLayer<T> temporalMemoryLayer))
                 throw new InvalidOperationException("The second layer is not a TemporalMemoryLayer.");
-                
+
             // Get predictions before processing input (what the network expected)
             var predictedCells = temporalMemoryLayer.GetPredictions();
-            
+
             // Process input to get current state
             var temporalMemoryOutput = temporalMemoryLayer.Forward(Tensor<T>.FromVector(spatialPoolerOutput)).ToVector();
-            
+
             // Calculate anomaly score (if supported)
             T anomalyScore = NumOps.Zero;
             if (Layers.Count > 2 && Layers[2] is AnomalyDetectorLayer<T> anomalyLayer)
@@ -401,27 +401,27 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
                     anomalyScore = anomalyOutput[0];
                 }
             }
-            
+
             // Create output vector with prediction results
             // Format depends on the specific implementation, but might include:
             // - Active columns
             // - Predicted columns
             // - Anomaly score
-            
+
             // Simple example format:
             // [anomaly_score, active_columns..., predicted_columns...]
             int outputSize = 1 + _columnCount * 2;
             var result = new Vector<T>(outputSize);
-            
+
             // Set anomaly score
             result[0] = anomalyScore;
-            
+
             // Set active columns (from spatial pooler output)
             for (int i = 0; i < _columnCount && i < spatialPoolerOutput.Length; i++)
             {
                 result[1 + i] = spatialPoolerOutput[i];
             }
-            
+
             // Set predicted columns (if available)
             if (predictedCells != null && predictedCells.Length >= _columnCount)
             {
@@ -430,7 +430,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
                     result[1 + _columnCount + i] = predictedCells[i];
                 }
             }
-            
+
             return result;
         }
         finally
@@ -466,10 +466,10 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentException("Input tensor must be a vector or a single-row batch.");
         }
-        
+
         // Use the vector prediction method
         var predictionVector = Predict(inputVector);
-        
+
         // Convert back to tensor
         return Tensor<T>.FromVector(predictionVector);
     }
@@ -668,9 +668,9 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         writer.Write(_columnCount);
         writer.Write(_cellsPerColumn);
         writer.Write(_sparsityThreshold);
-        
+
         // Serialize any additional HTM state
-        
+
         // Look for the temporal memory layer
         for (int i = 0; i < Layers.Count; i++)
         {
@@ -678,13 +678,13 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
             {
                 // Mark that we found a temporal memory layer
                 writer.Write(true);
-                
+
                 // Serialize the temporal memory's state
                 if (temporalMemoryLayer.PreviousState != null)
                 {
                     writer.Write(true); // Has previous state
                     writer.Write(temporalMemoryLayer.PreviousState.Length);
-                    
+
                     // Write each element of the previous state
                     for (int j = 0; j < temporalMemoryLayer.PreviousState.Length; j++)
                     {
@@ -695,11 +695,11 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
                 {
                     writer.Write(false); // No previous state
                 }
-                
+
                 break; // Stop after finding the first temporal memory layer
             }
         }
-        
+
         // If no temporal memory layer was found
         writer.Write(false);
     }
@@ -714,9 +714,9 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         _columnCount = reader.ReadInt32();
         _cellsPerColumn = reader.ReadInt32();
         _sparsityThreshold = reader.ReadDouble();
-        
+
         // Deserialize additional HTM state
-        
+
         // Check if there was a temporal memory layer
         bool hasTemporalMemoryLayer = reader.ReadBoolean();
         if (hasTemporalMemoryLayer)
@@ -732,17 +732,17 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
                     {
                         int stateLength = reader.ReadInt32();
                         var previousState = new Vector<T>(stateLength);
-                        
+
                         // Read each element of the previous state
                         for (int j = 0; j < stateLength; j++)
                         {
                             previousState[j] = NumOps.FromDouble(reader.ReadDouble());
                         }
-                        
+
                         // Set the previous state
                         temporalMemoryLayer.PreviousState = previousState;
                     }
-                    
+
                     break; // Stop after restoring the first temporal memory layer
                 }
             }

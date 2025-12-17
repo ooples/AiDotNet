@@ -269,7 +269,7 @@ public abstract class TeacherModelBase<TInput, TOutput, T> : ITeacherModel<TInpu
         }
 
         return new Vector<T>(probabilities);
-    }    
+    }
     /// <summary>
     /// Applies temperature-scaled softmax to logits. Must be implemented by subclasses
     /// based on their output type (Vector, Matrix, etc.).

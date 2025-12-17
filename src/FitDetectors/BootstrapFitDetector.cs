@@ -27,7 +27,7 @@ public class BootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
     /// different types of model fit.
     /// </remarks>
     private readonly BootstrapFitDetectorOptions _options;
-    
+
     /// <summary>
     /// Random number generator used for bootstrap resampling.
     /// </summary>

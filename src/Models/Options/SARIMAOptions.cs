@@ -81,7 +81,7 @@ public class SARIMAOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int P { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the differencing order (d) of the non-seasonal component.
     /// </summary>
@@ -122,7 +122,7 @@ public class SARIMAOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int D { get; set; } = 0;
-    
+
     /// <summary>
     /// Gets or sets the moving average order (q) of the non-seasonal component.
     /// </summary>
@@ -162,7 +162,7 @@ public class SARIMAOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int Q { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the seasonal autoregressive order (P) of the model.
     /// </summary>
@@ -201,7 +201,7 @@ public class SARIMAOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int SeasonalP { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the seasonal differencing order (D) of the model.
     /// </summary>
@@ -240,7 +240,7 @@ public class SARIMAOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int SeasonalD { get; set; } = 0;
-    
+
     /// <summary>
     /// Gets or sets the seasonal moving average order (Q) of the model.
     /// </summary>
@@ -278,7 +278,7 @@ public class SARIMAOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int SeasonalQ { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the number of time points in one seasonal cycle.
     /// </summary>

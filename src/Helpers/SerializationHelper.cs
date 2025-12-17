@@ -309,7 +309,7 @@ public static class SerializationHelper<T>
         return ms.ToArray();
     }
 
-        /// <summary>
+    /// <summary>
     /// Deserializes a matrix from a binary reader without specifying expected dimensions.
     /// </summary>
     /// <param name="reader">The binary reader to read the serialized data from.</param>

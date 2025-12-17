@@ -170,7 +170,6 @@ namespace AiDotNetTests.UnitTests.FitDetectors
 
             // Assert
             Assert.NotNull(result);
-            Assert.NotNull(result.FitType);
         }
 
         [Fact]
@@ -194,7 +193,6 @@ namespace AiDotNetTests.UnitTests.FitDetectors
 
             // Assert
             Assert.NotNull(result);
-            Assert.NotNull(result.ConfidenceLevel);
             Assert.True(result.ConfidenceLevel >= 0.0);
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
@@ -220,7 +218,6 @@ namespace AiDotNetTests.UnitTests.FitDetectors
 
             // Assert
             Assert.NotNull(result);
-            Assert.NotNull(result.FitType);
         }
 
         [Fact]
@@ -355,8 +352,6 @@ namespace AiDotNetTests.UnitTests.FitDetectors
 
             // Assert
             Assert.NotNull(result);
-            Assert.NotNull(result.FitType);
-            Assert.NotNull(result.ConfidenceLevel);
             Assert.NotNull(result.Recommendations);
             Assert.NotEmpty(result.Recommendations);
             Assert.NotNull(result.AdditionalInfo);

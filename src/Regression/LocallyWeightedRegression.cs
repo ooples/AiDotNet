@@ -37,12 +37,12 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// Configuration options for the Locally Weighted Regression algorithm.
     /// </summary>
     private readonly LocallyWeightedRegressionOptions _options;
-    
+
     /// <summary>
     /// Matrix containing the feature vectors of the training samples.
     /// </summary>
     private Matrix<T> _xTrain;
-    
+
     /// <summary>
     /// Vector containing the target values of the training samples.
     /// </summary>
@@ -306,7 +306,7 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
 
         // Serialize LWR specific data
         writer.Write(_options.Bandwidth);
-    
+
         // Serialize _xTrain
         writer.Write(_xTrain.Rows);
         writer.Write(_xTrain.Columns);

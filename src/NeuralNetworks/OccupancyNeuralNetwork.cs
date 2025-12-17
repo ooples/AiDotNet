@@ -54,12 +54,12 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     private int _historyWindowSize { get; set; }
-    
+
     /// <summary>
     /// Gets a value indicating whether this network processes temporal data.
     /// </summary>
     public bool IncludesTemporalData => _includeTemporalData;
-    
+
     /// <summary>
     /// Gets the size of the time window used for temporal data.
     /// </summary>
@@ -102,16 +102,16 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public OccupancyNeuralNetwork(
-        NeuralNetworkArchitecture<T> architecture, 
-        bool includeTemporalData = false, 
+        NeuralNetworkArchitecture<T> architecture,
+        bool includeTemporalData = false,
         int historyWindowSize = 5,
-        ILossFunction<T>? lossFunction = null) : 
+        ILossFunction<T>? lossFunction = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _includeTemporalData = includeTemporalData;
         _historyWindowSize = includeTemporalData ? Math.Max(1, historyWindowSize) : 0;
         _internalSensorHistory = new Queue<Vector<T>>(_historyWindowSize);
-        
+
         if (includeTemporalData)
         {
             ArchitectureValidator.ValidateInputType(architecture, InputType.ThreeDimensional, nameof(OccupancyNeuralNetwork<T>));
@@ -278,7 +278,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         // Set network to inference mode
         bool originalTrainingMode = IsTrainingMode;
         SetTrainingMode(false);
-        
+
         try
         {
             // Handle different input formats based on temporal configuration
@@ -322,10 +322,10 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                     // assume batch processing and process each vector separately
                     int batchSize = input.Shape[0];
                     int features = input.Rank > 1 ? input.Shape[1] : input.Shape[0];
-                    
+
                     // Create output tensor for batch results
                     var output = new Tensor<T>([batchSize, Architecture.OutputSize]);
-                    
+
                     // Process each input in the batch
                     for (int b = 0; b < batchSize; b++)
                     {
@@ -335,17 +335,17 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                         {
                             singleInput[f] = input[b, f];
                         }
-                        
+
                         // Process through layers
                         var result = ProcessSingleInput(singleInput);
-                        
+
                         // Store in output tensor
                         for (int o = 0; o < result.Length; o++)
                         {
                             output[b, o] = result[o];
                         }
                     }
-                    
+
                     return output;
                 }
                 else
@@ -362,7 +362,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
             SetTrainingMode(originalTrainingMode);
         }
     }
-    
+
     /// <summary>
     /// Processes a single input vector through the network.
     /// </summary>
@@ -381,15 +381,15 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentException($"Input size mismatch. Expected {Architecture.InputSize}, got {input.Length}.");
         }
-        
+
         // Forward pass through all layers
         var current = Tensor<T>.FromVector(input);
-        
+
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
-        
+
         return current.ToVector();
     }
 
@@ -423,7 +423,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Ensure we're in training mode
         SetTrainingMode(true);
-        
+
         // Process based on temporal configuration
         if (_includeTemporalData)
         {
@@ -535,17 +535,17 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                 nameof(CalculateError)
             );
         }
-    
+
         // Calculate error (expected - predicted)
         var error = new Tensor<T>(predicted.Shape);
-    
+
         for (int i = 0; i < predicted.Length; i++)
         {
             var predictedValue = predicted.GetFlatIndexValue(i);
             var expectedValue = expected.GetFlatIndexValue(i);
             error.SetFlatIndex(i, NumOps.Subtract(expectedValue, predictedValue));
         }
-    
+
         return error;
     }
 
@@ -587,7 +587,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                 layerTypeCount[layerType] = 1;
             }
         }
-        
+
         return new ModelMetadata<T>
         {
             ModelType = ModelType.OccupancyNetwork,
@@ -605,7 +605,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
             ModelData = this.Serialize()
         };
     }
-    
+
     /// <summary>
     /// Serializes network-specific data to a binary writer.
     /// </summary>
@@ -628,10 +628,10 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         // Save temporal configuration
         writer.Write(_includeTemporalData);
         writer.Write(_historyWindowSize);
-        
+
         // Save any internal sensor history if present
         writer.Write(_internalSensorHistory.Count);
-        
+
         foreach (var reading in _internalSensorHistory)
         {
             writer.Write(reading.Length);
@@ -664,23 +664,23 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         // Load temporal configuration
         _includeTemporalData = reader.ReadBoolean();
         _historyWindowSize = reader.ReadInt32();
-        
+
         // Initialize sensor history queue
         _internalSensorHistory = new Queue<Vector<T>>(_historyWindowSize);
-        
+
         // Load any saved sensor history
         int historyCount = reader.ReadInt32();
-        
+
         for (int h = 0; h < historyCount; h++)
         {
             int readingLength = reader.ReadInt32();
             var reading = new Vector<T>(readingLength);
-            
+
             for (int i = 0; i < readingLength; i++)
             {
                 reading[i] = NumOps.FromDouble(reader.ReadDouble());
             }
-            
+
             _internalSensorHistory.Enqueue(reading);
         }
     }
@@ -716,8 +716,8 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new OccupancyNeuralNetwork<T>(
-            Architecture, 
-            _includeTemporalData, 
+            Architecture,
+            _includeTemporalData,
             _historyWindowSize,
             LossFunction);
     }

@@ -40,7 +40,7 @@ public class ExponentialLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T loss = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -48,10 +48,10 @@ public class ExponentialLoss<T> : LossFunctionBase<T>
             T exponent = NumOps.Negate(NumOps.Multiply(actual[i], predicted[i]));
             loss = NumOps.Add(loss, NumOps.Exp(exponent));
         }
-        
+
         return NumOps.Divide(loss, NumOps.FromDouble(predicted.Length));
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Exponential Loss function.
     /// </summary>
@@ -61,7 +61,7 @@ public class ExponentialLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -72,7 +72,7 @@ public class ExponentialLoss<T> : LossFunctionBase<T>
                 NumOps.Exp(exponent)
             );
         }
-        
+
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
 }

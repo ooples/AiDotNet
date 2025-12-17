@@ -57,16 +57,17 @@ public class MinMaxNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
         {
             T min = vector.Min();
             T max = vector.Max();
-            
-            var normalized = vector.Transform(x => 
+
+            var normalized = vector.Transform(x =>
                 NumOps.Divide(NumOps.Subtract(x, min), NumOps.Subtract(max, min)));
-            
-            var parameters = new NormalizationParameters<T> { 
-                Method = NormalizationMethod.MinMax, 
-                Min = min, 
-                Max = max 
+
+            var parameters = new NormalizationParameters<T>
+            {
+                Method = NormalizationMethod.MinMax,
+                Min = min,
+                Max = max
             };
-            
+
             return ((TOutput)(object)normalized, parameters);
         }
         else if (data is Tensor<T> tensor)
@@ -75,31 +76,32 @@ public class MinMaxNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
             var flattenedTensor = tensor.ToVector();
             T min = flattenedTensor.Min();
             T max = flattenedTensor.Max();
-            
-            var normalized = flattenedTensor.Transform(x => 
+
+            var normalized = flattenedTensor.Transform(x =>
                 NumOps.Divide(NumOps.Subtract(x, min), NumOps.Subtract(max, min)));
-            
+
             // Convert back to tensor with the same shape
             var normalizedTensor = Tensor<T>.FromVector(normalized);
             if (tensor.Shape.Length > 1)
             {
                 normalizedTensor = normalizedTensor.Reshape(tensor.Shape);
             }
-            
-            var parameters = new NormalizationParameters<T> { 
-                Method = NormalizationMethod.MinMax, 
-                Min = min, 
-                Max = max 
+
+            var parameters = new NormalizationParameters<T>
+            {
+                Method = NormalizationMethod.MinMax,
+                Min = min,
+                Max = max
             };
-            
+
             return ((TOutput)(object)normalizedTensor, parameters);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
-    
+
     /// <summary>
     /// Normalizes input data to a standard range.
     /// </summary>
@@ -116,24 +118,25 @@ public class MinMaxNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
         {
             var normalizedColumns = new List<Vector<T>>();
             var parameters = new List<NormalizationParameters<T>>();
-            
+
             for (int i = 0; i < matrix.Columns; i++)
             {
                 var column = matrix.GetColumn(i);
                 T min = column.Min();
                 T max = column.Max();
-                
-                var normalizedColumn = column.Transform(x => 
+
+                var normalizedColumn = column.Transform(x =>
                     NumOps.Divide(NumOps.Subtract(x, min), NumOps.Subtract(max, min)));
-                
+
                 normalizedColumns.Add(normalizedColumn);
-                parameters.Add(new NormalizationParameters<T> { 
-                    Method = NormalizationMethod.MinMax, 
-                    Min = min, 
-                    Max = max 
+                parameters.Add(new NormalizationParameters<T>
+                {
+                    Method = NormalizationMethod.MinMax,
+                    Min = min,
+                    Max = max
                 });
             }
-            
+
             var normalizedMatrix = Matrix<T>.FromColumnVectors(normalizedColumns);
             return ((TInput)(object)normalizedMatrix, parameters);
         }
@@ -143,7 +146,7 @@ public class MinMaxNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
             var rows = tensor.Shape[0];
             var cols = tensor.Shape[1];
             var newMatrix = new Matrix<T>(rows, cols);
-            
+
             for (int i = 0; i < rows; i++)
             {
                 for (int j = 0; j < cols; j++)
@@ -151,40 +154,41 @@ public class MinMaxNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
                     newMatrix[i, j] = tensor[i, j];
                 }
             }
-            
+
             // Normalize each column separately
             var normalizedColumns = new List<Vector<T>>();
             var parameters = new List<NormalizationParameters<T>>();
-            
+
             for (int i = 0; i < cols; i++)
             {
                 var column = newMatrix.GetColumn(i);
                 T min = column.Min();
                 T max = column.Max();
-                
-                var normalizedColumn = column.Transform(x => 
+
+                var normalizedColumn = column.Transform(x =>
                     NumOps.Divide(NumOps.Subtract(x, min), NumOps.Subtract(max, min)));
-                
+
                 normalizedColumns.Add(normalizedColumn);
-                parameters.Add(new NormalizationParameters<T> { 
-                    Method = NormalizationMethod.MinMax, 
-                    Min = min, 
-                    Max = max 
+                parameters.Add(new NormalizationParameters<T>
+                {
+                    Method = NormalizationMethod.MinMax,
+                    Min = min,
+                    Max = max
                 });
             }
-            
+
             // Convert back to tensor
             var normalizedMatrix = Matrix<T>.FromColumnVectors(normalizedColumns);
             var normalizedTensor = new Tensor<T>(new[] { normalizedMatrix.Rows, normalizedMatrix.Columns }, normalizedMatrix);
-            
+
             return ((TInput)(object)normalizedTensor, parameters);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TInput).Name}. " +
             $"Supported types are Matrix<{typeof(T).Name}> and 2D Tensor<{typeof(T).Name}>.");
     }
-    
+
     /// <summary>
     /// Reverses the normalization of data using the original normalization parameters.
     /// </summary>
@@ -200,40 +204,40 @@ public class MinMaxNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
     {
         if (data is Vector<T> vector)
         {
-            var denormalized = vector.Transform(x => 
+            var denormalized = vector.Transform(x =>
                 NumOps.Add(
-                    NumOps.Multiply(x, NumOps.Subtract(parameters.Max, parameters.Min)), 
+                    NumOps.Multiply(x, NumOps.Subtract(parameters.Max, parameters.Min)),
                     parameters.Min
                 ));
-            
+
             return (TOutput)(object)denormalized;
         }
         else if (data is Tensor<T> tensor)
         {
             // Flatten tensor for denormalization
             var flattenedTensor = tensor.ToVector();
-            
-            var denormalized = flattenedTensor.Transform(x => 
+
+            var denormalized = flattenedTensor.Transform(x =>
                 NumOps.Add(
-                    NumOps.Multiply(x, NumOps.Subtract(parameters.Max, parameters.Min)), 
+                    NumOps.Multiply(x, NumOps.Subtract(parameters.Max, parameters.Min)),
                     parameters.Min
                 ));
-            
+
             // Convert back to tensor with the same shape
             var denormalizedTensor = Tensor<T>.FromVector(denormalized);
             if (tensor.Shape.Length > 1)
             {
                 denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             return (TOutput)(object)denormalizedTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
-    
+
     /// <summary>
     /// Denormalizes model coefficients to make them applicable to non-normalized input data.
     /// </summary>
@@ -251,7 +255,7 @@ public class MinMaxNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
         if (coefficients is Vector<T> vector)
         {
             var denormalizedCoefficients = new T[vector.Length];
-            
+
             for (int i = 0; i < vector.Length; i++)
             {
                 denormalizedCoefficients[i] = NumOps.Divide(
@@ -259,7 +263,7 @@ public class MinMaxNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
                     NumOps.Subtract(xParams[i].Max, xParams[i].Min)
                 );
             }
-            
+
             return (TOutput)(object)Vector<T>.FromArray(denormalizedCoefficients);
         }
         else if (coefficients is Tensor<T> tensor)
@@ -267,7 +271,7 @@ public class MinMaxNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
             // Flatten tensor for denormalization
             var flattenedTensor = tensor.ToVector();
             var denormalizedCoefficients = new T[flattenedTensor.Length];
-            
+
             for (int i = 0; i < flattenedTensor.Length; i++)
             {
                 denormalizedCoefficients[i] = NumOps.Divide(
@@ -275,24 +279,24 @@ public class MinMaxNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
                     NumOps.Subtract(xParams[i].Max, xParams[i].Min)
                 );
             }
-            
+
             // Convert back to tensor with the same shape
             var denormalizedVector = Vector<T>.FromArray(denormalizedCoefficients);
             var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
-            
+
             if (tensor.Shape.Length > 1)
             {
                 denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             return (TOutput)(object)denormalizedTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported coefficients type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
-    
+
     /// <summary>
     /// Calculates the denormalized Y-intercept (constant term) for a linear model.
     /// </summary>
@@ -307,7 +311,7 @@ public class MinMaxNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
     /// when using the original, unnormalized data.
     /// </para>
     /// </remarks>
-    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, 
+    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients,
         List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
         // Extract vector from coefficients
@@ -326,13 +330,13 @@ public class MinMaxNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
                 $"Unsupported coefficients type {typeof(TOutput).Name}. " +
                 $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
         }
-        
+
         // Calculate y-intercept
         T yIntercept = yParams.Min;
-        
+
         for (int i = 0; i < coefficientsVector.Length; i++)
         {
-            yIntercept = NumOps.Subtract(yIntercept, 
+            yIntercept = NumOps.Subtract(yIntercept,
                 NumOps.Divide(
                     NumOps.Multiply(
                         NumOps.Multiply(coefficientsVector[i], xParams[i].Min),
@@ -342,7 +346,7 @@ public class MinMaxNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
                 )
             );
         }
-        
+
         return yIntercept;
     }
 }

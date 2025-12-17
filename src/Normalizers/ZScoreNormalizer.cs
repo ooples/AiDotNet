@@ -36,7 +36,7 @@ public class ZScoreNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
     public ZScoreNormalizer() : base()
     {
     }
-    
+
     /// <summary>
     /// Normalizes output data using Z-Score normalization.
     /// </summary>
@@ -51,15 +51,16 @@ public class ZScoreNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
             T mean = StatisticsHelper<T>.CalculateMean(vector);
             T variance = StatisticsHelper<T>.CalculateVariance(vector, mean);
             T stdDev = NumOps.Sqrt(variance);
-            
-            Vector<T> normalizedVector = vector.Transform(x => 
+
+            Vector<T> normalizedVector = vector.Transform(x =>
                 NumOps.Divide(NumOps.Subtract(x, mean), stdDev)
             );
-            
-            return ((TOutput)(object)normalizedVector, new NormalizationParameters<T> { 
-                Method = NormalizationMethod.ZScore, 
-                Mean = mean, 
-                StdDev = stdDev 
+
+            return ((TOutput)(object)normalizedVector, new NormalizationParameters<T>
+            {
+                Method = NormalizationMethod.ZScore,
+                Mean = mean,
+                StdDev = stdDev
             });
         }
         else if (data is Tensor<T> tensor)
@@ -69,24 +70,25 @@ public class ZScoreNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
             T mean = StatisticsHelper<T>.CalculateMean(flattenedVector);
             T variance = StatisticsHelper<T>.CalculateVariance(flattenedVector, mean);
             T stdDev = NumOps.Sqrt(variance);
-            
+
             // Create normalized tensor with the same shape
-            var normalizedTensor = tensor.Transform(x => 
+            var normalizedTensor = tensor.Transform(x =>
                 NumOps.Divide(NumOps.Subtract(x, mean), stdDev)
             );
-            
-            return ((TOutput)(object)normalizedTensor, new NormalizationParameters<T> { 
-                Method = NormalizationMethod.ZScore, 
-                Mean = mean, 
-                StdDev = stdDev 
+
+            return ((TOutput)(object)normalizedTensor, new NormalizationParameters<T>
+            {
+                Method = NormalizationMethod.ZScore,
+                Mean = mean,
+                StdDev = stdDev
             });
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported output type {typeof(TOutput).Name} for Z-Score normalization. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
-    
+
     /// <summary>
     /// Normalizes input data using Z-Score normalization, applying normalization separately to each column.
     /// </summary>
@@ -100,7 +102,7 @@ public class ZScoreNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
         {
             var normalizedColumns = new List<Vector<T>>();
             var parameters = new List<NormalizationParameters<T>>();
-            
+
             for (int i = 0; i < matrix.Columns; i++)
             {
                 var column = matrix.GetColumn(i);
@@ -108,7 +110,7 @@ public class ZScoreNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
                 normalizedColumns.Add(normalizedColumn);
                 parameters.Add(columnParams);
             }
-            
+
             return ((TInput)(object)Matrix<T>.FromColumnVectors(normalizedColumns), parameters);
         }
         else if (data is Tensor<T> tensor)
@@ -119,10 +121,10 @@ public class ZScoreNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
                 throw new InvalidOperationException(
                     "Z-Score normalization for tensors requires a 2D tensor (matrix-like).");
             }
-            
+
             var parameters = new List<NormalizationParameters<T>>();
             var normalizedTensor = new Tensor<T>(tensor.Shape);
-            
+
             // Process each column
             for (int i = 0; i < tensor.Shape[1]; i++)
             {
@@ -132,27 +134,27 @@ public class ZScoreNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
                 {
                     column[j] = tensor[j, i];
                 }
-                
+
                 // Normalize column
                 var (normalizedColumn, columnParams) = NormalizeVector(column);
-                
+
                 // Put normalized column back into tensor
                 for (int j = 0; j < tensor.Shape[0]; j++)
                 {
                     normalizedTensor[j, i] = normalizedColumn[j];
                 }
-                
+
                 parameters.Add(columnParams);
             }
-            
+
             return ((TInput)(object)normalizedTensor, parameters);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported input type {typeof(TInput).Name} for Z-Score normalization. " +
             $"Supported types are Matrix<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
-    
+
     /// <summary>
     /// Helper method to normalize a vector using Z-Score normalization.
     /// </summary>
@@ -161,18 +163,19 @@ public class ZScoreNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
         T mean = StatisticsHelper<T>.CalculateMean(vector);
         T variance = StatisticsHelper<T>.CalculateVariance(vector, mean);
         T stdDev = NumOps.Sqrt(variance);
-        
-        Vector<T> normalizedVector = vector.Transform(x => 
+
+        Vector<T> normalizedVector = vector.Transform(x =>
             NumOps.Divide(NumOps.Subtract(x, mean), stdDev)
         );
-        
-        return (normalizedVector, new NormalizationParameters<T> { 
-            Method = NormalizationMethod.ZScore, 
-            Mean = mean, 
-            StdDev = stdDev 
+
+        return (normalizedVector, new NormalizationParameters<T>
+        {
+            Method = NormalizationMethod.ZScore,
+            Mean = mean,
+            StdDev = stdDev
         });
     }
-    
+
     /// <summary>
     /// Denormalizes data using the provided normalization parameters.
     /// </summary>
@@ -183,26 +186,26 @@ public class ZScoreNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
     {
         if (data is Vector<T> vector)
         {
-            var denormalized = vector.Transform(x => 
+            var denormalized = vector.Transform(x =>
                 NumOps.Add(NumOps.Multiply(x, parameters.StdDev), parameters.Mean)
             );
-            
+
             return (TOutput)(object)denormalized;
         }
         else if (data is Tensor<T> tensor)
         {
-            var denormalizedTensor = tensor.Transform(x => 
+            var denormalizedTensor = tensor.Transform(x =>
                 NumOps.Add(NumOps.Multiply(x, parameters.StdDev), parameters.Mean)
             );
-            
+
             return (TOutput)(object)denormalizedTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported output type {typeof(TOutput).Name} for Z-Score denormalization. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
-    
+
     /// <summary>
     /// Denormalizes coefficients from a regression model that was trained on Z-Score normalized data.
     /// </summary>
@@ -215,46 +218,46 @@ public class ZScoreNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
         if (coefficients is Vector<T> coefs)
         {
             var denormalizedCoefs = coefs.PointwiseMultiply(
-                Vector<T>.FromEnumerable(xParams.Select(p => 
+                Vector<T>.FromEnumerable(xParams.Select(p =>
                     NumOps.Divide(p.StdDev, yParams.StdDev)
                 ))
             );
-            
+
             return (TOutput)(object)denormalizedCoefs;
         }
         else if (coefficients is Tensor<T> tensor)
         {
             // For tensor coefficients, we flatten them, denormalize, and then reshape
             var flattenedVector = tensor.ToVector();
-            
+
             if (flattenedVector.Length != xParams.Count)
             {
                 throw new InvalidOperationException(
                     "Number of coefficients does not match the number of input features.");
             }
-            
+
             var denormalizedCoefs = flattenedVector.PointwiseMultiply(
-                Vector<T>.FromEnumerable(xParams.Select(p => 
+                Vector<T>.FromEnumerable(xParams.Select(p =>
                     NumOps.Divide(p.StdDev, yParams.StdDev)
                 ))
             );
-            
+
             var result = Tensor<T>.FromVector(denormalizedCoefs);
-            
+
             // If the original tensor had a specific shape, try to reshape the result
             if (tensor.Shape.Length > 1)
             {
                 result = result.Reshape(tensor.Shape);
             }
-            
+
             return (TOutput)(object)result;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported coefficient type {typeof(TOutput).Name} for Z-Score denormalization. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
     }
-    
+
     /// <summary>
     /// Denormalizes the y-intercept from a regression model that was trained on Z-Score normalized data.
     /// </summary>
@@ -264,7 +267,7 @@ public class ZScoreNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
     /// <param name="xParams">The normalization parameters for the input features.</param>
     /// <param name="yParams">The normalization parameters for the output variable.</param>
     /// <returns>A denormalized y-intercept that can be used with original, unnormalized data.</returns>
-    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, 
+    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients,
         List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
         if (coefficients is Vector<T> coefs)
@@ -272,14 +275,14 @@ public class ZScoreNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
             T yMean = yParams.Mean;
             var xMeans = Vector<T>.FromEnumerable(xParams.Select(p => p.Mean));
             var denormalizedCoefs = coefs.PointwiseMultiply(
-                Vector<T>.FromEnumerable(xParams.Select(p => 
+                Vector<T>.FromEnumerable(xParams.Select(p =>
                     NumOps.Divide(p.StdDev, yParams.StdDev)
                 ))
             );
-            
+
             return NumOps.Subtract(yMean, xMeans.DotProduct(denormalizedCoefs));
         }
-        
+
         // Default fallback if coefficient type is not a vector
         return NumOps.Zero;
     }

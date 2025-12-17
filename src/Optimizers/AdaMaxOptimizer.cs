@@ -428,8 +428,8 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateDecreaseFactor));
             }
 
-            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate, 
-                NumOps.FromDouble(_options.MinLearningRate), 
+            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate,
+                NumOps.FromDouble(_options.MinLearningRate),
                 NumOps.FromDouble(_options.MaxLearningRate));
         }
     }

@@ -131,7 +131,7 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
                 bins.Add(sortedVector[index]);
             }
 
-            var normalizedVector = vector.Transform(x => 
+            var normalizedVector = vector.Transform(x =>
             {
                 int binIndex = bins.FindIndex(b => NumOps.LessThanOrEquals(x, b));
                 return NumOps.Divide(NumOps.FromDouble(binIndex == -1 ? DefaultBinCount - 1 : binIndex), NumOps.FromDouble(DefaultBinCount - 1));
@@ -154,7 +154,7 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
                 bins.Add(sortedVector[index]);
             }
 
-            var normalizedVector = flattenedTensor.Transform(x => 
+            var normalizedVector = flattenedTensor.Transform(x =>
             {
                 int binIndex = bins.FindIndex(b => NumOps.LessThanOrEquals(x, b));
                 return NumOps.Divide(NumOps.FromDouble(binIndex == -1 ? DefaultBinCount - 1 : binIndex), NumOps.FromDouble(DefaultBinCount - 1));
@@ -170,7 +170,7 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
             var parameters = new NormalizationParameters<T> { Method = NormalizationMethod.Binning, Bins = bins };
             return ((TOutput)(object)normalizedTensor, parameters);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -239,7 +239,7 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
             var rows = tensor.Shape[0];
             var cols = tensor.Shape[1];
             var newMatrix = new Matrix<T>(rows, cols);
-            
+
             for (int i = 0; i < rows; i++)
             {
                 for (int j = 0; j < cols; j++)
@@ -247,11 +247,11 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
                     newMatrix[i, j] = tensor[i, j];
                 }
             }
-            
+
             // Normalize each column separately
             var normalizedColumns = new List<Vector<T>>();
             var parametersList = new List<NormalizationParameters<T>>();
-            
+
             for (int i = 0; i < cols; i++)
             {
                 var column = newMatrix.GetColumn(i);
@@ -269,14 +269,14 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
                         $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
                 }
             }
-            
+
             // Convert back to tensor
             var normalizedMatrix = Matrix<T>.FromColumnVectors(normalizedColumns);
             var normalizedTensor = new Tensor<T>(new[] { normalizedMatrix.Rows, normalizedMatrix.Columns }, normalizedMatrix);
-            
+
             return ((TInput)(object)normalizedTensor, parametersList);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TInput).Name}. " +
             $"Supported types are Matrix<{typeof(T).Name}> and 2D Tensor<{typeof(T).Name}>.");
@@ -321,15 +321,15 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
 
         if (data is Vector<T> vector)
         {
-            var denormalizedVector = vector.Transform(x => 
+            var denormalizedVector = vector.Transform(x =>
             {
                 // Ensure x is within [0, 1] range
                 var min = NumOps.LessThan(NumOps.One, x) ? NumOps.One : x;
                 x = NumOps.GreaterThan(NumOps.Zero, min) ? NumOps.Zero : min;
-            
+
                 // Calculate the bin index
                 int binIndex = Convert.ToInt32(NumOps.Multiply(x, NumOps.FromDouble(parameters.Bins.Count - 1)));
-            
+
                 // Ensure binIndex is within valid range
                 binIndex = Math.Max(0, Math.Min(parameters.Bins.Count - 2, binIndex));
 
@@ -343,33 +343,33 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
         {
             // Flatten tensor for denormalization
             var flattenedTensor = tensor.ToVector();
-            
-            var denormalizedVector = flattenedTensor.Transform(x => 
+
+            var denormalizedVector = flattenedTensor.Transform(x =>
             {
                 // Ensure x is within [0, 1] range
                 var min = NumOps.LessThan(NumOps.One, x) ? NumOps.One : x;
                 x = NumOps.GreaterThan(NumOps.Zero, min) ? NumOps.Zero : min;
-            
+
                 // Calculate the bin index
                 int binIndex = Convert.ToInt32(NumOps.Multiply(x, NumOps.FromDouble(parameters.Bins.Count - 1)));
-            
+
                 // Ensure binIndex is within valid range
                 binIndex = Math.Max(0, Math.Min(parameters.Bins.Count - 2, binIndex));
 
                 // Return the average of the current bin and the next bin
                 return NumOps.Divide(NumOps.Add(parameters.Bins[binIndex], parameters.Bins[binIndex + 1]), NumOps.FromDouble(2));
             });
-            
+
             // Convert back to tensor with the same shape
             var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             return (TOutput)(object)denormalizedTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -408,35 +408,35 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
     {
         if (coefficients is Vector<T> vector)
         {
-            var denormalizedCoefficients = vector.PointwiseMultiply(Vector<T>.FromArray(xParams.Select((p, i) => 
+            var denormalizedCoefficients = vector.PointwiseMultiply(Vector<T>.FromArray(xParams.Select((p, i) =>
                 NumOps.Divide(
                     NumOps.Subtract(yParams.Bins.Last(), yParams.Bins.First()),
                     NumOps.Subtract(p.Bins.Last(), p.Bins.First())
                 )).ToArray()));
-                
+
             return (TOutput)(object)denormalizedCoefficients;
         }
         else if (coefficients is Tensor<T> tensor)
         {
             // Flatten tensor for denormalization
             var flattenedTensor = tensor.ToVector();
-            
-            var denormalizedVector = flattenedTensor.PointwiseMultiply(Vector<T>.FromArray(xParams.Select((p, i) => 
+
+            var denormalizedVector = flattenedTensor.PointwiseMultiply(Vector<T>.FromArray(xParams.Select((p, i) =>
                 NumOps.Divide(
                     NumOps.Subtract(yParams.Bins.Last(), yParams.Bins.First()),
                     NumOps.Subtract(p.Bins.Last(), p.Bins.First())
                 )).ToArray()));
-            
+
             // Convert back to tensor with the same shape
             var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             return (TOutput)(object)denormalizedTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported coefficients type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -473,7 +473,7 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
     /// with simplified bin numbers back to complex original values.
     /// </para>
     /// </remarks>
-    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, 
+    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients,
         List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
         // Extract vector from coefficients
@@ -492,13 +492,13 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
                 $"Unsupported coefficients type {typeof(TOutput).Name}. " +
                 $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
         }
-        
+
         // Calculate y-intercept
         T denormalizedIntercept = NumOps.Divide(NumOps.Add(yParams.Bins.First(), yParams.Bins.Last()), NumOps.FromDouble(2));
         for (int i = 0; i < coefficientsVector.Length; i++)
         {
-            denormalizedIntercept = NumOps.Subtract(denormalizedIntercept, 
-                NumOps.Multiply(coefficientsVector[i], 
+            denormalizedIntercept = NumOps.Subtract(denormalizedIntercept,
+                NumOps.Multiply(coefficientsVector[i],
                     NumOps.Divide(NumOps.Add(xParams[i].Bins.First(), xParams[i].Bins.Last()), NumOps.FromDouble(2))));
         }
 

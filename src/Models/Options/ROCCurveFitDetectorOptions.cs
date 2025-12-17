@@ -77,7 +77,7 @@ public class ROCCurveFitDetectorOptions
     /// </para>
     /// </remarks>
     public double GoodFitThreshold { get; set; } = 0.8;
-    
+
     /// <summary>
     /// Gets or sets the AUC threshold for considering a model to have moderate fit.
     /// </summary>
@@ -116,7 +116,7 @@ public class ROCCurveFitDetectorOptions
     /// </para>
     /// </remarks>
     public double ModerateFitThreshold { get; set; } = 0.7;
-    
+
     /// <summary>
     /// Gets or sets the AUC threshold for considering a model to have poor fit.
     /// </summary>
@@ -153,7 +153,7 @@ public class ROCCurveFitDetectorOptions
     /// </para>
     /// </remarks>
     public double PoorFitThreshold { get; set; } = 0.6;
-    
+
     /// <summary>
     /// Gets or sets the scaling factor for confidence intervals when evaluating model fit.
     /// </summary>
@@ -192,7 +192,7 @@ public class ROCCurveFitDetectorOptions
     /// </para>
     /// </remarks>
     public double ConfidenceScalingFactor { get; set; } = 1.0;
-    
+
     /// <summary>
     /// Gets or sets the threshold for determining if a dataset is balanced.
     /// </summary>

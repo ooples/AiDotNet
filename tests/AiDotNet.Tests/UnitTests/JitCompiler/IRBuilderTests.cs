@@ -1,9 +1,9 @@
-using Xunit;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.JitCompiler;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.IR.Operations;
+using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.JitCompiler;
 

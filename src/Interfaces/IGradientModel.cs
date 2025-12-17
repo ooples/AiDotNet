@@ -10,7 +10,7 @@ public interface IGradientModel<T>
     /// Gets the gradient vector.
     /// </summary>
     Vector<T> Parameters { get; }
-    
+
     /// <summary>
     /// Evaluates the gradient at a specific point.
     /// </summary>

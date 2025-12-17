@@ -52,7 +52,7 @@ public class QueryRewritingProcessor<T> : QueryProcessorBase
         if (!string.IsNullOrWhiteSpace(query))
         {
             _conversationHistory.Add(query);
-            
+
             if (_conversationHistory.Count > 5)
             {
                 _conversationHistory.RemoveAt(0);
@@ -94,7 +94,7 @@ public class QueryRewritingProcessor<T> : QueryProcessorBase
     private string RewriteWithContext(string query)
     {
         var contextualKeywords = new[] { "it", "they", "them", "their", "that", "this", "these", "those", "what about", "how about" };
-        
+
         var lowerQuery = query.ToLowerInvariant();
         var needsContext = contextualKeywords.Any(keyword => lowerQuery.Contains(keyword));
 
@@ -119,7 +119,7 @@ Rewritten query:";
 
         // Fallback to rule-based rewriting
         var lastContext = _conversationHistory[_conversationHistory.Count - 1];
-        
+
         if (lowerQuery.StartsWith("what about") || lowerQuery.StartsWith("how about"))
         {
             var topic = ExtractTopic(lastContext);
@@ -141,9 +141,9 @@ Rewritten query:";
             return string.Empty;
 
         // Remove common question words and punctuation
-        var commonWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
-        { 
-            "what", "is", "are", "the", "a", "an", "how", "why", "when", "where", "who", 
+        var commonWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "what", "is", "are", "the", "a", "an", "how", "why", "when", "where", "who",
             "do", "does", "did", "can", "could", "would", "should", "will", "about", "tell",
             "me", "you", "your", "it", "they", "them", "this", "that", "these", "those",
             "for", "in", "on", "at", "to", "from", "with", "of", "by", "as"

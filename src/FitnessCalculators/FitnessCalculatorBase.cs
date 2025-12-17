@@ -37,7 +37,7 @@ public abstract class FitnessCalculatorBase<T, TInput, TOutput> : IFitnessCalcul
     /// </para>
     /// </remarks>
     protected bool _isHigherScoreBetter;
-    
+
     /// <summary>
     /// Provides mathematical operations for the specific numeric type being used.
     /// </summary>
@@ -51,7 +51,7 @@ public abstract class FitnessCalculatorBase<T, TInput, TOutput> : IFitnessCalcul
     /// </para>
     /// </remarks>
     protected readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// Specifies which dataset (training, validation, or testing) to use for fitness calculation.
     /// </summary>

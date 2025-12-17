@@ -18,7 +18,7 @@ public static class ModelHelper<T, TInput, TOutput>
     /// Uses the centralized RandomHelper for thread safety and consistent randomness.</para>
     /// </remarks>
     private static Random _random => RandomHelper.ThreadSafeRandom;
-    
+
     /// <summary>
     /// Numeric operations provider for type T.
     /// </summary>
@@ -143,7 +143,7 @@ public static class ModelHelper<T, TInput, TOutput>
     {
         if (input is Matrix<T> matrix)
         {
-            return [..indices.Select(i => matrix.GetColumn(i))];
+            return [.. indices.Select(i => matrix.GetColumn(i))];
         }
         else if (input is Tensor<T> tensor)
         {
@@ -151,16 +151,16 @@ public static class ModelHelper<T, TInput, TOutput>
             {
                 throw new ArgumentException("Tensor must have at least 2 dimensions to extract columns");
             }
-        
+
             var result = new List<Vector<T>>();
             foreach (int index in indices)
             {
                 if (index < 0 || index >= tensor.Shape[1])
                 {
-                    throw new ArgumentOutOfRangeException(nameof(indices), 
+                    throw new ArgumentOutOfRangeException(nameof(indices),
                         $"Column index {index} is out of range for tensor with shape {string.Join("×", tensor.Shape)}");
                 }
-            
+
                 // Create a vector from the column
                 Vector<T> column = new Vector<T>(tensor.Shape[0]);
                 for (int i = 0; i < tensor.Shape[0]; i++)
@@ -255,7 +255,7 @@ public static class ModelHelper<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     private static IFullModel<T, TInput, TOutput> CreateRandomVectorModelWithFeatures(
-        int[] activeFeatures, 
+        int[] activeFeatures,
         int totalFeatures)
     {
         // Create a vector with the total number of features
@@ -271,7 +271,7 @@ public static class ModelHelper<T, TInput, TOutput>
             // Initialize active features with substantial random values
             coefficients[index] = _numOps.FromDouble((_random.NextDouble() * 2 - 1) * 0.5); // Values between -0.5 and 0.5
         }
-    
+
         // Create the vector model
         return (IFullModel<T, TInput, TOutput>)(object)new VectorModel<T>(coefficients);
     }
@@ -293,7 +293,7 @@ public static class ModelHelper<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     private static ExpressionTree<T, TInput, TOutput> CreateRandomExpressionTreeWithFeatures(
-        int[] activeFeatures, 
+        int[] activeFeatures,
         int maxDepth)
     {
         // Helper function to build a random tree
@@ -307,7 +307,7 @@ public static class ModelHelper<T, TInput, TOutput>
                 {
                     // Create a constant with random value
                     return new ExpressionTree<T, TInput, TOutput>(
-                        ExpressionNodeType.Constant, 
+                        ExpressionNodeType.Constant,
                         _numOps.FromDouble(_random.NextDouble() * 2 - 1)); // Value between -1 and 1
                 }
                 else if (activeFeatures.Length > 0)
@@ -322,20 +322,20 @@ public static class ModelHelper<T, TInput, TOutput>
                 {
                     // If no active features, just create a constant
                     return new ExpressionTree<T, TInput, TOutput>(
-                        ExpressionNodeType.Constant, 
+                        ExpressionNodeType.Constant,
                         _numOps.FromDouble(_random.NextDouble() * 2 - 1));
                 }
             }
-        
+
             // Create an operation node
             ExpressionNodeType nodeType = (ExpressionNodeType)_random.Next(2, 6); // Add, Subtract, Multiply, or Divide
-        
+
             var left = BuildTree(depth + 1);
             var right = BuildTree(depth + 1);
-        
+
             return new ExpressionTree<T, TInput, TOutput>(nodeType, default, left, right);
         }
-    
+
         // Build the random tree starting at depth 0
         return BuildTree(0);
     }
@@ -354,7 +354,7 @@ public static class ModelHelper<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     private static IFullModel<T, TInput, TOutput> CreateRandomNeuralNetworkWithFeatures(
-        int[] activeFeatures, 
+        int[] activeFeatures,
         int totalFeatures)
     {
         // Create a neural network architecture
@@ -365,7 +365,7 @@ public static class ModelHelper<T, TInput, TOutput>
             inputSize: totalFeatures,
             outputSize: 1  // Assuming regression task with single output
         );
-    
+
         // Create the neural network model
         var neuralModel = new NeuralNetwork<T>(architecture);
 

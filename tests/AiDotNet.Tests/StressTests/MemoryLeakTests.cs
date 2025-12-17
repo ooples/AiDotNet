@@ -1,12 +1,12 @@
-using AiDotNet.Tensors.LinearAlgebra;
-using AiDotNet.Engines;
-using AiDotNet.Tensors.LinearAlgebra;
-using AiDotNet.Optimizers;
-using Xunit;
 using System;
-using System.Diagnostics;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using AiDotNet.Engines;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
+using Xunit;
 
 namespace AiDotNet.Tests.StressTests;
 

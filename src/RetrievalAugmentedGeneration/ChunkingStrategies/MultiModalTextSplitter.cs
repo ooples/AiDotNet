@@ -30,11 +30,11 @@ public class MultiModalTextSplitter : ChunkingStrategyBase
     {
         if (contextWindowSize < 0)
             throw new ArgumentOutOfRangeException(nameof(contextWindowSize), "Context window size cannot be negative");
-        
+
         // Ensure minimum context window to prevent division issues
         if (contextWindowSize > 0 && contextWindowSize < 50)
             throw new ArgumentOutOfRangeException(nameof(contextWindowSize), "Context window size must be at least 50 characters when enabled");
-            
+
         _contextWindowSize = contextWindowSize;
         _preserveImageContext = preserveImageContext;
     }
@@ -46,7 +46,7 @@ public class MultiModalTextSplitter : ChunkingStrategyBase
     {
         var chunks = new List<(string, int, int)>();
         var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
-        
+
         var currentChunk = new List<string>();
         var chunkStart = 0;
         var position = 0;
@@ -103,7 +103,7 @@ public class MultiModalTextSplitter : ChunkingStrategyBase
                 {
                     var content = string.Join(Environment.NewLine, currentChunk);
                     chunks.Add((content, chunkStart, position + lineLength));
-                    
+
                     // Apply overlap: keep last N lines for next chunk
                     if (ChunkOverlap > 0)
                     {
@@ -144,7 +144,7 @@ public class MultiModalTextSplitter : ChunkingStrategyBase
     private bool IsImageReference(string line)
     {
         var trimmed = line.Trim();
-        
+
         // Markdown image: ![alt](url)
         if (trimmed.Contains("![") && trimmed.Contains("]("))
             return true;

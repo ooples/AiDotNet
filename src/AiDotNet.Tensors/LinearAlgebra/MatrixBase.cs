@@ -19,17 +19,17 @@ public abstract class MatrixBase<T>
     /// The internal array storing matrix data in a flattened format.
     /// </summary>
     protected readonly T[] _data;
-    
+
     /// <summary>
     /// The number of rows in the matrix.
     /// </summary>
     protected readonly int _rows;
-    
+
     /// <summary>
     /// The number of columns in the matrix.
     /// </summary>
     protected readonly int _cols;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

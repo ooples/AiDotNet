@@ -66,7 +66,7 @@ public class FitDetectorResult<T>
     /// </para>
     /// </remarks>
     public FitType FitType { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the confidence level for the fit type assessment.
     /// </summary>
@@ -98,7 +98,7 @@ public class FitDetectorResult<T>
     /// </para>
     /// </remarks>
     public T? ConfidenceLevel { get; set; }
-    
+
     /// <summary>
     /// Gets or sets a list of recommendations for improving the model fit.
     /// </summary>
@@ -134,7 +134,7 @@ public class FitDetectorResult<T>
     /// </para>
     /// </remarks>
     public List<string> Recommendations { get; set; }
-    
+
     /// <summary>
     /// Gets or sets additional information about the fit detection result.
     /// </summary>

@@ -1,8 +1,8 @@
+using System.Diagnostics;
+using System.Text;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Reasoning.Benchmarks.Models;
-using System.Diagnostics;
-using System.Text;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Reasoning.Benchmarks;

@@ -72,7 +72,7 @@ public class ResidualAnalysisFitDetectorOptions
     /// </para>
     /// </remarks>
     public double MeanThreshold { get; set; } = 0.1;
-    
+
     /// <summary>
     /// Gets or sets the threshold for the standard deviation of residuals.
     /// </summary>
@@ -106,7 +106,7 @@ public class ResidualAnalysisFitDetectorOptions
     /// </para>
     /// </remarks>
     public double StdThreshold { get; set; } = 0.2;
-    
+
     /// <summary>
     /// Gets or sets the threshold for the Mean Absolute Percentage Error (MAPE).
     /// </summary>
@@ -143,7 +143,7 @@ public class ResidualAnalysisFitDetectorOptions
     /// </para>
     /// </remarks>
     public double MapeThreshold { get; set; } = 0.1;
-    
+
     /// <summary>
     /// Gets or sets the threshold for the coefficient of determination (R²).
     /// </summary>

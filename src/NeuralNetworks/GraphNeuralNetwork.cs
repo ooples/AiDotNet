@@ -597,10 +597,10 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         var concatenated = Tensor<T>.Concatenate([meanPooled, maxPooled, sumPooled], axis: 1);
 
         // Apply a small neural network to learn the best combination
-        var denseLayer = new DenseLayer<T>(concatenated.Shape[1], concatenated.Shape[1] / 2, 
+        var denseLayer = new DenseLayer<T>(concatenated.Shape[1], concatenated.Shape[1] / 2,
             _finalDenseLayerVectorActivation ?? new ReLUActivation<T>());
         // No separate activation layer needed since activation is included in the dense layer
-        var outputLayer = new DenseLayer<T>(concatenated.Shape[1] / 2, meanPooled.Shape[1], 
+        var outputLayer = new DenseLayer<T>(concatenated.Shape[1] / 2, meanPooled.Shape[1],
             _finalActivationLayerVectorActivation ?? new IdentityActivation<T>());
         var activation = new ReLUActivation<T>();
 
@@ -697,7 +697,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
                 current = Layers[i].Forward(current);
             }
         }
-        
+
         return current;
     }
 
@@ -734,10 +734,10 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
 
         // Extract node features and adjacency matrix from the input tensor
         int featuresDimension = input.Shape[0] / 2; // First half contains features
-        
+
         // Extract node features
         Tensor<T> nodeFeatures = input.Slice(0, featuresDimension);
-        
+
         // Extract adjacency matrix
         Tensor<T> adjacencyMatrix = input.Slice(featuresDimension, featuresDimension);
 
@@ -834,22 +834,22 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
 
         // Back-propagate the gradients
         Vector<T> backpropGradients = Backpropagate(Tensor<T>.FromVector(outputGradients)).ToVector();
-        
+
         // Get parameter gradients
         Vector<T> parameterGradients = GetParameterGradients();
-        
+
         // Apply gradient clipping
         parameterGradients = ClipGradient(parameterGradients);
-        
+
         // Use adaptive optimizer (Adam)
         var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
-        
+
         // Update parameters
         Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
-        
+
         // Apply updated parameters
         UpdateParameters(updatedParameters);
     }
@@ -910,33 +910,33 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     private IEnumerable<string> GetActivationTypes()
     {
         var activationTypes = new List<string>();
-        
+
         // Add scalar activations if they exist
         if (_graphConvolutionalScalarActivation != null)
             activationTypes.Add(_graphConvolutionalScalarActivation.GetType().Name);
-        
+
         if (_activationLayerScalarActivation != null)
             activationTypes.Add(_activationLayerScalarActivation.GetType().Name);
-        
+
         if (_finalDenseLayerScalarActivation != null)
             activationTypes.Add(_finalDenseLayerScalarActivation.GetType().Name);
-        
+
         if (_finalActivationLayerScalarActivation != null)
             activationTypes.Add(_finalActivationLayerScalarActivation.GetType().Name);
-        
+
         // Add vector activations if they exist
         if (_graphConvolutionalVectorActivation != null)
             activationTypes.Add(_graphConvolutionalVectorActivation.GetType().Name);
-        
+
         if (_activationLayerVectorActivation != null)
             activationTypes.Add(_activationLayerVectorActivation.GetType().Name);
-        
+
         if (_finalDenseLayerVectorActivation != null)
             activationTypes.Add(_finalDenseLayerVectorActivation.GetType().Name);
-        
+
         if (_finalActivationLayerVectorActivation != null)
             activationTypes.Add(_finalActivationLayerVectorActivation.GetType().Name);
-        
+
         return activationTypes.Distinct();
     }
 
@@ -969,7 +969,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         SerializationHelper<T>.SerializeInterface(writer, _activationLayerScalarActivation);
         SerializationHelper<T>.SerializeInterface(writer, _finalDenseLayerScalarActivation);
         SerializationHelper<T>.SerializeInterface(writer, _finalActivationLayerScalarActivation);
-        
+
         SerializationHelper<T>.SerializeInterface(writer, _graphConvolutionalVectorActivation);
         SerializationHelper<T>.SerializeInterface(writer, _activationLayerVectorActivation);
         SerializationHelper<T>.SerializeInterface(writer, _finalDenseLayerVectorActivation);
@@ -1004,8 +1004,8 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         _activationLayerScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
         _finalDenseLayerScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
         _finalActivationLayerScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
-        
-         _graphConvolutionalVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
+
+        _graphConvolutionalVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
         _activationLayerVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
         _finalDenseLayerVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
         _finalActivationLayerVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);

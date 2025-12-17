@@ -17,17 +17,17 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// The number of decomposition levels to perform.
     /// </summary>
     private readonly int _levels;
-    
+
     /// <summary>
     /// The wavelet function used for decomposition.
     /// </summary>
     private readonly IWaveletFunction<T> _wavelet;
-    
+
     /// <summary>
     /// The type of wavelet algorithm to use.
     /// </summary>
     private readonly WaveletAlgorithmType _algorithm;
-    
+
     /// <summary>
     /// The minimum length of data required to continue decomposition.
     /// </summary>
@@ -50,7 +50,7 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="levels">The number of decomposition levels (default is 3).</param>
     /// <param name="algorithm">The wavelet algorithm type to use (default is DWT).</param>
     /// <param name="minimumDecompositionLength">The minimum length required to continue decomposition (default is 2).</param>
-    public WaveletDecomposition(Vector<T> timeSeries, IWaveletFunction<T>? wavelet = null, int levels = 3, 
+    public WaveletDecomposition(Vector<T> timeSeries, IWaveletFunction<T>? wavelet = null, int levels = 3,
         WaveletAlgorithmType algorithm = WaveletAlgorithmType.DWT, int minimumDecompositionLength = 2)
         : base(timeSeries)
     {

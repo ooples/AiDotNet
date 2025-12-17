@@ -501,7 +501,7 @@ public class ErrorStats<T>
         (Precision, Recall, F1Score) = StatisticsHelper<T>.CalculatePrecisionRecallF1(actual, predicted, predictionType);
 
         // Populate error list
-        ErrorList = [..StatisticsHelper<T>.CalculateResiduals(actual, predicted)];
+        ErrorList = [.. StatisticsHelper<T>.CalculateResiduals(actual, predicted)];
     }
 
     /// <summary>

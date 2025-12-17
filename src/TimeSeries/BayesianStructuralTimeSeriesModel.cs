@@ -152,7 +152,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// If you don't provide options, the model will use default settings, but it's
     /// usually better to configure it specifically for your data.
     /// </remarks>
-    public BayesianStructuralTimeSeriesModel(BayesianStructuralTimeSeriesOptions<T>? options = null) 
+    public BayesianStructuralTimeSeriesModel(BayesianStructuralTimeSeriesOptions<T>? options = null)
     : base(options ?? new BayesianStructuralTimeSeriesOptions<T>())
     {
         _bayesianOptions = options ?? new BayesianStructuralTimeSeriesOptions<T>();
@@ -166,7 +166,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
             _seasonalComponents.Add(new Vector<T>(period));
         }
         _observationVariance = NumOps.FromDouble(_bayesianOptions.InitialObservationVariance);
-    
+
         int stateSize = GetStateSize();
         _stateCovariance = new Matrix<T>(stateSize, stateSize);
 
@@ -608,7 +608,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     private void EstimateParameters(Matrix<T> x, Vector<T> y, Matrix<T> states)
     {
         T previousLogLikelihood = NumOps.MinValue;
-    
+
         for (int iteration = 0; iteration < _bayesianOptions.MaxIterations; iteration++)
         {
             // E-step: Run Kalman filter and smoother
@@ -622,7 +622,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
             {
                 break;
             }
-        
+
             previousLogLikelihood = currentLogLikelihood;
         }
     }
@@ -655,7 +655,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         int n = y.Length;
         int stateSize = GetStateSize();
         Matrix<T> filteredStates = new Matrix<T>(n, stateSize);
-    
+
         // Forward pass (Kalman filter)
         for (int t = 0; t < n; t++)
         {
@@ -667,14 +667,14 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
             UpdateCovariance(predictedCovariance, kalmanGain);
             filteredStates.SetRow(t, GetCurrentState());
         }
-    
+
         // Backward pass (smoother)
         if (_bayesianOptions.PerformBackwardSmoothing)
         {
             PerformBackwardSmoothing(filteredStates);
             return filteredStates;
         }
-    
+
         return filteredStates;
     }
 
@@ -1381,7 +1381,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
 
         // Create the forecast vector
         Vector<T> forecast = new Vector<T>(horizon);
-    
+
         // Create default exogenous variables if not provided and needed
         Matrix<T>? futureExog = exogenousVariables;
         if (_bayesianOptions.IncludeRegression && _regression != null)
@@ -1392,23 +1392,23 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
                 futureExog = new Matrix<T>(horizon, _regression.Length);
             }
         }
-    
+
         // Track the seasonal position
         List<int> seasonalPositions = new List<int>();
         foreach (var seasonComponent in _seasonalComponents)
         {
             seasonalPositions.Add(0); // Start at position 0 for each seasonal component
         }
-    
+
         // Make predictions
         T currentLevel = _level;
         T currentTrend = _bayesianOptions.IncludeTrend ? _trend : NumOps.Zero;
-    
+
         for (int t = 0; t < horizon; t++)
         {
             // Start with the level
             T prediction = currentLevel;
-        
+
             // Add trend if included
             if (_bayesianOptions.IncludeTrend)
             {
@@ -1416,17 +1416,17 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
                 // Update level for next period
                 currentLevel = NumOps.Add(currentLevel, currentTrend);
             }
-        
+
             // Add seasonal components
             for (int i = 0; i < _seasonalComponents.Count; i++)
             {
                 int seasonLength = _seasonalComponents[i].Length;
                 prediction = NumOps.Add(prediction, _seasonalComponents[i][seasonalPositions[i]]);
-            
+
                 // Update seasonal position for next period
                 seasonalPositions[i] = (seasonalPositions[i] + 1) % seasonLength;
             }
-        
+
             // Add regression component if included
             if (_bayesianOptions.IncludeRegression && _regression != null && futureExog != null)
             {
@@ -1436,10 +1436,10 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
                     prediction = NumOps.Add(prediction, NumOps.Multiply(exogRow[i], _regression[i]));
                 }
             }
-        
+
             forecast[t] = prediction;
         }
-    
+
         return forecast;
     }
 
@@ -1468,21 +1468,21 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         // Reset level and trend to initial values
         _level = NumOps.FromDouble(_bayesianOptions.InitialLevelValue);
         _trend = _bayesianOptions.IncludeTrend ? NumOps.FromDouble(_bayesianOptions.InitialTrendValue) : NumOps.Zero;
-    
+
         // Reset seasonal components
         _seasonalComponents.Clear();
         foreach (int period in _bayesianOptions.SeasonalPeriods)
         {
             _seasonalComponents.Add(new Vector<T>(period));
         }
-    
+
         // Reset observation variance
         _observationVariance = NumOps.FromDouble(_bayesianOptions.InitialObservationVariance);
-    
+
         // Reset state covariance 
         int stateSize = GetStateSize();
         _stateCovariance = new Matrix<T>(stateSize, stateSize);
-    
+
         // Reset regression component if included
         if (_bayesianOptions.IncludeRegression && _regression != null)
         {
@@ -1515,14 +1515,14 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new BayesianStructuralTimeSeriesModel<T>((BayesianStructuralTimeSeriesOptions<T>)Options);
-    
+
         // Copy level and trend
         clone._level = _level;
         if (_bayesianOptions.IncludeTrend)
         {
             clone._trend = _trend;
         }
-    
+
         // Copy seasonal components
         clone._seasonalComponents.Clear();
         foreach (var component in _seasonalComponents)
@@ -1534,7 +1534,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
             }
             clone._seasonalComponents.Add(componentCopy);
         }
-    
+
         // Copy state covariance
         clone._stateCovariance = new Matrix<T>(_stateCovariance.Rows, _stateCovariance.Columns);
         for (int i = 0; i < _stateCovariance.Rows; i++)
@@ -1544,10 +1544,10 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
                 clone._stateCovariance[i, j] = _stateCovariance[i, j];
             }
         }
-    
+
         // Copy observation variance
         clone._observationVariance = _observationVariance;
-    
+
         // Copy regression component if included
         if (_bayesianOptions.IncludeRegression && _regression != null)
         {
@@ -1557,7 +1557,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
                 clone._regression[i] = _regression[i];
             }
         }
-    
+
         return clone;
     }
 
@@ -1598,7 +1598,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
             // Initialize regression coefficients using Ordinary Least Squares (OLS)
             InitializeRegressionCoefficients(x, y);
         }
-    
+
         // Kalman filter
         for (int t = 0; t < n; t++)
         {
@@ -1660,17 +1660,17 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
                 $"Input vector length ({input.Length}) must match the number of regression variables ({_regression.Length}).",
                 nameof(input));
         }
-    
+
         // Create a matrix with a single row
         Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
         for (int i = 0; i < input.Length; i++)
         {
             singleRowMatrix[0, i] = input[i];
         }
-    
+
         // Use the existing Predict method
         Vector<T> predictions = Predict(singleRowMatrix);
-    
+
         // Return the single prediction
         return predictions[0];
     }

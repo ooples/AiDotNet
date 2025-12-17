@@ -32,7 +32,7 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
     public BinaryCrossEntropyLoss()
     {
     }
-    
+
     /// <summary>
     /// Calculates the Binary Cross Entropy loss between predicted and actual values.
     /// </summary>
@@ -42,7 +42,7 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T sum = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -59,10 +59,10 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
                 )
             ));
         }
-        
+
         return NumOps.Negate(NumOps.Divide(sum, NumOps.FromDouble(predicted.Length)));
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Binary Cross Entropy loss function.
     /// </summary>
@@ -72,7 +72,7 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -87,7 +87,7 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
                 NumericalStabilityHelper.SmallEpsilon
             );
         }
-        
+
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
 }

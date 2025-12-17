@@ -1,5 +1,5 @@
-using AiDotNet.Interfaces;
 using System.Text.RegularExpressions;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.PromptEngineering.Compression;
 

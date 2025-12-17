@@ -59,7 +59,7 @@ public class LogCoshLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculato
     /// making it simpler to use.
     /// </para>
     /// </remarks>
-    public LogCoshLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) 
+    public LogCoshLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
     }
@@ -97,7 +97,7 @@ public class LogCoshLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculato
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return new LogCoshLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+        return new LogCoshLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

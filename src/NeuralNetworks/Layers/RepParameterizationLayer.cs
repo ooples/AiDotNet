@@ -41,7 +41,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// before the first forward pass or after a reset.
     /// </remarks>
     private Tensor<T>? _lastMean;
-    
+
     /// <summary>
     /// Stores the log variance values extracted from the input tensor during the forward pass.
     /// </summary>
@@ -51,7 +51,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// distribution from which samples are drawn. The tensor is null before the first forward pass or after a reset.
     /// </remarks>
     private Tensor<T>? _lastLogVar;
-    
+
     /// <summary>
     /// Stores the random noise values used during the sampling process in the forward pass.
     /// </summary>

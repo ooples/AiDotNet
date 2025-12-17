@@ -28,22 +28,22 @@ public class AdaptiveCubicSplineInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The natural cubic spline interpolation instance.
     /// </summary>
     private readonly IInterpolation<T> _naturalSpline;
-    
+
     /// <summary>
     /// The monotonic cubic spline interpolation instance.
     /// </summary>
     private readonly IInterpolation<T> _monotonicSpline;
-    
+
     /// <summary>
     /// Array indicating which interpolation method to use for each interval.
     /// </summary>
@@ -52,7 +52,7 @@ public class AdaptiveCubicSplineInterpolation<T> : IInterpolation<T>
     /// When false, the natural spline is used.
     /// </remarks>
     private readonly bool[] _useMonotonic;
-    
+
     /// <summary>
     /// Helper object for performing numeric operations on generic type T.
     /// </summary>
@@ -127,19 +127,19 @@ public class AdaptiveCubicSplineInterpolation<T> : IInterpolation<T>
     private bool[] DetermineInterpolationMethod(T threshold)
     {
         bool[] useMonotonic = new bool[_x.Length - 1];
-        
+
         for (int i = 0; i < _x.Length - 1; i++)
         {
             T slope = _numOps.Divide(_numOps.Subtract(_y[i + 1], _y[i]), _numOps.Subtract(_x[i + 1], _x[i]));
             T naturalValue = _naturalSpline.Interpolate(_numOps.Divide(_numOps.Add(_x[i], _x[i + 1]), _numOps.FromDouble(2)));
             T monotonicValue = _monotonicSpline.Interpolate(_numOps.Divide(_numOps.Add(_x[i], _x[i + 1]), _numOps.FromDouble(2)));
-            
+
             T naturalDiff = _numOps.Abs(_numOps.Subtract(naturalValue, _numOps.Divide(_numOps.Add(_y[i], _y[i + 1]), _numOps.FromDouble(2))));
             T monotonicDiff = _numOps.Abs(_numOps.Subtract(monotonicValue, _numOps.Divide(_numOps.Add(_y[i], _y[i + 1]), _numOps.FromDouble(2))));
-            
+
             useMonotonic[i] = _numOps.GreaterThan(_numOps.Subtract(naturalDiff, monotonicDiff), threshold);
         }
-        
+
         return useMonotonic;
     }
 
