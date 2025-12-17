@@ -59,7 +59,7 @@ namespace AiDotNet.AutoML.NAS
             _attentionHiddenSize = attentionHiddenSize;
 
             // Initialize attention module
-            int numArchitectureChoices = _elasticDepths.Count * _elasticWidthMultipliers.Count * _elasticKernelSizes.Count;
+            int numArchitectureChoices = _elasticDepths.Count + _elasticWidthMultipliers.Count + _elasticKernelSizes.Count;
             _attentionWeights = new Matrix<T>(_attentionHiddenSize, numArchitectureChoices);
             _attentionGradients = new Matrix<T>(_attentionHiddenSize, numArchitectureChoices);
 
