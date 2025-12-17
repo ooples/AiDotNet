@@ -21,7 +21,7 @@ public static class StatisticsHelper<T>
     /// </summary>
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
-    private static T GetOrDefaultOptionalParameter(T? value, T defaultValue)
+    private static T GetOrDefaultOptionalParameter(T? value, T defaultValue, bool treatDefaultAsMissing = true)
     {
         if (value is null)
         {
@@ -31,7 +31,7 @@ public static class StatisticsHelper<T>
         // With unconstrained generics, optional parameters of type `T?` that are omitted at the callsite
         // are passed as `default(T)` (e.g. 0 for numeric structs), not `null`. Treat `default(T)` as
         // "not provided" so documented defaults are applied consistently.
-        return EqualityComparer<T>.Default.Equals(value, default!) ? defaultValue : value;
+        return treatDefaultAsMissing && EqualityComparer<T>.Default.Equals(value, default!) ? defaultValue : value;
     }
 
     /// <summary>
@@ -3711,10 +3711,13 @@ public static class StatisticsHelper<T>
     /// </para>
     /// </remarks>
     public static T CalculateAccuracy(Vector<T> actual, Vector<T> predicted, PredictionType predictionType, T? tolerance = default)
+        => CalculateAccuracy(actual, predicted, predictionType, tolerance, treatDefaultAsMissing: true);
+
+    public static T CalculateAccuracy(Vector<T> actual, Vector<T> predicted, PredictionType predictionType, T? tolerance, bool treatDefaultAsMissing)
     {
         var correctPredictions = _numOps.Zero;
         var totalPredictions = _numOps.FromDouble(actual.Length);
-        tolerance = GetOrDefaultOptionalParameter(tolerance, _numOps.FromDouble(0.05));
+        tolerance = GetOrDefaultOptionalParameter(tolerance, _numOps.FromDouble(0.05), treatDefaultAsMissing);
         var classificationThreshold = _numOps.FromDouble(0.5);
 
         for (int i = 0; i < actual.Length; i++)
@@ -3784,13 +3787,21 @@ public static class StatisticsHelper<T>
         Vector<T> predicted,
         PredictionType predictionType,
         T? threshold = default)
+        => CalculatePrecisionRecallF1(actual, predicted, predictionType, threshold, treatDefaultAsMissing: true);
+
+    public static (T Precision, T Recall, T F1Score) CalculatePrecisionRecallF1(
+        Vector<T> actual,
+        Vector<T> predicted,
+        PredictionType predictionType,
+        T? threshold,
+        bool treatDefaultAsMissing)
     {
         var truePositives = _numOps.Zero;
         var falsePositives = _numOps.Zero;
         var falseNegatives = _numOps.Zero;
         var defaultRegressionThreshold = _numOps.FromDouble(0.1); // default of 10%
-        var classificationThreshold = GetOrDefaultOptionalParameter(threshold, _numOps.FromDouble(0.5));
-        var regressionThreshold = GetOrDefaultOptionalParameter(threshold, defaultRegressionThreshold);
+        var classificationThreshold = GetOrDefaultOptionalParameter(threshold, _numOps.FromDouble(0.5), treatDefaultAsMissing);
+        var regressionThreshold = GetOrDefaultOptionalParameter(threshold, defaultRegressionThreshold, treatDefaultAsMissing);
 
         if (predictionType == PredictionType.MultiClass)
         {
