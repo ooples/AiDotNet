@@ -139,6 +139,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;
+    private AiDotNet.Models.Options.SafetyFilterConfiguration<T>? _safetyFilterConfiguration;
     private ILoRAConfiguration<T>? _loraConfiguration;
     private IRetriever<T>? _ragRetriever;
     private IReranker<T>? _ragReranker;
@@ -1700,6 +1701,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             DeploymentConfiguration = deploymentConfig,
             JitCompiledFunction = jitCompiledFunction,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            SafetyFilterConfiguration = _safetyFilterConfiguration,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
             GraphStore = _graphStore,
@@ -1839,6 +1841,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             LoRAConfiguration = _loraConfiguration,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
+            SafetyFilterConfiguration = _safetyFilterConfiguration,
             RagRetriever = _ragRetriever,
             RagReranker = _ragReranker,
             RagGenerator = _ragGenerator,
@@ -2319,6 +2322,17 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator)
     {
         _fairnessEvaluator = evaluator;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the safety filter used to validate inputs and filter outputs during inference.
+    /// </summary>
+    /// <param name="configuration">Safety filter configuration.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureSafetyFilter(AiDotNet.Models.Options.SafetyFilterConfiguration<T> configuration)
+    {
+        _safetyFilterConfiguration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         return this;
     }
 

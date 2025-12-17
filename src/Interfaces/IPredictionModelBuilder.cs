@@ -344,6 +344,13 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator);
 
     /// <summary>
+    /// Configures the safety filter used to validate inputs and filter outputs during inference.
+    /// </summary>
+    /// <param name="configuration">Safety filter configuration.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureSafetyFilter(SafetyFilterConfiguration<T> configuration);
+
+    /// <summary>
     /// Configures LoRA (Low-Rank Adaptation) for parameter-efficient fine-tuning.
     /// </summary>
     /// <remarks>

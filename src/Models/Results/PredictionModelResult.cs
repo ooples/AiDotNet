@@ -1,5 +1,6 @@
 global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
+using AiDotNet.AdversarialRobustness.Safety;
 using AiDotNet.Agents;
 using AiDotNet.Benchmarking;
 using AiDotNet.Benchmarking.Models;
@@ -522,6 +523,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     [JsonProperty]
     private AiDotNet.Configuration.InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
+<<<<<<< HEAD
     [JsonIgnore]
     private readonly object _inferenceOptimizationLock = new();
 
@@ -537,6 +539,9 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     // Serving assembly uses InternalsVisibleTo; keep this internal to avoid expanding user-facing API surface.
     internal AiDotNet.Configuration.InferenceOptimizationConfig? GetInferenceOptimizationConfigForServing()
         => InferenceOptimizationConfig;
+=======
+    internal ISafetyFilter<T>? SafetyFilter { get; private set; }
+>>>>>>> f9fefaf2 (feat: integrate safety filtering into inference)
 
     /// <summary>
     /// Gets the reasoning configuration for advanced Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency reasoning.
@@ -1120,6 +1125,17 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         JitCompiledFunction = options.JitCompiledFunction;
         InferenceOptimizationConfig = options.InferenceOptimizationConfig;
 
+        // Safety & Robustness (enabled by default; opt-out via options)
+        var safetyConfig = options.SafetyFilterConfiguration;
+        if (safetyConfig?.Enabled == false)
+        {
+            SafetyFilter = null;
+        }
+        else
+        {
+            SafetyFilter = safetyConfig?.Filter ?? new SafetyFilter<T>(safetyConfig?.Options ?? new SafetyFilterOptions<T>());
+        }
+
         // Reasoning
         ReasoningConfig = options.ReasoningConfig;
 
@@ -1300,7 +1316,25 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
             throw new InvalidOperationException("Normalizer is not initialized.");
         }
 
-        var (normalizedNewData, _) = NormalizationInfo.Normalizer.NormalizeInput(newData);
+        var dataForPrediction = newData;
+        if (SafetyFilter != null && newData is Vector<T> vectorInput)
+        {
+            var validation = SafetyFilter.ValidateInput(vectorInput);
+            if (!validation.IsValid)
+            {
+                var issues = validation.Issues.Count > 0
+                    ? string.Join("; ", validation.Issues.Select(i => $"{i.Type}:{i.Severity}"))
+                    : "Unknown safety validation failure.";
+                throw new InvalidOperationException($"Safety validation failed: {issues}");
+            }
+
+            if (validation.SanitizedInput != null)
+            {
+                dataForPrediction = (TInput)(object)validation.SanitizedInput;
+            }
+        }
+
+        var (normalizedNewData, _) = NormalizationInfo.Normalizer.NormalizeInput(dataForPrediction);
 
         // Use JIT-compiled function if available for 5-10x faster predictions
         TOutput normalizedPredictions;
@@ -1348,7 +1382,18 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
             normalizedPredictions = Model.Predict(normalizedNewData);
         }
 
-        return NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, NormalizationInfo.YParams);
+        var denormalized = NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, NormalizationInfo.YParams);
+
+        if (SafetyFilter != null && denormalized is Vector<T> vectorOutput)
+        {
+            var filtered = SafetyFilter.FilterOutput(vectorOutput);
+            if (filtered.WasModified || !filtered.IsSafe)
+            {
+                return (TOutput)(object)filtered.FilteredOutput;
+            }
+        }
+
+        return denormalized;
     }
 
     /// <summary>
