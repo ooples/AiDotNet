@@ -65,7 +65,7 @@ jobs:
 
             # Check if commit follows conventional commits
             # Valid types: feat, fix, docs, refactor, perf, test, chore, ci, style, deps
-            if [[ "$FIRST_LINE" =~ ^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)\(([^)]+)\)\?:\ .+ ]]; then
+            if [[ "$FIRST_LINE" =~ ^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)(\([^)]+\))?: .+ ]]; then
               # Extract description after colon
               DESCRIPTION=$(echo "$FIRST_LINE" | cut -d':' -f2- | sed 's/^ *//')
 
