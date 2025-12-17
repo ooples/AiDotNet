@@ -4,6 +4,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Helpers;
 
+[Collection(AiDotNet.Tests.TestInfrastructure.DiagnosticsEnvironmentCollection.Name)]
 public class InferenceDiagnosticsTests
 {
     [Fact]

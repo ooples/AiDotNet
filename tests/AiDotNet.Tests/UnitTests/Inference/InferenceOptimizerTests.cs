@@ -8,6 +8,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
 
+[Collection(AiDotNet.Tests.TestInfrastructure.DiagnosticsEnvironmentCollection.Name)]
 public class InferenceOptimizerTests
 {
     [Fact]

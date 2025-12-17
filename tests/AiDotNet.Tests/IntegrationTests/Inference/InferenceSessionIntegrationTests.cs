@@ -14,6 +14,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Inference;
 
+[Collection(AiDotNet.Tests.TestInfrastructure.DiagnosticsEnvironmentCollection.Name)]
 public class InferenceSessionIntegrationTests
 {
     private const float Tolerance = 1e-4f;
