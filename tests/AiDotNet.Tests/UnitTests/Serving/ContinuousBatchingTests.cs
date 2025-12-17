@@ -1,5 +1,5 @@
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Serving.ContinuousBatching;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Serving;
@@ -469,7 +469,7 @@ public class ContinuousBatchingTests
     }
 
     [Fact]
-    public void ContinuousBatcher_StartStop_Works()
+    public async Task ContinuousBatcher_StartStop_Works()
     {
         // Arrange
         using var batcher = new ContinuousBatcher<float>(new ContinuousBatcherConfig
@@ -480,7 +480,7 @@ public class ContinuousBatchingTests
         // Act
         batcher.Start();
         bool wasRunning = batcher.IsRunning;
-        batcher.StopAsync().Wait();
+        await batcher.StopAsync();
         bool isNowRunning = batcher.IsRunning;
 
         // Assert

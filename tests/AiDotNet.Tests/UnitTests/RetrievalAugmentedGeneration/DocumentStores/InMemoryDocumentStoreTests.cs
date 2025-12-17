@@ -1,4 +1,3 @@
-using AiDotNet.Tensors.LinearAlgebra;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -6,6 +5,7 @@ using System.Threading.Tasks;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
@@ -271,7 +271,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
         #region Thread Safety Tests
 
         [Fact]
-        public void ConcurrentAdd_WithMultipleThreads_AllDocumentsAdded()
+        public async Task ConcurrentAdd_WithMultipleThreads_AllDocumentsAdded()
         {
             // Arrange
             var store = new InMemoryDocumentStore<float>(vectorDimension: 3);
@@ -288,7 +288,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                 }));
             }
 
-            Task.WaitAll(tasks.ToArray());
+            await Task.WhenAll(tasks);
 
             // Assert
             Assert.Equal(100, store.DocumentCount);
