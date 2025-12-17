@@ -39,6 +39,9 @@ internal class SpeculativeDecoder<T>
     private readonly SpeculativeDecodingConfig<T> _config;
     private readonly Random _random;
     private readonly int _maxDraftTokens;
+    private readonly int _maxTreeDepth;
+    private int _currentDraftTokens;
+    private int _currentMaxTreeDepth;
 
     // Statistics
     private long _totalTokensGenerated;
@@ -78,6 +81,16 @@ internal class SpeculativeDecoder<T>
     internal long TotalDraftTokens => _config.UseTreeSpeculation ? _treeTotalNodes : _totalDraftTokens;
 
     /// <summary>
+    /// Gets the current adaptive draft length.
+    /// </summary>
+    internal int CurrentDraftTokens => _currentDraftTokens;
+
+    /// <summary>
+    /// Gets the current adaptive tree depth.
+    /// </summary>
+    internal int CurrentMaxTreeDepth => _currentMaxTreeDepth;
+
+    /// <summary>
     /// Gets the total number of verification calls performed so far.
     /// </summary>
     internal long TotalVerificationCalls => _totalVerificationCalls;
@@ -98,6 +111,9 @@ internal class SpeculativeDecoder<T>
         _targetForward = targetForward ?? throw new ArgumentNullException(nameof(targetForward));
         _config = config ?? new SpeculativeDecodingConfig<T>();
         _maxDraftTokens = Math.Max(1, _config.NumDraftTokens);
+        _maxTreeDepth = Math.Max(1, _config.MaxTreeDepth);
+        _currentDraftTokens = _maxDraftTokens;
+        _currentMaxTreeDepth = _maxTreeDepth;
         _random = _config.Seed.HasValue ? new Random(_config.Seed.Value) : new Random();
     }
 
@@ -136,7 +152,7 @@ internal class SpeculativeDecoder<T>
             cancellationToken.ThrowIfCancellationRequested();
 
             // Determine how many draft tokens to generate
-            int numDraft = Math.Min(_config.NumDraftTokens, maxNewTokens - generated);
+            int numDraft = Math.Min(_currentDraftTokens, maxNewTokens - generated);
 
             // Generate draft tokens
             var currentTokens = new Vector<int>(tokens.ToArray());
@@ -310,7 +326,7 @@ internal class SpeculativeDecoder<T>
         var treeConfig = new TreeSpeculativeConfig
         {
             BranchFactor = Math.Max(1, _config.TreeBranchFactor),
-            MaxDepth = Math.Max(1, _config.MaxTreeDepth),
+            MaxDepth = _currentMaxTreeDepth,
             Seed = _config.Seed
         };
 
@@ -366,15 +382,15 @@ internal class SpeculativeDecoder<T>
 
         if (ar < minAccept)
         {
-            _config.NumDraftTokens = Math.Max(1, _config.NumDraftTokens - 1);
-            _config.MaxTreeDepth = Math.Max(1, _config.MaxTreeDepth - 1);
+            _currentDraftTokens = Math.Max(1, _currentDraftTokens - 1);
+            _currentMaxTreeDepth = Math.Max(1, _currentMaxTreeDepth - 1);
             return;
         }
 
         if (ar >= minAccept + 0.2)
         {
-            _config.NumDraftTokens = Math.Min(_maxDraftTokens, _config.NumDraftTokens + 1);
-            _config.MaxTreeDepth = Math.Min(Math.Max(1, _maxDraftTokens), Math.Max(1, _config.MaxTreeDepth + 1));
+            _currentDraftTokens = Math.Min(_maxDraftTokens, _currentDraftTokens + 1);
+            _currentMaxTreeDepth = Math.Min(_maxTreeDepth, _currentMaxTreeDepth + 1);
         }
     }
 
@@ -401,6 +417,8 @@ internal class SpeculativeDecoder<T>
         _totalVerificationCalls = 0;
         _treeTotalNodes = 0;
         _treeAcceptedNodes = 0;
+        _currentDraftTokens = _maxDraftTokens;
+        _currentMaxTreeDepth = _maxTreeDepth;
         _draftModel.Reset();
     }
 

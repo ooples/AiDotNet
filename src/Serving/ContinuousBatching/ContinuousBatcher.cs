@@ -413,14 +413,21 @@ internal class ContinuousBatcher<T> : IDisposable
         if (result.NewTokens.Length == 0)
             return Array.Empty<int>();
 
-        var newTokens = new int[result.NewTokens.Length];
-        for (int i = 0; i < newTokens.Length; i++)
+        var tokens = new List<int>(result.NewTokens.Length);
+        for (int i = 0; i < result.NewTokens.Length; i++)
         {
-            newTokens[i] = result.NewTokens[i];
-            sequence.AppendToken(newTokens[i]);
+            int token = result.NewTokens[i];
+            sequence.AppendToken(token);
+            tokens.Add(token);
+
+            // Prevent appending beyond stop conditions (e.g., EOS in the speculative batch).
+            if (sequence.ShouldStop(_config.EosTokenId, sequence.Request.StopTokenIds))
+            {
+                break;
+            }
         }
 
-        return newTokens;
+        return tokens;
     }
 
     private bool ShouldUseSpeculativeDecoding(IReadOnlyCollection<SequenceState<T>> batch, out string reason)

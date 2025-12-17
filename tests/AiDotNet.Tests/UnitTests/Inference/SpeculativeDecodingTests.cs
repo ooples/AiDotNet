@@ -684,7 +684,7 @@ public class SpeculativeDecodingIntegrationTests
         _ = await decoder.GenerateAsync(new Vector<int>(new[] { 0 }), maxNewTokens: 24, temperature: 1.0f);
 
         // Assert
-        Assert.True(decoder.Config.NumDraftTokens < 4);
+        Assert.True(decoder.CurrentDraftTokens < 4);
     }
 }
 
