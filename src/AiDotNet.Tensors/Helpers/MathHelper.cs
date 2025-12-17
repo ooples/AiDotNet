@@ -225,6 +225,29 @@ public static class MathHelper
     }
 
     /// <summary>
+    /// Calculates the inverse hyperbolic tangent (atanh) of a value.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Inverse hyperbolic tangent: atanh(x) = 0.5 * log((1 + x) / (1 - x)).
+    /// </para>
+    /// <para>
+    /// This method is provided for .NET Framework compatibility where <c>Math.Atanh</c> is not available.
+    /// </para>
+    /// </remarks>
+    /// <param name="x">The input value.</param>
+    /// <returns>The inverse hyperbolic tangent of <paramref name="x"/>.</returns>
+    public static double Atanh(double x)
+    {
+        // Clamp to open interval (-1, 1) to avoid infinities from the identity near boundaries.
+        const double eps = 1e-12;
+        x = Clamp(x, -1.0 + eps, 1.0 - eps);
+
+        // atanh(x) = 0.5 * ln((1+x)/(1-x))
+        return 0.5 * Math.Log((1.0 + x) / (1.0 - x));
+    }
+
+    /// <summary>
     /// Calculates the modified Bessel function of the first kind of order 0.
     /// </summary>
     /// <typeparam name="T">The numeric type to use for calculations.</typeparam>

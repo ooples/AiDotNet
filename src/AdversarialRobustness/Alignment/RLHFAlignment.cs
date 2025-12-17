@@ -224,7 +224,7 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
 
             // Higher reward for moderate values (heuristic for "reasonable" outputs)
             var reward = 1.0 - Math.Abs(outputMean - 0.5);
-            return Clamp(reward, 0.0, 1.0);
+            return MathHelper.Clamp(reward, 0.0, 1.0);
         };
     }
 
@@ -359,10 +359,4 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         return value;
     }
 
-    private static double Clamp(double value, double min, double max)
-    {
-        if (value < min) return min;
-        if (value > max) return max;
-        return value;
-    }
 }

@@ -61,7 +61,7 @@ public class CWAttack<T> : AdversarialAttackBase<T>
             // Initialize w such that tanh(w) ≈ x
             var x = NumOps.ToDouble(input[i]);
             var twoXMinusOne = 2.0 * x - 1.0;
-            w[i] = Atanh(Clamp(twoXMinusOne, -0.9999, 0.9999));
+            w[i] = MathHelper.Atanh(MathHelper.Clamp(twoXMinusOne, -0.9999, 0.9999));
         }
 
         // Optimization loop
@@ -174,33 +174,12 @@ public class CWAttack<T> : AdversarialAttackBase<T>
         // Untargeted: maximize maxOther - true. Targeted: maximize true - target (i.e., push toward target).
         if (Options.IsTargeted)
         {
-            var targetIndex = ClampInt(Options.TargetClass, 0, output.Length - 1);
+            var targetIndex = MathHelper.Clamp(Options.TargetClass, 0, output.Length - 1);
             var targetLogit = NumOps.ToDouble(output[targetIndex]);
             return Math.Max(maxOtherLogit - targetLogit, 0.0);
         }
 
         return Math.Max(maxOtherLogit - trueLogit, 0.0);
-    }
-
-    private static double Clamp(double value, double min, double max)
-    {
-        if (value < min) return min;
-        if (value > max) return max;
-        return value;
-    }
-
-    private static int ClampInt(int value, int min, int max)
-    {
-        if (value < min) return min;
-        if (value > max) return max;
-        return value;
-    }
-
-    private static double Atanh(double x)
-    {
-        // net471: Math.Atanh not available.
-        // atanh(x) = 0.5 * ln((1+x)/(1-x))
-        return 0.5 * Math.Log((1.0 + x) / (1.0 - x));
     }
 
     /// <summary>
