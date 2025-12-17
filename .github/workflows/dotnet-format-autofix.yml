@@ -1,0 +1,150 @@
+name: Auto-Fix Formatting (dotnet format)
+
+on:
+  schedule:
+    # Daily at 03:15 UTC (adjust as needed)
+    - cron: '15 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: dotnet-format-autofix
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  format:
+    name: Run dotnet format and open PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 8.0
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore AiDotNet.sln
+
+      - name: Run dotnet format
+        run: |
+          dotnet tool update -g dotnet-format || dotnet tool install -g dotnet-format
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet format AiDotNet.sln
+
+      - name: Detect changes
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure git
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit changes
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          git add -A
+          git commit -m "chore: apply dotnet format"
+
+      - name: Push branch
+        if: steps.changes.outputs.has_changes == 'true'
+        env:
+          # IMPORTANT:
+          # - If AUTOFIX_PAT is set, we can create a PR that triggers normal CI workflows.
+          # - If not set, pushes/PRs created with GITHUB_TOKEN may not trigger other workflows due to GitHub safeguards.
+          AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
+        shell: bash
+        run: |
+          BRANCH="automation/dotnet-format-autofix"
+          git checkout -B "$BRANCH"
+
+          if [ -n "$AUTOFIX_PAT" ]; then
+            git push "https://x-access-token:${AUTOFIX_PAT}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH" --force-with-lease
+          else
+            git push origin "$BRANCH" --force-with-lease
+            echo "::warning::AUTOFIX_PAT is not set. The PR may not trigger CI automatically when created by GitHub Actions."
+          fi
+
+      - name: Create or update PR
+        if: steps.changes.outputs.has_changes == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const head = `${owner}:automation/dotnet-format-autofix`;
+            const base = 'master';
+
+            const title = 'chore: automated dotnet format';
+            const body = [
+              'Automated formatting maintenance PR.',
+              '',
+              '- Runs `dotnet format AiDotNet.sln` on a schedule and opens/updates this PR.',
+              '- Intended to keep formatting drift from accumulating between feature PRs.',
+              '',
+              'If CI does not run automatically, ensure `AUTOFIX_PAT` is configured as a repository secret with `repo` and `workflow` scopes.'
+            ].join('\n');
+
+            const existing = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: 'open',
+              head,
+              base
+            });
+
+            if (existing.data.length > 0) {
+              const pr = existing.data[0];
+              core.info(`Updating existing PR #${pr.number}`);
+              await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: pr.number,
+                title,
+                body
+              });
+              return;
+            }
+
+            core.info('Creating new PR');
+            const created = await github.rest.pulls.create({
+              owner,
+              repo,
+              title,
+              head: 'automation/dotnet-format-autofix',
+              base,
+              body
+            });
+
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: created.data.number,
+              labels: ['chore', 'autofix', 'formatting']
+            });
+
+      - name: No changes
+        if: steps.changes.outputs.has_changes == 'false'
+        run: echo "No formatting changes detected."
+
