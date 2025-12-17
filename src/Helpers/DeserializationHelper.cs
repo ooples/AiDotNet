@@ -295,7 +295,14 @@ public static class DeserializationHelper
         else
         {
             // Default: pass inputShape as first parameter
-            instance = Activator.CreateInstance(type, [inputShape]);
+            var ctor = type.GetConstructor([typeof(int[])]);
+            if (ctor is null)
+            {
+                throw new NotSupportedException(
+                    $"Layer type {layerType} is not supported for deserialization (no known constructor found).");
+            }
+
+            instance = ctor.Invoke([inputShape]);
         }
         if (instance == null)
         {
@@ -670,7 +677,7 @@ public static class DeserializationHelper
             return null;
         }
 
-        string? typeName = value as string ?? value.ToString();
+        string? typeName = value as string ?? value.ToString() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(typeName))
         {
             return null;
@@ -700,9 +707,10 @@ public static class DeserializationHelper
         {
             return null;
         }
-        catch
+        catch (Exception ex)
         {
             // Best-effort: deserialization should not throw if an optional activation cannot be created.
+            System.Diagnostics.Debug.WriteLine($"Unexpected error deserializing activation {typeName}: {ex.Message}");
             return null;
         }
     }

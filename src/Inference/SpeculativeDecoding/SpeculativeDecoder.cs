@@ -61,9 +61,9 @@ internal class SpeculativeDecoder<T>
     /// <summary>
     /// Gets the draft acceptance rate.
     /// </summary>
-    public double AcceptanceRate => _totalDraftTokens > 0
-        ? (double)_acceptedDraftTokens / _totalDraftTokens
-        : _treeTotalNodes > 0 ? (double)_treeAcceptedNodes / _treeTotalNodes : 0;
+    public double AcceptanceRate => _config.UseTreeSpeculation
+        ? (_treeTotalNodes > 0 ? (double)_treeAcceptedNodes / _treeTotalNodes : 0)
+        : (_totalDraftTokens > 0 ? (double)_acceptedDraftTokens / _totalDraftTokens : 0);
 
     /// <summary>
     /// Gets the average tokens generated per verification call.

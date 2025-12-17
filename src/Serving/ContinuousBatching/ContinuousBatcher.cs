@@ -648,8 +648,8 @@ internal class ContinuousBatcher<T> : IDisposable
         }
         catch
         {
-            // Fallback to a common default; speculative decoding will be disabled if the shapes don't line up.
-            return 50000;
+            // Let the caller handle vocab detection failure.
+            return 0;
         }
     }
 
