@@ -15,6 +15,7 @@ global using AiDotNet.Agents;
 global using AiDotNet.LanguageModels;
 global using AiDotNet.Tools;
 global using AiDotNet.Models;
+global using AiDotNet.Models.Results;
 global using AiDotNet.Enums;
 global using AiDotNet.MixedPrecision;
 global using AiDotNet.KnowledgeDistillation;
@@ -85,6 +86,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig;
     private RLTrainingOptions<T>? _rlOptions;
     private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
+    private AutoMLOptions<T, TInput, TOutput>? _autoMLOptions;
 
     // Deployment configuration fields
     private QuantizationConfig? _quantizationConfig;
@@ -742,9 +744,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
         // AUTOML SEARCH (if configured and no model explicitly set)
         // AutoML finds the best model type and hyperparameters automatically
+        AutoMLRunSummary? autoMLSummary = null;
         if (_autoMLModel != null && _model == null)
         {
             Console.WriteLine("AutoML configured - starting model search...");
+            var searchStartedUtc = DateTimeOffset.UtcNow;
 
             // Set up preprocessing for AutoML search
             var autoMLNormalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
@@ -775,7 +779,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
             _model = bestModel;
 
-            Console.WriteLine($"AutoML search complete. Best model: {bestModel.GetType().Name}");
+            var searchEndedUtc = DateTimeOffset.UtcNow;
+            autoMLSummary = CreateAutoMLRunSummary(searchStartedUtc, searchEndedUtc);
+
+            Console.WriteLine("AutoML search complete.");
             Console.WriteLine($"Best score: {_autoMLModel.BestScore}");
             Console.WriteLine($"Trials completed: {_autoMLModel.GetTrialHistory().Count}");
         }
@@ -1014,6 +1021,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = normInfo,
+            AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
             RagRetriever = _ragRetriever,
@@ -1044,6 +1052,55 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var finalResult = new PredictionModelResult<T, TInput, TOutput>(options);
 
         return finalResult;
+    }
+
+    private AutoMLRunSummary CreateAutoMLRunSummary(DateTimeOffset startedUtc, DateTimeOffset endedUtc)
+    {
+        if (_autoMLModel is null)
+        {
+            throw new InvalidOperationException("AutoML summary requested but AutoML is not configured.");
+        }
+
+        MetricType metric = MetricType.Accuracy;
+        bool maximize = true;
+
+        if (_autoMLModel is AiDotNet.AutoML.AutoMLModelBase<T, TInput, TOutput> baseAutoML)
+        {
+            metric = baseAutoML.OptimizationMetric;
+            maximize = baseAutoML.MaximizeOptimizationMetric;
+        }
+        else if (_autoMLOptions?.OptimizationMetricOverride is MetricType overrideMetric)
+        {
+            metric = overrideMetric;
+            maximize = IsHigherBetter(metric);
+        }
+
+        var summary = new AutoMLRunSummary
+        {
+            SearchStrategy = _autoMLOptions?.SearchStrategy,
+            TimeLimit = _autoMLModel.TimeLimit,
+            TrialLimit = _autoMLModel.TrialLimit,
+            OptimizationMetric = metric,
+            MaximizeMetric = maximize,
+            BestScore = _autoMLModel.BestScore,
+            SearchStartedUtc = startedUtc,
+            SearchEndedUtc = endedUtc
+        };
+
+        foreach (var trial in _autoMLModel.GetTrialHistory())
+        {
+            summary.Trials.Add(new AutoMLTrialSummary
+            {
+                TrialId = trial.TrialId,
+                Score = trial.Score,
+                Duration = trial.Duration,
+                CompletedUtc = trial.Timestamp,
+                Success = trial.Success,
+                ErrorMessage = trial.ErrorMessage
+            });
+        }
+
+        return summary;
     }
 
     /// <summary>
@@ -1109,6 +1166,53 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         return result;
     }
 
+    private (IRLAgent<T> Agent, AutoMLRunSummary Summary) SelectRLAgentWithAutoML(RLTrainingOptions<T> rlTrainingOptions)
+    {
+        if (_autoMLOptions is null || _autoMLOptions.TaskFamilyOverride != AutoMLTaskFamily.ReinforcementLearning)
+        {
+            throw new InvalidOperationException("RL AutoML was requested but AutoML options are not configured for reinforcement learning.");
+        }
+
+        if (rlTrainingOptions.Environment is null)
+        {
+            throw new ArgumentException("RL training options must include a valid Environment.", nameof(rlTrainingOptions));
+        }
+
+        if (typeof(TInput) != typeof(AiDotNet.Tensors.LinearAlgebra.Vector<T>) || typeof(TOutput) != typeof(AiDotNet.Tensors.LinearAlgebra.Vector<T>))
+        {
+            throw new InvalidOperationException(
+                $"RL AutoML requires PredictionModelBuilder<T, Vector<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
+        }
+
+        if (_autoMLOptions.SearchStrategy != AutoMLSearchStrategy.RandomSearch)
+        {
+            throw new NotSupportedException(
+                $"RL AutoML currently supports only '{AutoMLSearchStrategy.RandomSearch}'. Received '{_autoMLOptions.SearchStrategy}'.");
+        }
+
+        var (defaultTimeLimit, defaultTrialLimit) = AiDotNet.AutoML.AutoMLBudgetDefaults.Resolve(_autoMLOptions.Budget.Preset);
+        var timeLimit = _autoMLOptions.Budget.TimeLimitOverride ?? defaultTimeLimit;
+        var trialLimit = _autoMLOptions.Budget.TrialLimitOverride ?? defaultTrialLimit;
+
+        var rlAutoOptions = _autoMLOptions.ReinforcementLearning ?? new RLAutoMLOptions<T>();
+        var maxSteps = rlAutoOptions.MaxStepsPerEpisodeOverride ?? rlTrainingOptions.MaxStepsPerEpisode;
+
+        if (rlTrainingOptions.Seed.HasValue)
+        {
+            rlTrainingOptions.Environment.Seed(rlTrainingOptions.Seed.Value);
+        }
+
+        var search = new AiDotNet.AutoML.RL.RandomSearchRLAutoML<T>(
+            rlTrainingOptions.Environment,
+            rlAutoOptions,
+            timeLimit,
+            trialLimit,
+            maxSteps,
+            rlTrainingOptions.Seed);
+
+        return search.Search();
+    }
+
     /// <summary>
     /// Internal method that performs reinforcement learning training.
     /// This contains all the core RL training logic.
@@ -1131,10 +1235,21 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 "BuildRLInternalAsync requires ConfigureReinforcementLearning() with a valid Environment.");
         }
 
-        // Validate model is set
+        AutoMLRunSummary? autoMLSummary = null;
+
+        // AutoML can optionally select an RL agent when TaskFamilyOverride is set to ReinforcementLearning.
         if (_model is null)
         {
-            throw new InvalidOperationException("Model (RL agent) must be specified using ConfigureModel().");
+            if (_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.ReinforcementLearning)
+            {
+                var (selectedAgent, summary) = SelectRLAgentWithAutoML(_rlOptions);
+                _model = (IFullModel<T, TInput, TOutput>)(object)selectedAgent;
+                autoMLSummary = summary;
+            }
+            else
+            {
+                throw new InvalidOperationException("Model (RL agent) must be specified using ConfigureModel().");
+            }
         }
 
         if (_model is not IRLAgent<T> rlAgent)
@@ -1173,7 +1288,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             bool done = false;
 
             // Episode loop
-            while (!done)
+            while (!done && steps < _rlOptions.MaxStepsPerEpisode)
             {
                 // Select action
                 var action = rlAgent.SelectAction(state, explore: true);
@@ -1327,6 +1442,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = normInfo,
+            AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
             RagRetriever = _ragRetriever,
@@ -1669,11 +1785,13 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// <para>
     /// Example:
     /// <code>
-    /// var autoML = new BayesianOptimizationAutoML&lt;double, double[][], double[]&gt;();
+    /// // Advanced usage: plug in your own AutoML implementation.
+    /// // Most users should prefer the ConfigureAutoML(AutoMLOptions&lt;...&gt;) overload instead.
+    /// var autoML = new RandomSearchAutoML&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
     /// autoML.SetTimeLimit(TimeSpan.FromMinutes(30));
-    /// autoML.SetCandidateModels(new[] { ModelType.RandomForest, ModelType.GradientBoosting });
+    /// autoML.SetCandidateModels(new List&lt;ModelType&gt; { ModelType.RandomForest, ModelType.GradientBoosting });
     ///
-    /// var builder = new PredictionModelBuilder&lt;double, double[][], double[]&gt;()
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAutoML(autoML)
     ///     .Build(trainingData, trainingLabels);
     /// </code>
@@ -1682,7 +1800,78 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel)
     {
         _autoMLModel = autoMLModel;
+        _autoMLOptions = null;
         return this;
+    }
+
+    /// <summary>
+    /// Configures AutoML using facade-style options (recommended for most users).
+    /// </summary>
+    /// <param name="options">AutoML options (budget, strategy, and optional overrides). If null, defaults are used.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AutoML automatically tries different models/settings to find a strong result.
+    /// With this overload you only choose a budget (how much time to spend), and AiDotNet handles the rest.
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(AutoMLOptions<T, TInput, TOutput>? options = null)
+    {
+        _autoMLOptions = options ?? new AutoMLOptions<T, TInput, TOutput>();
+
+        var (defaultTimeLimit, defaultTrialLimit) = AiDotNet.AutoML.AutoMLBudgetDefaults.Resolve(_autoMLOptions.Budget.Preset);
+        var timeLimit = _autoMLOptions.Budget.TimeLimitOverride ?? defaultTimeLimit;
+        var trialLimit = _autoMLOptions.Budget.TrialLimitOverride ?? defaultTrialLimit;
+
+        if (_autoMLOptions.TaskFamilyOverride == AutoMLTaskFamily.ReinforcementLearning)
+        {
+            if (_autoMLOptions.SearchStrategy != AutoMLSearchStrategy.RandomSearch)
+            {
+                throw new NotSupportedException(
+                    $"RL AutoML currently supports only '{AutoMLSearchStrategy.RandomSearch}'. Received '{_autoMLOptions.SearchStrategy}'.");
+            }
+
+            // RL AutoML runs through the RL training path and selects an IRLAgent; it does not use the supervised IAutoMLModel pipeline.
+            _autoMLModel = null;
+            return this;
+        }
+
+        _autoMLModel = CreateBuiltInAutoMLModel(_autoMLOptions.SearchStrategy);
+        _autoMLModel.TimeLimit = timeLimit;
+        _autoMLModel.TrialLimit = trialLimit;
+
+        if (_autoMLOptions.OptimizationMetricOverride.HasValue)
+        {
+            var metric = _autoMLOptions.OptimizationMetricOverride.Value;
+            _autoMLModel.SetOptimizationMetric(metric, maximize: IsHigherBetter(metric));
+        }
+
+        return this;
+    }
+
+    private static bool IsHigherBetter(MetricType metric)
+    {
+        return metric switch
+        {
+            MetricType.MeanSquaredError => false,
+            MetricType.RootMeanSquaredError => false,
+            MetricType.MeanAbsoluteError => false,
+            MetricType.MSE => false,
+            MetricType.RMSE => false,
+            MetricType.MAE => false,
+            _ => true
+        };
+    }
+
+    private IAutoMLModel<T, TInput, TOutput> CreateBuiltInAutoMLModel(AutoMLSearchStrategy strategy)
+    {
+        return strategy switch
+        {
+            AutoMLSearchStrategy.RandomSearch => new AiDotNet.AutoML.RandomSearchAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom()),
+            _ => throw new NotSupportedException(
+                $"AutoML search strategy '{strategy}' is not available via the facade options overload. " +
+                $"Use {nameof(ConfigureAutoML)}(IAutoMLModel<...>) to plug in a custom implementation.")
+        };
     }
 
     /// <summary>

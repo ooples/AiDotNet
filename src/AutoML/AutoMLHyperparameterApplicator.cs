@@ -1,0 +1,115 @@
+using System.Globalization;
+using System.Reflection;
+
+namespace AiDotNet.AutoML;
+
+internal static class AutoMLHyperparameterApplicator
+{
+    public static void ApplyToOptions(object options, IReadOnlyDictionary<string, object> parameters)
+    {
+        if (options is null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        if (parameters is null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+
+        var optionsType = options.GetType();
+
+        foreach (var (key, value) in parameters)
+        {
+            if (string.Equals(key, "ModelType", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var property = optionsType.GetProperty(
+                key,
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+
+            if (property is null || !property.CanWrite)
+            {
+                continue;
+            }
+
+            object? converted = ConvertValue(value, property.PropertyType);
+            if (converted is null && property.PropertyType.IsValueType && Nullable.GetUnderlyingType(property.PropertyType) is null)
+            {
+                continue;
+            }
+
+            property.SetValue(options, converted, null);
+        }
+    }
+
+    private static object? ConvertValue(object value, Type targetType)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        var underlyingNullable = Nullable.GetUnderlyingType(targetType);
+        if (underlyingNullable is not null)
+        {
+            return ConvertValue(value, underlyingNullable);
+        }
+
+        if (targetType.IsInstanceOfType(value))
+        {
+            return value;
+        }
+
+        if (targetType.IsEnum)
+        {
+            if (value is string s)
+            {
+                return Enum.Parse(targetType, s, ignoreCase: true);
+            }
+
+            return Enum.ToObject(targetType, Convert.ToInt32(value, CultureInfo.InvariantCulture));
+        }
+
+        if (targetType == typeof(bool))
+        {
+            return Convert.ToBoolean(value, CultureInfo.InvariantCulture);
+        }
+
+        if (targetType == typeof(int))
+        {
+            return Convert.ToInt32(value, CultureInfo.InvariantCulture);
+        }
+
+        if (targetType == typeof(double))
+        {
+            return Convert.ToDouble(value, CultureInfo.InvariantCulture);
+        }
+
+        if (targetType == typeof(float))
+        {
+            return Convert.ToSingle(value, CultureInfo.InvariantCulture);
+        }
+
+        if (targetType == typeof(long))
+        {
+            return Convert.ToInt64(value, CultureInfo.InvariantCulture);
+        }
+
+        if (targetType == typeof(string))
+        {
+            return Convert.ToString(value, CultureInfo.InvariantCulture);
+        }
+
+        try
+        {
+            return Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+}

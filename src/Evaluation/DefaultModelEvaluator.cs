@@ -55,15 +55,33 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// </remarks>
     public ModelEvaluationData<T, TInput, TOutput> EvaluateModel(ModelEvaluationInput<T, TInput, TOutput> input)
     {
+        var inferredPredictionType = input.PredictionTypeOverride
+            ?? PredictionTypeInference.Infer(ConversionsHelper.ConvertToVector<T, TOutput>(input.InputData.YTrain));
+
         var evaluationData = new ModelEvaluationData<T, TInput, TOutput>
         {
-            TrainingSet = CalculateDataSetStats(input.InputData.XTrain, input.InputData.YTrain, input.Model),
-            ValidationSet = CalculateDataSetStats(input.InputData.XValidation, input.InputData.YValidation, input.Model),
-            TestSet = CalculateDataSetStats(input.InputData.XTest, input.InputData.YTest, input.Model),
-            ModelStats = CalculateModelStats(input.Model, input.InputData.XTrain, input.NormInfo)
+            TrainingSet = CalculateDataSetStats(input.InputData.XTrain, input.InputData.YTrain, input.Model, inferredPredictionType),
+            ValidationSet = CalculateDataSetStats(input.InputData.XValidation, input.InputData.YValidation, input.Model, inferredPredictionType),
+            TestSet = CalculateDataSetStats(input.InputData.XTest, input.InputData.YTest, input.Model, inferredPredictionType),
+            ModelStats = TryCalculateModelStats(input.Model, input.InputData.XTrain, input.NormInfo)
         };
 
         return evaluationData;
+    }
+
+    private static ModelStats<T, TInput, TOutput> TryCalculateModelStats(
+        IFullModel<T, TInput, TOutput>? model,
+        TInput xTrain,
+        NormalizationInfo<T, TInput, TOutput> normInfo)
+    {
+        try
+        {
+            return CalculateModelStats(model, xTrain, normInfo);
+        }
+        catch
+        {
+            return ModelStats<T, TInput, TOutput>.Empty();
+        }
     }
 
     /// <summary>
@@ -83,7 +101,11 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// 
     /// This gives you a complete picture of your model's performance on this dataset.
     /// </remarks>
-    private DataSetStats<T, TInput, TOutput> CalculateDataSetStats(TInput X, TOutput y, IFullModel<T, TInput, TOutput>? model)
+    private DataSetStats<T, TInput, TOutput> CalculateDataSetStats(
+        TInput X,
+        TOutput y,
+        IFullModel<T, TInput, TOutput>? model,
+        PredictionType predictionType)
     {
         if (model == null)
         {
@@ -97,10 +119,10 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
 
         return new DataSetStats<T, TInput, TOutput>
         {
-            ErrorStats = CalculateErrorStats(actual, predicted, inputSize),
+            ErrorStats = CalculateErrorStats(actual, predicted, inputSize, predictionType),
             ActualBasicStats = CalculateBasicStats(actual),
             PredictedBasicStats = CalculateBasicStats(predicted),
-            PredictionStats = CalculatePredictionStats(actual, predicted, inputSize),
+            PredictionStats = CalculatePredictionStats(actual, predicted, inputSize, predictionType),
             Predicted = predictions,
             Features = X,
             Actual = y
@@ -123,9 +145,19 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// 
     /// Lower values for these metrics indicate better model performance.
     /// </remarks>
-    private static ErrorStats<T> CalculateErrorStats(Vector<T> actual, Vector<T> predicted, int featureCount)
+    private static ErrorStats<T> CalculateErrorStats(
+        Vector<T> actual,
+        Vector<T> predicted,
+        int featureCount,
+        PredictionType predictionType)
     {
-        return new ErrorStats<T>(new ErrorStatsInputs<T> { Actual = actual, Predicted = predicted, FeatureCount = featureCount });
+        return new ErrorStats<T>(new ErrorStatsInputs<T>
+        {
+            Actual = actual,
+            Predicted = predicted,
+            FeatureCount = featureCount,
+            PredictionType = predictionType
+        });
     }
 
     /// <summary>
@@ -163,7 +195,11 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// 
     /// These metrics help you understand not just how accurate your model is, but also how reliable and robust it is.
     /// </remarks>
-    private PredictionStats<T> CalculatePredictionStats(Vector<T> actual, Vector<T> predicted, int featureCount)
+    private PredictionStats<T> CalculatePredictionStats(
+        Vector<T> actual,
+        Vector<T> predicted,
+        int featureCount,
+        PredictionType predictionType)
     {
         return new PredictionStats<T>(new PredictionStatsInputs<T> 
         { 
@@ -171,7 +207,8 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
             Predicted = predicted, 
             NumberOfParameters = featureCount, 
             ConfidenceLevel = _predictionOptions.ConfidenceLevel, 
-            LearningCurveSteps = _predictionOptions.LearningCurveSteps 
+            LearningCurveSteps = _predictionOptions.LearningCurveSteps,
+            PredictionType = predictionType
         });
     }
 

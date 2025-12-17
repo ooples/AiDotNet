@@ -4,6 +4,7 @@ using AiDotNet.Data.Structures;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
+using AiDotNet.Models.Results;
 using AiDotNet.PromptEngineering.Analysis;
 using AiDotNet.PromptEngineering.Compression;
 using AiDotNet.Reasoning;
@@ -115,6 +116,19 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public NormalizationInfo<T, TInput, TOutput>? NormalizationInfo { get; set; }
+
+    /// <summary>
+    /// Gets or sets an optional AutoML run summary for this trained model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is intended for facade outputs and should not contain hyperparameter values, weights, or other
+    /// sensitive implementation details. If AutoML was not used, this can be null.
+    /// </para>
+    /// <para><b>For Beginners:</b> If you used AutoML, this stores a short history of the AutoML search
+    /// (how many trials ran and what the scores looked like), without exposing internal tuning details.</para>
+    /// </remarks>
+    public AutoMLRunSummary? AutoMLSummary { get; set; }
 
     // ============================================================================
     // Ethical AI Properties
