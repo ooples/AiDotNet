@@ -15,7 +15,8 @@ jobs:
     # Only run when commitlint fails on a pull_request event
     if: |
       github.event.workflow_run.conclusion == 'failure' &&
-      github.event.workflow_run.event == 'pull_request'
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.pull_requests[0].head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Debug workflow_run event
@@ -77,6 +78,7 @@ jobs:
           ref: ${{ steps.get-pr.outputs.head_branch }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Configure Git
         run: |
@@ -151,10 +153,13 @@ jobs:
 
       - name: Force push fixed commits
         if: steps.squash-commits.outputs.changes_made == 'true' || steps.fix-single-commit.outputs.changes_made == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           HEAD_BRANCH="${{ steps.get-pr.outputs.head_branch }}"
           HEAD_SHA="${{ steps.get-pr.outputs.head_sha }}"
           echo "Force pushing to $HEAD_BRANCH..."
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push origin "$HEAD_BRANCH" --force-with-lease="$HEAD_BRANCH:$HEAD_SHA"
 
       - name: Comment on PR

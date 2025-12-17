@@ -13,7 +13,9 @@ jobs:
     name: Check and Fix Non-Compliant Commits
     runs-on: ubuntu-latest
     # Skip for dependabot PRs (they have special handling)
-    if: github.actor != 'dependabot[bot]'
+    if: |
+      github.actor != 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
       - name: Checkout code
@@ -21,6 +23,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Configure Git
         run: |
@@ -50,6 +53,7 @@ jobs:
           COMMITS="${{ steps.get-commits.outputs.commits }}"
           NEEDS_FIX=false
           FIXED_COMMITS=()
+          PATTERN='^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)(\\([^)]+\\))?: .+'
 
           while IFS= read -r commit_sha; do
             if [ -z "$commit_sha" ]; then continue; fi
@@ -65,7 +69,7 @@ jobs:
 
             # Check if commit follows conventional commits
             # Valid types: feat, fix, docs, refactor, perf, test, chore, ci, style, deps
-            if [[ "$FIRST_LINE" =~ ^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)(\([^)]+\))?: .+ ]]; then
+            if [[ "$FIRST_LINE" =~ $PATTERN ]]; then
               # Extract description after colon
               DESCRIPTION=$(echo "$FIRST_LINE" | cut -d':' -f2- | sed 's/^ *//')
 
@@ -173,8 +177,10 @@ jobs:
         if: steps.check-commits.outputs.needs_fix == 'true'
         env:
           HEAD_REF: ${{ github.head_ref }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BRANCH="$HEAD_REF"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push origin "$BRANCH" --force-with-lease
 
       - name: Comment on PR
@@ -205,7 +211,9 @@ jobs:
     name: Handle Dependabot PR
     runs-on: ubuntu-latest
     # Only run for dependabot PRs
-    if: github.actor == 'dependabot[bot]'
+    if: |
+      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
       - name: Checkout code
@@ -213,6 +221,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Configure Git
         run: |
@@ -280,8 +289,10 @@ jobs:
         if: steps.check-needs-fix.outputs.needs_fix == 'true'
         env:
           HEAD_REF: ${{ github.head_ref }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BRANCH="$HEAD_REF"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push origin "$BRANCH" --force-with-lease
 
       - name: Comment on PR
