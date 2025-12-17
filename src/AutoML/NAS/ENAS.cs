@@ -142,7 +142,7 @@ namespace AiDotNet.AutoML.NAS
         {
             // Simplified: per-decision linear projection + softmax
             var weights = _controllerWeights[decisionIdx % _controllerWeights.Count];
-            var logits = new T[numChoices];
+            var logits = new Vector<T>(numChoices);
             for (int i = 0; i < numChoices; i++)
             {
                 T logit = _ops.Zero;
@@ -154,26 +154,11 @@ namespace AiDotNet.AutoML.NAS
                 logits[i] = logit;
             }
 
-            // Apply softmax
-            T maxLogit = logits[0];
-            for (int i = 1; i < numChoices; i++)
+            var probabilities = NasSamplingHelper.Softmax(logits, _ops);
+            var probs = new List<T>(numChoices);
+            for (int i = 0; i < probabilities.Length; i++)
             {
-                if (_ops.GreaterThan(logits[i], maxLogit))
-                    maxLogit = logits[i];
-            }
-
-            T sumExp = _ops.Zero;
-            var expValues = new T[numChoices];
-            for (int i = 0; i < numChoices; i++)
-            {
-                expValues[i] = _ops.Exp(_ops.Subtract(logits[i], maxLogit));
-                sumExp = _ops.Add(sumExp, expValues[i]);
-            }
-
-            var probs = new List<T>();
-            for (int i = 0; i < numChoices; i++)
-            {
-                probs.Add(_ops.Divide(expValues[i], sumExp));
+                probs.Add(probabilities[i]);
             }
 
             return probs;
@@ -203,11 +188,8 @@ namespace AiDotNet.AutoML.NAS
         private T ComputeEntropy(List<T> probs)
         {
             T entropy = _ops.Zero;
-            foreach (var p in probs)
+            foreach (var p in probs.Where(p => _ops.GreaterThan(p, _ops.Zero)))
             {
-                if (!_ops.GreaterThan(p, _ops.Zero))
-                    continue;
-
                 entropy = _ops.Subtract(entropy, _ops.Multiply(p, _ops.Log(p)));
             }
             return entropy;
