@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Runtime.CompilerServices;
+using AiDotNet.Inference.Quantization;
 
 namespace AiDotNet.Inference.PagedAttention;
 
@@ -350,27 +352,94 @@ internal class PagedAttentionKernel<T>
         int projDim = numHeads * headDim;
         float scale = 1.0f / MathF.Sqrt(headDim);
 
-        // Project Q, K, V
-        var query = new float[projDim];
-        var key = new float[projDim];
-        var value = new float[projDim];
+        var pool = ArrayPool<float>.Shared;
+        var queryBuf = pool.Rent(projDim);
+        var keyBuf = pool.Rent(projDim);
+        var valueBuf = pool.Rent(projDim);
+        var attnBuf = pool.Rent(projDim);
 
-        // Q = hidden @ wQ
-        MatVecMul(hiddenStates, wQ, query.AsSpan(), hiddenDim, projDim);
-        // K = hidden @ wK
-        MatVecMul(hiddenStates, wK, key.AsSpan(), hiddenDim, projDim);
-        // V = hidden @ wV
-        MatVecMul(hiddenStates, wV, value.AsSpan(), hiddenDim, projDim);
+        try
+        {
+            var query = queryBuf.AsSpan(0, projDim);
+            var key = keyBuf.AsSpan(0, projDim);
+            var value = valueBuf.AsSpan(0, projDim);
+            var attnOutput = attnBuf.AsSpan(0, projDim);
 
-        // Update cache with new K, V
-        UpdateCache(key.AsSpan(), value.AsSpan(), sequenceId, position, layer);
+            // Q = hidden @ wQ
+            MatVecMul(hiddenStates, wQ, query, hiddenDim, projDim);
+            // K = hidden @ wK
+            MatVecMul(hiddenStates, wK, key, hiddenDim, projDim);
+            // V = hidden @ wV
+            MatVecMul(hiddenStates, wV, value, hiddenDim, projDim);
 
-        // Compute attention
-        var attnOutput = new float[projDim];
-        ComputeTiledPagedAttention(query.AsSpan(), sequenceId, layer, attnOutput.AsSpan(), scale);
+            // Update cache with new K, V
+            UpdateCache(key, value, sequenceId, position, layer);
 
-        // Project output: out = attn @ wO
-        MatVecMul(attnOutput.AsSpan(), wO, output, projDim, hiddenDim);
+            // Compute attention
+            ComputeTiledPagedAttention(query, sequenceId, layer, attnOutput, scale);
+
+            // Project output: out = attn @ wO
+            MatVecMul(attnOutput, wO, output, projDim, hiddenDim);
+        }
+        finally
+        {
+            pool.Return(queryBuf);
+            pool.Return(keyBuf);
+            pool.Return(valueBuf);
+            pool.Return(attnBuf);
+        }
+    }
+
+    public void ForwardQuantized(
+        ReadOnlySpan<float> hiddenStates,
+        in Int8WeightOnlyQuantization.QuantizedWeights wQ,
+        in Int8WeightOnlyQuantization.QuantizedWeights wK,
+        in Int8WeightOnlyQuantization.QuantizedWeights wV,
+        in Int8WeightOnlyQuantization.QuantizedWeights wO,
+        long sequenceId,
+        int position,
+        int layer,
+        Span<float> output)
+    {
+        int hiddenDim = hiddenStates.Length;
+        int numHeads = _config.NumHeads;
+        int headDim = _config.HeadDimension;
+        int projDim = numHeads * headDim;
+        float scale = 1.0f / MathF.Sqrt(headDim);
+
+        if (wQ.Cols != hiddenDim || wK.Cols != hiddenDim || wV.Cols != hiddenDim || wO.Cols != projDim)
+        {
+            throw new ArgumentException("Quantized weight dimensions do not match expected shapes.");
+        }
+
+        var pool = ArrayPool<float>.Shared;
+        var queryBuf = pool.Rent(projDim);
+        var keyBuf = pool.Rent(projDim);
+        var valueBuf = pool.Rent(projDim);
+        var attnBuf = pool.Rent(projDim);
+
+        try
+        {
+            var query = queryBuf.AsSpan(0, projDim);
+            var key = keyBuf.AsSpan(0, projDim);
+            var value = valueBuf.AsSpan(0, projDim);
+            var attnOutput = attnBuf.AsSpan(0, projDim);
+
+            MatVecMulInt8(hiddenStates, wQ, query);
+            MatVecMulInt8(hiddenStates, wK, key);
+            MatVecMulInt8(hiddenStates, wV, value);
+
+            UpdateCache(key, value, sequenceId, position, layer);
+            ComputeTiledPagedAttention(query, sequenceId, layer, attnOutput, scale);
+            MatVecMulInt8(attnOutput, wO, output);
+        }
+        finally
+        {
+            pool.Return(queryBuf);
+            pool.Return(keyBuf);
+            pool.Return(valueBuf);
+            pool.Return(attnBuf);
+        }
     }
 
     private static void MatVecMul(ReadOnlySpan<float> vec, ReadOnlySpan<float> mat, Span<float> output, int inDim, int outDim)
@@ -385,6 +454,32 @@ internal class PagedAttentionKernel<T>
                 sum += vec[j] * mat[rowOffset + j];
             }
             output[i] = sum;
+        }
+    }
+
+    private static void MatVecMulInt8(ReadOnlySpan<float> vec, in Int8WeightOnlyQuantization.QuantizedWeights mat, Span<float> output)
+    {
+        int rows = mat.Rows;
+        int cols = mat.Cols;
+
+        if (vec.Length != cols)
+            throw new ArgumentException("Input vector length must match quantized matrix column count.", nameof(vec));
+        if (output.Length < rows)
+            throw new ArgumentException("Output span too small for quantized matvec.", nameof(output));
+
+        var weights = mat.Weights;
+        var scales = mat.Scales;
+
+        for (int r = 0; r < rows; r++)
+        {
+            int baseIdx = r * cols;
+            float sum = 0f;
+            for (int c = 0; c < cols; c++)
+            {
+                sum += weights[baseIdx + c] * vec[c];
+            }
+
+            output[r] = sum * scales[r];
         }
     }
 

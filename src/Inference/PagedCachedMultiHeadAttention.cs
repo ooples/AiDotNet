@@ -3,6 +3,7 @@ using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using System.Buffers;
+using AiDotNet.Inference.Quantization;
 
 namespace AiDotNet.Inference;
 
@@ -42,6 +43,12 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralN
     private float[]? _cachedWK;
     private float[]? _cachedWV;
     private float[]? _cachedWO;
+    private Int8WeightOnlyQuantization.QuantizedWeights? _cachedWQInt8;
+    private Int8WeightOnlyQuantization.QuantizedWeights? _cachedWKInt8;
+    private Int8WeightOnlyQuantization.QuantizedWeights? _cachedWVInt8;
+    private Int8WeightOnlyQuantization.QuantizedWeights? _cachedWOInt8;
+
+    internal bool EnableWeightOnlyQuantization { get; set; }
 
     /// <summary>
     /// Gets whether this layer supports training.
@@ -174,16 +181,37 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralN
                     hidden[d] = Convert.ToSingle(input[0, t, d]);
                 }
 
-                Kernel.Forward(
-                    hiddenStates: hidden,
-                    wQ: wQ,
-                    wK: wK,
-                    wV: wV,
-                    wO: wO,
-                    sequenceId: SequenceId,
-                    position: _currentPosition,
-                    layer: LayerIndex,
-                    output: tokenOut);
+                if (EnableWeightOnlyQuantization &&
+                    typeof(T) == typeof(float) &&
+                    _cachedWQInt8.HasValue &&
+                    _cachedWKInt8.HasValue &&
+                    _cachedWVInt8.HasValue &&
+                    _cachedWOInt8.HasValue)
+                {
+                    Kernel.ForwardQuantized(
+                        hiddenStates: hidden,
+                        wQ: _cachedWQInt8.Value,
+                        wK: _cachedWKInt8.Value,
+                        wV: _cachedWVInt8.Value,
+                        wO: _cachedWOInt8.Value,
+                        sequenceId: SequenceId,
+                        position: _currentPosition,
+                        layer: LayerIndex,
+                        output: tokenOut);
+                }
+                else
+                {
+                    Kernel.Forward(
+                        hiddenStates: hidden,
+                        wQ: wQ,
+                        wK: wK,
+                        wV: wV,
+                        wO: wO,
+                        sequenceId: SequenceId,
+                        position: _currentPosition,
+                        layer: LayerIndex,
+                        output: tokenOut);
+                }
 
                 // Add bias and activation.
                 for (int d = 0; d < embDim; d++)
@@ -387,6 +415,24 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralN
             _cachedWK ??= MatrixToFloatForKernel(_keyWeights);
             _cachedWV ??= MatrixToFloatForKernel(_valueWeights);
             _cachedWO ??= MatrixToFloatForKernel(_outputWeights);
+
+            if (EnableWeightOnlyQuantization && typeof(T) == typeof(float))
+            {
+                int projDim = _headCount * _headDimension;
+                int hiddenDim = _embeddingDimension;
+
+                _cachedWQInt8 = Int8WeightOnlyQuantization.QuantizePerRow(_cachedWQ, projDim, hiddenDim);
+                _cachedWKInt8 = Int8WeightOnlyQuantization.QuantizePerRow(_cachedWK, projDim, hiddenDim);
+                _cachedWVInt8 = Int8WeightOnlyQuantization.QuantizePerRow(_cachedWV, projDim, hiddenDim);
+                _cachedWOInt8 = Int8WeightOnlyQuantization.QuantizePerRow(_cachedWO, hiddenDim, projDim);
+            }
+            else
+            {
+                _cachedWQInt8 = null;
+                _cachedWKInt8 = null;
+                _cachedWVInt8 = null;
+                _cachedWOInt8 = null;
+            }
         }
     }
 
@@ -398,6 +444,10 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralN
             _cachedWK = null;
             _cachedWV = null;
             _cachedWO = null;
+            _cachedWQInt8 = null;
+            _cachedWKInt8 = null;
+            _cachedWVInt8 = null;
+            _cachedWOInt8 = null;
         }
     }
 
@@ -430,7 +480,8 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralN
         return new Dictionary<string, string>
         {
             ["HeadCount"] = _headCount.ToString(),
-            ["UseCausalMask"] = _useCausalMask.ToString()
+            ["UseCausalMask"] = _useCausalMask.ToString(),
+            ["EnableWeightOnlyQuantization"] = EnableWeightOnlyQuantization.ToString()
         };
     }
 }

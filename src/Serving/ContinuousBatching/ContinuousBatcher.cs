@@ -605,7 +605,14 @@ internal class ContinuousBatcher<T> : IDisposable
             var config = new SpeculativeDecodingConfig<T>
             {
                 NumDraftTokens = Math.Max(1, _config.SpeculationDepth),
-                Seed = 42
+                Seed = 42,
+                AdaptiveDraftLength = _config.SpeculationPolicy == AiDotNet.Configuration.SpeculationPolicy.Auto,
+                MinAcceptanceRate = MathHelper.GetNumericOperations<T>().FromDouble(0.5),
+                UseTreeSpeculation = _config.UseTreeSpeculation ||
+                                    _config.SpeculativeMethod == AiDotNet.Configuration.SpeculativeMethod.Medusa ||
+                                    _config.SpeculativeMethod == AiDotNet.Configuration.SpeculativeMethod.Eagle,
+                TreeBranchFactor = _config.SpeculativeMethod == AiDotNet.Configuration.SpeculativeMethod.Medusa ? 4 : 2,
+                MaxTreeDepth = Math.Max(1, _config.SpeculationDepth)
             };
 
             try

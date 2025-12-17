@@ -452,6 +452,7 @@ internal class InferenceOptimizer<T>
                             headCount: headCount,
                             useCausalMask: useCausalMask,
                             activationFunction: activation);
+                        paged.EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization;
                         paged.SetParameters(mha.GetParameters());
                         model.Layers[i] = paged;
                     }
@@ -512,6 +513,7 @@ internal class InferenceOptimizer<T>
                         headCount: headCount,
                         useCausalMask: useCausalMask,
                         activationFunction: activation);
+                    paged.EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization;
                     paged.SetParameters(flash.GetParameters());
                     model.Layers[i] = paged;
                 }
@@ -913,7 +915,10 @@ internal class InferenceOptimizer<T>
             ["IsInitialized"] = _isInitialized,
             ["KVCacheEnabled"] = _config.EnableKVCache,
             ["SpeculativeDecodingEnabled"] = _config.EnableSpeculativeDecoding,
-            ["BatchingEnabled"] = _config.EnableBatching
+            ["BatchingEnabled"] = _config.EnableBatching,
+            ["PagedKVCacheInitialized"] = _pagedKVCache != null,
+            ["PagedAttentionLayerCount"] = _pagedAttentionLayers?.Count ?? 0,
+            ["PagedAttentionWeightOnlyQuantizationEnabled"] = _pagedAttentionLayers?.Any(l => l.EnableWeightOnlyQuantization) ?? false
         };
 
         if (_kvCache != null)
@@ -1000,7 +1005,13 @@ internal class InferenceOptimizer<T>
         var speculativeConfig = new SpeculativeDecodingConfig<T>
         {
             NumDraftTokens = _config.SpeculationDepth,
-            UseTreeSpeculation = _config.UseTreeSpeculation
+            UseTreeSpeculation = _config.UseTreeSpeculation ||
+                                _config.SpeculativeMethod == SpeculativeMethod.Medusa ||
+                                _config.SpeculativeMethod == SpeculativeMethod.Eagle,
+            AdaptiveDraftLength = _config.SpeculationPolicy == SpeculationPolicy.Auto,
+            TreeBranchFactor = _config.SpeculativeMethod == SpeculativeMethod.Medusa ? 4 : 2,
+            MaxTreeDepth = Math.Max(1, _config.SpeculationDepth),
+            MinAcceptanceRate = MathHelper.GetNumericOperations<T>().FromDouble(0.5)
         };
 
         _speculativeDecoder = new SpeculativeDecoder<T>(_draftModel, targetForward, speculativeConfig);
