@@ -686,6 +686,44 @@ public class ContinuousBatchingTests
     }
 
     [Fact]
+    public void ContinuousBatcher_SpeculationPolicy_LatencyFirst_AllowsSpeculation_WithBatchSizeGreaterThanOne()
+    {
+        var config = new ContinuousBatcherConfig
+        {
+            AutoStart = false,
+            EosTokenId = 2,
+            EnableSpeculativeDecoding = true,
+            SpeculationPolicy = AiDotNet.Configuration.SpeculationPolicy.LatencyFirst,
+            SpeculationDepth = 4,
+            SchedulerConfig = new BatchSchedulerConfig { MaxBatchSize = 4 }
+        };
+
+        Tensor<float> mockModel(Tensor<float> input)
+        {
+            var vocabSize = 10;
+            int seqLen = input.Shape[1];
+            var logits = new Tensor<float>(new[] { 1, seqLen, vocabSize });
+            for (int pos = 0; pos < seqLen; pos++)
+            {
+                logits[new[] { 0, pos, 5 }] = 10f;
+            }
+            return logits;
+        }
+
+        var draft = new DeterministicDraftModel(vocabSize: 10, tokenId: 5);
+        using var batcher = new ContinuousBatcher<float>(config, mockModel, draftModel: draft);
+
+        var scheduler = GetSchedulerFromBatcher(batcher);
+        scheduler.AddSequence(new SequenceState<float>(new GenerationRequest<float> { PromptTokenIds = new List<int> { 1 }, MaxNewTokens = 10 }));
+        scheduler.AddSequence(new SequenceState<float>(new GenerationRequest<float> { PromptTokenIds = new List<int> { 1 }, MaxNewTokens = 10 }));
+
+        batcher.Step();
+
+        Assert.True(batcher.LastStepUsedSpeculation);
+        Assert.DoesNotContain("Backoff", batcher.LastStepSpeculationReason);
+    }
+
+    [Fact]
     public void ContinuousBatcher_SpeculativeDecoding_DisablesAfterFailure()
     {
         // Arrange

@@ -1,4 +1,5 @@
 using AiDotNet.Inference.PagedAttention;
+using AiDotNet.Inference.Quantization;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
@@ -776,6 +777,66 @@ public class PagedAttentionKernelTests
 
         // Assert
         Assert.Contains(outputs, v => v != 0);
+    }
+
+    [Fact]
+    public void PagedAttentionKernel_ForwardQuantized_MatchesFloatWithinTolerance()
+    {
+        // Arrange
+        using var cacheFloat = CreateTestCache();
+        cacheFloat.AllocateSequence(1, 1);
+        var kernelFloat = new PagedAttentionKernel<float>(cacheFloat);
+
+        using var cacheQ = CreateTestCache();
+        cacheQ.AllocateSequence(1, 1);
+        var kernelQ = new PagedAttentionKernel<float>(cacheQ);
+
+        int hiddenDim = kernelFloat.Config.NumHeads * kernelFloat.Config.HeadDimension;
+        int projDim = hiddenDim;
+
+        var rnd = new Random(42);
+        var hidden = new float[hiddenDim];
+        for (int i = 0; i < hidden.Length; i++)
+        {
+            hidden[i] = (float)(rnd.NextDouble() * 0.2 - 0.1);
+        }
+
+        float[] MakeWeights(int rows, int cols)
+        {
+            var w = new float[rows * cols];
+            for (int i = 0; i < w.Length; i++)
+            {
+                w[i] = (float)(rnd.NextDouble() * 0.02 - 0.01);
+            }
+            return w;
+        }
+
+        var wQ = MakeWeights(projDim, hiddenDim);
+        var wK = MakeWeights(projDim, hiddenDim);
+        var wV = MakeWeights(projDim, hiddenDim);
+        var wO = MakeWeights(hiddenDim, projDim);
+
+        var qWQ = Int8WeightOnlyQuantization.QuantizePerRow(wQ, projDim, hiddenDim);
+        var qWK = Int8WeightOnlyQuantization.QuantizePerRow(wK, projDim, hiddenDim);
+        var qWV = Int8WeightOnlyQuantization.QuantizePerRow(wV, projDim, hiddenDim);
+        var qWO = Int8WeightOnlyQuantization.QuantizePerRow(wO, hiddenDim, projDim);
+
+        var outFloat = new float[hiddenDim];
+        var outQ = new float[hiddenDim];
+
+        // Act
+        kernelFloat.Forward(hidden, wQ, wK, wV, wO, sequenceId: 1, position: 0, layer: 0, output: outFloat);
+        kernelQ.ForwardQuantized(hidden, qWQ, qWK, qWV, qWO, sequenceId: 1, position: 0, layer: 0, output: outQ);
+
+        // Assert
+        float maxAbsDiff = 0f;
+        for (int i = 0; i < hiddenDim; i++)
+        {
+            float diff = MathF.Abs(outFloat[i] - outQ[i]);
+            if (diff > maxAbsDiff) maxAbsDiff = diff;
+        }
+
+        Assert.True(maxAbsDiff <= 1e-2f, $"Max abs diff was {maxAbsDiff}");
     }
 }
 

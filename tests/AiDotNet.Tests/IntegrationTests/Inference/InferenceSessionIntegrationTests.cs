@@ -179,6 +179,53 @@ public class InferenceSessionIntegrationTests
     }
 
     [Fact]
+    public void BeginInferenceSession_PagedKVCache_IsInitialized_WhenEnabled()
+    {
+        var result = CreateDeterministicResult(
+            new InferenceOptimizationConfig
+            {
+                EnableFlashAttention = false,
+                EnableKVCache = true,
+                EnablePagedKVCache = true,
+                AttentionMasking = AttentionMaskingMode.Auto
+            });
+
+        using var session = result.BeginInferenceSession();
+        var seq = session.CreateSequence();
+
+        _ = seq.Predict(CreateTokenTensor(0.1f));
+
+        var stats = seq.GetInferenceStatistics();
+        Assert.True(stats.TryGetValue("PagedKVCacheInitialized", out var initialized));
+        Assert.True((bool)initialized);
+        Assert.True(stats.TryGetValue("PagedAttentionLayerCount", out var count));
+        Assert.True((int)count > 0);
+    }
+
+    [Fact]
+    public void BeginInferenceSession_PagedAttention_WOQ_IsEnabled_WhenConfigured()
+    {
+        var result = CreateDeterministicResult(
+            new InferenceOptimizationConfig
+            {
+                EnableFlashAttention = false,
+                EnableKVCache = true,
+                EnablePagedKVCache = true,
+                EnableWeightOnlyQuantization = true,
+                AttentionMasking = AttentionMaskingMode.Auto
+            });
+
+        using var session = result.BeginInferenceSession();
+        var seq = session.CreateSequence();
+
+        _ = seq.Predict(CreateTokenTensor(0.2f));
+
+        var stats = seq.GetInferenceStatistics();
+        Assert.True(stats.TryGetValue("PagedAttentionWeightOnlyQuantizationEnabled", out var enabled));
+        Assert.True((bool)enabled);
+    }
+
+    [Fact]
     public void BeginInferenceSession_MultiLoRA_TaskSelection_IsIsolatedPerSequence()
     {
         var config = new InferenceOptimizationConfig
