@@ -101,7 +101,46 @@ internal sealed class RandomSearchRLAutoML<T>
                     bestAgentType = agentType;
                 }
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
+            {
+                var duration = DateTime.UtcNow - trialStart;
+                summary.Trials.Add(new AutoMLTrialSummary
+                {
+                    TrialId = trialId,
+                    Score = double.NegativeInfinity,
+                    Duration = duration,
+                    CompletedUtc = DateTime.UtcNow,
+                    Success = false,
+                    ErrorMessage = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                var duration = DateTime.UtcNow - trialStart;
+                summary.Trials.Add(new AutoMLTrialSummary
+                {
+                    TrialId = trialId,
+                    Score = double.NegativeInfinity,
+                    Duration = duration,
+                    CompletedUtc = DateTime.UtcNow,
+                    Success = false,
+                    ErrorMessage = ex.Message
+                });
+            }
+            catch (NotSupportedException ex)
+            {
+                var duration = DateTime.UtcNow - trialStart;
+                summary.Trials.Add(new AutoMLTrialSummary
+                {
+                    TrialId = trialId,
+                    Score = double.NegativeInfinity,
+                    Duration = duration,
+                    CompletedUtc = DateTime.UtcNow,
+                    Success = false,
+                    ErrorMessage = ex.Message
+                });
+            }
+            catch (ArithmeticException ex)
             {
                 var duration = DateTime.UtcNow - trialStart;
                 summary.Trials.Add(new AutoMLTrialSummary
