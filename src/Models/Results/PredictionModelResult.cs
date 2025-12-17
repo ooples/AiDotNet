@@ -523,7 +523,6 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     [JsonProperty]
     private AiDotNet.Configuration.InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
-<<<<<<< HEAD
     [JsonIgnore]
     private readonly object _inferenceOptimizationLock = new();
 
@@ -539,9 +538,8 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     // Serving assembly uses InternalsVisibleTo; keep this internal to avoid expanding user-facing API surface.
     internal AiDotNet.Configuration.InferenceOptimizationConfig? GetInferenceOptimizationConfigForServing()
         => InferenceOptimizationConfig;
-=======
+
     internal ISafetyFilter<T>? SafetyFilter { get; private set; }
->>>>>>> f9fefaf2 (feat: integrate safety filtering into inference)
 
     /// <summary>
     /// Gets the reasoning configuration for advanced Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency reasoning.
@@ -1127,14 +1125,9 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
 
         // Safety & Robustness (enabled by default; opt-out via options)
         var safetyConfig = options.SafetyFilterConfiguration;
-        if (safetyConfig?.Enabled == false)
-        {
-            SafetyFilter = null;
-        }
-        else
-        {
-            SafetyFilter = safetyConfig?.Filter ?? new SafetyFilter<T>(safetyConfig?.Options ?? new SafetyFilterOptions<T>());
-        }
+        SafetyFilter = safetyConfig?.Enabled == false
+            ? null
+            : safetyConfig?.Filter ?? new SafetyFilter<T>(safetyConfig?.Options ?? new SafetyFilterOptions<T>());
 
         // Reasoning
         ReasoningConfig = options.ReasoningConfig;
@@ -1317,7 +1310,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         }
 
         var dataForPrediction = newData;
-        if (SafetyFilter != null && newData is Vector<T> vectorInput)
+        if (SafetyFilter != null && newData is Vector<T> vectorInput && typeof(TInput) == typeof(Vector<T>))
         {
             var validation = SafetyFilter.ValidateInput(vectorInput);
             if (!validation.IsValid)
@@ -1330,8 +1323,14 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
 
             if (validation.SanitizedInput != null)
             {
-                dataForPrediction = (TInput)(object)validation.SanitizedInput;
+                var sanitized = validation.SanitizedInput;
+                dataForPrediction = Unsafe.As<Vector<T>, TInput>(ref sanitized);
             }
+        }
+        else if (SafetyFilter != null && newData is Matrix<T> matrixInput && typeof(TInput) == typeof(Matrix<T>))
+        {
+            var sanitizedMatrix = ValidateAndSanitizeMatrix(matrixInput);
+            dataForPrediction = Unsafe.As<Matrix<T>, TInput>(ref sanitizedMatrix);
         }
 
         var (normalizedNewData, _) = NormalizationInfo.Normalizer.NormalizeInput(dataForPrediction);
@@ -1384,16 +1383,102 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
 
         var denormalized = NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, NormalizationInfo.YParams);
 
-        if (SafetyFilter != null && denormalized is Vector<T> vectorOutput)
+        if (SafetyFilter != null && denormalized is Vector<T> vectorOutput && typeof(TOutput) == typeof(Vector<T>))
         {
             var filtered = SafetyFilter.FilterOutput(vectorOutput);
             if (filtered.WasModified || !filtered.IsSafe)
             {
-                return (TOutput)(object)filtered.FilteredOutput;
+                var filteredOutput = filtered.FilteredOutput;
+                return Unsafe.As<Vector<T>, TOutput>(ref filteredOutput);
             }
+        }
+        else if (SafetyFilter != null && denormalized is Matrix<T> matrixOutput && typeof(TOutput) == typeof(Matrix<T>))
+        {
+            var filteredMatrix = FilterMatrixOutput(matrixOutput);
+            return Unsafe.As<Matrix<T>, TOutput>(ref filteredMatrix);
         }
 
         return denormalized;
+    }
+
+    private Matrix<T> ValidateAndSanitizeMatrix(Matrix<T> input)
+    {
+        if (SafetyFilter == null)
+        {
+            return input;
+        }
+
+        if (input.Rows == 0 || input.Columns == 0)
+        {
+            return input;
+        }
+
+        bool anySanitized = false;
+        var sanitizedRows = new Vector<T>?[input.Rows];
+
+        for (int i = 0; i < input.Rows; i++)
+        {
+            var row = input.GetRow(i);
+            var validation = SafetyFilter.ValidateInput(row);
+            if (!validation.IsValid)
+            {
+                var issues = validation.Issues.Count > 0
+                    ? string.Join("; ", validation.Issues.Select(issue => $"{issue.Type}:{issue.Severity}"))
+                    : "Unknown safety validation failure.";
+                throw new InvalidOperationException($"Safety validation failed (row {i}): {issues}");
+            }
+
+            sanitizedRows[i] = validation.SanitizedInput;
+            anySanitized |= validation.SanitizedInput != null;
+        }
+
+        if (!anySanitized)
+        {
+            return input;
+        }
+
+        var output = new Matrix<T>(input.Rows, input.Columns);
+        for (int i = 0; i < input.Rows; i++)
+        {
+            var sanitizedRow = sanitizedRows[i] ?? input.GetRow(i);
+            if (sanitizedRow.Length != input.Columns)
+            {
+                throw new InvalidOperationException($"Safety filter produced an incompatible sanitized row at index {i}.");
+            }
+
+            output.SetRow(i, sanitizedRow);
+        }
+
+        return output;
+    }
+
+    private Matrix<T> FilterMatrixOutput(Matrix<T> output)
+    {
+        if (SafetyFilter == null)
+        {
+            return output;
+        }
+
+        if (output.Rows == 0 || output.Columns == 0)
+        {
+            return output;
+        }
+
+        var result = new Matrix<T>(output.Rows, output.Columns);
+        for (int i = 0; i < output.Rows; i++)
+        {
+            var row = output.GetRow(i);
+            var filtered = SafetyFilter.FilterOutput(row);
+
+            if (filtered.FilteredOutput.Length != output.Columns)
+            {
+                throw new InvalidOperationException($"Safety filter produced an incompatible filtered row at index {i}.");
+            }
+
+            result.SetRow(i, filtered.FilteredOutput);
+        }
+
+        return result;
     }
 
     /// <summary>
