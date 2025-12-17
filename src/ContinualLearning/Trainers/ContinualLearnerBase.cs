@@ -2,7 +2,6 @@ using AiDotNet.ContinualLearning.Config;
 using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.ContinualLearning.Memory;
 using AiDotNet.ContinualLearning.Results;
-using AiDotNet.Data.Abstractions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json.Linq;

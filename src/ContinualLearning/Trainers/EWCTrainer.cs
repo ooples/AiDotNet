@@ -1,7 +1,6 @@
 using AiDotNet.ContinualLearning.Config;
 using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.ContinualLearning.Results;
-using AiDotNet.Data.Abstractions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.ContinualLearning.Trainers;

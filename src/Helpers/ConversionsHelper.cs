@@ -113,11 +113,14 @@ public static class ConversionsHelper
             // Validate scalar is a valid probability in [0, 1]
             if (numOps.LessThan(scalar, zero) || numOps.GreaterThan(scalar, one))
             {
-                throw new ArgumentException(
+                throw new ArgumentOutOfRangeException(
+                    nameof(output),
+                    scalar,
                     $"Scalar output must be a probability in [0, 1] for binary classification conversion. " +
-                    $"Got value outside valid range. Consider using Vector<T> or T[] for non-probability outputs.");
+                    $"Consider using Vector<T> or T[] for non-probability outputs.");
             }
 
+            // Return [P(class 0), P(class 1)] for binary classification
             var complement = numOps.Subtract(one, scalar);
             return new Vector<T>(new[] { complement, scalar });
         }

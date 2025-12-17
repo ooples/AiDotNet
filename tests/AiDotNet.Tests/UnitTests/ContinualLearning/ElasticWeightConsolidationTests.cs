@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.ContinualLearning.Strategies;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -180,6 +181,48 @@ public class ElasticWeightConsolidationTests
         public void LoadModel(string filePath)
         {
             Deserialize(File.ReadAllBytes(filePath));
+        }
+
+        // IFullModel<T> - DefaultLossFunction
+        public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+
+        // ICheckpointableModel - SaveState and LoadState
+        public void SaveState(Stream stream)
+        {
+            var data = Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+
+        public void LoadState(Stream stream)
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            Deserialize(ms.ToArray());
+        }
+
+        // IGradientComputable<double, Matrix<double>, Vector<double>>
+        public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null)
+        {
+            // Mock implementation - return zero gradients
+            return new Vector<double>(_parameters.Length);
+        }
+
+        public void ApplyGradients(Vector<double> gradients, double learningRate)
+        {
+            // Mock implementation - simple gradient descent
+            for (int i = 0; i < _parameters.Length && i < gradients.Length; i++)
+            {
+                _parameters[i] -= learningRate * gradients[i];
+            }
+        }
+
+        // IJitCompilable<double>
+        public bool SupportsJitCompilation => false;
+
+        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
+        {
+            throw new NotSupportedException("MockModel does not support JIT compilation.");
         }
     }
 }

@@ -1,4 +1,3 @@
-using AiDotNet.Data.Abstractions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.ContinualLearning.Interfaces;

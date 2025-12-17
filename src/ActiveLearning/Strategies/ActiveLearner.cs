@@ -1,6 +1,5 @@
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.ActiveLearning.Results;
-using AiDotNet.Data.Abstractions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
