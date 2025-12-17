@@ -1,8 +1,5 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.AutoML.Policies;
-using AiDotNet.AutoML.Registry;
 
 namespace AiDotNet.AutoML;
 
@@ -28,7 +25,7 @@ namespace AiDotNet.AutoML;
 /// If you are new to AutoML, random search is a good first choice because it is reliable and easy to reason about.
 /// </para>
 /// </remarks>
-public class RandomSearchAutoML<T, TInput, TOutput> : SupervisedAutoMLModelBase<T, TInput, TOutput>
+public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLModelBase<T, TInput, TOutput>
 {
     public RandomSearchAutoML(IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null, Random? random = null)
         : base(modelEvaluator, random)
@@ -134,48 +131,8 @@ public class RandomSearchAutoML<T, TInput, TOutput> : SupervisedAutoMLModelBase<
         return Task.FromResult(sampled);
     }
 
-    protected override Task<IFullModel<T, TInput, TOutput>> CreateModelAsync(ModelType modelType, Dictionary<string, object> parameters)
-    {
-        if (typeof(TInput) != typeof(Matrix<T>) || typeof(TOutput) != typeof(Vector<T>))
-        {
-            throw new NotSupportedException(
-                $"RandomSearchAutoML currently supports Matrix<T>/Vector<T> supervised tasks. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
-        }
-
-        var model = AutoMLTabularModelFactory<T>.Create(modelType, parameters);
-
-        return Task.FromResult((IFullModel<T, TInput, TOutput>)model);
-    }
-
-    protected override Dictionary<string, ParameterRange> GetDefaultSearchSpace(ModelType modelType)
-    {
-        return AutoMLTabularSearchSpaceRegistry.GetDefaultSearchSpace(modelType);
-    }
-
     protected override AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy()
     {
         return new RandomSearchAutoML<T, TInput, TOutput>(_modelEvaluator, Random);
     }
-
-    private void EnsureDefaultCandidateModels(TInput inputs, TOutput targets)
-    {
-        lock (_lock)
-        {
-            if (_candidateModels.Count != 0)
-            {
-                return;
-            }
-
-            if (typeof(TInput) == typeof(Matrix<T>) && typeof(TOutput) == typeof(Vector<T>))
-            {
-                int featureCount = InputHelper<T, TInput>.GetInputSize(inputs);
-                var taskFamily = AutoMLTaskFamilyInference.InferFromTargets<T, TOutput>(targets);
-                foreach (var candidate in AutoMLDefaultCandidateModelsPolicy.GetDefaultCandidates(taskFamily, featureCount))
-                {
-                    _candidateModels.Add(candidate);
-                }
-            }
-        }
-    }
-
 }
