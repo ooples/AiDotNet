@@ -11,6 +11,37 @@ namespace AiDotNet.Tests.UnitTests.Inference;
 public class InferenceOptimizerTests
 {
     [Fact]
+    public void InferenceOptimizer_WhenDiagnosticsEnabled_RecordsDecisions()
+    {
+        var original = Environment.GetEnvironmentVariable("AIDOTNET_DIAGNOSTICS");
+        try
+        {
+            Environment.SetEnvironmentVariable("AIDOTNET_DIAGNOSTICS", "1");
+            AiDotNet.Helpers.InferenceDiagnostics.Clear();
+
+            var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.TextGeneration);
+            var config = new InferenceOptimizationConfig
+            {
+                EnableKVCache = true,
+                EnableFlashAttention = false,
+                EnablePagedKVCache = false,
+                AttentionMasking = AttentionMaskingMode.Auto
+            };
+
+            var optimizer = new InferenceOptimizer<float>(config);
+            _ = optimizer.OptimizeForInference(model, cloneModel: false);
+
+            var entries = AiDotNet.Helpers.InferenceDiagnostics.Snapshot();
+            Assert.Contains(entries, e => e.Area == "InferenceOptimizer" && e.Feature == "KVCachePrecision");
+        }
+        finally
+        {
+            AiDotNet.Helpers.InferenceDiagnostics.Clear();
+            Environment.SetEnvironmentVariable("AIDOTNET_DIAGNOSTICS", original);
+        }
+    }
+
+    [Fact]
     public void InferenceOptimizer_RewritesMultiHeadAttention_ToFlashAttention_WhenEnabled()
     {
         var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.Regression);
@@ -171,6 +202,48 @@ public class InferenceOptimizerTests
         }
     }
 
+    [Fact]
+    public void InferenceOptimizer_Skips_AttentionLayer_WhenKVCacheEnabled()
+    {
+        var model = CreateTinyAttentionLayerModel();
+
+        var config = new InferenceOptimizationConfig
+        {
+            EnableKVCache = true,
+            EnableFlashAttention = true,
+            AttentionMasking = AttentionMaskingMode.Auto
+        };
+
+        var optimizer = new InferenceOptimizer<float>(config);
+        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: true);
+
+        Assert.False(anyApplied);
+        Assert.Same(model, optimized);
+        Assert.Contains(optimized.Layers, l => l is AttentionLayer<float>);
+    }
+
+    [Fact]
+    public void InferenceOptimizer_Skips_GraphAttentionLayer_WhenKVCacheEnabled()
+    {
+        var model = CreateTinyGraphAttentionModel();
+
+        var config = new InferenceOptimizationConfig
+        {
+            EnableKVCache = true,
+            EnableFlashAttention = true,
+            AttentionMasking = AttentionMaskingMode.Auto
+        };
+
+        var optimizer = new InferenceOptimizer<float>(config);
+
+        // Should not throw: graph attention is not part of inference-time transformer KV-cache rewriting.
+        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: true);
+
+        Assert.False(anyApplied);
+        Assert.Same(model, optimized);
+        Assert.Contains(optimized.Layers, l => l is GraphAttentionLayer<float>);
+    }
+
     private static Transformer<float> CreateTinyTransformer(NeuralNetworkTaskType taskType)
     {
         var architecture = new TransformerArchitecture<float>(
@@ -260,5 +333,51 @@ public class InferenceOptimizerTests
         model.UpdateParameters(new AiDotNet.Tensors.LinearAlgebra.Vector<float>(deterministic));
 
         return model;
+    }
+
+    private static NeuralNetworkBase<float> CreateTinyAttentionLayerModel()
+    {
+        const int inputSize = 8;
+        const int attentionSize = 8;
+
+        var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
+        {
+            new InputLayer<float>(inputSize),
+            new AttentionLayer<float>(inputSize, attentionSize, activation: (AiDotNet.Interfaces.IActivationFunction<float>?)null),
+            new DenseLayer<float>(attentionSize, attentionSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+        };
+
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Simple,
+            inputSize: inputSize,
+            outputSize: attentionSize,
+            layers: layers);
+
+        return new NeuralNetwork<float>(architecture);
+    }
+
+    private static NeuralNetworkBase<float> CreateTinyGraphAttentionModel()
+    {
+        const int inputSize = 8;
+        const int outputSize = 8;
+
+        var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
+        {
+            new InputLayer<float>(inputSize),
+            new GraphAttentionLayer<float>(inputSize, outputSize, numHeads: 1),
+            new DenseLayer<float>(outputSize, outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+        };
+
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Simple,
+            inputSize: inputSize,
+            outputSize: outputSize,
+            layers: layers);
+
+        return new NeuralNetwork<float>(architecture);
     }
 }
