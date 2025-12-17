@@ -316,7 +316,7 @@ jobs:
                 '',
                 '**Action taken** — Fixed the subject line to be lowercase.',
                 '',
-                '**Original:** `' + '`' + originalSubject + '`',
+                '**Original:** ' + '`' + originalSubject + '`',
                 '**Fixed:** ' + '`' + newSubject + '`',
                 '',
                 'The PR branch has been force-pushed with the fixed commit.'
