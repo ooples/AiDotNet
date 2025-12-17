@@ -53,7 +53,8 @@ jobs:
           COMMITS="${{ steps.get-commits.outputs.commits }}"
           NEEDS_FIX=false
           FIXED_COMMITS=()
-          PATTERN='^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)(\\([^)]+\\))?: .+'
+          # Bash [[ =~ ]] regex must be a single token: avoid literal spaces (use [[:space:]]).
+          PATTERN='^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)(\\([^)]+\\))?:[[:space:]].+'
 
           while IFS= read -r commit_sha; do
             if [ -z "$commit_sha" ]; then continue; fi
