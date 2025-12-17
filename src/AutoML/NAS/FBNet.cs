@@ -34,6 +34,7 @@ namespace AiDotNet.AutoML.NAS
         private readonly HardwareConstraints<T> _hardwareConstraints;
 
         // FBNet-specific parameters
+        private readonly double _initialTemperature;
         private T _temperature;
         private readonly T _latencyWeight;
         private readonly int _inputChannels;
@@ -57,6 +58,7 @@ namespace AiDotNet.AutoML.NAS
             _targetPlatform = targetPlatform;
             _hardwareCostModel = new HardwareCostModel<T>(targetPlatform);
             _latencyWeight = _ops.FromDouble(latencyWeight);
+            _initialTemperature = initialTemperature;
             _temperature = _ops.FromDouble(initialTemperature);
             _inputChannels = inputChannels;
             _spatialSize = spatialSize;
@@ -199,7 +201,7 @@ namespace AiDotNet.AutoML.NAS
         {
             // Exponential decay from initial temperature to near 0
             double ratio = (double)currentEpoch / maxEpochs;
-            double newTemp = 5.0 * Math.Pow(0.1, ratio);
+            double newTemp = _initialTemperature * Math.Pow(0.1, ratio);
             _temperature = _ops.FromDouble(Math.Max(newTemp, 0.1));
         }
 
@@ -249,7 +251,7 @@ namespace AiDotNet.AutoML.NAS
                 _numLayers,
                 targetPlatform: _targetPlatform,
                 latencyWeight: _ops.ToDouble(_latencyWeight),
-                initialTemperature: _ops.ToDouble(_temperature),
+                initialTemperature: _initialTemperature,
                 inputChannels: _inputChannels,
                 spatialSize: _spatialSize);
         }
