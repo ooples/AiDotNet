@@ -248,19 +248,32 @@ namespace AiDotNet.AutoML.NAS
             string configKey = $"{config.Depth}_{config.WidthMultiplier}_{config.KernelSize}";
             _performanceMemory[configKey] = performance;
 
+            int depthIdx = _elasticDepths.IndexOf(config.Depth);
+            int widthIdx = _elasticWidthMultipliers.IndexOf(config.WidthMultiplier);
+            int kernelIdx = _elasticKernelSizes.IndexOf(config.KernelSize);
+
+            if (depthIdx < 0 || widthIdx < 0 || kernelIdx < 0)
+            {
+                return;
+            }
+
+            int depthCol = depthIdx;
+            int widthCol = _elasticDepths.Count + widthIdx;
+            int kernelCol = _elasticDepths.Count + _elasticWidthMultipliers.Count + kernelIdx;
+
             // Update attention weights based on performance gradient
             // This is a simplified update; full implementation would use policy gradients
             var embedding = config.Embedding;
 
             for (int i = 0; i < Math.Min(_attentionWeights.Rows, embedding.Length); i++)
             {
-                for (int j = 0; j < _attentionWeights.Columns; j++)
-                {
-                    // Gradient approximation: performance * embedding
-                    T gradient = _ops.Multiply(performance, embedding[i]);
-                    T update = _ops.Multiply(learningRate, gradient);
-                    _attentionWeights[i, j] = _ops.Add(_attentionWeights[i, j], update);
-                }
+                // Gradient approximation: performance * embedding
+                T gradient = _ops.Multiply(performance, embedding[i]);
+                T update = _ops.Multiply(learningRate, gradient);
+
+                _attentionWeights[i, depthCol] = _ops.Add(_attentionWeights[i, depthCol], update);
+                _attentionWeights[i, widthCol] = _ops.Add(_attentionWeights[i, widthCol], update);
+                _attentionWeights[i, kernelCol] = _ops.Add(_attentionWeights[i, kernelCol], update);
             }
         }
 
