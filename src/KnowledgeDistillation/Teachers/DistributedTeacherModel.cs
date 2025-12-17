@@ -118,6 +118,8 @@ public class DistributedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
     /// </remarks>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
+        if (inputNodes == null) throw new ArgumentNullException(nameof(inputNodes));
+
         if (_aggregation != AggregationMode.Average)
         {
             return ThrowJitNotSupported(
@@ -136,12 +138,6 @@ public class DistributedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
             }
         }
 
-        // Create shared input node
-        var inputShape = new int[] { OutputDimension };
-        var inputTensor = new Tensor<T>(inputShape);
-        var sharedInputNode = TensorOperations<T>.Variable(inputTensor, "distributed_input", requiresGradient: false);
-        inputNodes.Add(sharedInputNode);
-
         // Combine worker graphs with sum then divide
         ComputationNode<T>? sumNode = null;
 
@@ -152,6 +148,7 @@ public class DistributedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
             // Get worker's computation graph
             var workerInputNodes = new List<ComputationNode<T>>();
             var workerOutput = jitWorker.ExportComputationGraph(workerInputNodes);
+            inputNodes.AddRange(workerInputNodes);
 
             // Add to sum
             if (sumNode == null)
@@ -165,16 +162,11 @@ public class DistributedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
         }
 
         // Divide by number of workers to get average
-        var divisorTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(_workers.Length) }));
+        var divisorTensor = new Tensor<T>((int[])sumNode!.Value.Shape.Clone());
+        divisorTensor.Fill(NumOps.FromDouble(_workers.Length));
         var divisorNode = TensorOperations<T>.Constant(divisorTensor, "worker_count");
         var resultNode = TensorOperations<T>.Divide(sumNode!, divisorNode);
 
         return resultNode;
     }
-}
-
-public enum AggregationMode
-{
-    Average,
-    Voting
 }

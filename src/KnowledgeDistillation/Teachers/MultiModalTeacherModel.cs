@@ -126,6 +126,8 @@ public class MultiModalTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
     /// </remarks>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
+        if (inputNodes == null) throw new ArgumentNullException(nameof(inputNodes));
+
         // Check all modality teachers support JIT
         for (int i = 0; i < _modalityTeachers.Length; i++)
         {
@@ -137,12 +139,6 @@ public class MultiModalTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
             }
         }
 
-        // Create shared input node
-        var inputShape = new int[] { OutputDimension };
-        var inputTensor = new Tensor<T>(inputShape);
-        var sharedInputNode = TensorOperations<T>.Variable(inputTensor, "multimodal_input", requiresGradient: false);
-        inputNodes.Add(sharedInputNode);
-
         // Combine modality teacher graphs with weighted sum
         ComputationNode<T>? resultNode = null;
 
@@ -153,9 +149,11 @@ public class MultiModalTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
             // Get modality teacher's computation graph
             var teacherInputNodes = new List<ComputationNode<T>>();
             var teacherOutput = jitTeacher.ExportComputationGraph(teacherInputNodes);
+            inputNodes.AddRange(teacherInputNodes);
 
             // Scale by modality weight
-            var weightTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(_modalityWeights[i]) }));
+            var weightTensor = new Tensor<T>((int[])teacherOutput.Value.Shape.Clone());
+            weightTensor.Fill(NumOps.FromDouble(_modalityWeights[i]));
             var weightNode = TensorOperations<T>.Constant(weightTensor, $"modality_{i}_weight");
             var scaledOutput = TensorOperations<T>.ElementwiseMultiply(teacherOutput, weightNode);
 

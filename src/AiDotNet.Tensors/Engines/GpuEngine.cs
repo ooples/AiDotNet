@@ -1048,8 +1048,8 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            // Create ILGPU context
-            _context = Context.CreateDefault();
+            // Create ILGPU context (enable Algorithms for XMath intrinsics like RoundToEven)
+            _context = Context.Create(builder => builder.Default().EnableAlgorithms());
 
             // Try to get preferred device (GPU over CPU)
             var device = _context.GetPreferredDevice(preferCPU: false);
