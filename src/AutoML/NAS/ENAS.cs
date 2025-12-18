@@ -140,28 +140,41 @@ namespace AiDotNet.AutoML.NAS
         /// </summary>
         private List<T> ComputeProbabilities(Vector<T> hiddenState, int numChoices, int decisionIdx)
         {
-            // Simplified: per-decision linear projection + softmax
+            var probabilities = ComputeSoftmaxProbabilities(hiddenState, numChoices, decisionIdx);
+            return probabilities.ToList();
+        }
+
+        private Vector<T> ComputeSoftmaxProbabilities(Vector<T> hiddenState, int numChoices, int decisionIdx)
+        {
+            var logits = ComputeLogits(hiddenState, numChoices, decisionIdx);
+            return NasSamplingHelper.Softmax(logits, _ops);
+        }
+
+        private Vector<T> ComputeLogits(Vector<T> hiddenState, int numChoices, int decisionIdx)
+        {
             var weights = _controllerWeights[decisionIdx % _controllerWeights.Count];
             var logits = new Vector<T>(numChoices);
-            for (int i = 0; i < numChoices; i++)
+            int hiddenSize = Math.Min(hiddenState.Length, _controllerHiddenSize);
+
+            for (int choiceIdx = 0; choiceIdx < numChoices; choiceIdx++)
             {
-                T logit = _ops.Zero;
-                for (int j = 0; j < Math.Min(hiddenState.Length, _controllerHiddenSize); j++)
-                {
-                    int weightIdx = (i * _controllerHiddenSize) + j;
-                    logit = _ops.Add(logit, _ops.Multiply(hiddenState[j], weights[weightIdx]));
-                }
-                logits[i] = logit;
+                logits[choiceIdx] = ComputeChoiceLogit(hiddenState, weights, choiceIdx, hiddenSize);
             }
 
-            var probabilities = NasSamplingHelper.Softmax(logits, _ops);
-            var probs = new List<T>(numChoices);
-            for (int i = 0; i < probabilities.Length; i++)
+            return logits;
+        }
+
+        private T ComputeChoiceLogit(Vector<T> hiddenState, Vector<T> weights, int choiceIdx, int hiddenSize)
+        {
+            T logit = _ops.Zero;
+            int weightBase = choiceIdx * _controllerHiddenSize;
+
+            for (int j = 0; j < hiddenSize; j++)
             {
-                probs.Add(probabilities[i]);
+                logit = _ops.Add(logit, _ops.Multiply(hiddenState[j], weights[weightBase + j]));
             }
 
-            return probs;
+            return logit;
         }
 
         /// <summary>
@@ -174,7 +187,7 @@ namespace AiDotNet.AutoML.NAS
 
             for (int i = 0; i < probs.Count; i++)
             {
-                cumulative += Convert.ToDouble(probs[i]);
+                cumulative += _ops.ToDouble(probs[i]);
                 if (rand <= cumulative)
                     return i;
             }

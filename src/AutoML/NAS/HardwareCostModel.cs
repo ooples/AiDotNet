@@ -15,12 +15,14 @@ namespace AiDotNet.AutoML.NAS
         private readonly INumericOperations<T> _ops;
         private readonly HardwarePlatform _platform;
         private readonly Dictionary<string, HardwareCost<T>> _operationCosts;
+        private readonly HashSet<string> _unknownOperations;
 
         public HardwareCostModel(HardwarePlatform platform = HardwarePlatform.Mobile)
         {
             _ops = MathHelper.GetNumericOperations<T>();
             _platform = platform;
             _operationCosts = new Dictionary<string, HardwareCost<T>>();
+            _unknownOperations = new HashSet<string>(StringComparer.Ordinal);
             InitializeOperationCosts();
         }
 
@@ -43,6 +45,12 @@ namespace AiDotNet.AutoML.NAS
             }
 
             // Default cost for unknown operations
+            if (_unknownOperations.Add(operation))
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"AiDotNet.AutoML.NAS: Unknown operation '{operation}' encountered in hardware cost estimation. Using default unit cost.");
+            }
+
             return new HardwareCost<T>
             {
                 Latency = _ops.FromDouble(1.0),
