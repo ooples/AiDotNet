@@ -14,6 +14,21 @@ namespace AiDotNet.AutoML
         public List<(int ToNode, int FromNode, string Operation)> Operations { get; set; } = new List<(int, int, string)>();
 
         /// <summary>
+        /// Optional per-node channel counts (typically output channels) used for cost estimation.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// When provided, hardware cost models can use these values to scale operation costs more accurately
+        /// (e.g., accounting for channel expansion/reduction across layers). If not provided, cost models may
+        /// fall back to assuming a uniform channel count.
+        /// </para>
+        /// <para><b>For Beginners:</b> This is a simple mapping like: node 0 has 16 channels, node 1 has 32 channels, etc.
+        /// Some operations change how many features (channels) flow through the network, which affects compute cost.
+        /// </para>
+        /// </remarks>
+        public Dictionary<int, int> NodeChannels { get; set; } = new Dictionary<int, int>();
+
+        /// <summary>
         /// Number of nodes in the architecture
         /// </summary>
         public int NodeCount { get; set; }

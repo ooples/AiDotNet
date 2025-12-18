@@ -65,7 +65,17 @@ namespace AiDotNet.AutoML.NAS
 
             foreach (var (toNode, fromNode, operation) in architecture.Operations)
             {
-                var opCost = EstimateOperationCost(operation, inputChannels, inputChannels, spatialSize);
+                var fromChannels = architecture.NodeChannels.TryGetValue(fromNode, out var fromNodeChannels)
+                    ? fromNodeChannels
+                    : inputChannels;
+
+                var toChannels = architecture.NodeChannels.TryGetValue(toNode, out var toNodeChannels)
+                    ? toNodeChannels
+                    : fromChannels;
+
+                // If the architecture does not provide per-node channel counts, this falls back to a uniform channel
+                // assumption (fromChannels == toChannels == inputChannels), which is a safe default for early NAS runs.
+                var opCost = EstimateOperationCost(operation, fromChannels, toChannels, spatialSize);
                 totalCost.Latency = _ops.Add(totalCost.Latency, opCost.Latency);
                 totalCost.Energy = _ops.Add(totalCost.Energy, opCost.Energy);
                 totalCost.Memory = _ops.Add(totalCost.Memory, opCost.Memory);
