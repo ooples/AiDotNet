@@ -19,8 +19,6 @@ jobs:
     env:
       AUTOFIX_GPG_PRIVATE_KEY: ${{ secrets.AUTOFIX_GPG_PRIVATE_KEY }}
       AUTOFIX_GPG_PASSPHRASE: ${{ secrets.AUTOFIX_GPG_PASSPHRASE }}
-      AUTOFIX_BOT_NAME: AiDotNetAutofixBot
-      AUTOFIX_BOT_EMAIL: autofix-bot@ooples.com
 
     steps:
       - name: Checkout code
@@ -41,16 +39,9 @@ jobs:
           git_commit_gpgsign: true
 
       - name: Configure Git
-        env:
-          AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
         run: |
-          if [ -n "$AUTOFIX_PAT" ]; then
-            git config user.name "$AUTOFIX_BOT_NAME"
-            git config user.email "$AUTOFIX_BOT_EMAIL"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Get commits to check
         id: get-commits
@@ -263,8 +254,6 @@ jobs:
     env:
       AUTOFIX_GPG_PRIVATE_KEY: ${{ secrets.AUTOFIX_GPG_PRIVATE_KEY }}
       AUTOFIX_GPG_PASSPHRASE: ${{ secrets.AUTOFIX_GPG_PASSPHRASE }}
-      AUTOFIX_BOT_NAME: AiDotNetAutofixBot
-      AUTOFIX_BOT_EMAIL: autofix-bot@ooples.com
 
     steps:
       - name: Checkout code
@@ -285,16 +274,9 @@ jobs:
           git_commit_gpgsign: true
 
       - name: Configure Git
-        env:
-          AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
         run: |
-          if [ -n "$AUTOFIX_PAT" ]; then
-            git config user.name "$AUTOFIX_BOT_NAME"
-            git config user.email "$AUTOFIX_BOT_EMAIL"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Get dependabot commit
         id: get-commit
