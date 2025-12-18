@@ -76,6 +76,8 @@ public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAu
                 throw new InvalidOperationException("AutoML failed to find a valid model configuration within the given budget.");
             }
 
+            await TrySelectEnsembleAsBestAsync(inputs, targets, validationInputs, validationTargets, deadline, cancellationToken);
+
             Status = AutoMLStatus.Completed;
             return BestModel;
         }
@@ -325,4 +327,3 @@ public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAu
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
     }
 }
-

@@ -1,4 +1,6 @@
 using AiDotNet.Enums;
+using AiDotNet.Configuration;
+using AiDotNet.Evaluation;
 using AiDotNet.Exceptions;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -48,6 +50,14 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
     /// Gets the RNG used for sampling candidate trials.
     /// </summary>
     protected Random Random => _random;
+
+    /// <summary>
+    /// Gets or sets options controlling optional post-search ensembling.
+    /// </summary>
+    /// <remarks>
+    /// This is primarily used by the facade options overload in <c>PredictionModelBuilder</c>.
+    /// </remarks>
+    public AutoMLEnsembleOptions EnsembleOptions { get; set; } = new();
 
     /// <summary>
     /// Runs a single trial (create, train, evaluate, record history).
@@ -123,6 +133,210 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
             await ReportTrialFailureAsync(trialParameters, ex, duration);
             return _maximize ? double.NegativeInfinity : double.PositiveInfinity;
         }
+    }
+
+    /// <summary>
+    /// Attempts to build and select an ensemble as the final model based on <see cref="EnsembleOptions"/>.
+    /// </summary>
+    protected async Task TrySelectEnsembleAsBestAsync(
+        TInput trainInputs,
+        TOutput trainTargets,
+        TInput validationInputs,
+        TOutput validationTargets,
+        DateTime deadlineUtc,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!EnsembleOptions.Enabled || EnsembleOptions.MaxModelCount < 2)
+            {
+                return;
+            }
+
+            if (DateTime.UtcNow >= deadlineUtc)
+            {
+                return;
+            }
+
+            if (typeof(TInput) != typeof(Matrix<T>) || typeof(TOutput) != typeof(Vector<T>))
+            {
+                return;
+            }
+
+            List<TrialResult> candidates;
+            lock (_lock)
+            {
+                candidates = _trialHistory
+                    .Where(t => t.Success && t.Parameters.ContainsKey("ModelType"))
+                    .Select(t => t.Clone())
+                    .ToList();
+            }
+
+            // Multi-fidelity trials may include reduced-budget runs. Ensemble should only consider full-fidelity trials.
+            candidates = candidates
+                .Where(t =>
+                {
+                    if (!t.Parameters.TryGetValue("FidelityFraction", out var ff))
+                    {
+                        return true;
+                    }
+
+                    return ff is double fraction && fraction >= 1.0 - 1e-12;
+                })
+                .ToList();
+
+            if (candidates.Count < 2)
+            {
+                return;
+            }
+
+            var topTrials = candidates
+                .OrderByDescending(t => _maximize ? t.Score : -t.Score)
+                .Take(Math.Min(EnsembleOptions.MaxModelCount, candidates.Count))
+                .ToList();
+
+            var members = new List<IFullModel<T, Matrix<T>, Vector<T>>>();
+            var memberScores = new List<double>();
+
+            foreach (var trial in topTrials)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (DateTime.UtcNow >= deadlineUtc)
+                {
+                    break;
+                }
+
+                if (!trial.Parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not ModelType modelType)
+                {
+                    continue;
+                }
+
+                IFullModel<T, TInput, TOutput> model;
+                try
+                {
+                    model = await CreateModelAsync(modelType, trial.Parameters);
+                }
+                catch (InvalidOperationException)
+                {
+                    continue;
+                }
+                catch (ArgumentException)
+                {
+                    continue;
+                }
+                catch (NotSupportedException)
+                {
+                    continue;
+                }
+
+                model.Train(trainInputs, trainTargets);
+
+                double score;
+                try
+                {
+                    score = await EvaluateModelAsync(model, validationInputs, validationTargets);
+                }
+                catch (InvalidOperationException)
+                {
+                    continue;
+                }
+                catch (ArgumentException)
+                {
+                    continue;
+                }
+                catch (NotSupportedException)
+                {
+                    continue;
+                }
+
+                members.Add((IFullModel<T, Matrix<T>, Vector<T>>)(object)model);
+                memberScores.Add(score);
+            }
+
+            if (members.Count < 2)
+            {
+                return;
+            }
+
+            if (trainTargets is not Vector<T> targetVector)
+            {
+                return;
+            }
+
+            var predictionType = PredictionTypeInference.Infer(targetVector);
+            var weights = ComputeEnsembleWeights(memberScores, _maximize);
+            var ensemble = new AutoMLEnsembleModel<T>(members, predictionType, weights);
+
+            double ensembleScore;
+            try
+            {
+                ensembleScore = await EvaluateModelAsync((IFullModel<T, TInput, TOutput>)(object)ensemble, validationInputs, validationTargets);
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+            catch (ArgumentException)
+            {
+                return;
+            }
+            catch (NotSupportedException)
+            {
+                return;
+            }
+
+            bool useEnsemble = EnsembleOptions.FinalSelectionPolicy switch
+            {
+                AutoMLFinalModelSelectionPolicy.AlwaysUseEnsemble => true,
+                AutoMLFinalModelSelectionPolicy.UseEnsembleIfBetter => _maximize ? ensembleScore > BestScore : ensembleScore < BestScore,
+                _ => false
+            };
+
+            if (useEnsemble)
+            {
+                BestModel = (IFullModel<T, TInput, TOutput>)(object)ensemble;
+                BestScore = ensembleScore;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Ensembling is best-effort; if it fails, keep the best single model.
+        }
+    }
+
+    private static double[] ComputeEnsembleWeights(IReadOnlyList<double> scores, bool maximize)
+    {
+        if (scores.Count == 0)
+        {
+            return Array.Empty<double>();
+        }
+
+        var rewards = scores.Select(s => maximize ? s : -s).ToArray();
+        double min = rewards.Min();
+
+        // Shift into a positive domain to avoid negative/zero weights.
+        for (int i = 0; i < rewards.Length; i++)
+        {
+            rewards[i] = Math.Max(0.0, rewards[i] - min + 1e-9);
+        }
+
+        double sum = rewards.Sum();
+        if (sum <= 0 || double.IsNaN(sum) || double.IsInfinity(sum))
+        {
+            double uniform = 1.0 / rewards.Length;
+            return Enumerable.Repeat(uniform, rewards.Length).ToArray();
+        }
+
+        for (int i = 0; i < rewards.Length; i++)
+        {
+            rewards[i] /= sum;
+        }
+
+        return rewards;
     }
 
     /// <summary>

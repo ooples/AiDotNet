@@ -77,6 +77,8 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
                 throw new InvalidOperationException("AutoML failed to find a valid model configuration within the given budget.");
             }
 
+            await TrySelectEnsembleAsBestAsync(inputs, targets, validationInputs, validationTargets, deadline, cancellationToken);
+
             Status = AutoMLStatus.Completed;
             return BestModel;
         }
@@ -469,4 +471,3 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
 
     private static double Clamp01(double value) => value < 0 ? 0 : value > 1 ? 1 : value;
 }
-

@@ -48,6 +48,22 @@ public class AutoMLOptions<T, TInput, TOutput>
     public AutoMLSearchStrategy SearchStrategy { get; set; } = AutoMLSearchStrategy.RandomSearch;
 
     /// <summary>
+    /// Gets or sets multi-fidelity options used when <see cref="SearchStrategy"/> is <see cref="AutoMLSearchStrategy.MultiFidelity"/>.
+    /// </summary>
+    /// <remarks>
+    /// If null, sensible defaults are used.
+    /// </remarks>
+    public AutoMLMultiFidelityOptions? MultiFidelity { get; set; }
+
+    /// <summary>
+    /// Gets or sets optional ensembling options applied after the AutoML search completes.
+    /// </summary>
+    /// <remarks>
+    /// If null, the facade uses sensible defaults based on the selected budget preset.
+    /// </remarks>
+    public AutoMLEnsembleOptions? Ensembling { get; set; }
+
+    /// <summary>
     /// Gets or sets reinforcement-learning specific AutoML options.
     /// </summary>
     /// <remarks>

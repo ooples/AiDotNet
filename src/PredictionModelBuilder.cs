@@ -1110,6 +1110,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             OptimizationMetric = metric,
             MaximizeMetric = maximize,
             BestScore = _autoMLModel.BestScore,
+            UsedEnsemble = _autoMLModel.BestModel is AiDotNet.AutoML.AutoMLEnsembleModel<T>,
+            EnsembleSize = _autoMLModel.BestModel is AiDotNet.AutoML.AutoMLEnsembleModel<T> ensemble ? ensemble.Members.Count : null,
             SearchStartedUtc = startedUtc,
             SearchEndedUtc = endedUtc
         };
@@ -1875,6 +1877,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         _autoMLModel.TimeLimit = timeLimit;
         _autoMLModel.TrialLimit = trialLimit;
 
+        if (_autoMLModel is AiDotNet.AutoML.SupervisedAutoMLModelBase<T, TInput, TOutput> supervised)
+        {
+            supervised.EnsembleOptions = _autoMLOptions.Ensembling ?? ResolveDefaultEnsembling(_autoMLOptions.Budget.Preset);
+        }
+
         if (_autoMLOptions.OptimizationMetricOverride.HasValue)
         {
             var metric = _autoMLOptions.OptimizationMetricOverride.Value;
@@ -1887,6 +1894,16 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         }
 
         return this;
+    }
+
+    private static AutoMLEnsembleOptions ResolveDefaultEnsembling(AutoMLBudgetPreset preset)
+    {
+        return preset switch
+        {
+            AutoMLBudgetPreset.Standard => new AutoMLEnsembleOptions { Enabled = true, MaxModelCount = 3 },
+            AutoMLBudgetPreset.Thorough => new AutoMLEnsembleOptions { Enabled = true, MaxModelCount = 5 },
+            _ => new AutoMLEnsembleOptions { Enabled = false, MaxModelCount = 3 }
+        };
     }
 
     private static bool IsHigherBetter(MetricType metric)
@@ -1926,6 +1943,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             AutoMLSearchStrategy.RandomSearch => new AiDotNet.AutoML.RandomSearchAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom()),
             AutoMLSearchStrategy.BayesianOptimization => new AiDotNet.AutoML.BayesianOptimizationAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom()),
             AutoMLSearchStrategy.Evolutionary => new AiDotNet.AutoML.EvolutionaryAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom()),
+            AutoMLSearchStrategy.MultiFidelity => new AiDotNet.AutoML.MultiFidelityAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom(), _autoMLOptions?.MultiFidelity),
             _ => throw new NotSupportedException(
                 $"AutoML search strategy '{strategy}' is not available via the facade options overload. " +
                 $"Use {nameof(ConfigureAutoML)}(IAutoMLModel<...>) to plug in a custom implementation.")

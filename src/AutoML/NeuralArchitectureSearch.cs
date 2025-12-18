@@ -189,16 +189,16 @@ public class NeuralArchitectureSearch<T>
     /// <summary>
     /// Updates parameters using Adam optimizer
     /// </summary>
-    private void UpdateParametersAdam<TParam>(
-        TParam parameters,
-        TParam gradients,
-        TParam momentum,
-        TParam velocity,
+    private void UpdateParametersAdam(
+        object parameters,
+        object gradients,
+        object momentum,
+        object velocity,
         T learningRate,
         T beta1,
         T beta2,
         T epsilon,
-        int t) where TParam : class
+        int t)
     {
         if (parameters is Matrix<T> paramMatrix && gradients is Matrix<T> gradMatrix &&
             momentum is Matrix<T> momMatrix && velocity is Matrix<T> velMatrix)

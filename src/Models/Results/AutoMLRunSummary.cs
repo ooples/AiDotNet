@@ -53,6 +53,16 @@ public sealed class AutoMLRunSummary
     public double BestScore { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether AutoML selected an ensemble as the final model.
+    /// </summary>
+    public bool UsedEnsemble { get; set; }
+
+    /// <summary>
+    /// Gets or sets the number of models in the selected ensemble, when applicable.
+    /// </summary>
+    public int? EnsembleSize { get; set; }
+
+    /// <summary>
     /// Gets or sets the UTC timestamp when the AutoML search started.
     /// </summary>
     public DateTimeOffset SearchStartedUtc { get; set; }
@@ -67,4 +77,3 @@ public sealed class AutoMLRunSummary
     /// </summary>
     public List<AutoMLTrialSummary> Trials { get; set; } = new();
 }
-

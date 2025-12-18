@@ -91,6 +91,8 @@ public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLMod
                 throw new InvalidOperationException($"AutoML failed to find a valid model configuration within the given budget. {details}");
             }
 
+            await TrySelectEnsembleAsBestAsync(inputs, targets, validationInputs, validationTargets, deadline, cancellationToken);
+
             Status = AutoMLStatus.Completed;
             return BestModel;
         }
