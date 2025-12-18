@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
@@ -76,7 +76,7 @@ jobs:
           NEEDS_FIX=false
           FIXED_COMMITS=()
           # Bash [[ =~ ]] regex must be a single token: avoid literal spaces (use [[:space:]]).
-          PATTERN='^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)(\\([^)]+\\))?:[[:space:]].+'
+          PATTERN='^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)(\([^)]+\))?:[[:space:]].+'
 
           while IFS= read -r commit_sha; do
             if [ -z "$commit_sha" ]; then continue; fi
@@ -268,7 +268,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
