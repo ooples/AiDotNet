@@ -143,7 +143,10 @@ internal static class AutoMLTabularModelFactory<T>
                 new ARIMAOptions<T>(),
                 parameters),
 
-            ModelType.NeuralNetworkRegression => new NeuralNetworkRegression<T>(),
+            ModelType.NeuralNetworkRegression => CreateWithOptions(
+                (NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>> options) => new NeuralNetworkRegression<T>(options),
+                new NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>(),
+                parameters),
 
             _ => throw new NotSupportedException(
                 $"AutoML model type '{modelType}' is not currently supported by the built-in tabular AutoML factory.")

@@ -87,14 +87,50 @@ public sealed class TrialResult
         {
             TrialId = TrialId,
             CandidateModelType = CandidateModelType,
-            Parameters = new Dictionary<string, object>(Parameters, StringComparer.Ordinal),
+            Parameters = DeepCopyDictionary(Parameters),
             Score = Score,
             Duration = Duration,
             Timestamp = Timestamp,
-            Metadata = Metadata != null ? new Dictionary<string, object>(Metadata, StringComparer.Ordinal) : null,
+            Metadata = Metadata != null ? DeepCopyDictionary(Metadata) : null,
             Success = Success,
             ErrorMessage = ErrorMessage
         };
+    }
+
+    private static Dictionary<string, object> DeepCopyDictionary(Dictionary<string, object> source)
+    {
+        var copy = new Dictionary<string, object>(source.Count, StringComparer.Ordinal);
+        foreach (var (key, value) in source)
+        {
+            copy[key] = DeepCopyValue(value);
+        }
+
+        return copy;
+    }
+
+    private static object DeepCopyValue(object value)
+    {
+        if (value is null)
+        {
+            return null!;
+        }
+
+        if (value is Dictionary<string, object> dictionary)
+        {
+            return DeepCopyDictionary(dictionary);
+        }
+
+        if (value is Array array)
+        {
+            return array.Clone();
+        }
+
+        if (value is ICloneable cloneable)
+        {
+            return cloneable.Clone() ?? value;
+        }
+
+        return value;
     }
 
     /// <summary>

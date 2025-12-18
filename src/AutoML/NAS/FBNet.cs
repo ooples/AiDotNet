@@ -151,16 +151,13 @@ namespace AiDotNet.AutoML.NAS
             for (int layerIdx = 0; layerIdx < _numLayers; layerIdx++)
             {
                 var theta = _architectureParams[layerIdx];
-                var probs = GumbelSoftmax(theta, hard: true);
-
-                // Find selected operation
                 int selectedOp = 0;
-                T maxProb = probs[0];
+                T maxLogit = theta[0];
                 for (int opIdx = 1; opIdx < _numOperations; opIdx++)
                 {
-                    if (_ops.GreaterThan(probs[opIdx], maxProb))
+                    if (_ops.GreaterThan(theta[opIdx], maxLogit))
                     {
-                        maxProb = probs[opIdx];
+                        maxLogit = theta[opIdx];
                         selectedOp = opIdx;
                     }
                 }
