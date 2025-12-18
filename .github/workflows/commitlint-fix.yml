@@ -33,7 +33,7 @@ jobs:
 
       - name: Import GPG key for signed commits
         if: env.AUTOFIX_GPG_PRIVATE_KEY != ''
-        uses: crazy-max/ghaction-import-gpg@v6
+        uses: crazy-max/ghaction-import-gpg@e89d40939c28e39f97cf32126055eeae86ba74ec # v6
         with:
           gpg_private_key: ${{ env.AUTOFIX_GPG_PRIVATE_KEY }}
           passphrase: ${{ env.AUTOFIX_GPG_PASSPHRASE }}
@@ -277,7 +277,7 @@ jobs:
 
       - name: Import GPG key for signed commits
         if: env.AUTOFIX_GPG_PRIVATE_KEY != ''
-        uses: crazy-max/ghaction-import-gpg@v6
+        uses: crazy-max/ghaction-import-gpg@e89d40939c28e39f97cf32126055eeae86ba74ec # v6
         with:
           gpg_private_key: ${{ env.AUTOFIX_GPG_PRIVATE_KEY }}
           passphrase: ${{ env.AUTOFIX_GPG_PASSPHRASE }}
