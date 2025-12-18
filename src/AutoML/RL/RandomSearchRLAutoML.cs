@@ -104,55 +104,19 @@ internal sealed class RandomSearchRLAutoML<T>
             }
             catch (ArgumentException ex)
             {
-                var duration = DateTime.UtcNow - trialStart;
-                summary.Trials.Add(new AutoMLTrialSummary
-                {
-                    TrialId = trialId,
-                    Score = double.NegativeInfinity,
-                    Duration = duration,
-                    CompletedUtc = DateTime.UtcNow,
-                    Success = false,
-                    ErrorMessage = ex.Message
-                });
+                RecordFailedTrial(summary, trialId, trialStart, ex);
             }
             catch (InvalidOperationException ex)
             {
-                var duration = DateTime.UtcNow - trialStart;
-                summary.Trials.Add(new AutoMLTrialSummary
-                {
-                    TrialId = trialId,
-                    Score = double.NegativeInfinity,
-                    Duration = duration,
-                    CompletedUtc = DateTime.UtcNow,
-                    Success = false,
-                    ErrorMessage = ex.Message
-                });
+                RecordFailedTrial(summary, trialId, trialStart, ex);
             }
             catch (NotSupportedException ex)
             {
-                var duration = DateTime.UtcNow - trialStart;
-                summary.Trials.Add(new AutoMLTrialSummary
-                {
-                    TrialId = trialId,
-                    Score = double.NegativeInfinity,
-                    Duration = duration,
-                    CompletedUtc = DateTime.UtcNow,
-                    Success = false,
-                    ErrorMessage = ex.Message
-                });
+                RecordFailedTrial(summary, trialId, trialStart, ex);
             }
             catch (ArithmeticException ex)
             {
-                var duration = DateTime.UtcNow - trialStart;
-                summary.Trials.Add(new AutoMLTrialSummary
-                {
-                    TrialId = trialId,
-                    Score = double.NegativeInfinity,
-                    Duration = duration,
-                    CompletedUtc = DateTime.UtcNow,
-                    Success = false,
-                    ErrorMessage = ex.Message
-                });
+                RecordFailedTrial(summary, trialId, trialStart, ex);
             }
         }
 
@@ -166,6 +130,27 @@ internal sealed class RandomSearchRLAutoML<T>
         // Create a fresh agent instance for full training using the best discovered parameters.
         var bestAgent = CreateAgent(bestAgentType, bestParams);
         return (bestAgent, summary);
+    }
+
+    private static void RecordFailedTrial(AutoMLRunSummary summary, int trialId, DateTime trialStartUtc, Exception exception)
+    {
+        if (summary is null)
+        {
+            throw new ArgumentNullException(nameof(summary));
+        }
+
+        var completedUtc = DateTime.UtcNow;
+        var duration = completedUtc - trialStartUtc;
+
+        summary.Trials.Add(new AutoMLTrialSummary
+        {
+            TrialId = trialId,
+            Score = double.NegativeInfinity,
+            Duration = duration,
+            CompletedUtc = completedUtc,
+            Success = false,
+            ErrorMessage = exception.Message
+        });
     }
 
     private List<RLAutoMLAgentType> ResolveCandidateAgents()
