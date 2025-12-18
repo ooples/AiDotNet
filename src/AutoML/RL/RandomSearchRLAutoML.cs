@@ -8,6 +8,7 @@ using AiDotNet.ReinforcementLearning.Agents.DDPG;
 using AiDotNet.ReinforcementLearning.Agents.DQN;
 using AiDotNet.ReinforcementLearning.Agents.PPO;
 using AiDotNet.ReinforcementLearning.Agents.SAC;
+using System.Globalization;
 
 namespace AiDotNet.AutoML.RL;
 
@@ -375,12 +376,96 @@ internal sealed class RandomSearchRLAutoML<T>
 
     private int? TryGetSeed(IReadOnlyDictionary<string, object> parameters)
     {
-        if (parameters.TryGetValue("Seed", out var seedValue))
+        if (parameters is null
+            || !parameters.TryGetValue("Seed", out var seedValue)
+            || seedValue is null)
         {
-            return Convert.ToInt32(seedValue);
+            return null;
         }
 
-        return null;
+        if (seedValue is int seed)
+        {
+            return seed;
+        }
+
+        switch (seedValue)
+        {
+            case short value:
+                return value;
+            case ushort value:
+                return value;
+            case byte value:
+                return value;
+            case sbyte value:
+                return value;
+            case long value:
+                return value >= int.MinValue && value <= int.MaxValue ? (int)value : null;
+            case uint value:
+                return value <= int.MaxValue ? (int)value : null;
+            case ulong value:
+                return value <= (ulong)int.MaxValue ? (int)value : null;
+        }
+
+        if (seedValue is string seedText)
+        {
+            return int.TryParse(seedText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : null;
+        }
+
+        if (seedValue is double doubleValue)
+        {
+            if (double.IsNaN(doubleValue) || double.IsInfinity(doubleValue))
+            {
+                return null;
+            }
+
+            double rounded = Math.Round(doubleValue);
+            const double integerEpsilon = 1e-8;
+            if (Math.Abs(doubleValue - rounded) > integerEpsilon)
+            {
+                return null;
+            }
+
+            return rounded >= int.MinValue && rounded <= int.MaxValue ? (int)rounded : null;
+        }
+
+        if (seedValue is float floatValue)
+        {
+            double asDouble = floatValue;
+            if (double.IsNaN(asDouble) || double.IsInfinity(asDouble))
+            {
+                return null;
+            }
+
+            double rounded = Math.Round(asDouble);
+            const double integerEpsilon = 1e-8;
+            if (Math.Abs(asDouble - rounded) > integerEpsilon)
+            {
+                return null;
+            }
+
+            return rounded >= int.MinValue && rounded <= int.MaxValue ? (int)rounded : null;
+        }
+
+        if (seedValue is decimal decimalValue)
+        {
+            if (decimalValue != decimal.Truncate(decimalValue))
+            {
+                return null;
+            }
+
+            return decimalValue >= int.MinValue && decimalValue <= int.MaxValue ? (int)decimalValue : null;
+        }
+
+        try
+        {
+            return Convert.ToInt32(seedValue, CultureInfo.InvariantCulture);
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
+        {
+            return null;
+        }
     }
 
     private void TrainEpisodes(IRLAgent<T> agent, int episodes)
