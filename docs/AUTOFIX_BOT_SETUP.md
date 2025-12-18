@@ -39,7 +39,7 @@ Store it as a repo secret:
 ### Windows (Gpg4win)
 1. Install Gpg4win (if not already installed).
 2. Open PowerShell and run:
-   - `gpg --quick-generate-key "AiDotNet Autofix Bot <autofix-bot@yourdomain.com>" default default 0`
+   - `gpg --quick-generate-key "AiDotNet Autofix Bot <autofix-bot@ooples.com>" default default 0`
    - `gpg --list-secret-keys --keyid-format=long`
 3. Export the keys:
    - `gpg --armor --export "AiDotNet Autofix Bot" > autofix-public.key`
