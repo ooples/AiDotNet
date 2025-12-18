@@ -31,7 +31,7 @@ jobs:
   codacy-security-scan:
     name: Codacy Security Scan
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     # Skip draft PRs
     if: github.event.pull_request.draft != true
     permissions:
