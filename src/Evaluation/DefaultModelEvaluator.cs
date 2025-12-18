@@ -75,32 +75,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
 
     private static PredictionType TryInferPredictionType(TOutput targets)
     {
-        try
-        {
-            return PredictionTypeInference.Infer(ConversionsHelper.ConvertToVector<T, TOutput>(targets));
-        }
-        catch (InvalidOperationException)
-        {
-            return InferPredictionTypeFromShape(targets);
-        }
-        catch (ArgumentException)
-        {
-            return InferPredictionTypeFromShape(targets);
-        }
-        catch (NotSupportedException)
-        {
-            return InferPredictionTypeFromShape(targets);
-        }
-    }
-
-    private static PredictionType InferPredictionTypeFromShape(TOutput targets)
-    {
-        if (LooksLikeMultiClassScores(targets))
-        {
-            return PredictionType.MultiClass;
-        }
-
-        return PredictionType.Regression;
+        return PredictionTypeInference.InferFromTargets<T, TOutput>(targets);
     }
 
     private static ModelStats<T, TInput, TOutput> TryCalculateModelStats(

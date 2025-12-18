@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Evaluation;
 
@@ -90,5 +91,162 @@ internal static class PredictionTypeInference
         }
 
         return PredictionType.MultiClass;
+    }
+
+    public static PredictionType InferFromTargets<T, TOutput>(TOutput targets)
+    {
+        if (targets is Matrix<T> matrix)
+        {
+            return InferFromMatrixTargets(matrix);
+        }
+
+        if (targets is Tensor<T> tensor)
+        {
+            return InferFromTensorTargets(tensor);
+        }
+
+        try
+        {
+            return Infer(ConversionsHelper.ConvertToVector<T, TOutput>(targets));
+        }
+        catch (InvalidOperationException)
+        {
+            return PredictionType.Regression;
+        }
+        catch (ArgumentException)
+        {
+            return PredictionType.Regression;
+        }
+        catch (NotSupportedException)
+        {
+            return PredictionType.Regression;
+        }
+    }
+
+    private static PredictionType InferFromTensorTargets<T>(Tensor<T> tensor)
+    {
+        if (tensor is null || tensor.Length == 0)
+        {
+            return PredictionType.Regression;
+        }
+
+        if (tensor.Rank == 1)
+        {
+            return Infer(tensor.ToVector());
+        }
+
+        if (tensor.Rank == 2)
+        {
+            if (tensor.Shape.Length >= 2 && tensor.Shape[1] <= 1)
+            {
+                return Infer(tensor.ToVector());
+            }
+
+            return InferFromMatrixTargets(tensor.ToMatrix());
+        }
+
+        return PredictionType.Regression;
+    }
+
+    private static PredictionType InferFromMatrixTargets<T>(Matrix<T> matrix)
+    {
+        if (matrix is null || matrix.Rows <= 0 || matrix.Columns <= 0)
+        {
+            return PredictionType.Regression;
+        }
+
+        if (matrix.Columns == 1)
+        {
+            var values = new Vector<T>(matrix.Rows);
+            for (int row = 0; row < matrix.Rows; row++)
+            {
+                values[row] = matrix[row, 0];
+            }
+
+            return Infer(values);
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int sampleRows = Math.Min(matrix.Rows, 128);
+        int sampleCols = Math.Min(matrix.Columns, 128);
+
+        int nearBinaryCount = 0;
+        int totalSampleCount = sampleRows * sampleCols;
+
+        int rowsWithMultiplePositives = 0;
+        int rowsWithSumGreaterThanOne = 0;
+        int rowsWithSumNearOne = 0;
+
+        const double probabilityEpsilon = 1e-3;
+        const double nearBinaryEpsilon = 0.15;
+        const double positiveThreshold = 0.5;
+        const double sumNearOneEpsilon = 0.2;
+        const double sumGreaterThanOneThreshold = 1.2;
+
+        for (int row = 0; row < sampleRows; row++)
+        {
+            double rowSum = 0.0;
+            int positives = 0;
+
+            for (int col = 0; col < sampleCols; col++)
+            {
+                double value = numOps.ToDouble(matrix[row, col]);
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                {
+                    return PredictionType.Regression;
+                }
+
+                if (value < -probabilityEpsilon || value > 1.0 + probabilityEpsilon)
+                {
+                    return PredictionType.Regression;
+                }
+
+                rowSum += value;
+
+                if (value >= positiveThreshold)
+                {
+                    positives++;
+                }
+
+                if (Math.Abs(value) <= nearBinaryEpsilon || Math.Abs(value - 1.0) <= nearBinaryEpsilon)
+                {
+                    nearBinaryCount++;
+                }
+            }
+
+            if (positives > 1)
+            {
+                rowsWithMultiplePositives++;
+            }
+
+            if (rowSum > sumGreaterThanOneThreshold)
+            {
+                rowsWithSumGreaterThanOne++;
+            }
+
+            if (Math.Abs(rowSum - 1.0) <= sumNearOneEpsilon)
+            {
+                rowsWithSumNearOne++;
+            }
+        }
+
+        double nearBinaryRatio = totalSampleCount == 0 ? 0.0 : nearBinaryCount / (double)totalSampleCount;
+        if (nearBinaryRatio < 0.6)
+        {
+            return PredictionType.Regression;
+        }
+
+        if (rowsWithMultiplePositives > 0 || rowsWithSumGreaterThanOne > 0)
+        {
+            return PredictionType.MultiLabel;
+        }
+
+        if (rowsWithSumNearOne >= sampleRows / 2)
+        {
+            return PredictionType.MultiClass;
+        }
+
+        return PredictionType.MultiLabel;
     }
 }

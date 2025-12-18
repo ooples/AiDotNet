@@ -1,6 +1,5 @@
 using AiDotNet.Enums;
 using AiDotNet.Evaluation;
-using AiDotNet.Helpers;
 
 namespace AiDotNet.AutoML.Policies;
 
@@ -21,28 +20,13 @@ internal static class AutoMLTaskFamilyInference
 {
     public static AutoMLTaskFamily InferFromTargets<T, TOutput>(TOutput targets)
     {
-        try
+        var predictionType = PredictionTypeInference.InferFromTargets<T, TOutput>(targets);
+        return predictionType switch
         {
-            var predictionType = PredictionTypeInference.Infer(ConversionsHelper.ConvertToVector<T, TOutput>(targets));
-            return predictionType switch
-            {
-                PredictionType.Binary => AutoMLTaskFamily.BinaryClassification,
-                PredictionType.MultiClass => AutoMLTaskFamily.MultiClassClassification,
-                PredictionType.MultiLabel => AutoMLTaskFamily.MultiLabelClassification,
-                _ => AutoMLTaskFamily.Regression
-            };
-        }
-        catch (InvalidOperationException)
-        {
-            return AutoMLTaskFamily.Regression;
-        }
-        catch (ArgumentException)
-        {
-            return AutoMLTaskFamily.Regression;
-        }
-        catch (NotSupportedException)
-        {
-            return AutoMLTaskFamily.Regression;
-        }
+            PredictionType.Binary => AutoMLTaskFamily.BinaryClassification,
+            PredictionType.MultiClass => AutoMLTaskFamily.MultiClassClassification,
+            PredictionType.MultiLabel => AutoMLTaskFamily.MultiLabelClassification,
+            _ => AutoMLTaskFamily.Regression
+        };
     }
 }
