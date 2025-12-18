@@ -32,7 +32,8 @@ public class MetaTrainer<T, TInput, TOutput>
     private readonly MetaTrainerOptions _options;
     private readonly List<TrainingMetrics<T>> _trainingHistory;
     private int _currentEpoch;
-    private T? _bestValLoss;
+    private T _bestValLoss;
+    private bool _hasBestValLoss;
     private int _epochsWithoutImprovement;
 
     /// <summary>
@@ -55,6 +56,8 @@ public class MetaTrainer<T, TInput, TOutput>
         _trainingHistory = new List<TrainingMetrics<T>>();
         _currentEpoch = 0;
         _epochsWithoutImprovement = 0;
+        _bestValLoss = default(T)!;
+        _hasBestValLoss = false;
 
         // Set random seeds for reproducibility
         if (_options.RandomSeed.HasValue)
@@ -218,7 +221,7 @@ public class MetaTrainer<T, TInput, TOutput>
             {
                 Epoch = _currentEpoch,
                 AlgorithmName = _algorithm.AlgorithmName,
-                BestValLoss = _bestValLoss.HasValue ? Convert.ToDouble(_bestValLoss.Value) : (double?)null,
+                BestValLoss = _hasBestValLoss ? Convert.ToDouble(_bestValLoss) : (double?)null,
                 EpochsWithoutImprovement = _epochsWithoutImprovement,
                 TrainingHistory = _trainingHistory,
                 Timestamp = DateTimeOffset.UtcNow
@@ -253,6 +256,10 @@ public class MetaTrainer<T, TInput, TOutput>
         {
             Console.WriteLine($"Warning: Failed to save checkpoint (serialization error): {ex.Message}");
         }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Warning: Failed to save checkpoint: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -271,15 +278,16 @@ public class MetaTrainer<T, TInput, TOutput>
         T currentValLoss = (T)(object)valLossDouble; // Safe cast via boxing for numeric types
 
         // Initialize best validation loss on first validation
-        if (!_bestValLoss.HasValue)
+        if (!_hasBestValLoss)
         {
             _bestValLoss = currentValLoss;
+            _hasBestValLoss = true;
             _epochsWithoutImprovement = 0;
             return false;
         }
 
         // Check if validation loss improved
-        if (Convert.ToDouble(currentValLoss) < Convert.ToDouble(_bestValLoss.Value))
+        if (Convert.ToDouble(currentValLoss) < Convert.ToDouble(_bestValLoss))
         {
             _bestValLoss = currentValLoss;
             _epochsWithoutImprovement = 0;

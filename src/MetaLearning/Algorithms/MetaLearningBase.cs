@@ -46,9 +46,7 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
         MetaModel = options.BaseModel;
         LossFunction = options.LossFunction ?? throw new ArgumentException("LossFunction cannot be null.", nameof(options));
 
-        RandomGenerator = options.RandomSeed.HasValue
-            ? new Random(options.RandomSeed.Value)
-            : new Random();
+        RandomGenerator = options.RandomSeed.HasValue ? new Random(options.RandomSeed.Value) : new Random();
 
         // Initialize optimizers with default SGD if not provided
         InnerOptimizer = options.InnerOptimizer ?? new StochasticGradientDescentOptimizer<T, TInput, TOutput>(new StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> { InitialLearningRate = options.InnerLearningRate });
