@@ -339,13 +339,13 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     public IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
         var copiedMembers = Members.Select(m => m.DeepCopy()).ToList();
-        return new AutoMLEnsembleModel<T>(copiedMembers, PredictionType, Weights);
+        return new AutoMLEnsembleModel<T>(copiedMembers, PredictionType, GetSafeNormalizedWeights(copiedMembers.Count));
     }
 
     public IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clonedMembers = Members.Select(m => m.Clone()).ToList();
-        return new AutoMLEnsembleModel<T>(clonedMembers, PredictionType, Weights);
+        return new AutoMLEnsembleModel<T>(clonedMembers, PredictionType, GetSafeNormalizedWeights(clonedMembers.Count));
     }
 
     public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
@@ -402,7 +402,8 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         int length = predictions[0].Length;
         var output = new Vector<T>(length);
 
-        var weightsT = Weights.Select(NumOps.FromDouble).ToArray();
+        var weightVector = GetSafeNormalizedWeights(predictions.Count);
+        var weightsT = weightVector.Select(NumOps.FromDouble).ToArray();
 
         for (int i = 0; i < length; i++)
         {
@@ -422,6 +423,7 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     {
         int length = predictions[0].Length;
         var output = new Vector<T>(length);
+        var weightVector = GetSafeNormalizedWeights(predictions.Count);
 
         for (int i = 0; i < length; i++)
         {
@@ -430,7 +432,7 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             for (int m = 0; m < predictions.Count; m++)
             {
                 int label = NumOps.ToInt32(predictions[m][i]);
-                double weight = (m < Weights.Length) ? Weights[m] : 1.0;
+                double weight = weightVector[m];
 
                 counts[label] = counts.TryGetValue(label, out var existing)
                     ? existing + weight
@@ -442,6 +444,49 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         }
 
         return output;
+    }
+
+    private double[] GetSafeNormalizedWeights(int expectedCount)
+    {
+        if (expectedCount <= 0)
+        {
+            return Array.Empty<double>();
+        }
+
+        if (Weights is null || Weights.Length != expectedCount)
+        {
+            return CreateUniformWeights(expectedCount);
+        }
+
+        double sum = 0.0;
+        for (int i = 0; i < Weights.Length; i++)
+        {
+            double value = Weights[i];
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                return CreateUniformWeights(expectedCount);
+            }
+
+            sum += value;
+        }
+
+        if (sum <= 0 || double.IsNaN(sum) || double.IsInfinity(sum))
+        {
+            return CreateUniformWeights(expectedCount);
+        }
+
+        if (Math.Abs(sum - 1.0) <= 1e-12)
+        {
+            return Weights;
+        }
+
+        var normalized = new double[expectedCount];
+        for (int i = 0; i < expectedCount; i++)
+        {
+            normalized[i] = Weights[i] / sum;
+        }
+
+        return normalized;
     }
 
     private static double[] CreateUniformWeights(int count)
