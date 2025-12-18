@@ -1,5 +1,5 @@
-using AiDotNet.Data.Abstractions;
-using AiDotNet.Helpers;
+using AiDotNet.Data.Structures;
+
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Config;
@@ -328,7 +328,7 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         out T queryLoss,
         out T queryAccuracy)
     {
-        var gradientModel = (IGradientComputable<T, TInput, TOutput>)MetaModel;
+        var gradientModel = (ISecondOrderGradientComputable<T, TInput, TOutput>)MetaModel;
 
         // Reset to original parameters
         MetaModel.SetParameters(originalParameters.Clone());
@@ -369,7 +369,7 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         out T queryLoss,
         out T queryAccuracy)
     {
-        var gradientModel = (IGradientComputable<T, TInput, TOutput>)MetaModel;
+        var gradientModel = (ISecondOrderGradientComputable<T, TInput, TOutput>)MetaModel;
 
         // Reset to original parameters
         MetaModel.SetParameters(originalParameters.Clone());
@@ -574,14 +574,38 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         }
         else
         {
-            // Use model's built-in Train method (default behavior)
-            for (int step = 0; step < Configuration.InnerSteps; step++)
+            // Use model's built-in Train method with per-layer learning rates
+            if (MAMLConfig.UsePerLayerLearningRates && _supportsGradientComputation)
             {
-                MetaModel.Train(task.SupportSetX, task.SupportSetY);
+                // Custom implementation with per-layer learning rates
+                var gradientModel = (IGradientComputable<T, TInput, TOutput>)MetaModel;
 
-                // Track loss after each step for convergence analysis
-                T stepLoss = ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY);
-                perStepLosses.Add(stepLoss);
+                for (int step = 0; step < Configuration.InnerSteps; step++)
+                {
+                    // Compute gradients
+                    var gradients = gradientModel.ComputeGradients(task.SupportSetX, task.SupportSetY, LossFunction);
+                    var currentParams = MetaModel.GetParameters();
+
+                    // Apply gradients with per-layer learning rates
+                    var newParams = ApplyGradientsWithPerLayerLR(currentParams, gradients);
+                    MetaModel.SetParameters(newParams);
+
+                    // Track loss after each step for convergence analysis
+                    T stepLoss = ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY);
+                    perStepLosses.Add(stepLoss);
+                }
+            }
+            else
+            {
+                // Use model's built-in Train method (default behavior)
+                for (int step = 0; step < Configuration.InnerSteps; step++)
+                {
+                    MetaModel.Train(task.SupportSetX, task.SupportSetY);
+
+                    // Track loss after each step for convergence analysis
+                    T stepLoss = ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY);
+                    perStepLosses.Add(stepLoss);
+                }
             }
         }
 
@@ -644,6 +668,87 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         result = result.Divide(divisor);
 
         return result;
+    }
+
+    /// <summary>
+    /// Computes per-layer learning rates based on layer type and depth.
+    /// </summary>
+    /// <param name="baseLearningRate">The base learning rate.</param>
+    /// <param name="parameterCount">Total number of parameters.</param>
+    /// <returns>A vector of per-layer learning rates.</returns>
+    /// <remarks>
+    /// This method creates a learning rate multiplier for each parameter based on
+    /// assumptions about layer structure. In a real implementation, this would
+    /// use the model's actual layer structure.
+    /// </remarks>
+    private Vector<T> ComputePerLayerLearningRates(T baseLearningRate, int parameterCount)
+    {
+        var perLayerLR = new Vector<T>(parameterCount);
+
+        // Simple heuristic based on parameter position
+        // Early 1/3 of parameters: early layers
+        // Middle 1/3: middle layers
+        // Final 1/3: late layers
+        int earlyEnd = parameterCount / 3;
+        int middleEnd = 2 * parameterCount / 3;
+
+        for (int i = 0; i < parameterCount; i++)
+        {
+            T multiplier;
+            if (i < earlyEnd)
+            {
+                // Early layers - slower learning
+                multiplier = MAMLConfig.EarlyLayerMultiplier;
+            }
+            else if (i < middleEnd)
+            {
+                // Middle layers - medium learning
+                multiplier = MAMLConfig.MiddleLayerMultiplier;
+            }
+            else
+            {
+                // Late layers - faster learning
+                multiplier = MAMLConfig.LateLayerMultiplier;
+            }
+
+            // Apply depth-based decay
+            int depthFromStart = i + 1;
+            T depthFactor = NumOps.Pow(MAMLConfig.LayerDepthDecay, NumOps.FromDouble(depthFromStart));
+            multiplier = NumOps.Multiply(multiplier, depthFactor);
+
+            // Compute final learning rate for this parameter
+            perLayerLR[i] = NumOps.Multiply(baseLearningRate, multiplier);
+        }
+
+        return perLayerLR;
+    }
+
+    /// <summary>
+    /// Applies gradients with per-layer learning rates.
+    /// </summary>
+    /// <param name="parameters">Current parameters.</param>
+    /// <param name="gradients">Gradient values.</param>
+    /// <returns>Updated parameters.</returns>
+    private Vector<T> ApplyGradientsWithPerLayerLR(Vector<T> parameters, Vector<T> gradients)
+    {
+        if (!MAMLConfig.UsePerLayerLearningRates)
+        {
+            // Use uniform learning rate
+            return parameters.Subtract(gradients.Multiply(MAMLConfig.InnerLearningRate));
+        }
+
+        // Compute per-layer learning rates
+        var perLayerLR = ComputePerLayerLearningRates(MAMLConfig.InnerLearningRate, parameters.Length);
+
+        // Apply gradients with per-layer learning rates
+        var updatedParameters = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            T update = NumOps.Multiply(gradients[i], perLayerLR[i]);
+            updatedParameters[i] = NumOps.Subtract(parameters[i], update);
+        }
+
+        return updatedParameters;
     }
 
     private bool _supportsGradientComputable => _supportsGradientComputation;

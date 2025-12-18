@@ -72,17 +72,16 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
             var initialParams = taskModel.GetParameters();
 
             // Inner loop: Adapt to the task using support set
-            var (adaptedParams, adaptationHistory) = InnerLoopAdaptationWithHistory(taskModel, task, initialParams);
-            taskModel.SetParameters(adaptedParams);
+            var adaptedParams = InnerLoopAdaptation(taskModel, task);
+            taskModel.UpdateParameters(adaptedParams);
 
             // Compute meta-loss on query set
             var queryPredictions = taskModel.Predict(task.QueryInput);
-            T metaLoss = LossFunction.CalculateLoss(OutputToVector(queryPredictions), OutputToVector(task.QueryOutput));
+            T metaLoss = LossFunction.ComputeLoss(queryPredictions, task.QueryOutput);
             totalMetaLoss = NumOps.Add(totalMetaLoss, metaLoss);
 
             // Compute meta-gradients (gradients with respect to initial parameters)
-            // Pass the already adapted parameters to avoid re-adaptation
-            var taskMetaGradients = ComputeMetaGradients(initialParams, task, adaptedParams, adaptationHistory);
+            var taskMetaGradients = ComputeMetaGradients(initialParams, task);
 
             // Accumulate meta-gradients
             if (metaGradients == null)
@@ -113,7 +112,7 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
         // Outer loop: Update meta-parameters using the meta-optimizer
         var currentMetaParams = MetaModel.GetParameters();
         var updatedMetaParams = MetaOptimizer.UpdateParameters(currentMetaParams, metaGradients);
-        MetaModel.SetParameters(updatedMetaParams);
+        MetaModel.UpdateParameters(updatedMetaParams);
 
         // Return average meta-loss
         return NumOps.Divide(totalMetaLoss, batchSize);
@@ -132,48 +131,9 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
         // Perform inner loop adaptation
         var adaptedParameters = InnerLoopAdaptation(adaptedModel, task);
-        adaptedModel.SetParameters(adaptedParameters);
+        adaptedModel.UpdateParameters(adaptedParameters);
 
         return adaptedModel;
-    }
-
-    /// <summary>
-    /// Performs the inner loop adaptation to a specific task.
-    /// </summary>
-    /// <param name="model">The model to adapt.</param>
-    /// <param name="task">The task to adapt to.</param>
-    /// <param name="initialParams">Initial parameters for adaptation.</param>
-    /// <returns>The adapted parameters and adaptation history.</returns>
-    private (Vector<T> adaptedParams, List<AdaptationStep<T>> adaptationHistory) InnerLoopAdaptationWithHistory(
-        IFullModel<T, TInput, TOutput> model,
-        ITask<T, TInput, TOutput> task,
-        Vector<T> initialParams)
-    {
-        var parameters = initialParams;
-        var history = new List<AdaptationStep<T>>();
-
-        // Perform K gradient steps on the support set
-        for (int step = 0; step < Options.AdaptationSteps; step++)
-        {
-            var stepInfo = new AdaptationStep<T>
-            {
-                Parameters = new Vector<T>(parameters), // Copy constructor
-                Step = step
-            };
-
-            // Compute gradients on support set
-            var gradients = ComputeGradients(model, task.SupportInput, task.SupportOutput);
-            stepInfo.Gradients = gradients;
-
-            // Use inner optimizer for parameter updates
-            parameters = InnerOptimizer.UpdateParameters(parameters, gradients);
-            stepInfo.UpdatedParameters = new Vector<T>(parameters); // Copy constructor
-
-            model.SetParameters(parameters);
-            history.Add(stepInfo);
-        }
-
-        return (parameters, history);
     }
 
     /// <summary>
@@ -194,21 +154,10 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
             // Use inner optimizer for parameter updates
             parameters = InnerOptimizer.UpdateParameters(parameters, gradients);
-            model.SetParameters(parameters);
+            model.UpdateParameters(parameters);
         }
 
         return parameters;
-    }
-
-    /// <summary>
-    /// Represents a single adaptation step for tracking gradients.
-    /// </summary>
-    private class AdaptationStep<TState>
-    {
-        public Vector<TState> Parameters { get; set; } = new Vector<TState>(0);
-        public Vector<TState> UpdatedParameters { get; set; } = new Vector<TState>(0);
-        public Vector<TState> Gradients { get; set; } = new Vector<TState>(0);
-        public int Step { get; set; }
     }
 
     /// <summary>
@@ -216,20 +165,35 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
     /// </summary>
     /// <param name="initialParams">The initial parameters before adaptation.</param>
     /// <param name="task">The task to compute meta-gradients for.</param>
-    /// <param name="adaptedParams">Already adapted parameters.</param>
-    /// <param name="adaptationHistory">History of adaptation steps.</param>
     /// <returns>The meta-gradient vector.</returns>
-    private Vector<T> ComputeMetaGradients(
-        Vector<T> initialParams,
-        ITask<T, TInput, TOutput> task,
-        Vector<T> adaptedParams,
-        List<AdaptationStep<T>> adaptationHistory)
+    private Vector<T> ComputeMetaGradients(Vector<T> initialParams, ITask<T, TInput, TOutput> task)
     {
-        // Clone meta model with adapted parameters (no re-adaptation needed)
+        // Clone meta model
         var model = CloneModel();
-        model.SetParameters(adaptedParams);
+        model.UpdateParameters(initialParams);
 
-        // Compute gradients on query set (this gives us the meta-gradient)
+        // Adapt to the task
+        var adaptedParams = InnerLoopAdaptation(model, task);
+        model.UpdateParameters(adaptedParams);
+
+        // CRITICAL: This implements first-order MAML (FOMAML)
+        // The gradient is computed w.r.t. adapted parameters, treating them as constants
+        // This is NOT true second-order MAML which would require:
+        // 1. Storing the computational graph during inner loop
+        // 2. Computing dL/dθ_i = dL/dθ'_i * dθ'_i/dθ_i (chain rule through adaptation)
+        // 3. Where θ'_i are adapted parameters and θ_i are initial parameters
+        //
+        // True second-order would need:
+        // - Automatic differentiation or manual gradient computation
+        // - Hessian-vector products for efficiency
+        // - O(n²) or O(n³) computational cost
+        //
+        // Current FOMAML approach:
+        // - Treats adaptation as a black box
+        // - Computes ∇L(θ') where θ' are adapted parameters
+        // - Ignores the dependency ∂θ'/∂θ
+        // - Reduces from O(n³) to O(n) complexity
+        // - Performs nearly as well in practice (Finn et al., 2017)
         var metaGradients = ComputeGradients(model, task.QueryInput, task.QueryOutput);
 
         return metaGradients;

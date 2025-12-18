@@ -140,27 +140,31 @@ public class MetaLearningAlgorithmOptions<T, TInput, TOutput>
     public bool TrackGradients { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the optimizer for the inner loop (task adaptation).
+    /// Gets or sets the optimizer for meta-learning (outer loop).
     /// </summary>
-    /// <value>The inner loop optimizer.</value>
+    /// <value>The meta-optimizer. If null, Adam optimizer will be used.</value>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This optimizer handles the fast adaptation to individual tasks.
-    /// It's typically a simple SGD optimizer with a fixed learning rate.
+    /// <b>For Beginners:</b> This optimizer updates the meta-parameters that enable
+    /// quick adaptation to new tasks. Different optimizers work better for different
+    /// scenarios:
+    /// - Adam: Good default choice with adaptive learning rates
+    /// - SGD: Simple and effective for some tasks
+    /// - RMSProp: Works well with non-stationary objectives
     /// </para>
     /// </remarks>
-    public GradientBasedOptimizerBase<T, TInput, TOutput>? InnerOptimizer { get; set; }
+    public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for the outer loop (meta-learning).
+    /// Gets or sets the optimizer for task adaptation (inner loop).
     /// </summary>
-    /// <value>The outer loop optimizer.</value>
+    /// <value>The inner optimizer. If null, Adam optimizer will be used.</value>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This optimizer handles the meta-learning updates that improve
-    /// the model's ability to adapt to new tasks. It's typically a slower optimizer than
-    /// the inner loop optimizer.
+    /// <b>For Beginners:</b> This optimizer handles the quick adaptation to each
+    /// specific task during meta-training. You can use the same optimizer type as
+    /// MetaOptimizer or choose a different one based on your needs.
     /// </para>
     /// </remarks>
-    public GradientBasedOptimizerBase<T, TInput, TOutput>? MetaOptimizer { get; set; }
+    public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
 }

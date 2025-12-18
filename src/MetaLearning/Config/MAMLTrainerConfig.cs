@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.MetaLearning.Config;
@@ -156,6 +156,86 @@ public class MAMLTrainerConfig<T> : IMetaLearnerConfig<T>
     public T AdamEpsilon { get; set; } = NumOps.FromDouble(1e-8);
 
     /// <summary>
+    /// Gets or sets whether to use per-layer learning rates.
+    /// </summary>
+    /// <value>
+    /// If true, uses different learning rates for different layers. Default is false.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Per-layer learning rates allow different parts of the network
+    /// to learn at different speeds, which can improve performance.
+    ///
+    /// Different layers often need different learning rates:
+    /// - Early layers (feature extraction): Usually slower learning rates
+    /// - Later layers (task-specific): Usually faster learning rates
+    /// - Attention mechanisms: May need different rates than feedforward layers
+    ///
+    /// When enabled, the learning rate for each layer is computed as:
+    /// base_lr * layer_multiplier
+    /// where layer_multiplier depends on the layer type and depth.
+    /// </para>
+    /// </remarks>
+    public bool UsePerLayerLearningRates { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the learning rate multiplier for early layers.
+    /// </summary>
+    /// <value>
+    /// Multiplier applied to base learning rate for early layers. Default is 0.1.
+    /// Only used if UsePerLayerLearningRates is true.
+    /// </value>
+    public T EarlyLayerMultiplier { get; set; } = NumOps.FromDouble(0.1);
+
+    /// <summary>
+    /// Gets or sets the learning rate multiplier for middle layers.
+    /// </summary>
+    /// <value>
+    /// Multiplier applied to base learning rate for middle layers. Default is 0.5.
+    /// Only used if UsePerLayerLearningRates is true.
+    /// </value>
+    public T MiddleLayerMultiplier { get; set; } = NumOps.FromDouble(0.5);
+
+    /// <summary>
+    /// Gets or sets the learning rate multiplier for late layers.
+    /// </summary>
+    /// <value>
+    /// Multiplier applied to base learning rate for late layers. Default is 1.0.
+    /// Only used if UsePerLayerLearningRates is true.
+    /// </value>
+    public T LateLayerMultiplier { get; set; } = NumOps.FromDouble(1.0);
+
+    /// <summary>
+    /// Gets or sets the learning rate multiplier for attention layers.
+    /// </summary>
+    /// <value>
+    /// Special multiplier for attention mechanisms. Default is 0.2.
+    /// Only used if UsePerLayerLearningRates is true.
+    /// </value>
+    public T AttentionLayerMultiplier { get; set; } = NumOps.FromDouble(0.2);
+
+    /// <summary>
+    /// Gets or sets the learning rate multiplier for normalization layers.
+    /// </summary>
+    /// <value>
+    /// Special multiplier for batch/layer normalization. Default is 0.01.
+    /// Only used if UsePerLayerLearningRates is true.
+    /// </value>
+    public T NormalizationLayerMultiplier { get; set; } = NumOps.FromDouble(0.01);
+
+    /// <summary>
+    /// Gets or sets the learning rate decay factor per layer depth.
+    /// </summary>
+    /// <value>
+    /// Decay factor applied to learning rate based on layer depth. Default is 0.95.
+    /// Only used if UsePerLayerLearningRates is true.
+    /// </value>
+    /// <remarks>
+    /// Deeper layers get progressively smaller learning rates when enabled.
+    /// </remarks>
+    public T LayerDepthDecay { get; set; } = NumOps.FromDouble(0.95);
+
+    /// <summary>
     /// Creates a default MAML configuration with standard values.
     /// </summary>
     /// <remarks>
@@ -180,13 +260,27 @@ public class MAMLTrainerConfig<T> : IMetaLearnerConfig<T>
     /// <param name="metaBatchSize">Number of tasks per meta-update.</param>
     /// <param name="numMetaIterations">Total number of meta-training iterations.</param>
     /// <param name="useFirstOrderApproximation">Whether to use FOMAML (true) or full MAML (false).</param>
+    /// <param name="usePerLayerLearningRates">Whether to use different learning rates per layer.</param>
+    /// <param name="earlyLayerMultiplier">Learning rate multiplier for early layers.</param>
+    /// <param name="middleLayerMultiplier">Learning rate multiplier for middle layers.</param>
+    /// <param name="lateLayerMultiplier">Learning rate multiplier for late layers.</param>
+    /// <param name="attentionLayerMultiplier">Learning rate multiplier for attention layers.</param>
+    /// <param name="normalizationLayerMultiplier">Learning rate multiplier for normalization layers.</param>
+    /// <param name="layerDepthDecay">Learning rate decay factor per layer depth.</param>
     public MAMLTrainerConfig(
         double innerLearningRate,
         double metaLearningRate,
         int innerSteps,
         int metaBatchSize = 4,
         int numMetaIterations = 1000,
-        bool useFirstOrderApproximation = true)
+        bool useFirstOrderApproximation = true,
+        bool usePerLayerLearningRates = false,
+        double earlyLayerMultiplier = 0.1,
+        double middleLayerMultiplier = 0.5,
+        double lateLayerMultiplier = 1.0,
+        double attentionLayerMultiplier = 0.2,
+        double normalizationLayerMultiplier = 0.01,
+        double layerDepthDecay = 0.95)
     {
         InnerLearningRate = NumOps.FromDouble(innerLearningRate);
         MetaLearningRate = NumOps.FromDouble(metaLearningRate);
@@ -194,6 +288,13 @@ public class MAMLTrainerConfig<T> : IMetaLearnerConfig<T>
         MetaBatchSize = metaBatchSize;
         NumMetaIterations = numMetaIterations;
         UseFirstOrderApproximation = useFirstOrderApproximation;
+        UsePerLayerLearningRates = usePerLayerLearningRates;
+        EarlyLayerMultiplier = NumOps.FromDouble(earlyLayerMultiplier);
+        MiddleLayerMultiplier = NumOps.FromDouble(middleLayerMultiplier);
+        LateLayerMultiplier = NumOps.FromDouble(lateLayerMultiplier);
+        AttentionLayerMultiplier = NumOps.FromDouble(attentionLayerMultiplier);
+        NormalizationLayerMultiplier = NumOps.FromDouble(normalizationLayerMultiplier);
+        LayerDepthDecay = NumOps.FromDouble(layerDepthDecay);
     }
 
     /// <inheritdoc/>
@@ -201,11 +302,23 @@ public class MAMLTrainerConfig<T> : IMetaLearnerConfig<T>
     {
         var innerLr = Convert.ToDouble(InnerLearningRate);
         var metaLr = Convert.ToDouble(MetaLearningRate);
+        var earlyMult = Convert.ToDouble(EarlyLayerMultiplier);
+        var middleMult = Convert.ToDouble(MiddleLayerMultiplier);
+        var lateMult = Convert.ToDouble(LateLayerMultiplier);
+        var attentionMult = Convert.ToDouble(AttentionLayerMultiplier);
+        var normMult = Convert.ToDouble(NormalizationLayerMultiplier);
+        var depthDecay = Convert.ToDouble(LayerDepthDecay);
 
         return innerLr > 0 && innerLr <= 1.0 &&
                metaLr > 0 && metaLr <= 1.0 &&
                InnerSteps > 0 && InnerSteps <= 100 &&
                MetaBatchSize > 0 && MetaBatchSize <= 128 &&
-               NumMetaIterations > 0 && NumMetaIterations <= 1000000;
+               NumMetaIterations > 0 && NumMetaIterations <= 1000000 &&
+               earlyMult > 0 && earlyMult <= 10.0 &&
+               middleMult > 0 && middleMult <= 10.0 &&
+               lateMult > 0 && lateMult <= 10.0 &&
+               attentionMult > 0 && attentionMult <= 10.0 &&
+               normMult > 0 && normMult <= 10.0 &&
+               depthDecay > 0 && depthDecay <= 1.0;
     }
 }

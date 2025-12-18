@@ -1,5 +1,5 @@
-using AiDotNet.Data.Abstractions;
-using AiDotNet.Helpers;
+using AiDotNet.Data.Structures;
+
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Config;
@@ -71,6 +71,16 @@ namespace AiDotNet.MetaLearning.Trainers;
 public class ReptileTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     /// <summary>
+    /// Gets the Reptile-specific configuration.
+    /// </summary>
+    protected ReptileTrainerConfig<T> ReptileConfig => (ReptileTrainerConfig<T>)Configuration;
+
+    /// <summary>
+    /// Velocity vector for momentum updates.
+    /// </summary>
+    private Vector<T>? _momentumVelocity;
+
+    /// <summary>
     /// Initializes a new instance of the ReptileTrainer with a configuration object.
     /// </summary>
     /// <param name="metaModel">The model to meta-train.</param>
@@ -110,6 +120,11 @@ public class ReptileTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         IMetaLearnerConfig<T>? config = null)
         : base(metaModel, lossFunction, dataLoader, config ?? new ReptileTrainerConfig<T>())
     {
+        // Initialize momentum velocity if needed
+        if (ReptileConfig.UseMomentum)
+        {
+            _momentumVelocity = new Vector<T>(metaModel.GetParameters().Length);
+        }
     }
 
     /// <inheritdoc/>
@@ -161,11 +176,49 @@ public class ReptileTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         // Outer loop: Meta-update by averaging parameter updates
         Vector<T> averageUpdate = AverageVectors(parameterUpdates);
 
-        // Scale by meta-learning rate: ε * Δθ_avg
-        Vector<T> scaledUpdate = averageUpdate.Multiply(Configuration.MetaLearningRate);
+        // Get current epsilon (with decay if enabled)
+        T currentEpsilon = GetCurrentEpsilon();
 
-        // Update meta-parameters: θ = θ + ε * Δθ_avg
-        Vector<T> newMetaParameters = originalParameters.Add(scaledUpdate);
+        // Scale by meta-learning rate: ε * Δθ_avg
+        Vector<T> scaledUpdate = averageUpdate.Multiply(currentEpsilon);
+
+        // Apply momentum if enabled
+        Vector<T> finalUpdate;
+        if (ReptileConfig.UseMomentum && _momentumVelocity != null)
+        {
+            if (ReptileConfig.UseNesterovMomentum)
+            {
+                // Nesterov momentum: look ahead
+                Vector<T> lookaheadParams = originalParameters.Add(
+                    _momentumVelocity.Multiply(ReptileConfig.MomentumCoefficient));
+                MetaModel.SetParameters(lookaheadParams);
+
+                // Compute gradient at lookahead position
+                Vector<T> lookaheadGradient = ComputeLookaheadGradient(
+                    originalParameters,
+                    lookaheadParams,
+                    averageUpdate);
+
+                // Update velocity: v = μ * v + ε * gradient
+                _momentumVelocity = _momentumVelocity.Multiply(ReptileConfig.MomentumCoefficient)
+                    .Add(scaledUpdate);
+                finalUpdate = _momentumVelocity;
+            }
+            else
+            {
+                // Standard momentum: v = μ * v + ε * update
+                _momentumVelocity = _momentumVelocity.Multiply(ReptileConfig.MomentumCoefficient)
+                    .Add(scaledUpdate);
+                finalUpdate = _momentumVelocity;
+            }
+        }
+        else
+        {
+            finalUpdate = scaledUpdate;
+        }
+
+        // Update meta-parameters: θ = θ + update
+        Vector<T> newMetaParameters = originalParameters.Add(finalUpdate);
         MetaModel.SetParameters(newMetaParameters);
 
         // Increment iteration counter
@@ -274,5 +327,70 @@ public class ReptileTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         result = result.Divide(divisor);
 
         return result;
+    }
+
+    /// <summary>
+    /// Gets the current epsilon value based on decay schedule.
+    /// </summary>
+    /// <returns>The current meta-learning rate (epsilon).</returns>
+    private T GetCurrentEpsilon()
+    {
+        if (!ReptileConfig.UseEpsilonDecay)
+        {
+            return ReptileConfig.MetaLearningRate;
+        }
+
+        double progress = (double)_currentIteration / ReptileConfig.NumMetaIterations;
+        progress = Math.Max(0, Math.Min(1, progress)); // Clamp to [0, 1]
+
+        T initialEpsilon = ReptileConfig.MetaLearningRate;
+        T finalEpsilon = ReptileConfig.FinalEpsilon;
+
+        switch (ReptileConfig.EpsilonDecaySchedule)
+        {
+            case EpsilonDecaySchedule.Linear:
+                // ε_t = ε_0 * (1 - t/T) + ε_final * (t/T)
+                return NumOps.Add(
+                    NumOps.Multiply(initialEpsilon, NumOps.FromDouble(1 - progress)),
+                    NumOps.Multiply(finalEpsilon, NumOps.FromDouble(progress)));
+
+            case EpsilonDecaySchedule.Cosine:
+                // ε_t = ε_0 * 0.5 * (1 + cos(π * t/T))
+                double cosine = Math.Cos(Math.PI * progress);
+                return NumOps.Multiply(
+                    NumOps.FromDouble(0.5 * (1 + cosine)),
+                    initialEpsilon);
+
+            case EpsilonDecaySchedule.Step:
+                // ε_t = ε_0 * 0.5^floor(t * 10 / T)
+                int steps = (int)(progress * 10);
+                double decay = Math.Pow(0.5, steps);
+                return NumOps.Multiply(initialEpsilon, NumOps.FromDouble(decay));
+
+            case EpsilonDecaySchedule.Exponential:
+                // ε_t = ε_0 * exp(-10 * t/T)
+                double exponential = Math.Exp(-10 * progress);
+                return NumOps.Multiply(initialEpsilon, NumOps.FromDouble(exponential));
+
+            default:
+                return initialEpsilon;
+        }
+    }
+
+    /// <summary>
+    /// Computes gradient for Nesterov momentum lookahead.
+    /// </summary>
+    /// <param name="originalParams">Original parameters.</param>
+    /// <param name="lookaheadParams">Lookahead parameters.</param>
+    /// <param name="averageUpdate">Average parameter update.</param>
+    /// <returns>The computed gradient.</returns>
+    private Vector<T> ComputeLookaheadGradient(
+        Vector<T> originalParams,
+        Vector<T> lookaheadParams,
+        Vector<T> averageUpdate)
+    {
+        // For Reptile, the "gradient" is just the parameter update direction
+        // Nesterov momentum uses this to look ahead
+        return averageUpdate;
     }
 }

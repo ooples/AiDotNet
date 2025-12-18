@@ -35,26 +35,24 @@ public class Task<T, TInput, TOutput> : ITask<T, TInput, TOutput>
         int numQueryPerClass,
         string? taskId = null)
     {
-        SupportInput = supportInput ?? throw new ArgumentNullException(nameof(supportInput));
-        SupportOutput = supportOutput ?? throw new ArgumentNullException(nameof(supportOutput));
-        QueryInput = queryInput ?? throw new ArgumentNullException(nameof(queryInput));
-        QueryOutput = queryOutput ?? throw new ArgumentNullException(nameof(queryOutput));
+        // Validate inputs
+        if (supportInput == null) throw new ArgumentNullException(nameof(supportInput));
+        if (supportOutput == null) throw new ArgumentNullException(nameof(supportOutput));
+        if (queryInput == null) throw new ArgumentNullException(nameof(queryInput));
+        if (queryOutput == null) throw new ArgumentNullException(nameof(queryOutput));
 
-        if (numWays <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(numWays), "NumWays must be positive.");
-        }
+        // Guard against invalid task sizes
+        if (numWays < 2)
+            throw new ArgumentException("Number of ways (classes) must be at least 2.", nameof(numWays));
+        if (numShots < 1)
+            throw new ArgumentException("Number of shots per class must be at least 1.", nameof(numShots));
+        if (numQueryPerClass < 1)
+            throw new ArgumentException("Number of query examples per class must be at least 1.", nameof(numQueryPerClass));
 
-        if (numShots <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(numShots), "NumShots must be positive.");
-        }
-
-        if (numQueryPerClass <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(numQueryPerClass), "NumQueryPerClass must be positive.");
-        }
-
+        SupportInput = supportInput;
+        SupportOutput = supportOutput;
+        QueryInput = queryInput;
+        QueryOutput = queryOutput;
         NumWays = numWays;
         NumShots = numShots;
         NumQueryPerClass = numQueryPerClass;

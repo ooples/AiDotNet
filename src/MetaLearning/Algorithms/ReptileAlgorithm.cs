@@ -101,9 +101,9 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, 
             }
 
             // Evaluate on query set for logging
-            taskModel.SetParameters(adaptedParams);
+            taskModel.UpdateParameters(adaptedParams);
             var queryPredictions = taskModel.Predict(task.QueryInput);
-            T taskLoss = LossFunction.CalculateLoss(OutputToVector(queryPredictions), OutputToVector(task.QueryOutput));
+            T taskLoss = LossFunction.ComputeLoss(queryPredictions, task.QueryOutput);
             totalLoss = NumOps.Add(totalLoss, taskLoss);
         }
 
@@ -133,7 +133,7 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, 
             );
         }
 
-        MetaModel.SetParameters(updatedMetaParams);
+        MetaModel.UpdateParameters(updatedMetaParams);
 
         // Return average loss
         return NumOps.Divide(totalLoss, batchSize);
@@ -152,7 +152,7 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, 
 
         // Perform inner loop adaptation
         var adaptedParameters = InnerLoopAdaptation(adaptedModel, task);
-        adaptedModel.SetParameters(adaptedParameters);
+        adaptedModel.UpdateParameters(adaptedParameters);
 
         return adaptedModel;
     }
@@ -177,7 +177,7 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, 
 
             // Use inner optimizer for parameter updates
             parameters = InnerOptimizer.UpdateParameters(parameters, gradients);
-            model.SetParameters(parameters);
+            model.UpdateParameters(parameters);
         }
 
         return parameters;

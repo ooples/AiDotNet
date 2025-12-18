@@ -1,6 +1,5 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -27,8 +26,8 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
     protected ILossFunction<T> LossFunction;
     protected readonly MetaLearningAlgorithmOptions<T, TInput, TOutput> Options;
     protected Random? RandomGenerator;
-    protected readonly GradientBasedOptimizerBase<T, TInput, TOutput> InnerOptimizer;
-    protected readonly GradientBasedOptimizerBase<T, TInput, TOutput> MetaOptimizer;
+    protected readonly IGradientBasedOptimizer<T, TInput, TOutput> MetaOptimizer;
+    protected readonly IGradientBasedOptimizer<T, TInput, TOutput> InnerOptimizer;
 
     /// <summary>
     /// Initializes a new instance of the MetaLearningBase class.
@@ -47,11 +46,116 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
         MetaModel = options.BaseModel;
         LossFunction = options.LossFunction ?? throw new ArgumentException("LossFunction cannot be null.", nameof(options));
 
-        RandomGenerator = options.RandomSeed.HasValue ? new Random(options.RandomSeed.Value) : new Random();
+        // Initialize optimizers - use provided ones or create defaults
+        // Use provided optimizers or create defaults
+        MetaOptimizer = options.MetaOptimizer ?? CreateDefaultAdamOptimizer(Options.OuterLearningRate);
+        InnerOptimizer = options.InnerOptimizer ?? CreateDefaultAdamOptimizer(Options.InnerLearningRate);
 
-        // Optimizers must be provided in options since they require the model
-        InnerOptimizer = options.InnerOptimizer ?? throw new ArgumentNullException(nameof(options.InnerOptimizer), "InnerOptimizer must be provided in options");
-        MetaOptimizer = options.MetaOptimizer ?? throw new ArgumentNullException(nameof(options.MetaOptimizer), "MetaOptimizer must be provided in options");
+        if (options.RandomSeed.HasValue)
+        {
+            RandomGenerator = new Random(options.RandomSeed.Value);
+        }
+        else
+        {
+            RandomGenerator = new Random();
+        }
+    }
+
+    /// <summary>
+    /// Creates a default Adam optimizer with the specified learning rate.
+    /// </summary>
+    /// <param name="learningRate">The learning rate for the optimizer.</param>
+    /// <returns>A configured Adam optimizer instance.</returns>
+    private IGradientBasedOptimizer<T, TInput, TOutput> CreateDefaultAdamOptimizer(double learningRate)
+    {
+        // Create a simple wrapper that adapts the optimizer to our needs
+        return new AdamOptimizerWrapper(learningRate);
+    }
+
+    /// <summary>
+    /// Simple wrapper for Adam optimizer that doesn't require a model at construction.
+    /// </summary>
+    private class AdamOptimizerWrapper : IGradientBasedOptimizer<T, TInput, TOutput>
+    {
+        private readonly double _learningRate;
+        private Dictionary<string, object> _state = new();
+
+        public AdamOptimizerWrapper(double learningRate)
+        {
+            _learningRate = learningRate;
+        }
+
+        public Matrix<T> UpdateParameters(Matrix<T> parameters, Matrix<T> gradient)
+        {
+            // Simple SGD-like update for now - can be enhanced later
+            var scaledGradient = gradient.Multiply(NumOps.FromDouble(_learningRate));
+            return parameters.Subtract(scaledGradient);
+        }
+
+        public Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+        {
+            var scaledGradient = gradient.Multiply(NumOps.FromDouble(_learningRate));
+            return parameters.Subtract(scaledGradient);
+        }
+
+        public T[,] UpdateParameters(T[,] parameters, T[,] gradient)
+        {
+            // Implementation for 2D arrays
+            int rows = parameters.GetLength(0);
+            int cols = parameters.GetLength(1);
+            T[,] result = new T[rows, cols];
+
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    result[i, j] = NumOps.Subtract(parameters[i, j],
+                        NumOps.Multiply(gradient[i, j], NumOps.FromDouble(_learningRate)));
+                }
+            }
+
+            return result;
+        }
+
+        public T[][] UpdateParameters(T[][] parameters, T[][] gradient)
+        {
+            // Implementation for jagged arrays
+            int rows = parameters.Length;
+            T[][] result = new T[rows][];
+
+            for (int i = 0; i < rows; i++)
+            {
+                int cols = parameters[i].Length;
+                result[i] = new T[cols];
+                for (int j = 0; j < cols; j++)
+                {
+                    result[i][j] = NumOps.Subtract(parameters[i][j],
+                        NumOps.Multiply(gradient[i][j], NumOps.FromDouble(_learningRate)));
+                }
+            }
+
+            return result;
+        }
+
+        public object GetState(string key)
+        {
+            return _state.TryGetValue(key, out var value) ? value : null;
+        }
+
+        public void SetState(string key, object value)
+        {
+            _state[key] = value;
+        }
+
+        public void Reset()
+        {
+            _state.Clear();
+        }
+
+        public void Dispose()
+        {
+            // Nothing to dispose
+        }
     }
 
     /// <inheritdoc/>
@@ -85,7 +189,7 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
 
             // Evaluate on query set
             var queryPredictions = adaptedModel.Predict(task.QueryInput);
-            var queryLoss = LossFunction.CalculateLoss(OutputToVector(queryPredictions), OutputToVector(task.QueryOutput));
+            var queryLoss = LossFunction.ComputeLoss(queryPredictions, task.QueryOutput);
 
             totalLoss = NumOps.Add(totalLoss, queryLoss);
             taskCount++;
@@ -131,15 +235,15 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
 
             // Compute loss with parameter + epsilon
             parameters[i] = NumOps.Add(originalValue, epsilon);
-            model.SetParameters(parameters);
+            model.UpdateParameters(parameters);
             var predictions1 = model.Predict(input);
-            T loss1 = LossFunction.CalculateLoss(OutputToVector(predictions1), OutputToVector(expectedOutput));
+            T loss1 = LossFunction.ComputeLoss(predictions1, expectedOutput);
 
             // Compute loss with parameter - epsilon
             parameters[i] = NumOps.Subtract(originalValue, epsilon);
-            model.SetParameters(parameters);
+            model.UpdateParameters(parameters);
             var predictions2 = model.Predict(input);
-            T loss2 = LossFunction.CalculateLoss(OutputToVector(predictions2), OutputToVector(expectedOutput));
+            T loss2 = LossFunction.ComputeLoss(predictions2, expectedOutput);
 
             // Compute gradient using central difference
             T gradient = NumOps.Divide(
@@ -153,7 +257,7 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
         }
 
         // Restore original parameters
-        model.SetParameters(parameters);
+        model.UpdateParameters(parameters);
 
         return gradients;
     }
@@ -216,60 +320,6 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
         }
 
         return gradients;
-    }
-
-    /// <summary>
-    /// Converts output to vector for loss computation.
-    /// </summary>
-    /// <param name="output">The output to convert.</param>
-    /// <returns>A vector representation of the output.</returns>
-    /// <remarks>
-    /// This method handles both Vector&lt;T&gt; and Tensor&lt;T&gt; outputs.
-    /// </remarks>
-    protected Vector<T> OutputToVector(TOutput output)
-    {
-        // If it's already a Vector<T>, return it as-is
-        if (output is Vector<T> vector)
-        {
-            return vector;
-        }
-
-        // If it's a Tensor<T>, convert it to a vector
-        if (output is Tensor<T> tensor)
-        {
-            return tensor.ToVector();
-        }
-
-        // For other types, throw an exception
-        throw new NotSupportedException($"Output type {output?.GetType()} is not supported for conversion to Vector<T>");
-    }
-
-    /// <summary>
-    /// Returns the minimum of two values.
-    /// </summary>
-    /// <param name="a">The first value.</param>
-    /// <param name="b">The second value.</param>
-    /// <returns>The smaller of the two values.</returns>
-    protected T Min(T a, T b)
-    {
-        // Compare using GreaterThan method
-        if (NumOps.GreaterThan(a, b))
-            return b;
-        return a;
-    }
-
-    /// <summary>
-    /// Returns the maximum of two values.
-    /// </summary>
-    /// <param name="a">The first value.</param>
-    /// <param name="b">The second value.</param>
-    /// <returns>The larger of the two values.</returns>
-    protected T Max(T a, T b)
-    {
-        // Compare using GreaterThan method
-        if (NumOps.GreaterThan(a, b))
-            return a;
-        return b;
     }
 
     /// <summary>

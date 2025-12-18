@@ -1,7 +1,6 @@
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Data;
-using Newtonsoft.Json;
-using static Newtonsoft.Json.Formatting;
+using System.Text.Json;
 
 namespace AiDotNet.MetaLearning.Training;
 
@@ -33,8 +32,7 @@ public class MetaTrainer<T, TInput, TOutput>
     private readonly MetaTrainerOptions _options;
     private readonly List<TrainingMetrics<T>> _trainingHistory;
     private int _currentEpoch;
-    private T _bestValLoss;
-    private bool _hasBestValLoss;
+    private T? _bestValLoss; // Nullable for proper initialization
     private int _epochsWithoutImprovement;
 
     /// <summary>
@@ -57,8 +55,6 @@ public class MetaTrainer<T, TInput, TOutput>
         _trainingHistory = new List<TrainingMetrics<T>>();
         _currentEpoch = 0;
         _epochsWithoutImprovement = 0;
-        _bestValLoss = default(T)!;
-        _hasBestValLoss = false;
 
         // Set random seeds for reproducibility
         if (_options.RandomSeed.HasValue)
@@ -222,13 +218,16 @@ public class MetaTrainer<T, TInput, TOutput>
             {
                 Epoch = _currentEpoch,
                 AlgorithmName = _algorithm.AlgorithmName,
-                BestValLoss = _hasBestValLoss ? Convert.ToDouble(_bestValLoss) : (double?)null,
+                BestValLoss = _bestValLoss != null ? Convert.ToDouble(_bestValLoss) : (double?)null,
                 EpochsWithoutImprovement = _epochsWithoutImprovement,
                 TrainingHistory = _trainingHistory,
                 Timestamp = DateTimeOffset.UtcNow
             };
 
-            string json = JsonConvert.SerializeObject(checkpoint, Formatting.Indented);
+            string json = JsonSerializer.Serialize(checkpoint, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
 
             File.WriteAllText(checkpointPath, json);
 
@@ -244,19 +243,15 @@ public class MetaTrainer<T, TInput, TOutput>
         }
         catch (IOException ex)
         {
-            Console.WriteLine($"Warning: Failed to save checkpoint (I/O error): {ex.Message}");
+            Console.WriteLine($"Warning: Failed to save checkpoint due to I/O error: {ex.Message}");
         }
         catch (UnauthorizedAccessException ex)
         {
-            Console.WriteLine($"Warning: Failed to save checkpoint (unauthorized): {ex.Message}");
+            Console.WriteLine($"Warning: Failed to save checkpoint due to permissions: {ex.Message}");
         }
-        catch (JsonException ex)
+        catch (System.Text.Json.JsonException ex)
         {
-            Console.WriteLine($"Warning: Failed to save checkpoint (serialization error): {ex.Message}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Warning: Failed to save checkpoint: {ex.Message}");
+            Console.WriteLine($"Warning: Failed to serialize checkpoint: {ex.Message}");
         }
     }
 
@@ -272,20 +267,33 @@ public class MetaTrainer<T, TInput, TOutput>
             return false;
         }
 
-        double valLossDouble = metrics.ValLoss.Value;
-        T currentValLoss = (T)(object)valLossDouble; // Safe cast via boxing for numeric types
+        // Safe type conversion with proper null handling
+        T? currentValLoss;
+        try
+        {
+            currentValLoss = (T?)Convert.ChangeType(metrics.ValLoss.Value, typeof(T));
+            if (currentValLoss == null)
+            {
+                Console.WriteLine($"Warning: Failed to convert validation loss to type {typeof(T).Name}");
+                return false;
+            }
+        }
+        catch (InvalidCastException ex)
+        {
+            Console.WriteLine($"Warning: Cannot convert validation loss {metrics.ValLoss.Value} to type {typeof(T).Name}: {ex.Message}");
+            return false;
+        }
 
         // Initialize best validation loss on first validation
-        if (!_hasBestValLoss)
+        if (_bestValLoss == null)
         {
             _bestValLoss = currentValLoss;
-            _hasBestValLoss = true;
             _epochsWithoutImprovement = 0;
             return false;
         }
 
         // Check if validation loss improved
-        if (Convert.ToDouble(currentValLoss) < Convert.ToDouble(_bestValLoss))
+        if (currentValLoss != null && Convert.ToDouble(currentValLoss) < Convert.ToDouble(_bestValLoss))
         {
             _bestValLoss = currentValLoss;
             _epochsWithoutImprovement = 0;
