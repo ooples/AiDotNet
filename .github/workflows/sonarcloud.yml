@@ -86,7 +86,7 @@ jobs:
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     if: github.event.pull_request.draft != true
 
     steps:
