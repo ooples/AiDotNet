@@ -70,7 +70,22 @@ internal static class AutoMLHyperparameterApplicator
                 return Enum.Parse(targetType, s, ignoreCase: true);
             }
 
-            return Enum.ToObject(targetType, Convert.ToInt32(value, CultureInfo.InvariantCulture));
+            try
+            {
+                return Enum.ToObject(targetType, Convert.ToInt32(value, CultureInfo.InvariantCulture));
+            }
+            catch (InvalidCastException)
+            {
+                return null;
+            }
+            catch (FormatException)
+            {
+                return null;
+            }
+            catch (OverflowException)
+            {
+                return null;
+            }
         }
 
         if (targetType == typeof(bool))
