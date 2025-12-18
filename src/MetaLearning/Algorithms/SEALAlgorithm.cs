@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -77,9 +78,10 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
     {
         _options = options;
         _adaptiveLearningRates = new Dictionary<string, AdaptiveLrState<T>>();
-        _defaultLr = options.InnerLearningRate;
-        _minLr = default!; // Will use NumOps later
-        _maxLr = default!; // Will use NumOps later
+        _defaultLr = NumOps.FromDouble(options.InnerLearningRate);
+        // Initialize using NumOps
+        _minLr = NumOps.FromDouble(1e-7);
+        _maxLr = NumOps.FromDouble(1.0);
 
         // For now, use default values for SEAL-specific features
         // These would be properly configured in a SEALAlgorithmOptions class
@@ -101,9 +103,9 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
         public AdaptiveLrState(int size)
         {
-            LearningRates = Vector<TState>.Zeros(size);
-            GradientMoments = Vector<TState>.Zeros(size);
-            GradientVariances = Vector<TState>.Zeros(size);
+            LearningRates = new Vector<TState>(size);
+            GradientMoments = new Vector<TState>(size);
+            GradientVariances = new Vector<TState>(size);
             StepCount = 0;
         }
     }
@@ -113,10 +115,10 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
     /// </summary>
     private class AdaptationStep<TState>
     {
-        public Vector<TState> Parameters { get; set; }
-        public Vector<TState> UpdatedParameters { get; set; }
-        public Vector<TState> Gradients { get; set; }
-        public Vector<TState> MetaGradients { get; set; }
+        public Vector<TState> Parameters { get; set; } = new Vector<TState>(0);
+        public Vector<TState> UpdatedParameters { get; set; } = new Vector<TState>(0);
+        public Vector<TState> Gradients { get; set; } = new Vector<TState>(0);
+        public Vector<TState> MetaGradients { get; set; } = new Vector<TState>(0);
         public int Step { get; set; }
     }
 
@@ -142,11 +144,11 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
             // Inner loop: Adapt to the task using support set
             var adaptedParameters = InnerLoopAdaptation(taskModel, task);
-            taskModel.UpdateParameters(adaptedParameters);
+            taskModel.SetParameters(adaptedParameters);
 
             // Evaluate on query set to get meta-loss
             var queryPredictions = taskModel.Predict(task.QueryInput);
-            T metaLoss = LossFunction.CalculateLoss(queryPredictions, task.QueryOutput);
+            T metaLoss = LossFunction.CalculateLoss(OutputToVector(queryPredictions), OutputToVector(task.QueryOutput));
 
             // Add temperature scaling if configured
             if (Math.Abs(_temperature - 1.0) > 1e-10)
@@ -203,7 +205,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
         // Outer loop: Update meta-parameters using the meta-optimizer
         var currentMetaParams = MetaModel.GetParameters();
         var updatedMetaParams = MetaOptimizer.UpdateParameters(currentMetaParams, metaGradients);
-        MetaModel.UpdateParameters(updatedMetaParams);
+        MetaModel.SetParameters(updatedMetaParams);
 
         // Return average meta-loss
         return NumOps.Divide(totalMetaLoss, batchSize);
@@ -222,7 +224,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
         // Perform inner loop adaptation
         var adaptedParameters = InnerLoopAdaptation(adaptedModel, task);
-        adaptedModel.UpdateParameters(adaptedParameters);
+        adaptedModel.SetParameters(adaptedParameters);
 
         return adaptedModel;
     }
@@ -241,9 +243,9 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
         // Initialize adaptive learning rates for this task if needed
         if (_useAdaptiveInnerLR && !_adaptiveLearningRates.ContainsKey(taskId))
         {
-            _adaptiveLearningRates[taskId] = new AdaptiveLrState<T>(parameters.Count);
+            _adaptiveLearningRates[taskId] = new AdaptiveLrState<T>(parameters.Length);
             // Initialize with default learning rate
-            for (int i = 0; i < parameters.Count; i++)
+            for (int i = 0; i < parameters.Length; i++)
             {
                 _adaptiveLearningRates[taskId].LearningRates[i] = _defaultLr;
             }
@@ -266,7 +268,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
                 parameters = InnerOptimizer.UpdateParameters(parameters, gradients);
             }
 
-            model.UpdateParameters(parameters);
+            model.SetParameters(parameters);
         }
 
         return parameters;
@@ -280,9 +282,9 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
         var state = _adaptiveLearningRates[taskId];
         state.StepCount++;
 
-        var updatedParameters = Vector<T>.Zeros(parameters.Count);
+        var updatedParameters = new Vector<T>(parameters.Length); // Vector constructor creates zero-initialized vector
 
-        for (int i = 0; i < parameters.Count; i++)
+        for (int i = 0; i < parameters.Length; i++)
         {
             // Update gradient statistics
             T beta1 = NumOps.FromDouble(0.9);
@@ -338,8 +340,8 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
             }
 
             // Clamp learning rate to bounds
-            state.LearningRates[i] = NumOps.Maximum(
-                NumOps.Minimum(state.LearningRates[i], _maxLr),
+            state.LearningRates[i] = Max(
+                Min(state.LearningRates[i], _maxLr),
                 _minLr);
 
             // Apply learning rate warmup if configured
@@ -387,7 +389,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
         // Adapt to the task
         var adaptedParameters = InnerLoopAdaptation(model, task);
-        model.UpdateParameters(adaptedParameters);
+        model.SetParameters(adaptedParameters);
 
         // Compute gradients on query set
         return ComputeGradients(model, task.QueryInput, task.QueryOutput);
@@ -433,7 +435,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
             currentStep.UpdatedParameters = adaptedParameters;
             adaptationHistory.Add(currentStep);
-            model.UpdateParameters(adaptedParameters);
+            model.SetParameters(adaptedParameters);
         }
 
         // Compute query loss gradients
@@ -472,7 +474,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
                 // For now, we'll use an approximation
                 var state = _adaptiveLearningRates[task.TaskId];
-                for (int j = 0; j < currentGradients.Count; j++)
+                for (int j = 0; j < currentGradients.Length; j++)
                 {
                     // Scale by learning rate for backpropagation
                     currentGradients[j] = NumOps.Multiply(
@@ -508,27 +510,30 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
     /// <returns>The entropy value.</returns>
     private T ComputeEntropyRegularization(TOutput predictions)
     {
-        // Compute entropy of prediction distribution for regularization
+        // Simplified entropy computation
         // H = -Σ(p_i * log(p_i))
         try
         {
-            // Convert predictions to a tensor if it's not already
-            var predTensor = ConvertToTensor(predictions);
+            // Convert to vector for computation
+            var predVector = OutputToVector(predictions);
 
-            // Apply softmax to get probabilities if not already normalized
-            var maxVal = Tensor<T>.Max(predTensor);
-            var expVals = Tensor<T>.Exp(Tensor<T>.Subtract(predTensor, maxVal));
-            var sumExp = Tensor<T>.Sum(expVals);
-            var probs = Tensor<T>.Divide(expVals, sumExp);
+            // Simple entropy calculation
+            T entropy = NumOps.Zero;
+            T epsilon = NumOps.FromDouble(1e-8);
 
-            // Add small epsilon to avoid log(0)
-            var epsilon = NumOps.FromDouble(1e-8);
-            var probsSafe = Tensor<T>.Add(probs, epsilon);
-
-            // Compute entropy: -Σ(p * log(p))
-            var logProbs = Tensor<T>.Log(probsSafe);
-            var negLogProbs = Tensor<T>.Negate(logProbs);
-            var entropy = Tensor<T>.Multiply(probsSafe, negLogProbs).Sum();
+            for (int i = 0; i < predVector.Length; i++)
+            {
+                T p = predVector[i];
+                // Clamp to avoid log(0)
+                p = Max(p, epsilon);
+                // Compute p * log(p) - use ToInt32 for conversion approximation
+                int pi = NumOps.ToInt32(p);
+                if (pi > 0)
+                {
+                    double logP = Math.Log(Math.Max(pi, 1));
+                    entropy = NumOps.Add(entropy, NumOps.Multiply(p, NumOps.FromDouble(-logP)));
+                }
+            }
 
             return entropy;
         }

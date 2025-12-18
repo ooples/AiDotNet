@@ -73,11 +73,11 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
             // Inner loop: Adapt to the task using support set
             var (adaptedParams, adaptationHistory) = InnerLoopAdaptationWithHistory(taskModel, task, initialParams);
-            taskModel.UpdateParameters(adaptedParams);
+            taskModel.SetParameters(adaptedParams);
 
             // Compute meta-loss on query set
             var queryPredictions = taskModel.Predict(task.QueryInput);
-            T metaLoss = LossFunction.ComputeLoss(queryPredictions, task.QueryOutput);
+            T metaLoss = LossFunction.CalculateLoss(OutputToVector(queryPredictions), OutputToVector(task.QueryOutput));
             totalMetaLoss = NumOps.Add(totalMetaLoss, metaLoss);
 
             // Compute meta-gradients (gradients with respect to initial parameters)
@@ -113,7 +113,7 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
         // Outer loop: Update meta-parameters using the meta-optimizer
         var currentMetaParams = MetaModel.GetParameters();
         var updatedMetaParams = MetaOptimizer.UpdateParameters(currentMetaParams, metaGradients);
-        MetaModel.UpdateParameters(updatedMetaParams);
+        MetaModel.SetParameters(updatedMetaParams);
 
         // Return average meta-loss
         return NumOps.Divide(totalMetaLoss, batchSize);
@@ -132,7 +132,7 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
         // Perform inner loop adaptation
         var adaptedParameters = InnerLoopAdaptation(adaptedModel, task);
-        adaptedModel.UpdateParameters(adaptedParameters);
+        adaptedModel.SetParameters(adaptedParameters);
 
         return adaptedModel;
     }
@@ -157,7 +157,7 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
         {
             var stepInfo = new AdaptationStep<T>
             {
-                Parameters = Vector<T>.Copy(parameters),
+                Parameters = new Vector<T>(parameters), // Copy constructor
                 Step = step
             };
 
@@ -167,9 +167,9 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
             // Use inner optimizer for parameter updates
             parameters = InnerOptimizer.UpdateParameters(parameters, gradients);
-            stepInfo.UpdatedParameters = Vector<T>.Copy(parameters);
+            stepInfo.UpdatedParameters = new Vector<T>(parameters); // Copy constructor
 
-            model.UpdateParameters(parameters);
+            model.SetParameters(parameters);
             history.Add(stepInfo);
         }
 
@@ -194,7 +194,7 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
             // Use inner optimizer for parameter updates
             parameters = InnerOptimizer.UpdateParameters(parameters, gradients);
-            model.UpdateParameters(parameters);
+            model.SetParameters(parameters);
         }
 
         return parameters;
@@ -205,9 +205,9 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
     /// </summary>
     private class AdaptationStep<TState>
     {
-        public Vector<TState> Parameters { get; set; }
-        public Vector<TState> UpdatedParameters { get; set; }
-        public Vector<TState> Gradients { get; set; }
+        public Vector<TState> Parameters { get; set; } = new Vector<TState>(0);
+        public Vector<TState> UpdatedParameters { get; set; } = new Vector<TState>(0);
+        public Vector<TState> Gradients { get; set; } = new Vector<TState>(0);
         public int Step { get; set; }
     }
 
@@ -227,7 +227,7 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
     {
         // Clone meta model with adapted parameters (no re-adaptation needed)
         var model = CloneModel();
-        model.UpdateParameters(adaptedParams);
+        model.SetParameters(adaptedParams);
 
         // Compute gradients on query set (this gives us the meta-gradient)
         var metaGradients = ComputeGradients(model, task.QueryInput, task.QueryOutput);

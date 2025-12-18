@@ -314,13 +314,14 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         int mu = lambda / 2;
 
         // Sort and select the best individuals
-        var sortedIndices = fitnessValues.Argsort().Reverse().ToArray();
+        var indices = Enumerable.Range(0, lambda).ToArray();
+        Array.Sort(indices, (i, j) => NumOps.GreaterThan(fitnessValues[j], fitnessValues[i]) ? -1 : 1);
         var selectedPopulation = new Matrix<T>(mu, dimensions);
         for (int i = 0; i < mu; i++)
         {
             for (int j = 0; j < dimensions; j++)
             {
-                selectedPopulation[i, j] = population[sortedIndices[i], j];
+                selectedPopulation[i, j] = population[indices[i], j];
             }
         }
 

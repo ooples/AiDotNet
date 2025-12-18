@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -48,9 +49,9 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
 
         RandomGenerator = options.RandomSeed.HasValue ? new Random(options.RandomSeed.Value) : new Random();
 
-        // Initialize optimizers with default SGD if not provided
-        InnerOptimizer = options.InnerOptimizer ?? new StochasticGradientDescentOptimizer<T, TInput, TOutput>(new StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> { InitialLearningRate = options.InnerLearningRate });
-        MetaOptimizer = options.MetaOptimizer ?? new StochasticGradientDescentOptimizer<T, TInput, TOutput>(new StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> { InitialLearningRate = options.OuterLearningRate });
+        // Optimizers must be provided in options since they require the model
+        InnerOptimizer = options.InnerOptimizer ?? throw new ArgumentNullException(nameof(options.InnerOptimizer), "InnerOptimizer must be provided in options");
+        MetaOptimizer = options.MetaOptimizer ?? throw new ArgumentNullException(nameof(options.MetaOptimizer), "MetaOptimizer must be provided in options");
     }
 
     /// <inheritdoc/>
@@ -84,7 +85,7 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
 
             // Evaluate on query set
             var queryPredictions = adaptedModel.Predict(task.QueryInput);
-            var queryLoss = LossFunction.ComputeLoss(queryPredictions, task.QueryOutput);
+            var queryLoss = LossFunction.CalculateLoss(OutputToVector(queryPredictions), OutputToVector(task.QueryOutput));
 
             totalLoss = NumOps.Add(totalLoss, queryLoss);
             taskCount++;
@@ -130,15 +131,15 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
 
             // Compute loss with parameter + epsilon
             parameters[i] = NumOps.Add(originalValue, epsilon);
-            model.UpdateParameters(parameters);
+            model.SetParameters(parameters);
             var predictions1 = model.Predict(input);
-            T loss1 = LossFunction.ComputeLoss(predictions1, expectedOutput);
+            T loss1 = LossFunction.CalculateLoss(OutputToVector(predictions1), OutputToVector(expectedOutput));
 
             // Compute loss with parameter - epsilon
             parameters[i] = NumOps.Subtract(originalValue, epsilon);
-            model.UpdateParameters(parameters);
+            model.SetParameters(parameters);
             var predictions2 = model.Predict(input);
-            T loss2 = LossFunction.ComputeLoss(predictions2, expectedOutput);
+            T loss2 = LossFunction.CalculateLoss(OutputToVector(predictions2), OutputToVector(expectedOutput));
 
             // Compute gradient using central difference
             T gradient = NumOps.Divide(
@@ -152,7 +153,7 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
         }
 
         // Restore original parameters
-        model.UpdateParameters(parameters);
+        model.SetParameters(parameters);
 
         return gradients;
     }
@@ -215,6 +216,60 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
         }
 
         return gradients;
+    }
+
+    /// <summary>
+    /// Converts output to vector for loss computation.
+    /// </summary>
+    /// <param name="output">The output to convert.</param>
+    /// <returns>A vector representation of the output.</returns>
+    /// <remarks>
+    /// This method handles both Vector&lt;T&gt; and Tensor&lt;T&gt; outputs.
+    /// </remarks>
+    protected Vector<T> OutputToVector(TOutput output)
+    {
+        // If it's already a Vector<T>, return it as-is
+        if (output is Vector<T> vector)
+        {
+            return vector;
+        }
+
+        // If it's a Tensor<T>, convert it to a vector
+        if (output is Tensor<T> tensor)
+        {
+            return tensor.ToVector();
+        }
+
+        // For other types, throw an exception
+        throw new NotSupportedException($"Output type {output?.GetType()} is not supported for conversion to Vector<T>");
+    }
+
+    /// <summary>
+    /// Returns the minimum of two values.
+    /// </summary>
+    /// <param name="a">The first value.</param>
+    /// <param name="b">The second value.</param>
+    /// <returns>The smaller of the two values.</returns>
+    protected T Min(T a, T b)
+    {
+        // Compare using GreaterThan method
+        if (NumOps.GreaterThan(a, b))
+            return b;
+        return a;
+    }
+
+    /// <summary>
+    /// Returns the maximum of two values.
+    /// </summary>
+    /// <param name="a">The first value.</param>
+    /// <param name="b">The second value.</param>
+    /// <returns>The larger of the two values.</returns>
+    protected T Max(T a, T b)
+    {
+        // Compare using GreaterThan method
+        if (NumOps.GreaterThan(a, b))
+            return a;
+        return b;
     }
 
     /// <summary>

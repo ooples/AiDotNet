@@ -56,9 +56,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
     // CG solver cache for LBFGS preconditioning
     private readonly LRUCGCache _cgCache;
 
-    // Thread-local random generator for line search
-    [ThreadStatic] private static Random? _threadRandom;
-
+    
     /// <summary>
     /// Initializes a new instance of the iMAMLAlgorithm class.
     /// </summary>
@@ -96,7 +94,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
 
             // Compute meta-loss on query set
             var queryPredictions = taskModel.Predict(task.QueryInput);
-            T metaLoss = LossFunction.ComputeLoss(queryPredictions, task.QueryOutput);
+            T metaLoss = LossFunction.CalculateLoss(OutputToVector(queryPredictions), OutputToVector(task.QueryOutput));
             totalMetaLoss = NumOps.Add(totalMetaLoss, metaLoss);
 
             // Compute implicit meta-gradients
@@ -138,7 +136,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
         // Outer loop: Update meta-parameters using the meta-optimizer
         var currentMetaParams = MetaModel.GetParameters();
         var updatedMetaParams = MetaOptimizer.UpdateParameters(currentMetaParams, metaGradients);
-        MetaModel.UpdateParameters(updatedMetaParams);
+        MetaModel.SetParameters(updatedMetaParams);
 
         // Return average meta-loss
         return NumOps.Divide(totalMetaLoss, batchSize);
@@ -157,7 +155,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
 
         // Perform inner loop adaptation
         var (adaptedParameters, _) = InnerLoopAdaptation(adaptedModel, task);
-        adaptedModel.UpdateParameters(adaptedParameters);
+        adaptedModel.SetParameters(adaptedParameters);
 
         return adaptedModel;
     }
@@ -175,7 +173,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
         var parameters = model.GetParameters();
         var adaptationState = new AdaptationState
         {
-            InitialParameters = Vector<T>.Copy(parameters),
+            InitialParameters = new Vector<T>(parameters), // Copy constructor
             TaskId = task.TaskId,
             AdaptationSteps = new List<AdaptationStep>(),
             Gradients = new List<Vector<T>>(),
@@ -238,7 +236,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
 
             // Apply gradient update
             parameters = ApplyGradientUpdate(parameters, clippedGradients, stepSize);
-            model.UpdateParameters(parameters);
+            model.SetParameters(parameters);
 
             // Record adaptation step
             adaptationState.AdaptationSteps.Add(new AdaptationStep
@@ -273,7 +271,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
     {
         // Step 1: Compute gradient of query loss with respect to adapted parameters
         var model = CloneModel();
-        model.UpdateParameters(adaptedParams);
+        model.SetParameters(adaptedParams);
         var queryGradients = ComputeGradients(model, task.QueryInput, task.QueryOutput);
 
         // Step 2: Solve the implicit equation (I + λ∇²f_adapt)v = g_query using CG
@@ -290,7 +288,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
         var v = SolveWithConjugateGradient(
             queryGradients,
             hvProduct,
-            _imamlOptions.ConjugateGradientTolerance,
+            NumOps.FromDouble(_imamlOptions.ConjugateGradientTolerance),
             _imamlOptions.ConjugateGradientIterations);
 
         // Step 3: The implicit meta-gradient is -v (from the implicit function theorem)
@@ -349,7 +347,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
 
         // Compute gradient at adapted parameters
         var model1 = CloneModel();
-        model1.UpdateParameters(adaptedParams);
+        model1.SetParameters(adaptedParams);
         var g1 = ComputeGradients(model1, task.QueryInput, task.QueryOutput);
 
         // Compute gradient at adapted parameters + epsilon * v
@@ -360,7 +358,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
         }
 
         var model2 = CloneModel();
-        model2.UpdateParameters(adaptedParamsPlus);
+        model2.SetParameters(adaptedParamsPlus);
         var g2 = ComputeGradients(model2, task.QueryInput, task.QueryOutput);
 
         // Finite difference approximation: (g2 - g1) / epsilon
@@ -398,7 +396,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
         var model = CloneModel();
 
         // First, compute ∇f
-        model.UpdateParameters(adaptedParams);
+        model.SetParameters(adaptedParams);
         var grad = ComputeGradients(model, task.QueryInput, task.QueryOutput);
 
         // Then compute the dot product ∇f · v
@@ -420,7 +418,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
         }
 
         var modelPlus = CloneModel();
-        modelPlus.UpdateParameters(adaptedParamsPlus);
+        modelPlus.SetParameters(adaptedParamsPlus);
         var gradPlus = ComputeGradients(modelPlus, task.QueryInput, task.QueryOutput);
 
         T dotProductPlus = NumOps.Zero;
@@ -602,14 +600,14 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
                     NumOps.Multiply(stepSize, gradients[j]));
             }
 
-            model.UpdateParameters(newParams);
+            model.SetParameters(newParams);
             var newLoss = ComputeLoss(model, input, target);
 
             // Check Armijo condition (sufficient decrease)
             if (Convert.ToDouble(newLoss) < Convert.ToDouble(currentLoss))
             {
                 // Restore parameters
-                model.UpdateParameters(parameters);
+                model.SetParameters(parameters);
                 return stepSize;
             }
 
@@ -624,7 +622,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
         }
 
         // Restore parameters
-        model.UpdateParameters(parameters);
+        model.SetParameters(parameters);
         return initialStepSize; // Return original if line search failed
     }
 
@@ -657,24 +655,24 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
         for (int i = 0; i < gradients.Length; i++)
         {
             state.M[i] = NumOps.Add(
-                NumOps.Multiply(state.Beta1, state.M[i]),
-                NumOps.Multiply(NumOps.Subtract(1.0, state.Beta1), gradients[i]));
+                NumOps.Multiply(NumOps.FromDouble(state.Beta1), state.M[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, NumOps.FromDouble(state.Beta1)), gradients[i]));
         }
 
         // Update biased second raw moment estimate
         for (int i = 0; i < gradients.Length; i++)
         {
             state.V[i] = NumOps.Add(
-                NumOps.Multiply(state.Beta2, state.V[i]),
-                NumOps.Multiply(NumOps.Subtract(1.0, state.Beta2), NumOps.Multiply(gradients[i], gradients[i])));
+                NumOps.Multiply(NumOps.FromDouble(state.Beta2), state.V[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, NumOps.FromDouble(state.Beta2)), NumOps.Multiply(gradients[i], gradients[i])));
         }
 
         // Compute bias-corrected estimates
         var mHat = new Vector<T>(gradients.Length);
         var vHat = new Vector<T>(gradients.Length);
 
-        T biasCorrection1 = NumOps.Divide(1.0, NumOps.Subtract(1.0, NumOps.Pow(state.Beta1, state.T)));
-        T biasCorrection2 = NumOps.Divide(1.0, NumOps.Subtract(1.0, NumOps.Pow(state.Beta2, state.T)));
+        T biasCorrection1 = NumOps.Divide(NumOps.One, NumOps.Subtract(NumOps.One, NumOps.Power(NumOps.FromDouble(state.Beta1), NumOps.FromDouble(state.T))));
+        T biasCorrection2 = NumOps.Divide(NumOps.One, NumOps.Subtract(NumOps.One, NumOps.Power(NumOps.FromDouble(state.Beta2), NumOps.FromDouble(state.T))));
 
         for (int i = 0; i < gradients.Length; i++)
         {
@@ -687,7 +685,8 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
         for (int i = 0; i < gradients.Length; i++)
         {
             var sqrtVHat = NumOps.Sqrt(vHat[i]);
-            var denom = NumOps.Add(sqrtVHat, state.Epsilon);
+            var epsilon = state.Epsilon ?? NumOps.FromDouble(1e-8);
+            var denom = NumOps.Add(sqrtVHat, epsilon);
             adaptiveLRs[i] = NumOps.Divide(baseLearningRate, denom);
 
             // Clamp to min/max range
@@ -731,7 +730,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
     private T ComputeLoss(IFullModel<T, TInput, TOutput> model, TInput input, TOutput target)
     {
         var predictions = model.Predict(input);
-        return LossFunction.ComputeLoss(predictions, target);
+        return LossFunction.CalculateLoss(OutputToVector(predictions), OutputToVector(target));
     }
 
     /// <summary>
@@ -765,7 +764,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
         public int T { get; set; }
         public double Beta1 { get; set; }
         public double Beta2 { get; set; }
-        public T Epsilon { get; set; } = null!;
+        public T? Epsilon { get; set; }
     }
 
     /// <summary>
