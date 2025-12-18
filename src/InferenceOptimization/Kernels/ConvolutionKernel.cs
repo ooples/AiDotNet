@@ -184,6 +184,12 @@ namespace AiDotNet.InferenceOptimization.Kernels
             if (input.Shape.Length != 4 || kernel.Shape.Length != 4)
                 throw new ArgumentException("DepthwiseConv2D requires 4D tensors");
 
+            if (stride <= 0)
+                throw new ArgumentOutOfRangeException(nameof(stride), $"stride must be positive, but got {stride}");
+
+            if (padding < 0)
+                throw new ArgumentOutOfRangeException(nameof(padding), $"padding must be non-negative, but got {padding}");
+
             int batchSize = input.Shape[0];
             int channels = input.Shape[1];
             int inHeight = input.Shape[2];
@@ -191,6 +197,9 @@ namespace AiDotNet.InferenceOptimization.Kernels
 
             int kernelH = kernel.Shape[2];
             int kernelW = kernel.Shape[3];
+
+            if (kernelH <= 0 || kernelW <= 0)
+                throw new ArgumentException($"Kernel dimensions must be positive, but got {kernelH}x{kernelW}");
 
             int outHeight = (inHeight + 2 * padding - kernelH) / stride + 1;
             int outWidth = (inWidth + 2 * padding - kernelW) / stride + 1;
