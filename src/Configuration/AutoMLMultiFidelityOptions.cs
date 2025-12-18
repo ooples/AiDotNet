@@ -44,4 +44,3 @@ public sealed class AutoMLMultiFidelityOptions
     /// </remarks>
     public double ReductionFactor { get; set; } = 3.0;
 }
-

@@ -37,4 +37,3 @@ public sealed class AutoMLEnsembleOptions
     /// </summary>
     public AutoMLFinalModelSelectionPolicy FinalSelectionPolicy { get; set; } = AutoMLFinalModelSelectionPolicy.UseEnsembleIfBetter;
 }
-
