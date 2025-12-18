@@ -99,7 +99,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
             return result;
         }
 
-        private unsafe void ProcessBatch(
+        private void ProcessBatch(
             Tensor<float> q, Tensor<float> k, Tensor<float> v,
             Tensor<float>? mask, Tensor<float> result,
             int batchIdx, int seqLenQ, int seqLenK, int dK, int dV,
@@ -116,30 +116,30 @@ namespace AiDotNet.InferenceOptimization.Kernels
             // Compute attention scores: QK^T
             var scores = new float[seqLenQ * seqLenK];
 
-            fixed (float* pQ = q.Data, pK = k.Data, pScores = scores)
+            for (int i = 0; i < seqLenQ; i++)
             {
-                for (int i = 0; i < seqLenQ; i++)
+                int qRowOffset = qOffset + i * dK;
+                var qRow = q.Data.AsSpan(qRowOffset, dK);
+
+                for (int j = 0; j < seqLenK; j++)
                 {
-                    for (int j = 0; j < seqLenK; j++)
+                    int kRowOffset = kOffset + j * dK;
+                    var kRow = k.Data.AsSpan(kRowOffset, dK);
+                    float score = SimdKernels.DotProduct(qRow, kRow) * scale;
+
+                    // Apply mask if provided
+                    if (mask != null)
                     {
-                        float* qRow = pQ + qOffset + i * dK;
-                        float* kRow = pK + kOffset + j * dK;
-                        float score = SimdKernels.DotProduct(qRow, kRow, dK) * scale;
-
-                        // Apply mask if provided
-                        if (mask != null)
+                        int effectiveMaskBatch = maskBatchModulo > 0 ? (batchIdx % maskBatchModulo) : batchIdx;
+                        int maskIdx = effectiveMaskBatch * seqLenQ * seqLenK + i * seqLenK + j;
+                        // Use epsilon-based comparison for floating point equality
+                        if (MathF.Abs(mask.Data[maskIdx]) < 1e-6f)
                         {
-                            int effectiveMaskBatch = maskBatchModulo > 0 ? (batchIdx % maskBatchModulo) : batchIdx;
-                            int maskIdx = effectiveMaskBatch * seqLenQ * seqLenK + i * seqLenK + j;
-                            // Use epsilon-based comparison for floating point equality
-                            if (MathF.Abs(mask.Data[maskIdx]) < 1e-6f)
-                            {
-                                score = float.NegativeInfinity;
-                            }
+                            score = float.NegativeInfinity;
                         }
-
-                        pScores[i * seqLenK + j] = score;
                     }
+
+                    scores[i * seqLenK + j] = score;
                 }
             }
 
@@ -147,70 +147,67 @@ namespace AiDotNet.InferenceOptimization.Kernels
             ApplySoftmax(scores, seqLenQ, seqLenK);
 
             // Compute weighted sum: attention_weights * V
-            fixed (float* pScores = scores, pV = v.Data, pOut = result.Data)
+            for (int i = 0; i < seqLenQ; i++)
             {
-                for (int i = 0; i < seqLenQ; i++)
+                var outRow = result.Data.AsSpan(outOffset + i * dV, dV);
+                outRow.Clear();
+
+                // Accumulate weighted values
+                for (int j = 0; j < seqLenK; j++)
                 {
-                    float* outRow = pOut + outOffset + i * dV;
-
-                    // Initialize output row to zero
-                    for (int j = 0; j < dV; j++)
+                    float weight = scores[i * seqLenK + j];
+                    if (weight == 0f)
                     {
-                        outRow[j] = 0.0f;
+                        continue;
                     }
 
-                    // Accumulate weighted values
-                    for (int j = 0; j < seqLenK; j++)
-                    {
-                        float weight = pScores[i * seqLenK + j];
-                        float* vRow = pV + vOffset + j * dV;
-
-                        // outRow += weight * vRow
-                        SimdKernels.ScalarMultiplyAdd(outRow, vRow, weight, outRow, dV);
-                    }
+                    var vRow = v.Data.AsSpan(vOffset + j * dV, dV);
+                    SimdKernels.ScalarMultiplyAdd(outRow, vRow, weight, outRow);
                 }
             }
         }
 
-        private unsafe void ApplySoftmax(float[] data, int rows, int cols)
+        private void ApplySoftmax(float[] data, int rows, int cols)
         {
-            fixed (float* pData = data)
+            for (int i = 0; i < rows; i++)
             {
-                for (int i = 0; i < rows; i++)
+                int rowOffset = i * cols;
+
+                // Find max for numerical stability
+                float maxVal = float.NegativeInfinity;
+                for (int j = 0; j < cols; j++)
                 {
-                    float* row = pData + i * cols;
-
-                    // Find max for numerical stability
-                    float maxVal = float.NegativeInfinity;
-                    for (int j = 0; j < cols; j++)
+                    float v = data[rowOffset + j];
+                    if (v > maxVal)
                     {
-                        if (row[j] > maxVal)
-                            maxVal = row[j];
+                        maxVal = v;
+                    }
+                }
+
+                // Compute exp and sum
+                float sum = 0.0f;
+                for (int j = 0; j < cols; j++)
+                {
+                    int idx = rowOffset + j;
+                    float v = data[idx];
+                    if (float.IsNegativeInfinity(v))
+                    {
+                        data[idx] = 0.0f;
+                        continue;
                     }
 
-                    // Compute exp and sum
-                    float sum = 0.0f;
+                    float ev = MathF.Exp(v - maxVal);
+                    data[idx] = ev;
+                    sum += ev;
+                }
+
+                // Normalize
+                if (sum > 0.0f)
+                {
+                    float invSum = 1.0f / sum;
                     for (int j = 0; j < cols; j++)
                     {
-                        if (float.IsNegativeInfinity(row[j]))
-                        {
-                            row[j] = 0.0f;
-                        }
-                        else
-                        {
-                            row[j] = MathF.Exp(row[j] - maxVal);
-                            sum += row[j];
-                        }
-                    }
-
-                    // Normalize
-                    if (sum > 0.0f)
-                    {
-                        float invSum = 1.0f / sum;
-                        for (int j = 0; j < cols; j++)
-                        {
-                            row[j] *= invSum;
-                        }
+                        data[rowOffset + j] *= invSum;
                     }
                 }
             }

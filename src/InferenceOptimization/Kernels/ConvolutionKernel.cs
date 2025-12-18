@@ -118,44 +118,44 @@ namespace AiDotNet.InferenceOptimization.Kernels
             return output;
         }
 
-        private unsafe void Conv2DSingleOutput(
+        private void Conv2DSingleOutput(
             Tensor<float> input, Tensor<float> kernel, Tensor<float> output,
             int batch, int outChannel,
             int inChannels, int inHeight, int inWidth,
             int kernelH, int kernelW, int stride, int padding,
             int outHeight, int outWidth)
         {
-            fixed (float* pInput = input.Data, pKernel = kernel.Data, pOutput = output.Data)
+            var inputData = input.Data;
+            var kernelData = kernel.Data;
+            var outputData = output.Data;
+
+            for (int oh = 0; oh < outHeight; oh++)
             {
-                for (int oh = 0; oh < outHeight; oh++)
+                for (int ow = 0; ow < outWidth; ow++)
                 {
-                    for (int ow = 0; ow < outWidth; ow++)
+                    float sum = 0.0f;
+
+                    for (int ic = 0; ic < inChannels; ic++)
                     {
-                        float sum = 0.0f;
-
-                        for (int ic = 0; ic < inChannels; ic++)
+                        for (int kh = 0; kh < kernelH; kh++)
                         {
-                            for (int kh = 0; kh < kernelH; kh++)
+                            for (int kw = 0; kw < kernelW; kw++)
                             {
-                                for (int kw = 0; kw < kernelW; kw++)
+                                int ih = oh * stride - padding + kh;
+                                int iw = ow * stride - padding + kw;
+
+                                if (ih >= 0 && ih < inHeight && iw >= 0 && iw < inWidth)
                                 {
-                                    int ih = oh * stride - padding + kh;
-                                    int iw = ow * stride - padding + kw;
-
-                                    if (ih >= 0 && ih < inHeight && iw >= 0 && iw < inWidth)
-                                    {
-                                        int inputIdx = ((batch * inChannels + ic) * inHeight + ih) * inWidth + iw;
-                                        int kernelIdx = ((outChannel * inChannels + ic) * kernelH + kh) * kernelW + kw;
-
-                                        sum += pInput[inputIdx] * pKernel[kernelIdx];
-                                    }
+                                    int inputIdx = ((batch * inChannels + ic) * inHeight + ih) * inWidth + iw;
+                                    int kernelIdx = ((outChannel * inChannels + ic) * kernelH + kh) * kernelW + kw;
+                                    sum += inputData[inputIdx] * kernelData[kernelIdx];
                                 }
                             }
                         }
-
-                        int outputIdx = ((batch * output.Shape[1] + outChannel) * outHeight + oh) * outWidth + ow;
-                        pOutput[outputIdx] = sum;
                     }
+
+                    int outputIdx = ((batch * output.Shape[1] + outChannel) * outHeight + oh) * outWidth + ow;
+                    outputData[outputIdx] = sum;
                 }
             }
         }
@@ -214,40 +214,40 @@ namespace AiDotNet.InferenceOptimization.Kernels
             return output;
         }
 
-        private unsafe void DepthwiseConv2DSingleChannel(
+        private void DepthwiseConv2DSingleChannel(
             Tensor<float> input, Tensor<float> kernel, Tensor<float> output,
             int batch, int channel,
             int inHeight, int inWidth, int kernelH, int kernelW,
             int stride, int padding, int outHeight, int outWidth)
         {
-            fixed (float* pInput = input.Data, pKernel = kernel.Data, pOutput = output.Data)
+            var inputData = input.Data;
+            var kernelData = kernel.Data;
+            var outputData = output.Data;
+
+            for (int oh = 0; oh < outHeight; oh++)
             {
-                for (int oh = 0; oh < outHeight; oh++)
+                for (int ow = 0; ow < outWidth; ow++)
                 {
-                    for (int ow = 0; ow < outWidth; ow++)
+                    float sum = 0.0f;
+
+                    for (int kh = 0; kh < kernelH; kh++)
                     {
-                        float sum = 0.0f;
-
-                        for (int kh = 0; kh < kernelH; kh++)
+                        for (int kw = 0; kw < kernelW; kw++)
                         {
-                            for (int kw = 0; kw < kernelW; kw++)
+                            int ih = oh * stride - padding + kh;
+                            int iw = ow * stride - padding + kw;
+
+                            if (ih >= 0 && ih < inHeight && iw >= 0 && iw < inWidth)
                             {
-                                int ih = oh * stride - padding + kh;
-                                int iw = ow * stride - padding + kw;
-
-                                if (ih >= 0 && ih < inHeight && iw >= 0 && iw < inWidth)
-                                {
-                                    int inputIdx = ((batch * input.Shape[1] + channel) * inHeight + ih) * inWidth + iw;
-                                    int kernelIdx = (channel * kernelH + kh) * kernelW + kw;
-
-                                    sum += pInput[inputIdx] * pKernel[kernelIdx];
-                                }
+                                int inputIdx = ((batch * input.Shape[1] + channel) * inHeight + ih) * inWidth + iw;
+                                int kernelIdx = (channel * kernelH + kh) * kernelW + kw;
+                                sum += inputData[inputIdx] * kernelData[kernelIdx];
                             }
                         }
-
-                        int outputIdx = ((batch * output.Shape[1] + channel) * outHeight + oh) * outWidth + ow;
-                        pOutput[outputIdx] = sum;
                     }
+
+                    int outputIdx = ((batch * output.Shape[1] + channel) * outHeight + oh) * outWidth + ow;
+                    outputData[outputIdx] = sum;
                 }
             }
         }
@@ -318,7 +318,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
             return output;
         }
 
-        private unsafe void GroupConv2DSingleOutput(
+        private void GroupConv2DSingleOutput(
             Tensor<float> input, Tensor<float> kernel, Tensor<float> output,
             int batch, int outChannel, int group,
             int inChannelsPerGroup, int inHeight, int inWidth,
@@ -326,40 +326,39 @@ namespace AiDotNet.InferenceOptimization.Kernels
             int outHeight, int outWidth)
         {
             int inChannelStart = group * inChannelsPerGroup;
+            var inputData = input.Data;
+            var kernelData = kernel.Data;
+            var outputData = output.Data;
 
-            fixed (float* pInput = input.Data, pKernel = kernel.Data, pOutput = output.Data)
+            for (int oh = 0; oh < outHeight; oh++)
             {
-                for (int oh = 0; oh < outHeight; oh++)
+                for (int ow = 0; ow < outWidth; ow++)
                 {
-                    for (int ow = 0; ow < outWidth; ow++)
+                    float sum = 0.0f;
+
+                    for (int ic = 0; ic < inChannelsPerGroup; ic++)
                     {
-                        float sum = 0.0f;
+                        int globalInChannel = inChannelStart + ic;
 
-                        for (int ic = 0; ic < inChannelsPerGroup; ic++)
+                        for (int kh = 0; kh < kernelH; kh++)
                         {
-                            int globalInChannel = inChannelStart + ic;
-
-                            for (int kh = 0; kh < kernelH; kh++)
+                            for (int kw = 0; kw < kernelW; kw++)
                             {
-                                for (int kw = 0; kw < kernelW; kw++)
+                                int ih = oh * stride - padding + kh;
+                                int iw = ow * stride - padding + kw;
+
+                                if (ih >= 0 && ih < inHeight && iw >= 0 && iw < inWidth)
                                 {
-                                    int ih = oh * stride - padding + kh;
-                                    int iw = ow * stride - padding + kw;
-
-                                    if (ih >= 0 && ih < inHeight && iw >= 0 && iw < inWidth)
-                                    {
-                                        int inputIdx = ((batch * input.Shape[1] + globalInChannel) * inHeight + ih) * inWidth + iw;
-                                        int kernelIdx = ((outChannel * inChannelsPerGroup + ic) * kernelH + kh) * kernelW + kw;
-
-                                        sum += pInput[inputIdx] * pKernel[kernelIdx];
-                                    }
+                                    int inputIdx = ((batch * input.Shape[1] + globalInChannel) * inHeight + ih) * inWidth + iw;
+                                    int kernelIdx = ((outChannel * inChannelsPerGroup + ic) * kernelH + kh) * kernelW + kw;
+                                    sum += inputData[inputIdx] * kernelData[kernelIdx];
                                 }
                             }
                         }
-
-                        int outputIdx = ((batch * output.Shape[1] + outChannel) * outHeight + oh) * outWidth + ow;
-                        pOutput[outputIdx] = sum;
                     }
+
+                    int outputIdx = ((batch * output.Shape[1] + outChannel) * outHeight + oh) * outWidth + ow;
+                    outputData[outputIdx] = sum;
                 }
             }
         }

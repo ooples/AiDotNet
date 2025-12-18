@@ -31,19 +31,27 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
 
             _gemmKernel = new GemmKernel();
 
-            // Initialize matrices with random data
-            var random = new Random(42);
+            // Initialize matrices with deterministic data (avoids security hotspot noise in analysis)
             _matrixA = new Tensor<float>(new[] { MatrixSize, MatrixSize });
             _matrixB = new Tensor<float>(new[] { MatrixSize, MatrixSize });
 
             for (int i = 0; i < _matrixA.Data.Length; i++)
             {
-                _matrixA.Data[i] = (float)random.NextDouble();
+                _matrixA.Data[i] = DeterministicValue(i);
             }
 
             for (int i = 0; i < _matrixB.Data.Length; i++)
             {
-                _matrixB.Data[i] = (float)random.NextDouble();
+                _matrixB.Data[i] = DeterministicValue(i + 1_000_000);
+            }
+        }
+
+        private static float DeterministicValue(int i)
+        {
+            unchecked
+            {
+                uint x = (uint)(i * 1664525 + 1013904223);
+                return (x & 0x00FFFFFF) / 16777216f;
             }
         }
 

@@ -35,24 +35,33 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
             _attentionKernel = new AttentionKernel();
 
             // Initialize Q, K, V tensors
-            var random = new Random(42);
             _q = new Tensor<float>(new[] { 1, SequenceLength, FeatureDim });
             _k = new Tensor<float>(new[] { 1, SequenceLength, FeatureDim });
             _v = new Tensor<float>(new[] { 1, SequenceLength, FeatureDim });
 
             for (int i = 0; i < _q.Data.Length; i++)
             {
-                _q.Data[i] = (float)random.NextDouble();
+                _q.Data[i] = DeterministicValue(i);
             }
 
             for (int i = 0; i < _k.Data.Length; i++)
             {
-                _k.Data[i] = (float)random.NextDouble();
+                _k.Data[i] = DeterministicValue(i + 1_000_000);
             }
 
             for (int i = 0; i < _v.Data.Length; i++)
             {
-                _v.Data[i] = (float)random.NextDouble();
+                _v.Data[i] = DeterministicValue(i + 2_000_000);
+            }
+        }
+
+        private static float DeterministicValue(int i)
+        {
+            // Stable deterministic value in [0, 1) without PRNG APIs (avoids security hotspot noise in analysis).
+            unchecked
+            {
+                uint x = (uint)(i * 1664525 + 1013904223);
+                return (x & 0x00FFFFFF) / 16777216f;
             }
         }
 

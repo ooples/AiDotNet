@@ -24,37 +24,8 @@ namespace AiDotNet.Tensors.Engines.Optimization
         /// </summary>
         public static int L3BlockSize => 2048; // Tuned for typical L3 cache
 
-        /// <summary>
-        /// Prefetch data for reading (temporal locality)
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void Prefetch(void* address)
-        {
-            // This hints the CPU to fetch data into cache
-            // Note: .NET JIT may or may not honor this depending on platform
-#if NET5_0_OR_GREATER
-            if (System.Runtime.Intrinsics.X86.Sse.IsSupported)
-            {
-                System.Runtime.Intrinsics.X86.Sse.Prefetch0(address);
-            }
-#endif
-            // No-op on non-x86 platforms, if SSE is not supported, or on .NET Framework
-        }
-
-        /// <summary>
-        /// Prefetch data with low temporal locality (won't pollute cache)
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void PrefetchNonTemporal(void* address)
-        {
-#if NET5_0_OR_GREATER
-            if (System.Runtime.Intrinsics.X86.Sse.IsSupported)
-            {
-                System.Runtime.Intrinsics.X86.Sse.PrefetchNonTemporal(address);
-            }
-#endif
-            // No-op on non-x86 platforms, if SSE is not supported, or on .NET Framework
-        }
+        // Note: Hardware prefetch intrinsics require pointer-based APIs and non-verifiable code.
+        // This implementation intentionally remains safe/portable and leaves prefetching to the JIT/CPU.
 
         /// <summary>
         /// Computes optimal tiling parameters for a 2D operation
@@ -93,8 +64,33 @@ namespace AiDotNet.Tensors.Engines.Optimization
         /// <summary>
         /// Cache-aware transpose of a 2D array
         /// </summary>
-        public static unsafe void TransposeBlocked(float* src, float* dst, int rows, int cols)
+        public static void TransposeBlocked(float[] src, float[] dst, int rows, int cols)
         {
+            if (rows < 0 || cols < 0)
+            {
+                throw new ArgumentOutOfRangeException("rows/cols must be non-negative.");
+            }
+
+            if (src is null)
+            {
+                throw new ArgumentNullException(nameof(src));
+            }
+
+            if (dst is null)
+            {
+                throw new ArgumentNullException(nameof(dst));
+            }
+
+            if (src.Length < rows * cols)
+            {
+                throw new ArgumentException("src does not contain enough elements for the specified shape.", nameof(src));
+            }
+
+            if (dst.Length < rows * cols)
+            {
+                throw new ArgumentException("dst does not contain enough elements for the specified shape.", nameof(dst));
+            }
+
             const int blockSize = 32; // Tuned for cache line size
 
             for (int i = 0; i < rows; i += blockSize)
@@ -117,26 +113,36 @@ namespace AiDotNet.Tensors.Engines.Optimization
         }
 
         /// <summary>
-        /// Cache-aware copying with prefetching
+        /// Cache-aware copying (portable safe implementation)
         /// </summary>
-        public static unsafe void CopyWithPrefetch(float* src, float* dst, int length)
+        public static void CopyWithPrefetch(float[] src, float[] dst, int length)
         {
-            const int prefetchDistance = 64; // Prefetch 64 elements ahead
-
-            int i = 0;
-
-            // Main loop with prefetching
-            for (; i < length - prefetchDistance; i++)
+            if (length < 0)
             {
-                Prefetch(src + i + prefetchDistance);
-                dst[i] = src[i];
+                throw new ArgumentOutOfRangeException(nameof(length));
             }
 
-            // Remaining elements without prefetch
-            for (; i < length; i++)
+            if (src is null)
             {
-                dst[i] = src[i];
+                throw new ArgumentNullException(nameof(src));
             }
+
+            if (dst is null)
+            {
+                throw new ArgumentNullException(nameof(dst));
+            }
+
+            if (src.Length < length)
+            {
+                throw new ArgumentException("src does not contain enough elements for the requested copy.", nameof(src));
+            }
+
+            if (dst.Length < length)
+            {
+                throw new ArgumentException("dst does not contain enough elements for the requested copy.", nameof(dst));
+            }
+
+            Array.Copy(src, 0, dst, 0, length);
         }
 
         /// <summary>

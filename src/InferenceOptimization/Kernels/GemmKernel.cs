@@ -72,35 +72,33 @@ namespace AiDotNet.InferenceOptimization.Kernels
         /// Cache-blocked GEMM implementation
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private unsafe void GemmBlocked(float[] A, float[] B, float[] C, int M, int N, int K)
+        private void GemmBlocked(float[] A, float[] B, float[] C, int M, int N, int K)
         {
-            fixed (float* pA = A, pB = B, pC = C)
+            // Blocked algorithm for cache efficiency
+            for (int i = 0; i < M; i += BlockSize)
             {
-                // Blocked algorithm for cache efficiency
-                for (int i = 0; i < M; i += BlockSize)
+                int iMax = Math.Min(i + BlockSize, M);
+
+                for (int j = 0; j < N; j += BlockSize)
                 {
-                    int iMax = Math.Min(i + BlockSize, M);
+                    int jMax = Math.Min(j + BlockSize, N);
+                    int spanLen = jMax - j;
 
-                    for (int j = 0; j < N; j += BlockSize)
+                    for (int k = 0; k < K; k += BlockSize)
                     {
-                        int jMax = Math.Min(j + BlockSize, N);
+                        int kMax = Math.Min(k + BlockSize, K);
 
-                        for (int k = 0; k < K; k += BlockSize)
+                        // Process block
+                        for (int ii = i; ii < iMax; ii++)
                         {
-                            int kMax = Math.Min(k + BlockSize, K);
-
-                            // Process block
-                            for (int ii = i; ii < iMax; ii++)
+                            for (int kk = k; kk < kMax; kk++)
                             {
-                                for (int kk = k; kk < kMax; kk++)
-                                {
-                                    float aVal = pA[ii * K + kk];
-                                    float* pBRow = pB + kk * N + j;
-                                    float* pCRow = pC + ii * N + j;
+                                float aVal = A[ii * K + kk];
+                                var bRow = B.AsSpan(kk * N + j, spanLen);
+                                var cRow = C.AsSpan(ii * N + j, spanLen);
 
-                                    // SIMD-optimized inner loop
-                                    SimdKernels.ScalarMultiplyAdd(pCRow, pBRow, aVal, pCRow, jMax - j);
-                                }
+                                // SIMD-optimized inner loop: cRow = cRow + aVal * bRow
+                                SimdKernels.ScalarMultiplyAdd(cRow, bRow, aVal, cRow);
                             }
                         }
                     }
@@ -112,7 +110,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
         /// Parallel GEMM implementation for large matrices
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private unsafe void GemmParallel(float[] A, float[] B, float[] C, int M, int N, int K)
+        private void GemmParallel(float[] A, float[] B, float[] C, int M, int N, int K)
         {
             // Parallelize over rows of A
             Parallel.For(0, (M + BlockSize - 1) / BlockSize, iBlock =>
@@ -120,26 +118,24 @@ namespace AiDotNet.InferenceOptimization.Kernels
                 int i = iBlock * BlockSize;
                 int iMax = Math.Min(i + BlockSize, M);
 
-                fixed (float* pA = A, pB = B, pC = C)
+                for (int j = 0; j < N; j += BlockSize)
                 {
-                    for (int j = 0; j < N; j += BlockSize)
+                    int jMax = Math.Min(j + BlockSize, N);
+                    int spanLen = jMax - j;
+
+                    for (int k = 0; k < K; k += BlockSize)
                     {
-                        int jMax = Math.Min(j + BlockSize, N);
+                        int kMax = Math.Min(k + BlockSize, K);
 
-                        for (int k = 0; k < K; k += BlockSize)
+                        for (int ii = i; ii < iMax; ii++)
                         {
-                            int kMax = Math.Min(k + BlockSize, K);
-
-                            for (int ii = i; ii < iMax; ii++)
+                            for (int kk = k; kk < kMax; kk++)
                             {
-                                for (int kk = k; kk < kMax; kk++)
-                                {
-                                    float aVal = pA[ii * K + kk];
-                                    float* pBRow = pB + kk * N + j;
-                                    float* pCRow = pC + ii * N + j;
+                                float aVal = A[ii * K + kk];
+                                var bRow = B.AsSpan(kk * N + j, spanLen);
+                                var cRow = C.AsSpan(ii * N + j, spanLen);
 
-                                    SimdKernels.ScalarMultiplyAdd(pCRow, pBRow, aVal, pCRow, jMax - j);
-                                }
+                                SimdKernels.ScalarMultiplyAdd(cRow, bRow, aVal, cRow);
                             }
                         }
                     }
@@ -166,17 +162,11 @@ namespace AiDotNet.InferenceOptimization.Kernels
 
             Parallel.For(0, m, i =>
             {
-                unsafe
+                var rowA = a.Data.AsSpan(i * k, k);
+                for (int j = 0; j < n; j++)
                 {
-                    fixed (float* pA = a.Data, pB = b.Data, pC = result.Data)
-                    {
-                        for (int j = 0; j < n; j++)
-                        {
-                            float* rowA = pA + i * k;
-                            float* rowB = pB + j * k;
-                            pC[i * n + j] = SimdKernels.DotProduct(rowA, rowB, k);
-                        }
-                    }
+                    var rowB = b.Data.AsSpan(j * k, k);
+                    result.Data[i * n + j] = SimdKernels.DotProduct(rowA, rowB);
                 }
             });
 

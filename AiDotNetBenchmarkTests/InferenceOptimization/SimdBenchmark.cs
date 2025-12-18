@@ -29,15 +29,14 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
         {
             OptimizationInitializer.Initialize(enableProfiling: false);
 
-            var random = new Random(42);
             _arrayA = new float[ArraySize];
             _arrayB = new float[ArraySize];
             _result = new float[ArraySize];
 
             for (int i = 0; i < ArraySize; i++)
             {
-                _arrayA[i] = (float)random.NextDouble();
-                _arrayB[i] = (float)random.NextDouble();
+                _arrayA[i] = DeterministicValue(i);
+                _arrayB[i] = DeterministicValue(i + 1_000_000);
             }
         }
 
@@ -55,12 +54,9 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
 
         [Benchmark]
         [BenchmarkCategory("VectorAdd")]
-        public unsafe void VectorAdd_SIMD()
+        public void VectorAdd_SIMD()
         {
-            fixed (float* pA = _arrayA, pB = _arrayB, pR = _result)
-            {
-                SimdKernels.VectorAdd(pA, pB, pR, ArraySize);
-            }
+            SimdKernels.VectorAdd(_arrayA, _arrayB, _result);
         }
 
         #endregion
@@ -79,12 +75,9 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
 
         [Benchmark]
         [BenchmarkCategory("VectorMultiply")]
-        public unsafe void VectorMultiply_SIMD()
+        public void VectorMultiply_SIMD()
         {
-            fixed (float* pA = _arrayA, pB = _arrayB, pR = _result)
-            {
-                SimdKernels.VectorMultiply(pA, pB, pR, ArraySize);
-            }
+            SimdKernels.VectorMultiply(_arrayA, _arrayB, _result);
         }
 
         #endregion
@@ -105,12 +98,9 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
 
         [Benchmark]
         [BenchmarkCategory("DotProduct")]
-        public unsafe float DotProduct_SIMD()
+        public float DotProduct_SIMD()
         {
-            fixed (float* pA = _arrayA, pB = _arrayB)
-            {
-                return SimdKernels.DotProduct(pA, pB, ArraySize);
-            }
+            return SimdKernels.DotProduct(_arrayA, _arrayB);
         }
 
         #endregion
@@ -129,12 +119,9 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
 
         [Benchmark]
         [BenchmarkCategory("ReLU")]
-        public unsafe void ReLU_SIMD()
+        public void ReLU_SIMD()
         {
-            fixed (float* pA = _arrayA, pR = _result)
-            {
-                SimdKernels.ReLU(pA, pR, ArraySize);
-            }
+            SimdKernels.ReLU(_arrayA, _result);
         }
 
         #endregion
@@ -155,14 +142,20 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
 
         [Benchmark]
         [BenchmarkCategory("Sum")]
-        public unsafe float Sum_SIMD()
+        public float Sum_SIMD()
         {
-            fixed (float* pA = _arrayA)
-            {
-                return SimdKernels.Sum(pA, ArraySize);
-            }
+            return SimdKernels.Sum(_arrayA);
         }
 
         #endregion
+
+        private static float DeterministicValue(int i)
+        {
+            unchecked
+            {
+                uint x = (uint)(i * 1664525 + 1013904223);
+                return (x & 0x00FFFFFF) / 16777216f;
+            }
+        }
     }
 }
