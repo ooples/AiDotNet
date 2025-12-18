@@ -48,17 +48,14 @@ internal static class AutoMLDefaultCandidateModelsPolicy
                         ModelType.GradientBoosting,
                         ModelType.DecisionTree,
                         ModelType.ExtremelyRandomizedTrees,
-                        ModelType.AdaBoostR2,
-                        ModelType.KNearestNeighbors,
-                        ModelType.SupportVectorRegression
+                        ModelType.KNearestNeighbors
                     },
                     _ => new[]
                     {
                         ModelType.LogisticRegression,
                         ModelType.RandomForest,
                         ModelType.GradientBoosting,
-                        ModelType.KNearestNeighbors,
-                        ModelType.SupportVectorRegression
+                        ModelType.KNearestNeighbors
                     }
                 };
 
@@ -81,8 +78,7 @@ internal static class AutoMLDefaultCandidateModelsPolicy
                         ModelType.MultinomialLogisticRegression,
                         ModelType.RandomForest,
                         ModelType.GradientBoosting,
-                        ModelType.KNearestNeighbors,
-                        ModelType.NeuralNetworkRegression
+                        ModelType.KNearestNeighbors
                     },
                     _ => new[]
                     {
