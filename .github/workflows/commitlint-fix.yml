@@ -197,10 +197,16 @@ jobs:
         env:
           HEAD_REF: ${{ github.head_ref }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
         run: |
           BRANCH="$HEAD_REF"
           git checkout -B "$BRANCH"
-          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if [ -n "$AUTOFIX_PAT" ]; then
+            git remote set-url origin "https://x-access-token:${AUTOFIX_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+          else
+            git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            echo "::warning::AUTOFIX_PAT is not set. Downstream PR checks may not rerun automatically after this workflow force-pushes."
+          fi
           git push origin "$BRANCH" --force-with-lease
 
       - name: Comment on PR
@@ -328,10 +334,16 @@ jobs:
         env:
           HEAD_REF: ${{ github.head_ref }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
         run: |
           BRANCH="$HEAD_REF"
           git checkout -B "$BRANCH"
-          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if [ -n "$AUTOFIX_PAT" ]; then
+            git remote set-url origin "https://x-access-token:${AUTOFIX_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+          else
+            git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            echo "::warning::AUTOFIX_PAT is not set. Downstream PR checks may not rerun automatically after this workflow force-pushes."
+          fi
           git push origin "$BRANCH" --force-with-lease
 
       - name: Comment on PR
