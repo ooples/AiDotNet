@@ -189,7 +189,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
    private Matrix<T> SelectCenters(Matrix<T> x)
     {
         int numCenters = Math.Min(_options.NumberOfCenters, x.Rows);
-        var random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
+        var random = new Random(_options.Seed ?? Environment.TickCount);
 
         // Initialize centers randomly
         var centers = new Matrix<T>(numCenters, x.Columns);

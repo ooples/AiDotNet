@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
@@ -143,7 +144,7 @@ public class NeuralGenerator<T> : IGenerator<T>
 
         // Initialize embedding matrix with Xavier/Glorot initialization
         _embeddingMatrix = new T[vocabularySize, embeddingDimension];
-        var random = RandomHelper.CreateSeededRandom(42);
+        var random = new Random(42);
         double initScale = Math.Sqrt(2.0 / (vocabularySize + embeddingDimension));
 
         for (int i = 0; i < vocabularySize; i++)
@@ -350,7 +351,7 @@ public class NeuralGenerator<T> : IGenerator<T>
     private List<int> GenerateTokens(List<int> inputTokens, int maxTokens)
     {
         var generated = new List<int>();
-        var random = RandomHelper.CreateSeededRandom(42); // For temperature sampling
+        var random = new Random(42); // For temperature sampling
 
         // Start with input context
         var currentSequence = new List<int>(inputTokens);

@@ -1,4 +1,4 @@
-
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -101,7 +101,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 public class FLARERetriever<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IGenerator<T> _generator;
     private readonly RetrieverBase<T> _baseRetriever;
     private readonly double _uncertaintyThreshold;
@@ -275,11 +274,10 @@ Please provide a partial answer. If you need more information, indicate what is 
         foreach (var pattern in patterns)
         {
             var match = System.Text.RegularExpressions.Regex.Match(
-                generatedText,
-                pattern,
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase,
-                RegexTimeout);
-
+                generatedText, 
+                pattern, 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                
             if (match.Success)
             {
                 return match.Groups[1].Value.Trim();

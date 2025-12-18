@@ -6,7 +6,7 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// <remarks>
 /// <b>For Beginners:</b> Multiplicative decomposition is used when the seasonal variations in your data increase 
 /// or decrease proportionally with the level of the time series. In this model, the components are multiplied 
-/// together (Original = Trend Ã— Seasonal Ã— Residual) rather than added. This is often appropriate for economic 
+/// together (Original = Trend × Seasonal × Residual) rather than added. This is often appropriate for economic 
 /// or financial data where percentage changes are more meaningful than absolute changes.
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>

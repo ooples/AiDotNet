@@ -137,22 +137,10 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
             }
         }
 
-        // Add noise to the diagonal for numerical stability (vectorized)
-        var diagonal = new Vector<T>(n);
+        // Add noise to the diagonal for numerical stability
         for (int i = 0; i < n; i++)
         {
-            diagonal[i] = _kernelMatrix[i, i];
-        }
-
-        var noiseVec = new Vector<T>(n);
-        T noise = NumOps.FromDouble(Options.NoiseLevel);
-        noiseVec.Fill(noise);
-
-        diagonal = (Vector<T>)Engine.Add(diagonal, noiseVec);
-
-        for (int i = 0; i < n; i++)
-        {
-            _kernelMatrix[i, i] = diagonal[i];
+            _kernelMatrix[i, i] = NumOps.Add(_kernelMatrix[i, i], NumOps.FromDouble(Options.NoiseLevel));
         }
 
         if (Options.OptimizeHyperparameters)
@@ -163,7 +151,7 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         // Apply regularization to the kernel matrix
         Matrix<T> regularizedKernelMatrix = Regularization.Regularize(_kernelMatrix);
 
-        // Solve (K + sÂ²I + R)a = y, where R is the regularization term
+        // Solve (K + s²I + R)a = y, where R is the regularization term
         _alpha = MatrixSolutionHelper.SolveLinearSystem(regularizedKernelMatrix, y, Options.DecompositionType);
 
         // Apply regularization to the alpha coefficients
@@ -194,23 +182,10 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
             // Compute the kernel matrix with current hyperparameters
             Matrix<T> K = ComputeKernelMatrix(x, lengthScale, signalVariance);
 
-            // Add noise to the diagonal for numerical stability (vectorized)
-            int kSize = K.Rows;
-            var diagonal = new Vector<T>(kSize);
-            for (int i = 0; i < kSize; i++)
+            // Add noise to the diagonal for numerical stability
+            for (int i = 0; i < K.Rows; i++)
             {
-                diagonal[i] = K[i, i];
-            }
-
-            var noiseVec = new Vector<T>(kSize);
-            T noise = NumOps.FromDouble(Options.NoiseLevel);
-            noiseVec.Fill(noise);
-
-            diagonal = (Vector<T>)Engine.Add(diagonal, noiseVec);
-
-            for (int i = 0; i < kSize; i++)
-            {
-                K[i, i] = diagonal[i];
+                K[i, i] = NumOps.Add(K[i, i], NumOps.FromDouble(Options.NoiseLevel));
             }
 
             // Compute the log likelihood

@@ -34,11 +34,6 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     protected readonly INumericOperations<T> NumOps;
 
     /// <summary>
-    /// Gets the global execution engine for vector operations.
-    /// </summary>
-    protected IEngine Engine => AiDotNetEngine.Current;
-
-    /// <summary>
     /// The original matrix that was decomposed.
     /// </summary>
     /// <remarks>
@@ -234,13 +229,13 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     {
         T sumOfSquares = NumOps.Zero;
 
-        // VECTORIZED: Process each row as a vector for SIMD optimization
         for (int i = 0; i < matrix.Rows; i++)
         {
-            Vector<T> row = matrix.GetRow(i);
-            // Dot product of row with itself gives sum of squares for that row
-            T rowSumOfSquares = row.DotProduct(row);
-            sumOfSquares = NumOps.Add(sumOfSquares, rowSumOfSquares);
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                T element = matrix[i, j];
+                sumOfSquares = NumOps.Add(sumOfSquares, NumOps.Multiply(element, element));
+            }
         }
 
         return NumOps.Sqrt(sumOfSquares);

@@ -35,8 +35,13 @@ namespace AiDotNet.WaveletFunctions;
 /// affecting the wavelet's frequency selectivity.
 /// </para>
 /// </remarks>
-public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
+public class ComplexGaussianWavelet<T> : IWaveletFunction<Complex<T>>
 {
+    /// <summary>
+    /// Provides numeric operations for the specific type T.
+    /// </summary>
+    private readonly INumericOperations<T> _numOps;
+    
     /// <summary>
     /// The order of the Complex Gaussian wavelet (number of derivatives).
     /// </summary>
@@ -72,6 +77,7 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     /// </remarks>
     public ComplexGaussianWavelet(int order = 1)
     {
+        _numOps = MathHelper.GetNumericOperations<T>();
         _order = order;
     }
 
@@ -86,11 +92,11 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     /// This method gives you the actual value of the Complex Gaussian wavelet at a specific point.
     /// 
     /// The Complex Gaussian wavelet is constructed as:
-    /// ?(x) = C * H_n(x) * e^(-xÂ²)
+    /// ?(x) = C * H_n(x) * e^(-x²)
     /// 
     /// Where:
     /// - H_n(x) is the Hermite polynomial of order n
-    /// - e^(-xÂ²) is the Gaussian function
+    /// - e^(-x²) is the Gaussian function
     /// - C is a normalization constant
     /// 
     /// For complex input z = x + iy, we evaluate this function at the real part x,
@@ -103,16 +109,16 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     /// to a signal at specific points.
     /// </para>
     /// </remarks>
-    public override Complex<T> Calculate(Complex<T> z)
+    public Complex<T> Calculate(Complex<T> z)
     {
         T x = z.Real;
         T y = z.Imaginary;
 
-        T gaussianTerm = NumOps.Exp(NumOps.Negate(NumOps.Multiply(x, x)));
+        T gaussianTerm = _numOps.Exp(_numOps.Negate(_numOps.Multiply(x, x)));
         T polynomialTerm = HermitePolynomial(x, _order);
 
-        T real = NumOps.Multiply(gaussianTerm, polynomialTerm);
-        T imag = NumOps.Zero; // The imaginary part is zero for real input
+        T real = _numOps.Multiply(gaussianTerm, polynomialTerm);
+        T imag = _numOps.Zero; // The imaginary part is zero for real input
 
         return new Complex<T>(real, imag);
     }
@@ -147,7 +153,7 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     /// which makes wavelet decomposition efficient for compression and multi-resolution analysis.
     /// </para>
     /// </remarks>
-    public override (Vector<Complex<T>> approximation, Vector<Complex<T>> detail) Decompose(Vector<Complex<T>> input)
+    public (Vector<Complex<T>> approximation, Vector<Complex<T>> detail) Decompose(Vector<Complex<T>> input)
     {
         var lowPass = GetScalingCoefficients();
         var highPass = GetWaveletCoefficients();
@@ -175,7 +181,7 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     /// 
     /// For Complex Gaussian wavelets, these coefficients are derived from a Gaussian function:
     /// 
-    /// g(x) = e^(-xÂ²/2)
+    /// g(x) = e^(-x²/2)
     /// 
     /// The method:
     /// 1. Determines an appropriate length for the filter based on the desired accuracy
@@ -189,35 +195,35 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     /// its overall shape while removing high-frequency details.
     /// </para>
     /// </remarks>
-    public override Vector<Complex<T>> GetScalingCoefficients()
+    public Vector<Complex<T>> GetScalingCoefficients()
     {
-        var errorTolerance = NumOps.FromDouble(1e-6);
-        var sigma = NumOps.FromDouble(Math.Sqrt(_order));
+        var errorTolerance = _numOps.FromDouble(1e-6);
+        var sigma = _numOps.FromDouble(Math.Sqrt(_order));
 
-        if (NumOps.LessThanOrEquals(sigma, NumOps.Zero))
+        if (_numOps.LessThanOrEquals(sigma, _numOps.Zero))
             throw new ArgumentException("Sigma must be positive", nameof(sigma));
 
-        if (NumOps.LessThanOrEquals(errorTolerance, NumOps.Zero))
+        if (_numOps.LessThanOrEquals(errorTolerance, _numOps.Zero))
             throw new ArgumentException("Error tolerance must be positive", nameof(errorTolerance));
 
         int length = DetermineAdaptiveLength(sigma, errorTolerance);
         var coeffs = new Complex<T>[length];
 
-        T sum = NumOps.Zero;
-        T centerIndex = NumOps.FromDouble((length - 1) / 2.0);
+        T sum = _numOps.Zero;
+        T centerIndex = _numOps.FromDouble((length - 1) / 2.0);
 
         for (int i = 0; i < length; i++)
         {
-            T x = NumOps.Divide(NumOps.Subtract(NumOps.FromDouble(i), centerIndex), sigma);
+            T x = _numOps.Divide(_numOps.Subtract(_numOps.FromDouble(i), centerIndex), sigma);
             T gaussianValue = CalculateGaussianValue(x);
-            coeffs[i] = new Complex<T>(gaussianValue, NumOps.Zero);
-            sum = NumOps.Add(sum, gaussianValue);
+            coeffs[i] = new Complex<T>(gaussianValue, _numOps.Zero);
+            sum = _numOps.Add(sum, gaussianValue);
         }
 
         // Normalize coefficients
         for (int i = 0; i < length; i++)
         {
-            coeffs[i] = new Complex<T>(NumOps.Divide(coeffs[i].Real, sum), NumOps.Zero);
+            coeffs[i] = new Complex<T>(_numOps.Divide(coeffs[i].Real, sum), _numOps.Zero);
         }
 
         return new Vector<Complex<T>>(coeffs);
@@ -254,15 +260,15 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     private int DetermineAdaptiveLength(T sigma, T errorTolerance)
     {
         int length = 1;
-        T x = NumOps.Zero;
+        T x = _numOps.Zero;
         T gaussianValue;
 
         do
         {
             length += 2; // Ensure odd length for symmetry
-            x = NumOps.Divide(NumOps.FromDouble(length / 2), sigma);
+            x = _numOps.Divide(_numOps.FromDouble(length / 2), sigma);
             gaussianValue = CalculateGaussianValue(x);
-        } while (NumOps.GreaterThan(gaussianValue, errorTolerance));
+        } while (_numOps.GreaterThan(gaussianValue, errorTolerance));
 
         return length;
     }
@@ -278,7 +284,7 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     /// This helper method calculates the value of a Gaussian function (bell curve) at a specific point.
     /// 
     /// The Gaussian function is defined as:
-    /// g(x) = e^(-xÂ²/2)
+    /// g(x) = e^(-x²/2)
     /// 
     /// This function has several important properties:
     /// - It's symmetric around x=0 (bell-shaped)
@@ -292,7 +298,7 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     /// </remarks>
     private T CalculateGaussianValue(T x)
     {
-        return NumOps.Exp(NumOps.Negate(NumOps.Divide(NumOps.Multiply(x, x), NumOps.FromDouble(2))));
+        return _numOps.Exp(_numOps.Negate(_numOps.Divide(_numOps.Multiply(x, x), _numOps.FromDouble(2))));
     }
 
     /// <summary>
@@ -308,10 +314,10 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     /// For Complex Gaussian wavelets, these coefficients combine a Gaussian envelope
     /// with sine and cosine functions to create a complex-valued filter:
     /// 
-    /// ?(x) = e^(-xÂ²/2) * (cos(x) + i*sin(x))
+    /// ?(x) = e^(-x²/2) * (cos(x) + i*sin(x))
     /// 
     /// Where:
-    /// - e^(-xÂ²/2) is the Gaussian envelope
+    /// - e^(-x²/2) is the Gaussian envelope
     /// - cos(x) becomes the real part of the coefficient
     /// - sin(x) becomes the imaginary part of the coefficient
     /// - i is the imaginary unit
@@ -325,26 +331,119 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     /// wavelets (which have more oscillations) have sufficient support.
     /// </para>
     /// </remarks>
-    public override Vector<Complex<T>> GetWaveletCoefficients()
+    public Vector<Complex<T>> GetWaveletCoefficients()
     {
         int length = 10 * _order;
         var coeffs = new Complex<T>[length];
-        T sigma = NumOps.FromDouble(Math.Sqrt(_order));
+        T sigma = _numOps.FromDouble(Math.Sqrt(_order));
 
         for (int i = 0; i < length; i++)
         {
-                        T x = NumOps.Divide(NumOps.FromDouble(i - length / 2), sigma);
-            T gaussianValue = NumOps.Exp(NumOps.Negate(NumOps.Divide(NumOps.Multiply(x, x), NumOps.FromDouble(2))));
+                        T x = _numOps.Divide(_numOps.FromDouble(i - length / 2), sigma);
+            T gaussianValue = _numOps.Exp(_numOps.Negate(_numOps.Divide(_numOps.Multiply(x, x), _numOps.FromDouble(2))));
             T sinValue = MathHelper.Sin(x);
             T cosValue = MathHelper.Cos(x);
 
             coeffs[i] = new Complex<T>(
-                NumOps.Multiply(gaussianValue, cosValue),
-                NumOps.Multiply(gaussianValue, sinValue)
+                _numOps.Multiply(gaussianValue, cosValue),
+                _numOps.Multiply(gaussianValue, sinValue)
             );
         }
 
         return new Vector<Complex<T>>(coeffs);
+    }
+
+    /// <summary>
+    /// Performs convolution of a complex input signal with a complex filter.
+    /// </summary>
+    /// <param name="input">The complex input signal vector.</param>
+    /// <param name="kernel">The complex filter vector.</param>
+    /// <returns>The convolved complex signal vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Convolution is a mathematical operation that combines two functions to produce a third function.
+    /// In signal processing, it's like sliding a filter over a signal and calculating a weighted sum
+    /// at each position.
+    /// 
+    /// For complex signals, convolution works similarly but involves complex multiplication:
+    /// 
+    /// (a + bi) * (c + di) = (ac - bd) + (ad + bc)i
+    /// 
+    /// The process works like this:
+    /// 1. For each position in the output:
+    ///    a. Center the filter at that position
+    ///    b. Multiply each filter coefficient by the corresponding signal value (using complex multiplication)
+    ///    c. Sum these products to get the output value at that position
+    /// 
+    /// This implementation produces a result with length equal to input.length + kernel.length - 1,
+    /// which is the full convolution without truncation. This ensures that no information is lost
+    /// at the boundaries.
+    /// 
+    /// Complex convolution is essential for processing signals that contain phase information,
+    /// such as in communications, radar, and audio processing.
+    /// </para>
+    /// </remarks>
+    private Vector<Complex<T>> Convolve(Vector<Complex<T>> input, Vector<Complex<T>> kernel)
+    {
+        int resultLength = input.Length + kernel.Length - 1;
+        var result = new Complex<T>[resultLength];
+        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
+
+        for (int i = 0; i < resultLength; i++)
+        {
+            Complex<T> sum = new Complex<T>(_numOps.Zero, _numOps.Zero);
+            for (int j = 0; j < kernel.Length; j++)
+            {
+                if (i - j >= 0 && i - j < input.Length)
+                {
+                    sum = complexOps.Add(sum, complexOps.Multiply(input[i - j], kernel[j]));
+                }
+            }
+
+            result[i] = sum;
+        }
+
+        return new Vector<Complex<T>>(result);
+    }
+
+    /// <summary>
+    /// Downsamples a complex signal by keeping only every nth sample.
+    /// </summary>
+    /// <param name="input">The complex input signal vector.</param>
+    /// <param name="factor">The downsampling factor.</param>
+    /// <returns>The downsampled complex signal vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// Downsampling reduces the sampling rate of a signal by keeping only a subset of the samples.
+    /// 
+    /// For example, with a factor of 2:
+    /// - Original signal: [10+2i, 20+3i, 30+4i, 40+5i, 50+6i, 60+7i]
+    /// - Downsampled signal: [10+2i, 30+4i, 50+6i]
+    /// 
+    /// This method keeps every nth sample (where n is the factor) and discards the rest.
+    /// In wavelet decomposition, downsampling by 2 is standard after filtering, because:
+    /// 
+    /// 1. The filters have already removed frequency components that would cause aliasing
+    /// 2. It reduces the data size by half at each decomposition level
+    /// 3. It ensures that the total size of approximation and detail coefficients equals the input size
+    /// 
+    /// For complex signals, both the real and imaginary parts are downsampled together,
+    /// preserving the phase relationship between them.
+    /// </para>
+    /// </remarks>
+    private static Vector<Complex<T>> Downsample(Vector<Complex<T>> input, int factor)
+    {
+        int resultLength = input.Length / factor;
+        var result = new Complex<T>[resultLength];
+
+        for (int i = 0; i < resultLength; i++)
+        {
+            result[i] = input[i * factor];
+        }
+
+        return new Vector<Complex<T>>(result);
     }
 
     /// <summary>
@@ -362,11 +461,11 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     /// The first few Hermite polynomials are:
     /// - H0(x) = 1
     /// - H1(x) = 2x
-    /// - H2(x) = 4xÂ² - 2
-    /// - H3(x) = 8xÂ³ - 12x
+    /// - H2(x) = 4x² - 2
+    /// - H3(x) = 8x³ - 12x
     /// 
     /// This method calculates these polynomials using a recurrence relation:
-    /// H_{n+1}(x) = 2xÂ·H_n(x) - 2nÂ·H_{n-1}(x)
+    /// H_{n+1}(x) = 2x·H_n(x) - 2n·H_{n-1}(x)
     /// 
     /// Starting with the known values for H0 and H1, it iteratively builds up to the
     /// desired order n.
@@ -379,15 +478,15 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     /// </remarks>
     private T HermitePolynomial(T x, int n)
     {
-        if (n == 0) return NumOps.One;
-        if (n == 1) return NumOps.Multiply(NumOps.FromDouble(2), x);
+        if (n == 0) return _numOps.One;
+        if (n == 1) return _numOps.Multiply(_numOps.FromDouble(2), x);
 
-        T h0 = NumOps.One;
-        T h1 = NumOps.Multiply(NumOps.FromDouble(2), x);
+        T h0 = _numOps.One;
+        T h1 = _numOps.Multiply(_numOps.FromDouble(2), x);
 
         for (int i = 2; i <= n; i++)
         {
-            T hi = NumOps.Subtract(NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(2), x), h1), NumOps.Multiply(NumOps.FromDouble(2 * (i - 1)), h0));
+            T hi = _numOps.Subtract(_numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(2), x), h1), _numOps.Multiply(_numOps.FromDouble(2 * (i - 1)), h0));
             h0 = h1;
             h1 = hi;
         }

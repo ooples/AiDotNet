@@ -152,7 +152,7 @@ public class CubicConvolutionInterpolation<T> : I2DInterpolation<T>
     /// <returns>The interpolated value at position x.</returns>
     private T CubicInterpolate(T p0, T p1, T p2, T p3, T x)
     {
-        // Calculate the coefficients of the cubic polynomial: a*xÂ³ + b*xÂ² + c*x + d
+        // Calculate the coefficients of the cubic polynomial: a*x³ + b*x² + c*x + d
         T a = _numOps.Subtract(_numOps.Subtract(_numOps.Multiply(_numOps.FromDouble(-0.5), p0), _numOps.Multiply(_numOps.FromDouble(1.5), p1)), _numOps.Multiply(_numOps.FromDouble(-1.5), p2));
         a = _numOps.Add(a, _numOps.Multiply(_numOps.FromDouble(0.5), p3));
 
@@ -163,7 +163,7 @@ public class CubicConvolutionInterpolation<T> : I2DInterpolation<T>
 
         T d = p1;
 
-        // Evaluate the polynomial at position x: a*xÂ³ + b*xÂ² + c*x + d
+        // Evaluate the polynomial at position x: a*x³ + b*x² + c*x + d
         return _numOps.Add(_numOps.Add(_numOps.Add(_numOps.Multiply(_numOps.Multiply(a, x), _numOps.Multiply(x, x)), _numOps.Multiply(_numOps.Multiply(b, x), x)), _numOps.Multiply(c, x)), d);
     }
 

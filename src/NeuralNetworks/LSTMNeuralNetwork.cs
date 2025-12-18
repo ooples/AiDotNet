@@ -1370,34 +1370,18 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Transforms a hidden state gradient to match the shape of an output gradient.
     /// </summary>
-    /// <param name="hiddenGradient">The hidden state gradient from an LSTM layer.</param>
-    /// <param name="outputShape">The shape of the output gradient that needs to be matched.</param>
+    /// <param name="hiddenGradient">The hidden state gradient.</param>
+    /// <param name="outputShape">The shape of the output gradient.</param>
     /// <returns>A transformed gradient matching the output shape.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method transforms hidden state gradients from LSTM layers to match the shape expected
-    /// by subsequent layers during backpropagation. When LSTM hidden states have a different
-    /// dimensionality than the output, this method performs the necessary transformation.
-    /// </para>
-    /// <para>
-    /// The transformation handles three cases:
-    /// 1. **Matching shapes**: Direct copy (no transformation needed)
-    /// 2. **Hidden larger than output**: Gradient averaging across hidden dimensions
-    /// 3. **Output larger than hidden**: Gradient distribution/replication
-    /// </para>
-    /// <para>
-    /// For production LSTMs with explicit output projection layers (W_out * h_t + b_out),
-    /// this transformation approximates the backpropagation through that projection.
-    /// If your architecture includes dense output layers after LSTM, those layers
-    /// handle the transformation automatically via their Backward() methods.
-    /// </para>
-    /// </remarks>
     private Tensor<T> TransformHiddenGradientToOutputGradient(Tensor<T> hiddenGradient, int[] outputShape)
     {
-        // Create tensor with target shape
+        // This is a placeholder implementation that needs to be adapted to your specific architecture
+        // In a proper implementation, this would project the hidden state gradient to the output space
+
+        // Create a tensor with the target shape
         var transformedGradient = new Tensor<T>(outputShape);
 
-        // Case 1: Shapes match exactly - direct copy
+        // If shapes match, we can just copy the data
         if (hiddenGradient.Shape.SequenceEqual(outputShape))
         {
             for (int i = 0; i < hiddenGradient.Length; i++)
@@ -1407,100 +1391,15 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
             return transformedGradient;
         }
 
-        // Case 2: Different shapes - need to transform
-        // Get the feature dimensions (last dimension)
-        int hiddenFeatures = hiddenGradient.Shape[hiddenGradient.Shape.Length - 1];
-        int outputFeatures = outputShape[outputShape.Length - 1];
+        // Otherwise, we need to project the hidden gradient to the output space
+        // This is highly dependent on the network architecture
 
-        // Calculate first dimension (could be batch size, sequence length, or combined depending on layout)
-        int outputFirstDim = outputShape.Length > 0 ? outputShape[0] : 1;
-        int hiddenFirstDim = hiddenGradient.Shape.Length > 0 ? hiddenGradient.Shape[0] : 1;
+        // For now, we'll implement a simple zero-padding or truncation approach
+        int minLength = Math.Min(hiddenGradient.Length, transformedGradient.Length);
 
-        // Ensure first dimensions are compatible
-        if (hiddenFirstDim != outputFirstDim && hiddenFirstDim != 1 && outputFirstDim != 1)
+        for (int i = 0; i < minLength; i++)
         {
-            // Incompatible batch sizes - use fallback
-            int minLength = Math.Min(hiddenGradient.Length, transformedGradient.Length);
-            for (int i = 0; i < minLength; i++)
-            {
-                transformedGradient[i] = hiddenGradient[i];
-            }
-            return transformedGradient;
-        }
-
-        // Transform based on feature dimension relationship
-        if (hiddenFeatures == outputFeatures)
-        {
-            // Same feature dimension, might differ in batch/sequence dims
-            int minLength = Math.Min(hiddenGradient.Length, transformedGradient.Length);
-            for (int i = 0; i < minLength; i++)
-            {
-                transformedGradient[i] = hiddenGradient[i];
-            }
-        }
-        else if (hiddenFeatures > outputFeatures)
-        {
-            // Hidden state has more features - average/pool gradients
-            // NOTE: This is an approximation using uniform averaging. For learned projections
-            // (e.g., dense layers with weight matrix W), the mathematically correct approach
-            // would be gradOutput = W^T @ gradHidden. This approximation is suitable when
-            // no explicit projection layers exist, or as a fallback for debugging.
-            // If your architecture includes dense output layers after LSTM, those layers
-            // handle the gradient transformation via their Backward() methods.
-            for (int b = 0; b < Math.Min(outputFirstDim, hiddenFirstDim); b++)
-            {
-                for (int outF = 0; outF < outputFeatures; outF++)
-                {
-                    T accumulatedGrad = NumOps.Zero;
-                    int startHiddenF = (outF * hiddenFeatures) / outputFeatures;
-                    int endHiddenF = ((outF + 1) * hiddenFeatures) / outputFeatures;
-
-                    // Average gradients from corresponding hidden features
-                    for (int hidF = startHiddenF; hidF < endHiddenF && hidF < hiddenFeatures; hidF++)
-                    {
-                        int hiddenIdx = b * hiddenFeatures + hidF;
-                        if (hiddenIdx < hiddenGradient.Length)
-                        {
-                            accumulatedGrad = NumOps.Add(accumulatedGrad, hiddenGradient[hiddenIdx]);
-                        }
-                    }
-
-                    // Store averaged gradient
-                    int outIdx = b * outputFeatures + outF;
-                    if (outIdx < transformedGradient.Length)
-                    {
-                        int count = endHiddenF - startHiddenF;
-                        transformedGradient[outIdx] = count > 0
-                            ? NumOps.Divide(accumulatedGrad, NumOps.FromDouble(count))
-                            : accumulatedGrad;
-                    }
-                }
-            }
-        }
-        else
-        {
-            // Output has more features - replicate gradients
-            // NOTE: This is an approximation using gradient replication. For learned projections,
-            // the correct approach would use the transpose of the projection matrix.
-            // This approximation is suitable when no explicit projection layers exist.
-            for (int b = 0; b < Math.Min(outputFirstDim, hiddenFirstDim); b++)
-            {
-                for (int outF = 0; outF < outputFeatures; outF++)
-                {
-                    // Map output feature to corresponding hidden feature
-                    int hidF = (outF * hiddenFeatures) / outputFeatures;
-                    int hiddenIdx = b * hiddenFeatures + hidF;
-
-                    if (hiddenIdx < hiddenGradient.Length)
-                    {
-                        int outIdx = b * outputFeatures + outF;
-                        if (outIdx < transformedGradient.Length)
-                        {
-                            transformedGradient[outIdx] = hiddenGradient[hiddenIdx];
-                        }
-                    }
-                }
-            }
+            transformedGradient[i] = hiddenGradient[i];
         }
 
         return transformedGradient;

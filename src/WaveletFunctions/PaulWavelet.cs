@@ -25,8 +25,30 @@ namespace AiDotNet.WaveletFunctions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class PaulWavelet<T> : WaveletFunctionBase<T>
+public class PaulWavelet<T> : IWaveletFunction<T>
 {
+    /// <summary>
+    /// Provides mathematical operations for the generic type T.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field holds an implementation of numeric operations that can work with the generic type T.
+    /// It provides methods for basic arithmetic operations, powers, exponentials, comparisons, and conversions
+    /// that are used throughout the wavelet calculations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a helper that lets us do math with different number types.
+    /// 
+    /// Because this class can work with different types of numbers (like float, double, or decimal),
+    /// we need a special helper that knows how to:
+    /// - Perform addition, subtraction, multiplication, and division
+    /// - Calculate exponential functions, powers, and other complex operations
+    /// - Convert between different number formats
+    /// 
+    /// This allows the wavelet code to work with whatever number type you choose,
+    /// without having to write separate code for each number type.
+    /// </para>
+    /// </remarks>
+    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// The order parameter that controls the properties of the Paul wavelet.
@@ -97,6 +119,7 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public PaulWavelet(int order = 4)
     {
+        _numOps = MathHelper.GetNumericOperations<T>();
         _fft = new FastFourierTransform<T>();
         _order = order;
     }
@@ -125,10 +148,10 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
     /// may be a complex number, which captures both amplitude and phase information.
     /// </para>
     /// </remarks>
-    public override T Calculate(T x)
+    public T Calculate(T x)
     {
-        Complex<T> i = new Complex<T>(NumOps.Zero, NumOps.One);
-        Complex<T> xComplex = new Complex<T>(x, NumOps.Zero);
+        Complex<T> i = new Complex<T>(_numOps.Zero, _numOps.One);
+        Complex<T> xComplex = new Complex<T>(x, _numOps.Zero);
         var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
 
         // Calculate (2^m * i^m * m!) / sqrt(p * (2m)!)
@@ -138,8 +161,8 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
         Complex<T> factor = complexOps.Power(i, complexOps.FromDouble(_order)) * complexOps.FromDouble(numerator / denominator);
 
         // Calculate (1 - ix)^(-m-1)
-        Complex<T> base_term = new Complex<T>(NumOps.One, NumOps.Zero) - i * xComplex;
-        T exponentT = NumOps.FromDouble(-m - 1);
+        Complex<T> base_term = new Complex<T>(_numOps.One, _numOps.Zero) - i * xComplex;
+        T exponentT = _numOps.FromDouble(-m - 1);
         Complex<T> denominator_term = complexOps.Power(base_term, new Complex<T>(exponentT, exponentT));
         Complex<T> result = factor * denominator_term;
 
@@ -170,7 +193,7 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
     /// while the detail captures the rapid changes and fine structures.
     /// </para>
     /// </remarks>
-    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int size = input.Length;
         var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
@@ -184,18 +207,18 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
 
         for (int i = 0; i < size; i++)
         {
-            T freq = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size));
+            T freq = _numOps.Divide(_numOps.FromDouble(i - size / 2), _numOps.FromDouble(size));
             Complex<T> psi = PaulFourierTransform(freq);
-
+            
             // Low-pass (scaling) filter
-            if (NumOps.LessThanOrEquals(NumOps.Abs(freq), NumOps.FromDouble(0.5)))
+            if (_numOps.LessThanOrEquals(_numOps.Abs(freq), _numOps.FromDouble(0.5)))
             {
                 scalingSpectrum[i] = complexOps.Multiply(spectrum[i], psi);
             }
 
             // High-pass (wavelet) filter
-            waveletSpectrum[i] = complexOps.Multiply(spectrum[i],
-                complexOps.Subtract(new Complex<T>(NumOps.One, NumOps.Zero), psi));
+            waveletSpectrum[i] = complexOps.Multiply(spectrum[i], 
+                complexOps.Subtract(new Complex<T>(_numOps.One, _numOps.Zero), psi));
         }
 
         // Perform inverse FFT
@@ -228,17 +251,17 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
     /// trends and patterns that evolve slowly over time.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetScalingCoefficients()
+    public Vector<T> GetScalingCoefficients()
     {
         int size = 1024; // Use a power of 2 for efficient FFT
         var coeffs = new Vector<T>(size);
 
         for (int i = 0; i < size; i++)
         {
-            T freq = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size));
-            coeffs[i] = NumOps.LessThanOrEquals(NumOps.Abs(freq), NumOps.FromDouble(0.5))
-                ? PaulFourierTransform(freq).Magnitude
-                : NumOps.Zero;
+            T freq = _numOps.Divide(_numOps.FromDouble(i - size / 2), _numOps.FromDouble(size));
+            coeffs[i] = _numOps.LessThanOrEquals(_numOps.Abs(freq), _numOps.FromDouble(0.5)) 
+                ? PaulFourierTransform(freq).Magnitude 
+                : _numOps.Zero;
         }
 
         return coeffs;
@@ -267,15 +290,15 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
     /// patterns that might be hidden within the broader trends.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetWaveletCoefficients()
+    public Vector<T> GetWaveletCoefficients()
     {
         int size = 1024; // Use a power of 2 for efficient FFT
         var coeffs = new Vector<T>(size);
 
         for (int i = 0; i < size; i++)
         {
-            T freq = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size));
-            coeffs[i] = NumOps.Subtract(NumOps.One, PaulFourierTransform(freq).Magnitude);
+            T freq = _numOps.Divide(_numOps.FromDouble(i - size / 2), _numOps.FromDouble(size));
+            coeffs[i] = _numOps.Subtract(_numOps.One, PaulFourierTransform(freq).Magnitude);
         }
 
         return coeffs;
@@ -307,16 +330,16 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Complex<T> PaulFourierTransform(T omega)
     {
-        if (NumOps.LessThanOrEquals(omega, NumOps.Zero))
+        if (_numOps.LessThanOrEquals(omega, _numOps.Zero))
         {
-            return new Complex<T>(NumOps.Zero, NumOps.Zero);
+            return new Complex<T>(_numOps.Zero, _numOps.Zero);
         }
 
-        T factor = NumOps.Multiply(NumOps.FromDouble(2), NumOps.Power(omega, NumOps.FromDouble(_order)));
-        T expTerm = NumOps.Exp(NumOps.Negate(omega));
+        T factor = _numOps.Multiply(_numOps.FromDouble(2), _numOps.Power(omega, _numOps.FromDouble(_order)));
+        T expTerm = _numOps.Exp(_numOps.Negate(omega));
 
-        T real = NumOps.Multiply(factor, expTerm);
-        T imag = NumOps.Zero;
+        T real = _numOps.Multiply(factor, expTerm);
+        T imag = _numOps.Zero;
 
         return new Complex<T>(real, imag);
     }

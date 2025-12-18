@@ -1,5 +1,3 @@
-using AiDotNet.Autodiff;
-
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -99,27 +97,25 @@ public class ReservoirLayer<T> : LayerBase<T>
     private readonly double _leakingRate;
 
     /// <summary>
-    /// The weight tensor representing connections between neurons in the reservoir.
+    /// The weight matrix representing connections between neurons in the reservoir.
     /// </summary>
     /// <remarks>
-    /// This tensor holds the fixed random weights of connections between reservoir neurons.
-    /// Shape: [reservoirSize, reservoirSize].
+    /// This matrix holds the fixed random weights of connections between reservoir neurons.
     /// It is initialized randomly based on the connection probability and then scaled to
     /// achieve the desired spectral radius. These weights remain fixed during training.
     /// </remarks>
-    private Tensor<T> _reservoirWeights;
-
+    private Matrix<T> _reservoirWeights;
+    
     /// <summary>
     /// The current state of the reservoir, representing the activation of all neurons.
     /// </summary>
     /// <remarks>
-    /// This tensor holds the current activation state of all neurons in the reservoir.
-    /// Shape: [reservoirSize].
+    /// This vector holds the current activation state of all neurons in the reservoir.
     /// It is updated during each forward pass based on the input and the previous state.
     /// The reservoir state is the output of this layer and contains the features that
     /// will be used by subsequent layers for prediction or classification.
     /// </remarks>
-    private Tensor<T> _reservoirState;
+    private Vector<T> _reservoirState;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -201,8 +197,8 @@ public class ReservoirLayer<T> : LayerBase<T>
         _inputScaling = inputScaling;
         _leakingRate = leakingRate;
 
-        _reservoirWeights = new Tensor<T>([_reservoirSize, _reservoirSize]);
-        _reservoirState = new Tensor<T>([_reservoirSize]);
+        _reservoirWeights = new Matrix<T>(_reservoirSize, _reservoirSize);
+        _reservoirState = new Vector<T>(_reservoirSize);
 
         InitializeReservoir();
     }
@@ -241,27 +237,16 @@ public class ReservoirLayer<T> : LayerBase<T>
         if (input.Shape.Length != 2 || input.Shape[0] != 1)
             throw new ArgumentException("Input must be a 2D tensor with shape [1, inputSize]");
 
-        // Flatten input and scale it
-        var inputFlat = input.Reshape([_inputSize]);
-        var scaledInput = Engine.TensorMultiplyScalar(inputFlat, NumOps.FromDouble(_inputScaling));
+        Vector<T> inputVector = input.ToVector();
+        Vector<T> scaledInput = inputVector.Multiply(NumOps.FromDouble(_inputScaling));
 
-        // Reservoir dynamics: W * state + scaled_input
-        var stateColumn = _reservoirState.Reshape([_reservoirSize, 1]);
-        var weightedState = Engine.TensorMatMul(_reservoirWeights, stateColumn);
-        var weightedStateFlat = weightedState.Reshape([_reservoirSize]);
+        Vector<T> reservoirInput = _reservoirWeights.Multiply(_reservoirState).Add(scaledInput);
+        Vector<T> newState = ApplyActivation(reservoirInput);
 
-        var reservoirInput = Engine.TensorAdd(weightedStateFlat, scaledInput);
+        _reservoirState = _reservoirState.Multiply(NumOps.FromDouble(1 - _leakingRate))
+            .Add(newState.Multiply(NumOps.FromDouble(_leakingRate)));
 
-        // Apply activation to get new state
-        var newStateTensor = ApplyActivation(reservoirInput.Reshape([1, _reservoirSize]));
-        var newState = newStateTensor.Reshape([_reservoirSize]);
-
-        // Leaky integration: (1-α)*old_state + α*new_state
-        var oldComponent = Engine.TensorMultiplyScalar(_reservoirState, NumOps.FromDouble(1 - _leakingRate));
-        var newComponent = Engine.TensorMultiplyScalar(newState, NumOps.FromDouble(_leakingRate));
-        _reservoirState = Engine.TensorAdd(oldComponent, newComponent);
-
-        return _reservoirState.Reshape([1, _reservoirSize]);
+        return Tensor<T>.FromVector(_reservoirState);
     }
 
     /// <summary>
@@ -298,47 +283,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation - not supported for ReservoirLayer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>This method does not return; it throws an exception.</returns>
-    /// <exception cref="InvalidOperationException">Always thrown because backward pass is not supported for ReservoirLayer.</exception>
-    /// <remarks>
-    /// In Echo State Networks (ESNs), the reservoir weights are randomly initialized
-    /// and remain fixed during training. Only the readout layer (placed after the reservoir)
-    /// is trained to interpret the reservoir states.
-    /// </remarks>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        throw new InvalidOperationException("Backward pass is not supported for ReservoirLayer in Echo State Networks as reservoir weights are typically fixed.");
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation - not supported for ReservoirLayer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>This method does not return; it throws an exception.</returns>
-    /// <exception cref="InvalidOperationException">Always thrown because backward pass is not supported for ReservoirLayer.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method is provided for API consistency but is not supported for ReservoirLayer.
-    /// Echo State Networks do not train the reservoir weights through backpropagation.
-    /// </para>
-    /// <para>
-    /// Autodiff Note: Since the reservoir itself is not trained, there is no gradient
-    /// computation required for this layer. All training occurs in the separate readout layer.
-    /// If gradient flow verification is needed for research purposes, this method could be
-    /// implemented to compute gradients without applying them to the fixed reservoir weights.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
+        // In ESN, we don't backpropagate through the reservoir
         throw new InvalidOperationException("Backward pass is not supported for ReservoirLayer in Echo State Networks as reservoir weights are typically fixed.");
     }
 
@@ -403,7 +348,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </remarks>
     public Vector<T> GetState()
     {
-        return new Vector<T>(_reservoirState.ToArray());
+        return _reservoirState;
     }
 
     /// <summary>
@@ -435,7 +380,10 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
-        _reservoirState.Fill(NumOps.Zero);
+        for (int i = 0; i < _reservoirState.Length; i++)
+        {
+            _reservoirState[i] = NumOps.Zero;
+        }
     }
 
     /// <summary>
@@ -469,7 +417,19 @@ public class ReservoirLayer<T> : LayerBase<T>
     {
         // In Echo State Networks, the reservoir weights are typically not trained
         // But we still provide access to them for inspection or manual modification
-        return new Vector<T>(_reservoirWeights.ToArray());
+        int totalParams = _reservoirWeights.Rows * _reservoirWeights.Columns;
+        var parameters = new Vector<T>(totalParams);
+    
+        int index = 0;
+        for (int i = 0; i < _reservoirWeights.Rows; i++)
+        {
+            for (int j = 0; j < _reservoirWeights.Columns; j++)
+            {
+                parameters[index++] = _reservoirWeights[i, j];
+            }
+        }
+    
+        return parameters;
     }
 
     /// <summary>
@@ -483,10 +443,10 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeReservoir()
     {
-        // Initialize reservoir weights with sparse random connections
-        for (int i = 0; i < _reservoirSize; i++)
+        // Initialize reservoir weights
+        for (int i = 0; i < _reservoirWeights.Rows; i++)
         {
-            for (int j = 0; j < _reservoirSize; j++)
+            for (int j = 0; j < _reservoirWeights.Columns; j++)
             {
                 if (Random.NextDouble() < _connectionProbability)
                 {
@@ -502,10 +462,13 @@ public class ReservoirLayer<T> : LayerBase<T>
         // Scale the reservoir weights to achieve the desired spectral radius
         T maxEigenvalue = ComputeMaxEigenvalue(_reservoirWeights);
         T scaleFactor = NumOps.FromDouble(_spectralRadius / Convert.ToDouble(maxEigenvalue));
-        _reservoirWeights = Engine.TensorMultiplyScalar(_reservoirWeights, scaleFactor);
+        _reservoirWeights = _reservoirWeights.Multiply(scaleFactor);
 
         // Initialize reservoir state to zeros
-        _reservoirState.Fill(NumOps.Zero);
+        for (int i = 0; i < _reservoirState.Length; i++)
+        {
+            _reservoirState[i] = NumOps.Zero;
+        }
     }
 
     /// <summary>
@@ -520,189 +483,59 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// the reservoir. The method uses improvements like random initialization and Rayleigh quotient
     /// for better convergence.
     /// </remarks>
-    private T ComputeMaxEigenvalue(Tensor<T> matrix)
+    private T ComputeMaxEigenvalue(Matrix<T> matrix)
     {
         // Power iteration method with improvements for better convergence
         int maxIterations = 1000;
         double tolerance = 1e-10;
-        int size = _reservoirSize;
-
+    
         // Start with a random vector instead of all ones
-        var v = new Tensor<T>([size]);
-        for (int i = 0; i < size; i++)
+        Vector<T> v = Vector<T>.CreateRandom(matrix.Rows);
+        for (int i = 0; i < v.Length; i++)
         {
             v[i] = NumOps.FromDouble(Random.NextDouble() - 0.5);
         }
-
+    
         // Normalize the initial vector
-        T initialNorm = ComputeNorm(v);
+        T initialNorm = v.Norm();
         if (!NumOps.Equals(initialNorm, NumOps.Zero))
         {
-            v = Engine.TensorMultiplyScalar(v, NumOps.Divide(NumOps.One, initialNorm));
+            v = v.Divide(initialNorm);
         }
-
+    
         T prevEigenvalue = NumOps.Zero;
-        T currentEigenvalue = NumOps.Zero;
-
-        for (int iter = 0; iter < maxIterations; iter++)
+        T currentEigenvalue;
+    
+        for (int i = 0; i < maxIterations; i++)
         {
-            // Apply matrix to vector: Av = matrix @ v (matrix multiply)
-            var vColumn = v.Reshape([size, 1]);
-            var AvColumn = Engine.TensorMatMul(matrix, vColumn);
-            var Av = AvColumn.Reshape([size]);
-
+            // Apply matrix to vector
+            Vector<T> Av = matrix.Multiply(v);
+        
             // Calculate Rayleigh quotient for better eigenvalue approximation
-            T rayleighQuotient = ComputeDotProduct(v, Av);
-
+            T rayleighQuotient = v.DotProduct(Av);
+        
             // Normalize the vector
-            T norm = ComputeNorm(Av);
+            T norm = Av.Norm();
             if (NumOps.Equals(norm, NumOps.Zero))
             {
                 // If we get a zero vector, the matrix might be nilpotent
                 return NumOps.Zero;
             }
-
-            v = Engine.TensorMultiplyScalar(Av, NumOps.Divide(NumOps.One, norm));
+        
+            v = Av.Divide(norm);
             currentEigenvalue = rayleighQuotient;
-
+        
             // Check for convergence
             T diff = NumOps.Abs(NumOps.Subtract(currentEigenvalue, prevEigenvalue));
-            if (Convert.ToDouble(diff) < tolerance && iter > 5)
+            if (Convert.ToDouble(diff) < tolerance && i > 5)
             {
                 return NumOps.Abs(currentEigenvalue);
             }
-
+        
             prevEigenvalue = currentEigenvalue;
         }
-
+    
         // Return absolute value to ensure positive spectral radius
         return NumOps.Abs(prevEigenvalue);
     }
-
-    /// <summary>
-    /// Computes the L2 norm of a tensor.
-    /// </summary>
-    private T ComputeNorm(Tensor<T> tensor)
-    {
-        T sumSquares = NumOps.Zero;
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(tensor[i], tensor[i]));
-        }
-        return NumOps.Sqrt(sumSquares);
-    }
-
-    /// <summary>
-    /// Computes the dot product of two tensors.
-    /// </summary>
-    private T ComputeDotProduct(Tensor<T> a, Tensor<T> b)
-    {
-        T result = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            result = NumOps.Add(result, NumOps.Multiply(a[i], b[i]));
-        }
-        return result;
-    }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        // ReservoirLayer JIT provides single-step update with frozen reservoir weights:
-        // new_state = (1 - leakingRate) * prev_state + leakingRate * tanh(W_res @ prev_state + input * inputScaling)
-        //
-        // For JIT compilation, we export the computation assuming prev_state is provided as a second input
-        // or initialized to zeros. The reservoir weights are fixed (not trainable).
-
-        var input = inputNodes[0];
-
-        // Reservoir weights are already Tensor<T>, use directly
-        var weightsNode = TensorOperations<T>.Constant(_reservoirWeights, "reservoir_weights");
-
-        // Get previous state from second input or use current state
-        ComputationNode<T> prevState;
-        if (inputNodes.Count > 1)
-        {
-            prevState = inputNodes[1];
-        }
-        else
-        {
-            // Use current reservoir state as initial state (reshape to column vector)
-            var stateTensor = _reservoirState.Reshape([_reservoirSize, 1]);
-            prevState = TensorOperations<T>.Constant(stateTensor, "reservoir_state");
-        }
-
-        // Scale input
-        var scalingFactor = TensorOperations<T>.Constant(
-            new Tensor<T>([1]) { [0] = NumOps.FromDouble(_inputScaling) },
-            "input_scaling");
-        var scaledInput = TensorOperations<T>.ElementwiseMultiply(input, scalingFactor);
-
-        // Reshape for matrix multiplication
-        var prevStateReshaped = TensorOperations<T>.Reshape(prevState, _reservoirSize, 1);
-
-        // W_res @ prev_state
-        var reservoirContrib = TensorOperations<T>.MatrixMultiply(weightsNode, prevStateReshaped);
-
-        // W_res @ prev_state + scaled_input
-        var scaledInputReshaped = TensorOperations<T>.Reshape(scaledInput, _reservoirSize, 1);
-        var preActivation = TensorOperations<T>.Add(reservoirContrib, scaledInputReshaped);
-
-        // tanh activation
-        var activated = TensorOperations<T>.Tanh(preActivation);
-
-        // Apply leaking rate: (1 - leakingRate) * prev_state + leakingRate * activated
-        ComputationNode<T> newState;
-        if (Math.Abs(_leakingRate - 1.0) < 1e-10)
-        {
-            // No leaking, use activated directly
-            newState = activated;
-        }
-        else
-        {
-            var keepRate = TensorOperations<T>.Constant(
-                new Tensor<T>([1]) { [0] = NumOps.FromDouble(1.0 - _leakingRate) },
-                "keep_rate");
-            var leakRate = TensorOperations<T>.Constant(
-                new Tensor<T>([1]) { [0] = NumOps.FromDouble(_leakingRate) },
-                "leak_rate");
-
-            var keptPrev = TensorOperations<T>.ElementwiseMultiply(prevStateReshaped, keepRate);
-            var scaledNew = TensorOperations<T>.ElementwiseMultiply(activated, leakRate);
-            newState = TensorOperations<T>.Add(keptPrev, scaledNew);
-        }
-
-        // Reshape output
-        var output = TensorOperations<T>.Reshape(newState, _reservoirSize);
-
-        // Apply layer activation if present
-        output = ApplyActivationToGraph(output);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c>. ReservoirLayer exports single-step computation with frozen weights.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// JIT compilation for ReservoirLayer exports a single-step state update. The reservoir
-    /// weights remain frozen (not trainable) during both forward and backward passes, which
-    /// is the standard behavior for Echo State Networks. The computation graph represents
-    /// one time step of the reservoir dynamics.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
 }

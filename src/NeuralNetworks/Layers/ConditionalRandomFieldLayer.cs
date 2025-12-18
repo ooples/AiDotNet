@@ -1,5 +1,3 @@
-using AiDotNet.Autodiff;
-
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -36,16 +34,16 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class ConditionalRandomFieldLayer<T> : LayerBase<T>
 {
-    private Tensor<T> _transitionMatrix;
-    private Tensor<T> _startScores;
-    private Tensor<T> _endScores;
+    private Matrix<T> _transitionMatrix;
+    private Vector<T> _startScores;
+    private Vector<T> _endScores;
 
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput;
 
-    private Tensor<T>? _transitionMatrixGradient;
-    private Tensor<T>? _startScoresGradient;
-    private Tensor<T>? _endScoresGradient;
+    private Matrix<T>? _transitionMatrixGradient;
+    private Vector<T>? _startScoresGradient;
+    private Vector<T>? _endScoresGradient;
 
     private readonly int _numClasses;
     private readonly int _sequenceLength;
@@ -82,7 +80,6 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// <param name="numClasses">The number of possible label classes.</param>
     /// <param name="sequenceLength">The length of the input sequences.</param>
     /// <param name="scalarActivation">The scalar activation function to apply to inputs. Defaults to identity if not specified.</param>
-    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new CRF layer with the specified number of classes and sequence length.
@@ -107,14 +104,11 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     public ConditionalRandomFieldLayer(int numClasses, int sequenceLength, IActivationFunction<T>? scalarActivation = null)
         : base([sequenceLength, numClasses], [sequenceLength, numClasses], scalarActivation ?? new IdentityActivation<T>())
     {
-        if (sequenceLength <= 0)
-            throw new ArgumentOutOfRangeException(nameof(sequenceLength), "sequenceLength must be greater than 0.");
-
         _numClasses = numClasses;
         _sequenceLength = sequenceLength;
-        _transitionMatrix = new Tensor<T>([_numClasses, _numClasses]);
-        _startScores = new Tensor<T>([_numClasses]);
-        _endScores = new Tensor<T>([_numClasses]);
+        _transitionMatrix = new Matrix<T>(_numClasses, _numClasses);
+        _startScores = new Vector<T>(_numClasses);
+        _endScores = new Vector<T>(_numClasses);
 
         InitializeParameters();
     }
@@ -125,7 +119,6 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// <param name="numClasses">The number of possible label classes.</param>
     /// <param name="sequenceLength">The length of the input sequences.</param>
     /// <param name="vectorActivation">The vector activation function to apply to inputs. Defaults to identity if not specified.</param>
-    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new CRF layer with the specified number of classes and sequence length.
@@ -147,14 +140,11 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     public ConditionalRandomFieldLayer(int numClasses, int sequenceLength, IVectorActivationFunction<T>? vectorActivation = null)
         : base([sequenceLength, numClasses], [sequenceLength, numClasses], vectorActivation ?? new IdentityActivation<T>())
     {
-        if (sequenceLength <= 0)
-            throw new ArgumentOutOfRangeException(nameof(sequenceLength), "sequenceLength must be greater than 0.");
-
         _numClasses = numClasses;
         _sequenceLength = sequenceLength;
-        _transitionMatrix = new Tensor<T>([_numClasses, _numClasses]);
-        _startScores = new Tensor<T>([_numClasses]);
-        _endScores = new Tensor<T>([_numClasses]);
+        _transitionMatrix = new Matrix<T>(_numClasses, _numClasses);
+        _startScores = new Vector<T>(_numClasses);
+        _endScores = new Vector<T>(_numClasses);
 
         InitializeParameters();
     }
@@ -184,30 +174,78 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // VECTORIZED: Initialize parameters with scaled random values
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_numClasses + _numClasses)));
-        T half = NumOps.FromDouble(0.5);
+        InitializeMatrix(_transitionMatrix, scale);
+        InitializeVector(_startScores, scale);
+        InitializeVector(_endScores, scale);
+    }
 
-        // Initialize transition matrix: (random - 0.5) * scale
-        var transRandom = Tensor<T>.CreateRandom(_transitionMatrix.Length, 1).Reshape(_transitionMatrix.Shape);
-        var transHalf = new Tensor<T>(_transitionMatrix.Shape);
-        transHalf.Fill(half);
-        var transCentered = Engine.TensorSubtract(transRandom, transHalf);
-        _transitionMatrix = Engine.TensorMultiplyScalar(transCentered, scale);
+    /// <summary>
+    /// Initializes a matrix with scaled random values.
+    /// </summary>
+    /// <param name="matrix">The matrix to initialize.</param>
+    /// <param name="scale">The scale factor for the random values.</param>
+    /// <remarks>
+    /// <para>
+    /// This method fills the given matrix with random values drawn from a uniform distribution
+    /// centered at zero (-0.5 to 0.5) and scaled by the provided scale factor. This type of
+    /// initialization helps with the training process by preventing issues like vanishing or
+    /// exploding gradients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method fills a matrix with random values of an appropriate size.
+    /// 
+    /// When filling the matrix:
+    /// - We generate random numbers between -0.5 and 0.5
+    /// - We multiply each by a scaling factor to control their magnitude
+    /// - The result is a matrix filled with small random values
+    /// 
+    /// For the transition matrix, these values represent the initial "guesses" about
+    /// how likely one label is to follow another. These values will be adjusted during
+    /// training to reflect the actual patterns in the data.
+    /// </para>
+    /// </remarks>
+    private void InitializeMatrix(Matrix<T> matrix, T scale)
+    {
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+            }
+        }
+    }
 
-        // Initialize start scores: (random - 0.5) * scale
-        var startRandom = Tensor<T>.CreateRandom(_startScores.Length, 1).Reshape(_startScores.Shape);
-        var startHalf = new Tensor<T>(_startScores.Shape);
-        startHalf.Fill(half);
-        var startCentered = Engine.TensorSubtract(startRandom, startHalf);
-        _startScores = Engine.TensorMultiplyScalar(startCentered, scale);
-
-        // Initialize end scores: (random - 0.5) * scale
-        var endRandom = Tensor<T>.CreateRandom(_endScores.Length, 1).Reshape(_endScores.Shape);
-        var endHalf = new Tensor<T>(_endScores.Shape);
-        endHalf.Fill(half);
-        var endCentered = Engine.TensorSubtract(endRandom, endHalf);
-        _endScores = Engine.TensorMultiplyScalar(endCentered, scale);
+    /// <summary>
+    /// Initializes a vector with scaled random values.
+    /// </summary>
+    /// <param name="vector">The vector to initialize.</param>
+    /// <param name="scale">The scale factor for the random values.</param>
+    /// <remarks>
+    /// <para>
+    /// This method fills the given vector with random values drawn from a uniform distribution
+    /// centered at zero (-0.5 to 0.5) and scaled by the provided scale factor. This helps with
+    /// the training process by providing a good starting point for the parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method fills a vector with random values of an appropriate size.
+    /// 
+    /// When filling the vector:
+    /// - We generate random numbers between -0.5 and 0.5
+    /// - We multiply each by a scaling factor to control their magnitude
+    /// - The result is a vector filled with small random values
+    /// 
+    /// These random values serve as starting points for:
+    /// - Start scores: initial "guesses" about which labels appear at sequence beginnings
+    /// - End scores: initial "guesses" about which labels appear at sequence endings
+    /// 
+    /// These values will be adjusted during training to reflect patterns in the actual data.
+    /// </para>
+    /// </remarks>
+    private void InitializeVector(Vector<T> vector, T scale)
+    {
+        for (int i = 0; i < vector.Length; i++)
+        {
+            vector[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+        }
     }
 
     /// <summary>
@@ -251,92 +289,91 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
 
         var output = new Tensor<T>([batchSize, _sequenceLength, _numClasses]);
 
-        // === VECTORIZED: Apply activation to entire input ===
-        Tensor<T> sequenceScores;
-        if (UsingVectorActivation)
-        {
-            sequenceScores = ApplyActivation(input);
-        }
-        else if (ScalarActivation != null && !(ScalarActivation is IdentityActivation<T>))
-        {
-            sequenceScores = ApplyActivation(input);
-        }
-        else
-        {
-            sequenceScores = input;
-        }
-
-        // Process each batch item (Viterbi requires sequential time processing)
         for (int b = 0; b < batchSize; b++)
         {
-            // === VECTORIZED: Extract sequence for this batch item ===
-            var batchSeq = Engine.TensorSliceAxis(sequenceScores, 0, b); // [sequenceLength, numClasses]
+            var sequenceScores = new Matrix<T>(_sequenceLength, _numClasses);
 
-            // === VECTORIZED Viterbi Algorithm ===
-            var viterbi = new Tensor<T>([_sequenceLength, _numClasses]);
-            var backpointers = new Matrix<int>(_sequenceLength, _numClasses);
-
-            // VECTORIZED: Initialize first timestep - startScores + emissions[0]
-            var firstEmissions = Engine.TensorSliceAxis(batchSeq, 0, 0); // [numClasses]
-            var firstViterbi = Engine.TensorAdd(firstEmissions, _startScores);
-            Engine.TensorSetSliceAxis(viterbi, firstViterbi, 0, 0);
-
-            // Recursion over time (inherently sequential)
-            for (int t = 1; t < _sequenceLength; t++)
+            // Apply optional feature transformation
+            for (int t = 0; t < _sequenceLength; t++)
             {
-                var currentEmissions = Engine.TensorSliceAxis(batchSeq, 0, t); // [numClasses]
-                var prevViterbi = Engine.TensorSliceAxis(viterbi, 0, t - 1); // [numClasses]
-
-                // For each current class, compute max over prev classes
-                // score[c] = max_prevC(viterbi[t-1, prevC] + transition[prevC, c]) + emissions[t, c]
-                // This can be done by broadcasting:
-                // prevViterbi: [numClasses, 1] + transition: [numClasses, numClasses] -> [numClasses, numClasses]
-                // Then max over axis 0
-
-                var prevExpanded = prevViterbi.Reshape([_numClasses, 1]); // [numClasses, 1]
-                var scoresWithTrans = Engine.TensorAdd(prevExpanded, _transitionMatrix); // [numClasses, numClasses]
-
-                // Get max over previous classes and store backpointers
-                var maxScores = new Tensor<T>([_numClasses]);
+                var featureVector = new Vector<T>(_numClasses);
                 for (int c = 0; c < _numClasses; c++)
                 {
-                    T maxVal = NumOps.MinValue;
-                    int maxIdx = 0;
-                    for (int prevC = 0; prevC < _numClasses; prevC++)
-                    {
-                        T val = scoresWithTrans[prevC, c];
-                        if (NumOps.GreaterThan(val, maxVal))
-                        {
-                            maxVal = val;
-                            maxIdx = prevC;
-                        }
-                    }
-                    maxScores[c] = maxVal;
-                    backpointers[t, c] = maxIdx;
+                    featureVector[c] = input[b, t, c];
                 }
 
-                // Add emissions: maxScores + currentEmissions
-                var currentViterbi = Engine.TensorAdd(maxScores, currentEmissions);
-                Engine.TensorSetSliceAxis(viterbi, currentViterbi, 0, t);
+                if (UsingVectorActivation)
+                {
+                    featureVector = VectorActivation!.Activate(featureVector);
+                }
+                else if (ScalarActivation != null)
+                {
+                    for (int c = 0; c < _numClasses; c++)
+                    {
+                        featureVector[c] = ScalarActivation.Activate(featureVector[c]);
+                    }
+                }
+
+                for (int c = 0; c < _numClasses; c++)
+                {
+                    sequenceScores[t, c] = featureVector[c];
+                }
             }
 
-            // === VECTORIZED Termination ===
-            var lastViterbi = Engine.TensorSliceAxis(viterbi, 0, _sequenceLength - 1);
-            var finalScores = Engine.TensorAdd(lastViterbi, _endScores);
+            // Viterbi algorithm
+            var viterbi = new Matrix<T>(_sequenceLength, _numClasses);
+            var backpointers = new Matrix<int>(_sequenceLength, _numClasses);
 
-            // Find argmax
-            T maxFinalScore = NumOps.MinValue;
-            int maxFinalClass = 0;
+            // Initialize first timestep
             for (int c = 0; c < _numClasses; c++)
             {
-                if (NumOps.GreaterThan(finalScores[c], maxFinalScore))
+                viterbi[0, c] = NumOps.Add(_startScores[c], sequenceScores[0, c]);
+            }
+
+            // Recursion
+            for (int t = 1; t < _sequenceLength; t++)
+            {
+                for (int c = 0; c < _numClasses; c++)
                 {
-                    maxFinalScore = finalScores[c];
+                    T maxScore = NumOps.MinValue;
+                    int maxPrevClass = -1;
+
+                    for (int prevC = 0; prevC < _numClasses; prevC++)
+                    {
+                        T score = NumOps.Add(
+                            NumOps.Add(
+                                viterbi[t - 1, prevC],
+                                _transitionMatrix[prevC, c]
+                            ),
+                            sequenceScores[t, c]
+                        );
+
+                        if (NumOps.GreaterThan(score, maxScore))
+                        {
+                            maxScore = score;
+                            maxPrevClass = prevC;
+                        }
+                    }
+
+                    viterbi[t, c] = maxScore;
+                    backpointers[t, c] = maxPrevClass;
+                }
+            }
+
+            // Termination
+            T maxFinalScore = NumOps.MinValue;
+            int maxFinalClass = -1;
+            for (int c = 0; c < _numClasses; c++)
+            {
+                T finalScore = NumOps.Add(viterbi[_sequenceLength - 1, c], _endScores[c]);
+                if (NumOps.GreaterThan(finalScore, maxFinalScore))
+                {
+                    maxFinalScore = finalScore;
                     maxFinalClass = c;
                 }
             }
 
-            // Backtracking (inherently sequential)
+            // Backtracking
             var bestPath = new int[_sequenceLength];
             bestPath[_sequenceLength - 1] = maxFinalClass;
             for (int t = _sequenceLength - 2; t >= 0; t--)
@@ -344,11 +381,13 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
                 bestPath[t] = backpointers[t + 1, bestPath[t + 1]];
             }
 
-            // === VECTORIZED: Set one-hot output ===
-            // Create one-hot tensor for this batch
+            // Set output
             for (int t = 0; t < _sequenceLength; t++)
             {
-                output[b, t, bestPath[t]] = NumOps.One;
+                for (int c = 0; c < _numClasses; c++)
+                {
+                    output[b, t, c] = c == bestPath[t] ? NumOps.One : NumOps.Zero;
+                }
             }
         }
 
@@ -368,7 +407,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// error gradients back through the network. It computes the gradients of the loss with respect to the
     /// layer's parameters (transition matrix, start scores, and end scores) and the layer's input.
     /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's inputs
+    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's inputs 
     /// and parameters should change to reduce errors.
     ///
     /// During the backward pass:
@@ -378,155 +417,98 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     ///    - How start and end scores should change
     /// 3. It calculates how the input features contributed to the error
     /// 4. If an activation function was used, its derivative is applied
-    ///
+    /// 
     /// This lets the network learn:
     /// - Which label is likely to follow another
     /// - Which labels commonly appear at the start or end of sequences
     /// - How input features relate to labels
-    ///
+    /// 
     /// This is part of the "backpropagation" algorithm that helps neural networks learn
     /// from their mistakes and improve over time.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         int batchSize = _lastInput.Shape[0];
 
-        // === VECTORIZED Gradient Computation ===
+        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        _transitionMatrixGradient = new Matrix<T>(_numClasses, _numClasses);
+        _startScoresGradient = new Vector<T>(_numClasses);
+        _endScoresGradient = new Vector<T>(_numClasses);
 
-        // Input gradient starts as a copy of output gradient
-        var inputGradient = outputGradient.Clone();
-
-        // Start scores gradient: sum of gradients at t=0 over all batches
-        // outputGradient[:, 0, :] summed over batch
-        var firstTimestep = Engine.TensorSliceAxis(outputGradient, 1, 0); // [batchSize, numClasses]
-        _startScoresGradient = Engine.ReduceSum(firstTimestep, new[] { 0 }, keepDims: false);
-
-        // End scores gradient: sum of gradients at t=seqLen-1 over all batches
-        var lastTimestep = Engine.TensorSliceAxis(outputGradient, 1, _sequenceLength - 1); // [batchSize, numClasses]
-        _endScoresGradient = Engine.ReduceSum(lastTimestep, new[] { 0 }, keepDims: false);
-
-        // Transition matrix gradient: sum of gradients for all t > 0
-        // For simplicity, we sum all gradients across batch and time (except t=0), then broadcast
-        // A more accurate gradient would involve the actual paths, but this is an approximation
-        var allGradients = Engine.ReduceSum(outputGradient, new[] { 0, 1 }, keepDims: false); // [numClasses]
-
-        // Create transition gradient: outer product approximation
-        // Each transition gets the sum of class gradients
-        _transitionMatrixGradient = new Tensor<T>([_numClasses, _numClasses]);
-        var gradExpanded = allGradients.Reshape([1, _numClasses]);
-        var onesCol = new Tensor<T>([_numClasses, 1]);
-        onesCol.Fill(NumOps.One);
-        // transGrad[i, j] = sumGrad[j] for all i
-        var transGrad = Engine.TensorMultiply(onesCol, gradExpanded);
-        // Scale by (seqLen - 1) / seqLen to account for t=0 not having transitions
-        var scale = NumOps.FromDouble((_sequenceLength - 1.0) / _sequenceLength);
-        _transitionMatrixGradient = Engine.TensorMultiplyScalar(transGrad, scale);
-
-        // Apply activation function gradient if applicable
-        if (UsingVectorActivation || (ScalarActivation != null && !(ScalarActivation is IdentityActivation<T>)))
+        for (int b = 0; b < batchSize; b++)
         {
-            inputGradient = ApplyActivationDerivative(_lastInput, inputGradient);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients via the CRFForward operation.
-    /// It builds a computation graph for the CRF forward pass, then propagates gradients backward
-    /// through the graph. The activation function derivative is applied separately after the autodiff
-    /// backward pass to match the behavior of BackwardManual.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Build computation graph using differentiable CRF forward op
-        var emissionsNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "crf_emissions", requiresGradient: true);
-        var transitionsNode = Autodiff.TensorOperations<T>.Variable(_transitionMatrix, "crf_transitions", requiresGradient: true);
-        var startNode = Autodiff.TensorOperations<T>.Variable(_startScores, "crf_start", requiresGradient: true);
-        var endNode = Autodiff.TensorOperations<T>.Variable(_endScores, "crf_end", requiresGradient: true);
-
-        var outputNode = Autodiff.TensorOperations<T>.CRFForward(emissionsNode, transitionsNode, startNode, endNode);
-        outputNode.Gradient = outputGradient;
-
-        // Inline topological sort
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
+            // Compute gradients for transition matrix, start scores, and end scores
+            for (int t = 0; t < _sequenceLength; t++)
             {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
+                for (int c = 0; c < _numClasses; c++)
                 {
-                    foreach (var parent in node.Parents)
+                    T grad = outputGradient[b, t, c];
+
+                    if (t == 0)
                     {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
+                        _startScoresGradient[c] = NumOps.Add(_startScoresGradient[c], grad);
                     }
+                    else if (t == _sequenceLength - 1)
+                    {
+                        _endScoresGradient[c] = NumOps.Add(_endScoresGradient[c], grad);
+                    }
+
+                    if (t > 0)
+                    {
+                        for (int prevC = 0; c < _numClasses; prevC++)
+                        {
+                            _transitionMatrixGradient[prevC, c] = NumOps.Add(_transitionMatrixGradient[prevC, c], grad);
+                        }
+                    }
+
+                    // Compute input gradient
+                    inputGradient[b, t, c] = grad;
                 }
             }
         }
 
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        // Apply activation function gradient if applicable
+        if (UsingVectorActivation)
         {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            for (int b = 0; b < batchSize; b++)
             {
-                node.BackwardFunction(node.Gradient);
+                for (int t = 0; t < _sequenceLength; t++)
+                {
+                    var input = new Vector<T>(_numClasses);
+                    var grad = new Vector<T>(_numClasses);
+                    for (int c = 0; c < _numClasses; c++)
+                    {
+                        input[c] = _lastInput[b, t, c];
+                        grad[c] = inputGradient[b, t, c];
+                    }
+
+                    var derivativeMatrix = VectorActivation!.Derivative(input);
+                    var result = derivativeMatrix.Multiply(grad);
+
+                    for (int c = 0; c < _numClasses; c++)
+                    {
+                        inputGradient[b, t, c] = result[c];
+                    }
+                }
             }
         }
-
-        // Capture gradients
-        _transitionMatrixGradient = transitionsNode.Gradient ?? new Tensor<T>([_numClasses, _numClasses]);
-        _startScoresGradient = startNode.Gradient ?? new Tensor<T>([_numClasses]);
-        _endScoresGradient = endNode.Gradient ?? new Tensor<T>([_numClasses]);
-
-        if (emissionsNode.Gradient == null)
-            throw new InvalidOperationException("Gradient computation failed in CRF autodiff.");
-
-        var inputGradient = emissionsNode.Gradient;
-
-        // Apply activation function gradient if applicable (matching BackwardManual behavior)
-        if (UsingVectorActivation || (ScalarActivation != null && !(ScalarActivation is IdentityActivation<T>)))
+        else if (ScalarActivation != null)
         {
-            inputGradient = ApplyActivationDerivative(_lastInput, inputGradient);
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int t = 0; t < _sequenceLength; t++)
+                {
+                    for (int c = 0; c < _numClasses; c++)
+                    {
+                        T derivative = ScalarActivation.Derivative(_lastInput[b, t, c]);
+                        inputGradient[b, t, c] = NumOps.Multiply(derivative, inputGradient[b, t, c]);
+                    }
+                }
+            }
         }
 
         return inputGradient;
@@ -562,15 +544,19 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (_transitionMatrixGradient == null || _startScoresGradient == null || _endScoresGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Update using Engine tensor operations: param = param - lr * gradient
-        var scaledTransGrad = Engine.TensorMultiplyScalar(_transitionMatrixGradient, learningRate);
-        _transitionMatrix = Engine.TensorSubtract(_transitionMatrix, scaledTransGrad);
+        for (int i = 0; i < _numClasses; i++)
+        {
+            for (int j = 0; j < _numClasses; j++)
+            {
+                _transitionMatrix[i, j] = NumOps.Subtract(_transitionMatrix[i, j], 
+                    NumOps.Multiply(learningRate, _transitionMatrixGradient[i, j]));
+            }
 
-        var scaledStartGrad = Engine.TensorMultiplyScalar(_startScoresGradient, learningRate);
-        _startScores = Engine.TensorSubtract(_startScores, scaledStartGrad);
-
-        var scaledEndGrad = Engine.TensorMultiplyScalar(_endScoresGradient, learningRate);
-        _endScores = Engine.TensorSubtract(_endScores, scaledEndGrad);
+            _startScores[i] = NumOps.Subtract(_startScores[i], 
+                NumOps.Multiply(learningRate, _startScoresGradient[i]));
+            _endScores[i] = NumOps.Subtract(_endScores[i], 
+                NumOps.Multiply(learningRate, _endScoresGradient[i]));
+        }
     }
 
     /// <summary>
@@ -600,12 +586,34 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatTrans = new Vector<T>(_transitionMatrix.ToArray());
-        var flatStart = new Vector<T>(_startScores.ToArray());
-        var flatEnd = new Vector<T>(_endScores.ToArray());
-
-        return Vector<T>.Concatenate(Vector<T>.Concatenate(flatTrans, flatStart), flatEnd);
+        // Flatten all parameters into a single vector
+        int totalParams = _numClasses * _numClasses + _numClasses * 2;
+        var parameters = new Vector<T>(totalParams);
+        
+        int index = 0;
+        
+        // Copy transition matrix parameters
+        for (int i = 0; i < _numClasses; i++)
+        {
+            for (int j = 0; j < _numClasses; j++)
+            {
+                parameters[index++] = _transitionMatrix[i, j];
+            }
+        }
+        
+        // Copy start scores
+        for (int i = 0; i < _numClasses; i++)
+        {
+            parameters[index++] = _startScores[i];
+        }
+        
+        // Copy end scores
+        for (int i = 0; i < _numClasses; i++)
+        {
+            parameters[index++] = _endScores[i];
+        }
+        
+        return parameters;
     }
 
     /// <summary>
@@ -637,20 +645,33 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int transSize = _numClasses * _numClasses;
-        int totalParams = transSize + _numClasses * 2;
-
+        int totalParams = _numClasses * _numClasses + _numClasses * 2;
+        
         if (parameters.Length != totalParams)
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-
-        // VECTORIZED: Use Vector.Slice and Tensor.FromVector
-        var transVec = parameters.Slice(0, transSize);
-        var startVec = parameters.Slice(transSize, _numClasses);
-        var endVec = parameters.Slice(transSize + _numClasses, _numClasses);
-
-        _transitionMatrix = Tensor<T>.FromVector(transVec).Reshape(_transitionMatrix.Shape);
-        _startScores = Tensor<T>.FromVector(startVec).Reshape(_startScores.Shape);
-        _endScores = Tensor<T>.FromVector(endVec).Reshape(_endScores.Shape);
+        
+        int index = 0;
+        
+        // Set transition matrix parameters
+        for (int i = 0; i < _numClasses; i++)
+        {
+            for (int j = 0; j < _numClasses; j++)
+            {
+                _transitionMatrix[i, j] = parameters[index++];
+            }
+        }
+        
+        // Set start scores
+        for (int i = 0; i < _numClasses; i++)
+        {
+            _startScores[i] = parameters[index++];
+        }
+        
+        // Set end scores
+        for (int i = 0; i < _numClasses; i++)
+        {
+            _endScores[i] = parameters[index++];
+        }
     }
 
     /// <summary>
@@ -685,56 +706,4 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         _startScoresGradient = null;
         _endScoresGradient = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        // ConditionalRandomFieldLayer JIT uses the forward algorithm for differentiable inference:
-        // This computes the log partition function which can be used for CRF training.
-        // For inference at runtime, Viterbi decoding is still used, but training can use autodiff.
-
-        var input = inputNodes[0];
-
-        // Input is emissions [seqLen, numClasses]
-        // Convert transition matrix to computation node
-        var transitionsTensor = new Tensor<T>([_numClasses, _numClasses]);
-        for (int i = 0; i < _numClasses; i++)
-            for (int j = 0; j < _numClasses; j++)
-                transitionsTensor[i, j] = _transitionMatrix[i, j];
-
-        var transitionsNode = TensorOperations<T>.Variable(transitionsTensor, "crf_transitions", requiresGradient: true);
-
-        // Use CRF forward algorithm for log partition computation
-        var logPartition = TensorOperations<T>.CRFForward(input, transitionsNode);
-
-        // Apply activation
-        var output = ApplyActivationToGraph(logPartition);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c>. CRF uses the forward algorithm for differentiable training.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// JIT compilation for CRF uses the forward algorithm to compute the log partition
-    /// function, which is differentiable with respect to emissions and transitions.
-    /// This enables gradient-based optimization of CRF parameters. For inference,
-    /// Viterbi decoding is used at runtime, but the JIT-compiled graph supports training.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
 }

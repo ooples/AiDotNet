@@ -117,33 +117,16 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
             throw new ArgumentException("Input dimensions do not match the model.");
         }
 
-        if (input.Rows < _varOptions.Lag)
-        {
-            throw new ArgumentException(
-                $"Input must contain at least {_varOptions.Lag} rows to form lagged values. Found {input.Rows}.");
-        }
-
         Vector<T> prediction = new Vector<T>(_varOptions.OutputDimension);
+        Vector<T> laggedValues = input.GetRow(input.Rows - 1);
 
-        // Build flattened lag vector (matches PrepareLaggedData ordering)
-        int m = _varOptions.OutputDimension;
-        int p = _varOptions.Lag;
-        var laggedValues = new Vector<T>(m * p);
-        for (int lag = 0; lag < p; lag++)
-        {
-            int rowIndex = input.Rows - lag - 1; // most recent row first
-            for (int col = 0; col < m; col++)
-            {
-                laggedValues[lag * m + col] = input[rowIndex, col];
-            }
-        }
-
-        // Vectorized prediction using Engine.DotProduct for each output dimension
         for (int i = 0; i < _varOptions.OutputDimension; i++)
         {
-            var coeffRow = _coefficients.GetRow(i);
-            T dotProductResult = Engine.DotProduct(coeffRow, laggedValues);
-            prediction[i] = NumOps.Add(_intercepts[i], dotProductResult);
+            prediction[i] = _intercepts[i];
+            for (int j = 0; j < _varOptions.OutputDimension * _varOptions.Lag; j++)
+            {
+                prediction[i] = NumOps.Add(prediction[i], NumOps.Multiply(_coefficients[i, j], laggedValues[j]));
+            }
         }
 
         return prediction;
@@ -358,12 +341,12 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     /// This method finds the best coefficients for a linear regression model using
     /// the Ordinary Least Squares (OLS) approach.
     /// 
-    /// It solves the equation: Œª = (X'X)‚Åª¬πX'y, where:
+    /// It solves the equation: ﬂ = (X'X)?πX'y, where:
     /// - X is the input matrix (lagged data in this case)
     /// - y is the target vector (current values of a variable)
-    /// - Œ≤ is the vector of coefficients we're solving for
+    /// - ﬂ is the vector of coefficients we're solving for
     /// - X' is the transpose of X
-    /// - (X'X)‚Åª¬π is the inverse of X'X
+    /// - (X'X)?π is the inverse of X'X
     /// 
     /// The result is a set of coefficients that minimize the sum of squared errors
     /// between the model's predictions and the actual values.
@@ -932,7 +915,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         int p = _varOptions.Lag;
         int kp = k * p;
     
-        // Create matrix of size (k*p √ó k*p)
+        // Create matrix of size (k*p ◊ k*p)
         Matrix<T> companion = new Matrix<T>(kp, kp);
     
         // Fill in the coefficient blocks

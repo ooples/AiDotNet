@@ -1,5 +1,4 @@
 ﻿using AiDotNet;
-using AiDotNet.Data.Loaders;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
@@ -12,7 +11,7 @@ namespace AiDotNetTestConsole.Examples;
 /// </summary>
 public class TimeSeriesExample
 {
-    public async Task RunExample()
+    public void RunExample()
     {
         Console.WriteLine("Time Series Example - Stock Price Forecasting");
         Console.WriteLine("===========================================\n");
@@ -64,11 +63,10 @@ public class TimeSeriesExample
             };
 
             // Build the time series model
-            var model = await modelBuilder
-                .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(timeFeatures, priceVector))
+            var model = modelBuilder
                 .ConfigureOptimizer(optimizer)
                 .ConfigureModel(new ProphetModel<double, Matrix<double>, Vector<double>>(timeSeriesOptions))
-                .BuildAsync();
+                .Build(timeFeatures, priceVector);
 
             Console.WriteLine("Model trained successfully!");
 

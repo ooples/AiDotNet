@@ -1,5 +1,3 @@
-using AiDotNet.Tensors.LinearAlgebra;
-
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -32,11 +30,6 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     protected readonly INumericOperations<T> NumOps;
 
     /// <summary>
-    /// Gets the global execution engine for vector operations.
-    /// </summary>
-    protected IEngine Engine => AiDotNetEngine.Current;
-
-    /// <summary>
     /// Gets or sets the root node of the decision tree.
     /// </summary>
     protected DecisionTreeNode<T>? Root;
@@ -53,21 +46,13 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// <para><b>For Beginners:</b> Regularization is a technique used to prevent the model from becoming
     /// too complex and fitting the training data too closely. This helps the model generalize better
     /// to new, unseen data.
-    ///
+    /// 
     /// Think of it like learning to ride a bike:
     /// - Without regularization, you might only learn to ride on one specific path.
     /// - With regularization, you learn general bike-riding skills that work on many different paths.
     /// </para>
     /// </remarks>
     protected IRegularization<T, Matrix<T>, Vector<T>> Regularization { get; private set; }
-
-    /// <summary>
-    /// Gets the default loss function for this async tree-based regression model.
-    /// </summary>
-    /// <value>
-    /// The loss function used for gradient computation.
-    /// </value>
-    private readonly ILossFunction<T> _defaultLossFunction;
 
     /// <summary>
     /// Gets the maximum depth of the decision tree.
@@ -120,14 +105,12 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// </summary>
     /// <param name="options">The options for configuring the decision tree.</param>
     /// <param name="regularization">The regularization method to use.</param>
-    /// <param name="lossFunction">Loss function for gradient computation. If null, defaults to Mean Squared Error.</param>
-    protected AsyncDecisionTreeRegressionBase(DecisionTreeOptions? options, IRegularization<T, Matrix<T>, Vector<T>>? regularization, ILossFunction<T>? lossFunction = null)
+    protected AsyncDecisionTreeRegressionBase(DecisionTreeOptions? options, IRegularization<T, Matrix<T>, Vector<T>>? regularization)
     {
         Options = options ?? new();
         NumOps = MathHelper.GetNumericOperations<T>();
         FeatureImportances = new Vector<T>(0);
         Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
-        _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
     /// <summary>
@@ -900,332 +883,4 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     {
         get { return CountNodes(Root) * 4 + 1; }
     }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// For async tree-based regression models, the default loss function is Mean Squared Error (MSE).
-    /// This can be customized by passing a different loss function to the constructor.
-    /// </para>
-    /// </remarks>
-    public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para><b>IMPORTANT NOTE:</b> Decision trees (including async variants) are not continuously differentiable.
-    /// This gradient computation provides a numerical approximation for compatibility with
-    /// gradient-based distributed training, but it is NOT the gradient in the traditional sense.
-    ///
-    /// For proper tree-based distributed training with async models, consider:
-    /// - Gradient Boosting (which uses gradients of the loss, not the tree)
-    /// - Model averaging approaches (Random Forests, Extremely Randomized Trees)
-    /// - Ensemble-based distributed training
-    /// </para>
-    /// <para><b>For Beginners:</b> Async tree models (like Random Forests) use multiple trees together.
-    ///
-    /// Each tree makes decisions using "if-then" rules, not smooth math functions.
-    /// This method provides an approximation for compatibility, but true tree training
-    /// happens through splitting algorithms, not gradient descent.
-    ///
-    /// For gradient-based training, use Gradient Boosting or other ensemble methods
-    /// that explicitly use gradients.
-    /// </para>
-    /// </remarks>
-    public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        var loss = lossFunction ?? DefaultLossFunction;
-        var predictions = Predict(input);
-
-        // For gradient boosting: compute per-sample loss derivatives (pseudo-residuals)
-        // These are ∂Loss/∂predictions, NOT ∂Loss/∂parameters
-        // In gradient boosting, subsequent trees are fit to these negative gradients
-        var sampleGradients = loss.CalculateDerivative(predictions, target);
-
-        // Map per-sample gradients to per-parameter gradients
-        // For decision trees, parameters typically represent leaf values or split thresholds
-        // We aggregate sample gradients into ParameterCount buckets
-        var gradients = new Vector<T>(ParameterCount);
-
-        if (sampleGradients.Length == 0 || ParameterCount == 0)
-        {
-            return gradients; // Return zeros
-        }
-
-        // Distribute samples across parameters
-        int samplesPerParam = Math.Max(1, (sampleGradients.Length + ParameterCount - 1) / ParameterCount);
-
-        for (int paramIdx = 0; paramIdx < ParameterCount; paramIdx++)
-        {
-            T sum = NumOps.Zero;
-            int count = 0;
-
-            // Aggregate gradients for samples mapped to this parameter
-            int startIdx = paramIdx * samplesPerParam;
-            int endIdx = Math.Min((paramIdx + 1) * samplesPerParam, sampleGradients.Length);
-
-            for (int sampleIdx = startIdx; sampleIdx < endIdx; sampleIdx++)
-            {
-                sum = NumOps.Add(sum, sampleGradients[sampleIdx]);
-                count++;
-            }
-
-            // Average the gradients for this parameter bucket
-            gradients[paramIdx] = count > 0
-                ? NumOps.Divide(sum, NumOps.FromDouble(count))
-                : NumOps.Zero;
-        }
-
-        return gradients;
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para><b>IMPORTANT NOTE:</b> Async tree models are not trained via gradient descent.
-    /// This method is provided for interface compatibility.
-    ///
-    /// Async tree models are typically trained using:
-    /// - Parallel tree construction algorithms
-    /// - Bootstrap aggregating (Bagging) for Random Forests
-    /// - Gradient-based ensemble methods for Gradient Boosting
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a no-op for tree-based models.
-    ///
-    /// Trees are built differently than neural networks. They don't learn by
-    /// adjusting weights with gradients. Instead, they:
-    /// 1. Find the best feature to split on at each node
-    /// 2. Build the tree structure recursively
-    /// 3. Combine multiple trees in ensembles (Random Forests, etc.)
-    ///
-    /// This method exists for interface compatibility but doesn't perform gradient updates.
-    /// </para>
-    /// </remarks>
-    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} gradients, but got {gradients.Length}", nameof(gradients));
-        }
-
-        // No-op for async tree models - trees are trained via splitting algorithms
-        // Derived classes like GradientBoostingRegression can override with proper gradient-based updates
-    }
-
-    /// <summary>
-    /// Saves the model's current state to a stream.
-    /// </summary>
-    public virtual void SaveState(Stream stream)
-    {
-        if (stream == null) throw new ArgumentNullException(nameof(stream));
-        if (!stream.CanWrite) throw new ArgumentException("Stream must be writable.", nameof(stream));
-        var data = Serialize();
-        stream.Write(data, 0, data.Length);
-        stream.Flush();
-    }
-
-    /// <summary>
-    /// Loads the model's state from a stream.
-    /// </summary>
-    public virtual void LoadState(Stream stream)
-    {
-        if (stream == null) throw new ArgumentNullException(nameof(stream));
-        if (!stream.CanRead) throw new ArgumentException("Stream must be readable.", nameof(stream));
-        using var ms = new MemoryStream();
-        stream.CopyTo(ms);
-        var data = ms.ToArray();
-        if (data.Length == 0) throw new InvalidOperationException("Stream contains no data.");
-        Deserialize(data);
-    }
-
-    #region Soft Tree Mode for JIT Compilation
-
-    /// <summary>
-    /// Gets or sets whether to use soft (differentiable) tree mode for JIT compilation support.
-    /// </summary>
-    /// <value><c>true</c> to enable soft tree mode; <c>false</c> (default) for traditional hard decision trees.</value>
-    /// <remarks>
-    /// <para>
-    /// When enabled, the decision tree uses sigmoid-based soft gating instead of hard if-then splits.
-    /// This makes the tree differentiable and enables JIT compilation support.
-    /// </para>
-    /// <para>
-    /// Formula at each split: output = σ((threshold - x[feature]) / temperature) * left + (1 - σ) * right
-    /// where σ is the sigmoid function.
-    /// </para>
-    /// <para><b>For Beginners:</b> Soft tree mode allows the decision tree to be JIT compiled for faster inference.
-    ///
-    /// Traditional decision trees make hard yes/no decisions:
-    /// - "If feature &gt; 5, go LEFT, otherwise go RIGHT"
-    ///
-    /// Soft trees use smooth transitions instead:
-    /// - Near the boundary, the output blends both left and right paths
-    /// - This creates a smooth, differentiable function that can be JIT compiled
-    /// </para>
-    /// </remarks>
-    public bool UseSoftTree
-    {
-        get => Options.UseSoftTree;
-        set => Options.UseSoftTree = value;
-    }
-
-    /// <summary>
-    /// Gets or sets the temperature parameter for soft decision tree mode.
-    /// </summary>
-    /// <value>
-    /// The temperature for sigmoid gating. Lower values produce sharper decisions.
-    /// Default is 1.0.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// Only used when <see cref="UseSoftTree"/> is enabled. Controls the smoothness of
-    /// the soft split operations:
-    /// </para>
-    /// <list type="bullet">
-    /// <item><description>Lower temperature (e.g., 0.1) = sharper, more discrete decisions</description></item>
-    /// <item><description>Higher temperature (e.g., 10.0) = softer, more blended decisions</description></item>
-    /// </list>
-    /// </remarks>
-    public T SoftTreeTemperature
-    {
-        get => NumOps.FromDouble(Options.SoftTreeTemperature);
-        set => Options.SoftTreeTemperature = Convert.ToDouble(value);
-    }
-
-    #endregion
-
-    #region IJitCompilable Implementation
-
-    /// <summary>
-    /// Gets whether this model currently supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> when <see cref="UseSoftTree"/> is enabled and the tree has been trained;
-    /// <c>false</c> otherwise.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// When <see cref="UseSoftTree"/> is enabled, the decision tree can be exported as a
-    /// differentiable computation graph using soft (sigmoid-based) gating. This enables
-    /// JIT compilation for optimized inference.
-    /// </para>
-    /// <para>
-    /// When <see cref="UseSoftTree"/> is disabled, JIT compilation is not supported because
-    /// traditional hard decision trees use branching logic that cannot be represented as
-    /// a static computation graph.
-    /// </para>
-    /// <para><b>For Beginners:</b> JIT compilation is available when soft tree mode is enabled.
-    ///
-    /// In soft tree mode, the discrete if-then decisions are replaced with smooth sigmoid
-    /// functions that can be compiled into an optimized computation graph. This gives you
-    /// the interpretability of decision trees with the speed of JIT-compiled models.
-    /// </para>
-    /// </remarks>
-    public virtual bool SupportsJitCompilation => UseSoftTree && Root != null;
-
-    /// <summary>
-    /// Exports the model's computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The root node of the exported computation graph.</returns>
-    /// <exception cref="NotSupportedException">
-    /// Thrown when <see cref="UseSoftTree"/> is false.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when the tree has not been trained (Root is null).
-    /// </exception>
-    /// <remarks>
-    /// <para>
-    /// When soft tree mode is enabled, this exports the tree as a differentiable computation
-    /// graph using <see cref="Autodiff.TensorOperations{T}.SoftSplit"/> operations. Each internal
-    /// node becomes a soft split operation that computes sigmoid-weighted combinations of
-    /// left and right subtree outputs.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method converts the decision tree into a computation graph.
-    ///
-    /// In soft tree mode, each decision node becomes a smooth blend:
-    /// - Instead of "go left OR right", it computes "X% left + Y% right"
-    /// - The percentages are determined by the sigmoid function
-    /// - This creates a smooth, differentiable function that can be JIT compiled
-    /// </para>
-    /// </remarks>
-    public virtual AiDotNet.Autodiff.ComputationNode<T> ExportComputationGraph(List<AiDotNet.Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (!UseSoftTree)
-        {
-            throw new NotSupportedException(
-                "Async decision trees do not support JIT compilation in hard tree mode because they use " +
-                "discrete branching logic (if-then-else rules).\n\n" +
-                "To enable JIT compilation, set UseSoftTree = true to use soft (differentiable) decision trees " +
-                "with sigmoid-based gating.");
-        }
-
-        if (Root == null)
-        {
-            throw new InvalidOperationException(
-                "Cannot export computation graph: the decision tree has not been trained. " +
-                "Call Train() or TrainAsync() first to build the tree structure.");
-        }
-
-        // Get the number of features from the tree structure
-        int numFeatures = GetMaxFeatureIndexFromTree(Root) + 1;
-
-        // Create input variable node
-        var inputTensor = new Tensor<T>(new[] { numFeatures });
-        var input = Autodiff.TensorOperations<T>.Variable(inputTensor, "input");
-        inputNodes.Add(input);
-
-        // Recursively export the tree as soft split operations
-        return ExportNodeAsComputationGraph(Root, input);
-    }
-
-    /// <summary>
-    /// Gets the maximum feature index used in the tree.
-    /// </summary>
-    /// <param name="node">The root node of the tree to scan.</param>
-    /// <returns>The maximum feature index found.</returns>
-    private int GetMaxFeatureIndexFromTree(DecisionTreeNode<T>? node)
-    {
-        if (node == null || node.IsLeaf)
-            return -1;
-
-        int maxIndex = node.FeatureIndex;
-        int leftMax = GetMaxFeatureIndexFromTree(node.Left);
-        int rightMax = GetMaxFeatureIndexFromTree(node.Right);
-
-        return Math.Max(maxIndex, Math.Max(leftMax, rightMax));
-    }
-
-    /// <summary>
-    /// Recursively exports a tree node as a computation graph.
-    /// </summary>
-    /// <param name="node">The node to export.</param>
-    /// <param name="input">The input computation node.</param>
-    /// <returns>A computation node representing this subtree.</returns>
-    private Autodiff.ComputationNode<T> ExportNodeAsComputationGraph(
-        DecisionTreeNode<T> node,
-        Autodiff.ComputationNode<T> input)
-    {
-        if (node.IsLeaf)
-        {
-            // Leaf node: return constant prediction value
-            var leafTensor = new Tensor<T>(new[] { 1 });
-            leafTensor[0] = node.Prediction;
-            return Autodiff.TensorOperations<T>.Constant(leafTensor, $"leaf_{node.GetHashCode()}");
-        }
-
-        // Internal node: export as SoftSplit operation
-        // Recursively export left and right subtrees
-        var leftOutput = ExportNodeAsComputationGraph(node.Left!, input);
-        var rightOutput = ExportNodeAsComputationGraph(node.Right!, input);
-
-        // Use SoftSplit operation: output = sigmoid((threshold - x[feature]) / temp) * left + (1 - sigmoid) * right
-        return Autodiff.TensorOperations<T>.SoftSplit(
-            input,
-            leftOutput,
-            rightOutput,
-            node.FeatureIndex,
-            node.SplitValue,
-            SoftTreeTemperature);
-    }
-
-    #endregion
 }

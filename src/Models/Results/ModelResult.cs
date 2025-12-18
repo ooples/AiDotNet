@@ -56,7 +56,7 @@ public struct ModelResult<T, TInput, TOutput>
     /// - Higher values usually indicate better performance
     /// 
     /// Common fitness metrics include:
-    /// - RÂ² (R-squared): Measures the proportion of variance explained (higher is better)
+    /// - R² (R-squared): Measures the proportion of variance explained (higher is better)
     /// - Negative MSE (Mean Squared Error): Measures prediction error (closer to zero is better)
     /// - Accuracy: For classification problems, the percentage of correct predictions
     /// 
@@ -120,7 +120,7 @@ public struct ModelResult<T, TInput, TOutput>
     /// - Gives a more complete picture of model performance
     /// 
     /// Common metrics included might be:
-    /// - RÂ² (R-squared): How much variance is explained
+    /// - R² (R-squared): How much variance is explained
     /// - MSE (Mean Squared Error): Average squared difference between predictions and actual values
     /// - MAE (Mean Absolute Error): Average absolute difference between predictions and actual values
     /// - RMSE (Root Mean Squared Error): Square root of MSE, in the same units as the target variable

@@ -13,8 +13,8 @@ namespace AiDotNet.Models.Options;
 /// </para>
 /// <para><b>For Beginners:</b> Think of Gaussian Process Regression as drawing a smooth curve through your data
 /// points, but instead of just giving you one "best" curve, it gives you a range of possible curves with
-/// information about which ones are more likely. This is like a weather forecast that says "70Â°F with a 90%
-/// chance of being between 65-75Â°F" rather than just "70Â°F." This ability to express uncertainty makes GPR
+/// information about which ones are more likely. This is like a weather forecast that says "70°F with a 90%
+/// chance of being between 65-75°F" rather than just "70°F." This ability to express uncertainty makes GPR
 /// especially useful when you need to know not just what your model predicts, but how confident it is in those
 /// predictions. GPR works well with small to medium datasets and can capture complex patterns without requiring
 /// you to specify the exact form of the relationship beforehand.</para>

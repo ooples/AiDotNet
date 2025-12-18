@@ -2,30 +2,14 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-	  <TargetFrameworks>net8.0;net471</TargetFrameworks>
+	  <TargetFrameworks>net8.0;net462</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 	  <LangVersion>latest</LangVersion>
-    <!-- CA1822: BenchmarkDotNet requires instance methods for benchmarks -->
-    <NoWarn>$(NoWarn);CA1822</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
-
-    <!-- Competitor Libraries for Benchmarking -->
-    <PackageReference Include="Accord" Version="3.8.0" />
-    <PackageReference Include="Accord.Math" Version="3.8.0" />
-    <PackageReference Include="Accord.Statistics" Version="3.8.0" />
-    <PackageReference Include="Accord.MachineLearning" Version="3.8.0" />
-    <!-- Microsoft.ML only supports x64/x86 architectures, limit to net8.0 for CI compatibility -->
-    <PackageReference Include="Microsoft.ML" Version="3.0.1" Condition="'$(TargetFramework)' == 'net8.0'" />
-    <PackageReference Include="TensorFlow.NET" Version="0.150.0" Condition="'$(TargetFramework)' == 'net8.0'" />
-    <PackageReference Include="SciSharp.TensorFlow.Redist" Version="2.16.0" Condition="'$(TargetFramework)' == 'net8.0'" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\src\AiDotNet.csproj" />
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.5" />
   </ItemGroup>
 
 </Project>

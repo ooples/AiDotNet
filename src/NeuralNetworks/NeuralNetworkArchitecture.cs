@@ -90,8 +90,8 @@ public class NeuralNetworkArchitecture<T>
     /// 
     /// For example:
     /// - For a list of 10 customer attributes: InputSize = 10
-    /// - For a 28Ã—28 grayscale image: InputSize = 784 (28Ã—28)
-    /// - For a 32Ã—32 color image: InputSize = 3072 (32Ã—32Ã—3 color channels)
+    /// - For a 28×28 grayscale image: InputSize = 784 (28×28)
+    /// - For a 32×32 color image: InputSize = 3072 (32×32×3 color channels)
     /// 
     /// This tells the network how many "inputs" to expect. Think of it like how many
     /// separate pieces of information your network will consider at once.
@@ -131,7 +131,7 @@ public class NeuralNetworkArchitecture<T>
     /// <para><b>For Beginners:</b> For grid-like data (like images), this is the number of rows.
     /// 
     /// For example:
-    /// - For a 28Ã—28 image: InputHeight = 28
+    /// - For a 28×28 image: InputHeight = 28
     /// 
     /// This is only used when working with multi-dimensional data like images.
     /// For simple lists of values, you'd use InputSize instead.
@@ -150,7 +150,7 @@ public class NeuralNetworkArchitecture<T>
     /// <para><b>For Beginners:</b> For grid-like data (like images), this is the number of columns.
     /// 
     /// For example:
-    /// - For a 28Ã—28 image: InputWidth = 28
+    /// - For a 28×28 image: InputWidth = 28
     /// 
     /// This is only used when working with multi-dimensional data like images.
     /// For simple lists of values, you'd use InputSize instead.
@@ -226,35 +226,6 @@ public class NeuralNetworkArchitecture<T>
     public NetworkComplexity Complexity { get; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether all layers in this architecture should use automatic differentiation by default.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if layers should use autodiff by default; <c>false</c> for manual backward implementations. Default is <c>false</c>.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property sets the default autodiff mode for all layers created with this architecture.
-    /// Individual layers can still override this setting via their <c>UseAutodiff</c> property.
-    /// Manual backward passes are typically faster but require explicit gradient code, while autodiff
-    /// is more flexible for custom or experimental layers.
-    /// </para>
-    /// <para><b>For Beginners:</b> This controls how gradient computation works for all layers in the network.
-    ///
-    /// When building a network from this architecture:
-    /// - <b>false (default):</b> All layers use fast, hand-optimized gradient code
-    /// - <b>true:</b> All layers use automatic differentiation for gradients
-    ///
-    /// Most users should leave this as false (default) for best performance. Set to true only for:
-    /// - Research and experimentation with novel architectures
-    /// - Networks with many custom layers that have complex gradients
-    /// - When you want to verify gradient correctness during development
-    ///
-    /// <b>Note:</b> Individual layers can override this setting. This just sets the default.
-    /// </para>
-    /// </remarks>
-    public bool UseAutodiff { get; set; } = false;
-
-    /// <summary>
     /// Gets the dimensionality of the input (1, 2, or 3).
     /// </summary>
     /// <remarks>
@@ -289,10 +260,10 @@ public class NeuralNetworkArchitecture<T>
     /// 
     /// It's automatically calculated depending on your input type:
     /// - For 1D data: Just returns your InputSize
-    /// - For 2D data: Calculates InputHeight Ã— InputWidth
-    /// - For 3D data: Calculates InputHeight Ã— InputWidth Ã— InputDepth
-    ///
-    /// For example, a 28Ã—28 image has 784 total pixels, so CalculatedInputSize would be 784.
+    /// - For 2D data: Calculates InputHeight × InputWidth
+    /// - For 3D data: Calculates InputHeight × InputWidth × InputDepth
+    /// 
+    /// For example, a 28×28 image has 784 total pixels, so CalculatedInputSize would be 784.
     /// 
     /// This helps ensure all your dimension settings are consistent with each other.
     /// </para>
@@ -413,7 +384,7 @@ public class NeuralNetworkArchitecture<T>
     /// <remarks>
     /// <para>
     /// This constructor provides a simplified way to create a neural network architecture specifically for regression tasks.
-    /// It automatically sets the appropriate input type to TwoDimensional (for a matrix of samples Ã— features) and
+    /// It automatically sets the appropriate input type to TwoDimensional (for a matrix of samples × features) and
     /// sets the task type to Regression.
     /// </para>
     /// <para><b>For Beginners:</b> This is a simpler way to create a neural network for predicting numerical values.
@@ -463,7 +434,7 @@ public class NeuralNetworkArchitecture<T>
     /// <remarks>
     /// <para>
     /// This constructor provides a simplified way to create a neural network architecture specifically for classification tasks.
-    /// It automatically sets the appropriate input type to TwoDimensional (for a matrix of samples Ã— features) and
+    /// It automatically sets the appropriate input type to TwoDimensional (for a matrix of samples × features) and
     /// sets the task type to either MultiClassClassification or BinaryClassification based on the isMultiClass parameter.
     /// </para>
     /// <para><b>For Beginners:</b> This is a simpler way to create a neural network for classifying data into categories.
@@ -562,7 +533,7 @@ public class NeuralNetworkArchitecture<T>
     /// 
     /// Different types of data have different shapes:
     /// - 1D data: Returns [size] - like [10] for 10 features
-    /// - 2D data: Returns [height, width] - like [28, 28] for a 28Ã—28 image
+    /// - 2D data: Returns [height, width] - like [28, 28] for a 28×28 image
     /// - 3D data: Returns [depth, height, width] - like [3, 32, 32] for a color image
     /// 
     /// This shape information is important when:
@@ -634,7 +605,7 @@ public class NeuralNetworkArchitecture<T>
     /// 
     /// It multiplies all the dimensions of your output shape:
     /// - For a shape [10] (like 10 classes): Total is 10
-    /// - For a shape [5, 5] (like a 5Ã—5 grid): Total is 25
+    /// - For a shape [5, 5] (like a 5×5 grid): Total is 25
     /// 
     /// Most common networks have simple outputs:
     /// - Classification: Equal to the number of categories
@@ -674,9 +645,9 @@ public class NeuralNetworkArchitecture<T>
     /// - All hidden layers (middle values)
     /// - The output layer (last value)
     /// 
-    /// For example, a network for classifying 28Ã—28 images into 10 categories
+    /// For example, a network for classifying 28×28 images into 10 categories
     /// might return: [784, 128, 64, 10]
-    /// - 784: Input layer (28Ã—28 pixels)
+    /// - 784: Input layer (28×28 pixels)
     /// - 128: First hidden layer
     /// - 64: Second hidden layer
     /// - 10: Output layer (10 categories)
@@ -757,8 +728,8 @@ public class NeuralNetworkArchitecture<T>
     /// - InputHeight = 5
     /// - InputWidth = 5
     ///
-    /// These are consistent because 5Ã—5=25. But if you set InputSize=30, it would
-    /// throw an error because 5Ã—5â‰ 30.
+    /// These are consistent because 5×5=25. But if you set InputSize=30, it would
+    /// throw an error because 5×5?30.
     ///
     /// This prevents many common errors when setting up neural networks.
     /// </para>

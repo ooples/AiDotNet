@@ -22,6 +22,7 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+    where T : struct, IEquatable<T>, IFormattable
 {
     /// <summary>
     /// The options specific to the Tabu Search algorithm.
@@ -54,14 +55,12 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <param name="model">The model to be optimized.</param>
     /// <param name="options">Options specific to the Tabu Search algorithm.</param>
     /// <param name="geneticAlgorithm">The genetic algorithm to use for mutations. If null, a StandardGeneticAlgorithm will be used.</param>
-    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public TabuSearchOptimizer(
         IFullModel<T, TInput, TOutput> model,
         TabuSearchOptions<T, TInput, TOutput>? options = null,
         GeneticBase<T, TInput, TOutput>? geneticAlgorithm = null,
         IFitnessCalculator<T, TInput, TOutput>? fitnessCalculator = null,
-        IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null,
-        IEngine? engine = null)
+        IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null)
         : base(model, options ?? new())
     {
         _tabuOptions = options ?? new TabuSearchOptions<T, TInput, TOutput>();

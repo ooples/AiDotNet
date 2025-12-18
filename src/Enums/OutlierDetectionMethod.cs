@@ -48,7 +48,7 @@ public enum OutlierDetectionMethod
     /// 2. Find Q1 (the value 25% of the way through your sorted data)
     /// 3. Find Q3 (the value 75% of the way through your sorted data)
     /// 4. Calculate IQR = Q3 - Q1
-    /// 5. Any value below Q1 - 1.5Ã—IQR or above Q3 + 1.5Ã—IQR is considered an outlier
+    /// 5. Any value below Q1 - 1.5×IQR or above Q3 + 1.5×IQR is considered an outlier
     /// 
     /// The advantage of IQR is that it's not affected by extreme values, making it more robust than Z-Score 
     /// for skewed data or when you're not sure if your data follows a bell curve.

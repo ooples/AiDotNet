@@ -1,5 +1,3 @@
-using AiDotNet.Autodiff;
-
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -66,7 +64,7 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     public GumbelSoftmaxActivation(double temperature = 1.0, int? seed = null)
     {
         _temperature = NumOps.FromDouble(temperature);
-        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
+        _random = seed.HasValue ? new Random(seed.Value) : new Random();
     }
 
     /// <summary>
@@ -178,12 +176,12 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
             uniform[i] = NumOps.FromDouble(_random.NextDouble());
         }
 
-        return uniform.Transform(u =>
+        return uniform.Transform(u => 
             NumOps.Multiply(
                 NumOps.Negate(
-                    NumericalStabilityHelper.SafeLog(
+                    NumOps.Log(
                         NumOps.Negate(
-                            NumericalStabilityHelper.SafeLog(u)
+                            NumOps.Log(u)
                         )
                     )
                 ),
@@ -221,39 +219,5 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
         T sum = expValues.Sum();
 
         return expValues.Transform(x => NumOps.Divide(x, sum));
-    }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.GumbelSoftmax provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// Gumbel-Softmax supports JIT compilation with straight-through gradient estimation.
-    /// The backward pass computes softmax gradients scaled by inverse temperature.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with GumbelSoftmax activation applied.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps to TensorOperations&lt;T&gt;.GumbelSoftmax(input) which handles both
-    /// forward and backward passes for JIT compilation with differentiable categorical sampling.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        double temperature = Convert.ToDouble(_temperature);
-        return TensorOperations<T>.GumbelSoftmax(input, temperature, hard: false);
     }
 }

@@ -205,7 +205,7 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
     /// <para><b>Supported Layer Types:</b>
     /// - <b>Dense/Linear:</b> DenseLayer, FullyConnectedLayer, FeedForwardLayer
     /// - <b>Convolutional:</b> ConvolutionalLayer, DeconvolutionalLayer, DepthwiseSeparableConvolutionalLayer,
-    ///   DilatedConvolutionalLayer, SeparableConvolutionalLayer, SubpixelConvolutionalLayer
+    ///   DilatedConvolutionalLayer, SeparableConvolutionalLayer, SubpixelConvolutionalLayer, GraphConvolutionalLayer
     /// - <b>Recurrent:</b> LSTMLayer, GRULayer, RecurrentLayer, ConvLSTMLayer, BidirectionalLayer
     /// - <b>Attention:</b> AttentionLayer, MultiHeadAttentionLayer, SelfAttentionLayer
     /// - <b>Transformer:</b> TransformerEncoderLayer, TransformerDecoderLayer
@@ -213,9 +213,8 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
     /// - <b>Specialized:</b> LocallyConnectedLayer, HighwayLayer, GatedLinearUnitLayer, SqueezeAndExcitationLayer
     /// - <b>Advanced:</b> CapsuleLayer, PrimaryCapsuleLayer, DigitCapsuleLayer, ConditionalRandomFieldLayer
     ///
-    /// <b>Excluded Layer Types:</b>
-    /// - Activation, Pooling, Dropout, Flatten, Reshape, Normalization (no trainable weights)
-    /// - GraphConvolutionalLayer (requires specialized adapter that implements IGraphConvolutionLayer)
+    /// <b>Excluded Layer Types</b> (no trainable weights or not suitable):
+    /// - Activation, Pooling, Dropout, Flatten, Reshape, Normalization, etc.
     /// </para>
     /// <para><b>For Beginners:</b> This method decides whether to add LoRA to each layer.
     ///
@@ -301,16 +300,10 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
 
         // Specialized layers with trainable weights
         if (layer is LocallyConnectedLayer<T> || layer is HighwayLayer<T> ||
-            layer is GatedLinearUnitLayer<T> || layer is SqueezeAndExcitationLayer<T>)
+            layer is GatedLinearUnitLayer<T> || layer is SqueezeAndExcitationLayer<T> ||
+            layer is GraphConvolutionalLayer<T>)
         {
             return CreateAdapter(layer);
-        }
-
-        // Graph convolutional layers - use specialized GraphConvolutionalLoRAAdapter
-        // which implements IGraphConvolutionLayer<T> and properly delegates graph methods
-        if (layer is IGraphConvolutionLayer<T>)
-        {
-            return new GraphConvolutionalLoRAAdapter<T>(layer, Rank, Alpha, FreezeBaseLayer);
         }
 
         // Capsule layers

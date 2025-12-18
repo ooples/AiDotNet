@@ -1,4 +1,4 @@
-namespace AiDotNet.WaveletFunctions;
+namespace AiDotNet.Wavelets;
 
 /// <summary>
 /// Implements biorthogonal wavelets, which offer symmetry and linear phase properties while maintaining
@@ -33,23 +33,28 @@ namespace AiDotNet.WaveletFunctions;
 /// and one for synthesizing - that work together perfectly.
 /// </para>
 /// </remarks>
-public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
+public class BiorthogonalWavelet<T> : IWaveletFunction<T>
 {
+    /// <summary>
+    /// Provides numeric operations for the specific type T.
+    /// </summary>
+    private readonly INumericOperations<T> _numOps;
+    
     /// <summary>
     /// The order of the wavelet used for decomposition.
     /// </summary>
     private readonly int _decompositionOrder;
-
+    
     /// <summary>
     /// The order of the wavelet used for reconstruction.
     /// </summary>
     private readonly int _reconstructionOrder;
-
+    
     /// <summary>
     /// Coefficients used for the decomposition process.
     /// </summary>
     private readonly Vector<T> _decompositionCoefficients;
-
+    
     /// <summary>
     /// Coefficients used for the reconstruction process.
     /// </summary>
@@ -90,6 +95,7 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
         if (reconstructionOrder < 1 || reconstructionOrder > 3)
             throw new ArgumentException("Order must be between 1 and 3.", nameof(reconstructionOrder));
 
+        _numOps = MathHelper.GetNumericOperations<T>();
         _decompositionOrder = decompositionOrder;
         _reconstructionOrder = reconstructionOrder;
         _decompositionCoefficients = GetDecompositionCoefficients(_decompositionOrder);
@@ -118,13 +124,13 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// to a signal at specific points.
     /// </para>
     /// </remarks>
-    public override T Calculate(T x)
+    public T Calculate(T x)
     {
-        T result = NumOps.Zero;
+        T result = _numOps.Zero;
         for (int k = 0; k < _decompositionCoefficients.Length; k++)
         {
-            T shiftedX = NumOps.Subtract(x, NumOps.FromDouble(k));
-            result = NumOps.Add(result, NumOps.Multiply(_decompositionCoefficients[k], ScalingFunction(shiftedX)));
+            T shiftedX = _numOps.Subtract(x, _numOps.FromDouble(k));
+            result = _numOps.Add(result, _numOps.Multiply(_decompositionCoefficients[k], ScalingFunction(shiftedX)));
         }
 
         return result;
@@ -153,12 +159,12 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private T ScalingFunction(T x)
     {
-        if (NumOps.GreaterThanOrEquals(x, NumOps.Zero) && NumOps.LessThan(x, NumOps.One))
+        if (_numOps.GreaterThanOrEquals(x, _numOps.Zero) && _numOps.LessThan(x, _numOps.One))
         {
-            return NumOps.One;
+            return _numOps.One;
         }
 
-        return NumOps.Zero;
+        return _numOps.Zero;
     }
 
     /// <summary>
@@ -194,14 +200,14 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     {
         return order switch
         {
-            1 => new Vector<T>([NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(0.7071067811865476)]),
-            2 => new Vector<T>([ NumOps.FromDouble(-0.1767766952966369), NumOps.FromDouble(0.3535533905932738),
-                                             NumOps.FromDouble(1.0606601717798214), NumOps.FromDouble(0.3535533905932738),
-                                             NumOps.FromDouble(-0.1767766952966369) ]),
-            3 => new Vector<T>([ NumOps.FromDouble(0.0352262918857095), NumOps.FromDouble(-0.0854412738820267),
-                                             NumOps.FromDouble(-0.1350110200102546), NumOps.FromDouble(0.4598775021184914),
-                                             NumOps.FromDouble(0.8068915093110924), NumOps.FromDouble(0.3326705529500826),
-                                             NumOps.FromDouble(-0.0279837694169839) ]),
+            1 => new Vector<T>([_numOps.FromDouble(0.7071067811865476), _numOps.FromDouble(0.7071067811865476)]),
+            2 => new Vector<T>([ _numOps.FromDouble(-0.1767766952966369), _numOps.FromDouble(0.3535533905932738),
+                                             _numOps.FromDouble(1.0606601717798214), _numOps.FromDouble(0.3535533905932738),
+                                             _numOps.FromDouble(-0.1767766952966369) ]),
+            3 => new Vector<T>([ _numOps.FromDouble(0.0352262918857095), _numOps.FromDouble(-0.0854412738820267),
+                                             _numOps.FromDouble(-0.1350110200102546), _numOps.FromDouble(0.4598775021184914),
+                                             _numOps.FromDouble(0.8068915093110924), _numOps.FromDouble(0.3326705529500826),
+                                             _numOps.FromDouble(-0.0279837694169839) ]),
             _ => throw new ArgumentException($"Biorthogonal wavelet of order {order} is not implemented."),
         };
     }
@@ -235,13 +241,13 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     {
         return order switch
         {
-            1 => new Vector<T>([NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(0.7071067811865476)]),
-            2 => new Vector<T>([ NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(1.0606601717798214),
-                                             NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(-0.1767766952966369) ]),
-            3 => new Vector<T>([ NumOps.FromDouble(-0.0279837694169839), NumOps.FromDouble(0.3326705529500826),
-                                             NumOps.FromDouble(0.8068915093110924), NumOps.FromDouble(0.4598775021184914),
-                                             NumOps.FromDouble(-0.1350110200102546), NumOps.FromDouble(-0.0854412738820267),
-                                             NumOps.FromDouble(0.0352262918857095) ]),
+            1 => new Vector<T>([_numOps.FromDouble(0.7071067811865476), _numOps.FromDouble(0.7071067811865476)]),
+            2 => new Vector<T>([ _numOps.FromDouble(0.3535533905932738), _numOps.FromDouble(1.0606601717798214),
+                                             _numOps.FromDouble(0.3535533905932738), _numOps.FromDouble(-0.1767766952966369) ]),
+            3 => new Vector<T>([ _numOps.FromDouble(-0.0279837694169839), _numOps.FromDouble(0.3326705529500826),
+                                             _numOps.FromDouble(0.8068915093110924), _numOps.FromDouble(0.4598775021184914),
+                                             _numOps.FromDouble(-0.1350110200102546), _numOps.FromDouble(-0.0854412738820267),
+                                             _numOps.FromDouble(0.0352262918857095) ]),
             _ => throw new ArgumentException($"Biorthogonal wavelet of order {order} is not implemented."),
         };
     }
@@ -274,7 +280,7 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// which is why the input length must be even.
     /// </para>
     /// </remarks>
-    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         if (input.Length % 2 != 0)
             throw new ArgumentException("Input length must be even for biorthogonal wavelet decomposition.");
@@ -288,14 +294,14 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
 
         for (int i = 0; i < halfLength; i++)
         {
-            T approx = NumOps.Zero;
-            T det = NumOps.Zero;
+            T approx = _numOps.Zero;
+            T det = _numOps.Zero;
 
             for (int j = 0; j < decompositionLowPass.Length; j++)
             {
                 int index = (2 * i + j) % input.Length;
-                approx = NumOps.Add(approx, NumOps.Multiply(decompositionLowPass[j], input[index]));
-                det = NumOps.Add(det, NumOps.Multiply(decompositionHighPass[j], input[index]));
+                approx = _numOps.Add(approx, _numOps.Multiply(decompositionLowPass[j], input[index]));
+                det = _numOps.Add(det, _numOps.Multiply(decompositionHighPass[j], input[index]));
             }
 
             approximation[i] = approx;
@@ -327,7 +333,7 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// wavelet coefficients, they can perfectly reconstruct the original signal.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetScalingCoefficients()
+    public Vector<T> GetScalingCoefficients()
     {
         return GetReconstructionLowPassFilter();
     }
@@ -354,7 +360,7 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// signal, these coefficients allow perfect reconstruction of the original signal.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetWaveletCoefficients()
+    public Vector<T> GetWaveletCoefficients()
     {
         return GetReconstructionHighPassFilter();
     }
@@ -548,7 +554,7 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     private Vector<T> NormalizeAndConvert(double[] coeffs)
     {
         double normFactor = Math.Sqrt(coeffs.Sum(c => c * c));
-        return new Vector<T>([.. coeffs.Select(c => NumOps.FromDouble(c / normFactor))]);
+        return new Vector<T>([.. coeffs.Select(c => _numOps.FromDouble(c / normFactor))]);
     }
 }
     

@@ -1,5 +1,3 @@
-using AiDotNet.Autodiff;
-
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -149,7 +147,7 @@ public class NBEATSBlock<T>
     /// </remarks>
     private void InitializeWeights()
     {
-        var random = RandomHelper.CreateSeededRandom(42);
+        var random = new Random(42);
 
         // First layer: lookbackWindow -> hiddenLayerSize
         int inputSize = _lookbackWindow;
@@ -241,12 +239,16 @@ public class NBEATSBlock<T>
 
         for (int layer = 0; layer < _numHiddenLayers; layer++)
         {
-            // VECTORIZED: Linear transformation y = Wx + b using dot product
+            // Linear transformation: y = Wx + b
             Vector<T> linear = new Vector<T>(_fcWeights[layer].Rows);
             for (int i = 0; i < _fcWeights[layer].Rows; i++)
             {
-                Vector<T> weightRow = _fcWeights[layer].GetRow(i);
-                linear[i] = _numOps.Add(_fcBiases[layer][i], weightRow.DotProduct(x));
+                T sum = _fcBiases[layer][i];
+                for (int j = 0; j < _fcWeights[layer].Columns; j++)
+                {
+                    sum = _numOps.Add(sum, _numOps.Multiply(_fcWeights[layer][i, j], x[j]));
+                }
+                linear[i] = sum;
             }
 
             // ReLU activation
@@ -257,22 +259,30 @@ public class NBEATSBlock<T>
             }
         }
 
-        // VECTORIZED: Compute theta for backcast using dot product
+        // Compute theta for backcast
         Vector<T> thetaBackcast = new Vector<T>(_thetaSizeBackcast);
         int backcastLayerIdx = _numHiddenLayers;
         for (int i = 0; i < _fcWeights[backcastLayerIdx].Rows; i++)
         {
-            Vector<T> weightRow = _fcWeights[backcastLayerIdx].GetRow(i);
-            thetaBackcast[i] = _numOps.Add(_fcBiases[backcastLayerIdx][i], weightRow.DotProduct(x));
+            T sum = _fcBiases[backcastLayerIdx][i];
+            for (int j = 0; j < _fcWeights[backcastLayerIdx].Columns; j++)
+            {
+                sum = _numOps.Add(sum, _numOps.Multiply(_fcWeights[backcastLayerIdx][i, j], x[j]));
+            }
+            thetaBackcast[i] = sum;
         }
 
-        // VECTORIZED: Compute theta for forecast using dot product
+        // Compute theta for forecast
         Vector<T> thetaForecast = new Vector<T>(_thetaSizeForecast);
         int forecastLayerIdx = _numHiddenLayers + 1;
         for (int i = 0; i < _fcWeights[forecastLayerIdx].Rows; i++)
         {
-            Vector<T> weightRow = _fcWeights[forecastLayerIdx].GetRow(i);
-            thetaForecast[i] = _numOps.Add(_fcBiases[forecastLayerIdx][i], weightRow.DotProduct(x));
+            T sum = _fcBiases[forecastLayerIdx][i];
+            for (int j = 0; j < _fcWeights[forecastLayerIdx].Columns; j++)
+            {
+                sum = _numOps.Add(sum, _numOps.Multiply(_fcWeights[forecastLayerIdx][i, j], x[j]));
+            }
+            thetaForecast[i] = sum;
         }
 
         // Apply basis expansion
@@ -365,20 +375,23 @@ public class NBEATSBlock<T>
     {
         var parameters = new List<T>();
 
-        // VECTORIZED: Use row operations to collect weight parameters
         foreach (var weight in _fcWeights)
         {
             for (int i = 0; i < weight.Rows; i++)
             {
-                Vector<T> row = weight.GetRow(i);
-                parameters.AddRange(row);
+                for (int j = 0; j < weight.Columns; j++)
+                {
+                    parameters.Add(weight[i, j]);
+                }
             }
         }
 
-        // VECTORIZED: Use AddRange to collect bias parameters
         foreach (var bias in _fcBiases)
         {
-            parameters.AddRange(bias);
+            for (int i = 0; i < bias.Length; i++)
+            {
+                parameters.Add(bias[i]);
+            }
         }
 
         return new Vector<T>(parameters.ToArray());
@@ -405,181 +418,23 @@ public class NBEATSBlock<T>
 
         int idx = 0;
 
-        // VECTORIZED: Use SetRow to assign weight parameters
         foreach (var weight in _fcWeights)
         {
             for (int i = 0; i < weight.Rows; i++)
             {
-                T[] rowData = new T[weight.Columns];
                 for (int j = 0; j < weight.Columns; j++)
                 {
-                    rowData[j] = parameters[idx++];
+                    weight[i, j] = parameters[idx++];
                 }
-                weight.SetRow(i, new Vector<T>(rowData));
             }
         }
 
-        // VECTORIZED: Use Slice to assign bias parameters
         foreach (var bias in _fcBiases)
         {
-            Vector<T> biasSlice = parameters.Slice(idx, bias.Length);
             for (int i = 0; i < bias.Length; i++)
             {
-                bias[i] = biasSlice[i];
-            }
-            idx += bias.Length;
-        }
-    }
-
-    /// <summary>
-    /// Exports the block as computation graph nodes for JIT compilation.
-    /// </summary>
-    /// <param name="inputNode">The input computation node (residual from previous block).</param>
-    /// <returns>A tuple containing (backcast, forecast) computation nodes.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a computation graph that represents the forward pass through
-    /// the N-BEATS block, enabling JIT compilation for optimized inference.
-    /// </para>
-    /// <para><b>For Beginners:</b> This converts the block's calculations into a format
-    /// that can be optimized by the JIT compiler. The resulting computation graph
-    /// represents:
-    /// 1. Passing input through fully connected layers with ReLU activation
-    /// 2. Computing theta parameters for backcast and forecast
-    /// 3. Applying basis expansion to generate backcast and forecast
-    /// </para>
-    /// </remarks>
-    public (ComputationNode<T> backcast, ComputationNode<T> forecast) ExportComputationGraph(ComputationNode<T> inputNode)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-
-        // Start with the input
-        var x = inputNode;
-
-        // Pass through fully connected layers with ReLU activation
-        for (int layer = 0; layer < _numHiddenLayers; layer++)
-        {
-            // Convert weight matrix to tensor [hidden_size, input_size]
-            var weightTensor = MatrixToTensor(_fcWeights[layer]);
-            var weightNode = TensorOperations<T>.Constant(weightTensor, $"block_fc{layer}_weight");
-
-            // Convert bias to tensor [hidden_size]
-            var biasTensor = VectorToTensor(_fcBiases[layer]);
-            var biasNode = TensorOperations<T>.Constant(biasTensor, $"block_fc{layer}_bias");
-
-            // Linear transformation: y = W @ x + b
-            var linear = TensorOperations<T>.MatrixMultiply(weightNode, x);
-            linear = TensorOperations<T>.Add(linear, biasNode);
-
-            // ReLU activation
-            x = TensorOperations<T>.ReLU(linear);
-        }
-
-        // Compute theta for backcast
-        var backcastWeightTensor = MatrixToTensor(_fcWeights[_numHiddenLayers]);
-        var backcastWeightNode = TensorOperations<T>.Constant(backcastWeightTensor, "block_backcast_weight");
-        var backcastBiasTensor = VectorToTensor(_fcBiases[_numHiddenLayers]);
-        var backcastBiasNode = TensorOperations<T>.Constant(backcastBiasTensor, "block_backcast_bias");
-
-        var thetaBackcast = TensorOperations<T>.MatrixMultiply(backcastWeightNode, x);
-        thetaBackcast = TensorOperations<T>.Add(thetaBackcast, backcastBiasNode);
-
-        // Compute theta for forecast
-        var forecastWeightTensor = MatrixToTensor(_fcWeights[_numHiddenLayers + 1]);
-        var forecastWeightNode = TensorOperations<T>.Constant(forecastWeightTensor, "block_forecast_weight");
-        var forecastBiasTensor = VectorToTensor(_fcBiases[_numHiddenLayers + 1]);
-        var forecastBiasNode = TensorOperations<T>.Constant(forecastBiasTensor, "block_forecast_bias");
-
-        var thetaForecast = TensorOperations<T>.MatrixMultiply(forecastWeightNode, x);
-        thetaForecast = TensorOperations<T>.Add(thetaForecast, forecastBiasNode);
-
-        // Apply basis expansion
-        var backcastNode = ApplyBasisExpansionGraph(thetaBackcast, _lookbackWindow, isBackcast: true);
-        var forecastNode = ApplyBasisExpansionGraph(thetaForecast, _forecastHorizon, isBackcast: false);
-
-        return (backcastNode, forecastNode);
-    }
-
-    /// <summary>
-    /// Applies basis expansion in the computation graph.
-    /// </summary>
-    private ComputationNode<T> ApplyBasisExpansionGraph(ComputationNode<T> theta, int outputLength, bool isBackcast)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-
-        if (_useInterpretableBasis)
-        {
-            // Polynomial basis expansion: output[t] = sum(theta[p] * t^p)
-            // Create the basis matrix [output_length, theta_size] where basis[t, p] = (t/outputLength)^p
-            var basisData = new T[outputLength * theta.Value.Shape[0]];
-            int thetaSize = theta.Value.Shape[0];
-
-            for (int t = 0; t < outputLength; t++)
-            {
-                double tNormalized = (double)t / outputLength;
-                for (int p = 0; p < Math.Min(thetaSize, _polynomialDegree + 1); p++)
-                {
-                    double power = Math.Pow(tNormalized, p);
-                    basisData[t * thetaSize + p] = numOps.FromDouble(power);
-                }
-            }
-
-            var basisTensor = new Tensor<T>(new[] { outputLength, thetaSize }, new Vector<T>(basisData));
-            var basisNode = TensorOperations<T>.Constant(basisTensor, isBackcast ? "backcast_basis" : "forecast_basis");
-
-            // output = basis @ theta
-            return TensorOperations<T>.MatrixMultiply(basisNode, theta);
-        }
-        else
-        {
-            // Generic basis: Fourier-like projection
-            // Create the basis matrix where basis[t, k] = cos(2π * k * t / outputLength)
-            var basisData = new T[outputLength * theta.Value.Shape[0]];
-            int thetaSize = theta.Value.Shape[0];
-
-            for (int t = 0; t < outputLength; t++)
-            {
-                for (int k = 0; k < thetaSize; k++)
-                {
-                    double cosValue = Math.Cos(2.0 * Math.PI * k * t / outputLength);
-                    basisData[t * thetaSize + k] = numOps.FromDouble(cosValue);
-                }
-            }
-
-            var basisTensor = new Tensor<T>(new[] { outputLength, thetaSize }, new Vector<T>(basisData));
-            var basisNode = TensorOperations<T>.Constant(basisTensor, isBackcast ? "backcast_basis" : "forecast_basis");
-
-            // output = basis @ theta
-            return TensorOperations<T>.MatrixMultiply(basisNode, theta);
-        }
-    }
-
-    /// <summary>
-    /// Converts a Matrix to a Tensor for use in computation graphs.
-    /// </summary>
-    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
-    {
-        var data = new T[matrix.Rows * matrix.Columns];
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                data[i * matrix.Columns + j] = matrix[i, j];
+                bias[i] = parameters[idx++];
             }
         }
-        return new Tensor<T>(new[] { matrix.Rows, matrix.Columns }, new Vector<T>(data));
-    }
-
-    /// <summary>
-    /// Converts a Vector to a Tensor for use in computation graphs.
-    /// </summary>
-    private Tensor<T> VectorToTensor(Vector<T> vector)
-    {
-        var data = new T[vector.Length];
-        for (int i = 0; i < vector.Length; i++)
-        {
-            data[i] = vector[i];
-        }
-        return new Tensor<T>(new[] { vector.Length }, new Vector<T>(data));
     }
 }

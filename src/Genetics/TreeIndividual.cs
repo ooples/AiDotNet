@@ -31,7 +31,7 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
     public TreeIndividual(NodeGene rootNode)
     {
         _rootNode = rootNode;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = new Random();
     }
 
     /// <summary>

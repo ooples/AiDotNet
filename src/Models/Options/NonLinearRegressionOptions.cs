@@ -257,7 +257,7 @@ public class NonLinearRegressionOptions : ModelOptions
     /// creating polynomial features, but only applies when using the Polynomial kernel.
     /// 
     /// The default value of 3 means:
-    /// - The polynomial kernel will include terms up to xÂ³ (cubic)
+    /// - The polynomial kernel will include terms up to x³ (cubic)
     /// - This can model S-shaped curves and more complex patterns than linear models
     /// 
     /// Think of the polynomial degree like choosing how flexible your curve can be:

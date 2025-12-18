@@ -139,39 +139,22 @@ public class TukeyWindow<T> : IWindowFunction<T>
     public Vector<T> Create(int windowSize)
     {
         Vector<T> window = new Vector<T>(windowSize);
-
-        // Special case: alpha = 0 is a rectangular window (all ones)
-        if (_numOps.Equals(_alpha, _numOps.Zero))
-        {
-            for (int n = 0; n < windowSize; n++)
-            {
-                window[n] = _numOps.One;
-            }
-            return window;
-        }
-
         T N = _numOps.FromDouble(windowSize - 1);
-        T halfAlphaN = _numOps.Multiply(_alpha, _numOps.Divide(N, _numOps.FromDouble(2)));
-
+        T alphaN = _numOps.Multiply(_alpha, N);
         for (int n = 0; n < windowSize; n++)
         {
             T nT = _numOps.FromDouble(n);
-            if (_numOps.LessThanOrEquals(nT, halfAlphaN))
+            if (_numOps.LessThanOrEquals(nT, _numOps.Multiply(_alpha, _numOps.Divide(N, _numOps.FromDouble(2)))))
             {
-                // Left taper region: 0.5 * (1 + cos(π * (2n/(αN) - 1)))
-                T x = _numOps.Subtract(_numOps.Divide(_numOps.Multiply(_numOps.FromDouble(2), nT), _numOps.Multiply(_alpha, N)), _numOps.One);
-                window[n] = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Add(_numOps.One, MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(Math.PI), x))));
+                window[n] = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Add(_numOps.One, MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(Math.PI), _numOps.Subtract(_numOps.Multiply(_numOps.FromDouble(2), nT), alphaN)))));
             }
-            else if (_numOps.LessThan(nT, _numOps.Subtract(N, halfAlphaN)))
+            else if (_numOps.GreaterThan(nT, _numOps.Multiply(_alpha, _numOps.Divide(N, _numOps.FromDouble(2)))) && _numOps.LessThan(nT, _numOps.Subtract(N, _numOps.Multiply(_alpha, _numOps.Divide(N, _numOps.FromDouble(2))))))
             {
-                // Flat region
                 window[n] = _numOps.One;
             }
             else
             {
-                // Right taper region: 0.5 * (1 + cos(π * (2n/(αN) - 2/α + 1)))
-                T x = _numOps.Add(_numOps.Subtract(_numOps.Divide(_numOps.Multiply(_numOps.FromDouble(2), nT), _numOps.Multiply(_alpha, N)), _numOps.Divide(_numOps.FromDouble(2), _alpha)), _numOps.One);
-                window[n] = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Add(_numOps.One, MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(Math.PI), x))));
+                window[n] = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Add(_numOps.One, MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(Math.PI), _numOps.Add(_numOps.Multiply(_numOps.FromDouble(2), nT), _numOps.Subtract(_numOps.Multiply(_numOps.FromDouble(2), N), alphaN))))));
             }
         }
 

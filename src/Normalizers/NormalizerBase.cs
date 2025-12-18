@@ -17,12 +17,7 @@ public abstract class NormalizerBase<T, TInput, TOutput> : INormalizer<T, TInput
     /// The numeric operations provider for type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps;
-
-    /// <summary>
-    /// Gets the global execution engine for vector operations.
-    /// </summary>
-    protected IEngine Engine => AiDotNetEngine.Current;
-
+    
     /// <summary>
     /// Initializes a new instance of the NormalizerBase class.
     /// </summary>

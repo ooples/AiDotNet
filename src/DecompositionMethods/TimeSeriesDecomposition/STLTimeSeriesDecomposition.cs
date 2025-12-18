@@ -279,7 +279,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// - Q3 is the value 75% of the way through your data
     /// - IQR is the range between Q1 and Q3
     /// 
-    /// Values that fall too far outside this range (typically 1.5 Ã— IQR below Q1 or above Q3)
+    /// Values that fall too far outside this range (typically 1.5 × IQR below Q1 or above Q3)
     /// are considered outliers.
     /// </para>
     /// </remarks>

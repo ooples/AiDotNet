@@ -65,7 +65,7 @@ public abstract class CrossValidatorBase<T, TInput, TOutput> : ICrossValidator<T
     {
         NumOps = MathHelper.GetNumericOperations<T>();
         Options = options;
-        Random = options.RandomSeed.HasValue ? RandomHelper.CreateSeededRandom(options.RandomSeed.Value) : RandomHelper.CreateSecureRandom();
+        Random = options.RandomSeed.HasValue ? new Random(options.RandomSeed.Value) : new Random();
     }
 
     /// <summary>

@@ -215,7 +215,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         _maxRank = maxRank;
         _activeRanks = activeRanks.ToArray();
         _currentDeploymentRank = activeRanks[activeRanks.Length - 1]; // Default to highest rank
-        _random = RandomHelper.CreateSecureRandom();
+        _random = new Random();
         _isTraining = true; // Start in training mode
     }
 

@@ -11,7 +11,7 @@ namespace AiDotNet.Kernels;
 /// and other applications where data is represented as frequency distributions.
 /// </para>
 /// <para>
-/// The kernel is defined as K(x,y) = -log(1 + S[(x_i - y_i)Â²/(x_i + y_i)]) for all dimensions i.
+/// The kernel is defined as K(x,y) = -log(1 + S[(x_i - y_i)²/(x_i + y_i)]) for all dimensions i.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> A kernel function is a way to measure how similar two data points are to each other.

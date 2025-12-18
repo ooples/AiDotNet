@@ -12,11 +12,11 @@ namespace AiDotNet.LossFunctions;
 /// - L1 regularization (also called Lasso): Helps select only the most important features by pushing some weights to zero
 /// - L2 regularization (also called Ridge): Prevents any single weight from becoming too large
 /// 
-/// The formula is: MSE + a * [l1Ratio * |weights|_1 + (1-l1Ratio) * 0.5 * |weights|_2Â²]
+/// The formula is: MSE + a * [l1Ratio * |weights|_1 + (1-l1Ratio) * 0.5 * |weights|_2²]
 /// Where:
 /// - MSE is the Mean Squared Error
 /// - |weights|_1 is the L1 norm (sum of absolute values)
-/// - |weights|_2Â² is the squared L2 norm (sum of squared values)
+/// - |weights|_2² is the squared L2 norm (sum of squared values)
 /// - a is the regularization strength
 /// - l1Ratio controls the mix between L1 and L2 regularization
 /// 

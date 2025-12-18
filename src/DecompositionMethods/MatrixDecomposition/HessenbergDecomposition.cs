@@ -185,17 +185,9 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
                 if (!NumOps.Equals(H[i, k], NumOps.Zero))
                 {
                     T factor = NumOps.Divide(H[i, k], H[k + 1, k]);
-
-                    // VECTORIZED: Use vector operations for row elimination
-                    Vector<T> rowI = H.GetRow(i);
-                    Vector<T> rowK1 = H.GetRow(k + 1);
-                    Vector<T> rowISegment = new Vector<T>(rowI.Skip(k));
-                    Vector<T> rowK1Segment = new Vector<T>(rowK1.Skip(k));
-                    Vector<T> newSegment = rowISegment.Subtract(rowK1Segment.Multiply(factor));
-
                     for (int j = k; j < n; j++)
                     {
-                        H[i, j] = newSegment[j - k];
+                        H[i, j] = NumOps.Subtract(H[i, j], NumOps.Multiply(factor, H[k + 1, j]));
                     }
                     H[i, k] = NumOps.Zero;
                 }
@@ -276,20 +268,15 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
             var w = matrix.Multiply(v);
             if (j > 0)
             {
-                // VECTORIZED: Subtract projection using Engine operations
-                var projection = (Vector<T>)Engine.Multiply(v, H[j - 1, j]);
-                w = (Vector<T>)Engine.Subtract(w, projection);
+                w = w.Subtract(v.Multiply(H[j - 1, j]));
             }
 
             H[j, j] = w.DotProduct(v);
-            // VECTORIZED: Subtract projection using Engine operations
-            var proj2 = (Vector<T>)Engine.Multiply(v, H[j, j]);
-            w = (Vector<T>)Engine.Subtract(w, proj2);
+            w = w.Subtract(v.Multiply(H[j, j]));
             if (j < n - 1)
             {
                 H[j, j + 1] = H[j + 1, j] = w.Norm();
-                // VECTORIZED: Normalize using Engine division
-                v = (Vector<T>)Engine.Divide(w, H[j, j + 1]);
+                v = w.Divide(H[j, j + 1]);
             }
         }
 
@@ -316,36 +303,26 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
         var n = A.Rows;
         var y = new Vector<T>(n);
 
-        // VECTORIZED: Forward substitution using dot product
+        // Forward substitution
         for (int i = 0; i < n; i++)
         {
-            T sum = NumOps.Zero;
-            if (i > 0)
+            var sum = NumOps.Zero;
+            for (int j = Math.Max(0, i - 1); j < i; j++)
             {
-                int start = Math.Max(0, i - 1);
-                int len = i - start;
-                if (len > 0)
-                {
-                    var rowSegment = new Vector<T>(HessenbergMatrix.GetRow(i).Skip(start).Take(len));
-                    var ySegment = new Vector<T>(y.Skip(start).Take(len));
-                    sum = rowSegment.DotProduct(ySegment);
-                }
+                sum = NumOps.Add(sum, NumOps.Multiply(HessenbergMatrix[i, j], y[j]));
             }
 
             y[i] = NumOps.Divide(NumOps.Subtract(b[i], sum), HessenbergMatrix[i, i]);
         }
 
-        // VECTORIZED: Backward substitution using dot product
+        // Backward substitution
         var x = new Vector<T>(n);
         for (int i = n - 1; i >= 0; i--)
         {
-            T sum = NumOps.Zero;
-            if (i < n - 1)
+            var sum = NumOps.Zero;
+            for (int j = i + 1; j < n; j++)
             {
-                int len = n - i - 1;
-                var rowSegment = new Vector<T>(HessenbergMatrix.GetRow(i).Skip(i + 1));
-                var xSegment = new Vector<T>(x.Skip(i + 1));
-                sum = rowSegment.DotProduct(xSegment);
+                sum = NumOps.Add(sum, NumOps.Multiply(HessenbergMatrix[i, j], x[j]));
             }
 
             x[i] = NumOps.Subtract(y[i], sum);

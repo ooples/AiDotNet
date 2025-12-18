@@ -39,7 +39,7 @@ public class ChiSquareTestResult<T>
     /// <remarks>
     /// <para>
     /// This property represents the Chi-Square test statistic, which measures the difference between observed and 
-    /// expected frequencies. It is calculated as the sum of (observed - expected)Â²/expected across all categories. 
+    /// expected frequencies. It is calculated as the sum of (observed - expected)²/expected across all categories. 
     /// Larger values indicate greater differences between observed and expected frequencies, suggesting a stronger 
     /// association between the variables or a poorer fit to the expected distribution. The Chi-Square statistic 
     /// follows a Chi-Square distribution with degrees of freedom determined by the number of categories in the data. 
@@ -106,7 +106,7 @@ public class ChiSquareTestResult<T>
     /// <para>
     /// This property represents the degrees of freedom for the Chi-Square test, which is a parameter of the Chi-Square 
     /// distribution used to calculate the p-value. For a test of independence between two categorical variables, the 
-    /// degrees of freedom is calculated as (r-1)Ã—(c-1), where r is the number of rows (categories of the first variable) 
+    /// degrees of freedom is calculated as (r-1)×(c-1), where r is the number of rows (categories of the first variable) 
     /// and c is the number of columns (categories of the second variable). For a goodness-of-fit test, the degrees of 
     /// freedom is k-1-m, where k is the number of categories and m is the number of parameters estimated from the data. 
     /// The degrees of freedom affects the shape of the Chi-Square distribution and thus the interpretation of the 
@@ -117,7 +117,7 @@ public class ChiSquareTestResult<T>
     /// The degrees of freedom:
     /// - Is a parameter needed to interpret the Chi-Square statistic
     /// - Depends on the number of categories in your data
-    /// - For a test of independence: (rows-1) Ã— (columns-1)
+    /// - For a test of independence: (rows-1) × (columns-1)
     /// - For a goodness-of-fit test: (categories-1)
     /// 
     /// This value is important because:

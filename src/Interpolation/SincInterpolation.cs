@@ -6,7 +6,7 @@ namespace AiDotNet.Interpolation;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// Sinc interpolation is a technique based on the Whittakerâ€“Shannon interpolation formula,
+/// Sinc interpolation is a technique based on the Whittaker–Shannon interpolation formula,
 /// which is theoretically perfect for band-limited signals.
 /// </para>
 /// <para>

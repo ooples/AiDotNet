@@ -22,7 +22,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 public class DecoderLayer<T> : LayerBase<T>
 {
-
     /// <summary>
     /// The self-attention mechanism of the decoder layer.
     /// </summary>
@@ -90,7 +89,6 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <param name="attentionSize">The size of the attention mechanism.</param>
     /// <param name="feedForwardSize">The size of the feed-forward network.</param>
     /// <param name="activation">The scalar activation function to use. If null, ReLUActivation is used.</param>
-    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     public DecoderLayer(int inputSize, int attentionSize, int feedForwardSize, IActivationFunction<T>? activation = null)
         : base([inputSize], [inputSize], activation ?? new ReLUActivation<T>())
     {
@@ -111,7 +109,6 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <param name="attentionSize">The size of the attention mechanism.</param>
     /// <param name="feedForwardSize">The size of the feed-forward network.</param>
     /// <param name="activation">The vector activation function to use. If null, ReLUActivation is used.</param>
-    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     public DecoderLayer(int inputSize, int attentionSize, int feedForwardSize, IVectorActivationFunction<T>? activation = null)
         : base([inputSize], [inputSize], activation ?? new ReLUActivation<T>())
     {
@@ -208,48 +205,9 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
         if (_lastInput == null || _lastEncoderOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var (inputGradient, encoderOutputGradient) = BackwardInternal(outputGradient);
-        _lastInputGradient = inputGradient;
-        _lastEncoderOutputGradient = encoderOutputGradient;
-
-        // Concatenate the input gradient and encoder output gradient
-        return Tensor<T>.Concatenate(new[] { inputGradient, encoderOutputGradient }, 1);
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation by delegating to the autodiff implementations
-    /// of the constituent layers (AttentionLayer, LayerNormalizationLayer, FeedForwardLayer).
-    /// Each sublayer will use its own autodiff implementation if available.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastEncoderOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Composite layer: just call Backward on each sublayer with UseAutodiff enabled
-        // The sublayers will handle their own autodiff if they support it
         var (inputGradient, encoderOutputGradient) = BackwardInternal(outputGradient);
         _lastInputGradient = inputGradient;
         _lastEncoderOutputGradient = encoderOutputGradient;
@@ -338,19 +296,14 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Use Vector<T>.Concatenate for efficient parameter collection
-        var selfAttnParams = _selfAttention.GetParameters();
-        var crossAttnParams = _crossAttention.GetParameters();
-        var ffParams = _feedForward.GetParameters();
-        var norm1Params = _norm1.GetParameters();
-        var norm2Params = _norm2.GetParameters();
-        var norm3Params = _norm3.GetParameters();
-
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(
-                Vector<T>.Concatenate(selfAttnParams, crossAttnParams),
-                Vector<T>.Concatenate(ffParams, norm1Params)),
-            Vector<T>.Concatenate(norm2Params, norm3Params));
+        var parameters = new List<T>();
+        parameters.AddRange(_selfAttention.GetParameters());
+        parameters.AddRange(_crossAttention.GetParameters());
+        parameters.AddRange(_feedForward.GetParameters());
+        parameters.AddRange(_norm1.GetParameters());
+        parameters.AddRange(_norm2.GetParameters());
+        parameters.AddRange(_norm3.GetParameters());
+        return new Vector<T>(parameters.ToArray());
     }
 
     /// <summary>
@@ -388,12 +341,8 @@ public class DecoderLayer<T> : LayerBase<T>
     private int UpdateComponentParameters(LayerBase<T> component, Vector<T> parameters, int startIndex)
     {
         int paramCount = component.ParameterCount;
-
-        // Use Engine.TensorSlice to extract component parameters without manual loops
-        var paramsTensor = new Tensor<T>([parameters.Length], parameters);
-        var componentParamsTensor = Engine.TensorSlice(paramsTensor, [startIndex], [paramCount]);
-        var componentParams = new Vector<T>(componentParamsTensor.ToArray());
-
+        var componentParams = new Vector<T>(paramCount);
+        Array.Copy(parameters.ToArray(), startIndex, componentParams.ToArray(), 0, paramCount);
         component.UpdateParameters(componentParams);
 
         return startIndex + paramCount;
@@ -452,49 +401,4 @@ public class DecoderLayer<T> : LayerBase<T>
         _norm1.ParameterCount +
         _norm2.ParameterCount +
         _norm3.ParameterCount;
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // DecoderLayer requires TWO inputs: decoder input and encoder output
-        if (inputNodes.Count < 2)
-            throw new ArgumentException(
-                "DecoderLayer requires at least two input nodes: decoder input and encoder output.",
-                nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var decoderInput = inputNodes[0];
-        var encoderOutput = inputNodes[1];
-
-        // Self-attention on decoder input
-        var selfAttentionOutput = _selfAttention.ExportComputationGraph([decoderInput]);
-        var residual1 = TensorOperations<T>.Add(decoderInput, selfAttentionOutput);
-        var normalized1 = _norm1.ExportComputationGraph([residual1]);
-
-        // Cross-attention with encoder output
-        var crossAttentionOutput = _crossAttention.ExportComputationGraph([normalized1, encoderOutput]);
-        var residual2 = TensorOperations<T>.Add(normalized1, crossAttentionOutput);
-        var normalized2 = _norm2.ExportComputationGraph([residual2]);
-
-        // Feed-forward network
-        var feedForwardOutput = _feedForward.ExportComputationGraph([normalized2]);
-        var residual3 = TensorOperations<T>.Add(normalized2, feedForwardOutput);
-        var output = _norm3.ExportComputationGraph([residual3]);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> because DecoderLayer can be compiled with multiple input nodes representing
-    /// the decoder input and encoder output. The computation graph supports multiple inputs.
-    /// </value>
-    public override bool SupportsJitCompilation => true;
-
 }

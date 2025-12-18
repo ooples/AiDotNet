@@ -22,10 +22,10 @@ namespace AiDotNet.Kernels;
 /// </para>
 /// <para>
 /// The formula for the Rational Quadratic kernel is:
-/// k(x, y) = 1 - ||x - y||Â²/(||x - y||Â² + c)
+/// k(x, y) = 1 - ||x - y||²/(||x - y||² + c)
 /// where:
 /// - x and y are the two data points being compared
-/// - ||x - y||Â² is the squared Euclidean distance between them
+/// - ||x - y||² is the squared Euclidean distance between them
 /// - c is a parameter that controls the kernel's behavior
 /// </para>
 /// <para>
@@ -107,7 +107,7 @@ public class RationalQuadraticKernel<T> : IKernelFunction<T>
     /// The calculation works by:
     /// 1. Finding the difference between the two vectors (x1 - x2)
     /// 2. Calculating the squared distance between them
-    /// 3. Applying the formula: 1 - distanceÂ²/(distanceÂ² + c)
+    /// 3. Applying the formula: 1 - distance²/(distance² + c)
     /// </para>
     /// <para>
     /// The result is a similarity measure where:

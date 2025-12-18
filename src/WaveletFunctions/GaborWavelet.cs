@@ -23,8 +23,30 @@ namespace AiDotNet.WaveletFunctions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GaborWavelet<T> : WaveletFunctionBase<T>
+public class GaborWavelet<T> : IWaveletFunction<T>
 {
+    /// <summary>
+    /// Provides mathematical operations for the generic type T.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field holds an implementation of numeric operations that can work with the generic type T.
+    /// It provides methods for basic arithmetic operations, comparisons, trigonometric functions, and 
+    /// conversions that are used throughout the wavelet calculations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a helper that lets us do math with different number types.
+    /// 
+    /// Because this class can work with different types of numbers (like float, double, or decimal),
+    /// we need a special helper that knows how to:
+    /// - Perform all the necessary math operations
+    /// - Convert between different number formats
+    /// - Handle complex calculations like exponentials and trigonometric functions
+    /// 
+    /// This allows the wavelet code to work with whatever number type you choose,
+    /// without having to write separate code for each number type.
+    /// </para>
+    /// </remarks>
+    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// The central frequency of the Gabor wavelet.
@@ -139,10 +161,11 @@ public class GaborWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public GaborWavelet(double omega = 5, double sigma = 1, double lambda = 4, double psi = 0)
     {
-        _omega = NumOps.FromDouble(omega);
-        _sigma = NumOps.FromDouble(sigma);
-        _psi = NumOps.FromDouble(psi);
-        _lambda = NumOps.FromDouble(lambda);
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _omega = _numOps.FromDouble(omega);
+        _sigma = _numOps.FromDouble(sigma);
+        _psi = _numOps.FromDouble(psi);
+        _lambda = _numOps.FromDouble(lambda);
     }
 
     /// <summary>
@@ -169,11 +192,11 @@ public class GaborWavelet<T> : WaveletFunctionBase<T>
     /// oscillation pattern with this specific width?"
     /// </para>
     /// </remarks>
-    public override T Calculate(T x)
+    public T Calculate(T x)
     {
-        T gaussianTerm = NumOps.Exp(NumOps.Negate(NumOps.Divide(NumOps.Multiply(x, x), NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(_sigma, _sigma)))));
-        T cosTerm = MathHelper.Cos(NumOps.Multiply(_omega, x));
-        return NumOps.Multiply(gaussianTerm, cosTerm);
+        T gaussianTerm = _numOps.Exp(_numOps.Negate(_numOps.Divide(_numOps.Multiply(x, x), _numOps.Multiply(_numOps.FromDouble(2.0), _numOps.Multiply(_sigma, _sigma)))));
+        T cosTerm = MathHelper.Cos(_numOps.Multiply(_omega, x));
+        return _numOps.Multiply(gaussianTerm, cosTerm);
     }
 
     /// <summary>
@@ -200,7 +223,7 @@ public class GaborWavelet<T> : WaveletFunctionBase<T>
     /// and its velocity (imaginary part) - together they give you complete information about the swing.
     /// </para>
     /// </remarks>
-    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int size = input.Length;
         var approximation = new Vector<T>(size);
@@ -209,8 +232,8 @@ public class GaborWavelet<T> : WaveletFunctionBase<T>
         {
             T gaborReal = GaborFunction(x, true);
             T gaborImag = GaborFunction(x, false);
-            approximation[x] = NumOps.Multiply(gaborReal, input[x]);
-            detail[x] = NumOps.Multiply(gaborImag, input[x]);
+            approximation[x] = _numOps.Multiply(gaborReal, input[x]);
+            detail[x] = _numOps.Multiply(gaborImag, input[x]);
         }
         return (approximation, detail);
     }
@@ -236,7 +259,7 @@ public class GaborWavelet<T> : WaveletFunctionBase<T>
     /// They're sampled at 100 points to provide a discrete approximation of the continuous wavelet.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetScalingCoefficients()
+    public Vector<T> GetScalingCoefficients()
     {
         int size = 100;
         var coefficients = new Vector<T>(size);
@@ -269,7 +292,7 @@ public class GaborWavelet<T> : WaveletFunctionBase<T>
     /// your data matches the Gabor pattern, including both amplitude and phase information.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetWaveletCoefficients()
+    public Vector<T> GetWaveletCoefficients()
     {
         int size = 100;
         var coefficients = new Vector<T>(size);
@@ -307,11 +330,11 @@ public class GaborWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private T GaborFunction(int x, bool real)
     {
-        T xT = NumOps.FromDouble(x);
-        T xTheta = NumOps.Multiply(xT, MathHelper.Cos(NumOps.Divide(MathHelper.Pi<T>(), NumOps.FromDouble(4))));
-        T expTerm = NumOps.Exp(NumOps.Divide(NumOps.Negate(NumOps.Multiply(xTheta, xTheta)), NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(_sigma, _sigma))));
-        T angle = NumOps.Add(NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2.0 * Math.PI), xTheta), _lambda), _psi);
+        T xT = _numOps.FromDouble(x);
+        T xTheta = _numOps.Multiply(xT, MathHelper.Cos(_numOps.Divide(MathHelper.Pi<T>(), _numOps.FromDouble(4))));
+        T expTerm = _numOps.Exp(_numOps.Divide(_numOps.Negate(_numOps.Multiply(xTheta, xTheta)), _numOps.Multiply(_numOps.FromDouble(2.0), _numOps.Multiply(_sigma, _sigma))));
+        T angle = _numOps.Add(_numOps.Divide(_numOps.Multiply(_numOps.FromDouble(2.0 * Math.PI), xTheta), _lambda), _psi);
         T trigTerm = real ? MathHelper.Cos(angle) : MathHelper.Sin(angle);
-        return NumOps.Multiply(expTerm, trigTerm);
+        return _numOps.Multiply(expTerm, trigTerm);
     }
 }

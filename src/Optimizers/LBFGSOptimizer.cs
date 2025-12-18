@@ -3,12 +3,12 @@
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Limited-memory Broyden-Fletcher-Goldfarb-Shanno (L-BFGS) optimization algorithm.
+/// Implements the Limited-memory Broyden�Fletcher�Goldfarb�Shanno (L-BFGS) optimization algorithm.
 /// </summary>
 /// <remarks>
 /// <para>
-/// L-BFGS is a quasi-Newton method for solving unconstrained nonlinear optimization problems. It approximates the
-/// Broyden-Fletcher-Goldfarb-Shanno (BFGS) algorithm using a limited amount of computer memory, making it suitable 
+/// L-BFGS is a quasi-Newton method for solving unconstrained nonlinear optimization problems. It approximates the 
+/// Broyden�Fletcher�Goldfarb�Shanno (BFGS) algorithm using a limited amount of computer memory, making it suitable 
 /// for optimization problems with many variables.
 /// </para>
 /// <para><b>For Beginners:</b> 
@@ -62,11 +62,9 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </summary>
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">Options for the L-BFGS optimizer. If null, default options are used.</param>
-    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public LBFGSOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        LBFGSOptimizerOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        LBFGSOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
         _options = options ?? new LBFGSOptimizerOptions<T, TInput, TOutput>();
@@ -155,42 +153,30 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <returns>The calculated search direction.</returns>
     private Vector<T> CalculateDirection(Vector<T> gradient)
     {
-        // === Partially Vectorized L-BFGS Two-Loop Recursion using IEngine (Phase B: US-GPU-015) ===
-
         if (_s.Count == 0 || _y.Count == 0)
         {
-            // First iteration: direction = -gradient
-            return (Vector<T>)Engine.Multiply(gradient, NumOps.Negate(NumOps.One));
+            return gradient.Transform(x => NumOps.Negate(x));
         }
 
         var q = new Vector<T>(gradient);
         var alphas = new T[_s.Count];
 
-        // First loop (backward)
         for (int i = _s.Count - 1; i >= 0; i--)
         {
             alphas[i] = NumOps.Divide(_s[i].DotProduct(q), _y[i].DotProduct(_s[i]));
-            // Vectorized: q = q - alpha * y[i]
-            var alphaTimesY = (Vector<T>)Engine.Multiply(_y[i], alphas[i]);
-            q = (Vector<T>)Engine.Subtract(q, alphaTimesY);
+            q = q.Subtract(_y[i].Multiply(alphas[i]));
         }
 
         var gamma = NumOps.Divide(_s[_s.Count - 1].DotProduct(_y[_s.Count - 1]), _y[_s.Count - 1].DotProduct(_y[_s.Count - 1]));
-        // Vectorized: z = gamma * q
-        var z = (Vector<T>)Engine.Multiply(q, gamma);
+        var z = q.Multiply(gamma);
 
-        // Second loop (forward)
         for (int i = 0; i < _s.Count; i++)
         {
             var beta = NumOps.Divide(_y[i].DotProduct(z), _y[i].DotProduct(_s[i]));
-            var alphaMinusBeta = NumOps.Subtract(alphas[i], beta);
-            // Vectorized: z = z + (alpha - beta) * s[i]
-            var scaledS = (Vector<T>)Engine.Multiply(_s[i], alphaMinusBeta);
-            z = (Vector<T>)Engine.Add(z, scaledS);
+            z = z.Add(_s[i].Multiply(NumOps.Subtract(alphas[i], beta)));
         }
 
-        // Vectorized negation
-        return (Vector<T>)Engine.Multiply(z, NumOps.Negate(NumOps.One));
+        return z.Transform(x => NumOps.Negate(x));
     }
 
     /// <summary>
@@ -202,18 +188,8 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <param name="previousGradient">The previous gradient.</param>
     private void UpdateLBFGSMemory(Vector<T> oldSolution, Vector<T> newSolution, Vector<T> gradient, Vector<T> previousGradient)
     {
-        // === Vectorized Memory Update using IEngine (Phase B: US-GPU-015) ===
-        // s = new_solution - old_solution
-        // y = current_gradient - previous_gradient
-
-        // Skip first iteration when previousGradient is empty
-        if (previousGradient.Length == 0)
-        {
-            return;
-        }
-
-        var s = (Vector<T>)Engine.Subtract(newSolution, oldSolution);
-        var y = (Vector<T>)Engine.Subtract(gradient, previousGradient);
+        var s = newSolution.Subtract(oldSolution);
+        var y = gradient.Subtract(previousGradient);
 
         if (_s.Count >= _options.MemorySize)
         {

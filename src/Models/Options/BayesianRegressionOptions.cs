@@ -66,7 +66,7 @@ public class BayesianRegressionOptions<T> : RegressionOptions<T>
     /// your variables. The default Linear kernel looks for straight-line relationships (like y = mx + b). Other options include:
     /// <list type="bullet">
     ///   <item>RBF (Radial Basis Function): Can find complex, curvy relationships</item>
-    ///   <item>Polynomial: Can find relationships with curves like y = xÂ² + 2x + 1</item>
+    ///   <item>Polynomial: Can find relationships with curves like y = x² + 2x + 1</item>
     ///   <item>Sigmoid: Useful for S-shaped relationships</item>
     /// </list>
     /// If you're not sure which to use, start with Linear for simplicity, then try RBF if you suspect the relationship 
@@ -103,7 +103,7 @@ public class BayesianRegressionOptions<T> : RegressionOptions<T>
     /// it controls the degree of homogeneity. For the Sigmoid kernel, it defines the vertical shift.
     /// </para>
     /// <para><b>For Beginners:</b> This is an additional parameter that affects how Polynomial and Sigmoid kernels work. 
-    /// For Polynomial kernels, it adds a constant term to the equation (like the "+c" in "y = xÂ² + x + c"). 
+    /// For Polynomial kernels, it adds a constant term to the equation (like the "+c" in "y = x² + x + c"). 
     /// For Sigmoid kernels, it shifts the S-curve up or down. The default value of 0.0 works well in most cases. 
     /// You can safely ignore this parameter if you're using the Linear or RBF kernel types.</para>
     /// </remarks>
@@ -119,7 +119,7 @@ public class BayesianRegressionOptions<T> : RegressionOptions<T>
     /// power in the polynomial equation.
     /// </para>
     /// <para><b>For Beginners:</b> If you're using the Polynomial kernel, this sets the highest power in your equation. 
-    /// For example, a value of 3 (the default) allows the model to find relationships up to cubic terms (like y = axÂ³ + bxÂ² + cx + d). 
+    /// For example, a value of 3 (the default) allows the model to find relationships up to cubic terms (like y = ax³ + bx² + cx + d). 
     /// A higher degree can capture more complex relationships but risks overfitting to your training data. A value of 1 would 
     /// be equivalent to a linear model, while 2 would allow quadratic relationships. This parameter is ignored if you're not 
     /// using the Polynomial kernel type.</para>

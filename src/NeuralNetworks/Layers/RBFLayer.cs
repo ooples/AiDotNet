@@ -31,25 +31,25 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public class RBFLayer<T> : LayerBase<T>
 {
     /// <summary>
-    /// Tensor storing the center positions of each RBF neuron in the input space.
+    /// Matrix storing the center positions of each RBF neuron in the input space.
     /// </summary>
     /// <remarks>
-    /// This tensor has shape [outputSize, inputSize], where each row represents the coordinates
+    /// This matrix has dimensions [outputSize, inputSize], where each row represents the coordinates
     /// of a center point for one RBF neuron. These centers are the primary trainable parameters of
     /// the layer and determine where in the input space each neuron responds most strongly.
     /// </remarks>
-    private Tensor<T> _centers;
+    private Matrix<T> _centers;
 
     /// <summary>
-    /// Tensor storing the width parameters for each RBF neuron.
+    /// Vector storing the width parameters for each RBF neuron.
     /// </summary>
     /// <remarks>
-    /// This tensor has shape [outputSize], where each element controls how quickly the response of
+    /// This vector has length outputSize, where each element controls how quickly the response of
     /// the corresponding RBF neuron decreases as the distance from its center increases. Larger
     /// width values mean the neuron responds more broadly, while smaller values make the response
     /// more focused around the center.
     /// </remarks>
-    private Tensor<T> _widths;
+    private Vector<T> _widths;
 
     /// <summary>
     /// The radial basis function implementation used to compute neuron activations.
@@ -86,31 +86,21 @@ public class RBFLayer<T> : LayerBase<T>
     /// Stores the gradients of the loss with respect to the center parameters.
     /// </summary>
     /// <remarks>
-    /// This tensor holds the accumulated gradients for all center parameters during the backward pass.
-    /// It has the same shape as the _centers tensor and is used to update the centers during
-    /// the parameter update step. The tensor is null before the first backward pass or after a reset.
+    /// This matrix holds the accumulated gradients for all center parameters during the backward pass.
+    /// It has the same dimensions as the _centers matrix and is used to update the centers during
+    /// the parameter update step. The matrix is null before the first backward pass or after a reset.
     /// </remarks>
-    private Tensor<T>? _centersGradient;
+    private Matrix<T>? _centersGradient;
 
     /// <summary>
     /// Stores the gradients of the loss with respect to the width parameters.
     /// </summary>
     /// <remarks>
-    /// This tensor holds the accumulated gradients for all width parameters during the backward pass.
-    /// It has the same shape as the _widths tensor and is used to update the widths during
-    /// the parameter update step. The tensor is null before the first backward pass or after a reset.
+    /// This vector holds the accumulated gradients for all width parameters during the backward pass.
+    /// It has the same length as the _widths vector and is used to update the widths during
+    /// the parameter update step. The vector is null before the first backward pass or after a reset.
     /// </remarks>
-    private Tensor<T>? _widthsGradient;
-
-    /// <summary>
-    /// Number of RBF neurons (output size).
-    /// </summary>
-    private readonly int _numCenters;
-
-    /// <summary>
-    /// Number of input features.
-    /// </summary>
-    private readonly int _inputSize;
+    private Vector<T>? _widthsGradient;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -166,10 +156,8 @@ public class RBFLayer<T> : LayerBase<T>
     public RBFLayer(int inputSize, int outputSize, IRadialBasisFunction<T> rbf)
         : base([inputSize], [outputSize])
     {
-        _inputSize = inputSize;
-        _numCenters = outputSize;
-        _centers = new Tensor<T>([outputSize, inputSize]);
-        _widths = new Tensor<T>([outputSize]);
+        _centers = new Matrix<T>(outputSize, inputSize);
+        _widths = new Vector<T>(outputSize);
         _rbf = rbf;
 
         InitializeParameters();
@@ -204,31 +192,21 @@ public class RBFLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+        int batchSize = input.Shape[0];
 
-        // Use Engine.RBFKernel for GPU/CPU acceleration
-        // This computes exp(-epsilon * ||x - center||²) for Gaussian RBF
-        // Convert widths to epsilons: epsilon = 1 / (2 * width²)
-        var epsilons = ComputeEpsilonsFromWidths();
-        _lastOutput = Engine.RBFKernel(input, _centers, epsilons);
+        var output = new Tensor<T>([batchSize, _centers.Rows]);
 
-        return _lastOutput;
-    }
-
-    /// <summary>
-    /// Converts width parameters to epsilon values for RBF kernel.
-    /// epsilon = 1 / (2 * width²) for Gaussian RBF.
-    /// </summary>
-    private Tensor<T> ComputeEpsilonsFromWidths()
-    {
-        var epsilons = new Tensor<T>(_widths.Shape);
-        var two = NumOps.FromDouble(2.0);
-        for (int i = 0; i < _numCenters; i++)
+        for (int i = 0; i < batchSize; i++)
         {
-            var widthSquared = NumOps.Multiply(_widths[i], _widths[i]);
-            var twoWidthSquared = NumOps.Multiply(two, widthSquared);
-            epsilons[i] = NumOps.Divide(NumOps.One, twoWidthSquared);
+            for (int j = 0; j < _centers.Rows; j++)
+            {
+                T distance = CalculateDistance(input.GetVector(i), _centers.GetRow(j));
+                output[i, j] = _rbf.Compute(distance);
+            }
         }
-        return epsilons;
+
+        _lastOutput = output;
+        return output;
     }
 
     /// <summary>
@@ -259,146 +237,42 @@ public class RBFLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Use Engine.RBFKernelBackward for GPU/CPU acceleration
-        var epsilons = ComputeEpsilonsFromWidths();
-        var (gradInput, gradCenters, gradEpsilons) = Engine.RBFKernelBackward(
-            outputGradient, _lastInput, _centers, epsilons, _lastOutput);
+        int batchSize = _lastInput.Shape[0];
+        int inputSize = _lastInput.Shape[1];
+        int outputSize = _centers.Rows;
 
-        _centersGradient = gradCenters;
+        _centersGradient = new Matrix<T>(outputSize, inputSize);
+        _widthsGradient = new Vector<T>(outputSize);
 
-        // Convert epsilon gradients back to width gradients
-        // epsilon = 1/(2*w²), depsilon/dw = -2/(2*w³) = -1/w³
-        // dL/dw = dL/depsilon * depsilon/dw = dL/depsilon * (-1/w³)
-        _widthsGradient = ConvertEpsilonGradientsToWidthGradients(gradEpsilons);
+        var inputGradient = new Tensor<T>(_lastInput.Shape);
 
-        return gradInput;
-    }
-
-    /// <summary>
-    /// Converts epsilon gradients to width gradients using chain rule.
-    /// </summary>
-    private Tensor<T> ConvertEpsilonGradientsToWidthGradients(Tensor<T> gradEpsilons)
-    {
-        var gradWidths = new Tensor<T>(_widths.Shape);
-        for (int i = 0; i < _numCenters; i++)
+        for (int i = 0; i < batchSize; i++)
         {
-            // depsilon/dwidth = -1/width³
-            var widthCubed = NumOps.Multiply(_widths[i], NumOps.Multiply(_widths[i], _widths[i]));
-            var dEpsilonDWidth = NumOps.Negate(NumOps.Divide(NumOps.One, widthCubed));
-            gradWidths[i] = NumOps.Multiply(gradEpsilons[i], dEpsilonDWidth);
-        }
-        return gradWidths;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation via the RBFKernel operation to compute gradients.
-    /// The operation handles Gaussian RBF computations with proper gradient flow.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Create computation nodes - _centers and _widths are already Tensors
-        var inputNode = Autodiff.TensorOperations<T>.Variable(
-            _lastInput,
-            "input",
-            requiresGradient: true);
-
-        var centersNode = Autodiff.TensorOperations<T>.Variable(
-            _centers,
-            "centers",
-            requiresGradient: true);
-
-        var widthsNode = Autodiff.TensorOperations<T>.Variable(
-            _widths,
-            "widths",
-            requiresGradient: true);
-
-        // Apply RBFKernel operation
-        var outputNode = Autodiff.TensorOperations<T>.RBFKernel(
-            inputNode,
-            centersNode,
-            widthsNode);
-
-        // Set the output gradient
-        outputNode.Gradient = outputGradient;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-                continue;
-
-            if (processed)
+            for (int j = 0; j < outputSize; j++)
             {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
+                T distance = CalculateDistance(_lastInput.GetVector(i), _centers.GetRow(j));
+                T rbfDerivative = _rbf.ComputeDerivative(distance);
+
+                for (int k = 0; k < inputSize; k++)
                 {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
+                    T inputDiff = NumOps.Subtract(_lastInput[i, k], _centers[j, k]);
+                    T gradient = NumOps.Multiply(outputGradient[i, j], rbfDerivative);
+                    T centerGradient = NumOps.Multiply(gradient, inputDiff);
+
+                    _centersGradient[j, k] = NumOps.Add(_centersGradient[j, k], centerGradient);
+                    inputGradient[i, k] = NumOps.Add(inputGradient[i, k], NumOps.Negate(centerGradient));
                 }
+
+                _widthsGradient[j] = NumOps.Add(_widthsGradient[j], 
+                    NumOps.Multiply(outputGradient[i, j], _rbf.ComputeWidthDerivative(distance)));
             }
         }
 
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Update parameter gradients (already Tensor types)
-        if (centersNode.Gradient != null)
-            _centersGradient = centersNode.Gradient;
-
-        if (widthsNode.Gradient != null)
-            _widthsGradient = widthsNode.Gradient;
-
-        // Return input gradient
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        return inputGradient;
     }
-
 
     /// <summary>
     /// Updates the parameters of the RBF layer using the calculated gradients.
@@ -431,12 +305,16 @@ public class RBFLayer<T> : LayerBase<T>
         if (_centersGradient == null || _widthsGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Use Engine.TensorSubtract and TensorMultiplyScalar for GPU/CPU acceleration
-        var scaledCentersGradient = Engine.TensorMultiplyScalar(_centersGradient, learningRate);
-        _centers = Engine.TensorSubtract(_centers, scaledCentersGradient);
-
-        var scaledWidthsGradient = Engine.TensorMultiplyScalar(_widthsGradient, learningRate);
-        _widths = Engine.TensorSubtract(_widths, scaledWidthsGradient);
+        for (int i = 0; i < _centers.Rows; i++)
+        {
+            for (int j = 0; j < _centers.Columns; j++)
+            {
+                _centers[i, j] = NumOps.Subtract(_centers[i, j], 
+                    NumOps.Multiply(learningRate, _centersGradient[i, j]));
+            }
+            _widths[i] = NumOps.Subtract(_widths[i], 
+                NumOps.Multiply(learningRate, _widthsGradient[i]));
+        }
     }
 
     /// <summary>
@@ -466,14 +344,28 @@ public class RBFLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Convert tensors to vectors and concatenate
-        var centersData = _centers.ToArray();
-        var widthsData = _widths.ToArray();
-
-        var centersVector = new Vector<T>(centersData);
-        var widthsVector = new Vector<T>(widthsData);
-
-        return Vector<T>.Concatenate(centersVector, widthsVector);
+        // Calculate total number of parameters
+        int totalParams = _centers.Rows * _centers.Columns + _widths.Length;
+    
+        var parameters = new Vector<T>(totalParams);
+        int index = 0;
+    
+        // Copy centers
+        for (int i = 0; i < _centers.Rows; i++)
+        {
+            for (int j = 0; j < _centers.Columns; j++)
+            {
+                parameters[index++] = _centers[i, j];
+            }
+        }
+    
+        // Copy widths
+        for (int i = 0; i < _widths.Length; i++)
+        {
+            parameters[index++] = _widths[i];
+        }
+    
+        return parameters;
     }
 
     /// <summary>
@@ -504,21 +396,29 @@ public class RBFLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int centersSize = _numCenters * _inputSize;
-        int totalParams = centersSize + _numCenters;
-
+        int totalParams = _centers.Rows * _centers.Columns + _widths.Length;
+    
         if (parameters.Length != totalParams)
         {
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
-
-        // Extract and reshape centers from the first portion of parameters
-        var centersVector = parameters.Slice(0, centersSize);
-        _centers = Tensor<T>.FromVector(centersVector, [_numCenters, _inputSize]);
-
-        // Extract widths from the remaining portion
-        var widthsVector = parameters.Slice(centersSize, _numCenters);
-        _widths = Tensor<T>.FromVector(widthsVector, [_numCenters]);
+    
+        int index = 0;
+    
+        // Set centers
+        for (int i = 0; i < _centers.Rows; i++)
+        {
+            for (int j = 0; j < _centers.Columns; j++)
+            {
+                _centers[i, j] = parameters[index++];
+            }
+        }
+    
+        // Set widths
+        for (int i = 0; i < _widths.Length; i++)
+        {
+            _widths[i] = parameters[index++];
+        }
     }
 
     /// <summary>
@@ -565,10 +465,10 @@ public class RBFLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_numCenters + _inputSize)));
-        for (int i = 0; i < _numCenters; i++)
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_centers.Rows + _centers.Columns)));
+        for (int i = 0; i < _centers.Rows; i++)
         {
-            for (int j = 0; j < _inputSize; j++)
+            for (int j = 0; j < _centers.Columns; j++)
             {
                 _centers[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
             }
@@ -577,30 +477,26 @@ public class RBFLayer<T> : LayerBase<T>
         }
     }
 
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    /// <summary>
+    /// Calculates the Euclidean distance between an input vector and a center vector.
+    /// </summary>
+    /// <param name="x">The input vector.</param>
+    /// <param name="center">The center vector.</param>
+    /// <returns>The Euclidean distance between the vectors.</returns>
+    /// <remarks>
+    /// This private method calculates the Euclidean distance between an input vector and a center vector,
+    /// which is the square root of the sum of squared differences between corresponding components.
+    /// This distance is used to determine how strongly each RBF neuron activates in response to an input.
+    /// </remarks>
+    private T CalculateDistance(Vector<T> x, Vector<T> center)
     {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
+        T sum = NumOps.Zero;
+        for (int i = 0; i < x.Length; i++)
+        {
+            T diff = NumOps.Subtract(x[i], center[i]);
+            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
+        }
 
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input [batch, inputSize]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // _centers is already a Tensor [numCenters, inputSize]
-        var centersNode = TensorOperations<T>.Constant(_centers, "centers");
-
-        // Convert widths to epsilons: epsilon = 1 / (2 * width²) for Gaussian RBF
-        var epsilonsTensor = ComputeEpsilonsFromWidths();
-        var epsilonsNode = TensorOperations<T>.Constant(epsilonsTensor, "epsilons");
-
-        // Use RBFKernel operation: computes exp(-epsilon * distance²)
-        return TensorOperations<T>.RBFKernel(inputNode, centersNode, epsilonsNode);
+        return NumOps.Sqrt(sum);
     }
-
-    public override bool SupportsJitCompilation => true;
-
 }

@@ -1,12 +1,8 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Threading.Channels;
-using AiDotNet.Tensors.LinearAlgebra;
-using AiDotNet.Serving.Batching;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
-using AiDotNet.Serving.Monitoring;
-using AiDotNet.Serving.Padding;
-using AiDotNet.Serving.Scheduling;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,40 +12,25 @@ namespace AiDotNet.Serving.Services;
 /// High-performance request batcher that collects multiple inference requests
 /// and processes them as a single batch to maximize throughput.
 ///
-/// Enhanced features (Issue #410):
-/// - Dynamic batching with multiple strategies (Timeout, Size, Adaptive, Bucket)
-/// - Priority-based request scheduling with fair scheduling and backpressure handling
-/// - Padding strategies for variable-length sequences (Minimal, Bucket, Fixed)
-/// - Performance monitoring with latency percentile tracking (p50, p95, p99)
-/// - Adaptive batch sizing based on latency and throughput metrics
-///
-/// Reliability improvements:
-/// - Uses Channel-based queue and background Task for robust batch processing
-/// - Eliminates Timer-based scheduling which can be unreliable in CI environments
-/// - Uses SemaphoreSlim with WaitAsync for non-blocking synchronization
+/// This class implements dynamic request batching:
+/// 1. Incoming requests are queued in a thread-safe queue
+/// 2. A background task periodically collects queued requests
+/// 3. Requests are batched together and sent to the model as a single forward pass
+/// 4. Individual results are returned to each request via TaskCompletionSource
 /// </summary>
 public class RequestBatcher : IRequestBatcher, IDisposable
 {
     private readonly IModelRepository _modelRepository;
     private readonly ILogger<RequestBatcher> _logger;
     private readonly ServingOptions _options;
-    private readonly PriorityRequestQueue<BatchRequest>? _priorityQueue;
-    private readonly Channel<BatchRequest> _requestChannel;
-    private readonly CancellationTokenSource _cts = new();
-    private readonly Task _processingTask;
-    private readonly SemaphoreSlim _batchSignal = new(0);
-
-    // Enhanced components
-    private readonly IBatchingStrategy _batchingStrategy;
-    private readonly IPaddingStrategy _paddingStrategy;
-    private readonly PerformanceMetrics _performanceMetrics;
+    private readonly ConcurrentQueue<BatchRequest> _requestQueue = new();
+    private readonly Timer _batchTimer;
+    private readonly SemaphoreSlim _processingSemaphore = new(1, 1);
 
     // Statistics tracking
     private long _totalRequests = 0;
     private long _totalBatches = 0;
     private long _totalBatchSize = 0;
-    private DateTime _oldestRequestTime = DateTime.MaxValue;
-    private readonly object _timeLock = new();
 
     /// <summary>
     /// Initializes a new instance of the RequestBatcher.
@@ -66,81 +47,12 @@ public class RequestBatcher : IRequestBatcher, IDisposable
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
 
-        // Initialize request channel with bounded capacity for backpressure
-        var channelOptions = new BoundedChannelOptions(_options.MaxQueueSize > 0 ? _options.MaxQueueSize : 1000)
-        {
-            FullMode = BoundedChannelFullMode.Wait,
-            SingleReader = true,
-            SingleWriter = false
-        };
-        _requestChannel = Channel.CreateBounded<BatchRequest>(channelOptions);
-
-        // Initialize priority queue only if enabled
-        if (_options.EnablePriorityScheduling)
-        {
-            _priorityQueue = new PriorityRequestQueue<BatchRequest>(_options.MaxQueueSize);
-        }
-
-        // Initialize batching strategy
-        _batchingStrategy = CreateBatchingStrategy();
-        _logger.LogInformation("Using batching strategy: {Strategy}", _batchingStrategy.Name);
-
-        // Initialize padding strategy
-        _paddingStrategy = CreatePaddingStrategy();
-        _logger.LogInformation("Using padding strategy: {Strategy}", _paddingStrategy.Name);
-
-        // Initialize performance metrics
-        _performanceMetrics = _options.EnablePerformanceMetrics
-            ? new PerformanceMetrics(_options.MaxLatencySamples)
-            : new PerformanceMetrics(0);
-
-        // Start the batch processing background task
-        _processingTask = Task.Run(() => ProcessingLoopAsync(_cts.Token));
-        _logger.LogInformation("RequestBatcher started with Channel-based processing");
-    }
-
-    /// <summary>
-    /// Creates the batching strategy based on configuration.
-    /// </summary>
-    private IBatchingStrategy CreateBatchingStrategy()
-    {
-        return _options.BatchingStrategy switch
-        {
-            BatchingStrategyType.Timeout => new TimeoutBatchingStrategy(_options.BatchingWindowMs, _options.MaxBatchSize),
-            BatchingStrategyType.Size => new SizeBatchingStrategy(_options.MaxBatchSize, _options.BatchingWindowMs),
-            BatchingStrategyType.Bucket => new BucketBatchingStrategy(_options.BucketSizes, _options.MaxBatchSize, _options.BatchingWindowMs),
-            BatchingStrategyType.Continuous => new ContinuousBatchingStrategy(
-                _options.MaxBatchSize,
-                Math.Max(1, _options.BatchingWindowMs / 10),
-                _options.TargetLatencyMs,
-                _options.AdaptiveBatchSize),
-            BatchingStrategyType.Adaptive => new AdaptiveBatchingStrategy(
-                _options.MinBatchSize,
-                _options.MaxBatchSize,
-                _options.BatchingWindowMs,
-                _options.TargetLatencyMs,
-                _options.LatencyToleranceFactor),
-            _ => new AdaptiveBatchingStrategy(
-                _options.MinBatchSize,
-                _options.MaxBatchSize,
-                _options.BatchingWindowMs,
-                _options.TargetLatencyMs,
-                _options.LatencyToleranceFactor)
-        };
-    }
-
-    /// <summary>
-    /// Creates the padding strategy based on configuration.
-    /// </summary>
-    private IPaddingStrategy CreatePaddingStrategy()
-    {
-        return _options.PaddingStrategy switch
-        {
-            PaddingStrategyType.Bucket => new BucketPaddingStrategy(_options.BucketSizes),
-            PaddingStrategyType.Fixed => new FixedSizePaddingStrategy(_options.FixedPaddingSize),
-            PaddingStrategyType.Minimal => new MinimalPaddingStrategy(),
-            _ => new MinimalPaddingStrategy()
-        };
+        // Start the batch processing timer
+        _batchTimer = new Timer(
+            ProcessBatchCallback,
+            null,
+            TimeSpan.FromMilliseconds(_options.BatchingWindowMs),
+            TimeSpan.FromMilliseconds(_options.BatchingWindowMs));
     }
 
     /// <summary>
@@ -149,9 +61,8 @@ public class RequestBatcher : IRequestBatcher, IDisposable
     /// <typeparam name="T">The numeric type used by the model</typeparam>
     /// <param name="modelName">The name of the model to use for prediction</param>
     /// <param name="input">The input features</param>
-    /// <param name="priority">The priority level for this request</param>
     /// <returns>A task that completes with the prediction result</returns>
-    public Task<Vector<T>> QueueRequest<T>(string modelName, Vector<T> input, RequestPriority priority = RequestPriority.Normal)
+    public Task<Vector<T>> QueueRequest<T>(string modelName, Vector<T> input)
     {
         var tcs = new TaskCompletionSource<Vector<T>>(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -160,188 +71,58 @@ public class RequestBatcher : IRequestBatcher, IDisposable
             ModelName = modelName,
             NumericType = typeof(T).Name,
             Input = input,
-            CompletionSource = tcs,
-            Priority = priority,
-            EnqueueTime = DateTime.UtcNow
+            CompletionSource = tcs
         };
 
-        // Use priority queue if enabled
-        if (_options.EnablePriorityScheduling && _priorityQueue != null)
-        {
-            lock (_timeLock)
-            {
-                if (!_priorityQueue.TryEnqueue(request, priority))
-                {
-                    // Queue is full - backpressure handling
-                    tcs.SetException(new InvalidOperationException("Request queue is full. Please try again later."));
-                    _logger.LogWarning("Request rejected due to backpressure. Queue size: {QueueSize}", _priorityQueue.Count);
-                    return tcs.Task;
-                }
-
-                // Track oldest request time
-                if (request.EnqueueTime < _oldestRequestTime)
-                    _oldestRequestTime = request.EnqueueTime;
-            }
-
-            // Signal that there are requests to process
-            try { _batchSignal.Release(); } catch (SemaphoreFullException) { }
-        }
-        else
-        {
-            // Try to write to the channel (non-blocking)
-            if (!_requestChannel.Writer.TryWrite(request))
-            {
-                tcs.SetException(new InvalidOperationException("Request queue is full. Please try again later."));
-                _logger.LogWarning("Request rejected due to backpressure. Channel is full.");
-                return tcs.Task;
-            }
-
-            lock (_timeLock)
-            {
-                // Track oldest request time
-                if (request.EnqueueTime < _oldestRequestTime)
-                    _oldestRequestTime = request.EnqueueTime;
-            }
-        }
-
+        _requestQueue.Enqueue(request);
         Interlocked.Increment(ref _totalRequests);
 
         return tcs.Task;
     }
 
     /// <summary>
-    /// Background processing loop that reads from the channel and processes batches.
-    /// This replaces the Timer-based approach for more reliable batch processing.
+    /// Timer callback that triggers batch processing.
     /// </summary>
-    private async Task ProcessingLoopAsync(CancellationToken cancellationToken)
+    private void ProcessBatchCallback(object? state)
     {
-        var pendingRequests = new List<BatchRequest>();
-        var batchingWindowMs = Math.Max(1, _options.BatchingWindowMs);
-
-        _logger.LogDebug("Processing loop started with batching window: {WindowMs}ms", batchingWindowMs);
+        // Use a semaphore to ensure only one batch is processed at a time
+        if (!_processingSemaphore.Wait(0))
+        {
+            // Another batch is still being processed, skip this cycle
+            return;
+        }
 
         try
         {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                // Read requests from the channel with a timeout
-                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeoutCts.CancelAfter(batchingWindowMs);
-
-                try
-                {
-                    // For priority queue mode, wait on the semaphore signal
-                    if (_options.EnablePriorityScheduling && _priorityQueue != null)
-                    {
-                        await _batchSignal.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
-
-                        // Drain priority queue
-                        while (_priorityQueue.TryDequeue(out var request))
-                        {
-                            if (request != null)
-                            {
-                                pendingRequests.Add(request);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        // Read from channel - this is the main batching entry point
-                        while (pendingRequests.Count < _options.MaxBatchSize)
-                        {
-                            if (_requestChannel.Reader.TryRead(out var request))
-                            {
-                                pendingRequests.Add(request);
-                            }
-                            else
-                            {
-                                // No more items immediately available
-                                // Wait for more items or timeout
-                                try
-                                {
-                                    var waitTask = _requestChannel.Reader.WaitToReadAsync(timeoutCts.Token);
-                                    if (!await waitTask.ConfigureAwait(false))
-                                    {
-                                        // Channel was completed (no more items will be written)
-                                        break;
-                                    }
-                                }
-                                catch (OperationCanceledException)
-                                {
-                                    // Timeout reached, process what we have
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-                {
-                    // Timeout - process what we have
-                }
-
-                // Process the batch if we have any requests
-                if (pendingRequests.Count > 0)
-                {
-                    try
-                    {
-                        ProcessBatchedRequests(pendingRequests);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error processing batch of {Count} requests", pendingRequests.Count);
-                        // Fail all pending requests
-                        foreach (var req in pendingRequests)
-                        {
-                            SetException(req, ex);
-                        }
-                    }
-                    finally
-                    {
-                        pendingRequests.Clear();
-                    }
-                }
-                else
-                {
-                    // Small delay to prevent tight loop when idle
-                    await Task.Delay(1, cancellationToken).ConfigureAwait(false);
-                }
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            _logger.LogInformation("Processing loop cancelled");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error in processing loop");
+            ProcessBatches();
         }
         finally
         {
-            // Fail any remaining pending requests
-            foreach (var req in pendingRequests)
-            {
-                SetException(req, new OperationCanceledException("Batcher is shutting down"));
-            }
-
-            _logger.LogDebug("Processing loop stopped");
+            _processingSemaphore.Release();
         }
     }
 
     /// <summary>
-    /// Processes a list of pending batch requests.
+    /// Processes all queued requests in batches grouped by model and numeric type.
     /// </summary>
-    private void ProcessBatchedRequests(List<BatchRequest> requests)
+    private void ProcessBatches()
     {
-        if (requests.Count == 0)
+        if (_requestQueue.IsEmpty)
         {
             return;
         }
 
-        // Reset oldest request time
-        lock (_timeLock)
+        // Collect all pending requests
+        var requests = new List<BatchRequest>();
+        while (_requestQueue.TryDequeue(out var request) &&
+               (_options.MaxBatchSize <= 0 || requests.Count < _options.MaxBatchSize))
         {
-            _oldestRequestTime = DateTime.MaxValue;
+            requests.Add(request);
+        }
+
+        if (requests.Count == 0)
+        {
+            return;
         }
 
         // Group requests by model name and numeric type
@@ -426,8 +207,6 @@ public class RequestBatcher : IRequestBatcher, IDisposable
             return;
         }
 
-        var stopwatch = Stopwatch.StartNew();
-
         // Get the model
         var model = _modelRepository.GetModel<T>(modelName);
         if (model == null)
@@ -466,31 +245,9 @@ public class RequestBatcher : IRequestBatcher, IDisposable
                 SetResult(requests[i], result);
             }
 
-            // Update statistics and metrics
-            stopwatch.Stop();
-            var latencyMs = stopwatch.Elapsed.TotalMilliseconds;
-
+            // Update statistics
             Interlocked.Increment(ref _totalBatches);
             Interlocked.Add(ref _totalBatchSize, batchSize);
-
-            if (_options.EnablePerformanceMetrics)
-            {
-                _performanceMetrics.RecordBatch(batchSize, latencyMs);
-
-                // Record padding metrics: calculate actual vs total elements
-                // For now, assuming minimal padding (no padding overhead in current implementation)
-                var actualElements = batchSize * inputDim;
-                var totalElements = batchSize * inputDim;
-                var paddingElements = totalElements - actualElements;
-                _performanceMetrics.RecordBatchUtilization(actualElements, paddingElements);
-            }
-
-            // Update batching strategy with performance feedback
-            _batchingStrategy.UpdatePerformanceFeedback(batchSize, latencyMs);
-
-            _logger.LogDebug(
-                "Processed batch for model '{ModelName}': size={BatchSize}, latency={LatencyMs}ms",
-                modelName, batchSize, latencyMs);
         }
         catch (ArgumentException ex)
         {
@@ -556,77 +313,24 @@ public class RequestBatcher : IRequestBatcher, IDisposable
     /// </summary>
     public Dictionary<string, object> GetStatistics()
     {
-        var queueDepth = _options.EnablePriorityScheduling && _priorityQueue != null
-            ? _priorityQueue.Count
-            : _requestChannel.Reader.Count;
-
         var stats = new Dictionary<string, object>
         {
             ["totalRequests"] = _totalRequests,
             ["totalBatches"] = _totalBatches,
-            ["queuedRequests"] = queueDepth,
-            ["averageBatchSize"] = _totalBatches > 0 ? (double)_totalBatchSize / _totalBatches : 0.0,
-            ["batchingStrategy"] = _batchingStrategy.Name,
-            ["paddingStrategy"] = _paddingStrategy.Name
+            ["queuedRequests"] = _requestQueue.Count,
+            ["averageBatchSize"] = _totalBatches > 0 ? (double)_totalBatchSize / _totalBatches : 0.0
         };
-
-        // Add priority queue stats if enabled
-        if (_options.EnablePriorityScheduling && _priorityQueue != null)
-        {
-            var priorityCounts = _priorityQueue.GetPriorityCounts();
-            stats["priorityQueues"] = priorityCounts;
-        }
 
         return stats;
     }
 
     /// <summary>
-    /// Gets detailed performance metrics including latency percentiles.
-    /// </summary>
-    public Dictionary<string, object> GetPerformanceMetrics()
-    {
-        if (!_options.EnablePerformanceMetrics)
-        {
-            return new Dictionary<string, object>
-            {
-                ["metricsEnabled"] = false
-            };
-        }
-
-        var metrics = _performanceMetrics.GetAllMetrics();
-        metrics["metricsEnabled"] = true;
-        metrics["batchingStrategy"] = _batchingStrategy.Name;
-        metrics["paddingStrategy"] = _paddingStrategy.Name;
-
-        return metrics;
-    }
-
-    /// <summary>
-    /// Disposes the request batcher and stops the background processing task.
+    /// Disposes the request batcher and stops the background timer.
     /// </summary>
     public void Dispose()
     {
-        // Signal cancellation and complete the channel
-        _cts.Cancel();
-        _requestChannel.Writer.TryComplete();
-
-        // Wait for the processing task to complete with timeout
-        try
-        {
-            if (!_processingTask.Wait(TimeSpan.FromSeconds(5)))
-            {
-                _logger.LogWarning("Processing task did not complete within timeout");
-            }
-        }
-        catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is TaskCanceledException or OperationCanceledException))
-        {
-            // Expected during cancellation
-        }
-
-        // Dispose resources
-        _cts.Dispose();
-        _batchSignal.Dispose();
-
+        _batchTimer?.Dispose();
+        _processingSemaphore?.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -639,7 +343,5 @@ public class RequestBatcher : IRequestBatcher, IDisposable
         public string NumericType { get; set; } = string.Empty;
         public object Input { get; set; } = null!;
         public object CompletionSource { get; set; } = null!;
-        public RequestPriority Priority { get; set; } = RequestPriority.Normal;
-        public DateTime EnqueueTime { get; set; } = DateTime.UtcNow;
     }
 }

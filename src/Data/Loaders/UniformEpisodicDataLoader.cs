@@ -1,4 +1,4 @@
-using AiDotNet.Data.Structures;
+using AiDotNet.Data.Abstractions;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Data.Loaders;
@@ -162,8 +162,8 @@ public class UniformEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderB
     protected override MetaLearningTask<T, TInput, TOutput> GetNextTaskCore()
     {
         // Step 1: Randomly select nWay unique classes
-        var selectedClasses = _availableClasses
-            .OrderBy(_ => RandomInstance.Next())
+        var selectedClasses = AvailableClasses
+            .OrderBy(_ => Random.Next())
             .Take(NWay)
             .ToArray();
 
@@ -181,7 +181,7 @@ public class UniformEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderB
 
             // Step 3: Sample (kShot + queryShots) examples and shuffle
             var sampledIndices = classIndices
-                .OrderBy(_ => RandomInstance.Next())
+                .OrderBy(_ => Random.Next())
                 .Take(KShot + QueryShots)
                 .ToList();
 

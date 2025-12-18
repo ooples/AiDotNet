@@ -27,14 +27,14 @@ public enum PoolingType
     /// <b>For Beginners:</b> Max Pooling works by looking at small groups of numbers and keeping only the largest 
     /// value from each group. 
     /// 
-    /// For example, if we have this 4Ã—4 grid of numbers:
+    /// For example, if we have this 4×4 grid of numbers:
     /// 
     /// 3  7  5  2
     /// 1  4  6  9
     /// 2  8  3  5
     /// 6  1  4  7
     /// 
-    /// And we use Max Pooling with 2Ã—2 groups, we'd get:
+    /// And we use Max Pooling with 2×2 groups, we'd get:
     /// 
     /// 7  9
     /// 8  7
@@ -54,14 +54,14 @@ public enum PoolingType
     /// <b>For Beginners:</b> Average Pooling works by looking at small groups of numbers and taking the average 
     /// (mean) of all values in each group.
     /// 
-    /// Using the same 4Ã—4 grid example:
+    /// Using the same 4×4 grid example:
     /// 
     /// 3  7  5  2
     /// 1  4  6  9
     /// 2  8  3  5
     /// 6  1  4  7
     /// 
-    /// With Average Pooling using 2Ã—2 groups, we'd get:
+    /// With Average Pooling using 2×2 groups, we'd get:
     /// 
     /// (3+7+1+4)/4 = 3.75    (5+2+6+9)/4 = 5.5
     /// (2+8+6+1)/4 = 4.25    (3+5+4+7)/4 = 4.75

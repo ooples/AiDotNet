@@ -333,7 +333,7 @@ public class DecimalNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
     /// - Your output was scaled by dividing by 100
     /// - The model learned a coefficient of 2.5 for this feature
     /// 
-    /// The denormalized coefficient would be 2.5 Ã— (100 Ã· 1,000) = 0.25
+    /// The denormalized coefficient would be 2.5 × (100 ÷ 1,000) = 0.25
     /// 
     /// This adjustment ensures that when you multiply the original unscaled input by this new coefficient,
     /// you get the correct prediction in the original output scale.

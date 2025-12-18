@@ -33,7 +33,7 @@ public enum DistributionType
     /// symmetric bell shape.
     /// 
     /// It's defined by two parameters:
-    /// - Mean (Âµ): The center of the distribution
+    /// - Mean (µ): The center of the distribution
     /// - Standard deviation (s): How spread out the values are
     /// 
     /// Think of it as a distribution where:
@@ -70,7 +70,7 @@ public enum DistributionType
     /// - It has fatter tails, meaning extreme values are more likely
     /// 
     /// It's defined by two parameters:
-    /// - Location (Âµ): The center of the distribution
+    /// - Location (µ): The center of the distribution
     /// - Scale (b): Controls how spread out the values are
     /// 
     /// Best used for:
@@ -133,7 +133,7 @@ public enum DistributionType
     /// - Most values are clustered on the left side
     /// 
     /// It's defined by two parameters:
-    /// - Âµ: The mean of the logarithm of the data
+    /// - µ: The mean of the logarithm of the data
     /// - s: The standard deviation of the logarithm of the data
     /// 
     /// Best used for:

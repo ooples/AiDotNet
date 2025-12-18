@@ -201,91 +201,10 @@ public class MaskingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
         if (_lastMask == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         return ApplyMask(outputGradient, _lastMask);
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// Masking is implemented as element-wise multiplication between input and binary mask.
-    /// The gradient flows through the mask via ElementwiseMultiply operation.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastMask == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Create computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var maskNode = Autodiff.TensorOperations<T>.Variable(_lastMask, "mask", requiresGradient: false);
-
-        // Forward pass: output = input * mask (element-wise multiplication)
-        var outputNode = Autodiff.TensorOperations<T>.ElementwiseMultiply(inputNode, maskNode);
-
-        // Set gradient at output
-        outputNode.Gradient = outputGradient;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>
@@ -312,9 +231,19 @@ public class MaskingLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> CreateMask(Tensor<T> input)
     {
-        // Use Engine for GPU/CPU accelerated vectorized comparison
-        // Returns 1 where input != maskValue, 0 where input == maskValue
-        return Engine.TensorNotEquals(input, _maskValue);
+        var mask = new Tensor<T>(input.Shape);
+        for (int i = 0; i < input.Shape[0]; i++)
+        {
+            for (int j = 0; j < input.Shape[1]; j++)
+            {
+                for (int k = 0; k < input.Shape[2]; k++)
+                {
+                    mask[i, j, k] = !NumOps.Equals(input[i, j, k], _maskValue) ? NumOps.One : NumOps.Zero;
+                }
+            }
+        }
+
+        return mask;
     }
 
     /// <summary>
@@ -343,8 +272,19 @@ public class MaskingLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyMask(Tensor<T> input, Tensor<T> mask)
     {
-        // Use Engine for GPU/CPU accelerated element-wise multiplication
-        return Engine.TensorMultiply(input, mask);
+        var output = new Tensor<T>(input.Shape);
+        for (int i = 0; i < input.Shape[0]; i++)
+        {
+            for (int j = 0; j < input.Shape[1]; j++)
+            {
+                for (int k = 0; k < input.Shape[2]; k++)
+                {
+                    output[i, j, k] = NumOps.Multiply(input[i, j, k], mask[i, j, k]);
+                }
+            }
+        }
+
+        return output;
     }
 
     /// <summary>
@@ -415,46 +355,5 @@ public class MaskingLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastInput = null;
         _lastMask = null;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because masking is a simple element-wise operation that can be JIT compiled.
-    /// </value>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Exports the masking layer's forward pass as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the masked result.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph for the masking operation.
-    /// The mask is applied element-wise: masked_output = input * mask.
-    /// For JIT compilation, we assume a pre-computed mask or identity (no masking).
-    /// </para>
-    /// </remarks>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create placeholder for input data
-        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input");
-
-        inputNodes.Add(inputNode);
-
-        // For JIT compilation, masking is typically not applied (inference mode)
-        // If masking is needed, it would require a Multiply operation with a mask tensor
-        // For now, return input unchanged (identity function)
-        // TODO: Implement mask application if needed for specific use cases
-        return inputNode;
     }
 }

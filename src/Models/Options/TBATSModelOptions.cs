@@ -203,7 +203,7 @@ public class TBATSModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// [24, 168] to capture daily and weekly patterns.
     /// </para>
     /// </remarks>
-    public int[] SeasonalPeriods { get; set; } = new int[] { 7, 30, 365 };
+    public int[] SeasonalPeriods { get; set; } = [7, 30, 365];
     
     /// <summary>
     /// Gets or sets the maximum number of iterations for the optimization algorithm.

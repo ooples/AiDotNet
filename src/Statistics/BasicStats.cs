@@ -43,7 +43,7 @@ public class BasicStats<T>
     /// For example, for the numbers [2, 4, 6, 8, 10]:
     /// - Sum: 2 + 4 + 6 + 8 + 10 = 30
     /// - Count: 5
-    /// - Mean: 30 Ã· 5 = 6
+    /// - Mean: 30 ÷ 5 = 6
     /// 
     /// The mean gives you the "center" of your data, but can be pulled in the direction of very large or small values.
     /// </para>
@@ -203,7 +203,7 @@ public class BasicStats<T>
     /// 
     /// For example:
     /// - For [3, 5, 8, 9, 12] (odd count), the median is 8
-    /// - For [3, 5, 8, 9, 12, 15] (even count), the median is (8 + 9) Ã· 2 = 8.5
+    /// - For [3, 5, 8, 9, 12, 15] (even count), the median is (8 + 9) ÷ 2 = 8.5
     /// 
     /// The median is often better than the mean for describing "typical" values when your data has outliers.
     /// </para>
@@ -264,7 +264,7 @@ public class BasicStats<T>
     /// The IQR is useful because:
     /// - It ignores the extreme values (potential outliers)
     /// - It gives you the range where the "typical" values fall
-    /// - It's used to identify outliers (values more than 1.5 Ã— IQR from the quartiles)
+    /// - It's used to identify outliers (values more than 1.5 × IQR from the quartiles)
     /// 
     /// For example, if test scores have an IQR of 15 points, it means the middle 50% of students' scores
     /// span a 15-point range.

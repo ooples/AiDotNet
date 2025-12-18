@@ -149,7 +149,7 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
             int testSize = totalSamples - trainSize - validationSize;
 
             // Shuffle the data
-            var random = RandomHelper.CreateSeededRandom(_options.RandomSeed);
+            var random = new Random(_options.RandomSeed);
             var indices = Enumerable.Range(0, totalSamples).ToList();
             indices = [.. indices.OrderBy(x => random.Next())];
 
@@ -194,7 +194,7 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
             int testSize = totalSamples - trainSize - validationSize;
 
             // Shuffle the data
-            var random = RandomHelper.CreateSeededRandom(_options.RandomSeed);
+            var random = new Random(_options.RandomSeed);
             var indices = Enumerable.Range(0, totalSamples).ToList();
             indices = [.. indices.OrderBy(x => random.Next())];
 

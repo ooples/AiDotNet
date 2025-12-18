@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -313,7 +314,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
                 throw new ArgumentOutOfRangeException(nameof(rank), "Rank must be greater than zero.");
             }
 
-            Random rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
+            Random rng = seed.HasValue ? new Random(seed.Value) : new Random();
             var ops = MathHelper.GetNumericOperations<T>();
 
             // Initialize matrix A (inputSize × rank) with Gaussian random values

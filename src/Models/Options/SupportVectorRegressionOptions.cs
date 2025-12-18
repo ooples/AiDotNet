@@ -62,7 +62,7 @@ public class SupportVectorRegressionOptions : NonLinearRegressionOptions
     /// - Only points outside this tube influence the model
     /// 
     /// The default value of 0.1 means:
-    /// - Predictions within Â±0.1 of the actual value are considered "good enough"
+    /// - Predictions within ±0.1 of the actual value are considered "good enough"
     /// - The model focuses on reducing errors larger than this threshold
     /// 
     /// Think of it like this:

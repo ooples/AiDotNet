@@ -131,10 +131,9 @@ namespace AiDotNet.Interpretability
                 return _numOps.Zero;
 
             int positiveCount = 0;
-            T threshold = _numOps.FromDouble(0.5);
             for (int i = 0; i < predictions.Length; i++)
             {
-                if (_numOps.GreaterThanOrEquals(predictions[i], threshold))
+                if (_numOps.GreaterThan(predictions[i], _numOps.Zero))
                 {
                     positiveCount++;
                 }
@@ -169,12 +168,11 @@ namespace AiDotNet.Interpretability
 
             int truePositives = 0;
             int actualPositives = 0;
-            T threshold = _numOps.FromDouble(0.5);
 
             for (int i = 0; i < predictions.Length; i++)
             {
-                bool isActualPositive = _numOps.GreaterThanOrEquals(actualLabels[i], threshold);
-                bool isPredictedPositive = _numOps.GreaterThanOrEquals(predictions[i], threshold);
+                bool isActualPositive = _numOps.GreaterThan(actualLabels[i], _numOps.Zero);
+                bool isPredictedPositive = _numOps.GreaterThan(predictions[i], _numOps.Zero);
 
                 if (isActualPositive)
                 {
@@ -218,12 +216,11 @@ namespace AiDotNet.Interpretability
 
             int falsePositives = 0;
             int actualNegatives = 0;
-            T threshold = _numOps.FromDouble(0.5);
 
             for (int i = 0; i < predictions.Length; i++)
             {
-                bool isActualNegative = _numOps.LessThan(actualLabels[i], threshold);
-                bool isPredictedPositive = _numOps.GreaterThanOrEquals(predictions[i], threshold);
+                bool isActualNegative = _numOps.Equals(actualLabels[i], _numOps.Zero);
+                bool isPredictedPositive = _numOps.GreaterThan(predictions[i], _numOps.Zero);
 
                 if (isActualNegative)
                 {
@@ -267,12 +264,11 @@ namespace AiDotNet.Interpretability
 
             int truePositives = 0;
             int predictedPositives = 0;
-            T threshold = _numOps.FromDouble(0.5);
 
             for (int i = 0; i < predictions.Length; i++)
             {
-                bool isActualPositive = _numOps.GreaterThanOrEquals(actualLabels[i], threshold);
-                bool isPredictedPositive = _numOps.GreaterThanOrEquals(predictions[i], threshold);
+                bool isActualPositive = _numOps.GreaterThan(actualLabels[i], _numOps.Zero);
+                bool isPredictedPositive = _numOps.GreaterThan(predictions[i], _numOps.Zero);
 
                 if (isPredictedPositive)
                 {

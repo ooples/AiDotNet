@@ -133,7 +133,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// Performs multiplicative X-11 decomposition.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> This method assumes your data components multiply together (trend Ã— seasonal Ã— irregular = original data).
+    /// <b>For Beginners:</b> This method assumes your data components multiply together (trend × seasonal × irregular = original data).
     /// It's suitable when seasonal patterns have amplitude that changes proportionally with the trend level.
     /// For example, if sales increase over time, the seasonal peaks and valleys also get larger.
     /// </remarks>

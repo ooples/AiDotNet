@@ -104,13 +104,13 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// <para>
     /// This method implements the forward pass of the measurement layer. It calculates the probability
     /// distribution from a quantum state vector by taking the squared magnitude of each complex amplitude
-    /// (|z|² = real² + imag²) and normalizing the results to ensure they sum to 1.0.
+    /// (|z|� = real� + imag�) and normalizing the results to ensure they sum to 1.0.
     /// </para>
     /// <para><b>For Beginners:</b> This method converts quantum amplitudes into classical probabilities.
     /// 
     /// During the forward pass:
     /// - The layer receives complex-valued quantum amplitudes
-    /// - For each amplitude, it calculates |z|² = real² + imag² (the squared magnitude)
+    /// - For each amplitude, it calculates |z|� = real� + imag� (the squared magnitude)
     /// - It normalizes these values so they sum to 1.0 (making them valid probabilities)
     /// - It returns these probabilities as a real-valued tensor
     /// 
@@ -126,7 +126,7 @@ public class MeasurementLayer<T> : LayerBase<T>
     {
         _lastInput = input;
         // Assume input is a complex-valued tensor representing quantum states
-        var probabilities = new Tensor<T>(new[] { input.Shape[0] });
+        var probabilities = new T[input.Shape[0]];
     
         // Get numeric operations for complex numbers
         var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
@@ -135,18 +135,23 @@ public class MeasurementLayer<T> : LayerBase<T>
             // Get the complex value from the input tensor
             var complexValue = Tensor<T>.GetComplex(input, i);
         
-            // Calculate |z|² = real² + imag²
+            // Calculate |z|� = real� + imag�
             var realSquared = NumOps.Multiply(complexValue.Real, complexValue.Real);
             var imagSquared = NumOps.Multiply(complexValue.Imaginary, complexValue.Imaginary);
             probabilities[i] = NumOps.Add(realSquared, imagSquared);
         }
-        // Normalize probabilities using engine ops
-        var sumTensor = Engine.ReduceSum(probabilities, new[] { 0 }, keepDims: false);
-        var sumValue = sumTensor[0];
-        var invSum = NumOps.Equals(sumValue, NumOps.Zero)
-            ? NumOps.Zero
-            : NumOps.Divide(NumOps.One, sumValue);
-        _lastOutput = Engine.TensorMultiplyScalar(probabilities, invSum);
+        // Normalize probabilities
+        var sum = NumOps.Zero;
+        for (int i = 0; i < probabilities.Length; i++)
+        {
+            sum = NumOps.Add(sum, probabilities[i]);
+        }
+        for (int i = 0; i < probabilities.Length; i++)
+        {
+            probabilities[i] = NumOps.Divide(probabilities[i], sum);
+        }
+        // Create a new tensor with the calculated probabilities
+        _lastOutput = new Tensor<T>([input.Shape[0]], new Vector<T>(probabilities));
         return _lastOutput;
     }
 
@@ -179,18 +184,6 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
         if (_lastInput == null || _lastOutput == null)
         {
             throw new InvalidOperationException("Backward called before Forward.");
@@ -217,54 +210,6 @@ public class MeasurementLayer<T> : LayerBase<T>
         // Create a new tensor with the calculated gradients
         return new Tensor<T>(_lastInput.Shape, inputGradientData);
     }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. It constructs a computation graph
-    /// that mirrors the forward pass operations (magnitude squared -> Sum -> Normalize) to calculate exact gradients.
-    /// The Forward pass uses GetComplex which treats each element as a complex value. For real-valued tensors (T=float/double),
-    /// the imaginary part is 0, so |z|² = real² + 0² = real². The output shape matches the input shape.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // 1. Create input variable
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-
-        // 2. Build computation graph matching Forward's magnitude computation
-        // Forward uses GetComplex(input, i) which treats each element as a complex value.
-        // For real T: imaginary=0, so |z|² = value²
-        // For complex T: |z|² = real² + imag² (handled by the Complex type itself)
-        // Here we compute for the common real case: magnitudeSquared = input²
-        var magnitudeSquared = Autodiff.TensorOperations<T>.Square(inputNode);
-
-        // Sum over all elements
-        var sumSquared = Autodiff.TensorOperations<T>.Sum(magnitudeSquared);
-
-        // Add epsilon for numerical stability
-        var epsilonTensor = new Tensor<T>(new int[] { 1 });
-        epsilonTensor[0] = NumOps.FromDouble(1e-10);
-        var epsilonNode = Autodiff.TensorOperations<T>.Constant(epsilonTensor, "epsilon");
-        var safeSum = Autodiff.TensorOperations<T>.Add(sumSquared, epsilonNode);
-
-        // Normalize to get probabilities: p = |z|² / sum(|z|²)
-        var output = Autodiff.TensorOperations<T>.Divide(magnitudeSquared, safeSum);
-
-        // 3. Set gradient and execute backward
-        output.Gradient = outputGradient;
-        output.Backward();
-
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-    }
-
 
     /// <summary>
     /// Updates the parameters of the measurement layer using the calculated gradients.
@@ -345,54 +290,4 @@ public class MeasurementLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastOutput = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var input = inputNodes[0];
-        int size = InputShape[0];
-
-        // MeasurementLayer computes quantum measurement: probabilities = |amplitude|^2 / sum(|amplitude|^2)
-        // Input is complex-valued stored as [real_0, imag_0, real_1, imag_1, ...] or [real; imag] halves
-        // Assuming interleaved format: extract real and imaginary parts
-
-        // For interleaved format [r0, i0, r1, i1, ...]:
-        // Extract even indices (real) and odd indices (imaginary)
-        var realPart = TensorOperations<T>.Slice(input, 0, size, step: 2, axis: 0);
-        var imagPart = TensorOperations<T>.Slice(input, 1, size, step: 2, axis: 0);
-
-        // Compute |amplitude|^2 = real^2 + imag^2
-        var realSquared = TensorOperations<T>.Square(realPart);
-        var imagSquared = TensorOperations<T>.Square(imagPart);
-        var magnitudeSquared = TensorOperations<T>.Add(realSquared, imagSquared);
-
-        // Compute sum for normalization
-        var totalSum = TensorOperations<T>.Sum(magnitudeSquared);
-
-        // Normalize to get probabilities (add epsilon to avoid division by zero)
-        var epsilonTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(1e-10) }));
-        var epsilon = TensorOperations<T>.Constant(epsilonTensor, "Epsilon");
-        var safeDenom = TensorOperations<T>.Add(totalSum, epsilon);
-        var probabilities = TensorOperations<T>.Divide(magnitudeSquared, safeDenom);
-
-        return probabilities;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> because MeasurementLayer computes quantum measurement using only
-    /// standard arithmetic operations: |amplitude|^2 = real^2 + imag^2, normalized by sum.
-    /// </value>
-    public override bool SupportsJitCompilation => true;
-
 }

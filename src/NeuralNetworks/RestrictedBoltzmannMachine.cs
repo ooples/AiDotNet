@@ -415,11 +415,11 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             
         if (_vectorActivation != null)
         {
-            return _vectorActivation.Activate(Tensor<T>.FromRowMatrix(hiddenActivations));
+            return _vectorActivation.Activate(Tensor<T>.FromMatrix(hiddenActivations));
         }
         else if (_scalarActivation != null)
         {
-            return Tensor<T>.FromRowMatrix(hiddenActivations.Transform((x, _, _) => _scalarActivation.Activate(x)));
+            return Tensor<T>.FromMatrix(hiddenActivations.Transform((x, _, _) => _scalarActivation.Activate(x)));
         }
         else
         {
@@ -586,7 +586,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     private Tensor<T> SampleBinaryStates(Tensor<T> activations)
     {
         var result = new Tensor<T>(activations.Shape);
-        var random = RandomHelper.CreateSecureRandom();
+        var random = new Random();
         
         for (int i = 0; i < activations.Length; i++)
         {
@@ -632,11 +632,11 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             
         if (_vectorActivation != null)
         {
-            return _vectorActivation.Activate(Tensor<T>.FromRowMatrix(visibleActivations));
+            return _vectorActivation.Activate(Tensor<T>.FromMatrix(visibleActivations));
         }
         else if (_scalarActivation != null)
         {
-            return Tensor<T>.FromRowMatrix(visibleActivations.Transform((x, _, _) => _scalarActivation.Activate(x)));
+            return Tensor<T>.FromMatrix(visibleActivations.Transform((x, _, _) => _scalarActivation.Activate(x)));
         }
         else
         {
@@ -845,7 +845,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     public Tensor<T> GenerateSamples(int numSamples, int numSteps = 1000)
     {
         var samples = new Tensor<T>(new[] { numSamples, VisibleSize });
-        var random = RandomHelper.CreateSecureRandom();
+        var random = new Random();
         
         for (int s = 0; s < numSamples; s++)
         {

@@ -56,7 +56,7 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
         _momentumDecay = momentumDecay;
         _secondMomentDecay = secondMomentDecay;
         _useAdaptiveLearningRate = useAdaptiveLearningRate;
-        _random = RandomHelper.CreateSeededRandom(seed);
+        _random = new Random(seed);
 
         int outputSize = GetOutputShape()[0];
         _compressedMomentum = new Matrix<T>(rank, outputSize);
@@ -252,47 +252,9 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
 
     public override ILayer<T> MergeToOriginalLayer()
     {
-        // Support both DenseLayer and FullyConnectedLayer
-        DenseLayer<T>? denseBase = _baseLayer as DenseLayer<T>;
-        FullyConnectedLayer<T>? fcBase = _baseLayer as FullyConnectedLayer<T>;
-
-        if (denseBase == null && fcBase == null)
-        {
-            throw new InvalidOperationException(
-                "FloraAdapter merging only supports DenseLayer or FullyConnectedLayer base layers. " +
-                $"Got: {_baseLayer.GetType().Name}");
-        }
-
-        // Get the LoRA weight contribution from the underlying LoRA layer
-        Matrix<T> loraWeights = _loraLayer.MergeWeights();
-
-        // Get base layer parameters (works for both DenseLayer and FullyConnectedLayer)
-        Vector<T> baseParams = _baseLayer.GetParameters();
-
-        // Both DenseLayer and FullyConnectedLayer store parameters as [weights..., biases...]
-        int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
-        int weightCount = inputSize * outputSize;
-
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights: baseWeight + loraWeight
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
-        }
-
-        // Copy biases unchanged (Flora/LoRA doesn't modify biases)
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
-
-        // Use helper method to clone base layer and preserve activation function
-        return CreateMergedLayerWithClone(mergedParams);
+        throw new NotImplementedException(
+            "Flora merging requires knowledge of the specific base layer type. " +
+            "Please use type-specific Flora adapters or implement custom merging logic.");
     }
 
     public override void ResetState()

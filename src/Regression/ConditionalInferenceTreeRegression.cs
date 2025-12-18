@@ -13,7 +13,7 @@ namespace AiDotNet.Regression;
 /// <para><b>For Beginners:</b> This class creates a special type of decision tree for predicting numerical values.
 /// 
 /// Think of a decision tree like a flowchart of yes/no questions that helps you make predictions:
-/// - The tree starts with a question (like "Is temperature > 70Â°F?")
+/// - The tree starts with a question (like "Is temperature > 70°F?")
 /// - Based on the answer, it follows different branches
 /// - It continues asking questions until it reaches a final prediction
 /// 

@@ -9,7 +9,7 @@ namespace AiDotNet.LossFunctions;
 /// <b>For Beginners:</b> Huber loss combines the best properties of Mean Squared Error and Mean Absolute Error.
 /// 
 /// The formula is:
-/// - For errors smaller than delta: 0.5 * errorÂ²
+/// - For errors smaller than delta: 0.5 * error²
 /// - For errors larger than delta: delta * (|error| - 0.5 * delta)
 /// 
 /// Where "error" is the difference between predicted and actual values.
@@ -62,7 +62,7 @@ public class HuberLoss<T> : LossFunctionBase<T>
             
             if (NumOps.LessThanOrEquals(diff, _delta))
             {
-                // 0.5 * errorÂ²
+                // 0.5 * error²
                 sum = NumOps.Add(sum, NumOps.Multiply(
                     NumOps.FromDouble(0.5), 
                     NumOps.Multiply(diff, diff)

@@ -58,7 +58,7 @@ public class BootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
     public BootstrapFitDetector(BootstrapFitDetectorOptions? options = null)
     {
         _options = options ?? new BootstrapFitDetectorOptions();
-        _random = RandomHelper.CreateSecureRandom();
+        _random = new Random();
     }
 
     /// <summary>
@@ -104,21 +104,21 @@ public class BootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method performs bootstrap resampling to create multiple versions of your 
-    /// performance metrics (RÂ² values), then analyzes these to determine what type of fit your model has.
+    /// performance metrics (R² values), then analyzes these to determine what type of fit your model has.
     /// </para>
     /// <para>
     /// The method looks at:
     /// <list type="bullet">
-    /// <item><description>Average RÂ² values across bootstrap samples for training, validation, and test sets</description></item>
-    /// <item><description>Differences between training and validation RÂ² values</description></item>
+    /// <item><description>Average R² values across bootstrap samples for training, validation, and test sets</description></item>
+    /// <item><description>Differences between training and validation R² values</description></item>
     /// </list>
     /// </para>
     /// <para>
     /// Based on these metrics, it categorizes the model as having:
     /// <list type="bullet">
-    /// <item><description>Good Fit: High RÂ² values across all datasets</description></item>
-    /// <item><description>Overfit: Much higher RÂ² on training than validation</description></item>
-    /// <item><description>Underfit: Low RÂ² values across all datasets</description></item>
+    /// <item><description>Good Fit: High R² values across all datasets</description></item>
+    /// <item><description>Overfit: Much higher R² on training than validation</description></item>
+    /// <item><description>Underfit: Low R² values across all datasets</description></item>
     /// <item><description>High Variance: Large differences between datasets but not clearly overfitting</description></item>
     /// <item><description>Unstable: Inconsistent performance that doesn't fit other categories</description></item>
     /// </list>
@@ -170,7 +170,7 @@ public class BootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
     /// <para>
     /// <b>For Beginners:</b> This method determines how confident the detector is in its assessment 
     /// of your model's fit. The confidence is based on the width of the confidence interval for the 
-    /// difference between training and validation RÂ² values.
+    /// difference between training and validation R² values.
     /// </para>
     /// <para>
     /// A narrower confidence interval indicates more consistent results across bootstrap samples, 
@@ -262,15 +262,15 @@ public class BootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
     /// Performs bootstrap resampling on the evaluation data.
     /// </summary>
     /// <param name="evaluationData">Data containing model predictions and actual values.</param>
-    /// <returns>A list of bootstrap results containing resampled RÂ² values.</returns>
+    /// <returns>A list of bootstrap results containing resampled R² values.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This private method creates multiple bootstrap samples by resampling the 
-    /// original RÂ² values with some added noise to simulate the variability you would see with actual 
+    /// original R² values with some added noise to simulate the variability you would see with actual 
     /// bootstrap resampling of the data.
     /// </para>
     /// <para>
-    /// Each bootstrap result contains resampled RÂ² values for the training, validation, and test sets. 
+    /// Each bootstrap result contains resampled R² values for the training, validation, and test sets. 
     /// The number of bootstrap samples is determined by the NumberOfBootstraps option.
     /// </para>
     /// </remarks>
@@ -296,23 +296,23 @@ public class BootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
     }
 
     /// <summary>
-    /// Resamples an RÂ² value by adding random noise.
+    /// Resamples an R² value by adding random noise.
     /// </summary>
-    /// <param name="originalR2">The original RÂ² value.</param>
-    /// <returns>A resampled RÂ² value.</returns>
+    /// <param name="originalR2">The original R² value.</param>
+    /// <returns>A resampled R² value.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This private method simulates bootstrap resampling by adding a small 
-    /// amount of random noise to the original RÂ² value. This mimics the variation you would see 
-    /// if you actually resampled the data and recalculated the RÂ².
+    /// amount of random noise to the original R² value. This mimics the variation you would see 
+    /// if you actually resampled the data and recalculated the R².
     /// </para>
     /// <para>
-    /// The noise is randomly generated between -0.05 and 0.05, and the resulting RÂ² value is 
-    /// clamped between 0 and 1 to ensure it remains a valid RÂ² value.
+    /// The noise is randomly generated between -0.05 and 0.05, and the resulting R² value is 
+    /// clamped between 0 and 1 to ensure it remains a valid R² value.
     /// </para>
     /// <para>
     /// In a full implementation, this would involve actual resampling of the data points and 
-    /// recalculation of the RÂ² value, but this simplified approach provides a reasonable 
+    /// recalculation of the R² value, but this simplified approach provides a reasonable 
     /// approximation for the purpose of fit detection.
     /// </para>
     /// </remarks>

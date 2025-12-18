@@ -51,11 +51,9 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// </remarks>
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">Custom options for the Levenberg-Marquardt algorithm.</param>
-    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public LevenbergMarquardtOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
         _options = options ?? new LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>();
@@ -252,12 +250,8 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// <returns>A vector of residuals.</returns>
     private Vector<T> CalculateResiduals(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
-        // === Vectorized Residuals Calculation using IEngine (Phase B: US-GPU-015) ===
-        // residuals = y - predictions
-
         var predictions = ConversionsHelper.ConvertToVector<T, TOutput>(model.Predict(X));
-        var targets = ConversionsHelper.ConvertToVector<T, TOutput>(y);
-        return (Vector<T>)Engine.Subtract(targets, predictions);
+        return ConversionsHelper.ConvertToVector<T, TOutput>(y).Subtract(predictions);
     }
 
     /// <summary>
@@ -280,22 +274,14 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// <returns>An updated symbolic model with improved coefficients.</returns>
     private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Matrix<T> jacobian, Vector<T> residuals)
     {
-        // === Vectorized Solution Update using IEngine (Phase B: US-GPU-015) ===
-        // Levenberg-Marquardt: (J^T J + λ diag(J^T J)) δ = J^T r
-        // where λ is the damping factor
-
         var jTj = jacobian.Transpose().Multiply(jacobian);
-
-        // Vectorized diagonal scaling
-        var diagonalValues = (Vector<T>)Engine.Multiply(jTj.Diagonal(), _dampingFactor);
-        var dampedDiagonal = Matrix<T>.CreateDiagonal(diagonalValues);
-
+        var diagonal = Matrix<T>.CreateDiagonal(jTj.Diagonal());
         var jTr = jacobian.Transpose().Multiply(residuals);
-        var lhs = jTj.Add(dampedDiagonal);
+
+        var lhs = jTj.Add(diagonal.Multiply(_dampingFactor));
         var delta = SolveLinearSystem(lhs, jTr);
 
-        // Vectorized parameter update
-        var newCoefficients = (Vector<T>)Engine.Add(currentSolution.GetParameters(), delta);
+        var newCoefficients = currentSolution.GetParameters().Add(delta);
         return currentSolution.WithParameters(newCoefficients);
     }
 

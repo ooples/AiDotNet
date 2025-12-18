@@ -83,7 +83,7 @@ public class KochanekBartelsSplineInterpolation<T> : IInterpolation<T>
         if (x.Length != y.Length)
             throw new ArgumentException("Input vectors must have the same length.");
         if (x.Length < 4)
-            throw new ArgumentException("At least 4 points are required for Kochanekâ€“Bartels spline interpolation.");
+            throw new ArgumentException("At least 4 points are required for Kochanek–Bartels spline interpolation.");
 
         _x = x;
         _y = y;

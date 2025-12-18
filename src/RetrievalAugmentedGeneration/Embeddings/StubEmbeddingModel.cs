@@ -78,7 +78,7 @@ public class StubEmbeddingModel<T> : EmbeddingModelBase<T>
 
         // Generate vector values from hash
         var values = new T[_embeddingDimension];
-        var random = RandomHelper.CreateSeededRandom(BitConverter.ToInt32(hashBytes, 0));
+        var random = new Random(BitConverter.ToInt32(hashBytes, 0));
 
         // Generate values with normal distribution (mean=0, stddev=1)
         for (int i = 0; i < _embeddingDimension; i++)

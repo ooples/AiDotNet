@@ -44,21 +44,13 @@ public class MeanAbsoluteErrorLoss<T> : LossFunctionBase<T>
     /// <param name="predicted">The predicted values from the model.</param>
     /// <param name="actual">The actual (target) values.</param>
     /// <returns>A vector containing the derivatives of MAE for each prediction.</returns>
-    /// <remarks>
-    /// The derivative of MAE is sign(predicted-actual)/n where:
-    /// - sign(x) = 1 if x > 0
-    /// - sign(x) = -1 if x &lt; 0
-    /// - sign(x) = 0 if x = 0 (subgradient at the kink point)
-    /// </remarks>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-
+        
         // The derivative of MAE is sign(predicted-actual)/n
-        // When predicted == actual (difference is 0), the derivative is 0 (subgradient)
-        return predicted.Subtract(actual).Transform(x =>
-            NumOps.GreaterThan(x, NumOps.Zero) ? NumOps.One :
-            NumOps.LessThan(x, NumOps.Zero) ? NumOps.Negate(NumOps.One) : NumOps.Zero
+        return predicted.Subtract(actual).Transform(x => 
+            NumOps.GreaterThan(x, NumOps.Zero) ? NumOps.One : NumOps.Negate(NumOps.One)
         ).Divide(NumOps.FromDouble(predicted.Length));
     }
 }

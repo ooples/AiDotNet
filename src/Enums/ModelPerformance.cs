@@ -19,7 +19,7 @@ public enum ModelPerformance
     /// <remarks>
     /// <para>
     /// A "Good" performance typically means the model makes predictions that closely match the actual values,
-    /// with metrics like RÂ² generally above 0.8 (or equivalent thresholds for other metrics).
+    /// with metrics like R² generally above 0.8 (or equivalent thresholds for other metrics).
     /// </para>
     /// </remarks>
     Good,
@@ -31,7 +31,7 @@ public enum ModelPerformance
     /// <para>
     /// A "Moderate" performance suggests the model captures some patterns in the data but misses others.
     /// It's usable but could benefit from refinement, with metrics typically in the middle ranges
-    /// (e.g., RÂ² between 0.5 and 0.8).
+    /// (e.g., R² between 0.5 and 0.8).
     /// </para>
     /// </remarks>
     Moderate,
@@ -42,7 +42,7 @@ public enum ModelPerformance
     /// <remarks>
     /// <para>
     /// A "Poor" performance means the model struggles to make accurate predictions, with metrics showing
-    /// low values (e.g., RÂ² below 0.5). This could indicate that the model needs significant improvements,
+    /// low values (e.g., R² below 0.5). This could indicate that the model needs significant improvements,
     /// more training data, or that a different type of model might be more appropriate for the task.
     /// </para>
     /// </remarks>

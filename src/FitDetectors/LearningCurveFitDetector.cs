@@ -148,13 +148,7 @@ public class LearningCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, T
         var validationVariance = CalculateVariance(evaluationData.ValidationSet.PredictionStats.LearningCurve);
 
         var totalVariance = NumOps.Add(trainingVariance, validationVariance);
-        var result = NumOps.Subtract(NumOps.One, NumOps.Divide(totalVariance, NumOps.FromDouble(2)));
-
-        // Clamp confidence to [0, 1]
-        if (NumOps.LessThan(result, NumOps.Zero)) result = NumOps.Zero;
-        if (NumOps.GreaterThan(result, NumOps.One)) result = NumOps.One;
-
-        return result;
+        return NumOps.Subtract(NumOps.One, NumOps.Divide(totalVariance, NumOps.FromDouble(2)));
     }
 
     /// <summary>
@@ -172,7 +166,7 @@ public class LearningCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, T
     /// - A slope close to zero means your model's performance has stabilized
     /// 
     /// The calculation uses the formula for the slope of a best-fit line:
-    /// slope = (n * sum(xy) - sum(x) * sum(y)) / (n * sum(xÂ²) - sum(x)Â²)
+    /// slope = (n * sum(xy) - sum(x) * sum(y)) / (n * sum(x²) - sum(x)²)
     /// where n is the number of points, x represents the position in the sequence, and y represents the performance value.
     /// </para>
     /// </remarks>

@@ -186,7 +186,7 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
 
         _numBasis = numBasis;
         _seed = seed;
-        _basisGenerator = RandomHelper.CreateSeededRandom(_seed);
+        _basisGenerator = new Random(_seed);
 
         // Initialize coefficients to zero (NOLA starts with no effect)
         _coefficientsA = new Vector<T>(_numBasis);
@@ -246,7 +246,7 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
     private Matrix<T> GenerateRandomBasis(int rows, int cols, int basisIndex)
     {
         // Reset random generator to get consistent basis for this index
-        Random gen = RandomHelper.CreateSeededRandom(_seed + basisIndex);
+        Random gen = new Random(_seed + basisIndex);
 
         Matrix<T> basis = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)

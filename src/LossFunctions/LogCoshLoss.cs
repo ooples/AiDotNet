@@ -1,5 +1,3 @@
-
-
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -40,15 +38,14 @@ public class LogCoshLoss<T> : LossFunctionBase<T>
         {
             T diff = NumOps.Subtract(predicted[i], actual[i]);
             // log(cosh(x)) = log((e^x + e^-x)/2)
-            T logCosh = NumericalStabilityHelper.SafeLog(
+            T logCosh = NumOps.Log(
                 NumOps.Divide(
                     NumOps.Add(
-                        NumOps.Exp(diff),
+                        NumOps.Exp(diff), 
                         NumOps.Exp(NumOps.Negate(diff))
                     ),
                     NumOps.FromDouble(2)
-                ),
-                NumericalStabilityHelper.SmallEpsilon
+                )
             );
             sum = NumOps.Add(sum, logCosh);
         }

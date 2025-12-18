@@ -24,8 +24,30 @@ namespace AiDotNet.WaveletFunctions
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
+public class ReverseBiorthogonalWavelet<T> : IWaveletFunction<T>
 {
+    /// <summary>
+    /// Provides mathematical operations for the generic type T.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field holds an implementation of numeric operations that can work with the generic type T.
+    /// It provides methods for basic arithmetic operations, comparisons, and conversions that are used
+    /// throughout the wavelet calculations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a helper that lets us do math with different number types.
+    /// 
+    /// Because this class can work with different types of numbers (like float, double, or decimal),
+    /// we need a special helper that knows how to:
+    /// - Perform addition, subtraction, multiplication, and division
+    /// - Compare values (greater than, less than, etc.)
+    /// - Convert between different number formats
+    /// 
+    /// This allows the wavelet code to work with whatever number type you choose,
+    /// without having to write separate code for each number type.
+    /// </para>
+    /// </remarks>
+    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// The low-pass filter coefficients used during signal decomposition.
@@ -185,6 +207,7 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// <summary>
     /// Initializes a new instance of the <see cref="ReverseBiorthogonalWavelet{T}"/> class with the specified parameters.
     /// </summary>
+    /// <param name="numOps">The numeric operations provider for type T.</param>
     /// <param name="waveletType">The type of Reverse Biorthogonal wavelet to use. Defaults to ReverseBior22.</param>
     /// <param name="boundaryMethod">The boundary handling method to use. Defaults to Periodic.</param>
     /// <param name="chunkSize">The size of data chunks for processing large signals. Defaults to 1024.</param>
@@ -195,21 +218,23 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// signal processing operations with the specified boundary handling method and chunk size.
     /// </para>
     /// <para><b>For Beginners:</b> This sets up the Reverse Biorthogonal wavelet with your chosen settings.
-    ///
+    /// 
     /// When creating a Reverse Biorthogonal wavelet:
     /// - You can select the specific wavelet type that best matches your needs
     /// - You can choose how to handle the edges of your data
     /// - You can set how large pieces of data are broken down for processing
-    ///
+    /// 
     /// The default settings (ReverseBior22, Periodic, 1024) work well for many
     /// common applications, but you can customize them for your specific needs.
     /// </para>
     /// </remarks>
     public ReverseBiorthogonalWavelet(
-        WaveletType waveletType = WaveletType.ReverseBior22,
-        BoundaryHandlingMethod boundaryMethod = BoundaryHandlingMethod.Periodic,
+        INumericOperations<T> numOps, 
+        WaveletType waveletType = WaveletType.ReverseBior22, 
+        BoundaryHandlingMethod boundaryMethod = BoundaryHandlingMethod.Periodic, 
         int chunkSize = 1024)
     {
+        _numOps = numOps;
         _boundaryMethod = boundaryMethod;
         _chunkSize = chunkSize;
         _waveletType = waveletType;
@@ -240,16 +265,16 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// and theoretical understanding of the wavelet shape.
     /// </para>
     /// </remarks>
-    public override T Calculate(T x)
+    public T Calculate(T x)
     {
-        T result = NumOps.Zero;
+        T result = _numOps.Zero;
         int centerIndex = _reconstructionLowPass.Length / 2;
 
         for (int k = 0; k < _reconstructionLowPass.Length; k++)
         {
-            T shiftedX = NumOps.Subtract(x, NumOps.FromDouble(k - centerIndex));
+            T shiftedX = _numOps.Subtract(x, _numOps.FromDouble(k - centerIndex));
             T phiValue = DiscreteCascadeAlgorithm(shiftedX);
-            result = NumOps.Add(result, NumOps.Multiply(_reconstructionLowPass[k], phiValue));
+            result = _numOps.Add(result, _numOps.Multiply(_reconstructionLowPass[k], phiValue));
         }
 
         return result;
@@ -287,7 +312,7 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         // Initialize with the scaling function
         for (int i = 0; i < resolution; i++)
         {
-            T xValue = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(resolution - 1));
+            T xValue = _numOps.Divide(_numOps.FromDouble(i), _numOps.FromDouble(resolution - 1));
             values[i] = ScalingFunction(xValue);
         }
 
@@ -297,10 +322,10 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
             var newValues = new T[resolution];
             for (int i = 0; i < resolution; i++)
             {
-                T sum = NumOps.Zero;
+                T sum = _numOps.Zero;
                 for (int k = 0; k < _reconstructionLowPass.Length; k++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_reconstructionLowPass[k], values[(2 * i - k + resolution) % resolution]));
+                    sum = _numOps.Add(sum, _numOps.Multiply(_reconstructionLowPass[k], values[(2 * i - k + resolution) % resolution]));
                 }
 
                 newValues[i] = sum;
@@ -312,10 +337,10 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         // Interpolate to find the value at x
         int index = (int)(Convert.ToDouble(x) * (resolution - 1));
         index = Math.Max(0, Math.Min(resolution - 2, index));
-        T t = NumOps.Subtract(x, NumOps.Divide(NumOps.FromDouble(index), NumOps.FromDouble(resolution - 1)));
-        return NumOps.Add(
-            NumOps.Multiply(NumOps.Subtract(NumOps.One, t), values[index]),
-            NumOps.Multiply(t, values[index + 1])
+        T t = _numOps.Subtract(x, _numOps.Divide(_numOps.FromDouble(index), _numOps.FromDouble(resolution - 1)));
+        return _numOps.Add(
+            _numOps.Multiply(_numOps.Subtract(_numOps.One, t), values[index]),
+            _numOps.Multiply(t, values[index + 1])
         );
     }
 
@@ -343,17 +368,17 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private T ScalingFunction(T x)
     {
-        T absX = NumOps.Abs(x);
-        T result = NumOps.Zero;
+        T absX = _numOps.Abs(x);
+        T result = _numOps.Zero;
 
-        if (NumOps.LessThan(absX, NumOps.One))
+        if (_numOps.LessThan(absX, _numOps.One))
         {
-            result = NumOps.Subtract(NumOps.One, absX);
+            result = _numOps.Subtract(_numOps.One, absX);
         }
-        else if (NumOps.LessThan(absX, NumOps.FromDouble(2)))
+        else if (_numOps.LessThan(absX, _numOps.FromDouble(2)))
         {
-            T temp = NumOps.Subtract(NumOps.FromDouble(2), absX);
-            result = NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Multiply(temp, temp));
+            T temp = _numOps.Subtract(_numOps.FromDouble(2), absX);
+            result = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Multiply(temp, temp));
         }
 
         return result;
@@ -382,7 +407,7 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// Together, these two parts contain all the information from the original image.
     /// </para>
     /// </remarks>
-    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int n = input.Length;
         var approximation = new Vector<T>((n + 1) / 2);
@@ -426,14 +451,14 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
     {
         for (int i = start; i < end; i += 2)
         {
-            T approx = NumOps.Zero;
-            T det = NumOps.Zero;
+            T approx = _numOps.Zero;
+            T det = _numOps.Zero;
 
             for (int j = 0; j < _decompositionLowPass.Length; j++)
             {
                 int index = GetExtendedIndex(i + j - _decompositionLowPass.Length / 2 + 1, input.Length);
-                approx = NumOps.Add(approx, NumOps.Multiply(_decompositionLowPass[j], input[index]));
-                det = NumOps.Add(det, NumOps.Multiply(_decompositionHighPass[j], input[index]));
+                approx = _numOps.Add(approx, _numOps.Multiply(_decompositionLowPass[j], input[index]));
+                det = _numOps.Add(det, _numOps.Multiply(_decompositionHighPass[j], input[index]));
             }
 
             approximation[i / 2] = approx;
@@ -509,15 +534,15 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
     {
         for (int i = start; i < end; i++)
         {
-            T value = NumOps.Zero;
+            T value = _numOps.Zero;
 
             for (int j = 0; j < _reconstructionLowPass.Length; j++)
             {
                 int index = (i / 2 - j + _reconstructionLowPass.Length) % approximation.Length;
                 if ((i - j) % 2 == 0)
                 {
-                    value = NumOps.Add(value, NumOps.Multiply(_reconstructionLowPass[j], approximation[index]));
-                    value = NumOps.Add(value, NumOps.Multiply(_reconstructionHighPass[j], detail[index]));
+                    value = _numOps.Add(value, _numOps.Multiply(_reconstructionLowPass[j], approximation[index]));
+                    value = _numOps.Add(value, _numOps.Multiply(_reconstructionHighPass[j], detail[index]));
                 }
             }
 
@@ -627,7 +652,7 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// properties and how it will analyze and process your data.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetScalingCoefficients()
+    public Vector<T> GetScalingCoefficients()
     {
         return _reconstructionLowPass;
     }
@@ -653,7 +678,7 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// process and ensure that all important features of your data are preserved.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetWaveletCoefficients()
+    public Vector<T> GetWaveletCoefficients()
     {
         return _reconstructionHighPass;
     }
@@ -778,33 +803,33 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionLowPass = new Vector<T>(6);
         var reconstructionHighPass = new Vector<T>(6);
 
-        decompositionLowPass[0] = NumOps.FromDouble(0);
-        decompositionLowPass[1] = NumOps.FromDouble(-0.1767766952966369);
-        decompositionLowPass[2] = NumOps.FromDouble(0.3535533905932738);
-        decompositionLowPass[3] = NumOps.FromDouble(1.0606601717798214);
-        decompositionLowPass[4] = NumOps.FromDouble(0.3535533905932738);
-        decompositionLowPass[5] = NumOps.FromDouble(-0.1767766952966369);
+        decompositionLowPass[0] = _numOps.FromDouble(0);
+        decompositionLowPass[1] = _numOps.FromDouble(-0.1767766952966369);
+        decompositionLowPass[2] = _numOps.FromDouble(0.3535533905932738);
+        decompositionLowPass[3] = _numOps.FromDouble(1.0606601717798214);
+        decompositionLowPass[4] = _numOps.FromDouble(0.3535533905932738);
+        decompositionLowPass[5] = _numOps.FromDouble(-0.1767766952966369);
 
-        decompositionHighPass[0] = NumOps.FromDouble(0);
-        decompositionHighPass[1] = NumOps.FromDouble(0.3535533905932738);
-        decompositionHighPass[2] = NumOps.FromDouble(-0.7071067811865476);
-        decompositionHighPass[3] = NumOps.FromDouble(0.3535533905932738);
-        decompositionHighPass[4] = NumOps.FromDouble(0);
-        decompositionHighPass[5] = NumOps.FromDouble(0);
+        decompositionHighPass[0] = _numOps.FromDouble(0);
+        decompositionHighPass[1] = _numOps.FromDouble(0.3535533905932738);
+        decompositionHighPass[2] = _numOps.FromDouble(-0.7071067811865476);
+        decompositionHighPass[3] = _numOps.FromDouble(0.3535533905932738);
+        decompositionHighPass[4] = _numOps.FromDouble(0);
+        decompositionHighPass[5] = _numOps.FromDouble(0);
 
-        reconstructionLowPass[0] = NumOps.FromDouble(0);
-        reconstructionLowPass[1] = NumOps.FromDouble(0.3535533905932738);
-        reconstructionLowPass[2] = NumOps.FromDouble(0.7071067811865476);
-        reconstructionLowPass[3] = NumOps.FromDouble(0.3535533905932738);
-        reconstructionLowPass[4] = NumOps.FromDouble(0);
-        reconstructionLowPass[5] = NumOps.FromDouble(0);
+        reconstructionLowPass[0] = _numOps.FromDouble(0);
+        reconstructionLowPass[1] = _numOps.FromDouble(0.3535533905932738);
+        reconstructionLowPass[2] = _numOps.FromDouble(0.7071067811865476);
+        reconstructionLowPass[3] = _numOps.FromDouble(0.3535533905932738);
+        reconstructionLowPass[4] = _numOps.FromDouble(0);
+        reconstructionLowPass[5] = _numOps.FromDouble(0);
 
-        reconstructionHighPass[0] = NumOps.FromDouble(0);
-        reconstructionHighPass[1] = NumOps.FromDouble(-0.1767766952966369);
-        reconstructionHighPass[2] = NumOps.FromDouble(0.3535533905932738);
-        reconstructionHighPass[3] = NumOps.FromDouble(-1.0606601717798214);
-        reconstructionHighPass[4] = NumOps.FromDouble(0.3535533905932738);
-        reconstructionHighPass[5] = NumOps.FromDouble(-0.1767766952966369);
+        reconstructionHighPass[0] = _numOps.FromDouble(0);
+        reconstructionHighPass[1] = _numOps.FromDouble(-0.1767766952966369);
+        reconstructionHighPass[2] = _numOps.FromDouble(0.3535533905932738);
+        reconstructionHighPass[3] = _numOps.FromDouble(-1.0606601717798214);
+        reconstructionHighPass[4] = _numOps.FromDouble(0.3535533905932738);
+        reconstructionHighPass[5] = _numOps.FromDouble(-0.1767766952966369);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }
@@ -838,20 +863,20 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionHighPass = new Vector<T>(2);
 
         // Decomposition low-pass filter
-        decompositionLowPass[0] = NumOps.FromDouble(0.7071067811865476);
-        decompositionLowPass[1] = NumOps.FromDouble(0.7071067811865476);
+        decompositionLowPass[0] = _numOps.FromDouble(0.7071067811865476);
+        decompositionLowPass[1] = _numOps.FromDouble(0.7071067811865476);
 
         // Decomposition high-pass filter
-        decompositionHighPass[0] = NumOps.FromDouble(-0.7071067811865476);
-        decompositionHighPass[1] = NumOps.FromDouble(0.7071067811865476);
+        decompositionHighPass[0] = _numOps.FromDouble(-0.7071067811865476);
+        decompositionHighPass[1] = _numOps.FromDouble(0.7071067811865476);
 
         // Reconstruction low-pass filter
-        reconstructionLowPass[0] = NumOps.FromDouble(0.7071067811865476);
-        reconstructionLowPass[1] = NumOps.FromDouble(0.7071067811865476);
+        reconstructionLowPass[0] = _numOps.FromDouble(0.7071067811865476);
+        reconstructionLowPass[1] = _numOps.FromDouble(0.7071067811865476);
 
         // Reconstruction high-pass filter
-        reconstructionHighPass[0] = NumOps.FromDouble(0.7071067811865476);
-        reconstructionHighPass[1] = NumOps.FromDouble(-0.7071067811865476);
+        reconstructionHighPass[0] = _numOps.FromDouble(0.7071067811865476);
+        reconstructionHighPass[1] = _numOps.FromDouble(-0.7071067811865476);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }
@@ -884,28 +909,28 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionHighPass = new Vector<T>(6);
 
         // Decomposition low-pass filter
-        decompositionLowPass[0] = NumOps.FromDouble(-0.0883883476483184);
-        decompositionLowPass[1] = NumOps.FromDouble(0.0883883476483184);
-        decompositionLowPass[2] = NumOps.FromDouble(0.7071067811865476);
-        decompositionLowPass[3] = NumOps.FromDouble(0.7071067811865476);
-        decompositionLowPass[4] = NumOps.FromDouble(0.0883883476483184);
-        decompositionLowPass[5] = NumOps.FromDouble(-0.0883883476483184);
+        decompositionLowPass[0] = _numOps.FromDouble(-0.0883883476483184);
+        decompositionLowPass[1] = _numOps.FromDouble(0.0883883476483184);
+        decompositionLowPass[2] = _numOps.FromDouble(0.7071067811865476);
+        decompositionLowPass[3] = _numOps.FromDouble(0.7071067811865476);
+        decompositionLowPass[4] = _numOps.FromDouble(0.0883883476483184);
+        decompositionLowPass[5] = _numOps.FromDouble(-0.0883883476483184);
 
         // Decomposition high-pass filter
-        decompositionHighPass[0] = NumOps.FromDouble(-0.7071067811865476);
-        decompositionHighPass[1] = NumOps.FromDouble(0.7071067811865476);
+        decompositionHighPass[0] = _numOps.FromDouble(-0.7071067811865476);
+        decompositionHighPass[1] = _numOps.FromDouble(0.7071067811865476);
 
         // Reconstruction low-pass filter
-        reconstructionLowPass[0] = NumOps.FromDouble(0.7071067811865476);
-        reconstructionLowPass[1] = NumOps.FromDouble(0.7071067811865476);
+        reconstructionLowPass[0] = _numOps.FromDouble(0.7071067811865476);
+        reconstructionLowPass[1] = _numOps.FromDouble(0.7071067811865476);
 
         // Reconstruction high-pass filter
-        reconstructionHighPass[0] = NumOps.FromDouble(0.0883883476483184);
-        reconstructionHighPass[1] = NumOps.FromDouble(0.0883883476483184);
-        reconstructionHighPass[2] = NumOps.FromDouble(-0.7071067811865476);
-        reconstructionHighPass[3] = NumOps.FromDouble(0.7071067811865476);
-        reconstructionHighPass[4] = NumOps.FromDouble(-0.0883883476483184);
-        reconstructionHighPass[5] = NumOps.FromDouble(-0.0883883476483184);
+        reconstructionHighPass[0] = _numOps.FromDouble(0.0883883476483184);
+        reconstructionHighPass[1] = _numOps.FromDouble(0.0883883476483184);
+        reconstructionHighPass[2] = _numOps.FromDouble(-0.7071067811865476);
+        reconstructionHighPass[3] = _numOps.FromDouble(0.7071067811865476);
+        reconstructionHighPass[4] = _numOps.FromDouble(-0.0883883476483184);
+        reconstructionHighPass[5] = _numOps.FromDouble(-0.0883883476483184);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }
@@ -937,41 +962,41 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionLowPass = new Vector<T>(6);
         var reconstructionHighPass = new Vector<T>(10);
 
-        decompositionLowPass[0] = NumOps.FromDouble(0);
-        decompositionLowPass[1] = NumOps.FromDouble(-0.0331456303681194);
-        decompositionLowPass[2] = NumOps.FromDouble(-0.0662912607362388);
-        decompositionLowPass[3] = NumOps.FromDouble(0.1767766952966369);
-        decompositionLowPass[4] = NumOps.FromDouble(0.4198446513295126);
-        decompositionLowPass[5] = NumOps.FromDouble(0.9943689110435825);
-        decompositionLowPass[6] = NumOps.FromDouble(0.4198446513295126);
-        decompositionLowPass[7] = NumOps.FromDouble(0.1767766952966369);
-        decompositionLowPass[8] = NumOps.FromDouble(-0.0662912607362388);
-        decompositionLowPass[9] = NumOps.FromDouble(-0.0331456303681194);
+        decompositionLowPass[0] = _numOps.FromDouble(0);
+        decompositionLowPass[1] = _numOps.FromDouble(-0.0331456303681194);
+        decompositionLowPass[2] = _numOps.FromDouble(-0.0662912607362388);
+        decompositionLowPass[3] = _numOps.FromDouble(0.1767766952966369);
+        decompositionLowPass[4] = _numOps.FromDouble(0.4198446513295126);
+        decompositionLowPass[5] = _numOps.FromDouble(0.9943689110435825);
+        decompositionLowPass[6] = _numOps.FromDouble(0.4198446513295126);
+        decompositionLowPass[7] = _numOps.FromDouble(0.1767766952966369);
+        decompositionLowPass[8] = _numOps.FromDouble(-0.0662912607362388);
+        decompositionLowPass[9] = _numOps.FromDouble(-0.0331456303681194);
 
-        decompositionHighPass[0] = NumOps.FromDouble(0);
-        decompositionHighPass[1] = NumOps.FromDouble(-0.1767766952966369);
-        decompositionHighPass[2] = NumOps.FromDouble(0.3535533905932738);
-        decompositionHighPass[3] = NumOps.FromDouble(-0.3535533905932738);
-        decompositionHighPass[4] = NumOps.FromDouble(0.1767766952966369);
-        decompositionHighPass[5] = NumOps.FromDouble(0);
+        decompositionHighPass[0] = _numOps.FromDouble(0);
+        decompositionHighPass[1] = _numOps.FromDouble(-0.1767766952966369);
+        decompositionHighPass[2] = _numOps.FromDouble(0.3535533905932738);
+        decompositionHighPass[3] = _numOps.FromDouble(-0.3535533905932738);
+        decompositionHighPass[4] = _numOps.FromDouble(0.1767766952966369);
+        decompositionHighPass[5] = _numOps.FromDouble(0);
 
-        reconstructionLowPass[0] = NumOps.FromDouble(0);
-        reconstructionLowPass[1] = NumOps.FromDouble(0.1767766952966369);
-        reconstructionLowPass[2] = NumOps.FromDouble(0.3535533905932738);
-        reconstructionLowPass[3] = NumOps.FromDouble(0.3535533905932738);
-        reconstructionLowPass[4] = NumOps.FromDouble(0.1767766952966369);
-        reconstructionLowPass[5] = NumOps.FromDouble(0);
+        reconstructionLowPass[0] = _numOps.FromDouble(0);
+        reconstructionLowPass[1] = _numOps.FromDouble(0.1767766952966369);
+        reconstructionLowPass[2] = _numOps.FromDouble(0.3535533905932738);
+        reconstructionLowPass[3] = _numOps.FromDouble(0.3535533905932738);
+        reconstructionLowPass[4] = _numOps.FromDouble(0.1767766952966369);
+        reconstructionLowPass[5] = _numOps.FromDouble(0);
 
-        reconstructionHighPass[0] = NumOps.FromDouble(0);
-        reconstructionHighPass[1] = NumOps.FromDouble(0.0331456303681194);
-        reconstructionHighPass[2] = NumOps.FromDouble(-0.0662912607362388);
-        reconstructionHighPass[3] = NumOps.FromDouble(-0.1767766952966369);
-        reconstructionHighPass[4] = NumOps.FromDouble(0.4198446513295126);
-        reconstructionHighPass[5] = NumOps.FromDouble(-0.9943689110435825);
-        reconstructionHighPass[6] = NumOps.FromDouble(0.4198446513295126);
-        reconstructionHighPass[7] = NumOps.FromDouble(-0.1767766952966369);
-        reconstructionHighPass[8] = NumOps.FromDouble(-0.0662912607362388);
-        reconstructionHighPass[9] = NumOps.FromDouble(0.0331456303681194);
+        reconstructionHighPass[0] = _numOps.FromDouble(0);
+        reconstructionHighPass[1] = _numOps.FromDouble(0.0331456303681194);
+        reconstructionHighPass[2] = _numOps.FromDouble(-0.0662912607362388);
+        reconstructionHighPass[3] = _numOps.FromDouble(-0.1767766952966369);
+        reconstructionHighPass[4] = _numOps.FromDouble(0.4198446513295126);
+        reconstructionHighPass[5] = _numOps.FromDouble(-0.9943689110435825);
+        reconstructionHighPass[6] = _numOps.FromDouble(0.4198446513295126);
+        reconstructionHighPass[7] = _numOps.FromDouble(-0.1767766952966369);
+        reconstructionHighPass[8] = _numOps.FromDouble(-0.0662912607362388);
+        reconstructionHighPass[9] = _numOps.FromDouble(0.0331456303681194);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }
@@ -1004,49 +1029,49 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionLowPass = new Vector<T>(6);
         var reconstructionHighPass = new Vector<T>(14);
 
-        decompositionLowPass[0] = NumOps.FromDouble(0);
-        decompositionLowPass[1] = NumOps.FromDouble(0.0069053396600248);
-        decompositionLowPass[2] = NumOps.FromDouble(0.0138106793200496);
-        decompositionLowPass[3] = NumOps.FromDouble(-0.0469563096881692);
-        decompositionLowPass[4] = NumOps.FromDouble(-0.1077232986963880);
-        decompositionLowPass[5] = NumOps.FromDouble(0.1697627774134332);
-        decompositionLowPass[6] = NumOps.FromDouble(0.4474660099696121);
-        decompositionLowPass[7] = NumOps.FromDouble(0.9667475524034829);
-        decompositionLowPass[8] = NumOps.FromDouble(0.4474660099696121);
-        decompositionLowPass[9] = NumOps.FromDouble(0.1697627774134332);
-        decompositionLowPass[10] = NumOps.FromDouble(-0.1077232986963880);
-        decompositionLowPass[11] = NumOps.FromDouble(-0.0469563096881692);
-        decompositionLowPass[12] = NumOps.FromDouble(0.0138106793200496);
-        decompositionLowPass[13] = NumOps.FromDouble(0.0069053396600248);
+        decompositionLowPass[0] = _numOps.FromDouble(0);
+        decompositionLowPass[1] = _numOps.FromDouble(0.0069053396600248);
+        decompositionLowPass[2] = _numOps.FromDouble(0.0138106793200496);
+        decompositionLowPass[3] = _numOps.FromDouble(-0.0469563096881692);
+        decompositionLowPass[4] = _numOps.FromDouble(-0.1077232986963880);
+        decompositionLowPass[5] = _numOps.FromDouble(0.1697627774134332);
+        decompositionLowPass[6] = _numOps.FromDouble(0.4474660099696121);
+        decompositionLowPass[7] = _numOps.FromDouble(0.9667475524034829);
+        decompositionLowPass[8] = _numOps.FromDouble(0.4474660099696121);
+        decompositionLowPass[9] = _numOps.FromDouble(0.1697627774134332);
+        decompositionLowPass[10] = _numOps.FromDouble(-0.1077232986963880);
+        decompositionLowPass[11] = _numOps.FromDouble(-0.0469563096881692);
+        decompositionLowPass[12] = _numOps.FromDouble(0.0138106793200496);
+        decompositionLowPass[13] = _numOps.FromDouble(0.0069053396600248);
 
-        decompositionHighPass[0] = NumOps.FromDouble(0);
-        decompositionHighPass[1] = NumOps.FromDouble(0.1767766952966369);
-        decompositionHighPass[2] = NumOps.FromDouble(-0.3535533905932738);
-        decompositionHighPass[3] = NumOps.FromDouble(0.3535533905932738);
-        decompositionHighPass[4] = NumOps.FromDouble(-0.1767766952966369);
-        decompositionHighPass[5] = NumOps.FromDouble(0);
+        decompositionHighPass[0] = _numOps.FromDouble(0);
+        decompositionHighPass[1] = _numOps.FromDouble(0.1767766952966369);
+        decompositionHighPass[2] = _numOps.FromDouble(-0.3535533905932738);
+        decompositionHighPass[3] = _numOps.FromDouble(0.3535533905932738);
+        decompositionHighPass[4] = _numOps.FromDouble(-0.1767766952966369);
+        decompositionHighPass[5] = _numOps.FromDouble(0);
 
-        reconstructionLowPass[0] = NumOps.FromDouble(0);
-        reconstructionLowPass[1] = NumOps.FromDouble(-0.1767766952966369);
-        reconstructionLowPass[2] = NumOps.FromDouble(-0.3535533905932738);
-        reconstructionLowPass[3] = NumOps.FromDouble(0.3535533905932738);
-        reconstructionLowPass[4] = NumOps.FromDouble(0.1767766952966369);
-        reconstructionLowPass[5] = NumOps.FromDouble(0);
+        reconstructionLowPass[0] = _numOps.FromDouble(0);
+        reconstructionLowPass[1] = _numOps.FromDouble(-0.1767766952966369);
+        reconstructionLowPass[2] = _numOps.FromDouble(-0.3535533905932738);
+        reconstructionLowPass[3] = _numOps.FromDouble(0.3535533905932738);
+        reconstructionLowPass[4] = _numOps.FromDouble(0.1767766952966369);
+        reconstructionLowPass[5] = _numOps.FromDouble(0);
 
-        reconstructionHighPass[0] = NumOps.FromDouble(0);
-        reconstructionHighPass[1] = NumOps.FromDouble(-0.0069053396600248);
-        reconstructionHighPass[2] = NumOps.FromDouble(0.0138106793200496);
-        reconstructionHighPass[3] = NumOps.FromDouble(0.0469563096881692);
-        reconstructionHighPass[4] = NumOps.FromDouble(-0.1077232986963880);
-        reconstructionHighPass[5] = NumOps.FromDouble(-0.1697627774134332);
-        reconstructionHighPass[6] = NumOps.FromDouble(0.4474660099696121);
-        reconstructionHighPass[7] = NumOps.FromDouble(-0.9667475524034829);
-        reconstructionHighPass[8] = NumOps.FromDouble(0.4474660099696121);
-        reconstructionHighPass[9] = NumOps.FromDouble(-0.1697627774134332);
-        reconstructionHighPass[10] = NumOps.FromDouble(-0.1077232986963880);
-        reconstructionHighPass[11] = NumOps.FromDouble(0.0469563096881692);
-        reconstructionHighPass[12] = NumOps.FromDouble(0.0138106793200496);
-        reconstructionHighPass[13] = NumOps.FromDouble(-0.0069053396600248);
+        reconstructionHighPass[0] = _numOps.FromDouble(0);
+        reconstructionHighPass[1] = _numOps.FromDouble(-0.0069053396600248);
+        reconstructionHighPass[2] = _numOps.FromDouble(0.0138106793200496);
+        reconstructionHighPass[3] = _numOps.FromDouble(0.0469563096881692);
+        reconstructionHighPass[4] = _numOps.FromDouble(-0.1077232986963880);
+        reconstructionHighPass[5] = _numOps.FromDouble(-0.1697627774134332);
+        reconstructionHighPass[6] = _numOps.FromDouble(0.4474660099696121);
+        reconstructionHighPass[7] = _numOps.FromDouble(-0.9667475524034829);
+        reconstructionHighPass[8] = _numOps.FromDouble(0.4474660099696121);
+        reconstructionHighPass[9] = _numOps.FromDouble(-0.1697627774134332);
+        reconstructionHighPass[10] = _numOps.FromDouble(-0.1077232986963880);
+        reconstructionHighPass[11] = _numOps.FromDouble(0.0469563096881692);
+        reconstructionHighPass[12] = _numOps.FromDouble(0.0138106793200496);
+        reconstructionHighPass[13] = _numOps.FromDouble(-0.0069053396600248);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }
@@ -1079,53 +1104,53 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionLowPass = new Vector<T>(6);
         var reconstructionHighPass = new Vector<T>(16);
 
-        decompositionLowPass[0] = NumOps.FromDouble(0);
-        decompositionLowPass[1] = NumOps.FromDouble(0.0015105430506304422);
-        decompositionLowPass[2] = NumOps.FromDouble(-0.0030210861012608843);
-        decompositionLowPass[3] = NumOps.FromDouble(-0.012947511862546647);
-        decompositionLowPass[4] = NumOps.FromDouble(0.02891610982635418);
-        decompositionLowPass[5] = NumOps.FromDouble(0.052998481890690945);
-        decompositionLowPass[6] = NumOps.FromDouble(-0.13491307360773608);
-        decompositionLowPass[7] = NumOps.FromDouble(-0.16382918343409025);
-        decompositionLowPass[8] = NumOps.FromDouble(0.4625714404759166);
-        decompositionLowPass[9] = NumOps.FromDouble(0.9516421218971786);
-        decompositionLowPass[10] = NumOps.FromDouble(0.4625714404759166);
-        decompositionLowPass[11] = NumOps.FromDouble(-0.16382918343409025);
-        decompositionLowPass[12] = NumOps.FromDouble(-0.13491307360773608);
-        decompositionLowPass[13] = NumOps.FromDouble(0.052998481890690945);
-        decompositionLowPass[14] = NumOps.FromDouble(0.02891610982635418);
-        decompositionLowPass[15] = NumOps.FromDouble(-0.012947511862546647);
+        decompositionLowPass[0] = _numOps.FromDouble(0);
+        decompositionLowPass[1] = _numOps.FromDouble(0.0015105430506304422);
+        decompositionLowPass[2] = _numOps.FromDouble(-0.0030210861012608843);
+        decompositionLowPass[3] = _numOps.FromDouble(-0.012947511862546647);
+        decompositionLowPass[4] = _numOps.FromDouble(0.02891610982635418);
+        decompositionLowPass[5] = _numOps.FromDouble(0.052998481890690945);
+        decompositionLowPass[6] = _numOps.FromDouble(-0.13491307360773608);
+        decompositionLowPass[7] = _numOps.FromDouble(-0.16382918343409025);
+        decompositionLowPass[8] = _numOps.FromDouble(0.4625714404759166);
+        decompositionLowPass[9] = _numOps.FromDouble(0.9516421218971786);
+        decompositionLowPass[10] = _numOps.FromDouble(0.4625714404759166);
+        decompositionLowPass[11] = _numOps.FromDouble(-0.16382918343409025);
+        decompositionLowPass[12] = _numOps.FromDouble(-0.13491307360773608);
+        decompositionLowPass[13] = _numOps.FromDouble(0.052998481890690945);
+        decompositionLowPass[14] = _numOps.FromDouble(0.02891610982635418);
+        decompositionLowPass[15] = _numOps.FromDouble(-0.012947511862546647);
 
-        decompositionHighPass[0] = NumOps.FromDouble(0);
-        decompositionHighPass[1] = NumOps.FromDouble(0);
-        decompositionHighPass[2] = NumOps.FromDouble(0.3535533905932738);
-        decompositionHighPass[3] = NumOps.FromDouble(-0.7071067811865476);
-        decompositionHighPass[4] = NumOps.FromDouble(0.3535533905932738);
-        decompositionHighPass[5] = NumOps.FromDouble(0);
+        decompositionHighPass[0] = _numOps.FromDouble(0);
+        decompositionHighPass[1] = _numOps.FromDouble(0);
+        decompositionHighPass[2] = _numOps.FromDouble(0.3535533905932738);
+        decompositionHighPass[3] = _numOps.FromDouble(-0.7071067811865476);
+        decompositionHighPass[4] = _numOps.FromDouble(0.3535533905932738);
+        decompositionHighPass[5] = _numOps.FromDouble(0);
 
-        reconstructionLowPass[0] = NumOps.FromDouble(0);
-        reconstructionLowPass[1] = NumOps.FromDouble(0);
-        reconstructionLowPass[2] = NumOps.FromDouble(-0.3535533905932738);
-        reconstructionLowPass[3] = NumOps.FromDouble(-0.7071067811865476);
-        reconstructionLowPass[4] = NumOps.FromDouble(-0.3535533905932738);
-        reconstructionLowPass[5] = NumOps.FromDouble(0);
+        reconstructionLowPass[0] = _numOps.FromDouble(0);
+        reconstructionLowPass[1] = _numOps.FromDouble(0);
+        reconstructionLowPass[2] = _numOps.FromDouble(-0.3535533905932738);
+        reconstructionLowPass[3] = _numOps.FromDouble(-0.7071067811865476);
+        reconstructionLowPass[4] = _numOps.FromDouble(-0.3535533905932738);
+        reconstructionLowPass[5] = _numOps.FromDouble(0);
 
-        reconstructionHighPass[0] = NumOps.FromDouble(0);
-        reconstructionHighPass[1] = NumOps.FromDouble(-0.0015105430506304422);
-        reconstructionHighPass[2] = NumOps.FromDouble(-0.0030210861012608843);
-        reconstructionHighPass[3] = NumOps.FromDouble(0.012947511862546647);
-        reconstructionHighPass[4] = NumOps.FromDouble(0.02891610982635418);
-        reconstructionHighPass[5] = NumOps.FromDouble(-0.052998481890690945);
-        reconstructionHighPass[6] = NumOps.FromDouble(-0.13491307360773608);
-        reconstructionHighPass[7] = NumOps.FromDouble(0.16382918343409025);
-        reconstructionHighPass[8] = NumOps.FromDouble(0.4625714404759166);
-        reconstructionHighPass[9] = NumOps.FromDouble(-0.9516421218971786);
-        reconstructionHighPass[10] = NumOps.FromDouble(0.4625714404759166);
-        reconstructionHighPass[11] = NumOps.FromDouble(0.16382918343409025);
-        reconstructionHighPass[12] = NumOps.FromDouble(-0.13491307360773608);
-        reconstructionHighPass[13] = NumOps.FromDouble(-0.052998481890690945);
-        reconstructionHighPass[14] = NumOps.FromDouble(0.02891610982635418);
-        reconstructionHighPass[15] = NumOps.FromDouble(0.012947511862546647);
+        reconstructionHighPass[0] = _numOps.FromDouble(0);
+        reconstructionHighPass[1] = _numOps.FromDouble(-0.0015105430506304422);
+        reconstructionHighPass[2] = _numOps.FromDouble(-0.0030210861012608843);
+        reconstructionHighPass[3] = _numOps.FromDouble(0.012947511862546647);
+        reconstructionHighPass[4] = _numOps.FromDouble(0.02891610982635418);
+        reconstructionHighPass[5] = _numOps.FromDouble(-0.052998481890690945);
+        reconstructionHighPass[6] = _numOps.FromDouble(-0.13491307360773608);
+        reconstructionHighPass[7] = _numOps.FromDouble(0.16382918343409025);
+        reconstructionHighPass[8] = _numOps.FromDouble(0.4625714404759166);
+        reconstructionHighPass[9] = _numOps.FromDouble(-0.9516421218971786);
+        reconstructionHighPass[10] = _numOps.FromDouble(0.4625714404759166);
+        reconstructionHighPass[11] = _numOps.FromDouble(0.16382918343409025);
+        reconstructionHighPass[12] = _numOps.FromDouble(-0.13491307360773608);
+        reconstructionHighPass[13] = _numOps.FromDouble(-0.052998481890690945);
+        reconstructionHighPass[14] = _numOps.FromDouble(0.02891610982635418);
+        reconstructionHighPass[15] = _numOps.FromDouble(0.012947511862546647);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }
@@ -1158,33 +1183,33 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionLowPass = new Vector<T>(8);
         var reconstructionHighPass = new Vector<T>(4);
 
-        decompositionLowPass[0] = NumOps.FromDouble(-0.3535533905932738);
-        decompositionLowPass[1] = NumOps.FromDouble(1.0606601717798214);
-        decompositionLowPass[2] = NumOps.FromDouble(1.0606601717798214);
-        decompositionLowPass[3] = NumOps.FromDouble(-0.3535533905932738);
+        decompositionLowPass[0] = _numOps.FromDouble(-0.3535533905932738);
+        decompositionLowPass[1] = _numOps.FromDouble(1.0606601717798214);
+        decompositionLowPass[2] = _numOps.FromDouble(1.0606601717798214);
+        decompositionLowPass[3] = _numOps.FromDouble(-0.3535533905932738);
 
-        decompositionHighPass[0] = NumOps.FromDouble(-0.0662912607362388);
-        decompositionHighPass[1] = NumOps.FromDouble(0.1988737822087164);
-        decompositionHighPass[2] = NumOps.FromDouble(-0.1546796083845572);
-        decompositionHighPass[3] = NumOps.FromDouble(-0.9943689110435825);
-        decompositionHighPass[4] = NumOps.FromDouble(0.9943689110435825);
-        decompositionHighPass[5] = NumOps.FromDouble(0.1546796083845572);
-        decompositionHighPass[6] = NumOps.FromDouble(-0.1988737822087164);
-        decompositionHighPass[7] = NumOps.FromDouble(0.0662912607362388);
+        decompositionHighPass[0] = _numOps.FromDouble(-0.0662912607362388);
+        decompositionHighPass[1] = _numOps.FromDouble(0.1988737822087164);
+        decompositionHighPass[2] = _numOps.FromDouble(-0.1546796083845572);
+        decompositionHighPass[3] = _numOps.FromDouble(-0.9943689110435825);
+        decompositionHighPass[4] = _numOps.FromDouble(0.9943689110435825);
+        decompositionHighPass[5] = _numOps.FromDouble(0.1546796083845572);
+        decompositionHighPass[6] = _numOps.FromDouble(-0.1988737822087164);
+        decompositionHighPass[7] = _numOps.FromDouble(0.0662912607362388);
 
-        reconstructionLowPass[0] = NumOps.FromDouble(0.0662912607362388);
-        reconstructionLowPass[1] = NumOps.FromDouble(0.1988737822087164);
-        reconstructionLowPass[2] = NumOps.FromDouble(0.1546796083845572);
-        reconstructionLowPass[3] = NumOps.FromDouble(-0.9943689110435825);
-        reconstructionLowPass[4] = NumOps.FromDouble(-0.9943689110435825);
-        reconstructionLowPass[5] = NumOps.FromDouble(0.1546796083845572);
-        reconstructionLowPass[6] = NumOps.FromDouble(0.1988737822087164);
-        reconstructionLowPass[7] = NumOps.FromDouble(0.0662912607362388);
+        reconstructionLowPass[0] = _numOps.FromDouble(0.0662912607362388);
+        reconstructionLowPass[1] = _numOps.FromDouble(0.1988737822087164);
+        reconstructionLowPass[2] = _numOps.FromDouble(0.1546796083845572);
+        reconstructionLowPass[3] = _numOps.FromDouble(-0.9943689110435825);
+        reconstructionLowPass[4] = _numOps.FromDouble(-0.9943689110435825);
+        reconstructionLowPass[5] = _numOps.FromDouble(0.1546796083845572);
+        reconstructionLowPass[6] = _numOps.FromDouble(0.1988737822087164);
+        reconstructionLowPass[7] = _numOps.FromDouble(0.0662912607362388);
 
-        reconstructionHighPass[0] = NumOps.FromDouble(-0.3535533905932738);
-        reconstructionHighPass[1] = NumOps.FromDouble(-1.0606601717798214);
-        reconstructionHighPass[2] = NumOps.FromDouble(1.0606601717798214);
-        reconstructionHighPass[3] = NumOps.FromDouble(0.3535533905932738);
+        reconstructionHighPass[0] = _numOps.FromDouble(-0.3535533905932738);
+        reconstructionHighPass[1] = _numOps.FromDouble(-1.0606601717798214);
+        reconstructionHighPass[2] = _numOps.FromDouble(1.0606601717798214);
+        reconstructionHighPass[3] = _numOps.FromDouble(0.3535533905932738);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }
@@ -1216,41 +1241,41 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionLowPass = new Vector<T>(8);
         var reconstructionHighPass = new Vector<T>(8);
 
-        decompositionLowPass[0] = NumOps.FromDouble(0.0352262918857095);
-        decompositionLowPass[1] = NumOps.FromDouble(-0.0854412738820267);
-        decompositionLowPass[2] = NumOps.FromDouble(-0.1350110200102546);
-        decompositionLowPass[3] = NumOps.FromDouble(0.4598775021184914);
-        decompositionLowPass[4] = NumOps.FromDouble(0.8068915093110924);
-        decompositionLowPass[5] = NumOps.FromDouble(0.3326705529500825);
-        decompositionLowPass[6] = NumOps.FromDouble(-0.0279837694168599);
-        decompositionLowPass[7] = NumOps.FromDouble(-0.0105974017850690);
+        decompositionLowPass[0] = _numOps.FromDouble(0.0352262918857095);
+        decompositionLowPass[1] = _numOps.FromDouble(-0.0854412738820267);
+        decompositionLowPass[2] = _numOps.FromDouble(-0.1350110200102546);
+        decompositionLowPass[3] = _numOps.FromDouble(0.4598775021184914);
+        decompositionLowPass[4] = _numOps.FromDouble(0.8068915093110924);
+        decompositionLowPass[5] = _numOps.FromDouble(0.3326705529500825);
+        decompositionLowPass[6] = _numOps.FromDouble(-0.0279837694168599);
+        decompositionLowPass[7] = _numOps.FromDouble(-0.0105974017850690);
 
-        decompositionHighPass[0] = NumOps.FromDouble(0);
-        decompositionHighPass[1] = NumOps.FromDouble(0);
-        decompositionHighPass[2] = NumOps.FromDouble(-0.1767766952966369);
-        decompositionHighPass[3] = NumOps.FromDouble(0.5303300858899107);
-        decompositionHighPass[4] = NumOps.FromDouble(-0.5303300858899107);
-        decompositionHighPass[5] = NumOps.FromDouble(0.1767766952966369);
-        decompositionHighPass[6] = NumOps.FromDouble(0);
-        decompositionHighPass[7] = NumOps.FromDouble(0);
+        decompositionHighPass[0] = _numOps.FromDouble(0);
+        decompositionHighPass[1] = _numOps.FromDouble(0);
+        decompositionHighPass[2] = _numOps.FromDouble(-0.1767766952966369);
+        decompositionHighPass[3] = _numOps.FromDouble(0.5303300858899107);
+        decompositionHighPass[4] = _numOps.FromDouble(-0.5303300858899107);
+        decompositionHighPass[5] = _numOps.FromDouble(0.1767766952966369);
+        decompositionHighPass[6] = _numOps.FromDouble(0);
+        decompositionHighPass[7] = _numOps.FromDouble(0);
 
-        reconstructionLowPass[0] = NumOps.FromDouble(0);
-        reconstructionLowPass[1] = NumOps.FromDouble(0);
-        reconstructionLowPass[2] = NumOps.FromDouble(0.1767766952966369);
-        reconstructionLowPass[3] = NumOps.FromDouble(0.5303300858899107);
-        reconstructionLowPass[4] = NumOps.FromDouble(0.5303300858899107);
-        reconstructionLowPass[5] = NumOps.FromDouble(0.1767766952966369);
-        reconstructionLowPass[6] = NumOps.FromDouble(0);
-        reconstructionLowPass[7] = NumOps.FromDouble(0);
+        reconstructionLowPass[0] = _numOps.FromDouble(0);
+        reconstructionLowPass[1] = _numOps.FromDouble(0);
+        reconstructionLowPass[2] = _numOps.FromDouble(0.1767766952966369);
+        reconstructionLowPass[3] = _numOps.FromDouble(0.5303300858899107);
+        reconstructionLowPass[4] = _numOps.FromDouble(0.5303300858899107);
+        reconstructionLowPass[5] = _numOps.FromDouble(0.1767766952966369);
+        reconstructionLowPass[6] = _numOps.FromDouble(0);
+        reconstructionLowPass[7] = _numOps.FromDouble(0);
 
-        reconstructionHighPass[0] = NumOps.FromDouble(-0.0105974017850690);
-        reconstructionHighPass[1] = NumOps.FromDouble(0.0279837694168599);
-        reconstructionHighPass[2] = NumOps.FromDouble(0.3326705529500825);
-        reconstructionHighPass[3] = NumOps.FromDouble(-0.8068915093110924);
-        reconstructionHighPass[4] = NumOps.FromDouble(0.4598775021184914);
-        reconstructionHighPass[5] = NumOps.FromDouble(0.1350110200102546);
-        reconstructionHighPass[6] = NumOps.FromDouble(-0.0854412738820267);
-        reconstructionHighPass[7] = NumOps.FromDouble(-0.0352262918857095);
+        reconstructionHighPass[0] = _numOps.FromDouble(-0.0105974017850690);
+        reconstructionHighPass[1] = _numOps.FromDouble(0.0279837694168599);
+        reconstructionHighPass[2] = _numOps.FromDouble(0.3326705529500825);
+        reconstructionHighPass[3] = _numOps.FromDouble(-0.8068915093110924);
+        reconstructionHighPass[4] = _numOps.FromDouble(0.4598775021184914);
+        reconstructionHighPass[5] = _numOps.FromDouble(0.1350110200102546);
+        reconstructionHighPass[6] = _numOps.FromDouble(-0.0854412738820267);
+        reconstructionHighPass[7] = _numOps.FromDouble(-0.0352262918857095);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }
@@ -1282,57 +1307,57 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionLowPass = new Vector<T>(12);
         var reconstructionHighPass = new Vector<T>(12);
 
-        decompositionLowPass[0] = NumOps.FromDouble(-0.0130514548443985);
-        decompositionLowPass[1] = NumOps.FromDouble(0.0307358671058437);
-        decompositionLowPass[2] = NumOps.FromDouble(0.0686539440891211);
-        decompositionLowPass[3] = NumOps.FromDouble(-0.1485354424027703);
-        decompositionLowPass[4] = NumOps.FromDouble(-0.2746482511903850);
-        decompositionLowPass[5] = NumOps.FromDouble(0.2746482511903850);
-        decompositionLowPass[6] = NumOps.FromDouble(0.7366601814282105);
-        decompositionLowPass[7] = NumOps.FromDouble(0.4976186676320155);
-        decompositionLowPass[8] = NumOps.FromDouble(0.0746831846544829);
-        decompositionLowPass[9] = NumOps.FromDouble(-0.0305795375195906);
-        decompositionLowPass[10] = NumOps.FromDouble(-0.0126815724766769);
-        decompositionLowPass[11] = NumOps.FromDouble(0.0010131419871576);
+        decompositionLowPass[0] = _numOps.FromDouble(-0.0130514548443985);
+        decompositionLowPass[1] = _numOps.FromDouble(0.0307358671058437);
+        decompositionLowPass[2] = _numOps.FromDouble(0.0686539440891211);
+        decompositionLowPass[3] = _numOps.FromDouble(-0.1485354424027703);
+        decompositionLowPass[4] = _numOps.FromDouble(-0.2746482511903850);
+        decompositionLowPass[5] = _numOps.FromDouble(0.2746482511903850);
+        decompositionLowPass[6] = _numOps.FromDouble(0.7366601814282105);
+        decompositionLowPass[7] = _numOps.FromDouble(0.4976186676320155);
+        decompositionLowPass[8] = _numOps.FromDouble(0.0746831846544829);
+        decompositionLowPass[9] = _numOps.FromDouble(-0.0305795375195906);
+        decompositionLowPass[10] = _numOps.FromDouble(-0.0126815724766769);
+        decompositionLowPass[11] = _numOps.FromDouble(0.0010131419871576);
 
-        decompositionHighPass[0] = NumOps.FromDouble(0);
-        decompositionHighPass[1] = NumOps.FromDouble(0);
-        decompositionHighPass[2] = NumOps.FromDouble(0);
-        decompositionHighPass[3] = NumOps.FromDouble(0.0662912607362388);
-        decompositionHighPass[4] = NumOps.FromDouble(-0.1988737822087164);
-        decompositionHighPass[5] = NumOps.FromDouble(0.1546796083845572);
-        decompositionHighPass[6] = NumOps.FromDouble(0.9943689110435825);
-        decompositionHighPass[7] = NumOps.FromDouble(-0.1546796083845572);
-        decompositionHighPass[8] = NumOps.FromDouble(-0.1988737822087164);
-        decompositionHighPass[9] = NumOps.FromDouble(0.0662912607362388);
-        decompositionHighPass[10] = NumOps.FromDouble(0);
-        decompositionHighPass[11] = NumOps.FromDouble(0);
+        decompositionHighPass[0] = _numOps.FromDouble(0);
+        decompositionHighPass[1] = _numOps.FromDouble(0);
+        decompositionHighPass[2] = _numOps.FromDouble(0);
+        decompositionHighPass[3] = _numOps.FromDouble(0.0662912607362388);
+        decompositionHighPass[4] = _numOps.FromDouble(-0.1988737822087164);
+        decompositionHighPass[5] = _numOps.FromDouble(0.1546796083845572);
+        decompositionHighPass[6] = _numOps.FromDouble(0.9943689110435825);
+        decompositionHighPass[7] = _numOps.FromDouble(-0.1546796083845572);
+        decompositionHighPass[8] = _numOps.FromDouble(-0.1988737822087164);
+        decompositionHighPass[9] = _numOps.FromDouble(0.0662912607362388);
+        decompositionHighPass[10] = _numOps.FromDouble(0);
+        decompositionHighPass[11] = _numOps.FromDouble(0);
 
-        reconstructionLowPass[0] = NumOps.FromDouble(0);
-        reconstructionLowPass[1] = NumOps.FromDouble(0);
-        reconstructionLowPass[2] = NumOps.FromDouble(0);
-        reconstructionLowPass[3] = NumOps.FromDouble(-0.0662912607362388);
-        reconstructionLowPass[4] = NumOps.FromDouble(-0.1988737822087164);
-        reconstructionLowPass[5] = NumOps.FromDouble(0.1546796083845572);
-        reconstructionLowPass[6] = NumOps.FromDouble(0.9943689110435825);
-        reconstructionLowPass[7] = NumOps.FromDouble(0.1546796083845572);
-        reconstructionLowPass[8] = NumOps.FromDouble(-0.1988737822087164);
-        reconstructionLowPass[9] = NumOps.FromDouble(-0.0662912607362388);
-        reconstructionLowPass[10] = NumOps.FromDouble(0);
-        reconstructionLowPass[11] = NumOps.FromDouble(0);
+        reconstructionLowPass[0] = _numOps.FromDouble(0);
+        reconstructionLowPass[1] = _numOps.FromDouble(0);
+        reconstructionLowPass[2] = _numOps.FromDouble(0);
+        reconstructionLowPass[3] = _numOps.FromDouble(-0.0662912607362388);
+        reconstructionLowPass[4] = _numOps.FromDouble(-0.1988737822087164);
+        reconstructionLowPass[5] = _numOps.FromDouble(0.1546796083845572);
+        reconstructionLowPass[6] = _numOps.FromDouble(0.9943689110435825);
+        reconstructionLowPass[7] = _numOps.FromDouble(0.1546796083845572);
+        reconstructionLowPass[8] = _numOps.FromDouble(-0.1988737822087164);
+        reconstructionLowPass[9] = _numOps.FromDouble(-0.0662912607362388);
+        reconstructionLowPass[10] = _numOps.FromDouble(0);
+        reconstructionLowPass[11] = _numOps.FromDouble(0);
 
-        reconstructionHighPass[0] = NumOps.FromDouble(0.0010131419871576);
-        reconstructionHighPass[1] = NumOps.FromDouble(0.0126815724766769);
-        reconstructionHighPass[2] = NumOps.FromDouble(-0.0305795375195906);
-        reconstructionHighPass[3] = NumOps.FromDouble(-0.0746831846544829);
-        reconstructionHighPass[4] = NumOps.FromDouble(0.4976186676320155);
-        reconstructionHighPass[5] = NumOps.FromDouble(-0.7366601814282105);
-        reconstructionHighPass[6] = NumOps.FromDouble(0.2746482511903850);
-        reconstructionHighPass[7] = NumOps.FromDouble(0.2746482511903850);
-        reconstructionHighPass[8] = NumOps.FromDouble(-0.1485354424027703);
-        reconstructionHighPass[9] = NumOps.FromDouble(-0.0686539440891211);
-        reconstructionHighPass[10] = NumOps.FromDouble(0.0307358671058437);
-        reconstructionHighPass[11] = NumOps.FromDouble(0.0130514548443985);
+        reconstructionHighPass[0] = _numOps.FromDouble(0.0010131419871576);
+        reconstructionHighPass[1] = _numOps.FromDouble(0.0126815724766769);
+        reconstructionHighPass[2] = _numOps.FromDouble(-0.0305795375195906);
+        reconstructionHighPass[3] = _numOps.FromDouble(-0.0746831846544829);
+        reconstructionHighPass[4] = _numOps.FromDouble(0.4976186676320155);
+        reconstructionHighPass[5] = _numOps.FromDouble(-0.7366601814282105);
+        reconstructionHighPass[6] = _numOps.FromDouble(0.2746482511903850);
+        reconstructionHighPass[7] = _numOps.FromDouble(0.2746482511903850);
+        reconstructionHighPass[8] = _numOps.FromDouble(-0.1485354424027703);
+        reconstructionHighPass[9] = _numOps.FromDouble(-0.0686539440891211);
+        reconstructionHighPass[10] = _numOps.FromDouble(0.0307358671058437);
+        reconstructionHighPass[11] = _numOps.FromDouble(0.0130514548443985);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }
@@ -1364,49 +1389,49 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionLowPass = new Vector<T>(8);
         var reconstructionHighPass = new Vector<T>(12);
 
-        decompositionLowPass[0] = NumOps.FromDouble(0.0030210861012608843);
-        decompositionLowPass[1] = NumOps.FromDouble(-0.009063258303782653);
-        decompositionLowPass[2] = NumOps.FromDouble(-0.01683176542131064);
-        decompositionLowPass[3] = NumOps.FromDouble(0.074663985074019);
-        decompositionLowPass[4] = NumOps.FromDouble(0.03133297870736289);
-        decompositionLowPass[5] = NumOps.FromDouble(-0.301159125922835);
-        decompositionLowPass[6] = NumOps.FromDouble(-0.026499240945345472);
-        decompositionLowPass[7] = NumOps.FromDouble(0.9516421218971786);
-        decompositionLowPass[8] = NumOps.FromDouble(0.9516421218971786);
-        decompositionLowPass[9] = NumOps.FromDouble(-0.026499240945345472);
-        decompositionLowPass[10] = NumOps.FromDouble(-0.301159125922835);
-        decompositionLowPass[11] = NumOps.FromDouble(0.03133297870736289);
+        decompositionLowPass[0] = _numOps.FromDouble(0.0030210861012608843);
+        decompositionLowPass[1] = _numOps.FromDouble(-0.009063258303782653);
+        decompositionLowPass[2] = _numOps.FromDouble(-0.01683176542131064);
+        decompositionLowPass[3] = _numOps.FromDouble(0.074663985074019);
+        decompositionLowPass[4] = _numOps.FromDouble(0.03133297870736289);
+        decompositionLowPass[5] = _numOps.FromDouble(-0.301159125922835);
+        decompositionLowPass[6] = _numOps.FromDouble(-0.026499240945345472);
+        decompositionLowPass[7] = _numOps.FromDouble(0.9516421218971786);
+        decompositionLowPass[8] = _numOps.FromDouble(0.9516421218971786);
+        decompositionLowPass[9] = _numOps.FromDouble(-0.026499240945345472);
+        decompositionLowPass[10] = _numOps.FromDouble(-0.301159125922835);
+        decompositionLowPass[11] = _numOps.FromDouble(0.03133297870736289);
 
-        decompositionHighPass[0] = NumOps.FromDouble(0);
-        decompositionHighPass[1] = NumOps.FromDouble(0);
-        decompositionHighPass[2] = NumOps.FromDouble(-0.1767766952966369);
-        decompositionHighPass[3] = NumOps.FromDouble(0.5303300858899107);
-        decompositionHighPass[4] = NumOps.FromDouble(-0.5303300858899107);
-        decompositionHighPass[5] = NumOps.FromDouble(0.1767766952966369);
-        decompositionHighPass[6] = NumOps.FromDouble(0);
-        decompositionHighPass[7] = NumOps.FromDouble(0);
+        decompositionHighPass[0] = _numOps.FromDouble(0);
+        decompositionHighPass[1] = _numOps.FromDouble(0);
+        decompositionHighPass[2] = _numOps.FromDouble(-0.1767766952966369);
+        decompositionHighPass[3] = _numOps.FromDouble(0.5303300858899107);
+        decompositionHighPass[4] = _numOps.FromDouble(-0.5303300858899107);
+        decompositionHighPass[5] = _numOps.FromDouble(0.1767766952966369);
+        decompositionHighPass[6] = _numOps.FromDouble(0);
+        decompositionHighPass[7] = _numOps.FromDouble(0);
 
-        reconstructionLowPass[0] = NumOps.FromDouble(0);
-        reconstructionLowPass[1] = NumOps.FromDouble(0);
-        reconstructionLowPass[2] = NumOps.FromDouble(0.1767766952966369);
-        reconstructionLowPass[3] = NumOps.FromDouble(0.5303300858899107);
-        reconstructionLowPass[4] = NumOps.FromDouble(0.5303300858899107);
-        reconstructionLowPass[5] = NumOps.FromDouble(0.1767766952966369);
-        reconstructionLowPass[6] = NumOps.FromDouble(0);
-        reconstructionLowPass[7] = NumOps.FromDouble(0);
+        reconstructionLowPass[0] = _numOps.FromDouble(0);
+        reconstructionLowPass[1] = _numOps.FromDouble(0);
+        reconstructionLowPass[2] = _numOps.FromDouble(0.1767766952966369);
+        reconstructionLowPass[3] = _numOps.FromDouble(0.5303300858899107);
+        reconstructionLowPass[4] = _numOps.FromDouble(0.5303300858899107);
+        reconstructionLowPass[5] = _numOps.FromDouble(0.1767766952966369);
+        reconstructionLowPass[6] = _numOps.FromDouble(0);
+        reconstructionLowPass[7] = _numOps.FromDouble(0);
 
-        reconstructionHighPass[0] = NumOps.FromDouble(0.0030210861012608843);
-        reconstructionHighPass[1] = NumOps.FromDouble(0.009063258303782653);
-        reconstructionHighPass[2] = NumOps.FromDouble(-0.01683176542131064);
-        reconstructionHighPass[3] = NumOps.FromDouble(-0.074663985074019);
-        reconstructionHighPass[4] = NumOps.FromDouble(0.03133297870736289);
-        reconstructionHighPass[5] = NumOps.FromDouble(0.301159125922835);
-        reconstructionHighPass[6] = NumOps.FromDouble(-0.026499240945345472);
-        reconstructionHighPass[7] = NumOps.FromDouble(-0.9516421218971786);
-        reconstructionHighPass[8] = NumOps.FromDouble(0.9516421218971786);
-        reconstructionHighPass[9] = NumOps.FromDouble(0.026499240945345472);
-        reconstructionHighPass[10] = NumOps.FromDouble(-0.301159125922835);
-        reconstructionHighPass[11] = NumOps.FromDouble(-0.03133297870736289);
+        reconstructionHighPass[0] = _numOps.FromDouble(0.0030210861012608843);
+        reconstructionHighPass[1] = _numOps.FromDouble(0.009063258303782653);
+        reconstructionHighPass[2] = _numOps.FromDouble(-0.01683176542131064);
+        reconstructionHighPass[3] = _numOps.FromDouble(-0.074663985074019);
+        reconstructionHighPass[4] = _numOps.FromDouble(0.03133297870736289);
+        reconstructionHighPass[5] = _numOps.FromDouble(0.301159125922835);
+        reconstructionHighPass[6] = _numOps.FromDouble(-0.026499240945345472);
+        reconstructionHighPass[7] = _numOps.FromDouble(-0.9516421218971786);
+        reconstructionHighPass[8] = _numOps.FromDouble(0.9516421218971786);
+        reconstructionHighPass[9] = _numOps.FromDouble(0.026499240945345472);
+        reconstructionHighPass[10] = _numOps.FromDouble(-0.301159125922835);
+        reconstructionHighPass[11] = _numOps.FromDouble(-0.03133297870736289);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }
@@ -1439,61 +1464,61 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionLowPass = new Vector<T>(10);
         var reconstructionHighPass = new Vector<T>(16);
 
-        decompositionLowPass[0] = NumOps.FromDouble(-0.000679744372783699);
-        decompositionLowPass[1] = NumOps.FromDouble(0.002039233118351097);
-        decompositionLowPass[2] = NumOps.FromDouble(0.005060319219611981);
-        decompositionLowPass[3] = NumOps.FromDouble(-0.020618912641105536);
-        decompositionLowPass[4] = NumOps.FromDouble(-0.014112787930175846);
-        decompositionLowPass[5] = NumOps.FromDouble(0.09913478249423216);
-        decompositionLowPass[6] = NumOps.FromDouble(0.012300136269419315);
-        decompositionLowPass[7] = NumOps.FromDouble(-0.32019196836077857);
-        decompositionLowPass[8] = NumOps.FromDouble(0.0020500227115698858);
-        decompositionLowPass[9] = NumOps.FromDouble(0.9421257006782068);
-        decompositionLowPass[10] = NumOps.FromDouble(0.9421257006782068);
-        decompositionLowPass[11] = NumOps.FromDouble(0.0020500227115698858);
-        decompositionLowPass[12] = NumOps.FromDouble(-0.32019196836077857);
-        decompositionLowPass[13] = NumOps.FromDouble(0.012300136269419315);
-        decompositionLowPass[14] = NumOps.FromDouble(0.09913478249423216);
-        decompositionLowPass[15] = NumOps.FromDouble(-0.014112787930175846);
+        decompositionLowPass[0] = _numOps.FromDouble(-0.000679744372783699);
+        decompositionLowPass[1] = _numOps.FromDouble(0.002039233118351097);
+        decompositionLowPass[2] = _numOps.FromDouble(0.005060319219611981);
+        decompositionLowPass[3] = _numOps.FromDouble(-0.020618912641105536);
+        decompositionLowPass[4] = _numOps.FromDouble(-0.014112787930175846);
+        decompositionLowPass[5] = _numOps.FromDouble(0.09913478249423216);
+        decompositionLowPass[6] = _numOps.FromDouble(0.012300136269419315);
+        decompositionLowPass[7] = _numOps.FromDouble(-0.32019196836077857);
+        decompositionLowPass[8] = _numOps.FromDouble(0.0020500227115698858);
+        decompositionLowPass[9] = _numOps.FromDouble(0.9421257006782068);
+        decompositionLowPass[10] = _numOps.FromDouble(0.9421257006782068);
+        decompositionLowPass[11] = _numOps.FromDouble(0.0020500227115698858);
+        decompositionLowPass[12] = _numOps.FromDouble(-0.32019196836077857);
+        decompositionLowPass[13] = _numOps.FromDouble(0.012300136269419315);
+        decompositionLowPass[14] = _numOps.FromDouble(0.09913478249423216);
+        decompositionLowPass[15] = _numOps.FromDouble(-0.014112787930175846);
 
-        decompositionHighPass[0] = NumOps.FromDouble(0);
-        decompositionHighPass[1] = NumOps.FromDouble(0);
-        decompositionHighPass[2] = NumOps.FromDouble(0);
-        decompositionHighPass[3] = NumOps.FromDouble(0.0662912607362388);
-        decompositionHighPass[4] = NumOps.FromDouble(0.1988737822087164);
-        decompositionHighPass[5] = NumOps.FromDouble(0.1988737822087164);
-        decompositionHighPass[6] = NumOps.FromDouble(0.0662912607362388);
-        decompositionHighPass[7] = NumOps.FromDouble(0);
-        decompositionHighPass[8] = NumOps.FromDouble(0);
-        decompositionHighPass[9] = NumOps.FromDouble(0);
+        decompositionHighPass[0] = _numOps.FromDouble(0);
+        decompositionHighPass[1] = _numOps.FromDouble(0);
+        decompositionHighPass[2] = _numOps.FromDouble(0);
+        decompositionHighPass[3] = _numOps.FromDouble(0.0662912607362388);
+        decompositionHighPass[4] = _numOps.FromDouble(0.1988737822087164);
+        decompositionHighPass[5] = _numOps.FromDouble(0.1988737822087164);
+        decompositionHighPass[6] = _numOps.FromDouble(0.0662912607362388);
+        decompositionHighPass[7] = _numOps.FromDouble(0);
+        decompositionHighPass[8] = _numOps.FromDouble(0);
+        decompositionHighPass[9] = _numOps.FromDouble(0);
 
-        reconstructionLowPass[0] = NumOps.FromDouble(0);
-        reconstructionLowPass[1] = NumOps.FromDouble(0);
-        reconstructionLowPass[2] = NumOps.FromDouble(0);
-        reconstructionLowPass[3] = NumOps.FromDouble(-0.0662912607362388);
-        reconstructionLowPass[4] = NumOps.FromDouble(0.1988737822087164);
-        reconstructionLowPass[5] = NumOps.FromDouble(-0.1988737822087164);
-        reconstructionLowPass[6] = NumOps.FromDouble(0.0662912607362388);
-        reconstructionLowPass[7] = NumOps.FromDouble(0);
-        reconstructionLowPass[8] = NumOps.FromDouble(0);
-        reconstructionLowPass[9] = NumOps.FromDouble(0);
+        reconstructionLowPass[0] = _numOps.FromDouble(0);
+        reconstructionLowPass[1] = _numOps.FromDouble(0);
+        reconstructionLowPass[2] = _numOps.FromDouble(0);
+        reconstructionLowPass[3] = _numOps.FromDouble(-0.0662912607362388);
+        reconstructionLowPass[4] = _numOps.FromDouble(0.1988737822087164);
+        reconstructionLowPass[5] = _numOps.FromDouble(-0.1988737822087164);
+        reconstructionLowPass[6] = _numOps.FromDouble(0.0662912607362388);
+        reconstructionLowPass[7] = _numOps.FromDouble(0);
+        reconstructionLowPass[8] = _numOps.FromDouble(0);
+        reconstructionLowPass[9] = _numOps.FromDouble(0);
 
-        reconstructionHighPass[0] = NumOps.FromDouble(-0.014112787930175846);
-        reconstructionHighPass[1] = NumOps.FromDouble(-0.09913478249423216);
-        reconstructionHighPass[2] = NumOps.FromDouble(0.012300136269419315);
-        reconstructionHighPass[3] = NumOps.FromDouble(0.32019196836077857);
-        reconstructionHighPass[4] = NumOps.FromDouble(0.0020500227115698858);
-        reconstructionHighPass[5] = NumOps.FromDouble(-0.9421257006782068);
-        reconstructionHighPass[6] = NumOps.FromDouble(0.9421257006782068);
-        reconstructionHighPass[7] = NumOps.FromDouble(-0.0020500227115698858);
-        reconstructionHighPass[8] = NumOps.FromDouble(-0.32019196836077857);
-        reconstructionHighPass[9] = NumOps.FromDouble(-0.012300136269419315);
-        reconstructionHighPass[10] = NumOps.FromDouble(0.09913478249423216);
-        reconstructionHighPass[11] = NumOps.FromDouble(0.014112787930175846);
-        reconstructionHighPass[12] = NumOps.FromDouble(-0.020618912641105536);
-        reconstructionHighPass[13] = NumOps.FromDouble(-0.005060319219611981);
-        reconstructionHighPass[14] = NumOps.FromDouble(0.002039233118351097);
-        reconstructionHighPass[15] = NumOps.FromDouble(0.000679744372783699);
+        reconstructionHighPass[0] = _numOps.FromDouble(-0.014112787930175846);
+        reconstructionHighPass[1] = _numOps.FromDouble(-0.09913478249423216);
+        reconstructionHighPass[2] = _numOps.FromDouble(0.012300136269419315);
+        reconstructionHighPass[3] = _numOps.FromDouble(0.32019196836077857);
+        reconstructionHighPass[4] = _numOps.FromDouble(0.0020500227115698858);
+        reconstructionHighPass[5] = _numOps.FromDouble(-0.9421257006782068);
+        reconstructionHighPass[6] = _numOps.FromDouble(0.9421257006782068);
+        reconstructionHighPass[7] = _numOps.FromDouble(-0.0020500227115698858);
+        reconstructionHighPass[8] = _numOps.FromDouble(-0.32019196836077857);
+        reconstructionHighPass[9] = _numOps.FromDouble(-0.012300136269419315);
+        reconstructionHighPass[10] = _numOps.FromDouble(0.09913478249423216);
+        reconstructionHighPass[11] = _numOps.FromDouble(0.014112787930175846);
+        reconstructionHighPass[12] = _numOps.FromDouble(-0.020618912641105536);
+        reconstructionHighPass[13] = _numOps.FromDouble(-0.005060319219611981);
+        reconstructionHighPass[14] = _numOps.FromDouble(0.002039233118351097);
+        reconstructionHighPass[15] = _numOps.FromDouble(0.000679744372783699);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }
@@ -1525,49 +1550,49 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionLowPass = new Vector<T>(10);
         var reconstructionHighPass = new Vector<T>(10);
 
-        decompositionLowPass[0] = NumOps.FromDouble(0);
-        decompositionLowPass[1] = NumOps.FromDouble(0.03782845550699535);
-        decompositionLowPass[2] = NumOps.FromDouble(-0.023849465019380);
-        decompositionLowPass[3] = NumOps.FromDouble(-0.11062440441842);
-        decompositionLowPass[4] = NumOps.FromDouble(0.37740285561265);
-        decompositionLowPass[5] = NumOps.FromDouble(0.85269867900940);
-        decompositionLowPass[6] = NumOps.FromDouble(0.37740285561265);
-        decompositionLowPass[7] = NumOps.FromDouble(-0.11062440441842);
-        decompositionLowPass[8] = NumOps.FromDouble(-0.023849465019380);
-        decompositionLowPass[9] = NumOps.FromDouble(0.03782845550699535);
+        decompositionLowPass[0] = _numOps.FromDouble(0);
+        decompositionLowPass[1] = _numOps.FromDouble(0.03782845550699535);
+        decompositionLowPass[2] = _numOps.FromDouble(-0.023849465019380);
+        decompositionLowPass[3] = _numOps.FromDouble(-0.11062440441842);
+        decompositionLowPass[4] = _numOps.FromDouble(0.37740285561265);
+        decompositionLowPass[5] = _numOps.FromDouble(0.85269867900940);
+        decompositionLowPass[6] = _numOps.FromDouble(0.37740285561265);
+        decompositionLowPass[7] = _numOps.FromDouble(-0.11062440441842);
+        decompositionLowPass[8] = _numOps.FromDouble(-0.023849465019380);
+        decompositionLowPass[9] = _numOps.FromDouble(0.03782845550699535);
 
-        decompositionHighPass[0] = NumOps.FromDouble(0);
-        decompositionHighPass[1] = NumOps.FromDouble(-0.06453888262893856);
-        decompositionHighPass[2] = NumOps.FromDouble(0.04068941760955867);
-        decompositionHighPass[3] = NumOps.FromDouble(0.41809227322161724);
-        decompositionHighPass[4] = NumOps.FromDouble(-0.7884856164056651);
-        decompositionHighPass[5] = NumOps.FromDouble(0.4180922732216172);
-        decompositionHighPass[6] = NumOps.FromDouble(0.040689417609558675);
-        decompositionHighPass[7] = NumOps.FromDouble(-0.06453888262893856);
-        decompositionHighPass[8] = NumOps.FromDouble(0);
-        decompositionHighPass[9] = NumOps.FromDouble(0);
+        decompositionHighPass[0] = _numOps.FromDouble(0);
+        decompositionHighPass[1] = _numOps.FromDouble(-0.06453888262893856);
+        decompositionHighPass[2] = _numOps.FromDouble(0.04068941760955867);
+        decompositionHighPass[3] = _numOps.FromDouble(0.41809227322161724);
+        decompositionHighPass[4] = _numOps.FromDouble(-0.7884856164056651);
+        decompositionHighPass[5] = _numOps.FromDouble(0.4180922732216172);
+        decompositionHighPass[6] = _numOps.FromDouble(0.040689417609558675);
+        decompositionHighPass[7] = _numOps.FromDouble(-0.06453888262893856);
+        decompositionHighPass[8] = _numOps.FromDouble(0);
+        decompositionHighPass[9] = _numOps.FromDouble(0);
 
-        reconstructionLowPass[0] = NumOps.FromDouble(0);
-        reconstructionLowPass[1] = NumOps.FromDouble(-0.06453888262893856);
-        reconstructionLowPass[2] = NumOps.FromDouble(-0.04068941760955867);
-        reconstructionLowPass[3] = NumOps.FromDouble(0.41809227322161724);
-        reconstructionLowPass[4] = NumOps.FromDouble(0.7884856164056651);
-        reconstructionLowPass[5] = NumOps.FromDouble(0.4180922732216172);
-        reconstructionLowPass[6] = NumOps.FromDouble(-0.040689417609558675);
-        reconstructionLowPass[7] = NumOps.FromDouble(-0.06453888262893856);
-        reconstructionLowPass[8] = NumOps.FromDouble(0);
-        reconstructionLowPass[9] = NumOps.FromDouble(0);
+        reconstructionLowPass[0] = _numOps.FromDouble(0);
+        reconstructionLowPass[1] = _numOps.FromDouble(-0.06453888262893856);
+        reconstructionLowPass[2] = _numOps.FromDouble(-0.04068941760955867);
+        reconstructionLowPass[3] = _numOps.FromDouble(0.41809227322161724);
+        reconstructionLowPass[4] = _numOps.FromDouble(0.7884856164056651);
+        reconstructionLowPass[5] = _numOps.FromDouble(0.4180922732216172);
+        reconstructionLowPass[6] = _numOps.FromDouble(-0.040689417609558675);
+        reconstructionLowPass[7] = _numOps.FromDouble(-0.06453888262893856);
+        reconstructionLowPass[8] = _numOps.FromDouble(0);
+        reconstructionLowPass[9] = _numOps.FromDouble(0);
 
-        reconstructionHighPass[0] = NumOps.FromDouble(0);
-        reconstructionHighPass[1] = NumOps.FromDouble(0.03782845550699535);
-        reconstructionHighPass[2] = NumOps.FromDouble(0.023849465019380);
-        reconstructionHighPass[3] = NumOps.FromDouble(-0.11062440441842);
-        reconstructionHighPass[4] = NumOps.FromDouble(-0.37740285561265);
-        reconstructionHighPass[5] = NumOps.FromDouble(0.85269867900940);
-        reconstructionHighPass[6] = NumOps.FromDouble(-0.37740285561265);
-        reconstructionHighPass[7] = NumOps.FromDouble(-0.11062440441842);
-        reconstructionHighPass[8] = NumOps.FromDouble(0.023849465019380);
-        reconstructionHighPass[9] = NumOps.FromDouble(0.03782845550699535);
+        reconstructionHighPass[0] = _numOps.FromDouble(0);
+        reconstructionHighPass[1] = _numOps.FromDouble(0.03782845550699535);
+        reconstructionHighPass[2] = _numOps.FromDouble(0.023849465019380);
+        reconstructionHighPass[3] = _numOps.FromDouble(-0.11062440441842);
+        reconstructionHighPass[4] = _numOps.FromDouble(-0.37740285561265);
+        reconstructionHighPass[5] = _numOps.FromDouble(0.85269867900940);
+        reconstructionHighPass[6] = _numOps.FromDouble(-0.37740285561265);
+        reconstructionHighPass[7] = _numOps.FromDouble(-0.11062440441842);
+        reconstructionHighPass[8] = _numOps.FromDouble(0.023849465019380);
+        reconstructionHighPass[9] = _numOps.FromDouble(0.03782845550699535);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }
@@ -1599,57 +1624,57 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionLowPass = new Vector<T>(10);
         var reconstructionHighPass = new Vector<T>(14);
 
-        decompositionLowPass[0] = NumOps.FromDouble(0.0019088317364812906);
-        decompositionLowPass[1] = NumOps.FromDouble(-0.0019142861290887667);
-        decompositionLowPass[2] = NumOps.FromDouble(-0.016990639867602342);
-        decompositionLowPass[3] = NumOps.FromDouble(0.01193456527972926);
-        decompositionLowPass[4] = NumOps.FromDouble(0.04973290349094079);
-        decompositionLowPass[5] = NumOps.FromDouble(-0.07726317316720414);
-        decompositionLowPass[6] = NumOps.FromDouble(-0.09405920349573646);
-        decompositionLowPass[7] = NumOps.FromDouble(0.4207962846098268);
-        decompositionLowPass[8] = NumOps.FromDouble(0.8259229974584023);
-        decompositionLowPass[9] = NumOps.FromDouble(0.4207962846098268);
-        decompositionLowPass[10] = NumOps.FromDouble(-0.09405920349573646);
-        decompositionLowPass[11] = NumOps.FromDouble(-0.07726317316720414);
-        decompositionLowPass[12] = NumOps.FromDouble(0.04973290349094079);
-        decompositionLowPass[13] = NumOps.FromDouble(0.01193456527972926);
+        decompositionLowPass[0] = _numOps.FromDouble(0.0019088317364812906);
+        decompositionLowPass[1] = _numOps.FromDouble(-0.0019142861290887667);
+        decompositionLowPass[2] = _numOps.FromDouble(-0.016990639867602342);
+        decompositionLowPass[3] = _numOps.FromDouble(0.01193456527972926);
+        decompositionLowPass[4] = _numOps.FromDouble(0.04973290349094079);
+        decompositionLowPass[5] = _numOps.FromDouble(-0.07726317316720414);
+        decompositionLowPass[6] = _numOps.FromDouble(-0.09405920349573646);
+        decompositionLowPass[7] = _numOps.FromDouble(0.4207962846098268);
+        decompositionLowPass[8] = _numOps.FromDouble(0.8259229974584023);
+        decompositionLowPass[9] = _numOps.FromDouble(0.4207962846098268);
+        decompositionLowPass[10] = _numOps.FromDouble(-0.09405920349573646);
+        decompositionLowPass[11] = _numOps.FromDouble(-0.07726317316720414);
+        decompositionLowPass[12] = _numOps.FromDouble(0.04973290349094079);
+        decompositionLowPass[13] = _numOps.FromDouble(0.01193456527972926);
 
-        decompositionHighPass[0] = NumOps.FromDouble(0);
-        decompositionHighPass[1] = NumOps.FromDouble(0);
-        decompositionHighPass[2] = NumOps.FromDouble(0.03782845550699535);
-        decompositionHighPass[3] = NumOps.FromDouble(-0.023849465019380);
-        decompositionHighPass[4] = NumOps.FromDouble(-0.11062440441842);
-        decompositionHighPass[5] = NumOps.FromDouble(0.37740285561265);
-        decompositionHighPass[6] = NumOps.FromDouble(-0.85269867900940);
-        decompositionHighPass[7] = NumOps.FromDouble(0.37740285561265);
-        decompositionHighPass[8] = NumOps.FromDouble(-0.11062440441842);
-        decompositionHighPass[9] = NumOps.FromDouble(-0.023849465019380);
+        decompositionHighPass[0] = _numOps.FromDouble(0);
+        decompositionHighPass[1] = _numOps.FromDouble(0);
+        decompositionHighPass[2] = _numOps.FromDouble(0.03782845550699535);
+        decompositionHighPass[3] = _numOps.FromDouble(-0.023849465019380);
+        decompositionHighPass[4] = _numOps.FromDouble(-0.11062440441842);
+        decompositionHighPass[5] = _numOps.FromDouble(0.37740285561265);
+        decompositionHighPass[6] = _numOps.FromDouble(-0.85269867900940);
+        decompositionHighPass[7] = _numOps.FromDouble(0.37740285561265);
+        decompositionHighPass[8] = _numOps.FromDouble(-0.11062440441842);
+        decompositionHighPass[9] = _numOps.FromDouble(-0.023849465019380);
 
-        reconstructionLowPass[0] = NumOps.FromDouble(0);
-        reconstructionLowPass[1] = NumOps.FromDouble(0);
-        reconstructionLowPass[2] = NumOps.FromDouble(0.03782845550699535);
-        reconstructionLowPass[3] = NumOps.FromDouble(0.023849465019380);
-        reconstructionLowPass[4] = NumOps.FromDouble(-0.11062440441842);
-        reconstructionLowPass[5] = NumOps.FromDouble(-0.37740285561265);
-        reconstructionLowPass[6] = NumOps.FromDouble(0.85269867900940);
-        reconstructionLowPass[7] = NumOps.FromDouble(-0.37740285561265);
-        reconstructionLowPass[8] = NumOps.FromDouble(-0.11062440441842);
-        reconstructionLowPass[9] = NumOps.FromDouble(0.023849465019380);
+        reconstructionLowPass[0] = _numOps.FromDouble(0);
+        reconstructionLowPass[1] = _numOps.FromDouble(0);
+        reconstructionLowPass[2] = _numOps.FromDouble(0.03782845550699535);
+        reconstructionLowPass[3] = _numOps.FromDouble(0.023849465019380);
+        reconstructionLowPass[4] = _numOps.FromDouble(-0.11062440441842);
+        reconstructionLowPass[5] = _numOps.FromDouble(-0.37740285561265);
+        reconstructionLowPass[6] = _numOps.FromDouble(0.85269867900940);
+        reconstructionLowPass[7] = _numOps.FromDouble(-0.37740285561265);
+        reconstructionLowPass[8] = _numOps.FromDouble(-0.11062440441842);
+        reconstructionLowPass[9] = _numOps.FromDouble(0.023849465019380);
 
-        reconstructionHighPass[0] = NumOps.FromDouble(0.0019088317364812906);
-        reconstructionHighPass[1] = NumOps.FromDouble(0.0019142861290887667);
-        reconstructionHighPass[2] = NumOps.FromDouble(-0.016990639867602342);
-        reconstructionHighPass[3] = NumOps.FromDouble(-0.01193456527972926);
-        reconstructionHighPass[4] = NumOps.FromDouble(0.04973290349094079);
-        reconstructionHighPass[5] = NumOps.FromDouble(0.07726317316720414);
-        reconstructionHighPass[6] = NumOps.FromDouble(-0.09405920349573646);
-        reconstructionHighPass[7] = NumOps.FromDouble(-0.4207962846098268);
-        reconstructionHighPass[8] = NumOps.FromDouble(0.8259229974584023);
-        reconstructionHighPass[9] = NumOps.FromDouble(-0.4207962846098268);
-        reconstructionHighPass[10] = NumOps.FromDouble(-0.09405920349573646);
-        reconstructionHighPass[11] = NumOps.FromDouble(0.07726317316720414);
-        reconstructionHighPass[12] = NumOps.FromDouble(0.04973290349094079);
-        reconstructionHighPass[13] = NumOps.FromDouble(-0.01193456527972926);
+        reconstructionHighPass[0] = _numOps.FromDouble(0.0019088317364812906);
+        reconstructionHighPass[1] = _numOps.FromDouble(0.0019142861290887667);
+        reconstructionHighPass[2] = _numOps.FromDouble(-0.016990639867602342);
+        reconstructionHighPass[3] = _numOps.FromDouble(-0.01193456527972926);
+        reconstructionHighPass[4] = _numOps.FromDouble(0.04973290349094079);
+        reconstructionHighPass[5] = _numOps.FromDouble(0.07726317316720414);
+        reconstructionHighPass[6] = _numOps.FromDouble(-0.09405920349573646);
+        reconstructionHighPass[7] = _numOps.FromDouble(-0.4207962846098268);
+        reconstructionHighPass[8] = _numOps.FromDouble(0.8259229974584023);
+        reconstructionHighPass[9] = _numOps.FromDouble(-0.4207962846098268);
+        reconstructionHighPass[10] = _numOps.FromDouble(-0.09405920349573646);
+        reconstructionHighPass[11] = _numOps.FromDouble(0.07726317316720414);
+        reconstructionHighPass[12] = _numOps.FromDouble(0.04973290349094079);
+        reconstructionHighPass[13] = _numOps.FromDouble(-0.01193456527972926);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }
@@ -1682,65 +1707,65 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionLowPass = new Vector<T>(10);
         var reconstructionHighPass = new Vector<T>(18);
 
-        decompositionLowPass[0] = NumOps.FromDouble(0);
-        decompositionLowPass[1] = NumOps.FromDouble(-0.0001174767841);
-        decompositionLowPass[2] = NumOps.FromDouble(-0.0002349535682);
-        decompositionLowPass[3] = NumOps.FromDouble(0.0013925484327);
-        decompositionLowPass[4] = NumOps.FromDouble(0.0030931751602);
-        decompositionLowPass[5] = NumOps.FromDouble(-0.0138017446325);
-        decompositionLowPass[6] = NumOps.FromDouble(-0.0457246565401);
-        decompositionLowPass[7] = NumOps.FromDouble(0.0687510184021);
-        decompositionLowPass[8] = NumOps.FromDouble(0.3848874557553);
-        decompositionLowPass[9] = NumOps.FromDouble(0.8525720202122);
-        decompositionLowPass[10] = NumOps.FromDouble(0.3848874557553);
-        decompositionLowPass[11] = NumOps.FromDouble(0.0687510184021);
-        decompositionLowPass[12] = NumOps.FromDouble(-0.0457246565401);
-        decompositionLowPass[13] = NumOps.FromDouble(-0.0138017446325);
-        decompositionLowPass[14] = NumOps.FromDouble(0.0030931751602);
-        decompositionLowPass[15] = NumOps.FromDouble(0.0013925484327);
-        decompositionLowPass[16] = NumOps.FromDouble(-0.0002349535682);
-        decompositionLowPass[17] = NumOps.FromDouble(-0.0001174767841);
+        decompositionLowPass[0] = _numOps.FromDouble(0);
+        decompositionLowPass[1] = _numOps.FromDouble(-0.0001174767841);
+        decompositionLowPass[2] = _numOps.FromDouble(-0.0002349535682);
+        decompositionLowPass[3] = _numOps.FromDouble(0.0013925484327);
+        decompositionLowPass[4] = _numOps.FromDouble(0.0030931751602);
+        decompositionLowPass[5] = _numOps.FromDouble(-0.0138017446325);
+        decompositionLowPass[6] = _numOps.FromDouble(-0.0457246565401);
+        decompositionLowPass[7] = _numOps.FromDouble(0.0687510184021);
+        decompositionLowPass[8] = _numOps.FromDouble(0.3848874557553);
+        decompositionLowPass[9] = _numOps.FromDouble(0.8525720202122);
+        decompositionLowPass[10] = _numOps.FromDouble(0.3848874557553);
+        decompositionLowPass[11] = _numOps.FromDouble(0.0687510184021);
+        decompositionLowPass[12] = _numOps.FromDouble(-0.0457246565401);
+        decompositionLowPass[13] = _numOps.FromDouble(-0.0138017446325);
+        decompositionLowPass[14] = _numOps.FromDouble(0.0030931751602);
+        decompositionLowPass[15] = _numOps.FromDouble(0.0013925484327);
+        decompositionLowPass[16] = _numOps.FromDouble(-0.0002349535682);
+        decompositionLowPass[17] = _numOps.FromDouble(-0.0001174767841);
 
-        decompositionHighPass[0] = NumOps.FromDouble(0);
-        decompositionHighPass[1] = NumOps.FromDouble(-0.0645388826289);
-        decompositionHighPass[2] = NumOps.FromDouble(0.0406894176091);
-        decompositionHighPass[3] = NumOps.FromDouble(0.4180922732222);
-        decompositionHighPass[4] = NumOps.FromDouble(-0.7884856164057);
-        decompositionHighPass[5] = NumOps.FromDouble(0.4180922732222);
-        decompositionHighPass[6] = NumOps.FromDouble(0.0406894176091);
-        decompositionHighPass[7] = NumOps.FromDouble(-0.0645388826289);
-        decompositionHighPass[8] = NumOps.FromDouble(0);
-        decompositionHighPass[9] = NumOps.FromDouble(0);
+        decompositionHighPass[0] = _numOps.FromDouble(0);
+        decompositionHighPass[1] = _numOps.FromDouble(-0.0645388826289);
+        decompositionHighPass[2] = _numOps.FromDouble(0.0406894176091);
+        decompositionHighPass[3] = _numOps.FromDouble(0.4180922732222);
+        decompositionHighPass[4] = _numOps.FromDouble(-0.7884856164057);
+        decompositionHighPass[5] = _numOps.FromDouble(0.4180922732222);
+        decompositionHighPass[6] = _numOps.FromDouble(0.0406894176091);
+        decompositionHighPass[7] = _numOps.FromDouble(-0.0645388826289);
+        decompositionHighPass[8] = _numOps.FromDouble(0);
+        decompositionHighPass[9] = _numOps.FromDouble(0);
 
-        reconstructionLowPass[0] = NumOps.FromDouble(0);
-        reconstructionLowPass[1] = NumOps.FromDouble(0.0645388826289);
-        reconstructionLowPass[2] = NumOps.FromDouble(0.0406894176091);
-        reconstructionLowPass[3] = NumOps.FromDouble(-0.4180922732222);
-        reconstructionLowPass[4] = NumOps.FromDouble(-0.7884856164057);
-        reconstructionLowPass[5] = NumOps.FromDouble(-0.4180922732222);
-        reconstructionLowPass[6] = NumOps.FromDouble(0.0406894176091);
-        reconstructionLowPass[7] = NumOps.FromDouble(0.0645388826289);
-        reconstructionLowPass[8] = NumOps.FromDouble(0);
-        reconstructionLowPass[9] = NumOps.FromDouble(0);
+        reconstructionLowPass[0] = _numOps.FromDouble(0);
+        reconstructionLowPass[1] = _numOps.FromDouble(0.0645388826289);
+        reconstructionLowPass[2] = _numOps.FromDouble(0.0406894176091);
+        reconstructionLowPass[3] = _numOps.FromDouble(-0.4180922732222);
+        reconstructionLowPass[4] = _numOps.FromDouble(-0.7884856164057);
+        reconstructionLowPass[5] = _numOps.FromDouble(-0.4180922732222);
+        reconstructionLowPass[6] = _numOps.FromDouble(0.0406894176091);
+        reconstructionLowPass[7] = _numOps.FromDouble(0.0645388826289);
+        reconstructionLowPass[8] = _numOps.FromDouble(0);
+        reconstructionLowPass[9] = _numOps.FromDouble(0);
 
-        reconstructionHighPass[0] = NumOps.FromDouble(0);
-        reconstructionHighPass[1] = NumOps.FromDouble(-0.0001174767841);
-        reconstructionHighPass[2] = NumOps.FromDouble(0.0002349535682);
-        reconstructionHighPass[3] = NumOps.FromDouble(0.0013925484327);
-        reconstructionHighPass[4] = NumOps.FromDouble(-0.0030931751602);
-        reconstructionHighPass[5] = NumOps.FromDouble(-0.0138017446325);
-        reconstructionHighPass[6] = NumOps.FromDouble(0.0457246565401);
-        reconstructionHighPass[7] = NumOps.FromDouble(0.0687510184021);
-        reconstructionHighPass[8] = NumOps.FromDouble(-0.3848874557553);
-        reconstructionHighPass[9] = NumOps.FromDouble(0.8525720202122);
-        reconstructionHighPass[10] = NumOps.FromDouble(-0.3848874557553);
-        reconstructionHighPass[11] = NumOps.FromDouble(0.0687510184021);
-        reconstructionHighPass[12] = NumOps.FromDouble(0.0457246565401);
-        reconstructionHighPass[13] = NumOps.FromDouble(-0.0138017446325);
-        reconstructionHighPass[14] = NumOps.FromDouble(-0.0030931751602);
-        reconstructionHighPass[15] = NumOps.FromDouble(0.0013925484327);
-        reconstructionHighPass[16] = NumOps.FromDouble(0.0002349535682);
-        reconstructionHighPass[17] = NumOps.FromDouble(-0.0001174767841);
+        reconstructionHighPass[0] = _numOps.FromDouble(0);
+        reconstructionHighPass[1] = _numOps.FromDouble(-0.0001174767841);
+        reconstructionHighPass[2] = _numOps.FromDouble(0.0002349535682);
+        reconstructionHighPass[3] = _numOps.FromDouble(0.0013925484327);
+        reconstructionHighPass[4] = _numOps.FromDouble(-0.0030931751602);
+        reconstructionHighPass[5] = _numOps.FromDouble(-0.0138017446325);
+        reconstructionHighPass[6] = _numOps.FromDouble(0.0457246565401);
+        reconstructionHighPass[7] = _numOps.FromDouble(0.0687510184021);
+        reconstructionHighPass[8] = _numOps.FromDouble(-0.3848874557553);
+        reconstructionHighPass[9] = _numOps.FromDouble(0.8525720202122);
+        reconstructionHighPass[10] = _numOps.FromDouble(-0.3848874557553);
+        reconstructionHighPass[11] = _numOps.FromDouble(0.0687510184021);
+        reconstructionHighPass[12] = _numOps.FromDouble(0.0457246565401);
+        reconstructionHighPass[13] = _numOps.FromDouble(-0.0138017446325);
+        reconstructionHighPass[14] = _numOps.FromDouble(-0.0030931751602);
+        reconstructionHighPass[15] = _numOps.FromDouble(0.0013925484327);
+        reconstructionHighPass[16] = _numOps.FromDouble(0.0002349535682);
+        reconstructionHighPass[17] = _numOps.FromDouble(-0.0001174767841);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }
@@ -1773,57 +1798,57 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionLowPass = new Vector<T>(12);
         var reconstructionHighPass = new Vector<T>(12);
 
-        decompositionLowPass[0] = NumOps.FromDouble(0.0);
-        decompositionLowPass[1] = NumOps.FromDouble(0.013456709459118716);
-        decompositionLowPass[2] = NumOps.FromDouble(-0.002694966880111507);
-        decompositionLowPass[3] = NumOps.FromDouble(-0.13670658466432914);
-        decompositionLowPass[4] = NumOps.FromDouble(-0.09350469740093886);
-        decompositionLowPass[5] = NumOps.FromDouble(0.47680326579848425);
-        decompositionLowPass[6] = NumOps.FromDouble(0.8995061097486484);
-        decompositionLowPass[7] = NumOps.FromDouble(0.47680326579848425);
-        decompositionLowPass[8] = NumOps.FromDouble(-0.09350469740093886);
-        decompositionLowPass[9] = NumOps.FromDouble(-0.13670658466432914);
-        decompositionLowPass[10] = NumOps.FromDouble(-0.002694966880111507);
-        decompositionLowPass[11] = NumOps.FromDouble(0.013456709459118716);
+        decompositionLowPass[0] = _numOps.FromDouble(0.0);
+        decompositionLowPass[1] = _numOps.FromDouble(0.013456709459118716);
+        decompositionLowPass[2] = _numOps.FromDouble(-0.002694966880111507);
+        decompositionLowPass[3] = _numOps.FromDouble(-0.13670658466432914);
+        decompositionLowPass[4] = _numOps.FromDouble(-0.09350469740093886);
+        decompositionLowPass[5] = _numOps.FromDouble(0.47680326579848425);
+        decompositionLowPass[6] = _numOps.FromDouble(0.8995061097486484);
+        decompositionLowPass[7] = _numOps.FromDouble(0.47680326579848425);
+        decompositionLowPass[8] = _numOps.FromDouble(-0.09350469740093886);
+        decompositionLowPass[9] = _numOps.FromDouble(-0.13670658466432914);
+        decompositionLowPass[10] = _numOps.FromDouble(-0.002694966880111507);
+        decompositionLowPass[11] = _numOps.FromDouble(0.013456709459118716);
 
-        decompositionHighPass[0] = NumOps.FromDouble(0.013456709459118716);
-        decompositionHighPass[1] = NumOps.FromDouble(-0.002694966880111507);
-        decompositionHighPass[2] = NumOps.FromDouble(-0.13670658466432914);
-        decompositionHighPass[3] = NumOps.FromDouble(-0.09350469740093886);
-        decompositionHighPass[4] = NumOps.FromDouble(0.47680326579848425);
-        decompositionHighPass[5] = NumOps.FromDouble(-0.8995061097486484);
-        decompositionHighPass[6] = NumOps.FromDouble(0.47680326579848425);
-        decompositionHighPass[7] = NumOps.FromDouble(-0.09350469740093886);
-        decompositionHighPass[8] = NumOps.FromDouble(-0.13670658466432914);
-        decompositionHighPass[9] = NumOps.FromDouble(-0.002694966880111507);
-        decompositionHighPass[10] = NumOps.FromDouble(0.013456709459118716);
-        decompositionHighPass[11] = NumOps.FromDouble(0.0);
+        decompositionHighPass[0] = _numOps.FromDouble(0.013456709459118716);
+        decompositionHighPass[1] = _numOps.FromDouble(-0.002694966880111507);
+        decompositionHighPass[2] = _numOps.FromDouble(-0.13670658466432914);
+        decompositionHighPass[3] = _numOps.FromDouble(-0.09350469740093886);
+        decompositionHighPass[4] = _numOps.FromDouble(0.47680326579848425);
+        decompositionHighPass[5] = _numOps.FromDouble(-0.8995061097486484);
+        decompositionHighPass[6] = _numOps.FromDouble(0.47680326579848425);
+        decompositionHighPass[7] = _numOps.FromDouble(-0.09350469740093886);
+        decompositionHighPass[8] = _numOps.FromDouble(-0.13670658466432914);
+        decompositionHighPass[9] = _numOps.FromDouble(-0.002694966880111507);
+        decompositionHighPass[10] = _numOps.FromDouble(0.013456709459118716);
+        decompositionHighPass[11] = _numOps.FromDouble(0.0);
 
-        reconstructionLowPass[0] = NumOps.FromDouble(0.013456709459118716);
-        reconstructionLowPass[1] = NumOps.FromDouble(0.002694966880111507);
-        reconstructionLowPass[2] = NumOps.FromDouble(-0.13670658466432914);
-        reconstructionLowPass[3] = NumOps.FromDouble(0.09350469740093886);
-        reconstructionLowPass[4] = NumOps.FromDouble(0.47680326579848425);
-        reconstructionLowPass[5] = NumOps.FromDouble(0.8995061097486484);
-        reconstructionLowPass[6] = NumOps.FromDouble(0.47680326579848425);
-        reconstructionLowPass[7] = NumOps.FromDouble(0.09350469740093886);
-        reconstructionLowPass[8] = NumOps.FromDouble(-0.13670658466432914);
-        reconstructionLowPass[9] = NumOps.FromDouble(0.002694966880111507);
-        reconstructionLowPass[10] = NumOps.FromDouble(0.013456709459118716);
-        reconstructionLowPass[11] = NumOps.FromDouble(0.0);
+        reconstructionLowPass[0] = _numOps.FromDouble(0.013456709459118716);
+        reconstructionLowPass[1] = _numOps.FromDouble(0.002694966880111507);
+        reconstructionLowPass[2] = _numOps.FromDouble(-0.13670658466432914);
+        reconstructionLowPass[3] = _numOps.FromDouble(0.09350469740093886);
+        reconstructionLowPass[4] = _numOps.FromDouble(0.47680326579848425);
+        reconstructionLowPass[5] = _numOps.FromDouble(0.8995061097486484);
+        reconstructionLowPass[6] = _numOps.FromDouble(0.47680326579848425);
+        reconstructionLowPass[7] = _numOps.FromDouble(0.09350469740093886);
+        reconstructionLowPass[8] = _numOps.FromDouble(-0.13670658466432914);
+        reconstructionLowPass[9] = _numOps.FromDouble(0.002694966880111507);
+        reconstructionLowPass[10] = _numOps.FromDouble(0.013456709459118716);
+        reconstructionLowPass[11] = _numOps.FromDouble(0.0);
 
-        reconstructionHighPass[0] = NumOps.FromDouble(0.0);
-        reconstructionHighPass[1] = NumOps.FromDouble(0.013456709459118716);
-        reconstructionHighPass[2] = NumOps.FromDouble(-0.002694966880111507);
-        reconstructionHighPass[3] = NumOps.FromDouble(-0.13670658466432914);
-        reconstructionHighPass[4] = NumOps.FromDouble(-0.09350469740093886);
-        reconstructionHighPass[5] = NumOps.FromDouble(0.47680326579848425);
-        reconstructionHighPass[6] = NumOps.FromDouble(-0.8995061097486484);
-        reconstructionHighPass[7] = NumOps.FromDouble(0.47680326579848425);
-        reconstructionHighPass[8] = NumOps.FromDouble(-0.09350469740093886);
-        reconstructionHighPass[9] = NumOps.FromDouble(-0.13670658466432914);
-        reconstructionHighPass[10] = NumOps.FromDouble(-0.002694966880111507);
-        reconstructionHighPass[11] = NumOps.FromDouble(0.013456709459118716);
+        reconstructionHighPass[0] = _numOps.FromDouble(0.0);
+        reconstructionHighPass[1] = _numOps.FromDouble(0.013456709459118716);
+        reconstructionHighPass[2] = _numOps.FromDouble(-0.002694966880111507);
+        reconstructionHighPass[3] = _numOps.FromDouble(-0.13670658466432914);
+        reconstructionHighPass[4] = _numOps.FromDouble(-0.09350469740093886);
+        reconstructionHighPass[5] = _numOps.FromDouble(0.47680326579848425);
+        reconstructionHighPass[6] = _numOps.FromDouble(-0.8995061097486484);
+        reconstructionHighPass[7] = _numOps.FromDouble(0.47680326579848425);
+        reconstructionHighPass[8] = _numOps.FromDouble(-0.09350469740093886);
+        reconstructionHighPass[9] = _numOps.FromDouble(-0.13670658466432914);
+        reconstructionHighPass[10] = _numOps.FromDouble(-0.002694966880111507);
+        reconstructionHighPass[11] = _numOps.FromDouble(0.013456709459118716);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }
@@ -1858,68 +1883,68 @@ public class ReverseBiorthogonalWavelet<T> : WaveletFunctionBase<T>
         var reconstructionHighPass = new Vector<T>(18);
 
         // Decomposition low-pass filter
-        decompositionLowPass[0] = NumOps.FromDouble(0);
-        decompositionLowPass[1] = NumOps.FromDouble(0.0001490583487665);
-        decompositionLowPass[2] = NumOps.FromDouble(-0.0003179695108439);
-        decompositionLowPass[3] = NumOps.FromDouble(-0.0018118519793764);
-        decompositionLowPass[4] = NumOps.FromDouble(0.0047314665272548);
-        decompositionLowPass[5] = NumOps.FromDouble(0.0087901063101452);
-        decompositionLowPass[6] = NumOps.FromDouble(-0.0297451247861220);
-        decompositionLowPass[7] = NumOps.FromDouble(-0.0736365678679802);
-        decompositionLowPass[8] = NumOps.FromDouble(0.1485354836691763);
-        decompositionLowPass[9] = NumOps.FromDouble(0.4675630700319812);
-        decompositionLowPass[10] = NumOps.FromDouble(0.9667475524034829);
-        decompositionLowPass[11] = NumOps.FromDouble(0.4675630700319812);
-        decompositionLowPass[12] = NumOps.FromDouble(0.1485354836691763);
-        decompositionLowPass[13] = NumOps.FromDouble(-0.0736365678679802);
-        decompositionLowPass[14] = NumOps.FromDouble(-0.0297451247861220);
-        decompositionLowPass[15] = NumOps.FromDouble(0.0087901063101452);
-        decompositionLowPass[16] = NumOps.FromDouble(0.0047314665272548);
-        decompositionLowPass[17] = NumOps.FromDouble(-0.0018118519793764);
+        decompositionLowPass[0] = _numOps.FromDouble(0);
+        decompositionLowPass[1] = _numOps.FromDouble(0.0001490583487665);
+        decompositionLowPass[2] = _numOps.FromDouble(-0.0003179695108439);
+        decompositionLowPass[3] = _numOps.FromDouble(-0.0018118519793764);
+        decompositionLowPass[4] = _numOps.FromDouble(0.0047314665272548);
+        decompositionLowPass[5] = _numOps.FromDouble(0.0087901063101452);
+        decompositionLowPass[6] = _numOps.FromDouble(-0.0297451247861220);
+        decompositionLowPass[7] = _numOps.FromDouble(-0.0736365678679802);
+        decompositionLowPass[8] = _numOps.FromDouble(0.1485354836691763);
+        decompositionLowPass[9] = _numOps.FromDouble(0.4675630700319812);
+        decompositionLowPass[10] = _numOps.FromDouble(0.9667475524034829);
+        decompositionLowPass[11] = _numOps.FromDouble(0.4675630700319812);
+        decompositionLowPass[12] = _numOps.FromDouble(0.1485354836691763);
+        decompositionLowPass[13] = _numOps.FromDouble(-0.0736365678679802);
+        decompositionLowPass[14] = _numOps.FromDouble(-0.0297451247861220);
+        decompositionLowPass[15] = _numOps.FromDouble(0.0087901063101452);
+        decompositionLowPass[16] = _numOps.FromDouble(0.0047314665272548);
+        decompositionLowPass[17] = _numOps.FromDouble(-0.0018118519793764);
 
         // Decomposition high-pass filter
-        decompositionHighPass[0] = NumOps.FromDouble(0);
-        decompositionHighPass[1] = NumOps.FromDouble(-0.0107148249460572);
-        decompositionHighPass[2] = NumOps.FromDouble(0.0328921202609630);
-        decompositionHighPass[3] = NumOps.FromDouble(0.0308560115845869);
-        decompositionHighPass[4] = NumOps.FromDouble(-0.1870348117190931);
-        decompositionHighPass[5] = NumOps.FromDouble(0.0279837694169839);
-        decompositionHighPass[6] = NumOps.FromDouble(0.6308807679295904);
-        decompositionHighPass[7] = NumOps.FromDouble(-0.7148465705525415);
-        decompositionHighPass[8] = NumOps.FromDouble(0.2303778133088552);
-        decompositionHighPass[9] = NumOps.FromDouble(0.0279837694169839);
+        decompositionHighPass[0] = _numOps.FromDouble(0);
+        decompositionHighPass[1] = _numOps.FromDouble(-0.0107148249460572);
+        decompositionHighPass[2] = _numOps.FromDouble(0.0328921202609630);
+        decompositionHighPass[3] = _numOps.FromDouble(0.0308560115845869);
+        decompositionHighPass[4] = _numOps.FromDouble(-0.1870348117190931);
+        decompositionHighPass[5] = _numOps.FromDouble(0.0279837694169839);
+        decompositionHighPass[6] = _numOps.FromDouble(0.6308807679295904);
+        decompositionHighPass[7] = _numOps.FromDouble(-0.7148465705525415);
+        decompositionHighPass[8] = _numOps.FromDouble(0.2303778133088552);
+        decompositionHighPass[9] = _numOps.FromDouble(0.0279837694169839);
 
         // Reconstruction low-pass filter
-        reconstructionLowPass[0] = NumOps.FromDouble(0);
-        reconstructionLowPass[1] = NumOps.FromDouble(0.0279837694169839);
-        reconstructionLowPass[2] = NumOps.FromDouble(0.2303778133088552);
-        reconstructionLowPass[3] = NumOps.FromDouble(0.7148465705525415);
-        reconstructionLowPass[4] = NumOps.FromDouble(0.6308807679295904);
-        reconstructionLowPass[5] = NumOps.FromDouble(0.0279837694169839);
-        reconstructionLowPass[6] = NumOps.FromDouble(-0.1870348117190931);
-        reconstructionLowPass[7] = NumOps.FromDouble(0.0308560115845869);
-        reconstructionLowPass[8] = NumOps.FromDouble(0.0328921202609630);
-        reconstructionLowPass[9] = NumOps.FromDouble(-0.0107148249460572);
+        reconstructionLowPass[0] = _numOps.FromDouble(0);
+        reconstructionLowPass[1] = _numOps.FromDouble(0.0279837694169839);
+        reconstructionLowPass[2] = _numOps.FromDouble(0.2303778133088552);
+        reconstructionLowPass[3] = _numOps.FromDouble(0.7148465705525415);
+        reconstructionLowPass[4] = _numOps.FromDouble(0.6308807679295904);
+        reconstructionLowPass[5] = _numOps.FromDouble(0.0279837694169839);
+        reconstructionLowPass[6] = _numOps.FromDouble(-0.1870348117190931);
+        reconstructionLowPass[7] = _numOps.FromDouble(0.0308560115845869);
+        reconstructionLowPass[8] = _numOps.FromDouble(0.0328921202609630);
+        reconstructionLowPass[9] = _numOps.FromDouble(-0.0107148249460572);
 
         // Reconstruction high-pass filter
-        reconstructionHighPass[0] = NumOps.FromDouble(0);
-        reconstructionHighPass[1] = NumOps.FromDouble(-0.0018118519793764);
-        reconstructionHighPass[2] = NumOps.FromDouble(0.0047314665272548);
-        reconstructionHighPass[3] = NumOps.FromDouble(0.0087901063101452);
-        reconstructionHighPass[4] = NumOps.FromDouble(-0.0297451247861220);
-        reconstructionHighPass[5] = NumOps.FromDouble(-0.0736365678679802);
-        reconstructionHighPass[6] = NumOps.FromDouble(0.1485354836691763);
-        reconstructionHighPass[7] = NumOps.FromDouble(0.4675630700319812);
-        reconstructionHighPass[8] = NumOps.FromDouble(-0.9667475524034829);
-        reconstructionHighPass[9] = NumOps.FromDouble(0.4675630700319812);
-        reconstructionHighPass[10] = NumOps.FromDouble(0.1485354836691763);
-        reconstructionHighPass[11] = NumOps.FromDouble(-0.0736365678679802);
-        reconstructionHighPass[12] = NumOps.FromDouble(-0.0297451247861220);
-        reconstructionHighPass[13] = NumOps.FromDouble(0.0087901063101452);
-        reconstructionHighPass[14] = NumOps.FromDouble(0.0047314665272548);
-        reconstructionHighPass[15] = NumOps.FromDouble(-0.0018118519793764);
-        reconstructionHighPass[16] = NumOps.FromDouble(-0.0003179695108439);
-        reconstructionHighPass[17] = NumOps.FromDouble(0.0001490583487665);
+        reconstructionHighPass[0] = _numOps.FromDouble(0);
+        reconstructionHighPass[1] = _numOps.FromDouble(-0.0018118519793764);
+        reconstructionHighPass[2] = _numOps.FromDouble(0.0047314665272548);
+        reconstructionHighPass[3] = _numOps.FromDouble(0.0087901063101452);
+        reconstructionHighPass[4] = _numOps.FromDouble(-0.0297451247861220);
+        reconstructionHighPass[5] = _numOps.FromDouble(-0.0736365678679802);
+        reconstructionHighPass[6] = _numOps.FromDouble(0.1485354836691763);
+        reconstructionHighPass[7] = _numOps.FromDouble(0.4675630700319812);
+        reconstructionHighPass[8] = _numOps.FromDouble(-0.9667475524034829);
+        reconstructionHighPass[9] = _numOps.FromDouble(0.4675630700319812);
+        reconstructionHighPass[10] = _numOps.FromDouble(0.1485354836691763);
+        reconstructionHighPass[11] = _numOps.FromDouble(-0.0736365678679802);
+        reconstructionHighPass[12] = _numOps.FromDouble(-0.0297451247861220);
+        reconstructionHighPass[13] = _numOps.FromDouble(0.0087901063101452);
+        reconstructionHighPass[14] = _numOps.FromDouble(0.0047314665272548);
+        reconstructionHighPass[15] = _numOps.FromDouble(-0.0018118519793764);
+        reconstructionHighPass[16] = _numOps.FromDouble(-0.0003179695108439);
+        reconstructionHighPass[17] = _numOps.FromDouble(0.0001490583487665);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
     }

@@ -10,7 +10,7 @@ namespace AiDotNet.LossFunctions;
 /// It combines quadratic behavior near zero with linear behavior for large negative values.
 /// 
 /// The formula is:
-/// - For z = -1: max(0, 1 - z)Â²
+/// - For z = -1: max(0, 1 - z)²
 /// - For z &lt; -1: -4 * z
 /// 
 /// Where z = y * f(x), with y being the true label and f(x) the prediction.
@@ -47,7 +47,7 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
             
             if (NumOps.GreaterThanOrEquals(z, NumOps.FromDouble(-1)))
             {
-                // For z = -1: max(0, 1 - z)Â²
+                // For z = -1: max(0, 1 - z)²
                 T margin = NumOps.Subtract(NumOps.One, z);
                 T hingeLoss = MathHelper.Max(NumOps.Zero, margin);
                 loss = NumOps.Add(loss, NumOps.Power(hingeLoss, NumOps.FromDouble(2)));

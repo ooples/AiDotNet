@@ -258,23 +258,23 @@ public class AdaptiveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     }
 
     /// <summary>
-    /// Assesses the performance of the model based on RÂ² values.
+    /// Assesses the performance of the model based on R² values.
     /// </summary>
     /// <param name="evaluationData">Data containing model predictions and actual values.</param>
     /// <returns>The assessed model performance (Good, Moderate, or Poor).</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This private method evaluates how well your model is performing by looking 
-    /// at its RÂ² (R-squared) values. RÂ² measures how well your model explains the variation in the data, 
+    /// at its R² (R-squared) values. R² measures how well your model explains the variation in the data, 
     /// with values closer to 1 indicating better performance.
     /// </para>
     /// <para>
-    /// The method calculates the average RÂ² across training, validation, and test sets, then 
+    /// The method calculates the average R² across training, validation, and test sets, then 
     /// compares it to thresholds to categorize the performance as:
     /// <list type="bullet">
-    /// <item><description>Good: High RÂ², model explains most of the variation in the data</description></item>
-    /// <item><description>Moderate: Medium RÂ², model explains some of the variation</description></item>
-    /// <item><description>Poor: Low RÂ², model explains little of the variation</description></item>
+    /// <item><description>Good: High R², model explains most of the variation in the data</description></item>
+    /// <item><description>Moderate: Medium R², model explains some of the variation</description></item>
+    /// <item><description>Poor: Low R², model explains little of the variation</description></item>
     /// </list>
     /// </para>
     /// </remarks>

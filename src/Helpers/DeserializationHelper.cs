@@ -48,132 +48,54 @@ public static class DeserializationHelper
     /// </remarks>
     public static ILayer<T> CreateLayerFromType<T>(string layerType, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams = null)
     {
-        if (!LayerTypes.TryGetValue(layerType, out Type? openGenericType))
+        if (!LayerTypes.TryGetValue(layerType, out Type? type))
         {
             throw new NotSupportedException($"Layer type {layerType} is not supported for deserialization.");
         }
 
-        if (openGenericType == null)
+        if (type == null)
         {
             throw new InvalidOperationException($"Type for layer {layerType} was registered as null.");
         }
 
-        // Validate input/output shapes
-        if (inputShape is null || inputShape.Length == 0)
+        // Prepare constructor parameters
+        var parameters = new List<object> { inputShape };
+        
+        if (type == typeof(DenseLayer<T>))
         {
-            throw new ArgumentException("Input shape must have at least one dimension.", nameof(inputShape));
+            parameters.Add(outputShape[0]);
         }
-        if (outputShape is null || outputShape.Length == 0)
+        else if (type == typeof(ConvolutionalLayer<T>))
         {
-            throw new ArgumentException("Output shape must have at least one dimension.", nameof(outputShape));
+            int filterSize = additionalParams?.TryGetValue("FilterSize", out var fs) == true ? (int)fs : 3;
+            int filterCount = outputShape[0];
+            parameters.Add(filterSize);
+            parameters.Add(filterCount);
         }
-
-        // Close the generic type with the actual type parameter T
-        Type type = openGenericType.IsGenericTypeDefinition
-            ? openGenericType.MakeGenericType(typeof(T))
-            : openGenericType;
-
-        // Get the generic type definition for comparison (handles both open and closed types)
-        // All layer types should be generic; if not, throw a descriptive error
-        if (!openGenericType.IsGenericType)
+        else if (type == typeof(PoolingLayer<T>))
         {
-            throw new InvalidOperationException($"Layer type {layerType} is not a generic type. All ILayer<T> implementations must be generic.");
-        }
-        Type genericDef = openGenericType.IsGenericTypeDefinition
-            ? openGenericType
-            : openGenericType.GetGenericTypeDefinition();
-
-        // Prepare constructor and parameters based on layer type
-        object? instance;
-
-        if (genericDef == typeof(DenseLayer<>))
-        {
-            // DenseLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
-            // Use specific constructor to avoid ambiguity with vector activation constructor
-            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor([typeof(int), typeof(int), activationFuncType]);
-            if (ctor is null)
-            {
-                throw new InvalidOperationException($"Cannot find DenseLayer constructor with (int, int, IActivationFunction<T>).");
-            }
-            instance = ctor.Invoke([inputShape[0], outputShape[0], null]);
-        }
-        else if (genericDef == typeof(ConvolutionalLayer<>))
-        {
-            // ConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth, int stride, int padding, IActivationFunction<T>?)
-            int kernelSize = additionalParams?.TryGetValue("FilterSize", out var fs) == true ? (int)fs : 3;
-            int stride = additionalParams?.TryGetValue("Stride", out var s) == true ? (int)s : 1;
-            int padding = additionalParams?.TryGetValue("Padding", out var p) == true ? (int)p : 0;
-            // inputShape format: [height, width, depth]
-            int inputDepth = inputShape.Length > 2 ? inputShape[2] : inputShape[0];
-            int inputHeight = inputShape.Length > 0 ? inputShape[0] : 1;
-            int inputWidth = inputShape.Length > 1 ? inputShape[1] : 1;
-            int outputDepth = outputShape[0];
-
-            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor([typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType]);
-            if (ctor is null)
-            {
-                throw new InvalidOperationException($"Cannot find ConvolutionalLayer constructor.");
-            }
-            instance = ctor.Invoke([inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, null]);
-        }
-        else if (genericDef == typeof(PoolingLayer<>))
-        {
-            // PoolingLayer(int inputDepth, int inputHeight, int inputWidth, int poolSize, int stride, PoolingType type)
             int poolSize = additionalParams?.TryGetValue("PoolSize", out var ps) == true ? (int)ps : 2;
             int stride = additionalParams?.TryGetValue("Stride", out var s) == true ? (int)s : 2;
-            PoolingType poolingType = additionalParams?.TryGetValue("PoolingType", out var pt) == true
+            PoolingType poolingType = additionalParams?.TryGetValue("PoolingType", out var pt) == true 
                 ? (PoolingType)pt : PoolingType.Max;
-            // inputShape format: [height, width, depth]
-            int inputDepth = inputShape.Length > 2 ? inputShape[2] : inputShape[0];
-            int inputHeight = inputShape.Length > 0 ? inputShape[0] : 1;
-            int inputWidth = inputShape.Length > 1 ? inputShape[1] : 1;
-
-            var ctor = type.GetConstructor([typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(PoolingType)]);
-            if (ctor is null)
-            {
-                throw new InvalidOperationException($"Cannot find PoolingLayer constructor.");
-            }
-            instance = ctor.Invoke([inputDepth, inputHeight, inputWidth, poolSize, stride, poolingType]);
+            parameters.Add(poolSize);
+            parameters.Add(stride);
+            parameters.Add(poolingType);
         }
-        else if (genericDef == typeof(ActivationLayer<>))
+        else if (type == typeof(ActivationLayer<T>))
         {
-            // ActivationLayer(int[] inputShape, IActivationFunction<T> activationFunction)
-            ActivationFunction activationFunctionEnum = additionalParams?.TryGetValue("ActivationFunction", out var af) == true
+            ActivationFunction activationFunction = additionalParams?.TryGetValue("ActivationFunction", out var af) == true 
                 ? (ActivationFunction)af : ActivationFunction.ReLU;
-            // Use ActivationFunctionFactory to create the IActivationFunction from enum
-            var factoryType = typeof(ActivationFunctionFactory<>).MakeGenericType(typeof(T));
-            var createMethod = factoryType.GetMethod("CreateActivationFunction", BindingFlags.Public | BindingFlags.Static);
-            if (createMethod is null)
-            {
-                throw new InvalidOperationException("Cannot find ActivationFunctionFactory.CreateActivationFunction method.");
-            }
-            object? activationFunction = createMethod.Invoke(null, [activationFunctionEnum]);
-            if (activationFunction is null)
-            {
-                throw new InvalidOperationException($"Failed to create activation function for {activationFunctionEnum}.");
-            }
-
-            // Use specific constructor to avoid ambiguity with vector activation constructor
-            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor([typeof(int[]), activationFuncType]);
-            if (ctor is null)
-            {
-                throw new InvalidOperationException($"Cannot find ActivationLayer constructor with (int[], IActivationFunction<T>).");
-            }
-            instance = ctor.Invoke([inputShape, activationFunction]);
+            parameters.Add(activationFunction);
         }
-        else
-        {
-            // Default: pass inputShape as first parameter
-            instance = Activator.CreateInstance(type, [inputShape]);
-        }
+        
+        // Use reflection to create the instance
+        object? instance = Activator.CreateInstance(type, [.. parameters]);
         if (instance == null)
         {
             throw new InvalidOperationException($"Failed to create instance of layer type {layerType}.");
         }
-
+        
         return (ILayer<T>)instance;
     }
 

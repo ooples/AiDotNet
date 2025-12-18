@@ -122,9 +122,9 @@ public class VIFFitDetectorOptions
     /// <value>A double value between 0 and 1, defaulting to 0.7.</value>
     /// <remarks>
     /// <para>
-    /// This property specifies the minimum value of the primary metric (typically RÂ² or adjusted RÂ²) required for 
+    /// This property specifies the minimum value of the primary metric (typically R² or adjusted R²) required for 
     /// the model to be considered a good fit. The primary metric is specified by the PrimaryMetric property. For 
-    /// RÂ² and similar metrics, higher values indicate better fit, with 1.0 representing a perfect fit and 0.0 
+    /// R² and similar metrics, higher values indicate better fit, with 1.0 representing a perfect fit and 0.0 
     /// representing no fit. The default value of 0.7 indicates that the model should explain at least 70% of the 
     /// variance in the dependent variable to be considered a good fit. A higher threshold is more strict, requiring 
     /// better model performance, while a lower threshold is more lenient. The appropriate value depends on the 
@@ -134,11 +134,11 @@ public class VIFFitDetectorOptions
     /// 
     /// The good fit threshold:
     /// - Defines the minimum acceptable value for your primary performance metric
-    /// - For RÂ², it represents how much variance your model explains
+    /// - For R², it represents how much variance your model explains
     /// - Helps you automatically evaluate if your model performs well enough
     /// 
     /// The default value of 0.7 means:
-    /// - For RÂ², the model should explain at least 70% of the variance
+    /// - For R², the model should explain at least 70% of the variance
     /// - This is a moderate threshold suitable for many applications
     /// 
     /// Think of it like this:
@@ -148,7 +148,7 @@ public class VIFFitDetectorOptions
     /// When to adjust this value:
     /// - Increase it in fields where high predictive accuracy is expected
     /// - Decrease it for problems where even modest predictive power is valuable
-    /// - Adjust based on the typical RÂ² values in your specific field
+    /// - Adjust based on the typical R² values in your specific field
     /// 
     /// For example, in physical sciences where relationships are often well-defined,
     /// you might increase this to 0.8 or 0.9, while in social sciences or complex
@@ -164,10 +164,10 @@ public class VIFFitDetectorOptions
     /// <remarks>
     /// <para>
     /// This property specifies which metric is used as the primary criterion for evaluating model fit. The most 
-    /// common metric is RÂ² (coefficient of determination), which measures the proportion of variance in the 
+    /// common metric is R² (coefficient of determination), which measures the proportion of variance in the 
     /// dependent variable that is predictable from the independent variables. Other possible metrics might include 
-    /// adjusted RÂ² (which adjusts for the number of predictors), mean squared error (MSE), or information criteria 
-    /// such as AIC or BIC. The default value of MetricType.R2 specifies RÂ² as the primary metric, which is 
+    /// adjusted R² (which adjusts for the number of predictors), mean squared error (MSE), or information criteria 
+    /// such as AIC or BIC. The default value of MetricType.R2 specifies R² as the primary metric, which is 
     /// appropriate for many applications. The optimal choice depends on the specific goals of the analysis and 
     /// the characteristics of the data.
     /// </para>
@@ -179,12 +179,12 @@ public class VIFFitDetectorOptions
     /// - Works with GoodFitThreshold to determine if your model performs well enough
     /// 
     /// The default value of R2 means:
-    /// - The coefficient of determination (RÂ²) is used as the primary metric
-    /// - RÂ² measures the proportion of variance explained by your model
+    /// - The coefficient of determination (R²) is used as the primary metric
+    /// - R² measures the proportion of variance explained by your model
     /// - Values range from 0 (no explanation) to 1 (perfect explanation)
     /// 
     /// Common alternatives include:
-    /// - AdjustedR2: Similar to RÂ² but penalizes adding unnecessary predictors
+    /// - AdjustedR2: Similar to R² but penalizes adding unnecessary predictors
     /// - MSE: Mean Squared Error, measures the average squared difference between predictions and actual values
     /// - AIC/BIC: Information criteria that balance fit and complexity
     /// 

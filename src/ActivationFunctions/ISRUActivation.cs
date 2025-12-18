@@ -1,5 +1,3 @@
-using AiDotNet.Autodiff;
-
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -73,10 +71,10 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
     /// <para>
     /// <b>For Beginners:</b> This method transforms an input value using the formula:
     /// 
-    /// f(x) = x / sqrt(1 + aÂ·xÂ²)
+    /// f(x) = x / sqrt(1 + a·x²)
     /// 
     /// This creates a smooth curve that:
-    /// - For small inputs, behaves almost like the identity function (output Ëœ input)
+    /// - For small inputs, behaves almost like the identity function (output ˜ input)
     /// - For large positive inputs, approaches but never exceeds +1
     /// - For large negative inputs, approaches but never exceeds -1
     /// 
@@ -109,7 +107,7 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
     /// 
     /// For the ISRU function, the derivative is calculated using:
     /// 
-    /// f'(x) = (1 + aÂ·xÂ²)^(-3/2)
+    /// f'(x) = (1 + a·x²)^(-3/2)
     /// 
     /// Key properties of this derivative:
     /// - It's always positive (meaning the function always increases as input increases)
@@ -129,39 +127,5 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
         T exponent = NumOps.FromDouble(-1.5);
 
         return NumOps.Power(baseValue, exponent);
-    }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.ISRU provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// ISRU supports JIT compilation with full gradient computation.
-    /// The backward pass correctly computes gradients: (1 + alpha * xÂ²)^(-3/2).
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with ISRU activation applied.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps to TensorOperations&lt;T&gt;.ISRU(input) which handles both
-    /// forward and backward passes for JIT compilation.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        double alpha = Convert.ToDouble(_alpha);
-        return TensorOperations<T>.ISRU(input, alpha);
     }
 }

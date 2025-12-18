@@ -1,6 +1,5 @@
 global using AiDotNet.Factories;
 using Newtonsoft.Json;
-using AiDotNet.Autodiff;
 
 namespace AiDotNet.Regression;
 
@@ -39,24 +38,6 @@ public abstract class RegressionBase<T> : IRegression<T>
     protected INumericOperations<T> NumOps { get; private set; }
 
     /// <summary>
-    /// Gets the global execution engine for vector operations.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This property provides access to the execution engine (CPU or GPU) for performing
-    /// vectorized operations. The engine is determined by the global AiDotNetEngine configuration
-    /// and allows automatic fallback from GPU to CPU when GPU is not available.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// This gives access to either CPU or GPU processing for faster computations.
-    /// The system automatically chooses the best available option and falls back to CPU
-    /// if GPU acceleration is not available.
-    /// </para>
-    /// </remarks>
-    protected IEngine Engine => AiDotNetEngine.Current;
-
-    /// <summary>
     /// Gets the regression options.
     /// </summary>
     /// <value>
@@ -71,14 +52,6 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// An object that implements regularization for the regression model.
     /// </value>
     protected IRegularization<T, Matrix<T>, Vector<T>> Regularization { get; private set; }
-
-    /// <summary>
-    /// Gets the default loss function for this regression model.
-    /// </summary>
-    /// <value>
-    /// The loss function used for gradient computation.
-    /// </value>
-    private readonly ILossFunction<T> _defaultLossFunction;
 
     /// <summary>
     /// Gets or sets the coefficients (weights) of the regression model.
@@ -125,7 +98,6 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// </summary>
     /// <param name="options">Configuration options for the regression model. If null, default options will be used.</param>
     /// <param name="regularization">Regularization method to prevent overfitting. If null, no regularization will be applied.</param>
-    /// <param name="lossFunction">Loss function for gradient computation. If null, defaults to Mean Squared Error.</param>
     /// <remarks>
     /// <para>
     /// The constructor initializes the model with either the provided options or default settings.
@@ -134,18 +106,16 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// <b>For Beginners:</b>
     /// This constructor sets up the regression model with your specified settings or uses
     /// default settings if none are provided. Regularization is an optional technique to prevent the model
-    /// from becoming too complex and overfitting to the training data. The loss function determines how
-    /// prediction errors are measured during training.
+    /// from becoming too complex and overfitting to the training data.
     /// </para>
     /// </remarks>
-    protected RegressionBase(RegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null, ILossFunction<T>? lossFunction = null)
+    protected RegressionBase(RegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
     {
         Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
         NumOps = MathHelper.GetNumericOperations<T>();
         Options = options ?? new RegressionOptions<T>();
         Coefficients = new Vector<T>(0);
         Intercept = NumOps.Zero;
-        _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
     /// <summary>
@@ -765,130 +735,6 @@ public abstract class RegressionBase<T> : IRegression<T>
         get { return ExpectedParameterCount; }
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// For regression models, the default loss function is Mean Squared Error (MSE), which measures
-    /// the average squared difference between predicted and actual values. This can be customized
-    /// by passing a different loss function to the constructor.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property specifies how the model measures prediction errors.
-    ///
-    /// Mean Squared Error (MSE) is the standard loss function for regression because it:
-    /// - Penalizes large errors more than small errors (due to squaring)
-    /// - Provides smooth gradients for optimization
-    /// - Has a clear mathematical interpretation (average squared distance from truth)
-    ///
-    /// You can customize this by passing your own loss function when creating the model.
-    /// The loss function is used during gradient computation to determine how to adjust parameters
-    /// to improve predictions.
-    /// </para>
-    /// </remarks>
-    public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// This method computes gradients for regression models using numerical differentiation.
-    /// For linear regression models, the gradient of the loss with respect to coefficients is:
-    /// ∂L/∂w = (1/n) * X^T * (predictions - targets)
-    /// where X is the input matrix, predictions are model outputs, and targets are the desired outputs.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how to adjust the model's parameters to reduce errors.
-    ///
-    /// Gradients tell us:
-    /// - Which direction to change each parameter (positive or negative)
-    /// - How much to change each parameter (magnitude)
-    ///
-    /// For regression, we compute gradients by:
-    /// 1. Making a prediction with current parameters
-    /// 2. Computing the error using the loss function
-    /// 3. Calculating how much each parameter contributed to the error
-    ///
-    /// These gradients are then used by ApplyGradients() to update the parameters and improve predictions.
-    /// </para>
-    /// </remarks>
-    public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // Note: Linear regression uses closed-form least-squares solution (MSE-based).
-        // The lossFunction parameter is ignored because the gradient computation is specific
-        // to the MSE objective function: ∇L = (1/n) * X^T * (predictions - target)
-        // For custom loss functions, use NonLinearRegressionBase instead.
-
-        // Make predictions
-        var predictions = Predict(input);
-
-        // Compute prediction errors (MSE gradient component)
-        var errors = predictions.Subtract(target);
-
-        // Compute gradients using MSE formula: (1/n) * X^T * errors
-        var n = NumOps.FromDouble(input.Rows);
-        var gradCoefficients = input.Transpose().Multiply(errors).Divide(n);
-
-        // Build full gradient vector (coefficients + intercept)
-        var gradients = new Vector<T>(ExpectedParameterCount);
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            gradients[i] = gradCoefficients[i];
-        }
-
-        // Gradient for intercept is mean of errors
-        if (Options.UseIntercept)
-        {
-            T interceptGrad = NumOps.Zero;
-            for (int i = 0; i < errors.Length; i++)
-            {
-                interceptGrad = NumOps.Add(interceptGrad, errors[i]);
-            }
-            gradients[Coefficients.Length] = NumOps.Divide(interceptGrad, n);
-        }
-
-        return gradients;
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// This method updates the model's parameters (coefficients and intercept) using the computed gradients.
-    /// The update rule is: parameter_new = parameter_old - learningRate * gradient
-    /// </para>
-    /// <para><b>For Beginners:</b> This method adjusts the model's parameters to improve predictions.
-    ///
-    /// Think of it like adjusting a recipe:
-    /// - The gradients tell you which ingredients to increase or decrease
-    /// - The learning rate controls how big the adjustments are
-    /// - Small learning rates = slow, careful adjustments
-    /// - Large learning rates = fast, aggressive adjustments (but risk overshooting)
-    ///
-    /// The method:
-    /// 1. Takes the gradients (directions to improve)
-    /// 2. Scales them by the learning rate (controls step size)
-    /// 3. Subtracts them from current parameters (gradient descent moves opposite to gradient)
-    ///
-    /// After calling this method, the model should make better predictions (lower loss).
-    /// </para>
-    /// </remarks>
-    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        if (gradients.Length != ExpectedParameterCount)
-        {
-            throw new ArgumentException($"Expected {ExpectedParameterCount} gradients, but got {gradients.Length}", nameof(gradients));
-        }
-
-        // Get current parameters
-        var currentParams = GetParameters();
-
-        // Apply gradient descent: params = params - learningRate * gradients
-        var newParams = new Vector<T>(currentParams.Length);
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            newParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
-
-        // Use SetParameters to update all model state
-        SetParameters(newParams);
-    }
-
     /// <summary>
     /// Saves the regression model to a file.
     /// </summary>
@@ -944,129 +790,4 @@ public abstract class RegressionBase<T> : IRegression<T>
         byte[] serializedData = File.ReadAllBytes(filePath);
         Deserialize(serializedData);
     }
-
-    /// <summary>
-    /// Saves the model's current state to a stream.
-    /// </summary>
-    /// <param name="stream">The stream to write the model state to.</param>
-    public virtual void SaveState(Stream stream)
-    {
-        byte[] serializedData = Serialize();
-        stream.Write(serializedData, 0, serializedData.Length);
-    }
-
-    /// <summary>
-    /// Loads the model's state from a stream.
-    /// </summary>
-    /// <param name="stream">The stream to read the model state from.</param>
-    public virtual void LoadState(Stream stream)
-    {
-        using var memoryStream = new MemoryStream();
-        stream.CopyTo(memoryStream);
-        byte[] serializedData = memoryStream.ToArray();
-        Deserialize(serializedData);
-    }
-
-    #region IJitCompilable Implementation
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// Regression models support JIT compilation for accelerated inference.
-    /// The computation graph represents the linear regression formula:
-    /// output = input @ coefficients + intercept (if HasIntercept)
-    /// </para>
-    /// <para><b>For Beginners:</b> JIT (Just-In-Time) compilation optimizes the model for faster predictions.
-    ///
-    /// Instead of performing matrix operations step-by-step at runtime, JIT compilation:
-    /// - Analyzes the model's structure ahead of time
-    /// - Generates optimized native code
-    /// - Results in 5-10x faster predictions
-    ///
-    /// This is especially beneficial for:
-    /// - Real-time prediction systems
-    /// - High-throughput applications
-    /// - Batch processing of many predictions
-    /// </para>
-    /// </remarks>
-    public virtual bool SupportsJitCompilation => true;
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// Exports the regression model as a computation graph for JIT compilation.
-    /// The graph represents: output = input @ coefficients + intercept
-    /// </para>
-    /// <para><b>For Beginners:</b> This method converts the regression model into a computation graph.
-    ///
-    /// A computation graph is like a recipe that describes:
-    /// 1. Take input features (a matrix)
-    /// 2. Multiply by learned coefficients
-    /// 3. Add intercept (if the model uses one)
-    /// 4. Return predictions
-    ///
-    /// The JIT compiler uses this graph to:
-    /// - Optimize the operations
-    /// - Combine steps where possible
-    /// - Generate fast native code
-    ///
-    /// For linear regression: y = X * w + b
-    /// - X: input features
-    /// - w: coefficients (weights)
-    /// - b: intercept (bias)
-    /// </para>
-    /// </remarks>
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes));
-        }
-
-        // Validation: Ensure model is trained
-        if (Coefficients == null || Coefficients.Length == 0)
-        {
-            throw new InvalidOperationException("Cannot export computation graph: Model has not been trained yet.");
-        }
-
-        // Create input node (placeholder for input features)
-        // Shape: [batch_size, feature_count]
-        var inputShape = new int[] { 1, Coefficients.Length };
-        var inputTensor = new Tensor<T>(inputShape);
-        var inputNode = new ComputationNode<T>(inputTensor);
-        inputNodes.Add(inputNode);
-
-        // Convert coefficients Vector<T> to Tensor<T>
-        // Shape: [feature_count, 1] for matrix multiplication
-        var coeffShape = new int[] { Coefficients.Length, 1 };
-        var coeffData = new T[Coefficients.Length];
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            coeffData[i] = Coefficients[i];
-        }
-        var coeffTensor = new Tensor<T>(coeffShape, new Vector<T>(coeffData));
-        var coeffNode = new ComputationNode<T>(coeffTensor);
-
-        // MatMul: input @ coefficients
-        // Result shape: [batch_size, 1]
-        var outputNode = TensorOperations<T>.MatrixMultiply(inputNode, coeffNode);
-
-        // Add intercept if used
-        if (HasIntercept)
-        {
-            // Convert scalar intercept to Tensor<T>
-            // Shape: [1, 1] (scalar broadcasted)
-            var interceptShape = new int[] { 1, 1 };
-            var interceptData = new T[] { Intercept };
-            var interceptTensor = new Tensor<T>(interceptShape, new Vector<T>(interceptData));
-            var interceptNode = new ComputationNode<T>(interceptTensor);
-
-            // Add: (input @ coefficients) + intercept
-            outputNode = TensorOperations<T>.Add(outputNode, interceptNode);
-        }
-
-        return outputNode;
-    }
-
-    #endregion
 }

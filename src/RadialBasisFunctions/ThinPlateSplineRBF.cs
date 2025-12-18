@@ -1,13 +1,13 @@
 namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
-/// Implements a Thin Plate Spline Radial Basis Function (RBF) of the form rÂ² log(r).
+/// Implements a Thin Plate Spline Radial Basis Function (RBF) of the form r² log(r).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides an implementation of a Thin Plate Spline Radial Basis Function, which is defined as
-/// f(r) = rÂ² log(r), where r is the radial distance. This is a special case of the polyharmonic spline with k = 2.
+/// f(r) = r² log(r), where r is the radial distance. This is a special case of the polyharmonic spline with k = 2.
 /// The Thin Plate Spline RBF does not have a width parameter, making it scale-invariant.
 /// </para>
 /// <para>
@@ -50,12 +50,12 @@ public class ThinPlateSplineRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// The constructor initializes the Thin Plate Spline Radial Basis Function. Unlike most other RBFs,
-    /// the Thin Plate Spline RBF does not take any parameters as it has the fixed form f(r) = rÂ² log(r).
+    /// the Thin Plate Spline RBF does not take any parameters as it has the fixed form f(r) = r² log(r).
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new Thin Plate Spline RBF.
     /// 
     /// Unlike other RBFs we've seen, the Thin Plate Spline doesn't need any configuration parameters
-    /// because its behavior is fixed - it always follows the same mathematical formula: rÂ² log(r).
+    /// because its behavior is fixed - it always follows the same mathematical formula: r² log(r).
     /// There's no "width" parameter or other settings to adjust.
     /// 
     /// This means that once you create a Thin Plate Spline RBF, it's ready to use without additional setup.
@@ -70,18 +70,18 @@ public class ThinPlateSplineRBF<T> : IRadialBasisFunction<T>
     /// Computes the value of the Thin Plate Spline Radial Basis Function for a given radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
-    /// <returns>The computed function value rÂ² log(r), or zero if r = 0.</returns>
+    /// <returns>The computed function value r² log(r), or zero if r = 0.</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the value of the Thin Plate Spline RBF for a given radius r.
-    /// The formula used is rÂ² log(r). For r = 0, the function returns 0 to avoid numerical issues with logarithms.
+    /// The formula used is r² log(r). For r = 0, the function returns 0 to avoid numerical issues with logarithms.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes the function's value at a specific distance (r) from the center.
     /// 
     /// The calculation involves:
-    /// 1. Squaring the distance (rÂ² = r * r)
+    /// 1. Squaring the distance (r² = r * r)
     /// 2. Computing the natural logarithm of the distance (log(r))
-    /// 3. Multiplying these two values together (rÂ² * log(r))
+    /// 3. Multiplying these two values together (r² * log(r))
     /// 
     /// For the special case when distance is exactly 0, the function returns 0 (because log(0) is undefined).
     /// 
@@ -121,7 +121,7 @@ public class ThinPlateSplineRBF<T> : IRadialBasisFunction<T>
     /// For the Thin Plate Spline RBF:
     /// - At the center (r = 0), the derivative is 0, meaning the function is flat at the origin
     /// - For small values of r (between 0 and about 0.61), the derivative is negative, meaning the function decreases
-    /// - At r Ëœ 0.61 (where 2*log(r)+1 = 0), the derivative is 0 again (a local minimum)
+    /// - At r ˜ 0.61 (where 2*log(r)+1 = 0), the derivative is 0 again (a local minimum)
     /// - For r > 0.61, the derivative is positive and increasing, meaning the function grows faster and faster
     /// 
     /// This pattern creates the distinctive shape of the thin plate spline - a smooth dip around the origin
@@ -164,7 +164,7 @@ public class ThinPlateSplineRBF<T> : IRadialBasisFunction<T>
     /// would change if you adjusted the width parameter.
     /// 
     /// However, the Thin Plate Spline RBF doesn't have a width parameter to adjust - its behavior
-    /// is controlled by the mathematical formula rÂ² log(r) with no additional parameters.
+    /// is controlled by the mathematical formula r² log(r) with no additional parameters.
     /// 
     /// This property makes the function "scale-invariant," which means that if you scale all input
     /// distances by the same factor, the relative shape of the resulting interpolation doesn't change.

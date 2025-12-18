@@ -1,87 +1,55 @@
-using AiDotNet.Data.Structures;
+using AiDotNet.Data.Abstractions;
 
 namespace AiDotNet.Interfaces;
 
 /// <summary>
-/// Interface for data loaders that provide episodic tasks for meta-learning.
+/// Defines the contract for episodic data loaders that sample N-way K-shot meta-learning tasks.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-/// <typeparam name="TInput">The input data type for tasks.</typeparam>
-/// <typeparam name="TOutput">The output data type for tasks.</typeparam>
+/// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
+/// <typeparam name="TOutput">The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
 /// <remarks>
 /// <para>
-/// This interface is for meta-learning scenarios using N-way K-shot learning,
-/// where the loader generates tasks consisting of:
-/// - Support set: K examples per class for N classes (used to adapt the model)
-/// - Query set: Additional examples for evaluation after adaptation
+/// This interface defines the core functionality required for meta-learning data loaders.
+/// Implementations must be able to generate episodic tasks suitable for few-shot learning
+/// algorithms such as MAML, Reptile, and SEAL.
 /// </para>
-/// <para><b>For Beginners:</b> Meta-learning is "learning to learn".
+/// <para><b>For Beginners:</b> This interface describes what any meta-learning data loader must do.
 ///
-/// **Standard ML**: Train on lots of cat/dog images, then classify new cat/dog images.
+/// Meta-learning requires training on many small tasks instead of one large dataset. This interface
+/// ensures that any data loader can provide these tasks in a consistent way, making it easy to:
+/// - Swap between different data loading strategies
+/// - Use dependency injection in your application
+/// - Mock data loaders for testing
+/// - Extend functionality with custom implementations
 ///
-/// **Meta-learning**: Train on many different tasks (cats vs dogs, cars vs planes, etc.),
-/// then when given a *new* task with only a few examples, quickly learn to do it.
-///
-/// **N-way K-shot** means:
-/// - **N-way**: Each task has N different classes to distinguish
-/// - **K-shot**: You get K examples of each class to learn from
-///
-/// **Example: 5-way 1-shot**
-/// - Given 5 new animal types you've never seen
-/// - With only 1 example image of each
-/// - Classify new images into one of these 5 types
-///
-/// The episodic data loader creates these mini-tasks for training.
+/// The key requirement is the ability to generate tasks on demand, where each task contains
+/// a support set (for learning) and a query set (for evaluation).
 /// </para>
 /// </remarks>
-public interface IEpisodicDataLoader<T, TInput, TOutput> :
-    IDataLoader<T>,
-    IBatchIterable<MetaLearningTask<T, TInput, TOutput>>
+public interface IEpisodicDataLoader<T, TInput, TOutput>
 {
     /// <summary>
-    /// Gets the number of classes per task (N in N-way).
+    /// Samples and returns the next N-way K-shot meta-learning task.
     /// </summary>
-    int NWay { get; }
-
-    /// <summary>
-    /// Gets the number of support examples per class (K in K-shot).
-    /// </summary>
-    int KShot { get; }
-
-    /// <summary>
-    /// Gets the number of query examples per class.
-    /// </summary>
-    int QueryShots { get; }
-
-    /// <summary>
-    /// Gets the total number of available classes in the dataset.
-    /// </summary>
-    int AvailableClasses { get; }
-
-    /// <summary>
-    /// Gets the next meta-learning task (support set + query set).
-    /// </summary>
-    /// <returns>A MetaLearningTask with support and query sets.</returns>
+    /// <returns>
+    /// A MetaLearningTask containing support and query sets with the configured N-way K-shot specification.
+    /// </returns>
     /// <remarks>
     /// <para>
-    /// Each call returns a new randomly sampled task with:
-    /// - N randomly selected classes from available classes
-    /// - K support examples per class
-    /// - QueryShots query examples per class
+    /// Each call to this method should produce a new task with randomly sampled classes and examples.
+    /// The task structure must conform to the N-way K-shot configuration specified during initialization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method generates one meta-learning task each time you call it.
+    ///
+    /// Think of it like drawing a random quiz from a question bank:
+    /// - Each quiz (task) tests different topics (classes)
+    /// - Each quiz has some practice questions (support set) and test questions (query set)
+    /// - Every time you call this method, you get a new, different quiz
+    ///
+    /// The meta-learning algorithm will train on many such tasks, learning to quickly
+    /// adapt to new tasks by recognizing patterns across diverse problems.
     /// </para>
     /// </remarks>
     MetaLearningTask<T, TInput, TOutput> GetNextTask();
-
-    /// <summary>
-    /// Gets multiple meta-learning tasks as a batch.
-    /// </summary>
-    /// <param name="numTasks">Number of tasks to sample.</param>
-    /// <returns>A list of MetaLearningTasks.</returns>
-    IReadOnlyList<MetaLearningTask<T, TInput, TOutput>> GetTaskBatch(int numTasks);
-
-    /// <summary>
-    /// Sets the random seed for reproducible task sampling.
-    /// </summary>
-    /// <param name="seed">Random seed value.</param>
-    void SetSeed(int seed);
 }

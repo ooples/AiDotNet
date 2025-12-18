@@ -59,7 +59,7 @@ public enum X11AlgorithmType
     /// grow or shrink proportionally with the overall level of the series.
     /// 
     /// For example, if your ice cream sales are generally $10,000 per month but increase by 50% in summer, 
-    /// that's a multiplicative pattern (summer = regular sales Ã— 1.5).
+    /// that's a multiplicative pattern (summer = regular sales × 1.5).
     /// 
     /// This method:
     /// 

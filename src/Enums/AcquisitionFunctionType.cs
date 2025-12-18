@@ -42,7 +42,7 @@ public enum AcquisitionFunctionType
     /// 2. Adding an "uncertainty bonus" that's larger for less-explored areas (exploration)
     /// 3. Selecting the point with the highest combined score
     /// 
-    /// The formula is essentially: UCB = predicted_value + exploration_weight Ã— uncertainty
+    /// The formula is essentially: UCB = predicted_value + exploration_weight × uncertainty
     /// 
     /// Key characteristics:
     /// - Has a tunable parameter that controls the exploration-exploitation balance

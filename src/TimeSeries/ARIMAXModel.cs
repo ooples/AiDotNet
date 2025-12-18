@@ -158,14 +158,11 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
         {
             T prediction = _intercept;
 
-            // Apply exogenous component - vectorized with Engine.DotProduct
-            var exogRow = new Vector<T>(xNew.Columns);
+            // Apply exogenous component
             for (int i = 0; i < xNew.Columns; i++)
             {
-                exogRow[i] = xNew[t, i];
+                prediction = NumOps.Add(prediction, NumOps.Multiply(xNew[t, i], _exogenousCoefficients[i]));
             }
-            T exogContribution = Engine.DotProduct(exogRow, _exogenousCoefficients);
-            prediction = NumOps.Add(prediction, exogContribution);
 
             // Apply AR component
             for (int p = 0; p < _arimaxOptions.AROrder; p++)
@@ -328,9 +325,14 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
         // Solve the linear system for exogenous coefficients
         _exogenousCoefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _arimaxOptions.DecompositionType);
 
-        // Extract residuals - vectorized with Engine.Subtract
+        // Extract residuals
         Vector<T> fitted = x * _exogenousCoefficients;
-        Vector<T> residuals = (Vector<T>)Engine.Subtract(y, fitted);
+        Vector<T> residuals = new Vector<T>(y.Length);
+
+        for (int i = 0; i < y.Length; i++)
+        {
+            residuals[i] = NumOps.Subtract(y[i], fitted[i]);
+        }
 
         // Replace any invalid values in residuals with zeros
         // This is more efficient than checking each value with try-catch
@@ -346,15 +348,18 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
         // Fit ARMA model to residuals
         FitARMAModel(residuals);
 
-        // Calculate intercept efficiently - vectorized with Engine.Sum
-        T sum = Engine.Sum(y);
+        // Calculate intercept efficiently
+        T sum = NumOps.Zero;
         int validCount = y.Length;
 
-        // Check for invalid values and adjust count
         for (int i = 0; i < y.Length; i++)
         {
             double val = Convert.ToDouble(y[i]);
-            if (double.IsNaN(val) || double.IsInfinity(val))
+            if (!double.IsNaN(val) && !double.IsInfinity(val))
+            {
+                sum = NumOps.Add(sum, y[i]);
+            }
+            else
             {
                 validCount--;
             }

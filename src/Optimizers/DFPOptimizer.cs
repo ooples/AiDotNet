@@ -56,11 +56,9 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// </para>
     /// </remarks>
     /// <param name="model">The model to optimize.</param>
-    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public DFPOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        DFPOptimizerOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        DFPOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
         _options = options ?? new DFPOptimizerOptions<T, TInput, TOutput>();
@@ -150,11 +148,7 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// </remarks>
     private Vector<T> CalculateDirection(Vector<T> gradient)
     {
-        // === Vectorized Direction Calculation using IEngine (Phase B: US-GPU-015) ===
-        // direction = -H^{-1} * gradient
-
-        var Hg = _inverseHessian.Multiply(gradient);
-        return (Vector<T>)Engine.Multiply(Hg, NumOps.Negate(NumOps.One));
+        return _inverseHessian.Multiply(gradient).Transform(NumOps.Negate);
     }
 
     /// <summary>
@@ -170,15 +164,11 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// It uses line search to determine how big of a step to take, then updates the solution accordingly.
     /// </para>
     /// </remarks>
-    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient,
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient, 
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        // === Vectorized Solution Update using IEngine (Phase B: US-GPU-015) ===
-        // new_params = current_params + stepSize * direction
-
         var stepSize = LineSearch(currentSolution, direction, gradient, inputData);
-        var scaledDirection = (Vector<T>)Engine.Multiply(direction, stepSize);
-        var newCoefficients = currentSolution.GetParameters().Add(scaledDirection);
+        var newCoefficients = currentSolution.GetParameters().Add(direction.Multiply(stepSize));
 
         return currentSolution.WithParameters(newCoefficients);
     }
@@ -196,17 +186,14 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// </remarks>
     private void UpdateInverseHessian(IFullModel<T, TInput, TOutput> currentSolution, IFullModel<T, TInput, TOutput> newSolution, Vector<T> gradient)
     {
-        // === Partially Vectorized DFP Hessian Update using IEngine (Phase B: US-GPU-015) ===
-
         if (_previousGradient == null)
         {
             _previousGradient = gradient;
             return;
         }
 
-        // Vectorized parameter and gradient differences
-        var s = (Vector<T>)Engine.Subtract(newSolution.GetParameters(), currentSolution.GetParameters());
-        var y = (Vector<T>)Engine.Subtract(gradient, _previousGradient);
+        var s = newSolution.GetParameters().Subtract(currentSolution.GetParameters());
+        var y = gradient.Subtract(_previousGradient);
 
         var sTy = s.DotProduct(y);
         if (NumOps.LessThanOrEquals(sTy, NumOps.Zero))
@@ -214,7 +201,6 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
             return; // Skip update if sTy is not positive
         }
 
-        // DFP update formula: H = H + (s s^T) / (s^T y) - (H y) (H y)^T / (y^T H y)
         var term1 = Matrix<T>.OuterProduct(s, s).Divide(sTy);
         var Hy = _inverseHessian.Multiply(y);
         var yTHy = y.DotProduct(Hy);

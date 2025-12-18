@@ -97,7 +97,7 @@ public class GaussianProcessFitDetectorOptions
     /// <para><b>For Beginners:</b> This setting determines when your model's predictions are considered
     /// highly confident. With the default value of 0.1, if the uncertainty in predictions is less than
     /// 10% of a reference level, the model is considered to have low uncertainty. Think of it like a
-    /// weather forecast that confidently predicts exactly 78Â°F tomorrow - it's making a very specific
+    /// weather forecast that confidently predicts exactly 78°F tomorrow - it's making a very specific
     /// prediction with little hedging. Low uncertainty is generally good if the predictions are also
     /// accurate, but can be problematic if the model is confidently wrong. If you want your model to be
     /// more cautious about claiming high confidence, you could lower this threshold.</para>
@@ -118,7 +118,7 @@ public class GaussianProcessFitDetectorOptions
     /// <para><b>For Beginners:</b> This setting determines when your model's predictions are considered
     /// highly uncertain. With the default value of 0.5, if the uncertainty in predictions exceeds 50%
     /// of a reference level, the model is considered to have high uncertainty. Think of it like a weather
-    /// forecast that says "temperatures between 65-90Â°F tomorrow" - it's giving a very wide range because
+    /// forecast that says "temperatures between 65-90°F tomorrow" - it's giving a very wide range because
     /// it's not confident in a specific prediction. High uncertainty often occurs in regions where you have
     /// little training data or where the relationship is inherently complex and variable. If you want to be
     /// more sensitive to detecting uncertain predictions, you could lower this threshold.</para>

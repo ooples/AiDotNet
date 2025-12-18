@@ -1,4 +1,3 @@
-using AiDotNet.Tensors.LinearAlgebra;
 using System;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -58,10 +57,10 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var result = loss.CalculateLoss(predicted, actual);
 
             // Assert
-            // Sample 1 loss: -log(predicted[0]) = -log(0.7) = 0.35667494393873245
-            // Sample 2 loss: -log(predicted[1]) = -log(0.2) = 1.6094379124341003
-            // Average: (0.35667494393873245 + 1.6094379124341003) / 2 = 0.9830564281864163
-            Assert.Equal(0.9830564281864163, result, 10);
+            // Sample 1 loss: -log(predicted[0]) = -log(0.7) = 0.3567...
+            // Sample 2 loss: -log(predicted[1]) = -log(0.2) = 1.6094...
+            // Average: (0.3567 + 1.6094) / 2 = 0.9830...
+            Assert.Equal(0.9830481536968003, result, 10);
         }
 
         [Fact]

@@ -1,4 +1,4 @@
-
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.Interfaces;
@@ -85,7 +85,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 public class SelfCorrectingRetriever<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IGenerator<T> _generator;
     private readonly RetrieverBase<T> _baseRetriever;
     private readonly int _maxIterations;
@@ -147,7 +146,7 @@ public class SelfCorrectingRetriever<T>
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
-        if (topK < 1)
+        if (topK <= 0)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
         metadataFilters ??= new Dictionary<string, object>();
@@ -266,11 +265,10 @@ Provide a brief critique.";
         foreach (var pattern in patterns)
         {
             var match = System.Text.RegularExpressions.Regex.Match(
-                critique,
-                pattern,
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase,
-                RegexTimeout);
-
+                critique, 
+                pattern, 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                
             if (match.Success)
             {
                 return match.Groups[1].Value.Trim();

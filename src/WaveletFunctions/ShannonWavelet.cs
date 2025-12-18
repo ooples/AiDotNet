@@ -24,8 +24,30 @@ namespace AiDotNet.WaveletFunctions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class ShannonWavelet<T> : WaveletFunctionBase<T>
+public class ShannonWavelet<T> : IWaveletFunction<T>
 {
+    /// <summary>
+    /// Provides mathematical operations for the generic type T.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field holds an implementation of numeric operations that can work with the generic type T.
+    /// It provides methods for basic arithmetic operations, trigonometric functions, and conversions
+    /// that are used throughout the wavelet calculations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a helper that lets us do math with different number types.
+    /// 
+    /// Because this class can work with different types of numbers (like float, double, or decimal),
+    /// we need a special helper that knows how to:
+    /// - Perform addition, subtraction, multiplication, and division
+    /// - Calculate trigonometric functions like sine and cosine
+    /// - Convert between different number formats
+    /// 
+    /// This allows the wavelet code to work with whatever number type you choose,
+    /// without having to write separate code for each number type.
+    /// </para>
+    /// </remarks>
+    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ShannonWavelet{T}"/> class.
@@ -49,6 +71,7 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public ShannonWavelet()
     {
+        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
@@ -74,14 +97,14 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
     /// This creates a wavelet that's excellent at isolating specific frequency bands.
     /// </para>
     /// </remarks>
-    public override T Calculate(T x)
+    public T Calculate(T x)
     {
-        if (NumOps.Equals(x, NumOps.Zero))
-            return NumOps.One;
-        T sinc = NumOps.Divide(MathHelper.Sin(x), x);
-        T cos = MathHelper.Cos(NumOps.Divide(x, NumOps.FromDouble(2)));
+        if (_numOps.Equals(x, _numOps.Zero))
+            return _numOps.One;
+        T sinc = _numOps.Divide(MathHelper.Sin(x), x);
+        T cos = MathHelper.Cos(_numOps.Divide(x, _numOps.FromDouble(2)));
 
-        return NumOps.Multiply(sinc, cos);
+        return _numOps.Multiply(sinc, cos);
     }
 
     /// <summary>
@@ -109,7 +132,7 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
     /// The Shannon wavelet is unique because it makes this perfect frequency separation possible.
     /// </para>
     /// </remarks>
-    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int n = input.Length;
         var approximation = new Vector<T>((n + 1) / 2);
@@ -130,8 +153,8 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
         // If n is odd, handle the middle frequency
         if (n % 2 != 0)
         {
-            T scaleFactor = NumOps.FromDouble(Math.Sqrt(0.5));
-            Complex<T> complexScaleFactor = new Complex<T>(scaleFactor, NumOps.Zero);
+            T scaleFactor = _numOps.FromDouble(Math.Sqrt(0.5));
+            Complex<T> complexScaleFactor = new Complex<T>(scaleFactor, _numOps.Zero);
             approxSpectrum[halfN] = complexOps.Multiply(spectrum[halfN], complexScaleFactor);
             detailSpectrum[halfN] = complexOps.Multiply(spectrum[halfN], complexScaleFactor);
         }
@@ -164,22 +187,22 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
     /// blurring at the boundary, but the Shannon wavelet achieves a theoretically perfect separation.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetScalingCoefficients()
+    public Vector<T> GetScalingCoefficients()
     {
         int n = 1024;
         var coeffs = new T[n];
-        T twoPi = NumOps.Multiply(NumOps.FromDouble(2), MathHelper.Pi<T>());
+        T twoPi = _numOps.Multiply(_numOps.FromDouble(2), MathHelper.Pi<T>());
         for (int k = -n/2; k < n/2; k++)
         {
-            T x = NumOps.Divide(NumOps.FromDouble(k), NumOps.FromDouble(n));
+            T x = _numOps.Divide(_numOps.FromDouble(k), _numOps.FromDouble(n));
             if (k == 0)
             {
-                coeffs[k + n/2] = NumOps.FromDouble(Math.Sqrt(0.5));
+                coeffs[k + n/2] = _numOps.FromDouble(Math.Sqrt(0.5));
             }
             else
             {
-                T sinc = NumOps.Divide(MathHelper.Sin(NumOps.Multiply(twoPi, x)), NumOps.Multiply(twoPi, x));
-                coeffs[k + n/2] = NumOps.Multiply(NumOps.FromDouble(Math.Sqrt(0.5)), sinc);
+                T sinc = _numOps.Divide(MathHelper.Sin(_numOps.Multiply(twoPi, x)), _numOps.Multiply(twoPi, x));
+                coeffs[k + n/2] = _numOps.Multiply(_numOps.FromDouble(Math.Sqrt(0.5)), sinc);
             }
         }
 
@@ -209,23 +232,23 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
     /// This perfect separation is a unique property of the Shannon wavelet.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetWaveletCoefficients()
+    public Vector<T> GetWaveletCoefficients()
     {
         int n = 1024;
         var coeffs = new T[n];
-        T twoPi = NumOps.Multiply(NumOps.FromDouble(2), MathHelper.Pi<T>());
+        T twoPi = _numOps.Multiply(_numOps.FromDouble(2), MathHelper.Pi<T>());
         for (int k = -n/2; k < n/2; k++)
         {
-            T x = NumOps.Divide(NumOps.FromDouble(k), NumOps.FromDouble(n));
+            T x = _numOps.Divide(_numOps.FromDouble(k), _numOps.FromDouble(n));
             if (k == 0)
             {
-                coeffs[k + n/2] = NumOps.FromDouble(Math.Sqrt(0.5));
+                coeffs[k + n/2] = _numOps.FromDouble(Math.Sqrt(0.5));
             }
             else
             {
-                T sinc = NumOps.Divide(MathHelper.Sin(NumOps.Multiply(twoPi, x)), NumOps.Multiply(twoPi, x));
-                T modulation = MathHelper.Cos(NumOps.Multiply(twoPi, x));
-                coeffs[k + n/2] = NumOps.Multiply(NumOps.FromDouble(Math.Sqrt(0.5)), NumOps.Multiply(sinc, modulation));
+                T sinc = _numOps.Divide(MathHelper.Sin(_numOps.Multiply(twoPi, x)), _numOps.Multiply(twoPi, x));
+                T modulation = MathHelper.Cos(_numOps.Multiply(twoPi, x));
+                coeffs[k + n/2] = _numOps.Multiply(_numOps.FromDouble(Math.Sqrt(0.5)), _numOps.Multiply(sinc, modulation));
             }
         }
 

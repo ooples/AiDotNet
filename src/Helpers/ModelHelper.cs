@@ -11,13 +11,13 @@ namespace AiDotNet.Helpers;
 public static class ModelHelper<T, TInput, TOutput>
 {
     /// <summary>
-    /// Gets the thread-safe random number generator for creating randomized models.
+    /// Random number generator for creating randomized models.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> This is used to generate random values when creating models.
-    /// Uses the centralized RandomHelper for thread safety and consistent randomness.</para>
+    /// Using a single random generator ensures consistent randomness across all methods.</para>
     /// </remarks>
-    private static Random _random => RandomHelper.ThreadSafeRandom;
+    private static readonly Random _random = new();
     
     /// <summary>
     /// Numeric operations provider for type T.
@@ -57,16 +57,6 @@ public static class ModelHelper<T, TInput, TOutput>
 
             return (x, y, predictions);
         }
-        else if (typeof(TInput) == typeof(Vector<T>) && typeof(TOutput) == typeof(Vector<T>))
-        {
-            // Note: The intermediate cast to object is required for generic type conversion in C#.
-            // We can't directly cast Vector<T> to TInput even when we know they're the same type at runtime.
-            var x = (TInput)(object)Vector<T>.Empty();
-            var y = (TOutput)(object)Vector<T>.Empty();
-            var predictions = (TOutput)(object)Vector<T>.Empty();
-
-            return (x, y, predictions);
-        }
         else
         {
             throw new InvalidOperationException("Unsupported types for TInput and TOutput");
@@ -103,7 +93,7 @@ public static class ModelHelper<T, TInput, TOutput>
         else if (typeof(TInput) == typeof(Tensor<T>) && typeof(TOutput) == typeof(Tensor<T>))
         {
             // For neural network models (tensor input and output)
-            return (IFullModel<T, TInput, TOutput>)(object)new NeuralNetwork<T>(
+            return (IFullModel<T, TInput, TOutput>)new NeuralNetworkModel<T>(
                 new NeuralNetworkArchitecture<T>(InputType.ThreeDimensional, NeuralNetworkTaskType.Custom));
         }
         else
@@ -158,7 +148,7 @@ public static class ModelHelper<T, TInput, TOutput>
                 if (index < 0 || index >= tensor.Shape[1])
                 {
                     throw new ArgumentOutOfRangeException(nameof(indices), 
-                        $"Column index {index} is out of range for tensor with shape {string.Join("Ã—", tensor.Shape)}");
+                        $"Column index {index} is out of range for tensor with shape {string.Join("×", tensor.Shape)}");
                 }
             
                 // Create a vector from the column
@@ -367,7 +357,7 @@ public static class ModelHelper<T, TInput, TOutput>
         );
     
         // Create the neural network model
-        var neuralModel = new NeuralNetwork<T>(architecture);
+        var neuralModel = new NeuralNetworkModel<T>(architecture);
 
         return (IFullModel<T, TInput, TOutput>)(object)neuralModel;
     }

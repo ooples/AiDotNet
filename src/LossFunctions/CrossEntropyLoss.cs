@@ -1,5 +1,3 @@
-
-
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -26,10 +24,16 @@ namespace AiDotNet.LossFunctions;
 public class CrossEntropyLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
+    /// Small value to prevent numerical instability with log(0).
+    /// </summary>
+    private readonly T _epsilon;
+    
+    /// <summary>
     /// Initializes a new instance of the CrossEntropyLoss class.
     /// </summary>
     public CrossEntropyLoss()
     {
+        _epsilon = NumOps.FromDouble(1e-15);
     }
     
     /// <summary>
@@ -45,11 +49,11 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
         T sum = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
-            // Clamp predicted values to prevent log(0) using NumericalStabilityHelper
-            T p = NumericalStabilityHelper.ClampProbability(predicted[i], NumericalStabilityHelper.SmallEpsilon);
-
+            // Clamp predicted values to prevent log(0)
+            T p = MathHelper.Clamp(predicted[i], _epsilon, NumOps.Subtract(NumOps.One, _epsilon));
+            
             // -?(actual_i * log(predicted_i))
-            sum = NumOps.Add(sum, NumOps.Multiply(actual[i], NumericalStabilityHelper.SafeLog(p, NumericalStabilityHelper.SmallEpsilon)));
+            sum = NumOps.Add(sum, NumOps.Multiply(actual[i], NumOps.Log(p)));
         }
         
         return NumOps.Negate(NumOps.Divide(sum, NumOps.FromDouble(predicted.Length)));
@@ -68,11 +72,11 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
-            // Clamp predicted values to prevent division by zero using NumericalStabilityHelper
-            T p = NumericalStabilityHelper.ClampProbability(predicted[i], NumericalStabilityHelper.SmallEpsilon);
-
-            // -actual_i / predicted_i with safe division
-            derivative[i] = NumericalStabilityHelper.SafeDiv(NumOps.Negate(actual[i]), p, NumericalStabilityHelper.SmallEpsilon);
+            // Clamp predicted values to prevent division by zero
+            T p = MathHelper.Clamp(predicted[i], _epsilon, NumOps.Subtract(NumOps.One, _epsilon));
+            
+            // -actual_i / predicted_i
+            derivative[i] = NumOps.Divide(NumOps.Negate(actual[i]), p);
         }
         
         return derivative.Divide(NumOps.FromDouble(predicted.Length));

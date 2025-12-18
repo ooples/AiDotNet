@@ -1,5 +1,3 @@
-using AiDotNet.Autodiff;
-
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -348,11 +346,17 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         {
             var (backcast, forecast) = _blocks[blockIdx].Forward(residual);
 
-            // Update residual for next block - vectorized with Engine.Subtract
-            residual = (Vector<T>)Engine.Subtract(residual, backcast);
+            // Update residual for next block
+            for (int i = 0; i < residual.Length; i++)
+            {
+                residual[i] = _numOps.Subtract(residual[i], backcast[i]);
+            }
 
-            // Accumulate forecast - vectorized with Engine.Add
-            aggregatedForecast = (Vector<T>)Engine.Add(aggregatedForecast, forecast);
+            // Accumulate forecast
+            for (int i = 0; i < aggregatedForecast.Length; i++)
+            {
+                aggregatedForecast[i] = _numOps.Add(aggregatedForecast[i], forecast[i]);
+            }
         }
 
         // Return the first forecast step
@@ -389,11 +393,17 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         {
             var (backcast, forecast) = _blocks[blockIdx].Forward(residual);
 
-            // Update residual for next block - vectorized with Engine.Subtract
-            residual = (Vector<T>)Engine.Subtract(residual, backcast);
+            // Update residual for next block
+            for (int i = 0; i < residual.Length; i++)
+            {
+                residual[i] = _numOps.Subtract(residual[i], backcast[i]);
+            }
 
-            // Accumulate forecast - vectorized with Engine.Add
-            aggregatedForecast = (Vector<T>)Engine.Add(aggregatedForecast, forecast);
+            // Accumulate forecast
+            for (int i = 0; i < aggregatedForecast.Length; i++)
+            {
+                aggregatedForecast[i] = _numOps.Add(aggregatedForecast[i], forecast[i]);
+            }
         }
 
         return aggregatedForecast;
@@ -585,114 +595,5 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 
             block.SetParameters(blockParams);
         }
-    }
-
-    /// <summary>
-    /// Gets whether this model supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Returns <c>true</c> when the model has been trained and has initialized blocks.
-    /// N-BEATS architecture can be represented as a computation graph with the doubly-residual
-    /// stacking pattern, enabling JIT compilation for optimized inference.
-    /// </value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> JIT (Just-In-Time) compilation converts the model's calculations
-    /// into optimized native code that runs much faster. N-BEATS can be JIT compiled because
-    /// its forward pass can be expressed as a series of matrix operations with residual connections.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => _blocks.Count > 0;
-
-    /// <summary>
-    /// Exports the N-BEATS model as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">A list to which input nodes will be added.</param>
-    /// <returns>The output computation node representing the forecast.</returns>
-    /// <remarks>
-    /// <para>
-    /// The computation graph represents the N-BEATS forward pass:
-    /// 1. For each block, compute backcast and forecast from the current residual
-    /// 2. Update residual: residual = residual - backcast
-    /// 3. Accumulate forecast: total_forecast = total_forecast + block_forecast
-    /// 4. Return the first element of the aggregated forecast
-    /// </para>
-    /// <para><b>For Beginners:</b> This converts the entire N-BEATS model into a computation graph
-    /// that can be optimized by the JIT compiler. The graph chains all blocks together with
-    /// their residual connections, allowing the JIT compiler to:
-    /// - Fuse operations across blocks
-    /// - Optimize memory usage
-    /// - Generate fast native code
-    ///
-    /// Expected speedup: 3-5x for inference after JIT compilation.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes), "Input nodes list cannot be null.");
-        }
-
-        if (_blocks.Count == 0)
-        {
-            throw new InvalidOperationException("Cannot export computation graph: Model blocks are not initialized.");
-        }
-
-        // Create input node (lookback window)
-        var inputShape = new int[] { _options.LookbackWindow };
-        var inputTensor = new Tensor<T>(inputShape);
-        var inputNode = TensorOperations<T>.Variable(inputTensor, "nbeats_input", requiresGradient: false);
-        inputNodes.Add(inputNode);
-
-        // Initialize residual as input
-        var residual = inputNode;
-
-        // Initialize aggregated forecast with zeros
-        var zeroData = new T[_options.ForecastHorizon];
-        var numOps = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < _options.ForecastHorizon; i++)
-        {
-            zeroData[i] = numOps.Zero;
-        }
-        var zeroTensor = new Tensor<T>(new[] { _options.ForecastHorizon }, new Vector<T>(zeroData));
-        var aggregatedForecast = TensorOperations<T>.Constant(zeroTensor, "initial_forecast");
-
-        // Process each block
-        for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
-        {
-            // Export block computation graph
-            var (backcast, forecast) = _blocks[blockIdx].ExportComputationGraph(residual);
-
-            // Update residual: residual = residual - backcast
-            residual = TensorOperations<T>.Subtract(residual, backcast);
-
-            // Accumulate forecast: aggregatedForecast = aggregatedForecast + forecast
-            aggregatedForecast = TensorOperations<T>.Add(aggregatedForecast, forecast);
-        }
-
-        // Extract first element of forecast (for single-step prediction)
-        // Create a slice tensor to extract the first element
-        var sliceData = new T[1];
-        sliceData[0] = numOps.One;
-        var sliceTensor = new Tensor<T>(new[] { 1, _options.ForecastHorizon }, new Vector<T>(CreateSliceWeights(0, _options.ForecastHorizon, numOps)));
-        var sliceNode = TensorOperations<T>.Constant(sliceTensor, "forecast_slice");
-
-        // output[0] = slice @ aggregatedForecast
-        var outputNode = TensorOperations<T>.MatrixMultiply(sliceNode, aggregatedForecast);
-
-        return outputNode;
-    }
-
-    /// <summary>
-    /// Creates slice weights for extracting a single element from a vector.
-    /// </summary>
-    private T[] CreateSliceWeights(int index, int length, INumericOperations<T> numOps)
-    {
-        var weights = new T[length];
-        for (int i = 0; i < length; i++)
-        {
-            weights[i] = i == index ? numOps.One : numOps.Zero;
-        }
-        return weights;
     }
 }

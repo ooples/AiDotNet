@@ -1,7 +1,3 @@
-
-
-using AiDotNet.Autodiff;
-
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -16,11 +12,11 @@ namespace AiDotNet.ActivationFunctions;
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> Softmax is commonly used in the output layer of neural networks for classification problems.
-/// Think of it as a way to convert raw scores (called "logits") into probabilities. For example, if you're
-/// classifying images into 3 categories (cat, dog, bird), the neural network might output raw scores like
+/// Think of it as a way to convert raw scores (called "logits") into probabilities. For example, if you're 
+/// classifying images into 3 categories (cat, dog, bird), the neural network might output raw scores like 
 /// [2.5, 1.2, 0.8]. Softmax converts these to probabilities like [0.65, 0.22, 0.13], which sum to 1.0 (or 100%).
 /// This makes it easy to interpret the highest value as the model's prediction (in this case, "cat" with 65% confidence).
-///
+/// 
 /// Unlike other activation functions that work on single values, Softmax needs to see all values at once because
 /// it normalizes them relative to each other.
 /// </para>
@@ -34,15 +30,15 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>A vector of probabilities that sum to 1.</returns>
     /// <remarks>
     /// <para>
-    /// The implementation uses TensorPrimitivesHelper for SIMD-optimized Exp and Sum operations (5-10x speedup for float),
-    /// then divides each value by the sum to ensure the output values sum to 1.
+    /// The implementation first computes the exponential of each input value, then divides each by the sum
+    /// of all exponentials to ensure the output values sum to 1.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This method transforms a list of numbers into probabilities by:
-    /// 1. Calculating e^x for each number (which makes all values positive) - SIMD optimized!
-    /// 2. Adding up all these e^x values to get a total - SIMD optimized!
+    /// 1. Calculating e^x for each number (which makes all values positive)
+    /// 2. Adding up all these e^x values to get a total
     /// 3. Dividing each e^x by this total
-    ///
+    /// 
     /// The result is a list of numbers between 0 and 1 that add up to exactly 1 (or 100%).
     /// The largest input value will produce the largest probability, but the exact values
     /// depend on the relative differences between all inputs.
@@ -50,31 +46,10 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
-        // Use TensorPrimitivesHelper for SIMD-optimized Exp (5-10x speedup for float)
-        var expVector = TensorPrimitivesHelper<T>.Exp(input);
+        Vector<T> expValues = input.Transform(NumOps.Exp);
+        T sum = expValues.Sum();
 
-        // Use TensorPrimitivesHelper for SIMD-optimized Sum (8-12x speedup for float)
-        T sum = TensorPrimitivesHelper<T>.Sum(expVector);
-
-        // Create sum vector for vectorized division
-        var sumVector = new Vector<T>(Enumerable.Repeat(sum, expVector.Length).ToArray());
-
-        // Use TensorPrimitivesHelper for SIMD-optimized Divide (5-10x speedup for float)
-        return TensorPrimitivesHelper<T>.Divide(expVector, sumVector);
-    }
-
-    /// <summary>
-    /// Applies the Softmax activation function to each element in a tensor.
-    /// </summary>
-    /// <param name="input">The input tensor to activate.</param>
-    /// <returns>A new tensor with the Softmax function applied to each element.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> A tensor is like a multi-dimensional array or a container for data.
-    /// This method applies the Softmax function to the tensor, normalizing values along the last dimension.
-    /// </remarks>
-    public override Tensor<T> Activate(Tensor<T> input)
-    {
-        return Engine.Softmax(input);
+        return expValues.Transform(x => NumOps.Divide(x, sum));
     }
 
     /// <summary>
@@ -139,58 +114,4 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </para>
     /// </remarks>
     protected override bool SupportsScalarOperations() => false;
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.Softmax provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// Softmax supports JIT compilation with full gradient computation. The backward pass implements
-    /// the Jacobian-vector product: ∂softmax/∂x_i = softmax_i * (∂L/∂y_i - Σ_j(∂L/∂y_j * softmax_j)).
-    /// </para>
-    /// <para>
-    /// Note: Currently implemented for 2D tensors (batch, features) along axis=-1.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with Softmax activation applied.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps to TensorOperations&lt;T&gt;.Softmax(input) which handles both
-    /// forward and backward passes for JIT compilation.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        return TensorOperations<T>.Softmax(input);
-    }
-
-    /// <summary>
-    /// Calculates the backward pass gradient for Softmax.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="outputGradient">The output gradient.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
-    {
-        // For Softmax, we need the output (probabilities) to calculate the gradient efficiently.
-        // If we don't have it cached, we must recompute it.
-        // Ideally, Backward should accept 'output' as an optional argument, but for now we recompute.
-        // NOTE: In ActivationLayer, we could optimize this by passing cached output if available,
-        // but standard Interface only takes input.
-        
-        var output = Activate(input);
-        return Engine.SoftmaxBackward(outputGradient, output);
-    }
 }

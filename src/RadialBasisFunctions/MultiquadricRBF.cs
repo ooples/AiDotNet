@@ -1,13 +1,13 @@
 namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
-/// Implements a Multiquadric Radial Basis Function (RBF) of the form v(rÂ² + eÂ²).
+/// Implements a Multiquadric Radial Basis Function (RBF) of the form v(r² + e²).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides an implementation of a Radial Basis Function (RBF) that uses a multiquadric form
-/// of f(r) = v(rÂ² + eÂ²), where r is the radial distance and e (epsilon) is a shape parameter
+/// of f(r) = v(r² + e²), where r is the radial distance and e (epsilon) is a shape parameter
 /// controlling the width of the function. The multiquadric RBF is infinitely differentiable and
 /// increases with distance, unlike many other RBFs that decrease with distance. It was introduced by
 /// R.L. Hardy and is often used in scattered data interpolation and solving partial differential equations.
@@ -80,20 +80,20 @@ public class MultiquadricRBF<T> : IRadialBasisFunction<T>
     /// Computes the value of the Multiquadric Radial Basis Function for a given radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
-    /// <returns>The computed function value v(rÂ² + eÂ²).</returns>
+    /// <returns>The computed function value v(r² + e²).</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the value of the Multiquadric RBF for a given radius r. The formula used is
-    /// v(rÂ² + eÂ²), which increases with distance. The function reaches its minimum value of e at r = 0
+    /// v(r² + e²), which increases with distance. The function reaches its minimum value of e at r = 0
     /// and increases without bound as r increases.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes the "height" or "value" of the Multiquadric function
     /// at a specific distance (r) from the center.
     /// 
     /// The calculation involves:
-    /// 1. Squaring the distance (rÂ² = r * r)
-    /// 2. Squaring the epsilon parameter (eÂ² = e * e)
-    /// 3. Adding these squared values together (rÂ² + eÂ²)
+    /// 1. Squaring the distance (r² = r * r)
+    /// 2. Squaring the epsilon parameter (e² = e * e)
+    /// 3. Adding these squared values together (r² + e²)
     /// 4. Taking the square root of this sum
     /// 
     /// The result is a single number representing the function's value at the given distance.
@@ -115,7 +115,7 @@ public class MultiquadricRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Multiquadric RBF with respect to the radius r.
-    /// The formula for the derivative is r/v(rÂ² + eÂ²), which is always positive for positive r,
+    /// The formula for the derivative is r/v(r² + e²), which is always positive for positive r,
     /// indicating that the function always increases with distance.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes how fast the function's value changes
@@ -133,21 +133,21 @@ public class MultiquadricRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeDerivative(T r)
     {
-        // Derivative with respect to r: r/v(rÂ² + eÂ²)
+        // Derivative with respect to r: r/v(r² + e²)
         
-        // Calculate rÂ²
+        // Calculate r²
         T rSquared = _numOps.Multiply(r, r);
         
-        // Calculate eÂ²
+        // Calculate e²
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
         
-        // Calculate rÂ² + eÂ²
+        // Calculate r² + e²
         T sum = _numOps.Add(rSquared, epsilonSquared);
         
-        // Calculate v(rÂ² + eÂ²)
+        // Calculate v(r² + e²)
         T sqrtSum = _numOps.Sqrt(sum);
         
-        // Return r/v(rÂ² + eÂ²)
+        // Return r/v(r² + e²)
         return _numOps.Divide(r, sqrtSum);
     }
     
@@ -159,7 +159,7 @@ public class MultiquadricRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Multiquadric RBF with respect to the shape parameter epsilon.
-    /// The formula for this derivative is e/v(rÂ² + eÂ²). The sign of this derivative is always positive for positive e,
+    /// The formula for this derivative is e/v(r² + e²). The sign of this derivative is always positive for positive e,
     /// indicating that increasing epsilon always increases the function value at any radius.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the function's value would change
@@ -176,21 +176,21 @@ public class MultiquadricRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeWidthDerivative(T r)
     {
-        // Derivative with respect to e: e/v(rÂ² + eÂ²)
+        // Derivative with respect to e: e/v(r² + e²)
         
-        // Calculate rÂ²
+        // Calculate r²
         T rSquared = _numOps.Multiply(r, r);
         
-        // Calculate eÂ²
+        // Calculate e²
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
         
-        // Calculate rÂ² + eÂ²
+        // Calculate r² + e²
         T sum = _numOps.Add(rSquared, epsilonSquared);
         
-        // Calculate v(rÂ² + eÂ²)
+        // Calculate v(r² + e²)
         T sqrtSum = _numOps.Sqrt(sum);
         
-        // Return e/v(rÂ² + eÂ²)
+        // Return e/v(r² + e²)
         return _numOps.Divide(_epsilon, sqrtSum);
     }
 }

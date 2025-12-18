@@ -11,7 +11,7 @@ namespace AiDotNet.Enums.AlgorithmTypes;
 /// 
 /// In simple terms, Takagi factorization breaks down a complex symmetric matrix A into:
 /// 
-/// A = U Ã— D Ã— U^T
+/// A = U × D × U^T
 /// 
 /// Where:
 /// - U is a unitary matrix (similar to a rotation in higher dimensions)

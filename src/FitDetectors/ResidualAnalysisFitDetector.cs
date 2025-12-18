@@ -200,48 +200,15 @@ public class ResidualAnalysisFitDetector<T, TInput, TOutput> : FitDetectorBase<T
     /// </remarks>
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        // Helper function to safely calculate confidence, avoiding division by zero
-        T SafeConfidence(T populationStdError, T meanBiasError)
-        {
-            // Avoid division by zero - if mean bias error is close to zero, use R-squared only
-            if (NumOps.LessThanOrEquals(NumOps.Abs(meanBiasError), NumOps.FromDouble(1e-10)))
-            {
-                return NumOps.FromDouble(0.5);  // Neutral confidence when bias is near zero
-            }
-            var ratio = NumOps.Divide(populationStdError, meanBiasError);
-            var conf = NumOps.Subtract(NumOps.One, NumOps.Abs(ratio));
-            // Clamp to [0, 1]
-            if (NumOps.LessThan(conf, NumOps.Zero)) conf = NumOps.Zero;
-            if (NumOps.GreaterThan(conf, NumOps.One)) conf = NumOps.One;
-            return conf;
-        }
-
-        var trainingConfidence = SafeConfidence(evaluationData.TrainingSet.ErrorStats.PopulationStandardError, evaluationData.TrainingSet.ErrorStats.MeanBiasError);
-        var validationConfidence = SafeConfidence(evaluationData.ValidationSet.ErrorStats.PopulationStandardError, evaluationData.ValidationSet.ErrorStats.MeanBiasError);
-        var testConfidence = SafeConfidence(evaluationData.TestSet.ErrorStats.PopulationStandardError, evaluationData.TestSet.ErrorStats.MeanBiasError);
+        var trainingConfidence = NumOps.Subtract(NumOps.One, NumOps.Divide(evaluationData.TrainingSet.ErrorStats.PopulationStandardError, evaluationData.TrainingSet.ErrorStats.MeanBiasError));
+        var validationConfidence = NumOps.Subtract(NumOps.One, NumOps.Divide(evaluationData.ValidationSet.ErrorStats.PopulationStandardError, evaluationData.ValidationSet.ErrorStats.MeanBiasError));
+        var testConfidence = NumOps.Subtract(NumOps.One, NumOps.Divide(evaluationData.TestSet.ErrorStats.PopulationStandardError, evaluationData.TestSet.ErrorStats.MeanBiasError));
 
         var averageConfidence = NumOps.Divide(NumOps.Add(NumOps.Add(trainingConfidence, validationConfidence), testConfidence), NumOps.FromDouble(3));
 
-        // Adjust confidence based on R-squared values (clamp R2 values to [0, 1])
-        var r2Training = evaluationData.TrainingSet.PredictionStats.R2;
-        if (NumOps.LessThan(r2Training, NumOps.Zero)) r2Training = NumOps.Zero;
-        if (NumOps.GreaterThan(r2Training, NumOps.One)) r2Training = NumOps.One;
-
-        var r2Validation = evaluationData.ValidationSet.PredictionStats.R2;
-        if (NumOps.LessThan(r2Validation, NumOps.Zero)) r2Validation = NumOps.Zero;
-        if (NumOps.GreaterThan(r2Validation, NumOps.One)) r2Validation = NumOps.One;
-
-        var r2Test = evaluationData.TestSet.PredictionStats.R2;
-        if (NumOps.LessThan(r2Test, NumOps.Zero)) r2Test = NumOps.Zero;
-        if (NumOps.GreaterThan(r2Test, NumOps.One)) r2Test = NumOps.One;
-        var r2Adjustment = NumOps.Divide(NumOps.Add(NumOps.Add(r2Training, r2Validation), r2Test), NumOps.FromDouble(3));
-
-        var result = NumOps.Multiply(averageConfidence, r2Adjustment);
-
-        // Final clamp to ensure [0, 1]
-        if (NumOps.LessThan(result, NumOps.Zero)) result = NumOps.Zero;
-        if (NumOps.GreaterThan(result, NumOps.One)) result = NumOps.One;
-
-        return result;
+        // Adjust confidence based on R-squared values
+        var r2Adjustment = NumOps.Divide(NumOps.Add(NumOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2), evaluationData.TestSet.PredictionStats.R2), NumOps.FromDouble(3));
+        
+        return NumOps.Multiply(averageConfidence, r2Adjustment);
     }
 }

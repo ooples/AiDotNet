@@ -415,13 +415,6 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         Vector<T> seasonalFactors = new Vector<T>(Options.SeasonalPeriod);
         int seasons = y.Length / Options.SeasonalPeriod;
 
-        if (seasons <= 0)
-        {
-            throw new InvalidOperationException(
-                $"Cannot estimate initial seasonal factors: " +
-                $"time series length ({y.Length}) is shorter than one seasonal period ({Options.SeasonalPeriod}).");
-        }
-
         for (int i = 0; i < Options.SeasonalPeriod; i++)
         {
             T sum = NumOps.Zero;
@@ -433,16 +426,11 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         }
 
         // Normalize seasonal factors
-        T seasonalSum = Engine.Sum(seasonalFactors);
-        // VECTORIZED: Normalize seasonal factors using Engine operations
-        var periodScalar = NumOps.FromDouble(Options.SeasonalPeriod);
-        var periodVec = new Vector<T>(Options.SeasonalPeriod);
-        for (int i = 0; i < Options.SeasonalPeriod; i++) periodVec[i] = periodScalar;
-        seasonalFactors = (Vector<T>)Engine.Multiply(seasonalFactors, periodVec);
-        
-        var sumVec = new Vector<T>(Options.SeasonalPeriod);
-        for (int i = 0; i < Options.SeasonalPeriod; i++) sumVec[i] = seasonalSum;
-        seasonalFactors = (Vector<T>)Engine.Divide(seasonalFactors, sumVec);
+        T seasonalSum = seasonalFactors.Sum();
+        for (int i = 0; i < Options.SeasonalPeriod; i++)
+        {
+            seasonalFactors[i] = NumOps.Divide(NumOps.Multiply(seasonalFactors[i], NumOps.FromDouble(Options.SeasonalPeriod)), seasonalSum);
+        }
 
         return seasonalFactors;
     }

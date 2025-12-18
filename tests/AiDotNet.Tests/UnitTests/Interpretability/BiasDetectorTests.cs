@@ -1,4 +1,3 @@
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Interpretability;
 using AiDotNet.LinearAlgebra;
 using Xunit;
@@ -11,6 +10,28 @@ namespace AiDotNetTests.UnitTests.Interpretability
     /// </summary>
     public class BiasDetectorTests
     {
+        [Fact]
+        public void DetectBias_WithNullPredictions_ThrowsArgumentNullException()
+        {
+            // Arrange
+            var detector = new DisparateImpactBiasDetector<double>();
+            Vector<double> sensitiveFeature = new Vector<double>(new double[] { 0, 1, 0, 1 });
+
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() => detector.DetectBias(null, sensitiveFeature));
+        }
+
+        [Fact]
+        public void DetectBias_WithNullSensitiveFeature_ThrowsArgumentNullException()
+        {
+            // Arrange
+            var detector = new DisparateImpactBiasDetector<double>();
+            Vector<double> predictions = new Vector<double>(new double[] { 1, 0, 1, 0 });
+
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() => detector.DetectBias(predictions, null));
+        }
+
         [Fact]
         public void DetectBias_WithMismatchedLengths_ThrowsArgumentException()
         {

@@ -6,7 +6,7 @@ namespace AiDotNet.WindowFunctions;
 /// <remarks>
 /// <para>
 /// The Welch window is a parabolic window function defined by the equation:
-/// w(n) = 1 - ((n - N/2)/(N/2))Â²
+/// w(n) = 1 - ((n - N/2)/(N/2))²
 /// where n is the sample index and N is (windowSize - 1). The Welch window has a parabolic shape
 /// that reaches 1 at the center and 0 at both ends.
 /// </para>
@@ -57,7 +57,7 @@ public class WelchWindow<T> : IWindowFunction<T>
     /// <remarks>
     /// <para>
     /// This method implements the Welch window function formula:
-    /// w(n) = 1 - ((n - N/2)/(N/2))Â²
+    /// w(n) = 1 - ((n - N/2)/(N/2))²
     /// It calculates the window function value for each point from 0 to windowSize-1.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates the actual window values based on the size you specify.

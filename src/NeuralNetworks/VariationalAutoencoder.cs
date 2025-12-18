@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
-public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
+public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
 {
     /// <summary>
     /// Gets the size of the latent space dimension in the Variational Autoencoder.
@@ -107,33 +107,6 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer { get; set; }
 
     /// <summary>
-    /// Stores the last computed mean vector from the encoder for auxiliary loss computation.
-    /// </summary>
-    private Vector<T>? _lastMean;
-
-    /// <summary>
-    /// Stores the last computed log variance vector from the encoder for auxiliary loss computation.
-    /// </summary>
-    private Vector<T>? _lastLogVariance;
-
-    /// <summary>
-    /// Stores the last computed KL divergence value for diagnostics.
-    /// </summary>
-    private T _lastKLDivergence;
-
-    /// <summary>
-    /// Gets or sets whether to use auxiliary loss (KL divergence) during training.
-    /// For VAEs, this should always be true as KL divergence is required for proper functioning.
-    /// </summary>
-    public bool UseAuxiliaryLoss { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets the weight (beta parameter) for the KL divergence auxiliary loss.
-    /// Default is 1.0. Can be adjusted for beta-VAE variants.
-    /// </summary>
-    public T AuxiliaryLossWeight { get; set; }
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="VariationalAutoencoder{T}"/> class with the 
     /// specified architecture, latent space size, and optional optimizer and loss function.
     /// </summary>
@@ -168,10 +141,6 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
         LatentSize = latentSize;
-
-        // Initialize NumOps-based fields
-        _lastKLDivergence = NumOps.Zero;
-        AuxiliaryLossWeight = NumOps.One;
 
         // Initialize layers first so the model is fully constructed
         InitializeLayers();
@@ -554,8 +523,6 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
 
         // Encode the input
         var (mean, logVariance) = Encode(inputVector);
-        _lastMean = mean;
-        _lastLogVariance = logVariance;
 
         // Sample from the latent space
         var latentSample = Reparameterize(mean, logVariance);
@@ -594,41 +561,28 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        IsTrainingMode = true;
-
         // Flatten the input tensor to a vector
         var inputVector = input.ToVector();
 
         // Forward pass
         var (mean, logVariance) = Encode(inputVector);
-        _lastMean = mean;
-        _lastLogVariance = logVariance;
-
         var latentSample = Reparameterize(mean, logVariance);
         var reconstructed = Decode(latentSample);
 
         // Calculate reconstruction loss
         var reconstructionLoss = LossFunction.CalculateLoss(inputVector, reconstructed);
 
-        // Calculate auxiliary loss (KL divergence) using the interface
-        T auxiliaryLoss = NumOps.Zero;
-        if (UseAuxiliaryLoss)
-        {
-            var klDivergence = ComputeAuxiliaryLoss();
-            auxiliaryLoss = NumOps.Multiply(klDivergence, AuxiliaryLossWeight);
-        }
+        // Calculate KL divergence
+        var klDivergence = CalculateKLDivergence(mean, logVariance);
 
         // Calculate total loss
-        var totalLoss = NumOps.Add(reconstructionLoss, auxiliaryLoss);
-        LastLoss = totalLoss;
+        var totalLoss = NumOps.Add(reconstructionLoss, klDivergence);
 
         // Backpropagation
         var gradient = CalculateGradient(totalLoss);
 
         // Update parameters using the optimizer
         _optimizer.UpdateParameters(Layers);
-
-        IsTrainingMode = false;
     }
 
     /// <summary>
@@ -748,126 +702,6 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         }
 
         return (meanGradient, logVarianceGradient);
-    }
-
-    /// <summary>
-    /// Computes the auxiliary loss for the VAE, which is the KL divergence between the learned
-    /// latent distribution and a standard normal distribution.
-    /// </summary>
-    /// <returns>The KL divergence loss value.</returns>
-    /// <remarks>
-    /// <para>
-    /// The KL divergence is computed as: -0.5 * Σ(1 + log(σ²) - μ² - σ²)
-    /// This regularizes the latent space to follow a standard normal distribution, which is
-    /// essential for VAEs to generate new samples and ensure a smooth, continuous latent space.
-    /// </para>
-    /// <para><b>For Beginners:</b> This computes how different the VAE's compression is from an ideal "standard" compression.
-    ///
-    /// The KL divergence measures:
-    /// - How much the learned latent space differs from a standard normal distribution
-    /// - This difference acts as a penalty to encourage the VAE to organize its latent space properly
-    ///
-    /// Without this loss:
-    /// - The VAE might create "holes" in the latent space where nothing meaningful exists
-    /// - Generated samples might not look realistic
-    /// - The latent space might not be smooth or continuous
-    ///
-    /// The KL divergence ensures the latent space has good properties for generation and interpolation.
-    /// </para>
-    /// </remarks>
-    public T ComputeAuxiliaryLoss()
-    {
-        if (!UseAuxiliaryLoss || _lastMean == null || _lastLogVariance == null)
-        {
-            return NumOps.Zero;
-        }
-
-        _lastKLDivergence = CalculateKLDivergence(_lastMean, _lastLogVariance);
-        return _lastKLDivergence;
-    }
-
-    /// <summary>
-    /// Gets diagnostic information about the auxiliary loss computation.
-    /// </summary>
-    /// <returns>A dictionary containing diagnostic information about KL divergence and latent space statistics.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method provides insights into the VAE's latent space behavior, including:
-    /// - The current KL divergence value
-    /// - The beta weight parameter
-    /// - Statistics about the mean and variance of the latent distribution
-    /// </para>
-    /// <para><b>For Beginners:</b> This gives you information to help understand and debug your VAE.
-    ///
-    /// The diagnostics include:
-    /// - KL Divergence: How much the latent space differs from ideal (lower is more "standard")
-    /// - Beta Weight: How much the KL divergence is weighted in training
-    /// - Latent Mean Norm: How far the average latent values are from zero
-    /// - Latent Std Mean: The average uncertainty in the latent space
-    ///
-    /// These values help you:
-    /// - Understand if training is progressing well
-    /// - Detect problems like "posterior collapse" (when the VAE ignores the latent space)
-    /// - Tune hyperparameters like the beta weight
-    /// </para>
-    /// </remarks>
-    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
-    {
-        var diagnostics = new Dictionary<string, string>
-        {
-            { "KLDivergence", _lastKLDivergence?.ToString() ?? "0" },
-            { "Beta", AuxiliaryLossWeight?.ToString() ?? "1.0" },
-            { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
-        };
-
-        if (_lastMean != null)
-        {
-            // Calculate L2 norm of mean vector
-            T meanNormSquared = NumOps.Zero;
-            for (int i = 0; i < _lastMean.Length; i++)
-            {
-                meanNormSquared = NumOps.Add(meanNormSquared, NumOps.Multiply(_lastMean[i], _lastMean[i]));
-            }
-            var meanNorm = NumOps.Sqrt(meanNormSquared);
-            diagnostics["LatentMeanNorm"] = meanNorm?.ToString() ?? "0";
-        }
-
-        if (_lastLogVariance != null)
-        {
-            // Calculate mean of standard deviations
-            T stdSum = NumOps.Zero;
-            for (int i = 0; i < _lastLogVariance.Length; i++)
-            {
-                var halfLogVar = NumOps.Multiply(NumOps.FromDouble(0.5), _lastLogVariance[i]);
-                stdSum = NumOps.Add(stdSum, NumOps.Exp(halfLogVar));
-            }
-            var stdMean = NumOps.Divide(stdSum, NumOps.FromDouble(_lastLogVariance.Length));
-            diagnostics["LatentStdMean"] = stdMean?.ToString() ?? "0";
-        }
-
-        return diagnostics;
-    }
-
-    /// <summary>
-    /// Gets diagnostic information about this component's state and behavior.
-    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
-    /// </summary>
-    /// <returns>
-    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
-    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
-    /// </returns>
-    public Dictionary<string, string> GetDiagnostics()
-    {
-        var diagnostics = new Dictionary<string, string>();
-
-        // Merge auxiliary loss diagnostics
-        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
-        foreach (var kvp in auxDiagnostics)
-        {
-            diagnostics[kvp.Key] = kvp.Value;
-        }
-
-        return diagnostics;
     }
 
     /// <summary>

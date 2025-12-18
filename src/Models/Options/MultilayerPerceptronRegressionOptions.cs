@@ -74,7 +74,7 @@ public class MultilayerPerceptronOptions<T, TInput, TOutput> : NonLinearRegressi
     /// 3 hidden layers (with 100, 50, and 10 neurons), and 3 outputs.
     /// </para>
     /// </remarks>
-    public List<int> LayerSizes { get; set; } = new List<int> { 1, 10, 1 };  // Default: 1 input, 1 hidden layer with 10 neurons, 1 output
+    public List<int> LayerSizes { get; set; } = [1, 10, 1];  // Default: 1 input, 1 hidden layer with 10 neurons, 1 output
 
     /// <summary>
     /// Gets or sets the maximum number of complete passes through the training dataset.

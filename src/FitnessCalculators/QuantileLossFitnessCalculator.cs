@@ -127,7 +127,7 @@ public class QuantileLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculat
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return new QuantileLoss<T>(_numOps.ToDouble(_quantile)).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
+        return new OrdinalRegressionLoss<T>(Convert.ToInt32(_quantile)).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

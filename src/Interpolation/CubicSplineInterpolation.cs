@@ -103,7 +103,7 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
         // Calculate the distance from the left endpoint of the interval
         T dx = _numOps.Subtract(x, _x[i]);
 
-        // Evaluate the cubic polynomial: a + b*dx + c*dxÂ² + d*dxÂ³
+        // Evaluate the cubic polynomial: a + b*dx + c*dx² + d*dx³
         return _numOps.Add(
             _numOps.Add(
                 _numOps.Add(

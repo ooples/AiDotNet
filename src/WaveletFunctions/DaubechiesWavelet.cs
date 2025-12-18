@@ -38,18 +38,23 @@ namespace AiDotNet.WaveletFunctions;
 /// vanishing moments but wider support.
 /// </para>
 /// </remarks>
-public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
+public class DaubechiesWavelet<T> : IWaveletFunction<T>
 {
+    /// <summary>
+    /// Provides numeric operations for the specific type T.
+    /// </summary>
+    private readonly INumericOperations<T> _numOps;
+    
     /// <summary>
     /// The order of the Daubechies wavelet.
     /// </summary>
     private readonly int _order;
-
+    
     /// <summary>
     /// The scaling function coefficients of the Daubechies wavelet.
     /// </summary>
     private readonly Vector<T> _scalingCoefficients;
-
+    
     /// <summary>
     /// The wavelet function coefficients of the Daubechies wavelet.
     /// </summary>
@@ -90,6 +95,7 @@ public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public DaubechiesWavelet(int order = 4)
     {
+        _numOps = MathHelper.GetNumericOperations<T>();
         _order = order;
         _scalingCoefficients = ComputeScalingCoefficients();
         _waveletCoefficients = ComputeWaveletCoefficients();
@@ -109,7 +115,7 @@ public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// Instead, they're defined implicitly through their scaling coefficients and a
     /// recursive relationship called the two-scale relation:
     /// 
-    /// f(t) = S h_k Â· f(2t-k)
+    /// f(t) = S h_k · f(2t-k)
     /// 
     /// This method approximates the wavelet value using:
     /// 1. The cascade algorithm to compute the scaling function values
@@ -122,19 +128,19 @@ public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// which is useful for visualization and understanding the wavelet's shape.
     /// </para>
     /// </remarks>
-    public override T Calculate(T x)
+    public T Calculate(T x)
     {
         double t = Convert.ToDouble(x);
         if (t < 0 || t > _order - 1)
-            return NumOps.Zero;
+            return _numOps.Zero;
 
-        T result = NumOps.Zero;
+        T result = _numOps.Zero;
         for (int k = 0; k < _scalingCoefficients.Length; k++)
         {
             double shiftedT = t - k;
             if (shiftedT >= 0 && shiftedT < 1)
             {
-                result = NumOps.Add(result, NumOps.Multiply(_scalingCoefficients[k], NumOps.FromDouble(CascadeAlgorithm(shiftedT))));
+                result = _numOps.Add(result, _numOps.Multiply(_scalingCoefficients[k], _numOps.FromDouble(CascadeAlgorithm(shiftedT))));
             }
         }
 
@@ -154,7 +160,7 @@ public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// when no explicit formula exists.
     /// 
     /// The scaling function satisfies a two-scale relation:
-    /// f(t) = S h_k Â· f(2t-k)
+    /// f(t) = S h_k · f(2t-k)
     /// 
     /// This is a recursive definition, which makes exact calculation challenging.
     /// The cascade algorithm solves this by:
@@ -225,7 +231,7 @@ public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// efficient for compression and multi-resolution analysis.
     /// </para>
     /// </remarks>
-    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         if (input.Length % 2 != 0)
             throw new ArgumentException("Input length must be even for Daubechies wavelet decomposition.");
@@ -236,14 +242,14 @@ public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
 
         for (int i = 0; i < halfLength; i++)
         {
-            T approx = NumOps.Zero;
-            T det = NumOps.Zero;
+            T approx = _numOps.Zero;
+            T det = _numOps.Zero;
 
             for (int j = 0; j < _scalingCoefficients.Length; j++)
             {
                 int index = (2 * i + j) % input.Length;
-                approx = NumOps.Add(approx, NumOps.Multiply(_scalingCoefficients[j], input[index]));
-                det = NumOps.Add(det, NumOps.Multiply(_waveletCoefficients[j], input[index]));
+                approx = _numOps.Add(approx, _numOps.Multiply(_scalingCoefficients[j], input[index]));
+                det = _numOps.Add(det, _numOps.Multiply(_waveletCoefficients[j], input[index]));
             }
 
             approximation[i] = approx;
@@ -276,7 +282,7 @@ public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// which has 2 vanishing moments and 4 coefficients.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetScalingCoefficients()
+    public Vector<T> GetScalingCoefficients()
     {
         return _scalingCoefficients;
     }
@@ -294,7 +300,7 @@ public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// For Daubechies wavelets, these coefficients are derived from the scaling coefficients using
     /// the quadrature mirror filter relationship:
     /// 
-    /// g[n] = (-1)^n Â· h[L-1-n]
+    /// g[n] = (-1)^n · h[L-1-n]
     /// 
     /// Where:
     /// - g[n] are the wavelet coefficients
@@ -310,7 +316,7 @@ public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// The alternating signs ((-1)^n) create the oscillating nature that is characteristic of wavelets.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetWaveletCoefficients()
+    public Vector<T> GetWaveletCoefficients()
     {
         return _waveletCoefficients;
     }
@@ -353,7 +359,7 @@ public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
             (1 - Math.Sqrt(3)) / (4 * Math.Sqrt(2))
         ];
 
-        return new Vector<T>([.. d4Coefficients.Select(c => NumOps.FromDouble(c))]);
+        return new Vector<T>([.. d4Coefficients.Select(c => _numOps.FromDouble(c))]);
     }
 
     /// <summary>
@@ -367,7 +373,7 @@ public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// using the quadrature mirror filter relationship.
     /// 
     /// The formula used is:
-    /// g[n] = (-1)^n Â· h[L-1-n]
+    /// g[n] = (-1)^n · h[L-1-n]
     /// 
     /// Where:
     /// - g[n] are the wavelet coefficients
@@ -399,7 +405,7 @@ public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
 
         for (int i = 0; i < L; i++)
         {
-            waveletCoeffs[i] = NumOps.Multiply(NumOps.FromDouble(Math.Pow(-1, i)), coeffs[L - 1 - i]);
+            waveletCoeffs[i] = _numOps.Multiply(_numOps.FromDouble(Math.Pow(-1, i)), coeffs[L - 1 - i]);
         }
 
         return new Vector<T>(waveletCoeffs);

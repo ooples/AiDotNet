@@ -104,15 +104,10 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
         T t2 = _numOps.Multiply(t, t);
         T t3 = _numOps.Multiply(t2, t);
 
-        // Hermite basis functions (correct formulas):
-        // h00(t) = 2t³ - 3t² + 1
-        // h10(t) = t³ - 2t² + t
-        // h01(t) = -2t³ + 3t²
-        // h11(t) = t³ - t²
-        T h00 = _numOps.Add(_numOps.Add(_numOps.Multiply(_numOps.FromDouble(2), t3), _numOps.Multiply(_numOps.FromDouble(-3), t2)), _numOps.One);
-        T h10 = _numOps.Add(_numOps.Add(t3, _numOps.Multiply(_numOps.FromDouble(-2), t2)), t);
+        T h00 = _numOps.Add(_numOps.Multiply(_numOps.FromDouble(2), t3), _numOps.Subtract(_numOps.Multiply(_numOps.FromDouble(-3), t2), _numOps.FromDouble(1)));
+        T h10 = _numOps.Add(t3, _numOps.Subtract(_numOps.Multiply(_numOps.FromDouble(-2), t2), t));
         T h01 = _numOps.Add(_numOps.Multiply(_numOps.FromDouble(-2), t3), _numOps.Multiply(_numOps.FromDouble(3), t2));
-        T h11 = _numOps.Add(t3, _numOps.Multiply(_numOps.FromDouble(-1), t2));
+        T h11 = _numOps.Subtract(t3, t2);
 
         return _numOps.Add(
             _numOps.Add(

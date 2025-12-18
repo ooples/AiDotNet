@@ -1,5 +1,3 @@
-
-
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -45,6 +43,11 @@ public class FocalLoss<T> : LossFunctionBase<T>
     private readonly T _alpha;
     
     /// <summary>
+    /// Small value to prevent numerical instability with log(0).
+    /// </summary>
+    private readonly T _epsilon;
+    
+    /// <summary>
     /// Initializes a new instance of the FocalLoss class.
     /// </summary>
     /// <param name="gamma">The focusing parameter that down-weights easy examples. Default is 2.0.</param>
@@ -53,6 +56,7 @@ public class FocalLoss<T> : LossFunctionBase<T>
     {
         _gamma = NumOps.FromDouble(gamma);
         _alpha = NumOps.FromDouble(alpha);
+        _epsilon = NumOps.FromDouble(1e-15);
     }
     
     /// <summary>
@@ -68,8 +72,8 @@ public class FocalLoss<T> : LossFunctionBase<T>
         T loss = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
-            // Clamp predicted values to prevent log(0) using NumericalStabilityHelper
-            T p = NumericalStabilityHelper.ClampProbability(predicted[i], NumericalStabilityHelper.SmallEpsilon);
+            // Clamp predicted values to prevent log(0)
+            T p = MathHelper.Clamp(predicted[i], _epsilon, NumOps.Subtract(NumOps.One, _epsilon));
             
             // pt is the probability of the target class
             T pt = NumOps.Equals(actual[i], NumOps.One) ? p : NumOps.Subtract(NumOps.One, p);
@@ -80,10 +84,10 @@ public class FocalLoss<T> : LossFunctionBase<T>
             // (1-pt)^gamma is the focusing term
             T focusingTerm = NumOps.Power(NumOps.Subtract(NumOps.One, pt), _gamma);
             
-            // -a(1-pt)^?log(pt) using SafeLog
+            // -a(1-pt)^?log(pt)
             T sampleLoss = NumOps.Multiply(
                 NumOps.Negate(alphaT),
-                NumOps.Multiply(focusingTerm, NumericalStabilityHelper.SafeLog(pt, NumericalStabilityHelper.SmallEpsilon))
+                NumOps.Multiply(focusingTerm, NumOps.Log(pt))
             );
             
             loss = NumOps.Add(loss, sampleLoss);
@@ -105,8 +109,8 @@ public class FocalLoss<T> : LossFunctionBase<T>
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
-            // Clamp predicted values to prevent division by zero using NumericalStabilityHelper
-            T p = NumericalStabilityHelper.ClampProbability(predicted[i], NumericalStabilityHelper.SmallEpsilon);
+            // Clamp predicted values to prevent division by zero
+            T p = MathHelper.Clamp(predicted[i], _epsilon, NumOps.Subtract(NumOps.One, _epsilon));
             
             // pt is the probability of the target class
             T pt = NumOps.Equals(actual[i], NumOps.One) ? p : NumOps.Subtract(NumOps.One, p);

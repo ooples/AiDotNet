@@ -80,15 +80,15 @@ public class KFoldCrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBa
     /// <para>
     /// <b>For Beginners:</b> This method looks at how your model performed on different data sets and determines if there are any problems.
     /// 
-    /// It compares the RÂ² (R-squared) values, which measure how well your model explains the data (higher is better, with 1.0 being perfect):
-    /// - If training RÂ² is much higher than validation RÂ², your model might be overfitting (memorizing instead of learning)
-    /// - If validation RÂ² is very low, your model might be underfitting (too simple to capture patterns)
-    /// - If validation and test RÂ² values differ significantly, your model might have high variance (inconsistent performance)
-    /// - If validation RÂ² is high and close to test RÂ², your model likely has a good fit
+    /// It compares the R² (R-squared) values, which measure how well your model explains the data (higher is better, with 1.0 being perfect):
+    /// - If training R² is much higher than validation R², your model might be overfitting (memorizing instead of learning)
+    /// - If validation R² is very low, your model might be underfitting (too simple to capture patterns)
+    /// - If validation and test R² values differ significantly, your model might have high variance (inconsistent performance)
+    /// - If validation R² is high and close to test R², your model likely has a good fit
     /// - Otherwise, your model might be unstable
     /// 
     /// Terminology explained:
-    /// - RÂ² (R-squared): A statistical measure between 0 and 1 that represents how well your model explains the data
+    /// - R² (R-squared): A statistical measure between 0 and 1 that represents how well your model explains the data
     /// - Training set: Data used to train the model
     /// - Validation set: Data used to tune the model during development
     /// - Test set: Completely new data used to evaluate the final model
@@ -136,8 +136,8 @@ public class KFoldCrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBa
     /// <b>For Beginners:</b> This method calculates how confident we are in our assessment of your model.
     /// 
     /// The confidence is based on how consistent your model performs between validation and test data:
-    /// - If validation and test RÂ² values are very close, confidence will be high (closer to 1)
-    /// - If validation and test RÂ² values differ significantly, confidence will be lower
+    /// - If validation and test R² values are very close, confidence will be high (closer to 1)
+    /// - If validation and test R² values differ significantly, confidence will be lower
     /// 
     /// A higher confidence value means you can trust the fit assessment more.
     /// </para>

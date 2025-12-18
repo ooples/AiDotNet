@@ -10,7 +10,7 @@ namespace AiDotNet.Interfaces;
 /// 
 /// <b>For Beginners:</b> Think of matrix decomposition like breaking down a complex number into factors.
 /// 
-/// For example, the number 12 can be broken down into 3 ร— 4, making it easier to work with.
+/// For example, the number 12 can be broken down into 3 ื 4, making it easier to work with.
 /// Similarly, matrix decomposition breaks down a complex matrix into simpler parts that are
 /// easier to work with mathematically.
 /// 
@@ -65,7 +65,7 @@ public interface IMatrixDecomposition<T>
     /// - Solving for weights in certain neural network calculations
     /// - Transforming data in specific ways
     /// 
-    /// This method is much faster and more accurate than directly calculating A?ยน and then
+    /// This method is much faster and more accurate than directly calculating A?น and then
     /// multiplying by b, which is why decompositions are so valuable.
     /// </remarks>
     /// <param name="b">The right-hand side vector of the equation Ax = b.</param>
@@ -76,19 +76,19 @@ public interface IMatrixDecomposition<T>
     /// Calculates the inverse of the original matrix A.
     /// </summary>
     /// <remarks>
-    /// The inverse of a matrix A is another matrix A?ยน such that A ร— A?ยน = I, where I is the identity matrix.
+    /// The inverse of a matrix A is another matrix A?น such that A ื A?น = I, where I is the identity matrix.
     /// Not all matrices have inverses - only square matrices with non-zero determinants are invertible.
     /// Matrix decompositions provide efficient ways to compute inverses when they exist.
     /// 
     /// <b>For Beginners:</b> The inverse of a matrix is similar to the reciprocal of a number.
     /// 
-    /// Just as 5 ร— (1/5) = 1, a matrix multiplied by its inverse gives the identity matrix
+    /// Just as 5 ื (1/5) = 1, a matrix multiplied by its inverse gives the identity matrix
     /// (which is like the number 1 in matrix form, with 1's on the diagonal and 0's elsewhere).
     /// 
     /// For example, if matrix A represents a transformation (like rotating or scaling),
-    /// then A?ยน represents the opposite transformation that "undoes" the original:
-    /// - If A rotates data clockwise, A?ยน rotates it counterclockwise
-    /// - If A scales data up by 2x, A?ยน scales it down by 1/2
+    /// then A?น represents the opposite transformation that "undoes" the original:
+    /// - If A rotates data clockwise, A?น rotates it counterclockwise
+    /// - If A scales data up by 2x, A?น scales it down by 1/2
     /// 
     /// In machine learning, matrix inverses are used for:
     /// - Solving systems of linear equations

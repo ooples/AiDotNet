@@ -114,8 +114,7 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// </remarks>
     public PowellOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        PowellOptimizerOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        PowellOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
         _options = options ?? new PowellOptimizerOptions<T, TInput, TOutput>();
@@ -349,12 +348,12 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// </remarks>
     private IFullModel<T, TInput, TOutput> MoveInDirection(IFullModel<T, TInput, TOutput> solution, Vector<T> direction, T step)
     {
-        // === Vectorized Move in Direction using IEngine (Phase B: US-GPU-015) ===
-        // newCoefficients = parameters + step * direction
-
         var parameters = solution.GetParameters();
-        var scaledDirection = (Vector<T>)AiDotNetEngine.Current.Multiply(direction, step);
-        var newCoefficients = (Vector<T>)AiDotNetEngine.Current.Add(parameters, scaledDirection);
+        var newCoefficients = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            newCoefficients[i] = NumOps.Add(parameters[i], NumOps.Multiply(direction[i], step));
+        }
 
         return solution.WithParameters(newCoefficients);
     }
@@ -385,16 +384,18 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// </remarks>
     private IFullModel<T, TInput, TOutput> ExtrapolatePoint(IFullModel<T, TInput, TOutput> oldPoint, IFullModel<T, TInput, TOutput> newPoint)
     {
-        // === Vectorized Extrapolation using IEngine (Phase B: US-GPU-015) ===
-        // extrapolated = new + (new - old) = 2*new - old
-
         var parameters = newPoint.GetParameters();
         var oldParameters = oldPoint.GetParameters();
-
-        // Calculate the direction vector: new - old
-        var direction = (Vector<T>)AiDotNetEngine.Current.Subtract(parameters, oldParameters);
-        // Extrapolate: new + direction = new + (new - old)
-        var extrapolatedCoefficients = (Vector<T>)AiDotNetEngine.Current.Add(parameters, direction);
+        var extrapolatedCoefficients = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Calculate the vector from old to new, and double it
+            var direction = NumOps.Subtract(parameters[i], oldParameters[i]);
+            extrapolatedCoefficients[i] = NumOps.Add(
+                parameters[i],
+                direction // Add the direction again to double the movement
+            );
+        }
 
         // Use the newPoint as a template to create a new model with the extrapolated coefficients
         return newPoint.WithParameters(extrapolatedCoefficients);

@@ -65,35 +65,25 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This tensor contains the bias values that are added to each output channel after the filter
+    /// This vector contains the bias values that are added to each output channel after the filter
     /// application. These are shared across spatial locations but different for each output channel.
     /// </para>
     /// <para><b>For Beginners:</b> These are additional learnable values added to each output channel.
-    ///
+    /// 
     /// The biases:
     /// - Are added to each output after applying the filters
     /// - Help the network learn by providing an adjustable baseline
     /// - Are the same for a given channel across all spatial positions
-    ///
+    /// 
     /// They're like a "starting point" that the network can adjust during learning.
     /// </para>
     /// </remarks>
-    private Tensor<T> _biases;
+    private Vector<T> _biases;
 
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.
     /// </summary>
     private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Stores the pre-activation output from the last forward pass for use in the backward pass.
-    /// </summary>
-    private Tensor<T>? _lastPreActivation;
-
-    /// <summary>
-    /// Stores the output tensor from the last forward pass for use in the backward pass.
-    /// </summary>
-    private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Stores the gradients for the weights calculated during the backward pass.
@@ -103,7 +93,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// <summary>
     /// Stores the gradients for the biases calculated during the backward pass.
     /// </summary>
-    private Tensor<T>? _biasGradients;
+    private Vector<T>? _biasGradients;
 
     /// <summary>
     /// The height of the input tensor.
@@ -335,7 +325,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
 
         // Initialize weights and biases
         _weights = new Tensor<T>([_outputHeight, _outputWidth, _outputChannels, _kernelSize, _kernelSize, _inputChannels]);
-        _biases = new Tensor<T>([_outputChannels]);
+        _biases = new Vector<T>(_outputChannels);
 
         InitializeParameters();
     }
@@ -396,7 +386,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
 
         // Initialize weights and biases
         _weights = new Tensor<T>([_outputHeight, _outputWidth, _outputChannels, _kernelSize, _kernelSize, _inputChannels]);
-        _biases = new Tensor<T>([_outputChannels]);
+        _biases = new Vector<T>(_outputChannels);
 
         InitializeParameters();
     }
@@ -425,28 +415,34 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Xavier initialization for weights using vectorized operations
+        // Xavier initialization for weights
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_kernelSize * _kernelSize * _inputChannels + _outputChannels)));
-        T half = NumOps.FromDouble(0.5);
-
-        // Generate random values [0, 1) and transform to [-0.5, 0.5] * scale
-        int totalElements = _weights.Length;
-        var randomTensor = Tensor<T>.CreateRandom(totalElements, 1); // [0, 1]
-
-        // Create tensor filled with 0.5 for subtraction
-        var halfTensor = new Tensor<T>([totalElements]);
-        halfTensor.Fill(half);
-
-        // Transform to [-0.5, 0.5] * scale using Engine ops
-        var centeredTensor = Engine.TensorSubtract(randomTensor.Reshape([totalElements]), halfTensor);
-        var scaledTensor = Engine.TensorMultiplyScalar(centeredTensor, scale);
-
-        // Assign the scaled tensor to weights (preserving shape)
-        // Note: Array.Copy to _weights.ToArray() creates a temporary copy, not updating _weights
-        _weights = scaledTensor.Reshape(_weights.Shape);
+    
+        for (int h = 0; h < _outputHeight; h++)
+        {
+            for (int w = 0; w < _outputWidth; w++)
+            {
+                for (int oc = 0; oc < _outputChannels; oc++)
+                {
+                    for (int kh = 0; kh < _kernelSize; kh++)
+                    {
+                        for (int kw = 0; kw < _kernelSize; kw++)
+                        {
+                            for (int ic = 0; ic < _inputChannels; ic++)
+                            {
+                                _weights[h, w, oc, kh, kw, ic] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // Initialize biases to zero
-        _biases.Fill(NumOps.Zero);
+        for (int i = 0; i < _biases.Length; i++)
+        {
+            _biases[i] = NumOps.Zero;
+        }
     }
 
     /// <summary>
@@ -476,27 +472,38 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     {
         _lastInput = input;
         int batchSize = input.Shape[0];
+        var output = new Tensor<T>([batchSize, _outputHeight, _outputWidth, _outputChannels]);
 
-        // === GPU-Accelerated LocallyConnectedConv2D ===
-        // The layer uses NHWC format but Engine expects NCHW, so we transpose
-        // Input NHWC [batch, height, width, channels] -> NCHW [batch, channels, height, width]
-        var inputNCHW = input.Transpose([0, 3, 1, 2]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < _outputHeight; h++)
+            {
+                for (int w = 0; w < _outputWidth; w++)
+                {
+                    for (int oc = 0; oc < _outputChannels; oc++)
+                    {
+                        T sum = NumOps.Zero;
+                        for (int kh = 0; kh < _kernelSize; kh++)
+                        {
+                            for (int kw = 0; kw < _kernelSize; kw++)
+                            {
+                                for (int ic = 0; ic < _inputChannels; ic++)
+                                {
+                                    int ih = h * _stride + kh;
+                                    int iw = w * _stride + kw;
+                                    sum = NumOps.Add(sum, NumOps.Multiply(input[b, ih, iw, ic], _weights[h, w, oc, kh, kw, ic]));
+                                }
+                            }
+                        }
+                        sum = NumOps.Add(sum, _biases[oc]);
+                        output[b, h, w, oc] = sum;
+                    }
+                }
+            }
+        }
 
-        // Weights need to be permuted from [oh, ow, oc, kh, kw, ic] to [oh, ow, oc, ic, kh, kw]
-        var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]);
-
-        // Pass bias as 1D tensor [outChannels] to ensure consistent behavior across
-        // CPU fallback, GPU, and JIT paths. The engine handles per-channel bias internally.
-        int[] strideArr = [_stride, _stride];
-        var outputNCHW = Engine.LocallyConnectedConv2D(inputNCHW, weightsPermuted, _biases, strideArr);
-
-        // Transpose output back from NCHW [batch, channels, height, width] to NHWC [batch, height, width, channels]
-        var preActivation = outputNCHW.Transpose([0, 2, 3, 1]);
-
-        // Cache pre-activation and apply activation function
-        _lastPreActivation = preActivation;
-        _lastOutput = ApplyActivation(preActivation);
-        return _lastOutput;
+        // Apply activation function
+        return ApplyActivation(output);
     }
 
     /// <summary>
@@ -513,187 +520,65 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
     /// and parameters should change to reduce errors.
-    ///
+    /// 
     /// During the backward pass:
     /// 1. The layer receives information about how its output contributed to errors
     /// 2. It calculates how the weights and biases should change to reduce errors
     /// 3. It calculates how the input should change, which will be used by earlier layers
-    ///
+    /// 
     /// This process involves:
     /// - Applying the derivative of the activation function
     /// - Computing gradients for each unique filter
     /// - Computing gradients for biases
     /// - Computing how the input should change
-    ///
+    /// 
     /// The method will throw an error if you try to run it before performing a forward pass.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when Forward has not been called before Backward.</exception>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // === GPU-Accelerated LocallyConnectedConv2D Backward ===
+        int batchSize = _lastInput.Shape[0];
+        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        _weightGradients = new Tensor<T>(_weights.Shape);
+        _biasGradients = new Vector<T>(_biases.Length);
+
         // Apply activation derivative
-        var activationGradient = ApplyActivationDerivative(_lastOutput!, outputGradient);
+        outputGradient = ApplyActivationDerivative(_lastInput, outputGradient);
 
-        // Transpose output gradient from NHWC to NCHW for Engine operations
-        // NHWC [batch, height, width, channels] -> NCHW [batch, channels, height, width]
-        var gradNCHW = activationGradient.Transpose([0, 3, 1, 2]);
-
-        // Transpose input from NHWC to NCHW
-        var inputNCHW = _lastInput.Transpose([0, 3, 1, 2]);
-
-        // Permute weights from [oh, ow, oc, kh, kw, ic] to [oh, ow, oc, ic, kh, kw] for Engine
-        var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]);
-
-        int[] strideArr = [_stride, _stride];
-
-        // Compute input gradient using Engine operation
-        var inputGradNCHW = Engine.LocallyConnectedConv2DBackwardInput(
-            gradNCHW, weightsPermuted, inputNCHW.Shape, strideArr);
-
-        // Compute weight gradients using Engine operation
-        // Result is [oh, ow, oc, ic, kh, kw]
-        var weightGradsPermuted = Engine.LocallyConnectedConv2DBackwardWeights(
-            gradNCHW, inputNCHW, weightsPermuted.Shape, strideArr);
-
-        // Permute weight gradients back from [oh, ow, oc, ic, kh, kw] to [oh, ow, oc, kh, kw, ic]
-        _weightGradients = weightGradsPermuted.Transpose([0, 1, 2, 4, 5, 3]);
-
-        // Compute bias gradients - sum over batch and spatial dimensions
-        // gradNCHW shape is [batch, channels, height, width]
-        // We need bias gradient of shape [channels] - sum over dims [0, 2, 3]
-        var biasGradTensor = Engine.LocallyConnectedConv2DBackwardBias(gradNCHW);
-        // biasGradTensor is [oh, ow, oc], sum to get per-channel [oc]
-        _biasGradients = Engine.ReduceSum(biasGradTensor, new[] { 0, 1 }, keepDims: false);
-
-        // Transpose input gradient back from NCHW to NHWC
-        var inputGradient = inputGradNCHW.Transpose([0, 2, 3, 1]);
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation with production-grade pattern:
-    /// - Uses cached forward pass values for activation derivative computation
-    /// - Uses Tensor.FromVector for efficient conversions
-    /// - Builds minimal autodiff graph for gradient routing
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Production-grade: Compute activation derivative using cached output
-        Tensor<T> preActivationGradient;
-        if (VectorActivation != null)
+        for (int b = 0; b < batchSize; b++)
         {
-            var actDeriv = VectorActivation.Derivative(_lastOutput);
-            preActivationGradient = Engine.TensorMultiply(outputGradient, actDeriv);
-        }
-        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
-        {
-            var activation = ScalarActivation;
-            var activationDerivative = _lastOutput.Transform((x, _) => activation.Derivative(x));
-            preActivationGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
-        }
-        else
-        {
-            preActivationGradient = outputGradient;
-        }
-
-        // Convert from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
-        var inputNCHW = _lastInput.Transpose([0, 3, 1, 2]);
-        var weightsNCHW = _weights.Transpose([0, 1, 2, 5, 3, 4]);
-
-        // Create computation nodes with efficient conversions
-        var inputNode = Autodiff.TensorOperations<T>.Variable(inputNCHW, "input", requiresGradient: true);
-        var weightsNode = Autodiff.TensorOperations<T>.Variable(weightsNCHW, "weights", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(_biases, "bias", requiresGradient: true);
-
-        // Build minimal autodiff graph for linear operations (activation derivative already applied)
-        var preActivationNode = Autodiff.TensorOperations<T>.LocallyConnectedConv2D(
-            inputNode,
-            weightsNode,
-            biasNode,
-            stride: new int[] { _stride, _stride });
-
-        // Convert pre-activation gradient from NHWC to NCHW
-        var preActivationGradientNCHW = preActivationGradient.Transpose([0, 3, 1, 2]);
-
-        // Set gradient on pre-activation node (activation derivative already applied)
-        preActivationNode.Gradient = preActivationGradientNCHW;
-
-        // Inline topological sort and backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((preActivationNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
+            for (int h = 0; h < _outputHeight; h++)
             {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
+                for (int w = 0; w < _outputWidth; w++)
                 {
-                    foreach (var parent in node.Parents)
+                    for (int oc = 0; oc < _outputChannels; oc++)
                     {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
+                        T gradOutput = outputGradient[b, h, w, oc];
+                        _biasGradients[oc] = NumOps.Add(_biasGradients[oc], gradOutput);
+
+                        for (int kh = 0; kh < _kernelSize; kh++)
+                        {
+                            for (int kw = 0; kw < _kernelSize; kw++)
+                            {
+                                for (int ic = 0; ic < _inputChannels; ic++)
+                                {
+                                    int ih = h * _stride + kh;
+                                    int iw = w * _stride + kw;
+                                    T inputValue = _lastInput[b, ih, iw, ic];
+                                    _weightGradients[h, w, oc, kh, kw, ic] = NumOps.Add(_weightGradients[h, w, oc, kh, kw, ic], NumOps.Multiply(gradOutput, inputValue));
+                                    inputGradient[b, ih, iw, ic] = NumOps.Add(inputGradient[b, ih, iw, ic], NumOps.Multiply(gradOutput, _weights[h, w, oc, kh, kw, ic]));
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Update parameter gradients using efficient conversion
-        if (weightsNode.Gradient != null)
-            _weightGradients = weightsNode.Gradient.Transpose([0, 1, 2, 4, 5, 3]);
-
-        if (biasNode.Gradient != null)
-            _biasGradients = biasNode.Gradient;
-
-        // Convert input gradient from NCHW back to NHWC
-        var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-        return inputGradientNCHW.Transpose([0, 2, 3, 1]);
+        return inputGradient;
     }
 
     /// <summary>
@@ -727,8 +612,34 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             throw new InvalidOperationException("UpdateParameters called before Backward. Gradients are null.");
         }
 
-        _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightGradients, learningRate));
-        _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasGradients, learningRate));
+        // Update weights
+        for (int h = 0; h < _outputHeight; h++)
+        {
+            for (int w = 0; w < _outputWidth; w++)
+            {
+                for (int oc = 0; oc < _outputChannels; oc++)
+                {
+                    for (int kh = 0; kh < _kernelSize; kh++)
+                    {
+                        for (int kw = 0; kw < _kernelSize; kw++)
+                        {
+                            for (int ic = 0; ic < _inputChannels; ic++)
+                            {
+                                T update = NumOps.Multiply(learningRate, _weightGradients[h, w, oc, kh, kw, ic]);
+                                _weights[h, w, oc, kh, kw, ic] = NumOps.Subtract(_weights[h, w, oc, kh, kw, ic], update);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Update biases
+        for (int oc = 0; oc < _outputChannels; oc++)
+        {
+            T update = NumOps.Multiply(learningRate, _biasGradients[oc]);
+            _biases[oc] = NumOps.Subtract(_biases[oc], update);
+        }
     }
 
     /// <summary>
@@ -759,14 +670,39 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Get weight parameters as vector
-        var weightVector = new Vector<T>(_weights.ToArray());
+        // Calculate total number of parameters
+        int totalParams = _weights.Length + _biases.Length;
+        var parameters = new Vector<T>(totalParams);
+        int index = 0;
 
-        // Get bias parameters as vector
-        var biasVector = new Vector<T>(_biases.ToArray());
+        // Copy weights parameters
+        for (int h = 0; h < _outputHeight; h++)
+        {
+            for (int w = 0; w < _outputWidth; w++)
+            {
+                for (int oc = 0; oc < _outputChannels; oc++)
+                {
+                    for (int kh = 0; kh < _kernelSize; kh++)
+                    {
+                        for (int kw = 0; kw < _kernelSize; kw++)
+                        {
+                            for (int ic = 0; ic < _inputChannels; ic++)
+                            {
+                                parameters[index++] = _weights[h, w, oc, kh, kw, ic];
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-        // Concatenate weights and biases
-        return Vector<T>.Concatenate(weightVector, biasVector);
+        // Copy bias parameters
+        for (int oc = 0; oc < _outputChannels; oc++)
+        {
+            parameters[index++] = _biases[oc];
+        }
+
+        return parameters;
     }
 
     /// <summary>
@@ -803,14 +739,33 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        // Split parameters into weights and biases using Vector.Slice
-        int weightsLength = _weights.Length;
-        var weightsVector = parameters.Slice(0, weightsLength);
-        var biasesVector = parameters.Slice(weightsLength, _biases.Length);
+        int index = 0;
+        // Set weights parameters
+        for (int h = 0; h < _outputHeight; h++)
+        {
+            for (int w = 0; w < _outputWidth; w++)
+            {
+                for (int oc = 0; oc < _outputChannels; oc++)
+                {
+                    for (int kh = 0; kh < _kernelSize; kh++)
+                    {
+                        for (int kw = 0; kw < _kernelSize; kw++)
+                        {
+                            for (int ic = 0; ic < _inputChannels; ic++)
+                            {
+                                _weights[h, w, oc, kh, kw, ic] = parameters[index++];
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-        // Convert vectors to tensors and assign
-        _weights = Tensor<T>.FromVector(weightsVector, _weights.Shape);
-        _biases = Tensor<T>.FromVector(biasesVector, _biases.Shape);
+        // Set bias parameters
+        for (int oc = 0; oc < _outputChannels; oc++)
+        {
+            _biases[oc] = parameters[index++];
+        }
     }
 
     /// <summary>
@@ -840,83 +795,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward and backward passes
         _lastInput = null;
-        _lastPreActivation = null;
-        _lastOutput = null;
         _weightGradients = null;
         _biasGradients = null;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> when weights are initialized and activation function supports JIT.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// Locally connected layers support JIT compilation using the LocallyConnectedConv2D operation
-    /// from TensorOperations. The layer applies different filters to different spatial locations.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation =>
-        _weights != null && _biases != null && CanActivationBeJitted();
-
-    /// <summary>
-    /// Exports the locally connected layer's forward pass as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the locally connected layer output.</returns>
-    /// <remarks>
-    /// <para>
-    /// The locally connected layer computation graph implements:
-    /// output = activation(LocallyConnectedConv2D(input, weights) + bias)
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates an optimized version of the locally connected layer.
-    /// Unlike convolution which shares filters, locally connected layers use unique filters for each position.
-    /// </para>
-    /// </remarks>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (_weights == null || _biases == null)
-            throw new InvalidOperationException("Weights and biases not initialized.");
-
-        if (InputShape == null || InputShape.Length < 3)
-            throw new InvalidOperationException("Layer input shape not configured. Expected [height, width, channels].");
-
-        // Validate activation can be JIT compiled
-        if (!CanActivationBeJitted())
-        {
-            var activationType = (ScalarActivation?.GetType() ?? VectorActivation?.GetType())?.Name ?? "Unknown";
-            throw new NotSupportedException(
-                $"Activation function '{activationType}' is not supported for JIT compilation. " +
-                "Supported activations: ReLU, Sigmoid, Tanh, Softmax, Identity");
-        }
-
-        // Create symbolic input node in NHWC format [batch, height, width, channels]
-        var symbolicInput = new Tensor<T>(new int[] { 1, _inputHeight, _inputWidth, _inputChannels });
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "locally_connected_input");
-        inputNodes.Add(inputNode);
-
-        // Convert weights to NCHW format for LocallyConnectedConv2D
-        var weightsNCHW = _weights.Transpose([0, 1, 2, 5, 3, 4]);
-        var weightsNode = Autodiff.TensorOperations<T>.Constant(weightsNCHW, "locally_connected_weights");
-
-        // Use bias tensor directly
-        var biasNode = Autodiff.TensorOperations<T>.Constant(_biases, "locally_connected_bias");
-
-        // Apply LocallyConnectedConv2D operation
-        var convOutput = Autodiff.TensorOperations<T>.LocallyConnectedConv2D(
-            inputNode,
-            weightsNode,
-            biasNode,
-            stride: new int[] { _stride, _stride });
-
-        // Apply activation function using base class helper
-        var output = ApplyActivationToGraph(convOutput);
-
-        return output;
     }
 }

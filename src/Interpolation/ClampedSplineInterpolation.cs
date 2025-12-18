@@ -265,11 +265,11 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// x by itself 'power' times.
     /// 
     /// <b>For Beginners:</b> This is a simple way to calculate powers. For example:
-    /// - Power(x, 2) means xÂ² (x squared)
-    /// - Power(x, 3) means xÂ³ (x cubed)
+    /// - Power(x, 2) means x² (x squared)
+    /// - Power(x, 3) means x³ (x cubed)
     /// 
     /// This is needed because cubic splines use polynomial equations that include
-    /// terms like xÂ², xÂ³, etc.
+    /// terms like x², x³, etc.
     /// </remarks>
     /// <param name="x">The base value.</param>
     /// <param name="power">The exponent (power) to raise the base to.</param>

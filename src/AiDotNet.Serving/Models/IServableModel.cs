@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Serving.Models;
 

@@ -83,7 +83,7 @@ public class CauchyKernel<T> : IKernelFunction<T>
     /// The calculation works by:
     /// 1. Finding the difference between the two vectors (subtracting one from the other)
     /// 2. Calculating the squared distance between them (dot product of the difference with itself)
-    /// 3. Applying the Cauchy formula: 1 / (1 + squared_distance / sigmaÂ²)
+    /// 3. Applying the Cauchy formula: 1 / (1 + squared_distance / sigma²)
     /// </para>
     /// <para>
     /// The result is a number between 0 and 1, where:

@@ -205,7 +205,7 @@ public class GradientBoostingFitDetector<T, TInput, TOutput> : FitDetectorBase<T
     /// <para>
     /// <b>For Beginners:</b> This method collects important metrics that help you understand your model's performance:
     /// - MSE (Mean Squared Error): Measures prediction accuracy; lower values are better
-    /// - RÂ² (R-squared): Measures how well your model explains the variation in data; values closer to 1 are better
+    /// - R² (R-squared): Measures how well your model explains the variation in data; values closer to 1 are better
     /// </para>
     /// <para>
     /// Having both training and validation metrics helps you compare how well your model performs on data it has seen

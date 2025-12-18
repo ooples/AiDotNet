@@ -201,17 +201,12 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     {
         Vector<T> gradAR = new Vector<T>(_arOrder);
 
-        // VECTORIZED: Process lagged y values as vectors for each timestep
         for (int t = _arOrder; t < y.Length; t++)
         {
-            var laggedY = new Vector<T>(_arOrder);
             for (int i = 0; i < _arOrder; i++)
             {
-                laggedY[i] = y[t - i - 1];
+                gradAR[i] = NumOps.Add(gradAR[i], NumOps.Multiply(residuals[t], y[t - i - 1]));
             }
-
-            var contribution = (Vector<T>)Engine.Multiply(laggedY, residuals[t]);
-            gradAR = (Vector<T>)Engine.Add(gradAR, contribution);
         }
 
         return gradAR;
@@ -239,8 +234,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private bool CheckConvergence(Vector<T> gradAR, Vector<T> prevGradAR)
     {
-        var diffARVec = (Vector<T>)Engine.Subtract(gradAR, prevGradAR);
-        T diffAR = diffARVec.Norm();
+        T diffAR = gradAR.Subtract(prevGradAR).Norm();
         return NumOps.LessThan(diffAR, NumOps.FromDouble(_tolerance));
     }
 
@@ -287,7 +281,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// For example, if yesterday's temperature was high, today's might also be high.
     /// 
     /// The prediction is calculated as:
-    /// prediction = (coefficient1 Ã— value1) + (coefficient2 Ã— value2) + ... + (coefficientp Ã— valuep)
+    /// prediction = (coefficient1 × value1) + (coefficient2 × value2) + ... + (coefficientp × valuep)
     /// 
     /// Where:
     /// - coefficientn is the importance of each past value
@@ -298,26 +292,13 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private T Predict(Vector<T> y, int t)
     {
-        // VECTORIZED: Use dot product for AR prediction
-        int availableHistory = Math.Min(_arOrder, t);
-        if (availableHistory == 0)
+        T prediction = NumOps.Zero;
+        for (int i = 0; i < _arOrder && t - i - 1 >= 0; i++)
         {
-            return NumOps.Zero;
+            prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], y[t - i - 1]));
         }
 
-        // Build vector of past values
-        T[] pastValues = new T[availableHistory];
-        for (int i = 0; i < availableHistory; i++)
-        {
-            pastValues[i] = y[t - i - 1];
-        }
-
-        Vector<T> pastVector = new Vector<T>(pastValues);
-        Vector<T> coeffSlice = availableHistory < _arOrder
-            ? _arCoefficients.Slice(0, availableHistory)
-            : _arCoefficients;
-
-        return Engine.DotProduct(coeffSlice, pastVector);
+        return prediction;
     }
 
     /// <summary>
@@ -689,10 +670,11 @@ public class ARModel<T> : TimeSeriesModelBase<T>
             Vector<T> residuals = CalculateResiduals(y);
             Vector<T> gradAR = CalculateGradients(y, residuals);
 
-            // VECTORIZED: Update coefficients using gradient descent with Engine operations
-            var learningRateT = NumOps.FromDouble(_learningRate);
-            var update = (Vector<T>)Engine.Multiply(gradAR, learningRateT);
-            _arCoefficients = (Vector<T>)Engine.Subtract(_arCoefficients, update);
+            // Update coefficients using gradient descent
+            for (int i = 0; i < _arOrder; i++)
+            {
+                _arCoefficients[i] = NumOps.Subtract(_arCoefficients[i], NumOps.Multiply(NumOps.FromDouble(_learningRate), gradAR[i]));
+            }
 
             // Check for convergence
             if (CheckConvergence(gradAR, prevGradAR))
@@ -732,20 +714,23 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {
-        if (input == null)
-        {
-            throw new ArgumentNullException(nameof(input));
-        }
-
+        // Validate input
         if (input.Length < _arOrder)
         {
-            throw new ArgumentException(
-                $"Input vector must contain at least {_arOrder} elements for an AR({_arOrder}) model.",
-                nameof(input));
+            throw new ArgumentException($"Input vector must contain at least {_arOrder} elements for an AR({_arOrder}) model.", nameof(input));
         }
-
-        // Interpret the input as the complete history up to the current time
-        // and predict the next value using the vectorized helper
-        return Predict(input, input.Length);
+    
+        // Create a matrix with a single row
+        Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            singleRowMatrix[0, i] = input[i];
+        }
+    
+        // Use the existing Predict method
+        Vector<T> predictions = Predict(singleRowMatrix);
+    
+        // Return the single prediction
+        return predictions[0];
     }
 }

@@ -28,91 +28,76 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public class SpatialTransformerLayer<T> : LayerBase<T>
 {
-    /// <summary>
-    /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
-    /// </summary>
-    public bool UseAuxiliaryLoss { get; set; } = false;
-
-    /// <summary>
-    /// Gets or sets the weight for the auxiliary loss contribution.
-    /// </summary>
-    public T AuxiliaryLossWeight { get; set; }
-
-    /// <summary>
-    /// Stores the last computed transformation regularization loss for diagnostic purposes.
-    /// </summary>
-    private T _lastTransformationLoss;
-
     /// <summary>
     /// Weights for the first layer of the localization network.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This tensor contains the weights for the first fully connected layer of the localization network,
-    /// which predicts the transformation parameters. Its shape is [inputHeight * inputWidth, 32].
+    /// This matrix contains the weights for the first fully connected layer of the localization network,
+    /// which predicts the transformation parameters. Its dimensions are [inputHeight * inputWidth, 32].
     /// </para>
     /// <para><b>For Beginners:</b> These are the adjustable values for the first part of the "smart camera".
-    ///
+    /// 
     /// The localization network is like a mini neural network within this layer that decides
-    /// how to transform the input. This tensor stores the connection strengths in the first layer
+    /// how to transform the input. This matrix stores the connection strengths in the first layer
     /// of this mini-network. The network looks at the input and starts figuring out what transformation
     /// would be most helpful.
     /// </para>
     /// </remarks>
-    private Tensor<T> _localizationWeights1;
+    private Matrix<T> _localizationWeights1;
 
     /// <summary>
     /// Biases for the first layer of the localization network.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This tensor contains the bias values for the first fully connected layer of the localization network.
-    /// It has shape [32].
+    /// This vector contains the bias values for the first fully connected layer of the localization network.
+    /// It has a length of 32.
     /// </para>
     /// <para><b>For Beginners:</b> These are additional adjustable values for the first part of the "smart camera".
-    ///
+    /// 
     /// Biases help the network learn more complex patterns by shifting the activation values.
     /// They work together with the weights to determine how the network responds to different inputs.
     /// </para>
     /// </remarks>
-    private Tensor<T> _localizationBias1;
+    private Vector<T> _localizationBias1;
 
     /// <summary>
     /// Weights for the second layer of the localization network.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This tensor contains the weights for the second fully connected layer of the localization network,
-    /// which produces the final transformation parameters. Its shape is [32, 6], where 6 represents
-    /// the parameters of a 2D affine transformation (2x3 tensor).
+    /// This matrix contains the weights for the second fully connected layer of the localization network,
+    /// which produces the final transformation parameters. Its dimensions are [32, 6], where 6 represents
+    /// the parameters of a 2D affine transformation (2x3 matrix).
     /// </para>
     /// <para><b>For Beginners:</b> These are the adjustable values for the second part of the "smart camera".
-    ///
+    /// 
     /// This second set of weights takes the initial processing from the first layer and
     /// refines it into the exact transformation parameters. The 6 output values represent
     /// how to scale, rotate, translate, and shear the input image.
     /// </para>
     /// </remarks>
-    private Tensor<T> _localizationWeights2;
+    private Matrix<T> _localizationWeights2;
 
     /// <summary>
     /// Biases for the second layer of the localization network.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This tensor contains the bias values for the second fully connected layer of the localization network.
-    /// It has shape [6], corresponding to the 6 parameters of a 2D affine transformation.
+    /// This vector contains the bias values for the second fully connected layer of the localization network.
+    /// It has a length of 6, corresponding to the 6 parameters of a 2D affine transformation.
     /// </para>
     /// <para><b>For Beginners:</b> These are additional adjustable values for the second part of the "smart camera".
-    ///
+    /// 
     /// These biases are initialized in a special way so that the layer starts by doing no transformation
     /// (identity transform). This helps the network start with a neutral behavior and gradually
     /// learn more complex transformations as needed.
     /// </para>
     /// </remarks>
-    private Tensor<T> _localizationBias2;
+    private Vector<T> _localizationBias2;
 
     /// <summary>
     /// Stores the input tensor from the most recent forward pass.
@@ -152,17 +137,17 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This field caches the 2x3 transformation tensor computed during the forward pass, which is needed
+    /// This field caches the 2x3 transformation matrix computed during the forward pass, which is needed
     /// during the backward pass to compute gradients. It is cleared when ResetState() is called.
     /// </para>
     /// <para><b>For Beginners:</b> This saves the exact transformation that was applied to the input.
-    ///
-    /// The transformation tensor contains the specific rotation, scaling, translation, and other
+    /// 
+    /// The transformation matrix contains the specific rotation, scaling, translation, and other
     /// operations that were applied to the input. Keeping track of this is crucial for the
     /// backward pass, when the layer needs to understand exactly how it processed the data.
     /// </para>
     /// </remarks>
-    private Tensor<T>? _lastTransformationMatrix;
+    private Matrix<T>? _lastTransformationMatrix;
 
     /// <summary>
     /// Gradient of the loss with respect to the weights of the first localization layer.
@@ -175,13 +160,13 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// <para><b>For Beginners:</b> This shows how each value in the first layer's weights should be changed
     /// to improve the network's performance.
-    ///
+    /// 
     /// During training, this gradient tells the layer how to adjust its first set of weights
     /// to make the overall network more accurate. Larger gradient values indicate weights
     /// that need more adjustment.
     /// </para>
     /// </remarks>
-    private Tensor<T>? _localizationWeights1Gradient;
+    private Matrix<T>? _localizationWeights1Gradient;
 
     /// <summary>
     /// Gradient of the loss with respect to the biases of the first localization layer.
@@ -193,12 +178,12 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// <para><b>For Beginners:</b> This shows how each bias value in the first layer should be changed
     /// to improve the network's performance.
-    ///
+    /// 
     /// Similar to the weight gradients, these values tell the layer how to adjust the bias terms
     /// in the first layer during training. They help fine-tune the network's behavior.
     /// </para>
     /// </remarks>
-    private Tensor<T>? _localizationBias1Gradient;
+    private Vector<T>? _localizationBias1Gradient;
 
     /// <summary>
     /// Gradient of the loss with respect to the weights of the second localization layer.
@@ -211,13 +196,13 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// <para><b>For Beginners:</b> This shows how each value in the second layer's weights should be changed
     /// to improve the network's performance.
-    ///
+    /// 
     /// These gradients specifically target the weights in the second layer, which directly influence
     /// the transformation parameters. They are crucial for helping the network learn the right kinds
     /// of transformations for the task.
     /// </para>
     /// </remarks>
-    private Tensor<T>? _localizationWeights2Gradient;
+    private Matrix<T>? _localizationWeights2Gradient;
 
     /// <summary>
     /// Gradient of the loss with respect to the biases of the second localization layer.
@@ -229,15 +214,13 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// <para><b>For Beginners:</b> This shows how each bias value in the second layer should be changed
     /// to improve the network's performance.
-    ///
+    /// 
     /// These gradients help adjust the biases that directly affect the transformation parameters.
     /// Since these biases are initialized to represent an identity transformation (no change),
     /// the gradients show how to move away from that neutral state toward more helpful transformations.
     /// </para>
     /// </remarks>
-    private Tensor<T>? _localizationBias2Gradient;
-    private Tensor<T>? _lastFlattenedInput;
-    private Tensor<T>? _lastLocalization1;
+    private Vector<T>? _localizationBias2Gradient;
 
     /// <summary>
     /// The height of the input feature map.
@@ -350,20 +333,16 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IActivationFunction<T>? activationFunction = null)
         : base([inputHeight, inputWidth], [outputHeight, outputWidth], activationFunction ?? new TanhActivation<T>())
     {
-        // Initialize auxiliary loss fields first so compiler knows they're set
-        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
-        _lastTransformationLoss = NumOps.Zero;
-
         _inputHeight = inputHeight;
         _inputWidth = inputWidth;
         _outputHeight = outputHeight;
         _outputWidth = outputWidth;
 
-        // Initialize localization network weights and biases as Tensor<T>
-        _localizationWeights1 = new Tensor<T>([inputHeight * inputWidth, 32]);
-        _localizationBias1 = new Tensor<T>([32]);
-        _localizationWeights2 = new Tensor<T>([32, 6]);
-        _localizationBias2 = new Tensor<T>([6]);
+        // Initialize localization network weights and biases
+        _localizationWeights1 = new Matrix<T>(inputHeight * inputWidth, 32);
+        _localizationBias1 = new Vector<T>(32);
+        _localizationWeights2 = new Matrix<T>(32, 6);
+        _localizationBias2 = new Vector<T>(6);
 
         InitializeParameters();
     }
@@ -382,11 +361,11 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// function for the localization network. It initializes the weights and biases of the localization network.
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new spatial transformer layer with advanced settings.
-    ///
+    /// 
     /// This is similar to the basic constructor, but with one key difference:
     /// - It uses a vector activation function, which works on groups of numbers at once
     /// - This can capture relationships between different elements in the output
-    ///
+    /// 
     /// This constructor is for advanced users who need more sophisticated activation patterns
     /// for their neural networks. For most cases, the basic constructor is sufficient.
     /// </para>
@@ -394,20 +373,16 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([inputHeight, inputWidth], [outputHeight, outputWidth], vectorActivationFunction ?? new TanhActivation<T>())
     {
-        // Initialize auxiliary loss fields first so compiler knows they're set
-        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
-        _lastTransformationLoss = NumOps.Zero;
-
         _inputHeight = inputHeight;
         _inputWidth = inputWidth;
         _outputHeight = outputHeight;
         _outputWidth = outputWidth;
 
-        // Initialize localization network weights and biases as Tensor<T>
-        _localizationWeights1 = new Tensor<T>([inputHeight * inputWidth, 32]);
-        _localizationBias1 = new Tensor<T>([32]);
-        _localizationWeights2 = new Tensor<T>([32, 6]);
-        _localizationBias2 = new Tensor<T>([6]);
+        // Initialize localization network weights and biases
+        _localizationWeights1 = new Matrix<T>(inputHeight * inputWidth, 32);
+        _localizationBias1 = new Vector<T>(32);
+        _localizationWeights2 = new Matrix<T>(32, 6);
+        _localizationBias2 = new Vector<T>(6);
 
         InitializeParameters();
     }
@@ -435,48 +410,49 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_localizationWeights1.Shape[0] + _localizationWeights1.Shape[1])));
-        InitializeTensor(_localizationWeights1, scale);
-        InitializeTensor(_localizationWeights2, scale);
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_localizationWeights1.Rows + _localizationWeights1.Columns)));
+        InitializeMatrix(_localizationWeights1, scale);
+        InitializeMatrix(_localizationWeights2, scale);
 
-        // Initialize bias1 to zero
-        _localizationBias1.Fill(NumOps.Zero);
+        for (int i = 0; i < _localizationBias1.Length; i++)
+        {
+            _localizationBias1[i] = NumOps.Zero;
+        }
 
         // Initialize the localization bias2 to represent identity transformation
-        _localizationBias2.Fill(NumOps.Zero);
         _localizationBias2[0] = NumOps.One;
         _localizationBias2[4] = NumOps.One;
     }
 
     /// <summary>
-    /// Initializes a tensor with scaled random values.
+    /// Initializes a matrix with scaled random values.
     /// </summary>
-    /// <param name="tensor">The tensor to initialize.</param>
+    /// <param name="matrix">The matrix to initialize.</param>
     /// <param name="scale">The scale factor for the random values.</param>
     /// <remarks>
     /// <para>
-    /// This method fills the given tensor with random values between -0.5 and 0.5, scaled by the provided scale factor.
+    /// This method fills the given matrix with random values between -0.5 and 0.5, scaled by the provided scale factor.
     /// This type of initialization helps prevent large initial values that could cause instability during training.
     /// </para>
+    /// <para><b>For Beginners:</b> This method fills a matrix with appropriate random starting values.
+    /// 
+    /// It works by:
+    /// - Generating random numbers between -0.5 and 0.5
+    /// - Multiplying each by a scale factor to get the right size
+    /// - Setting each element in the matrix to these scaled random values
+    /// 
+    /// Having good starting values helps the network learn more effectively from the beginning.
+    /// </para>
     /// </remarks>
-    private void InitializeTensor(Tensor<T> tensor, T scale)
+    private void InitializeMatrix(Matrix<T> matrix, T scale)
     {
-        // Vectorized initialization using Engine operations
-        int totalElements = tensor.Length;
-        var randomTensor = Tensor<T>.CreateRandom(totalElements, 1); // [0, 1]
-        var half = NumOps.FromDouble(0.5);
-
-        // Create tensor filled with 0.5 for subtraction
-        var halfTensor = new Tensor<T>([totalElements]);
-        halfTensor.Fill(half);
-
-        // Transform to [-0.5, 0.5] * scale using Engine ops
-        var centeredTensor = Engine.TensorSubtract(randomTensor.Reshape([totalElements]), halfTensor);
-        var scaledTensor = Engine.TensorMultiplyScalar(centeredTensor, scale);
-
-        // Copy back to original tensor (preserving shape)
-        var reshapedResult = scaledTensor.Reshape(tensor.Shape);
-        Array.Copy(reshapedResult.ToArray(), tensor.ToArray(), totalElements);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+            }
+        }
     }
 
     /// <summary>
@@ -511,34 +487,20 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastInput = input;
         int batchSize = input.Shape[0];
 
-        // Localization network using Engine operations
-        var flattenedInput = input.Reshape([batchSize, _inputHeight * _inputWidth]);
-        _lastFlattenedInput = flattenedInput;
-
-        // First layer: localization1 = flattenedInput @ _localizationWeights1 + _localizationBias1
-        var localization1 = Engine.TensorMatMul(flattenedInput, _localizationWeights1);
-        // Add bias (broadcast across batch dimension)
-        var bias1Expanded = _localizationBias1.Reshape([1, _localizationBias1.Shape[0]]);
-        localization1 = Engine.TensorAdd(localization1, bias1Expanded);
+        // Localization network
+        var flattenedInput = input.Reshape(batchSize, _inputHeight * _inputWidth);
+        var localization1 = flattenedInput.Multiply(_localizationWeights1).Add(_localizationBias1);
         localization1 = ApplyActivation(localization1);
-        _lastLocalization1 = localization1;
+        var transformationParams = localization1.Multiply(_localizationWeights2).Add(_localizationBias2);
 
-        // Second layer: transformationParams = localization1 @ _localizationWeights2 + _localizationBias2
-        var transformationParams = Engine.TensorMatMul(localization1, _localizationWeights2);
-        var bias2Expanded = _localizationBias2.Reshape([1, _localizationBias2.Shape[0]]);
-        transformationParams = Engine.TensorAdd(transformationParams, bias2Expanded);
-
-        // Convert transformation parameters to 2x3 transformation tensor
+        // Convert transformation parameters to 2x3 transformation matrices
         _lastTransformationMatrix = ConvertToTransformationMatrix(transformationParams);
 
-        // Build theta tensor [batch, 2, 3] from computed matrix using Engine ops
-        // Expand [2,3] to [1, 2, 3] then tile along batch dimension
-        var thetaExpanded = Engine.TensorExpandDims(_lastTransformationMatrix, 0); // [1, 2, 3]
-        var theta = Engine.TensorTile(thetaExpanded, [batchSize, 1, 1]); // [batch, 2, 3]
+        // Grid generator
+        var outputGrid = GenerateOutputGrid();
 
-        // Grid generator + sampler via engine ops
-        var grid = Engine.AffineGrid(theta, _outputHeight, _outputWidth);
-        var output = Engine.GridSample(input, grid);
+        // Sampler
+        var output = SampleInputImage(input, outputGrid, _lastTransformationMatrix);
 
         _lastOutput = output;
         return _lastOutput;
@@ -561,7 +523,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - Translation (2 parameters)
     /// 
     /// The method:
-    /// - Converts these parameters into a 2Ã—3 matrix format that can be used for transformation
+    /// - Converts these parameters into a 2×3 matrix format that can be used for transformation
     /// - Applies limits to prevent extreme transformations that might distort the image too much
     /// - Ensures that small parameter values result in transformations close to identity (no change)
     /// 
@@ -569,14 +531,14 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// into a specific formula that can be applied to each pixel.
     /// </para>
     /// </remarks>
-    private Tensor<T> ConvertToTransformationMatrix(Tensor<T> transformationParams)
+    private Matrix<T> ConvertToTransformationMatrix(Tensor<T> transformationParams)
     {
         if (transformationParams.Shape[0] != 1 || transformationParams.Shape[1] != 6)
         {
             throw new ArgumentException("Transformation parameters should be a 1x6 tensor.");
         }
 
-        var tensor = new Tensor<T>([2, 3]);
+        var matrix = new Matrix<T>(2, 3);
 
         // Extract the parameters
         T theta11 = transformationParams[0, 0];
@@ -588,7 +550,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Apply constraints to prevent extreme transformations
         T scale = NumOps.FromDouble(0.1); // Adjust this value to control the scale of transformations
-
+    
         // Limit scaling and shearing
         theta11 = MathHelper.Tanh(NumOps.Multiply(theta11, scale));
         theta12 = MathHelper.Tanh(NumOps.Multiply(theta12, scale));
@@ -600,23 +562,158 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         theta23 = MathHelper.Tanh(NumOps.Multiply(theta23, scale));
 
         // Ensure the transformation is close to identity if parameters are small
+        T epsilon = NumOps.FromDouble(1e-5);
         theta11 = NumOps.Add(theta11, NumOps.One);
         theta22 = NumOps.Add(theta22, NumOps.One);
 
-        // Construct the transformation tensor
-        tensor[0, 0] = theta11;
-        tensor[0, 1] = theta12;
-        tensor[0, 2] = theta13;
-        tensor[1, 0] = theta21;
-        tensor[1, 1] = theta22;
-        tensor[1, 2] = theta23;
+        // Construct the transformation matrix
+        matrix[0, 0] = theta11;
+        matrix[0, 1] = theta12;
+        matrix[0, 2] = theta13;
+        matrix[1, 0] = theta21;
+        matrix[1, 1] = theta22;
+        matrix[1, 2] = theta23;
 
-        return tensor;
+        return matrix;
     }
 
-    // Removed GenerateOutputGrid (unused)
+    /// <summary>
+    /// Generates a grid of sampling coordinates in the output space.
+    /// </summary>
+    /// <returns>A tensor containing the (x, y) coordinates for each position in the output grid.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method generates a regular grid of coordinates in the output space, with values normalized to the range [-1, 1].
+    /// These coordinates will be transformed using the transformation matrix to determine the sampling locations in the input.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a map of where each output pixel should be in the final result.
+    /// 
+    /// The grid generator:
+    /// - Creates a grid of coordinates covering the entire output space
+    /// - Normalizes these coordinates to the range [-1, 1], where (0,0) is the center
+    /// - This normalized range makes the math for transformations cleaner
+    /// 
+    /// For example, in a 3x3 output:
+    /// - The top-left point would be (-1, -1)
+    /// - The center point would be (0, 0)
+    /// - The bottom-right point would be (1, 1)
+    /// 
+    /// This regular grid will later be transformed to sample from the right places in the input.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> GenerateOutputGrid()
+    {
+        // Generate a grid of (x, y) coordinates for the output
+        var grid = new Tensor<T>([_outputHeight, _outputWidth, 2]);
+        for (int i = 0; i < _outputHeight; i++)
+        {
+            for (int j = 0; j < _outputWidth; j++)
+            {
+                grid[i, j, 0] = NumOps.FromDouble((double)j / (_outputWidth - 1) * 2 - 1);
+                grid[i, j, 1] = NumOps.FromDouble((double)i / (_outputHeight - 1) * 2 - 1);
+            }
+        }
 
-    // Removed SampleInputImage (unused)
+        return grid;
+    }
+
+    /// <summary>
+    /// Samples the input image according to the transformed coordinates.
+    /// </summary>
+    /// <param name="input">The input tensor to sample from.</param>
+    /// <param name="outputGrid">The grid of coordinates in the output space.</param>
+    /// <param name="transformationMatrix">The 2x3 affine transformation matrix.</param>
+    /// <returns>The sampled output tensor after transformation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method applies the spatial transformation by sampling the input at locations determined by transforming
+    /// the output grid coordinates using the transformation matrix. It uses bilinear interpolation to sample between
+    /// discrete pixel locations for smoother results.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method actually performs the transformation by sampling from the right input locations.
+    /// 
+    /// For each output pixel:
+    /// 1. The method transforms its coordinates to find where in the input image it should come from
+    /// 2. These transformed coordinates usually fall between exact pixel locations
+    /// 3. Bilinear interpolation is used to smoothly blend the four nearest input pixels
+    /// 4. The result is a smoothly transformed output without jagged edges
+    /// 
+    /// For example, if the transformation is a 45-degree rotation, each output pixel's value
+    /// would be calculated by sampling from the appropriate rotated position in the input,
+    /// using interpolation to handle positions between pixels.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> SampleInputImage(Tensor<T> input, Tensor<T> outputGrid, Matrix<T> transformationMatrix)
+    {
+        int batchSize = input.Shape[0];
+        int channels = input.Shape[3];
+        var output = new Tensor<T>([batchSize, _outputHeight, _outputWidth, channels]);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int y = 0; y < _outputHeight; y++)
+            {
+                for (int x = 0; x < _outputWidth; x++)
+                {
+                    // Apply transformation to output coordinates
+                    T srcX = NumOps.Add(
+                        NumOps.Add(
+                            NumOps.Multiply(transformationMatrix[0, 0], outputGrid[y, x, 0]),
+                            NumOps.Multiply(transformationMatrix[0, 1], outputGrid[y, x, 1])
+                        ),
+                        transformationMatrix[0, 2]
+                    );
+                    T srcY = NumOps.Add(
+                        NumOps.Add(
+                            NumOps.Multiply(transformationMatrix[1, 0], outputGrid[y, x, 0]),
+                            NumOps.Multiply(transformationMatrix[1, 1], outputGrid[y, x, 1])
+                        ),
+                        transformationMatrix[1, 2]
+                    );
+
+                    // Convert to input image coordinates
+                    srcX = NumOps.Multiply(NumOps.Add(srcX, NumOps.One), NumOps.Divide(NumOps.FromDouble(_inputWidth - 1), NumOps.FromDouble(2)));
+                    srcY = NumOps.Multiply(NumOps.Add(srcY, NumOps.One), NumOps.Divide(NumOps.FromDouble(_inputHeight - 1), NumOps.FromDouble(2)));
+
+                    // Compute the four nearest neighbor coordinates
+                    int x0 = (int)Math.Floor(Convert.ToDouble(srcX));
+                    int x1 = Math.Min(x0 + 1, _inputWidth - 1);
+                    int y0 = (int)Math.Floor(Convert.ToDouble(srcY));
+                    int y1 = Math.Min(y0 + 1, _inputHeight - 1);
+
+                    // Compute interpolation weights
+                    T wx1 = NumOps.Subtract(srcX, NumOps.FromDouble(x0));
+                    T wx0 = NumOps.Subtract(NumOps.One, wx1);
+                    T wy1 = NumOps.Subtract(srcY, NumOps.FromDouble(y0));
+                    T wy0 = NumOps.Subtract(NumOps.One, wy1);
+
+                    // Perform bilinear interpolation for each channel
+                    for (int c = 0; c < channels; c++)
+                    {
+                        T v00 = input[b, y0, x0, c];
+                        T v01 = input[b, y0, x1, c];
+                        T v10 = input[b, y1, x0, c];
+                        T v11 = input[b, y1, x1, c];
+
+                        T interpolated = NumOps.Add(
+                            NumOps.Add(
+                                NumOps.Multiply(NumOps.Multiply(v00, wx0), wy0),
+                                NumOps.Multiply(NumOps.Multiply(v01, wx1), wy0)
+                            ),
+                            NumOps.Add(
+                                NumOps.Multiply(NumOps.Multiply(v10, wx0), wy1),
+                                NumOps.Multiply(NumOps.Multiply(v11, wx1), wy1)
+                            )
+                        );
+
+                        output[b, y, x, c] = interpolated;
+                    }
+                }
+            }
+        }
+
+        return output;
+    }
 
     /// <summary>
     /// Performs the backward pass of the spatial transformer layer.
@@ -648,222 +745,128 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
         if (_lastInput == null || _lastTransformationMatrix == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         int batchSize = _lastInput.Shape[0];
+        int channels = _lastInput.Shape[3];
 
-        // Build theta tensor replicated across batch using Engine ops
-        var thetaExpanded = Engine.TensorExpandDims(_lastTransformationMatrix, 0); // [1, 2, 3]
-        var theta = Engine.TensorTile(thetaExpanded, [batchSize, 1, 1]); // [batch, 2, 3]
+        // Initialize gradients
+        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        _localizationWeights1Gradient = new Matrix<T>(_localizationWeights1.Rows, _localizationWeights1.Columns);
+        _localizationBias1Gradient = new Vector<T>(_localizationBias1.Length);
+        _localizationWeights2Gradient = new Matrix<T>(_localizationWeights2.Rows, _localizationWeights2.Columns);
+        _localizationBias2Gradient = new Vector<T>(_localizationBias2.Length);
 
-        // Autodiff graph for sampling backward
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "st_input", requiresGradient: true);
-        var thetaNode = Autodiff.TensorOperations<T>.Variable(theta, "st_theta", requiresGradient: true);
-        var gridNode = Autodiff.TensorOperations<T>.AffineGrid(thetaNode, _outputHeight, _outputWidth);
-        var outputNode = Autodiff.TensorOperations<T>.GridSample(inputNode, gridNode);
-        outputNode.Gradient = outputGradient;
-        outputNode.Backward();
+        // Generate output grid
+        var outputGrid = GenerateOutputGrid();
 
-        // Propagate theta gradient into localization network
-        if (thetaNode.Gradient != null)
+        for (int b = 0; b < batchSize; b++)
         {
-            var thetaGradFlat = thetaNode.Gradient.Reshape([batchSize, 6]);
+            // Backward pass through the sampler
+            var samplerGradient = BackwardSampler(outputGradient.GetSlice(b), _lastInput.GetSlice(b), outputGrid, _lastTransformationMatrix);
 
-            // Gradients for second layer
-            var lastLoc1 = _lastLocalization1!;
-            var loc1T = Engine.TensorTranspose(lastLoc1);
-            _localizationWeights2Gradient = Engine.TensorMatMul(loc1T, thetaGradFlat);
-            _localizationBias2Gradient = Engine.ReduceSum(thetaGradFlat, new[] { 0 }, keepDims: false);
+            // Backward pass through the grid generator
+            var gridGeneratorGradient = BackwardGridGenerator(samplerGradient, _lastTransformationMatrix);
 
-            // Backprop to localization1
-            var weights2T = Engine.TensorTranspose(_localizationWeights2);
-            var loc1Back = Engine.TensorMatMul(thetaGradFlat, weights2T);
+            // Backward pass through the localization network
+            BackwardLocalizationNetwork(gridGeneratorGradient, _lastInput.GetSlice(b));
 
-            // Activation derivative for localization1
-            Tensor<T> activationDeriv;
-            if (VectorActivation != null)
+            // Accumulate input gradient
+            for (int y = 0; y < _inputHeight; y++)
             {
-                activationDeriv = VectorActivation.Derivative(lastLoc1);
-            }
-            else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
-            {
-                var act = ScalarActivation;
-                activationDeriv = lastLoc1.Transform((x, _) => act.Derivative(x));
-            }
-            else
-            {
-                activationDeriv = new Tensor<T>(lastLoc1.Shape);
-                activationDeriv.Fill(NumOps.One);
-            }
-
-            var loc1Grad = Engine.TensorMultiply(loc1Back, activationDeriv);
-
-            // Gradients for first layer
-            var lastFlat = _lastFlattenedInput!;
-            var flatInputT = Engine.TensorTranspose(lastFlat);
-            _localizationWeights1Gradient = Engine.TensorMatMul(flatInputT, loc1Grad);
-            _localizationBias1Gradient = Engine.ReduceSum(loc1Grad, new[] { 0 }, keepDims: false);
-
-            // Input gradient contribution from localization network
-            var weights1T = Engine.TensorTranspose(_localizationWeights1);
-            var inputLocGradFlat = Engine.TensorMatMul(loc1Grad, weights1T);
-            var inputLocGrad = inputLocGradFlat.Reshape(_lastInput.Shape);
-
-            if (inputNode.Gradient != null)
-            {
-                inputNode.Gradient = Engine.TensorAdd(inputNode.Gradient, inputLocGrad);
-            }
-        }
-
-        return inputNode.Gradient ?? throw new InvalidOperationException("Spatial transformer backward failed.");
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation via AffineGrid and GridSample operations.
-    /// The localization network gradients are computed using standard matrix operations,
-    /// while the spatial transformation uses the specialized autodiff operations.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastTransformationMatrix == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-
-        // For now, SpatialTransformer with full localization network autodiff is complex
-        // We use the specialized AffineGrid and GridSample operations for the transformation part
-        // but handle the localization network manually to avoid excessive complexity
-
-        // Convert transformation matrix to tensor [batch, 2, 3] using Engine ops
-        // Note: Current implementation uses single transformation matrix for simplicity
-        var thetaExpanded = Engine.TensorExpandDims(_lastTransformationMatrix, 0); // [1, 2, 3]
-        var thetaTensor = Engine.TensorTile(thetaExpanded, [batchSize, 1, 1]); // [batch, 2, 3]
-
-        // Create computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(
-            _lastInput,
-            "input",
-            requiresGradient: true);
-
-        var thetaNode = Autodiff.TensorOperations<T>.Variable(
-            thetaTensor,
-            "theta",
-            requiresGradient: true);
-
-        // Apply AffineGrid to generate sampling grid
-        var gridNode = Autodiff.TensorOperations<T>.AffineGrid(
-            thetaNode,
-            _outputHeight,
-            _outputWidth);
-
-        // Apply GridSample to sample from input
-        var outputNode = Autodiff.TensorOperations<T>.GridSample(
-            inputNode,
-            gridNode);
-
-        // Set the output gradient
-        outputNode.Gradient = outputGradient;
-
-        // Perform backward pass with inlined topological sort
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (currentNode, processed) = stack.Pop();
-            if (visited.Contains(currentNode)) continue;
-
-            if (processed)
-            {
-                visited.Add(currentNode);
-                topoOrder.Add(currentNode);
-            }
-            else
-            {
-                stack.Push((currentNode, true));
-                foreach (var parent in currentNode.Parents)
+                for (int x = 0; x < _inputWidth; x++)
                 {
-                    if (!visited.Contains(parent))
+                    for (int c = 0; c < channels; c++)
                     {
-                        stack.Push((parent, false));
+                        inputGradient[b, y, x, c] = samplerGradient[y, x, c];
                     }
                 }
             }
         }
 
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        return inputGradient;
+    }
+
+    /// <summary>
+    /// Computes the gradient of the loss with respect to the sampler operations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the output of the layer.</param>
+    /// <param name="input">The input tensor for the current batch.</param>
+    /// <param name="outputGrid">The grid of coordinates in the output space.</param>
+    /// <param name="transformationMatrix">The transformation matrix used in the forward pass.</param>
+    /// <returns>The gradient of the loss with respect to the sampler operations.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes the gradient of the loss with respect to the sampler operations by distributing
+    /// the output gradient back to the input locations according to the transformation. It uses the same
+    /// bilinear interpolation weights as in the forward pass.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method calculates how changes in the output affect the sampling process.
+    /// 
+    /// During the backward pass through the sampler:
+    /// - The method takes gradients from the output and distributes them back to the input locations
+    /// - It uses the same transformation and interpolation weights as the forward pass, but in reverse
+    /// - Each output gradient is distributed to the four nearest input pixels that contributed to it
+    /// - This shows how changes in the input would affect the output after transformation
+    /// 
+    /// This step is crucial for calculating how the input should change to improve the overall result.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardSampler(Tensor<T> outputGradient, Tensor<T> input, Tensor<T> outputGrid, Matrix<T> transformationMatrix)
+    {
+        var samplerGradient = new Tensor<T>(input.Shape);
+
+        for (int y = 0; y < _outputHeight; y++)
         {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            for (int x = 0; x < _outputWidth; x++)
             {
-                node.BackwardFunction(node.Gradient);
+                // Apply transformation to output coordinates
+                T srcX = NumOps.Add(
+                    NumOps.Add(
+                        NumOps.Multiply(transformationMatrix[0, 0], outputGrid[y, x, 0]),
+                        NumOps.Multiply(transformationMatrix[0, 1], outputGrid[y, x, 1])
+                    ),
+                    transformationMatrix[0, 2]
+                );
+                T srcY = NumOps.Add(
+                    NumOps.Add(
+                        NumOps.Multiply(transformationMatrix[1, 0], outputGrid[y, x, 0]),
+                        NumOps.Multiply(transformationMatrix[1, 1], outputGrid[y, x, 1])
+                    ),
+                    transformationMatrix[1, 2]
+                );
+
+                // Convert to input image coordinates
+                srcX = NumOps.Multiply(NumOps.Add(srcX, NumOps.One), NumOps.Divide(NumOps.FromDouble(_inputWidth - 1), NumOps.FromDouble(2)));
+                srcY = NumOps.Multiply(NumOps.Add(srcY, NumOps.One), NumOps.Divide(NumOps.FromDouble(_inputHeight - 1), NumOps.FromDouble(2)));
+
+                // Compute the four nearest neighbor coordinates
+                int x0 = (int)Math.Floor(Convert.ToDouble(srcX));
+                int x1 = Math.Min(x0 + 1, _inputWidth - 1);
+                int y0 = (int)Math.Floor(Convert.ToDouble(srcY));
+                int y1 = Math.Min(y0 + 1, _inputHeight - 1);
+
+                // Compute interpolation weights
+                T wx1 = NumOps.Subtract(srcX, NumOps.FromDouble(x0));
+                T wx0 = NumOps.Subtract(NumOps.One, wx1);
+                T wy1 = NumOps.Subtract(srcY, NumOps.FromDouble(y0));
+                T wy0 = NumOps.Subtract(NumOps.One, wy1);
+
+                // Distribute gradients to the four nearest neighbors
+                for (int c = 0; c < input.Shape[3]; c++)
+                {
+                    T gradValue = outputGradient[y, x, c];
+                    samplerGradient[y0, x0, c] = NumOps.Add(samplerGradient[y0, x0, c], NumOps.Multiply(NumOps.Multiply(gradValue, wx0), wy0));
+                    samplerGradient[y0, x1, c] = NumOps.Add(samplerGradient[y0, x1, c], NumOps.Multiply(NumOps.Multiply(gradValue, wx1), wy0));
+                    samplerGradient[y1, x0, c] = NumOps.Add(samplerGradient[y1, x0, c], NumOps.Multiply(NumOps.Multiply(gradValue, wx0), wy1));
+                    samplerGradient[y1, x1, c] = NumOps.Add(samplerGradient[y1, x1, c], NumOps.Multiply(NumOps.Multiply(gradValue, wx1), wy1));
+                }
             }
         }
 
-        // For the localization network parameters, we need to backpropagate from theta gradients
-        // This requires converting theta gradients back and computing localization network gradients
-        if (thetaNode.Gradient != null)
-        {
-            // Initialize parameter gradients as Tensor<T>
-            _localizationWeights1Gradient = new Tensor<T>([_localizationWeights1.Shape[0], _localizationWeights1.Shape[1]]);
-            _localizationWeights1Gradient.Fill(NumOps.Zero);
-            _localizationBias1Gradient = new Tensor<T>([_localizationBias1.Shape[0]]);
-            _localizationBias1Gradient.Fill(NumOps.Zero);
-            _localizationWeights2Gradient = new Tensor<T>([_localizationWeights2.Shape[0], _localizationWeights2.Shape[1]]);
-            _localizationWeights2Gradient.Fill(NumOps.Zero);
-            _localizationBias2Gradient = new Tensor<T>([_localizationBias2.Shape[0]]);
-            _localizationBias2Gradient.Fill(NumOps.Zero);
-
-            // Extract theta gradient (averaging across batch for simplicity in this implementation)
-            // Average theta gradient across batch using Engine ops
-            // Reshape [batch, 2, 3] -> [batch, 6], then mean
-            var thetaGradBatch = thetaNode.Gradient.Reshape([batchSize, 6]);
-            var thetaGrad = Engine.ReduceMean(thetaGradBatch, [0], keepDims: true); // [1, 6]
-
-            // Backpropagate through localization network using Engine operations
-            // This is a simplified version - full implementation would process each batch item
-            var flattenedInput = _lastInput.Reshape([batchSize, _inputHeight * _inputWidth]);
-            var localization1 = Engine.TensorMatMul(flattenedInput, _localizationWeights1);
-            var bias1Expanded = _localizationBias1.Reshape([1, _localizationBias1.Shape[0]]);
-            localization1 = Engine.TensorAdd(localization1, bias1Expanded);
-
-            // Gradient for localization bias2: copy from thetaGrad
-            Engine.TensorCopy(thetaGrad.Reshape([6]), _localizationBias2Gradient);
-
-            // Gradient for localization weights2 using outer product
-            // loc1[0] is [32], thetaGrad[0] is [6] -> outer product gives [32, 6]
-            var loc1First = localization1.Slice(0, 0, 1).Reshape([32]); // First batch item [32]
-            var thetaGradFlat = thetaGrad.Reshape([6]);
-            _localizationWeights2Gradient = Engine.TensorOuterProduct(loc1First, thetaGradFlat);
-        }
-
-        // Return input gradient
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        return samplerGradient;
     }
-
-    // Removed BackwardSampler (unused)
 
     /// <summary>
     /// Computes the gradient of the loss with respect to the grid generator operations.
@@ -887,57 +890,25 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This step is important for understanding how to adjust the transformation to improve the result.
     /// </para>
     /// </remarks>
-    private Tensor<T> BackwardGridGenerator(Tensor<T> samplerGradient, Tensor<T> transformationMatrix)
+    private Matrix<T> BackwardGridGenerator(Tensor<T> samplerGradient, Matrix<T> transformationMatrix)
     {
-        // Fully vectorized implementation using Engine operations
-        // samplerGradient shape: [outputHeight, outputWidth, 2]
+        var gridGeneratorGradient = new Matrix<T>(2, 3);
 
-        // Extract gradX and gradY channels using TensorSliceAxis
-        var gradX2D = Engine.TensorSliceAxis(samplerGradient, 2, 0); // [H, W]
-        var gradY2D = Engine.TensorSliceAxis(samplerGradient, 2, 1); // [H, W]
+        for (int y = 0; y < _outputHeight; y++)
+        {
+            for (int x = 0; x < _outputWidth; x++)
+            {
+                T gradX = samplerGradient[y, x, 0];
+                T gradY = samplerGradient[y, x, 1];
 
-        // Flatten for subsequent operations
-        var flatGradX = gradX2D.Reshape([_outputHeight * _outputWidth]);
-        var flatGradY = gradY2D.Reshape([_outputHeight * _outputWidth]);
-
-        // Create normalized coordinate grids [-1, 1] using TensorLinspace and TensorMeshgrid
-        var xRange = Engine.TensorLinspace(NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0), _outputWidth);
-        var yRange = Engine.TensorLinspace(NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0), _outputHeight);
-        var (xGrid, yGrid) = Engine.TensorMeshgrid(xRange, yRange);
-
-        // Flatten coordinates
-        var xCoords = xGrid.Reshape([_outputHeight * _outputWidth]);
-        var yCoords = yGrid.Reshape([_outputHeight * _outputWidth]);
-
-        // Compute gradient contributions using Engine operations
-        // grad[0,0] = sum(gradX * xCoords)
-        // grad[0,1] = sum(gradX * yCoords)
-        // grad[0,2] = sum(gradX)
-        // grad[1,0] = sum(gradY * xCoords)
-        // grad[1,1] = sum(gradY * yCoords)
-        // grad[1,2] = sum(gradY)
-
-        var gradX_xCoords = Engine.TensorMultiply(flatGradX, xCoords);
-        var gradX_yCoords = Engine.TensorMultiply(flatGradX, yCoords);
-        var gradY_xCoords = Engine.TensorMultiply(flatGradY, xCoords);
-        var gradY_yCoords = Engine.TensorMultiply(flatGradY, yCoords);
-
-        // Sum all elements using ReduceSum
-        var grad00 = Engine.ReduceSum(gradX_xCoords, [0], keepDims: false);
-        var grad01 = Engine.ReduceSum(gradX_yCoords, [0], keepDims: false);
-        var grad02 = Engine.ReduceSum(flatGradX, [0], keepDims: false);
-        var grad10 = Engine.ReduceSum(gradY_xCoords, [0], keepDims: false);
-        var grad11 = Engine.ReduceSum(gradY_yCoords, [0], keepDims: false);
-        var grad12 = Engine.ReduceSum(flatGradY, [0], keepDims: false);
-
-        // Build the result tensor
-        var gridGeneratorGradient = new Tensor<T>([2, 3]);
-        gridGeneratorGradient[0, 0] = grad00.GetFlat(0);
-        gridGeneratorGradient[0, 1] = grad01.GetFlat(0);
-        gridGeneratorGradient[0, 2] = grad02.GetFlat(0);
-        gridGeneratorGradient[1, 0] = grad10.GetFlat(0);
-        gridGeneratorGradient[1, 1] = grad11.GetFlat(0);
-        gridGeneratorGradient[1, 2] = grad12.GetFlat(0);
+                gridGeneratorGradient[0, 0] = NumOps.Add(gridGeneratorGradient[0, 0], NumOps.Multiply(gradX, NumOps.FromDouble((double)x / (_outputWidth - 1) * 2 - 1)));
+                gridGeneratorGradient[0, 1] = NumOps.Add(gridGeneratorGradient[0, 1], NumOps.Multiply(gradX, NumOps.FromDouble((double)y / (_outputHeight - 1) * 2 - 1)));
+                gridGeneratorGradient[0, 2] = NumOps.Add(gridGeneratorGradient[0, 2], gradX);
+                gridGeneratorGradient[1, 0] = NumOps.Add(gridGeneratorGradient[1, 0], NumOps.Multiply(gradY, NumOps.FromDouble((double)x / (_outputWidth - 1) * 2 - 1)));
+                gridGeneratorGradient[1, 1] = NumOps.Add(gridGeneratorGradient[1, 1], NumOps.Multiply(gradY, NumOps.FromDouble((double)y / (_outputHeight - 1) * 2 - 1)));
+                gridGeneratorGradient[1, 2] = NumOps.Add(gridGeneratorGradient[1, 2], gradY);
+            }
+        }
 
         return gridGeneratorGradient;
     }
@@ -963,87 +934,82 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// It shows how to adjust the "smart camera" weights to improve the overall performance.
     /// </para>
     /// </remarks>
-    private void BackwardLocalizationNetwork(Tensor<T> gridGeneratorGradient, Tensor<T> input)
+    private void BackwardLocalizationNetwork(Matrix<T> gridGeneratorGradient, Tensor<T> input)
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         int batchSize = _lastInput.Shape[0];
-
+    
         // Flatten input
         var flattenedInput = input.Reshape([input.Shape[0], _inputHeight * _inputWidth * input.Shape[3]]);
 
         // Backward pass through the second layer of localization network
-        // gridGeneratorGradient is [2, 3], reshape to [1, 6] for dL_dTheta
-        var dL_dTheta = gridGeneratorGradient.Reshape([1, 6]);
+        var dL_dTheta = gridGeneratorGradient.Reshape(gridGeneratorGradient.Rows, 6);
+        var dL_dL1 = dL_dTheta.Multiply(_localizationWeights2.Transpose());
 
-        // dL_dL1 = dL_dTheta @ _localizationWeights2.T
-        var weights2T = Engine.TensorTranspose(_localizationWeights2);
-        var dL_dL1 = Engine.TensorMatMul(dL_dTheta, weights2T);
+        _localizationWeights2Gradient ??= new Matrix<T>(_localizationWeights2.Rows, _localizationWeights2.Columns);
+        _localizationWeights2Gradient = _localizationWeights2Gradient.Add(
+            flattenedInput.ToMatrix().Transpose().Multiply(dL_dL1));
 
-        // Update weights2 gradient: _localizationWeights2Gradient += flattenedInput.T @ dL_dTheta
-        // flattenedInput is [batchSize, inputSize], dL_dTheta is [1, 6]
-        // For simplicity, we use the first sample
-        var flatInputT = Engine.TensorTranspose(flattenedInput);
-        var w2GradUpdate = Engine.TensorMatMul(flatInputT, dL_dTheta);
-        // Add gradient update to weights2 gradient using Engine ops
-        // Only take relevant part [32, 6]
-        var w2UpdateSliced = Engine.TensorSlice(w2GradUpdate, [0, 0], [_localizationWeights2.Shape[0], _localizationWeights2.Shape[1]]);
-        _localizationWeights2Gradient = Engine.TensorAdd(_localizationWeights2Gradient!, w2UpdateSliced);
-
-        // Update bias2 gradient: sum over rows of dL_dTheta -> squeeze first row
-        var bias2Update = Engine.TensorSqueeze(dL_dTheta, 0); // [6]
-        _localizationBias2Gradient = Engine.TensorAdd(_localizationBias2Gradient!, bias2Update);
+        _localizationBias2Gradient ??= new Vector<T>(_localizationBias2.Length);
+        for (int i = 0; i < dL_dTheta.Rows; i++)
+        {
+            _localizationBias2Gradient = _localizationBias2Gradient.Add(dL_dTheta.GetRow(i));
+        }
 
         // Backward pass through the activation function
-        // z1 = flattenedInput @ _localizationWeights1 + bias1
-        var z1 = Engine.TensorMatMul(flattenedInput, _localizationWeights1);
-        var bias1Expanded = _localizationBias1.Reshape([1, _localizationBias1.Shape[0]]);
-        z1 = Engine.TensorAdd(z1, bias1Expanded);
-
-        // Apply activation gradient
-        var dL_dZ1 = ApplyActivationGradientTensor(dL_dL1, z1);
+        var z1 = flattenedInput.ToMatrix().Multiply(_localizationWeights1).AddColumn(_localizationBias1);
+        var dL_dZ1 = ApplyActivationGradient(dL_dL1, z1);
 
         // Backward pass through the first layer of localization network
-        // _localizationWeights1Gradient += flattenedInput.T @ dL_dZ1
-        var w1GradUpdate = Engine.TensorMatMul(flatInputT, dL_dZ1);
-        // Add gradient update using Engine ops - slice to match shape
-        var w1UpdateSliced = Engine.TensorSlice(w1GradUpdate, [0, 0], [_localizationWeights1.Shape[0], _localizationWeights1.Shape[1]]);
-        _localizationWeights1Gradient = Engine.TensorAdd(_localizationWeights1Gradient!, w1UpdateSliced);
+        _localizationWeights1Gradient ??= new Matrix<T>(_localizationWeights1.Rows, _localizationWeights1.Columns);
+        _localizationWeights1Gradient = _localizationWeights1Gradient.Add(
+            flattenedInput.Transpose([1, 0]).ToMatrix().Multiply(dL_dZ1));
 
-        // Update bias1 gradient: sum over batch dimension (axis 0) of dL_dZ1
-        var bias1Update = Engine.ReduceSum(dL_dZ1, [0], keepDims: false); // [32]
-        _localizationBias1Gradient = Engine.TensorAdd(_localizationBias1Gradient!, bias1Update);
+        _localizationBias1Gradient ??= new Vector<T>(_localizationBias1.Length);
+        for (int i = 0; i < dL_dZ1.Rows; i++)
+        {
+            _localizationBias1Gradient = _localizationBias1Gradient.Add(dL_dZ1.GetRow(i));
+        }
     }
 
     /// <summary>
-    /// Applies the activation function gradient to a tensor.
+    /// Applies the activation function gradient to a matrix.
     /// </summary>
     /// <param name="upstream">The upstream gradient coming from the next layer.</param>
     /// <param name="z">The input to the activation function in the forward pass.</param>
     /// <returns>The gradient after applying the activation function gradient.</returns>
     /// <remarks>
     /// <para>
-    /// This method applies the gradient of the activation function to each element of the tensor. It implements
+    /// This method applies the gradient of the activation function to each element of the matrix. It implements
     /// the backpropagation through the activation function by computing how changes in the activation output
     /// affect the activation input.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how changes in the output of an activation function
     /// relate to changes in its input.
-    ///
+    /// 
     /// During backward propagation:
     /// - The activation function gradient shows how sensitive the output is to small changes in the input
-    /// - This method applies this gradient to each value in the tensor
+    /// - This method applies this gradient to each value in the matrix
     /// - The result shows how to adjust the inputs to the activation function to improve the output
-    ///
+    /// 
     /// This is a crucial step in the backpropagation algorithm that allows neural networks to learn.
     /// </para>
     /// </remarks>
-    private Tensor<T> ApplyActivationGradientTensor(Tensor<T> upstream, Tensor<T> z)
+   private Matrix<T> ApplyActivationGradient(Matrix<T> upstream, Matrix<T> z)
     {
-        // Use the tensor-based ApplyActivationDerivative from LayerBase
-        // This handles both scalar and vector activation functions efficiently
-        return ApplyActivationDerivative(z, upstream);
+        var gradient = new Matrix<T>(z.Rows, z.Columns);
+
+        for (int i = 0; i < z.Rows; i++)
+        {
+            Vector<T> rowZ = z.GetRow(i);
+            Vector<T> rowUpstream = upstream.GetRow(i);
+            Vector<T> rowGradient = ApplyActivationDerivative(rowZ, rowUpstream);
+            gradient.SetRow(i, rowGradient);
+        }
+
+        return gradient;
     }
 
     /// <summary>
@@ -1075,18 +1041,10 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _localizationWeights2Gradient == null || _localizationBias2Gradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Update using Engine operations: w = w - lr * gradient
-        var scaledW1Grad = Engine.TensorMultiplyScalar(_localizationWeights1Gradient, learningRate);
-        _localizationWeights1 = Engine.TensorSubtract(_localizationWeights1, scaledW1Grad);
-
-        var scaledB1Grad = Engine.TensorMultiplyScalar(_localizationBias1Gradient, learningRate);
-        _localizationBias1 = Engine.TensorSubtract(_localizationBias1, scaledB1Grad);
-
-        var scaledW2Grad = Engine.TensorMultiplyScalar(_localizationWeights2Gradient, learningRate);
-        _localizationWeights2 = Engine.TensorSubtract(_localizationWeights2, scaledW2Grad);
-
-        var scaledB2Grad = Engine.TensorMultiplyScalar(_localizationBias2Gradient, learningRate);
-        _localizationBias2 = Engine.TensorSubtract(_localizationBias2, scaledB2Grad);
+        _localizationWeights1 = _localizationWeights1.Subtract(_localizationWeights1Gradient.Multiply(learningRate));
+        _localizationBias1 = _localizationBias1.Subtract(_localizationBias1Gradient.Multiply(learningRate));
+        _localizationWeights2 = _localizationWeights2.Subtract(_localizationWeights2Gradient.Multiply(learningRate));
+        _localizationBias2 = _localizationBias2.Subtract(_localizationBias2Gradient.Multiply(learningRate));
     }
 
     /// <summary>
@@ -1114,15 +1072,46 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatW1 = new Vector<T>(_localizationWeights1.ToArray());
-        var flatB1 = new Vector<T>(_localizationBias1.ToArray());
-        var flatW2 = new Vector<T>(_localizationWeights2.ToArray());
-        var flatB2 = new Vector<T>(_localizationBias2.ToArray());
-
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(flatW1, flatB1),
-            Vector<T>.Concatenate(flatW2, flatB2));
+        // Calculate total number of parameters
+        int totalParams = _localizationWeights1.Rows * _localizationWeights1.Columns +
+                          _localizationBias1.Length +
+                          _localizationWeights2.Rows * _localizationWeights2.Columns +
+                          _localizationBias2.Length;
+    
+        var parameters = new Vector<T>(totalParams);
+        int index = 0;
+    
+        // Copy localization weights1
+        for (int i = 0; i < _localizationWeights1.Rows; i++)
+        {
+            for (int j = 0; j < _localizationWeights1.Columns; j++)
+            {
+                parameters[index++] = _localizationWeights1[i, j];
+            }
+        }
+    
+        // Copy localization bias1
+        for (int i = 0; i < _localizationBias1.Length; i++)
+        {
+            parameters[index++] = _localizationBias1[i];
+        }
+    
+        // Copy localization weights2
+        for (int i = 0; i < _localizationWeights2.Rows; i++)
+        {
+            for (int j = 0; j < _localizationWeights2.Columns; j++)
+            {
+                parameters[index++] = _localizationWeights2[i, j];
+            }
+        }
+    
+        // Copy localization bias2
+        for (int i = 0; i < _localizationBias2.Length; i++)
+        {
+            parameters[index++] = _localizationBias2[i];
+        }
+    
+        return parameters;
     }
 
     /// <summary>
@@ -1154,37 +1143,47 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int w1Size = _localizationWeights1.Shape[0] * _localizationWeights1.Shape[1];
-        int b1Size = _localizationBias1.Shape[0];
-        int w2Size = _localizationWeights2.Shape[0] * _localizationWeights2.Shape[1];
-        int b2Size = _localizationBias2.Shape[0];
-        int totalParams = w1Size + b1Size + w2Size + b2Size;
-
+        int totalParams = _localizationWeights1.Rows * _localizationWeights1.Columns +
+                          _localizationBias1.Length +
+                          _localizationWeights2.Rows * _localizationWeights2.Columns +
+                          _localizationBias2.Length;
+    
         if (parameters.Length != totalParams)
         {
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
-
+    
         int index = 0;
-
-        // Set localization weights1 using Tensor<T>.FromVector with slice
-        var w1Params = parameters.Slice(index, w1Size);
-        index += w1Size;
-        _localizationWeights1 = Tensor<T>.FromVector(w1Params).Reshape([_localizationWeights1.Shape[0], _localizationWeights1.Shape[1]]);
-
+    
+        // Set localization weights1
+        for (int i = 0; i < _localizationWeights1.Rows; i++)
+        {
+            for (int j = 0; j < _localizationWeights1.Columns; j++)
+            {
+                _localizationWeights1[i, j] = parameters[index++];
+            }
+        }
+    
         // Set localization bias1
-        var b1Params = parameters.Slice(index, b1Size);
-        index += b1Size;
-        _localizationBias1 = Tensor<T>.FromVector(b1Params);
-
+        for (int i = 0; i < _localizationBias1.Length; i++)
+        {
+            _localizationBias1[i] = parameters[index++];
+        }
+    
         // Set localization weights2
-        var w2Params = parameters.Slice(index, w2Size);
-        index += w2Size;
-        _localizationWeights2 = Tensor<T>.FromVector(w2Params).Reshape([_localizationWeights2.Shape[0], _localizationWeights2.Shape[1]]);
-
+        for (int i = 0; i < _localizationWeights2.Rows; i++)
+        {
+            for (int j = 0; j < _localizationWeights2.Columns; j++)
+            {
+                _localizationWeights2[i, j] = parameters[index++];
+            }
+        }
+    
         // Set localization bias2
-        var b2Params = parameters.Slice(index, b2Size);
-        _localizationBias2 = Tensor<T>.FromVector(b2Params);
+        for (int i = 0; i < _localizationBias2.Length; i++)
+        {
+            _localizationBias2[i] = parameters[index++];
+        }
     }
 
     /// <summary>
@@ -1223,115 +1222,4 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _localizationWeights2Gradient = null;
         _localizationBias2Gradient = null;
     }
-
-    /// <summary>
-    /// Computes the auxiliary loss for this layer based on transformation regularization.
-    /// </summary>
-    /// <returns>The computed auxiliary loss value.</returns>
-    public T ComputeAuxiliaryLoss()
-    {
-        // Placeholder - full implementation would regularize transformation parameters
-        // to prevent extreme transformations
-        _lastTransformationLoss = NumOps.Zero;
-        return _lastTransformationLoss;
-    }
-
-    /// <summary>
-    /// Gets diagnostic information about the auxiliary loss computation.
-    /// </summary>
-    /// <returns>A dictionary containing diagnostic information about the auxiliary loss.</returns>
-    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
-    {
-        return new Dictionary<string, string>
-        {
-            { "TotalTransformationLoss", $"{_lastTransformationLoss}" },
-            { "TransformationWeight", $"{AuxiliaryLossWeight}" },
-            { "UseTransformationLoss", UseAuxiliaryLoss.ToString() }
-        };
-    }
-
-    /// <summary>
-    /// Gets diagnostic information about this component's state and behavior.
-    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
-    /// </summary>
-    /// <returns>
-    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
-    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
-    /// </returns>
-    public override Dictionary<string, string> GetDiagnostics()
-    {
-        var diagnostics = base.GetDiagnostics();
-
-        // Merge auxiliary loss diagnostics
-        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
-        foreach (var kvp in auxDiagnostics)
-        {
-            diagnostics[kvp.Key] = kvp.Value;
-        }
-
-        return diagnostics;
-    }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_localizationWeights1 == null || _localizationBias1 == null ||
-            _localizationWeights2 == null || _localizationBias2 == null)
-            throw new InvalidOperationException("Layer not initialized. Call Initialize() first.");
-
-        // Create input node
-        var symbolicInput = new Tensor<T>(InputShape);
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Localization network: 2-layer fully connected network
-        // Layer 1: Flatten input and apply first fully connected layer
-        int batchSize = InputShape[0];
-        var flattenedShape = new int[] { batchSize, _inputHeight * _inputWidth };
-        var flattenedInput = Autodiff.TensorOperations<T>.Reshape(inputNode, flattenedShape);
-
-        // Use tensors directly (already Tensor<T>)
-        var weights1Node = Autodiff.TensorOperations<T>.Constant(_localizationWeights1, "localization_weights1");
-        var bias1Node = Autodiff.TensorOperations<T>.Constant(_localizationBias1, "localization_bias1");
-
-        // First layer: MatMul + Add + Activation
-        var localization1 = Autodiff.TensorOperations<T>.MatrixMultiply(flattenedInput, weights1Node);
-        localization1 = Autodiff.TensorOperations<T>.Add(localization1, bias1Node);
-
-        // Apply activation function
-        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
-            localization1 = ScalarActivation.ApplyToGraph(localization1);
-        else if (VectorActivation != null && VectorActivation.SupportsJitCompilation)
-            localization1 = VectorActivation.ApplyToGraph(localization1);
-        else
-            localization1 = Autodiff.TensorOperations<T>.Tanh(localization1);
-
-        // Layer 2: Second fully connected layer to get transformation parameters
-        var weights2Node = Autodiff.TensorOperations<T>.Constant(_localizationWeights2, "localization_weights2");
-        var bias2Node = Autodiff.TensorOperations<T>.Constant(_localizationBias2, "localization_bias2");
-
-        var transformationParams = Autodiff.TensorOperations<T>.MatrixMultiply(localization1, weights2Node);
-        transformationParams = Autodiff.TensorOperations<T>.Add(transformationParams, bias2Node);
-
-        // Reshape transformation parameters to [batch, 2, 3] for affine transformation matrix
-        var thetaShape = new int[] { batchSize, 2, 3 };
-        var thetaNode = Autodiff.TensorOperations<T>.Reshape(transformationParams, thetaShape);
-
-        // Generate sampling grid using AffineGrid
-        var gridNode = Autodiff.TensorOperations<T>.AffineGrid(thetaNode, _outputHeight, _outputWidth);
-
-        // Sample from input using GridSample
-        var outputNode = Autodiff.TensorOperations<T>.GridSample(inputNode, gridNode);
-
-        return outputNode;
-    }
-
-    public override bool SupportsJitCompilation => _localizationWeights1 != null && _localizationBias1 != null &&
-                                                     _localizationWeights2 != null && _localizationBias2 != null;
-
 }

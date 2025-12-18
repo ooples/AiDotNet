@@ -1,4 +1,5 @@
-using AiDotNet.Data.Structures;
+using AiDotNet.Data.Abstractions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -25,14 +26,12 @@ namespace AiDotNet.Data.Loaders;
 ///
 /// The base class takes care of:
 /// - Validating that your dataset has enough classes and examples
-/// - Building an efficient index (class to example indices) for fast sampling
+/// - Building an efficient index (class → example indices) for fast sampling
 /// - Storing configuration (N-way, K-shot, query shots)
 /// - Providing protected access to the dataset and configuration
 /// </para>
 /// </remarks>
-public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
-    DataLoaderBase<T>,
-    IEpisodicDataLoader<T, TInput, TOutput>
+public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> : IEpisodicDataLoader<T, TInput, TOutput>
 {
     /// <summary>
     /// The feature matrix containing all examples.
@@ -47,22 +46,22 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
     /// <summary>
     /// The number of classes per task (N in N-way).
     /// </summary>
-    protected readonly int _nWay;
+    protected readonly int NWay;
 
     /// <summary>
     /// The number of support examples per class (K in K-shot).
     /// </summary>
-    protected readonly int _kShot;
+    protected readonly int KShot;
 
     /// <summary>
     /// The number of query examples per class.
     /// </summary>
-    protected readonly int _queryShots;
+    protected readonly int QueryShots;
 
     /// <summary>
     /// Random number generator for task sampling.
     /// </summary>
-    protected Random RandomInstance;
+    protected readonly Random Random;
 
     /// <summary>
     /// Mapping from class label to list of example indices for that class.
@@ -72,46 +71,12 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
     /// <summary>
     /// Array of all available class labels in the dataset.
     /// </summary>
-    protected readonly int[] _availableClasses;
+    protected readonly int[] AvailableClasses;
 
     /// <summary>
     /// Provides mathematical operations for the numeric type T.
     /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
-    private int _batchSize = 1;
-    private int _currentBatchStartIndex;
-
-    /// <inheritdoc/>
-    public override string Name => "EpisodicDataLoader";
-
-    /// <inheritdoc/>
-    public override string Description => "Episodic data loader for N-way K-shot meta-learning";
-
-    /// <inheritdoc/>
-    public override int TotalCount => DatasetX.Rows;
-
-    /// <inheritdoc/>
-    public int NWay => _nWay;
-
-    /// <inheritdoc/>
-    public int KShot => _kShot;
-
-    /// <inheritdoc/>
-    public int QueryShots => _queryShots;
-
-    /// <inheritdoc/>
-    public int AvailableClasses => _availableClasses.Length;
-
-    /// <inheritdoc/>
-    public override int BatchSize
-    {
-        get => _batchSize;
-        set => _batchSize = Math.Max(1, value);
-    }
-
-    /// <inheritdoc/>
-    public bool HasNext => _currentBatchStartIndex < TotalCount;
 
     /// <summary>
     /// Initializes a new instance of the EpisodicDataLoaderBase class with industry-standard defaults.
@@ -151,85 +116,34 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
 
         DatasetX = datasetX;
         DatasetY = datasetY;
-        _nWay = nWay;
-        _kShot = kShot;
-        _queryShots = queryShots;
-        RandomInstance = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
+        NWay = nWay;
+        KShot = kShot;
+        QueryShots = queryShots;
+        Random = seed.HasValue ? new Random(seed.Value) : new Random();
 
         // Preprocess: Build class-to-indices mapping
         ClassToIndices = BuildClassIndex(datasetY);
-        _availableClasses = ClassToIndices.Keys.ToArray();
+        AvailableClasses = ClassToIndices.Keys.ToArray();
 
         // Validate dataset has sufficient classes and examples
         ValidateDatasetSize(ClassToIndices, nWay, kShot, queryShots);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Samples and returns the next N-way K-shot meta-learning task.
+    /// </summary>
+    /// <returns>
+    /// A MetaLearningTask containing support and query sets with the configured N-way K-shot specification.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method delegates to the derived class's implementation of GetNextTaskCore,
+    /// which contains the specific sampling strategy.
+    /// </para>
+    /// </remarks>
     public MetaLearningTask<T, TInput, TOutput> GetNextTask()
     {
         return GetNextTaskCore();
-    }
-
-    /// <inheritdoc/>
-    public IReadOnlyList<MetaLearningTask<T, TInput, TOutput>> GetTaskBatch(int numTasks)
-    {
-        var tasks = new List<MetaLearningTask<T, TInput, TOutput>>(numTasks);
-        for (int i = 0; i < numTasks; i++)
-        {
-            tasks.Add(GetNextTask());
-        }
-        return tasks.AsReadOnly();
-    }
-
-    /// <inheritdoc/>
-    public void SetSeed(int seed)
-    {
-        RandomInstance = RandomHelper.CreateSeededRandom(seed);
-    }
-
-    /// <inheritdoc/>
-    public MetaLearningTask<T, TInput, TOutput> GetNextBatch()
-    {
-        if (!HasNext)
-        {
-            throw new InvalidOperationException("No more batches available. Call Reset() to start over.");
-        }
-
-        var task = GetNextTask();
-        _currentBatchStartIndex += BatchSize;
-        return task;
-    }
-
-    /// <inheritdoc/>
-    public bool TryGetNextBatch(out MetaLearningTask<T, TInput, TOutput> batch)
-    {
-        if (!HasNext)
-        {
-            batch = default!;
-            return false;
-        }
-
-        batch = GetNextBatch();
-        return true;
-    }
-
-    /// <inheritdoc/>
-    protected override Task LoadDataCoreAsync(CancellationToken cancellationToken)
-    {
-        // Data is provided via constructor, so nothing to load asynchronously
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    protected override void UnloadDataCore()
-    {
-        // Data is managed externally via constructor, nothing to unload
-    }
-
-    /// <inheritdoc/>
-    protected override void OnReset()
-    {
-        _currentBatchStartIndex = 0;
     }
 
     /// <summary>
@@ -242,9 +156,9 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
     /// You have access to:
     /// - DatasetX and DatasetY: The full dataset
     /// - ClassToIndices: Fast lookup of examples by class
-    /// - _availableClasses: Array of all class labels
-    /// - _nWay, _kShot, _queryShots: Task configuration
-    /// - RandomInstance: For randomized sampling
+    /// - AvailableClasses: Array of all class labels
+    /// - NWay, KShot, QueryShots: Task configuration
+    /// - Random: For randomized sampling
     /// - NumOps: For numeric operations
     ///
     /// Your implementation should:
@@ -417,8 +331,7 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
         if (typeof(TInput) == typeof(Tensor<T>))
         {
             // Use Tensor.FromMatrix for efficient conversion
-            var tensor = Tensor<T>.FromRowMatrix(matrix);
-            return (TInput)(object)tensor;
+            return (TInput)(object)Tensor<T>.FromMatrix(matrix);
         }
 
         throw new NotSupportedException(

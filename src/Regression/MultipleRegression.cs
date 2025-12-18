@@ -18,7 +18,7 @@ namespace AiDotNet.Regression;
 /// - The model combines all these factors with their importances to make a prediction
 /// 
 /// For example, the formula might be:
-/// House Price = $50,000 + ($100 Ã— Square Footage) + ($15,000 Ã— Number of Bedrooms) + ($25,000 Ã— Neighborhood Rating)
+/// House Price = $50,000 + ($100 × Square Footage) + ($15,000 × Number of Bedrooms) + ($25,000 × Neighborhood Rating)
 /// 
 /// The model learns the best values for these coefficients from your training data to make accurate predictions.
 /// </para>

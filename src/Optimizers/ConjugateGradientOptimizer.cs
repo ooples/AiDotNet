@@ -44,7 +44,13 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// </summary>
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the Conjugate Gradient algorithm.</param>
-    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
+    /// <param name="predictionOptions">Options for prediction statistics.</param>
+    /// <param name="modelOptions">Options for model statistics.</param>
+    /// <param name="modelEvaluator">The model evaluator to use.</param>
+    /// <param name="fitDetector">The fit detector to use.</param>
+    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
+    /// <param name="modelCache">The model cache to use.</param>
+    /// <param name="gradientCache">The gradient cache to use.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This constructor sets up the Conjugate Gradient optimizer with its initial configuration.
     /// You can customize various aspects of how it works, or use default settings.
@@ -52,8 +58,7 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// </remarks>
     public ConjugateGradientOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        ConjugateGradientOptimizerOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        ConjugateGradientOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
         _options = options ?? new ConjugateGradientOptimizerOptions<T, TInput, TOutput>();
@@ -141,19 +146,13 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// </remarks>
     private Vector<T> CalculateDirection(Vector<T> gradient)
     {
-        // === Vectorized Direction Calculation using IEngine (Phase B: US-GPU-015) ===
-        // direction = -gradient + beta * previous_direction
-
         if (_previousGradient == null || _previousDirection == null)
         {
-            // First iteration: direction = -gradient
-            return (Vector<T>)Engine.Multiply(gradient, NumOps.Negate(NumOps.One));
+            return gradient.Transform(x => NumOps.Negate(x));
         }
 
         var beta = CalculateBeta(gradient);
-        var negGradient = (Vector<T>)Engine.Multiply(gradient, NumOps.Negate(NumOps.One));
-        var betaTimesPrevDir = (Vector<T>)Engine.Multiply(_previousDirection, beta);
-        return (Vector<T>)Engine.Add(negGradient, betaTimesPrevDir);
+        return gradient.Transform(x => NumOps.Negate(x)).Add(_previousDirection.Multiply(beta));
     }
 
     /// <summary>
@@ -187,16 +186,12 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// It uses line search to determine how big of a step to take.
     /// </para>
     /// </remarks>
-    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient,
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient, 
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        // === Vectorized Solution Update using IEngine (Phase B: US-GPU-015) ===
-        // new_params = current_params + step * direction
-
         var step = LineSearch(currentSolution, direction, gradient, inputData);
-        var scaledDirection = (Vector<T>)Engine.Multiply(direction, step);
-        var parameters = currentSolution.GetParameters();
-        var newCoefficients = (Vector<T>)Engine.Add(parameters, scaledDirection);
+        var scaledDirection = direction.Transform(x => NumOps.Multiply(x, step));
+        var newCoefficients = currentSolution.GetParameters().Add(scaledDirection);
 
         return currentSolution.WithParameters(newCoefficients);
     }

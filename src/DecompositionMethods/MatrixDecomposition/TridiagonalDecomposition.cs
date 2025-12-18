@@ -101,14 +101,12 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
             Vector<T> u = x.Subtract(Vector<T>.CreateDefault(x.Length, alpha).SetValue(0, x[0]));
             u = u.Divide(u.Norm());
 
-            // VECTORIZED: Construct Householder reflection matrix using outer product
             Matrix<T> P = Matrix<T>.CreateIdentity(n);
-            Matrix<T> uOuter = u.OuterProduct(u).Multiply(NumOps.FromDouble(2));
             for (int i = k + 1; i < n; i++)
             {
                 for (int j = k + 1; j < n; j++)
                 {
-                    P[i, j] = NumOps.Subtract(P[i, j], uOuter[i - k - 1, j - k - 1]);
+                    P[i, j] = NumOps.Subtract(P[i, j], NumOps.Multiply(NumOps.FromDouble(2), NumOps.Multiply(u[i - k - 1], u[j - k - 1])));
                 }
             }
 
@@ -146,21 +144,23 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
                     T c = NumOps.Divide(a, r);
                     T s = NumOps.Divide(b, r);
 
-                    // VECTORIZED: Apply Givens rotation to TMatrix rows using vector operations
-                    Vector<T> rowI1 = TMatrix.GetRow(i + 1);
-                    Vector<T> rowJ = TMatrix.GetRow(j);
-                    Vector<T> newRowI1 = rowI1.Multiply(c).Add(rowJ.Multiply(s));
-                    Vector<T> newRowJ = rowI1.Multiply(NumOps.Negate(s)).Add(rowJ.Multiply(c));
-                    TMatrix.SetRow(i + 1, newRowI1);
-                    TMatrix.SetRow(j, newRowJ);
+                    // Apply Givens rotation to TMatrix
+                    for (int k = i; k < n; k++)
+                    {
+                        T temp1 = TMatrix[i + 1, k];
+                        T temp2 = TMatrix[j, k];
+                        TMatrix[i + 1, k] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
+                        TMatrix[j, k] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp1), NumOps.Multiply(c, temp2));
+                    }
 
-                    // VECTORIZED: Update QMatrix columns using vector operations
-                    Vector<T> colI1 = QMatrix.GetColumn(i + 1);
-                    Vector<T> colJ = QMatrix.GetColumn(j);
-                    Vector<T> newColI1 = colI1.Multiply(c).Add(colJ.Multiply(s));
-                    Vector<T> newColJ = colI1.Multiply(NumOps.Negate(s)).Add(colJ.Multiply(c));
-                    QMatrix.SetColumn(i + 1, newColI1);
-                    QMatrix.SetColumn(j, newColJ);
+                    // Update QMatrix
+                    for (int k = 0; k < n; k++)
+                    {
+                        T temp1 = QMatrix[k, i + 1];
+                        T temp2 = QMatrix[k, j];
+                        QMatrix[k, i + 1] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
+                        QMatrix[k, j] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp1), NumOps.Multiply(c, temp2));
+                    }
                 }
             }
         }
@@ -199,9 +199,7 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
         v[0] = NumOps.One;
         Vector<T> w = A.Multiply(v);
         T alpha = w.DotProduct(v);
-        // VECTORIZED: Subtract projection using Engine operations
-        var proj1 = (Vector<T>)Engine.Multiply(v, alpha);
-        w = (Vector<T>)Engine.Subtract(w, proj1);
+        w = w.Subtract(v.Multiply(alpha));
         T beta = w.Norm();
 
         QMatrix.SetColumn(0, v);
@@ -214,16 +212,12 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
                 break; // Early termination if beta becomes zero
             }
 
-            // VECTORIZED: Normalize using Engine division
-            v = (Vector<T>)Engine.Divide(w, beta);
+            v = w.Divide(beta);
             QMatrix.SetColumn(j, v);
 
-            // VECTORIZED: Subtract projection using Engine operations
-            var proj2 = (Vector<T>)Engine.Multiply(v, beta);
-            w = (Vector<T>)Engine.Subtract(A.Multiply(v), proj2);
+            w = A.Multiply(v).Subtract(v.Multiply(beta));
             alpha = w.DotProduct(v);
-            var proj3 = (Vector<T>)Engine.Multiply(v, alpha);
-            w = (Vector<T>)Engine.Subtract(w, proj3);
+            w = w.Subtract(v.Multiply(alpha));
 
             if (j < n - 1)
             {

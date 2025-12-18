@@ -23,10 +23,10 @@ namespace AiDotNet.Kernels;
 /// </para>
 /// <para>
 /// The formula for the Spline kernel for each dimension is:
-/// k(x, y) = 1 + x*y + x*y*min(x,y) - (x+y)/2*min(x,y)Â² + min(x,y)Â³/3
+/// k(x, y) = 1 + x*y + x*y*min(x,y) - (x+y)/2*min(x,y)² + min(x,y)³/3
 /// 
 /// For simplicity, this implementation uses the form:
-/// k(x, y) = 1 + x*y*min(x,y) + 0.5*min(x,y)Â³
+/// k(x, y) = 1 + x*y*min(x,y) + 0.5*min(x,y)³
 /// 
 /// The overall kernel value is the product of these values across all dimensions.
 /// </para>

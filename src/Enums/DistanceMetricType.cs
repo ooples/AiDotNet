@@ -32,7 +32,7 @@ public enum DistanceMetricType
     /// Euclidean distance is the most common and intuitive distance measure - it's the straight-line 
     /// distance between two points "as the crow flies."
     /// 
-    /// Formula: sqrt((x2-x1)Â² + (y2-y1)Â² + ...)
+    /// Formula: sqrt((x2-x1)² + (y2-y1)² + ...)
     /// 
     /// Think of it as measuring distance with a ruler in a straight line.
     /// 
@@ -92,7 +92,7 @@ public enum DistanceMetricType
     /// Two people facing north are similar (cosine = 1), even if one walked 1 mile and the other 100 miles.
     /// People facing opposite directions have maximum dissimilarity (cosine = -1).
     /// 
-    /// Formula: cos(?) = (AÂ·B)/(||A||Â·||B||)
+    /// Formula: cos(?) = (A·B)/(||A||·||B||)
     /// 
     /// Best used for:
     /// - Text documents (comparing document topics regardless of length)
@@ -194,7 +194,7 @@ public enum DistanceMetricType
     /// - If you have height and weight data, these are correlated (taller people tend to weigh more)
     /// - Mahalanobis distance accounts for this correlation when measuring similarity
     /// 
-    /// Formula: sqrt((x-Âµ)? S?Â¹ (x-Âµ)) where S is the covariance matrix
+    /// Formula: sqrt((x-µ)? S?¹ (x-µ)) where S is the covariance matrix
     /// 
     /// Best used for:
     /// - Multivariate data with correlated features

@@ -283,44 +283,11 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
         var gradient = _fc3.Backward(outputGradient);
         gradient = _fc2.Backward(gradient);
 
         return _fc1.Backward(gradient);
     }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation by delegating to the autodiff implementations
-    /// of the three constituent FullyConnectedLayers. Each sublayer will use its own autodiff implementation.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        // Composite layer: just call Backward on each sublayer with UseAutodiff enabled
-        // The sublayers will handle their own autodiff if they support it
-        var gradient = _fc3.Backward(outputGradient);
-        gradient = _fc2.Backward(gradient);
-        return _fc1.Backward(gradient);
-    }
-
 
     /// <summary>
     /// Updates the parameters of the reconstruction layer using the calculated gradients.
@@ -451,11 +418,34 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Use Vector<T>.Concatenate for production-grade parameter collection
-        return Vector<T>.Concatenate(
-            _fc1.GetParameters(),
-            _fc2.GetParameters(),
-            _fc3.GetParameters());
+        // Get parameters from all sublayers
+        var fc1Params = _fc1.GetParameters();
+        var fc2Params = _fc2.GetParameters();
+        var fc3Params = _fc3.GetParameters();
+    
+        // Create a combined parameter vector
+        int totalParams = fc1Params.Length + fc2Params.Length + fc3Params.Length;
+        var parameters = new Vector<T>(totalParams);
+    
+        // Copy parameters from each layer
+        int index = 0;
+    
+        for (int i = 0; i < fc1Params.Length; i++)
+        {
+            parameters[index++] = fc1Params[i];
+        }
+    
+        for (int i = 0; i < fc2Params.Length; i++)
+        {
+            parameters[index++] = fc2Params[i];
+        }
+    
+        for (int i = 0; i < fc3Params.Length; i++)
+        {
+            parameters[index++] = fc3Params[i];
+        }
+    
+        return parameters;
     }
 
     /// <summary>
@@ -492,21 +482,35 @@ public class ReconstructionLayer<T> : LayerBase<T>
         int fc2ParamCount = _fc2.ParameterCount;
         int fc3ParamCount = _fc3.ParameterCount;
         int totalParams = fc1ParamCount + fc2ParamCount + fc3ParamCount;
-
+    
         if (parameters.Length != totalParams)
         {
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
-
-        // Use Vector.Slice for production-grade parameter distribution
-        int offset = 0;
-        _fc1.SetParameters(parameters.Slice(offset, fc1ParamCount));
-        offset += fc1ParamCount;
-
-        _fc2.SetParameters(parameters.Slice(offset, fc2ParamCount));
-        offset += fc2ParamCount;
-
-        _fc3.SetParameters(parameters.Slice(offset, fc3ParamCount));
+    
+        // Extract and set parameters for each sublayer
+        int index = 0;
+    
+        var fc1Params = new Vector<T>(fc1ParamCount);
+        for (int i = 0; i < fc1ParamCount; i++)
+        {
+            fc1Params[i] = parameters[index++];
+        }
+        _fc1.SetParameters(fc1Params);
+    
+        var fc2Params = new Vector<T>(fc2ParamCount);
+        for (int i = 0; i < fc2ParamCount; i++)
+        {
+            fc2Params[i] = parameters[index++];
+        }
+        _fc2.SetParameters(fc2Params);
+    
+        var fc3Params = new Vector<T>(fc3ParamCount);
+        for (int i = 0; i < fc3ParamCount; i++)
+        {
+            fc3Params[i] = parameters[index++];
+        }
+        _fc3.SetParameters(fc3Params);
     }
 
     /// <summary>
@@ -541,37 +545,4 @@ public class ReconstructionLayer<T> : LayerBase<T>
         _fc2.ResetState();
         _fc3.ResetState();
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Check if all inner layers support JIT compilation
-        if (!_fc1.SupportsJitCompilation || !_fc2.SupportsJitCompilation || !_fc3.SupportsJitCompilation)
-            throw new InvalidOperationException("ReconstructionLayer requires all inner fully connected layers to support JIT compilation.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Chain the three fully connected layers sequentially
-        var fc1InputNodes = new List<ComputationNode<T>>();
-        var currentNode = _fc1.ExportComputationGraph(fc1InputNodes);
-
-        var fc2InputNodes = new List<ComputationNode<T>>();
-        currentNode = _fc2.ExportComputationGraph(fc2InputNodes);
-
-        var fc3InputNodes = new List<ComputationNode<T>>();
-        currentNode = _fc3.ExportComputationGraph(fc3InputNodes);
-
-        return currentNode;
-    }
-
-    public override bool SupportsJitCompilation =>
-        _fc1.SupportsJitCompilation && _fc2.SupportsJitCompilation && _fc3.SupportsJitCompilation;
-
 }

@@ -1,5 +1,3 @@
-
-
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -33,10 +31,16 @@ namespace AiDotNet.LossFunctions;
 public class PoissonLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
+    /// Small value to prevent numerical instability with log(0).
+    /// </summary>
+    private readonly T _epsilon;
+    
+    /// <summary>
     /// Initializes a new instance of the PoissonLoss class.
     /// </summary>
     public PoissonLoss()
     {
+        _epsilon = NumOps.FromDouble(1e-15);
     }
     
     /// <summary>
@@ -52,11 +56,14 @@ public class PoissonLoss<T> : LossFunctionBase<T>
         T sum = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
+            // Ensure predicted values are positive
+            T p = MathHelper.Max(predicted[i], _epsilon);
+            
             // Poisson loss: predicted - actual * log(predicted)
             // (Omitting log(actual!) as it's constant wrt predictions)
             sum = NumOps.Add(sum, NumOps.Subtract(
-                predicted[i],
-                NumOps.Multiply(actual[i], NumericalStabilityHelper.SafeLog(predicted[i], NumericalStabilityHelper.SmallEpsilon))
+                p,
+                NumOps.Multiply(actual[i], NumOps.Log(p))
             ));
         }
         
@@ -76,8 +83,11 @@ public class PoissonLoss<T> : LossFunctionBase<T>
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
+            // Ensure predicted values are positive
+            T p = MathHelper.Max(predicted[i], _epsilon);
+            
             // The derivative is 1 - actual/predicted
-            derivative[i] = NumOps.Subtract(NumOps.One, NumericalStabilityHelper.SafeDiv(actual[i], predicted[i], NumericalStabilityHelper.SmallEpsilon));
+            derivative[i] = NumOps.Subtract(NumOps.One, NumOps.Divide(actual[i], p));
         }
         
         return derivative.Divide(NumOps.FromDouble(predicted.Length));

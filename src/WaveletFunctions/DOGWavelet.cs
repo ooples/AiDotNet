@@ -38,8 +38,13 @@ namespace AiDotNet.WaveletFunctions;
 /// The order parameter lets you choose which type of change you're looking for.
 /// </para>
 /// </remarks>
-public class DOGWavelet<T> : WaveletFunctionBase<T>
+public class DOGWavelet<T> : IWaveletFunction<T>
 {
+    /// <summary>
+    /// Provides numeric operations for the specific type T.
+    /// </summary>
+    private readonly INumericOperations<T> _numOps;
+    
     /// <summary>
     /// The order of the derivative of the Gaussian function.
     /// </summary>
@@ -78,6 +83,7 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public DOGWavelet(int order = 2)
     {
+        _numOps = MathHelper.GetNumericOperations<T>();
         _order = order;
     }
 
@@ -92,16 +98,16 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     /// This method gives you the actual value of the DOG wavelet at a specific point.
     /// 
     /// The DOG wavelet is defined as the nth derivative of the Gaussian function:
-    /// ?(x) = (-1)^n Â· d^n/dx^n(e^(-xÂ²/2))
+    /// ?(x) = (-1)^n · d^n/dx^n(e^(-x²/2))
     /// 
     /// For specific orders, this gives:
-    /// - Order 1: ?(x) = -x Â· e^(-xÂ²/2)
-    /// - Order 2: ?(x) = (xÂ² - 1) Â· e^(-xÂ²/2)
-    /// - Order 3: ?(x) = -(xÂ³ - 3x) Â· e^(-xÂ²/2)
+    /// - Order 1: ?(x) = -x · e^(-x²/2)
+    /// - Order 2: ?(x) = (x² - 1) · e^(-x²/2)
+    /// - Order 3: ?(x) = -(x³ - 3x) · e^(-x²/2)
     /// 
     /// The implementation uses a combination of:
     /// 1. The appropriate polynomial term based on the order
-    /// 2. The Gaussian envelope e^(-xÂ²/2)
+    /// 2. The Gaussian envelope e^(-x²/2)
     /// 3. A normalization factor to ensure proper scaling
     /// 
     /// The result is a function that:
@@ -113,21 +119,21 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     /// to a signal at specific points.
     /// </para>
     /// </remarks>
-    public override T Calculate(T x)
+    public T Calculate(T x)
     {
-        T x2 = NumOps.Square(x);
-        T exp_term = NumOps.Exp(NumOps.Negate(NumOps.Divide(x2, NumOps.FromDouble(2))));
+        T x2 = _numOps.Square(x);
+        T exp_term = _numOps.Exp(_numOps.Negate(_numOps.Divide(x2, _numOps.FromDouble(2))));
 
-        T result = NumOps.FromDouble(Math.Pow(-1, _order));
+        T result = _numOps.FromDouble(Math.Pow(-1, _order));
         for (int i = 0; i < _order; i++)
         {
-            result = NumOps.Multiply(result, x);
+            result = _numOps.Multiply(result, x);
         }
-        result = NumOps.Multiply(result, exp_term);
+        result = _numOps.Multiply(result, exp_term);
 
         // Normalization factor
         double norm_factor = Math.Pow(-1, _order) / (Math.Sqrt(Convert.ToDouble(MathHelper.Factorial<T>(_order))) * Math.Pow(2, (_order + 1.0) / 2.0));
-        result = NumOps.Multiply(result, NumOps.FromDouble(norm_factor));
+        result = _numOps.Multiply(result, _numOps.FromDouble(norm_factor));
 
         return result;
     }
@@ -162,7 +168,7 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     /// which makes wavelet decomposition efficient for compression and multi-resolution analysis.
     /// </para>
     /// </remarks>
-    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         var waveletCoeffs = GetWaveletCoefficients();
         var scalingCoeffs = GetScalingCoefficients();
@@ -189,7 +195,7 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     /// 
     /// For DOG wavelets, these coefficients are derived from the Gaussian function:
     /// 
-    /// g(x) = e^(-xÂ²)
+    /// g(x) = e^(-x²)
     /// 
     /// The Gaussian function is a natural choice for the scaling function because:
     /// - It's smooth and has good localization properties
@@ -204,24 +210,24 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     /// providing the "approximation" part of the wavelet decomposition.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetScalingCoefficients()
+    public Vector<T> GetScalingCoefficients()
     {
         int length = 64;
         var coeffs = new T[length];
-        T sum = NumOps.Zero;
+        T sum = _numOps.Zero;
 
         for (int i = 0; i < length; i++)
         {
-            T x = NumOps.Divide(NumOps.FromDouble(i - length / 2), NumOps.FromDouble(length / 4));
-            T value = NumOps.Exp(NumOps.Negate(NumOps.Multiply(x, x)));
+            T x = _numOps.Divide(_numOps.FromDouble(i - length / 2), _numOps.FromDouble(length / 4));
+            T value = _numOps.Exp(_numOps.Negate(_numOps.Multiply(x, x)));
             coeffs[i] = value;
-            sum = NumOps.Add(sum, NumOps.Abs(value));
+            sum = _numOps.Add(sum, _numOps.Abs(value));
         }
 
         // Normalize
         for (int i = 0; i < length; i++)
         {
-            coeffs[i] = NumOps.Divide(coeffs[i], sum);
+            coeffs[i] = _numOps.Divide(coeffs[i], sum);
         }
 
         return new Vector<T>(coeffs);
@@ -240,7 +246,7 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     /// For DOG wavelets, these coefficients are a discretized version of the
     /// first derivative of the Gaussian function:
     /// 
-    /// ?(t) = -2t Â· e^(-tÂ²)
+    /// ?(t) = -2t · e^(-t²)
     /// 
     /// This method:
     /// 1. Creates a discretized version of this function with specified length
@@ -256,28 +262,28 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     /// need to be extended to use the appropriate derivative based on the order.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetWaveletCoefficients()
+    public Vector<T> GetWaveletCoefficients()
     {
         int length = 256;
         var coeffs = new T[length];
-        T sum = NumOps.Zero;
+        T sum = _numOps.Zero;
 
         for (int i = 0; i < length; i++)
         {
-            T t = NumOps.Divide(NumOps.FromDouble(i - length / 2), NumOps.FromDouble(length / 4));
-            T t2 = NumOps.Multiply(t, t);
-            T value = NumOps.Multiply(
-                NumOps.Negate(NumOps.Multiply(NumOps.FromDouble(2), t)),
-                NumOps.Exp(NumOps.Negate(t2))
+            T t = _numOps.Divide(_numOps.FromDouble(i - length / 2), _numOps.FromDouble(length / 4));
+            T t2 = _numOps.Multiply(t, t);
+            T value = _numOps.Multiply(
+                _numOps.Negate(_numOps.Multiply(_numOps.FromDouble(2), t)),
+                _numOps.Exp(_numOps.Negate(t2))
             );
             coeffs[i] = value;
-            sum = NumOps.Add(sum, NumOps.Abs(value));
+            sum = _numOps.Add(sum, _numOps.Abs(value));
         }
 
         // Normalize
         for (int i = 0; i < length; i++)
         {
-            coeffs[i] = NumOps.Divide(coeffs[i], sum);
+            coeffs[i] = _numOps.Divide(coeffs[i], sum);
         }
 
         return new Vector<T>(coeffs);
@@ -317,12 +323,12 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
 
         for (int i = 0; i < resultLength; i++)
         {
-            T sum = NumOps.Zero;
+            T sum = _numOps.Zero;
             for (int j = 0; j < kernel.Length; j++)
             {
                 if (i - j >= 0 && i - j < input.Length)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(input[i - j], kernel[j]));
+                    sum = _numOps.Add(sum, _numOps.Multiply(input[i - j], kernel[j]));
                 }
             }
             result[i] = sum;

@@ -32,7 +32,7 @@ public class FitnessCalculatorOptions
     /// </list>
     /// </para>
     /// <para><b>For Beginners:</b> This determines which method is used to score your model's performance.
-    /// The default, R-squared (also written as RÂ²), measures how well your model explains the variations in your data.
+    /// The default, R-squared (also written as R²), measures how well your model explains the variations in your data.
     /// An R-squared of 1.0 means your model perfectly predicts every value, while 0.0 means it's no better than
     /// just guessing the average value every time. Other options include:
     /// <list type="bullet">

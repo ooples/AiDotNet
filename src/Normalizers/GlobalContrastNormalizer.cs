@@ -27,7 +27,7 @@ namespace AiDotNet.Normalizers;
 /// - The result is values that typically fall between 0 and 1, with 0.5 being the new average
 /// 
 /// For example, if you have temperature readings that are clustered together:
-/// - Original temperatures: [68Â°F, 70Â°F, 71Â°F, 69Â°F, 72Â°F]
+/// - Original temperatures: [68°F, 70°F, 71°F, 69°F, 72°F]
 /// - After normalization, they might become: [0.3, 0.5, 0.6, 0.4, 0.7]
 /// - Now the differences between temperatures are more visible and standardized
 /// 
@@ -359,7 +359,7 @@ public class GlobalContrastNormalizer<T, TInput, TOutput> : NormalizerBase<T, TI
     /// - The output's standard deviation was 5 (meaning it was divided by 10 during normalization)
     /// - The model learned a coefficient of 2.0 for this feature on normalized data
     /// 
-    /// The denormalized coefficient would be 2.0 Ã— (10 Ã· 20) = 1.0
+    /// The denormalized coefficient would be 2.0 × (10 ÷ 20) = 1.0
     /// 
     /// This ensures that predictions made using original data will be properly scaled.
     /// </para>

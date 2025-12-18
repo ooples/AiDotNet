@@ -103,7 +103,7 @@ namespace AiDotNet.Interpretability
                 throw new ArgumentNullException(nameof(sensitiveFeature));
 
             if (predictions.Length != sensitiveFeature.Length)
-                throw new ArgumentException($"Predictions and sensitive feature lengths must match. Predictions: {predictions.Length}, Sensitive feature: {sensitiveFeature.Length}");
+                throw new ArgumentException($"Predictions and sensitive feature must have the same length. Predictions: {predictions.Length}, Sensitive feature: {sensitiveFeature.Length}");
 
             if (actualLabels != null && predictions.Length != actualLabels.Length)
                 throw new ArgumentException($"Predictions and actual labels must have the same length. Predictions: {predictions.Length}, Actual labels: {actualLabels.Length}");

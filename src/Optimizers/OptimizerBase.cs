@@ -34,11 +34,6 @@ namespace AiDotNet.Optimizers;
 public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, TOutput>
 {
     /// <summary>
-    /// Gets the global execution engine for vector operations.
-    /// </summary>
-    protected IEngine Engine => AiDotNetEngine.Current;
-
-    /// <summary>
     /// Provides numeric operations for type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps;
@@ -1133,7 +1128,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </para>
     /// </remarks>
     public abstract OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions();
-
+    
     /// <summary>
     /// Calculates the parameter updates based on the gradients.
     /// </summary>

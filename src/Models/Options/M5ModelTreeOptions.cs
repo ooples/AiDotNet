@@ -114,7 +114,7 @@ public class M5ModelTreeOptions : DecisionTreeOptions
     /// 
     /// Returning to our house price example:
     /// - When set to true (the default): Each category of houses gets its own formula for predicting price
-    ///   (like: price = $100,000 + $100 Ã— sq.ft + $10,000 Ã— #bathrooms)
+    ///   (like: price = $100,000 + $100 × sq.ft + $10,000 × #bathrooms)
     /// - When set to false: Each category just gets an average price (like: all 3-bedroom suburban houses
     ///   are predicted to cost $350,000)
     /// 

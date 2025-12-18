@@ -158,7 +158,7 @@ public class NotAKnotSplineInterpolation<T> : IInterpolation<T>
     /// curve extra smooth.
     /// </para>
     /// <para>
-    /// Each cubic polynomial has the form: a + b(x-xi) + c(x-xi)Â² + d(x-xi)Â³, where a, b, c, and d are the
+    /// Each cubic polynomial has the form: a + b(x-xi) + c(x-xi)² + d(x-xi)³, where a, b, c, and d are the
     /// coefficients stored in the _coefficients array.
     /// </para>
     /// </remarks>
@@ -251,8 +251,8 @@ public class NotAKnotSplineInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method calculates x raised to a power. For example:
-    /// - Power(2, 3) = 2Â³ = 2 Ã— 2 Ã— 2 = 8
-    /// - Power(5, 2) = 5Â² = 5 Ã— 5 = 25
+    /// - Power(2, 3) = 2³ = 2 × 2 × 2 = 8
+    /// - Power(5, 2) = 5² = 5 × 5 = 25
     /// </para>
     /// <para>
     /// The method works by multiplying the base value by itself the specified number of times.

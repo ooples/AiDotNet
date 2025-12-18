@@ -1,6 +1,4 @@
-using AiDotNet.Autodiff;
-
-namespace AiDotNet.TimeSeries;
+﻿namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Implements an Unobserved Components Model (UCM) for time series decomposition and forecasting.
@@ -371,9 +369,11 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         {
             int start = Math.Max(0, i - windowSize + 1);
             int end = i + 1;
-            // VECTORIZED: Use Engine.Sum() on slice instead of NumOps loop
-            var window = data.Slice(start, end - start);
-            T sum = Engine.Sum(window);
+            T sum = NumOps.Zero;
+            for (int j = start; j < end; j++)
+            {
+                sum = NumOps.Add(sum, data[j]);
+            }
 
             result[i] = NumOps.Divide(sum, NumOps.FromDouble(end - start));
         }
@@ -423,12 +423,13 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
             seasonalIndices[i] = NumOps.Divide(sum, NumOps.FromDouble(count));
         }
 
-        // VECTORIZED: Normalize seasonal indices using Engine operations
-        T seasonalSum = Engine.Sum(seasonalIndices);
+        // Normalize seasonal indices
+        T seasonalSum = seasonalIndices.Sum();
         T seasonalAdjustment = NumOps.Divide(seasonalSum, NumOps.FromDouble(period));
-        var adjustment = new Vector<T>(period);
-        for (int i = 0; i < period; i++) adjustment[i] = seasonalAdjustment;
-        seasonalIndices = (Vector<T>)Engine.Subtract(seasonalIndices, adjustment);
+        for (int i = 0; i < period; i++)
+        {
+            seasonalIndices[i] = NumOps.Subtract(seasonalIndices[i], seasonalAdjustment);
+        }
 
         // Apply seasonal indices to the full series
         for (int i = 0; i < n; i++)
@@ -1036,8 +1037,8 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// - RMSE (Root Mean Squared Error): The square root of MSE, which gives errors in the same units
     ///   as your original data. For example, if forecasting sales in dollars, RMSE is also in dollars.
     /// 
-    /// - R² (R-squared): The proportion of variance in the dependent variable explained by the model.
-    ///   Values range from 0 to 1, with higher values indicating better fit. An R² of 0.75 means
+    /// - R� (R-squared): The proportion of variance in the dependent variable explained by the model.
+    ///   Values range from 0 to 1, with higher values indicating better fit. An R� of 0.75 means
     ///   the model explains 75% of the variation in the data.
     /// 
     /// These metrics together provide a comprehensive assessment of model performance.
@@ -1446,10 +1447,14 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         Vector<T> irregularForecast = ForecastIrregular(horizon);
     
         // Combine components to produce the final forecast
-        // VECTORIZED: Add forecast components using Engine operations
-        forecast = (Vector<T>)Engine.Add(trendForecast, seasonalForecast);
-        forecast = (Vector<T>)Engine.Add(forecast, cycleForecast);
-        forecast = (Vector<T>)Engine.Add(forecast, irregularForecast);
+        for (int i = 0; i < horizon; i++)
+        {
+            forecast[i] = NumOps.Zero;
+            forecast[i] = NumOps.Add(forecast[i], trendForecast[i]);
+            forecast[i] = NumOps.Add(forecast[i], seasonalForecast[i]);
+            forecast[i] = NumOps.Add(forecast[i], cycleForecast[i]);
+            forecast[i] = NumOps.Add(forecast[i], irregularForecast[i]);
+        }
     
         return forecast;
     }
@@ -1674,7 +1679,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         T irregularStdDev = _irregular.StandardDeviation();
     
         // Create a random number generator
-        Random random = RandomHelper.CreateSecureRandom();
+        Random random = new Random();
     
         // Damping factor to reduce irregular component over time
         T dampingFactor = NumOps.FromDouble(0.9);
@@ -1839,83 +1844,5 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         };
     
         return metadata;
-    }
-
-    /// <summary>
-    /// Gets whether this model supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Returns <c>true</c> when the model has decomposed components.
-    /// Prediction uses precomputed trend, seasonal, and cycle components.
-    /// </value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> While UCM training uses Kalman filtering,
-    /// prediction combines precomputed components and can be JIT compiled.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => _trend != null && _trend.Length > 0;
-
-    /// <summary>
-    /// Exports the UCM model as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">A list to which input nodes will be added.</param>
-    /// <returns>The output computation node representing the forecast.</returns>
-    /// <remarks>
-    /// <para>
-    /// The computation graph represents: forecast = trend + seasonal + cycle
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes), "Input nodes list cannot be null.");
-        }
-
-        if (_trend == null || _trend.Length == 0)
-        {
-            throw new InvalidOperationException("Cannot export computation graph: Model has not been trained.");
-        }
-
-        // Create input node for time index
-        var timeIndexTensor = new Tensor<T>(new[] { 1 });
-        var timeIndexNode = TensorOperations<T>.Variable(timeIndexTensor, "time_index", requiresGradient: false);
-        inputNodes.Add(timeIndexNode);
-
-        // Get last trend value
-        var lastTrend = _trend[_trend.Length - 1];
-        var trendTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { lastTrend }));
-        var resultNode = TensorOperations<T>.Constant(trendTensor, "trend");
-
-        // Add average seasonal
-        if (_seasonal != null && _seasonal.Length > 0)
-        {
-            T avgSeasonal = NumOps.Zero;
-            int period = _ucOptions.SeasonalPeriod;
-            for (int i = Math.Max(0, _seasonal.Length - period); i < _seasonal.Length; i++)
-            {
-                avgSeasonal = NumOps.Add(avgSeasonal, _seasonal[i]);
-            }
-            avgSeasonal = NumOps.Divide(avgSeasonal, NumOps.FromDouble(Math.Min(period, _seasonal.Length)));
-            var seasonalTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { avgSeasonal }));
-            var seasonalNode = TensorOperations<T>.Constant(seasonalTensor, "seasonal");
-            resultNode = TensorOperations<T>.Add(resultNode, seasonalNode);
-        }
-
-        // Add average cycle
-        if (_cycle != null && _cycle.Length > 0)
-        {
-            T avgCycle = NumOps.Zero;
-            for (int i = 0; i < _cycle.Length; i++)
-            {
-                avgCycle = NumOps.Add(avgCycle, _cycle[i]);
-            }
-            avgCycle = NumOps.Divide(avgCycle, NumOps.FromDouble(_cycle.Length));
-            var cycleTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { avgCycle }));
-            var cycleNode = TensorOperations<T>.Constant(cycleTensor, "cycle");
-            resultNode = TensorOperations<T>.Add(resultNode, cycleNode);
-        }
-
-        return resultNode;
     }
 }

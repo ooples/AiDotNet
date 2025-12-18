@@ -124,13 +124,6 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     /// <exception cref="ArgumentException">
     /// Thrown when the matrix is not square, not symmetric, or not positive definite.
     /// </exception>
-    /// <remarks>
-    /// <para>
-    /// <b>VECTORIZED:</b> This method uses vectorized dot product operations for inner loop sums,
-    /// improving performance while maintaining the sequential outer loop structure required by
-    /// Cholesky's strong data dependencies.
-    /// </para>
-    /// </remarks>
     private Matrix<T> ComputeCholeskyDefault(Matrix<T> matrix)
     {
         if (matrix.Rows != matrix.Columns)
@@ -150,17 +143,14 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
                     throw new ArgumentException("Matrix must be symmetric for Cholesky decomposition.");
                 }
 
+                T sum = NumOps.Zero;
+
                 if (j == i) // Diagonal elements
                 {
-                    // VECTORIZED: compute sum of squares using dot product
-                    T sum = NumOps.Zero;
-                    if (j > 0)
+                    for (int k = 0; k < j; k++)
                     {
-                        var rowJ = L.GetRow(j);
-                        var rowJSegment = new Vector<T>(rowJ.Take(j));
-                        sum = rowJSegment.DotProduct(rowJSegment);
+                        sum = NumOps.Add(sum, NumOps.Multiply(L[j, k], L[j, k]));
                     }
-
                     T diagonalValue = NumOps.Subtract(matrix[j, j], sum);
                     if (NumOps.LessThanOrEquals(diagonalValue, NumOps.Zero))
                     {
@@ -170,17 +160,10 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
                 }
                 else // Lower triangular elements
                 {
-                    // VECTORIZED: compute dot product of L[i,:j] and L[j,:j]
-                    T sum = NumOps.Zero;
-                    if (j > 0)
+                    for (int k = 0; k < j; k++)
                     {
-                        var rowI = L.GetRow(i);
-                        var rowJ = L.GetRow(j);
-                        var rowISegment = new Vector<T>(rowI.Take(j));
-                        var rowJSegment = new Vector<T>(rowJ.Take(j));
-                        sum = rowISegment.DotProduct(rowJSegment);
+                        sum = NumOps.Add(sum, NumOps.Multiply(L[i, k], L[j, k]));
                     }
-
                     L[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], sum), L[j, j]);
                 }
             }
@@ -207,11 +190,6 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     /// building up the solution gradually. It's like solving a puzzle by completing
     /// one vertical section before moving to the next.
     /// </para>
-    /// <para>
-    /// <b>VECTORIZED:</b> This method uses vectorized dot product operations for computing
-    /// row sums, replacing scalar loops with efficient vector operations while maintaining
-    /// the column-by-column processing order required by the algorithm.
-    /// </para>
     /// </remarks>
     private Matrix<T> ComputeCholeskyCrout(Matrix<T> matrix)
     {
@@ -225,15 +203,11 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
 
         for (int j = 0; j < n; j++)
         {
-            // VECTORIZED: compute diagonal element using dot product
             T sum = NumOps.Zero;
-            if (j > 0)
+            for (int k = 0; k < j; k++)
             {
-                var rowJ = L.GetRow(j);
-                var rowJSegment = new Vector<T>(rowJ.Take(j));
-                sum = rowJSegment.DotProduct(rowJSegment);
+                sum = NumOps.Add(sum, NumOps.Multiply(L[j, k], L[j, k]));
             }
-
             T diagonalValue = NumOps.Subtract(matrix[j, j], sum);
             if (NumOps.LessThanOrEquals(diagonalValue, NumOps.Zero))
             {
@@ -241,27 +215,14 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
             }
             L[j, j] = NumOps.Sqrt(diagonalValue);
 
-            // VECTORIZED: compute off-diagonal elements using dot product
-            if (j > 0)
+            for (int i = j + 1; i < n; i++)
             {
-                var rowJ = L.GetRow(j);
-                var rowJSegment = new Vector<T>(rowJ.Take(j));
-
-                for (int i = j + 1; i < n; i++)
+                sum = NumOps.Zero;
+                for (int k = 0; k < j; k++)
                 {
-                    var rowI = L.GetRow(i);
-                    var rowISegment = new Vector<T>(rowI.Take(j));
-                    sum = rowISegment.DotProduct(rowJSegment);
-                    L[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], sum), L[j, j]);
+                    sum = NumOps.Add(sum, NumOps.Multiply(L[i, k], L[j, k]));
                 }
-            }
-            else
-            {
-                // First column: no dot product needed
-                for (int i = j + 1; i < n; i++)
-                {
-                    L[i, j] = NumOps.Divide(matrix[i, j], L[j, j]);
-                }
+                L[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], sum), L[j, j]);
             }
         }
 
@@ -286,11 +247,6 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     /// building up the solution gradually. It's like solving a puzzle by completing
     /// one horizontal section before moving to the next.
     /// </para>
-    /// <para>
-    /// <b>VECTORIZED:</b> This method uses vectorized dot product operations to compute
-    /// row element contributions, replacing scalar accumulation loops with efficient
-    /// vector operations while maintaining row-by-row processing order.
-    /// </para>
     /// </remarks>
     private Matrix<T> ComputeCholeskyBanachiewicz(Matrix<T> matrix)
     {
@@ -306,15 +262,10 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
         {
             for (int j = 0; j <= i; j++)
             {
-                // VECTORIZED: compute dot product of L[i,:j] and L[j,:j]
                 T sum = NumOps.Zero;
-                if (j > 0)
+                for (int k = 0; k < j; k++)
                 {
-                    var rowI = L.GetRow(i);
-                    var rowJ = L.GetRow(j);
-                    var rowISegment = new Vector<T>(rowI.Take(j));
-                    var rowJSegment = new Vector<T>(rowJ.Take(j));
-                    sum = rowISegment.DotProduct(rowJSegment);
+                    sum = NumOps.Add(sum, NumOps.Multiply(L[i, k], L[j, k]));
                 }
 
                 if (i == j)
@@ -354,11 +305,6 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     /// which can give more accurate results for certain matrices. It's like doing all the
     /// easy arithmetic first and saving the complicated square root calculations for last.
     /// </para>
-    /// <para>
-    /// <b>VECTORIZED:</b> This method uses vectorized operations with element-wise multiplication
-    /// and dot products for computing weighted sums, replacing scalar accumulation loops.
-    /// The final conversion to LL' form uses vectorized row operations.
-    /// </para>
     /// </remarks>
     private Matrix<T> ComputeCholeskyLDL(Matrix<T> matrix)
     {
@@ -374,46 +320,24 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
         for (int j = 0; j < n; j++)
         {
             T d = matrix[j, j];
-            if (j > 0)
+            for (int k = 0; k < j; k++)
             {
-                // VECTORIZED: compute weighted sum using element-wise operations
-                var rowJ = L.GetRow(j);
-                var rowJSegment = new Vector<T>(rowJ.Take(j));
-                var dSegment = new Vector<T>(D.Take(j));
-
-                // Compute L[j,k]^2 * D[k] for k < j
-                var squaredRow = new Vector<T>(rowJSegment.Select(x => NumOps.Multiply(x, x)));
-                var weighted = new Vector<T>(squaredRow.Zip(dSegment, (l, dVal) => NumOps.Multiply(l, dVal)));
-                var weightedSum = weighted.Aggregate(NumOps.Zero, (acc, val) => NumOps.Add(acc, val));
-
-                d = NumOps.Subtract(d, weightedSum);
+                d = NumOps.Subtract(d, NumOps.Multiply(NumOps.Multiply(L[j, k], L[j, k]), D[k]));
             }
             D[j] = d;
 
             for (int i = j + 1; i < n; i++)
             {
                 T sum = matrix[i, j];
-                if (j > 0)
+                for (int k = 0; k < j; k++)
                 {
-                    // VECTORIZED: compute weighted dot product
-                    var rowI = L.GetRow(i);
-                    var rowJ = L.GetRow(j);
-                    var rowISegment = new Vector<T>(rowI.Take(j));
-                    var rowJSegment = new Vector<T>(rowJ.Take(j));
-                    var dSegment = new Vector<T>(D.Take(j));
-
-                    // Compute sum of L[i,k] * L[j,k] * D[k] for k < j
-                    var product = new Vector<T>(rowISegment.Zip(rowJSegment, (li, lj) => NumOps.Multiply(li, lj)));
-                    var weighted = new Vector<T>(product.Zip(dSegment, (p, dVal) => NumOps.Multiply(p, dVal)));
-                    var weightedSum = weighted.Aggregate(NumOps.Zero, (acc, val) => NumOps.Add(acc, val));
-
-                    sum = NumOps.Subtract(sum, weightedSum);
+                    sum = NumOps.Subtract(sum, NumOps.Multiply(NumOps.Multiply(L[i, k], L[j, k]), D[k]));
                 }
                 L[i, j] = NumOps.Divide(sum, d);
             }
         }
 
-        // Convert LDL' to LL' - vectorized per row
+        // Convert LDL' to LL'
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j <= i; j++)
@@ -484,20 +408,14 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
                 }
 
                 var C = matrix.SubMatrix(i + size, i + size, n - i - size, n - i - size);
-                // VECTORIZED: compute row updates using dot products
                 for (int r = 0; r < n - i - size; r++)
                 {
                     for (int c = 0; c <= r; c++)
                     {
-                        // VECTORIZED: compute dot product of L[i+size+r, i:i+size] and L[i+size+c, i:i+size]
                         T sum = NumOps.Zero;
-                        if (size > 0)
+                        for (int k = 0; k < size; k++)
                         {
-                            var rowR = L.GetRow(i + size + r);
-                            var rowC = L.GetRow(i + size + c);
-                            var rowRSegment = new Vector<T>(rowR.Skip(i).Take(size));
-                            var rowCSegment = new Vector<T>(rowC.Skip(i).Take(size));
-                            sum = rowRSegment.DotProduct(rowCSegment);
+                            sum = NumOps.Add(sum, NumOps.Multiply(L[i + size + r, i + k], L[i + size + c, i + k]));
                         }
                         C[r, c] = NumOps.Subtract(C[r, c], sum);
                         C[c, r] = C[r, c];
@@ -535,25 +453,15 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     /// <param name="L">The lower triangular matrix.</param>
     /// <param name="b">The right-hand side vector.</param>
     /// <returns>The solution vector y.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>VECTORIZED:</b> Uses vectorized dot product for computing row contributions,
-    /// replacing scalar accumulation loops while maintaining the sequential dependency order.
-    /// </para>
-    /// </remarks>
     private Vector<T> ForwardSubstitution(Matrix<T> L, Vector<T> b)
     {
         var y = new Vector<T>(L.Rows);
         for (int i = 0; i < L.Rows; i++)
         {
-            // VECTORIZED: compute dot product of L[i,:i] and y[:i]
             T sum = NumOps.Zero;
-            if (i > 0)
+            for (int j = 0; j < i; j++)
             {
-                var rowL = L.GetRow(i);
-                var rowLSegment = new Vector<T>(rowL.Take(i));
-                var ySegment = new Vector<T>(y.Take(i));
-                sum = rowLSegment.DotProduct(ySegment);
+                sum = NumOps.Add(sum, NumOps.Multiply(L[i, j], y[j]));
             }
 
             y[i] = NumOps.Divide(NumOps.Subtract(b[i], sum), L[i, i]);
@@ -568,25 +476,15 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     /// <param name="LT">The transpose of the lower triangular matrix.</param>
     /// <param name="y">The right-hand side vector.</param>
     /// <returns>The solution vector x.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>VECTORIZED:</b> Uses vectorized dot product for computing row contributions,
-    /// replacing scalar accumulation loops while maintaining the sequential dependency order.
-    /// </para>
-    /// </remarks>
     private Vector<T> BackSubstitution(Matrix<T> LT, Vector<T> y)
     {
         var x = new Vector<T>(LT.Columns);
         for (int i = LT.Columns - 1; i >= 0; i--)
         {
-            // VECTORIZED: compute dot product of LT[i, i+1:] and x[i+1:]
             T sum = NumOps.Zero;
-            if (i < LT.Columns - 1)
+            for (int j = i + 1; j < LT.Columns; j++)
             {
-                var rowLT = LT.GetRow(i);
-                var rowLTSegment = new Vector<T>(rowLT.Skip(i + 1));
-                var xSegment = new Vector<T>(x.Skip(i + 1));
-                sum = rowLTSegment.DotProduct(xSegment);
+                sum = NumOps.Add(sum, NumOps.Multiply(LT[i, j], x[j]));
             }
 
             x[i] = NumOps.Divide(NumOps.Subtract(y[i], sum), LT[i, i]);

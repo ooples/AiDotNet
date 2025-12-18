@@ -1,6 +1,6 @@
 using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Config;
 using AiDotNet.MetaLearning.Trainers;

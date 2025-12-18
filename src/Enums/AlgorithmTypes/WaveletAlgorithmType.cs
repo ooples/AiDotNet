@@ -86,7 +86,7 @@ public enum WaveletAlgorithmType
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The Stationary Wavelet Transform (SWT) is very similar to MODWT and is sometimes 
-    /// called the "undecimated wavelet transform" or "algorithme Ã  trous" (algorithm with holes).
+    /// called the "undecimated wavelet transform" or "algorithme à trous" (algorithm with holes).
     /// 
     /// Like MODWT, SWT:
     /// 

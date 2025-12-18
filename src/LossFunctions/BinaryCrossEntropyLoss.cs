@@ -1,5 +1,3 @@
-
-
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -27,10 +25,16 @@ namespace AiDotNet.LossFunctions;
 public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
+    /// Small value to prevent numerical instability with log(0).
+    /// </summary>
+    private readonly T _epsilon;
+    
+    /// <summary>
     /// Initializes a new instance of the BinaryCrossEntropyLoss class.
     /// </summary>
     public BinaryCrossEntropyLoss()
     {
+        _epsilon = NumOps.FromDouble(1e-15);
     }
     
     /// <summary>
@@ -46,16 +50,15 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
         T sum = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
-            // Clamp values to prevent log(0) using NumericalStabilityHelper
-            T p = NumericalStabilityHelper.ClampProbability(predicted[i], NumericalStabilityHelper.SmallEpsilon);
-            T oneMinusP = NumericalStabilityHelper.ClampProbability(NumOps.Subtract(NumOps.One, p), NumericalStabilityHelper.SmallEpsilon);
-
+            // Clamp values to prevent log(0)
+            T p = MathHelper.Clamp(predicted[i], _epsilon, NumOps.Subtract(NumOps.One, _epsilon));
+            
             // -[y*log(p) + (1-y)*log(1-p)]
             sum = NumOps.Add(sum, NumOps.Add(
-                NumOps.Multiply(actual[i], NumericalStabilityHelper.SafeLog(p, NumericalStabilityHelper.SmallEpsilon)),
+                NumOps.Multiply(actual[i], NumOps.Log(p)),
                 NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, actual[i]),
-                    NumericalStabilityHelper.SafeLog(oneMinusP, NumericalStabilityHelper.SmallEpsilon)
+                    NumOps.Subtract(NumOps.One, actual[i]), 
+                    NumOps.Log(NumOps.Subtract(NumOps.One, p))
                 )
             ));
         }
@@ -76,15 +79,13 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
-            // Clamp values to prevent division by zero using NumericalStabilityHelper
-            T p = NumericalStabilityHelper.ClampProbability(predicted[i], NumericalStabilityHelper.SmallEpsilon);
-
-            // -(y/p - (1-y)/(1-p)) with safe division
-            T denominator = NumOps.Multiply(p, NumOps.Subtract(NumOps.One, p));
-            derivative[i] = NumericalStabilityHelper.SafeDiv(
+            // Clamp values to prevent division by zero
+            T p = MathHelper.Clamp(predicted[i], _epsilon, NumOps.Subtract(NumOps.One, _epsilon));
+            
+            // -(y/p - (1-y)/(1-p))
+            derivative[i] = NumOps.Divide(
                 NumOps.Subtract(p, actual[i]),
-                denominator,
-                NumericalStabilityHelper.SmallEpsilon
+                NumOps.Multiply(p, NumOps.Subtract(NumOps.One, p))
             );
         }
         

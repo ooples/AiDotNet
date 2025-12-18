@@ -3,12 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Xunit;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Genetics;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
-using AiDotNet.LossFunctions;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 
 namespace AiDotNet.Tests.UnitTests.Genetics
@@ -106,10 +104,6 @@ namespace AiDotNet.Tests.UnitTests.Genetics
                 _parameters = new Vector<double>(values);
             }
 
-            // ICheckpointableModel implementation
-            public void SaveState(Stream stream) { }
-            public void LoadState(Stream stream) { }
-
             public IEnumerable<int> GetActiveFeatureIndices()
             {
                 return new[] { 0, 1, 2 };
@@ -159,45 +153,6 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             public void LoadModel(string filePath)
             {
                 Deserialize(File.ReadAllBytes(filePath));
-            }
-
-            // IGradientComputable implementation
-            public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
-
-            public Vector<double> ComputeGradients(double[] input, double[] target, ILossFunction<double>? lossFunction = null)
-            {
-                return new Vector<double>(ParameterCount);
-            }
-
-            public void ApplyGradients(Vector<double> gradients, double learningRate)
-            {
-                // Mock implementation - simple parameter update
-                for (int i = 0; i < Math.Min(gradients.Length, _parameters.Length); i++)
-                {
-                    _parameters[i] -= learningRate * gradients[i];
-                }
-            }
-
-            // IJitCompilable implementation
-            public bool SupportsJitCompilation => true;
-
-            public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-            {
-                // Create a simple computation graph for the mock model
-                var inputShape = new int[] { 1, _parameterCount };
-                var inputTensor = new Tensor<double>(inputShape);
-                var inputNode = TensorOperations<double>.Variable(inputTensor, "input");
-                inputNodes.Add(inputNode);
-
-                // Create parameter node
-                var paramTensor = new Tensor<double>(new int[] { _parameterCount }, _parameters);
-                var paramNode = TensorOperations<double>.Variable(paramTensor, "parameters");
-                inputNodes.Add(paramNode);
-
-                // Compute element-wise multiply and sum
-                var mulNode = TensorOperations<double>.ElementwiseMultiply(inputNode, paramNode);
-                var outputNode = TensorOperations<double>.Sum(mulNode);
-                return outputNode;
             }
         }
 

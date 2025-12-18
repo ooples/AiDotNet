@@ -37,9 +37,7 @@ public class ResidualBootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<
     public ResidualBootstrapFitDetector(ResidualBootstrapFitDetectorOptions? options = null)
     {
         _options = options ?? new ResidualBootstrapFitDetectorOptions();
-        _random = _options.Seed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
-            : RandomHelper.CreateSecureRandom();
+        _random = new Random(_options.Seed ?? Environment.TickCount);
     }
 
     /// <summary>

@@ -39,7 +39,7 @@ public class PermutationTestFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// </remarks>
     public PermutationTestFitDetector(PermutationTestFitDetectorOptions? options = null)
     {
-        _random = RandomHelper.CreateSecureRandom();
+        _random = new Random();
         _options = options ?? new PermutationTestFitDetectorOptions();
     }
 

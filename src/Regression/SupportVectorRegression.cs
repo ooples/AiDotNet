@@ -311,8 +311,8 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
                 break;
         }
 
-        // Store all training data as support vectors (base class will filter to non-zero alphas)
-        SupportVectors = x;
+        // Store support vectors
+        SupportVectors = x.GetRows(Enumerable.Range(0, m).Where(i => NumOps.GreaterThan(Alphas[i], NumOps.Zero)).ToArray());
     }
 
     /// <summary>
@@ -338,7 +338,7 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// optimizes two coefficients at a time.
     /// </para>
     /// </remarks>
-    private readonly Random _random = RandomHelper.CreateSecureRandom();
+    private readonly Random _random = new();
 
     private int SelectSecondAlpha(int i, int m)
     {

@@ -63,7 +63,7 @@ public class ARIMAXModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// <para><b>For Beginners:</b> This determines how many times the model subtracts consecutive values to remove trends.
     /// The default value of 0 means the model works with the raw values directly. If set to 1, the model would work with the 
     /// changes between consecutive values rather than the raw values themselves. For example, instead of using temperatures 
-    /// like [70째F, 72째F, 75째F], it would use the differences [2째F, 3째F]. This helps the model focus on how values are changing 
+    /// like [70캟, 72캟, 75캟], it would use the differences [2캟, 3캟]. This helps the model focus on how values are changing 
     /// rather than their absolute values, which is useful when data has an upward or downward trend. Think of it like focusing 
     /// on how much warmer or cooler it gets each day rather than the actual temperature.</para>
     /// </remarks>

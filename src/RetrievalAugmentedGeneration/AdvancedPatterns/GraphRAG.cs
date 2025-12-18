@@ -1,4 +1,4 @@
-
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -100,7 +100,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 public class GraphRAG<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IGenerator<T> _generator;
     private readonly RetrieverBase<T> _vectorRetriever;
     private readonly Dictionary<string, List<(string relation, string target)>> _knowledgeGraph;
@@ -201,7 +200,7 @@ public class GraphRAG<T>
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
-        if (topK < 1)
+        if (topK <= 0)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
         // Step 1: Extract entities from query using LLM
@@ -237,10 +236,9 @@ public class GraphRAG<T>
             // Check if document mentions any of our graph entities using word boundary matching
             var mentionedEntities = relatedEntities
                 .Where(entity => Regex.IsMatch(
-                    doc.Content,
-                    @"\b" + Regex.Escape(entity) + @"\b",
-                    RegexOptions.IgnoreCase,
-                    RegexTimeout))
+                    doc.Content, 
+                    @"\b" + Regex.Escape(entity) + @"\b", 
+                    RegexOptions.IgnoreCase))
                 .ToList();
 
             if (mentionedEntities.Count > 0)
@@ -286,11 +284,11 @@ public class GraphRAG<T>
         var entities = new List<string>();
 
         // Extract capitalized phrases (simple proper noun detection)
-        var capitalizedMatches = Regex.Matches(text, @"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", RegexOptions.None, RegexTimeout);
+        var capitalizedMatches = Regex.Matches(text, @"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b");
         entities.AddRange(capitalizedMatches.Cast<Match>().Select(m => m.Value));
 
         // Extract quoted terms
-        var quotedMatches = Regex.Matches(text, @"""([^""]+)""", RegexOptions.None, RegexTimeout);
+        var quotedMatches = Regex.Matches(text, @"""([^""]+)""");
         entities.AddRange(quotedMatches.Cast<Match>().Select(m => m.Groups[1].Value));
 
         // Use LLM for more sophisticated extraction if needed

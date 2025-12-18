@@ -9,7 +9,7 @@ namespace AiDotNet.LossFunctions;
 /// <b>For Beginners:</b> Squared Hinge Loss is a variation of the Hinge Loss used in Support Vector Machines (SVMs)
 /// that applies a squared penalty to incorrectly classified examples.
 /// 
-/// The formula is: max(0, 1 - y*f(x))Â²
+/// The formula is: max(0, 1 - y*f(x))²
 /// Where:
 /// - y is the true label (usually -1 or 1)
 /// - f(x) is the model's prediction
@@ -49,7 +49,7 @@ public class SquaredHingeLoss<T> : LossFunctionBase<T>
                 NumOps.Multiply(actual[i], predicted[i])
             );
             
-            // Apply squared hinge: max(0, margin)Â²
+            // Apply squared hinge: max(0, margin)²
             T hingeLoss = MathHelper.Max(NumOps.Zero, margin);
             loss = NumOps.Add(loss, NumOps.Power(hingeLoss, NumOps.FromDouble(2)));
         }

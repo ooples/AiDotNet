@@ -119,20 +119,10 @@ public class LdlDecomposition<T> : MatrixDecompositionBase<T>
 
         for (int j = 0; j < n; j++)
         {
-            // VECTORIZED: Calculate D[j] using dot product
             T sum = NumOps.Zero;
-            if (j > 0)
+            for (int k = 0; k < j; k++)
             {
-                var ljRow = new T[j];
-                var dSlice = new T[j];
-                for (int k = 0; k < j; k++)
-                {
-                    ljRow[k] = NumOps.Multiply(L[j, k], L[j, k]);
-                    dSlice[k] = D[k];
-                }
-                var ljVec = new Vector<T>(ljRow);
-                var dVec = new Vector<T>(dSlice);
-                sum = ljVec.DotProduct(dVec);
+                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(L[j, k], L[j, k]), D[k]));
             }
             D[j] = NumOps.Subtract(A[j, j], sum);
 
@@ -140,24 +130,10 @@ public class LdlDecomposition<T> : MatrixDecompositionBase<T>
 
             for (int i = j + 1; i < n; i++)
             {
-                // VECTORIZED: Calculate L[i,j] using dot product
                 sum = NumOps.Zero;
-                if (j > 0)
+                for (int k = 0; k < j; k++)
                 {
-                    var liRow = new T[j];
-                    var ljRow = new T[j];
-                    var dSlice = new T[j];
-                    for (int k = 0; k < j; k++)
-                    {
-                        liRow[k] = L[i, k];
-                        ljRow[k] = L[j, k];
-                        dSlice[k] = D[k];
-                    }
-                    // Compute element-wise product then sum
-                    for (int k = 0; k < j; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(liRow[k], ljRow[k]), dSlice[k]));
-                    }
+                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(L[i, k], L[j, k]), D[k]));
                 }
 
                 L[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[j]);
@@ -183,20 +159,10 @@ public class LdlDecomposition<T> : MatrixDecompositionBase<T>
 
         for (int j = 0; j < n; j++)
         {
-            // VECTORIZED: Calculate D[j] using dot product
             T sum = NumOps.Zero;
-            if (j > 0)
+            for (int k = 0; k < j; k++)
             {
-                var ljRow = new T[j];
-                var dSlice = new T[j];
-                for (int k = 0; k < j; k++)
-                {
-                    ljRow[k] = NumOps.Multiply(L[j, k], L[j, k]);
-                    dSlice[k] = D[k];
-                }
-                var ljVec = new Vector<T>(ljRow);
-                var dVec = new Vector<T>(dSlice);
-                sum = ljVec.DotProduct(dVec);
+                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(L[j, k], L[j, k]), D[k]));
             }
 
             D[j] = NumOps.Subtract(A[j, j], sum);
@@ -204,24 +170,10 @@ public class LdlDecomposition<T> : MatrixDecompositionBase<T>
 
             for (int i = j + 1; i < n; i++)
             {
-                // VECTORIZED: Calculate L[i,j] using element-wise product and sum
                 sum = NumOps.Zero;
-                if (j > 0)
+                for (int k = 0; k < j; k++)
                 {
-                    var liRow = new T[j];
-                    var ljRow = new T[j];
-                    var dSlice = new T[j];
-                    for (int k = 0; k < j; k++)
-                    {
-                        liRow[k] = L[i, k];
-                        ljRow[k] = L[j, k];
-                        dSlice[k] = D[k];
-                    }
-                    // Compute element-wise product then sum
-                    for (int k = 0; k < j; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(liRow[k], ljRow[k]), dSlice[k]));
-                    }
+                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(L[i, k], L[j, k]), D[k]));
                 }
 
                 L[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[j]);
@@ -254,46 +206,28 @@ public class LdlDecomposition<T> : MatrixDecompositionBase<T>
         Vector<T> y = new(b.Length);
         for (int i = 0; i < b.Length; i++)
         {
-            // VECTORIZED: Use dot product for sum computation
             T sum = NumOps.Zero;
-            if (i > 0)
+            for (int j = 0; j < i; j++)
             {
-                var rowSlice = new T[i];
-                var ySlice = new T[i];
-                for (int k = 0; k < i; k++)
-                {
-                    rowSlice[k] = L[i, k];
-                    ySlice[k] = y[k];
-                }
-                var rowVec = new Vector<T>(rowSlice);
-                var yVec = new Vector<T>(ySlice);
-                sum = rowVec.DotProduct(yVec);
+                sum = NumOps.Add(sum, NumOps.Multiply(L[i, j], y[j]));
             }
             y[i] = NumOps.Subtract(b[i], sum);
         }
 
-        // VECTORIZED: Diagonal scaling using vector division
-        y = y.ElementwiseDivide(D);
+        // Diagonal scaling
+        for (int i = 0; i < b.Length; i++)
+        {
+            y[i] = NumOps.Divide(y[i], D[i]);
+        }
 
         // Backward substitution
         Vector<T> x = new Vector<T>(b.Length);
         for (int i = b.Length - 1; i >= 0; i--)
         {
-            // VECTORIZED: Use dot product for sum computation
             T sum = NumOps.Zero;
-            if (i < b.Length - 1)
+            for (int j = i + 1; j < b.Length; j++)
             {
-                int remaining = b.Length - i - 1;
-                var colSlice = new T[remaining];
-                var xSlice = new T[remaining];
-                for (int k = 0; k < remaining; k++)
-                {
-                    colSlice[k] = L[i + 1 + k, i];
-                    xSlice[k] = x[i + 1 + k];
-                }
-                var colVec = new Vector<T>(colSlice);
-                var xVec = new Vector<T>(xSlice);
-                sum = colVec.DotProduct(xVec);
+                sum = NumOps.Add(sum, NumOps.Multiply(L[j, i], x[j]));
             }
             x[i] = NumOps.Subtract(y[i], sum);
         }

@@ -26,65 +26,8 @@ namespace AiDotNet.NeuralNetworks;
 /// inputs they've never seen before during training.
 /// </para>
 /// </remarks>
-public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
+public class SiameseNetwork<T> : NeuralNetworkBase<T>
 {
-    /// <summary>
-    /// Gets or sets whether auxiliary loss (contrastive/triplet loss) should be used during training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Contrastive loss encourages similar pairs to have small distances and dissimilar pairs to have large distances.
-    /// Triplet loss ensures that an anchor is closer to positive examples than negative examples by a margin.
-    /// </para>
-    /// <para><b>For Beginners:</b> This helps the Siamese network learn better similarity representations.
-    ///
-    /// Contrastive loss works like this:
-    /// - Similar pairs should have embeddings close together
-    /// - Dissimilar pairs should have embeddings far apart
-    /// - Formula: L = (1-Y) * 0.5 * D² + Y * 0.5 * max(0, margin - D)²
-    ///   where Y=1 for similar, Y=0 for dissimilar, D=distance
-    ///
-    /// This helps the network:
-    /// - Learn meaningful similarity measures
-    /// - Create well-separated embedding spaces
-    /// - Improve discrimination between similar/dissimilar pairs
-    /// </para>
-    /// </remarks>
-    public bool UseAuxiliaryLoss { get; set; } = false;
-
-    /// <summary>
-    /// Gets or sets the weight for the contrastive auxiliary loss.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This weight controls how much contrastive loss contributes to the total loss.
-    /// Typical values range from 0.1 to 1.0.
-    /// </para>
-    /// <para><b>For Beginners:</b> This controls how much we encourage good similarity learning.
-    ///
-    /// Common values:
-    /// - 0.5 (default): Balanced contribution
-    /// - 0.1-0.3: Light contrastive emphasis
-    /// - 0.7-1.0: Strong contrastive emphasis
-    ///
-    /// Higher values make the network focus more on learning good embeddings.
-    /// </para>
-    /// </remarks>
-    public T AuxiliaryLossWeight { get; set; }
-
-    /// <summary>
-    /// Gets or sets the margin for contrastive loss.
-    /// </summary>
-    public T ContrastiveMargin { get; set; }
-
-    private T _lastContrastiveLoss;
-
-    /// <summary>
-    /// Cache for embedding pairs and their similarity labels during training.
-    /// Used to compute contrastive auxiliary loss.
-    /// </summary>
-    private List<(Vector<T> embedding1, Vector<T> embedding2, T label)> _cachedEmbeddingPairs;
-
     /// <summary>
     /// The shared neural network that processes each input independently.
     /// </summary>
@@ -118,18 +61,12 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// where 0 means "completely different" and 1 means "identical".
     /// </para>
     /// </remarks>
-    public SiameseNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) :
+    public SiameseNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) : 
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _subnetwork = new ConvolutionalNeuralNetwork<T>(architecture);
         int embeddingSize = architecture.GetOutputShape()[0];
         _outputLayer = new DenseLayer<T>(embeddingSize * 2, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
-
-        // Initialize NumOps-based fields
-        AuxiliaryLossWeight = NumOps.FromDouble(0.5);
-        ContrastiveMargin = NumOps.FromDouble(1.0);
-        _lastContrastiveLoss = NumOps.Zero;
-        _cachedEmbeddingPairs = new List<(Vector<T>, Vector<T>, T)>();
     }
 
     /// <summary>
@@ -159,158 +96,6 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return combined;
-    }
-
-    /// <summary>
-    /// Computes the auxiliary loss (contrastive loss) for similarity learning.
-    /// </summary>
-    /// <returns>The computed contrastive auxiliary loss.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes contrastive loss to improve embedding quality.
-    /// Formula: L = (1-Y) * 0.5 * D² + Y * 0.5 * max(0, margin - D)²
-    /// where Y=1 for similar pairs, Y=0 for dissimilar, D=Euclidean distance
-    /// </para>
-    /// <para><b>For Beginners:</b> This calculates how well the network separates similar from dissimilar pairs.
-    ///
-    /// Contrastive loss works by:
-    /// 1. For similar pairs: Penalize large distances (pull them together)
-    /// 2. For dissimilar pairs: Penalize small distances (push them apart)
-    /// 3. Use a margin to define "far enough" for dissimilar pairs
-    ///
-    /// This helps because:
-    /// - Creates well-organized embedding spaces
-    /// - Similar items cluster together
-    /// - Dissimilar items stay separated
-    /// - Improves the network's ability to judge similarity
-    ///
-    /// The auxiliary loss is combined with the main loss during training.
-    /// </para>
-    /// </remarks>
-    public T ComputeAuxiliaryLoss()
-    {
-        if (!UseAuxiliaryLoss)
-        {
-            _lastContrastiveLoss = NumOps.Zero;
-            return NumOps.Zero;
-        }
-
-        // Return zero if no cached pairs (e.g., before first training step)
-        if (_cachedEmbeddingPairs.Count == 0)
-        {
-            _lastContrastiveLoss = NumOps.Zero;
-            return NumOps.Zero;
-        }
-
-        T totalLoss = NumOps.Zero;
-        T half = NumOps.FromDouble(0.5);
-
-        // Compute contrastive loss for each cached pair
-        foreach (var (embedding1, embedding2, label) in _cachedEmbeddingPairs)
-        {
-            // Compute Euclidean distance between embeddings
-            T distanceSquared = NumOps.Zero;
-            for (int i = 0; i < embedding1.Length; i++)
-            {
-                T diff = NumOps.Subtract(embedding1[i], embedding2[i]);
-                T diffSquared = NumOps.Multiply(diff, diff);
-                distanceSquared = NumOps.Add(distanceSquared, diffSquared);
-            }
-            T distance = NumOps.Sqrt(distanceSquared);
-
-            // Compute contrastive loss based on label
-            // For similar pairs (label close to 1): minimize distance
-            // For dissimilar pairs (label close to 0): maximize distance up to margin
-            T one = NumOps.FromDouble(1.0);
-            T zero = NumOps.Zero;
-
-            // Check if similar (label close to 1) or dissimilar (label close to 0)
-            // Using threshold of 0.5 to classify
-            bool isSimilar = NumOps.GreaterThan(label, half);
-
-            T pairLoss;
-            if (isSimilar)
-            {
-                // Similar: loss = 0.5 * D²
-                pairLoss = NumOps.Multiply(half, distanceSquared);
-            }
-            else
-            {
-                // Dissimilar: loss = 0.5 * max(0, margin - D)²
-                T marginMinusDistance = NumOps.Subtract(ContrastiveMargin, distance);
-                // Clamp to max(0, marginMinusDistance)
-                T clamped = NumOps.GreaterThan(marginMinusDistance, zero) ? marginMinusDistance : zero;
-                T clampedSquared = NumOps.Multiply(clamped, clamped);
-                pairLoss = NumOps.Multiply(half, clampedSquared);
-            }
-
-            totalLoss = NumOps.Add(totalLoss, pairLoss);
-        }
-
-        // Average over all pairs
-        T averageLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(_cachedEmbeddingPairs.Count));
-
-        _lastContrastiveLoss = averageLoss;
-        return _lastContrastiveLoss;
-    }
-
-    /// <summary>
-    /// Gets diagnostic information about the contrastive auxiliary loss.
-    /// </summary>
-    /// <returns>A dictionary containing diagnostic information about contrastive learning.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns detailed diagnostics about contrastive loss, including
-    /// the computed loss value, margin, weight, and configuration parameters.
-    /// This information is useful for monitoring similarity learning and debugging.
-    /// </para>
-    /// <para><b>For Beginners:</b> This provides information about how well the network learns similarity.
-    ///
-    /// The diagnostics include:
-    /// - Total contrastive loss (how well embeddings are organized)
-    /// - Contrastive margin (minimum distance for dissimilar pairs)
-    /// - Weight applied to the contrastive loss
-    /// - Whether contrastive learning is enabled
-    ///
-    /// This helps you:
-    /// - Monitor embedding quality during training
-    /// - Debug issues with similarity learning
-    /// - Understand the impact of contrastive loss on performance
-    ///
-    /// You can use this information to adjust margin and weight for better results.
-    /// </para>
-    /// </remarks>
-    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
-    {
-        return new Dictionary<string, string>
-        {
-            { "TotalContrastiveLoss", _lastContrastiveLoss?.ToString() ?? "0" },
-            { "ContrastiveMargin", ContrastiveMargin?.ToString() ?? "1.0" },
-            { "ContrastiveWeight", AuxiliaryLossWeight?.ToString() ?? "0.5" },
-            { "UseContrastiveLoss", UseAuxiliaryLoss.ToString() }
-        };
-    }
-
-    /// <summary>
-    /// Gets diagnostic information about this component's state and behavior.
-    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
-    /// </summary>
-    /// <returns>
-    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
-    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
-    /// </returns>
-    public Dictionary<string, string> GetDiagnostics()
-    {
-        var diagnostics = new Dictionary<string, string>();
-
-        // Merge auxiliary loss diagnostics
-        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
-        foreach (var kvp in auxDiagnostics)
-        {
-            diagnostics[kvp.Key] = kvp.Value;
-        }
-
-        return diagnostics;
     }
 
     /// <summary>
@@ -478,12 +263,6 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 
         int batchSize = input.Shape[0];
 
-        // Clear cached embedding pairs for this training batch
-        if (UseAuxiliaryLoss)
-        {
-            _cachedEmbeddingPairs.Clear();
-        }
-
         // Forward pass to get predictions
         var predictions = Predict(input);
 
@@ -508,17 +287,10 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             // Extract the pair - GetSlice returns a tensor
             var input1 = input.GetSlice(b).GetSlice(0);
             var input2 = input.GetSlice(b).GetSlice(1);
-
+        
             // Forward pass through the subnetwork
             var embedding1 = _subnetwork.Forward(input1).ToVector();
             var embedding2 = _subnetwork.Forward(input2).ToVector();
-
-            // Cache embeddings and label for contrastive loss computation
-            if (UseAuxiliaryLoss)
-            {
-                T label = expectedOutput[b, 0];
-                _cachedEmbeddingPairs.Add((embedding1, embedding2, label));
-            }
         
             // Combine embeddings
             var combinedEmbedding = CombineEmbeddings(embedding1, embedding2);

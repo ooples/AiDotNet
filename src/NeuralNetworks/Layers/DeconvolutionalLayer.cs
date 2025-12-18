@@ -1,6 +1,5 @@
 using System;
 
-
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -75,7 +74,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// or brightness levels.
     /// </para>
     /// </remarks>
-    private Tensor<T> _biases;
+    private Vector<T> _biases;
 
     /// <summary>
     /// Stored input data from the most recent forward pass, used for backpropagation.
@@ -157,7 +156,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// to make the output better next time.
     /// </para>
     /// </remarks>
-    private Tensor<T>? _biasesGradient;
+    private Vector<T>? _biasesGradient;
 
     /// <summary>
     /// Gets the depth (number of channels) of the input data.
@@ -213,8 +212,8 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> Kernel size is how big each "pattern generator" is.
     /// 
     /// For example:
-    /// - A kernel size of 3 means a 3Ã—3 grid (9 weights)
-    /// - A kernel size of 5 means a 5Ã—5 grid (25 weights)
+    /// - A kernel size of 3 means a 3×3 grid (9 weights)
+    /// - A kernel size of 5 means a 5×5 grid (25 weights)
     /// 
     /// Larger kernels:
     /// - Can create more complex patterns
@@ -239,8 +238,8 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// - Stride of 2: Roughly doubles the size
     /// - Stride of 4: Roughly quadruples the size
     /// 
-    /// For example, if your input is 16Ã—16 pixels and you use a stride of 2,
-    /// the output might be around 32Ã—32 pixels (the exact size depends on other factors too).
+    /// For example, if your input is 16×16 pixels and you use a stride of 2,
+    /// the output might be around 32×32 pixels (the exact size depends on other factors too).
     /// </para>
     /// </remarks>
     public int Stride { get; }
@@ -328,7 +327,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         Padding = padding;
 
         _kernels = new Tensor<T>([InputDepth, OutputDepth, KernelSize, KernelSize]);
-        _biases = new Tensor<T>([OutputDepth]);
+        _biases = new Vector<T>(OutputDepth);
 
         InitializeParameters();
     }
@@ -373,7 +372,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         Padding = padding;
 
         _kernels = new Tensor<T>([InputDepth, OutputDepth, KernelSize, KernelSize]);
-        _biases = new Tensor<T>([OutputDepth]);
+        _biases = new Vector<T>(OutputDepth);
 
         InitializeParameters();
     }
@@ -401,11 +400,11 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// - How big your pattern generators are (kernel size)
     /// - Any adjustments needed (padding)
     /// 
-    /// For example, if you have a 16Ã—16 input and use stride 2, kernel size 3, and no padding:
+    /// For example, if you have a 16×16 input and use stride 2, kernel size 3, and no padding:
     /// - The output height will be (16-1)*2 - 0 + 3 = 33
     /// - The output width will be (16-1)*2 - 0 + 3 = 33
     /// 
-    /// So your 16Ã—16 input becomes approximately 33Ã—33 output (about 4 times larger in area).
+    /// So your 16×16 input becomes approximately 33×33 output (about 4 times larger in area).
     /// </para>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape, int outputDepth, int kernelSize, int stride, int padding)
@@ -444,7 +443,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     private void InitializeParameters()
     {
         // Xavier/Glorot initialization
-        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputDepth + OutputDepth)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (InputDepth + OutputDepth)));
         for (int i = 0; i < _kernels.Length; i++)
         {
             _kernels[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
@@ -482,19 +481,46 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+        int batchSize = input.Shape[0];
+        int inputHeight = input.Shape[2];
+        int inputWidth = input.Shape[3];
+        int outputHeight = OutputShape[2];
+        int outputWidth = OutputShape[3];
 
-        // Use GPU-accelerated ConvTranspose2D via Engine
-        var stride = new int[] { Stride, Stride };
-        var padding = new int[] { Padding, Padding };
-        var outputPadding = new int[] { 0, 0 };
+        var output = new Tensor<T>([batchSize, OutputDepth, outputHeight, outputWidth]);
 
-        var output = Engine.ConvTranspose2D(input, _kernels, stride, padding, outputPadding);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int od = 0; od < OutputDepth; od++)
+            {
+                for (int oh = 0; oh < outputHeight; oh++)
+                {
+                    for (int ow = 0; ow < outputWidth; ow++)
+                    {
+                        T sum = _biases[od];
+                        for (int id = 0; id < InputDepth; id++)
+                        {
+                            for (int kh = 0; kh < KernelSize; kh++)
+                            {
+                                for (int kw = 0; kw < KernelSize; kw++)
+                                {
+                                    int ih = (oh + Padding - kh) / Stride;
+                                    int iw = (ow + Padding - kw) / Stride;
+                                    if (ih >= 0 && ih < inputHeight && iw >= 0 && iw < inputWidth)
+                                    {
+                                        sum = NumOps.Add(sum, NumOps.Multiply(input[b, id, ih, iw], _kernels[id, od, kh, kw]));
+                                    }
+                                }
+                            }
+                        }
 
-        // Add bias using broadcast: reshape [OutputDepth] to [1, OutputDepth, 1, 1] for NCHW format
-        var biasReshaped = _biases.Reshape([1, OutputDepth, 1, 1]);
-        var biasedOutput = Engine.TensorBroadcastAdd(output, biasReshaped);
+                        output[b, od, oh, ow] = sum;
+                    }
+                }
+            }
+        }
 
-        _lastOutput = ApplyActivation(biasedOutput);
+        _lastOutput = ApplyActivation(output);
         return _lastOutput;
     }
 
@@ -511,172 +537,68 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// gradient is returned for propagation to earlier layers.
     /// </para>
     /// <para><b>For Beginners:</b> This method helps the layer learn from its mistakes.
-    ///
+    /// 
     /// During the backward pass:
     /// - The layer receives information about how wrong its output was
     /// - It calculates how to adjust its pattern generators to be more accurate
     /// - It prepares the gradients for updating kernels and biases
     /// - It passes information back to previous layers so they can learn too
-    ///
+    /// 
     /// This is where the actual "learning" happens. The layer figures out how to
     /// adjust all its internal values to make better outputs next time.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
 
-        // Calculate bias gradient: sum over batch, height, width
-        _biasesGradient = Engine.ReduceSum(activationGradient, new[] { 0, 2, 3 }, keepDims: false);
+        int batchSize = _lastInput.Shape[0];
+        int inputHeight = _lastInput.Shape[2];
+        int inputWidth = _lastInput.Shape[3];
+        int outputHeight = OutputShape[2];
+        int outputWidth = OutputShape[3];
 
-        var stride = new int[] { Stride, Stride };
-        var padding = new int[] { Padding, Padding };
+        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        _kernelsGradient = new Tensor<T>(_kernels.Shape);
+        _biasesGradient = new Vector<T>(OutputDepth);
 
-        // Calculate input gradient
-        var inputGradient = Engine.ConvTranspose2DBackwardInput(activationGradient, _kernels, _lastInput.Shape, stride, padding);
-
-        // Calculate kernel gradient
-        _kernelsGradient = Engine.ConvTranspose2DBackwardKernel(activationGradient, _lastInput, _kernels.Shape, stride, padding);
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. Currently, deconvolution operations
-    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
-    /// </para>
-    /// <para>
-    /// Once deconvolution operations are added to TensorOperations, this method will provide:
-    /// - Automatic gradient computation through the computation graph
-    /// - Verification of manual gradient implementations
-    /// - Support for rapid prototyping with custom modifications
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Convert parameters to computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var kernelNode = Autodiff.TensorOperations<T>.Variable(_kernels, "kernel", requiresGradient: true);
-
-        // Convert biases from Vector to Tensor for TensorOperations
-        var biasesTensor = new Tensor<T>(new int[] { OutputDepth });
-        for (int i = 0; i < OutputDepth; i++)
+        for (int b = 0; b < batchSize; b++)
         {
-            biasesTensor[i] = _biases[i];
-        }
-        var biasNode = Autodiff.TensorOperations<T>.Variable(biasesTensor, "bias", requiresGradient: true);
-
-        // Forward pass using autodiff ConvTranspose2D operation
-        var stride = new int[] { Stride, Stride };
-        var padding = new int[] { Padding, Padding };
-
-        var deconvOutput = Autodiff.TensorOperations<T>.ConvTranspose2D(
-            inputNode,
-            kernelNode,
-            biasNode,
-            stride,
-            padding,
-            null  // outputPadding - not used in this layer
-        );
-
-        // Apply activation if present
-        // If vector activation is configured, fall back to manual path
-        Autodiff.ComputationNode<T> activated;
-        if (VectorActivation != null)
-        {
-            // Vector activations not supported in autodiff - use manual path
-            return BackwardManual(outputGradient);
-        }
-        activated = ApplyScalarActivationAutodiff(deconvOutput);
-
-        // Perform backward pass with inline topological sort
-        activated.Gradient = outputGradient;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((activated, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-                continue;
-
-            if (processed)
+            for (int od = 0; od < OutputDepth; od++)
             {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
+                for (int oh = 0; oh < outputHeight; oh++)
                 {
-                    foreach (var parent in node.Parents)
+                    for (int ow = 0; ow < outputWidth; ow++)
                     {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
+                        T outGrad = activationGradient[b, od, oh, ow];
+                        _biasesGradient[od] = NumOps.Add(_biasesGradient[od], outGrad);
+
+                        for (int id = 0; id < InputDepth; id++)
+                        {
+                            for (int kh = 0; kh < KernelSize; kh++)
+                            {
+                                for (int kw = 0; kw < KernelSize; kw++)
+                                {
+                                    int ih = (oh + Padding - kh) / Stride;
+                                    int iw = (ow + Padding - kw) / Stride;
+                                    if (ih >= 0 && ih < inputHeight && iw >= 0 && iw < inputWidth)
+                                    {
+                                        T inputVal = _lastInput[b, id, ih, iw];
+                                        _kernelsGradient[id, od, kh, kw] = NumOps.Add(_kernelsGradient[id, od, kh, kw], NumOps.Multiply(outGrad, inputVal));
+                                        inputGradient[b, id, ih, iw] = NumOps.Add(inputGradient[b, id, ih, iw], NumOps.Multiply(outGrad, _kernels[id, od, kh, kw]));
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients
-        _kernelsGradient = kernelNode.Gradient;
-
-        if (biasNode.Gradient != null)
-        {
-            _biasesGradient = biasNode.Gradient;
-        }
-
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-    }
-
-    private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (ScalarActivation == null)
-            return input;
-
-        // Use generic activation support - works for ALL 39 built-in activations
-        return Autodiff.TensorOperations<T>.ApplyActivation(input, ScalarActivation);
+        return inputGradient;
     }
 
     /// <summary>
@@ -705,8 +627,15 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         if (_kernelsGradient == null || _biasesGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _kernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar(_kernelsGradient, learningRate));
-        _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
+        for (int i = 0; i < _kernels.Length; i++)
+        {
+            _kernels[i] = NumOps.Subtract(_kernels[i], NumOps.Multiply(learningRate, _kernelsGradient[i]));
+        }
+
+        for (int i = 0; i < _biases.Length; i++)
+        {
+            _biases[i] = NumOps.Subtract(_biases[i], NumOps.Multiply(learningRate, _biasesGradient[i]));
+        }
     }
 
     /// <summary>
@@ -735,7 +664,34 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
+        // Calculate total number of parameters
+        int totalParams = _kernels.Length + _biases.Length;
+        var parameters = new Vector<T>(totalParams);
+    
+        int index = 0;
+    
+        // Copy kernel parameters
+        for (int id = 0; id < InputDepth; id++)
+        {
+            for (int od = 0; od < OutputDepth; od++)
+            {
+                for (int kh = 0; kh < KernelSize; kh++)
+                {
+                    for (int kw = 0; kw < KernelSize; kw++)
+                    {
+                        parameters[index++] = _kernels[id, od, kh, kw];
+                    }
+                }
+            }
+        }
+    
+        // Copy bias parameters
+        for (int od = 0; od < OutputDepth; od++)
+        {
+            parameters[index++] = _biases[od];
+        }
+    
+        return parameters;
     }
 
     /// <summary>
@@ -764,17 +720,33 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int expectedLength = _kernels.Length + _biases.Length;
-        if (parameters.Length != expectedLength)
+        if (parameters.Length != _kernels.Length + _biases.Length)
         {
-            throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {_kernels.Length + _biases.Length} parameters, but got {parameters.Length}");
         }
-
-        var kernelVec = parameters.Slice(0, _kernels.Length);
-        var biasVec = parameters.Slice(_kernels.Length, _biases.Length);
-
-        _kernels = new Tensor<T>([InputDepth, OutputDepth, KernelSize, KernelSize], kernelVec);
-        _biases = new Tensor<T>([OutputDepth], biasVec);
+    
+        int index = 0;
+    
+        // Set kernel parameters
+        for (int id = 0; id < InputDepth; id++)
+        {
+            for (int od = 0; od < OutputDepth; od++)
+            {
+                for (int kh = 0; kh < KernelSize; kh++)
+                {
+                    for (int kw = 0; kw < KernelSize; kw++)
+                    {
+                        _kernels[id, od, kh, kw] = parameters[index++];
+                    }
+                }
+            }
+        }
+    
+        // Set bias parameters
+        for (int od = 0; od < OutputDepth; od++)
+        {
+            _biases[od] = parameters[index++];
+        }
     }
 
     /// <summary>
@@ -808,47 +780,5 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         _lastOutput = null;
         _kernelsGradient = null;
         _biasesGradient = null;
-    }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_kernels == null || _biases == null)
-            throw new InvalidOperationException("Layer weights not initialized.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        var kernelNode = TensorOperations<T>.Constant(_kernels, "kernel");
-        var biasNode = TensorOperations<T>.Constant(_biases, "bias");
-
-        var deconvNode = TensorOperations<T>.ConvTranspose2D(inputNode, kernelNode, biasNode, stride: new[] { Stride, Stride }, padding: new[] { Padding, Padding });
-
-        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
-        {
-            return ScalarActivation.ApplyToGraph(deconvNode);
-        }
-
-        return deconvNode;
-    }
-
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            if (_kernels == null || _biases == null)
-                return false;
-
-            if (ScalarActivation != null)
-                return ScalarActivation.SupportsJitCompilation;
-
-            return true;
-        }
     }
 }

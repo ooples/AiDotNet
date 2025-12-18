@@ -1,5 +1,3 @@
-using AiDotNet.Autodiff;
-
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -82,39 +80,5 @@ public class SiLUActivation<T> : ActivationFunctionBase<T>
         T xSigmoidDerivative = NumOps.Multiply(input, sigmoidDerivative);
 
         return NumOps.Add(sigmoid, xSigmoidDerivative);
-    }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because SiLU is mathematically equivalent to Swish, which is fully implemented in TensorOperations.</value>
-    /// <remarks>
-    /// <para>
-    /// SiLU (Sigmoid Linear Unit) is mathematically identical to Swish: f(x) = x * sigmoid(x).
-    /// TensorOperations.Swish provides full forward and backward pass support for JIT compilation.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with SiLU/Swish activation applied.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps SiLU to TensorOperations&lt;T&gt;.Swish(input) since SiLU and Swish
-    /// are mathematically equivalent: f(x) = x * sigmoid(x).
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        // SiLU is mathematically equivalent to Swish: x * sigmoid(x)
-        return TensorOperations<T>.Swish(input);
     }
 }

@@ -88,7 +88,7 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         _options = options;
         _trees = [];
-        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
+        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
     }
 
     /// <summary>
@@ -383,7 +383,7 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
         })];
 
         // Reinitialize other fields
-        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
+        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
     }
 
     /// <summary>
@@ -419,139 +419,4 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
         // Create a new instance with the same options and regularization
         return new RandomForestRegression<T>(_options, Regularization);
     }
-
-    #region IJitCompilable Implementation Override
-
-    /// <summary>
-    /// Gets whether this Random Forest model supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> when soft tree mode is enabled and all trees have been trained;
-    /// <c>false</c> otherwise.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// Random Forest supports JIT compilation when soft tree mode is enabled. In soft mode,
-    /// each tree in the forest uses sigmoid-based soft gating instead of hard if-then splits,
-    /// making the entire ensemble differentiable.
-    /// </para>
-    /// <para><b>For Beginners:</b> JIT compilation is available when soft tree mode is enabled.
-    ///
-    /// In soft tree mode:
-    /// - Each tree in the forest uses smooth transitions instead of hard decisions
-    /// - All trees can be exported as a single computation graph
-    /// - The final prediction averages all tree outputs (just like regular Random Forest)
-    ///
-    /// This gives you the benefits of ensemble learning with JIT-compiled speed.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation =>
-        UseSoftTree && _trees.Count > 0 && _trees.All(t => t.UseSoftTree);
-
-    /// <summary>
-    /// Exports the Random Forest's computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The root node of the exported computation graph.</returns>
-    /// <exception cref="NotSupportedException">
-    /// Thrown when soft tree mode is not enabled.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when the forest has not been trained (no trees).
-    /// </exception>
-    /// <remarks>
-    /// <para>
-    /// When soft tree mode is enabled, this exports the entire Random Forest as a differentiable
-    /// computation graph. Each tree is exported individually, and their outputs are averaged
-    /// to produce the final prediction.
-    /// </para>
-    /// <para>
-    /// The computation graph structure is:
-    /// <code>
-    /// output = (tree1_output + tree2_output + ... + treeN_output) / N
-    /// </code>
-    /// where each tree uses soft split operations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This exports the entire forest as a computation graph.
-    ///
-    /// Each tree in the forest becomes a soft tree computation graph, and then
-    /// all tree outputs are averaged together - just like how regular Random Forest
-    /// predictions work, but compiled into optimized code.
-    /// </para>
-    /// </remarks>
-    public override AiDotNet.Autodiff.ComputationNode<T> ExportComputationGraph(
-        List<AiDotNet.Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (!UseSoftTree)
-        {
-            throw new NotSupportedException(
-                "Random Forest does not support JIT compilation in hard tree mode because " +
-                "decision trees use discrete branching logic.\n\n" +
-                "To enable JIT compilation, set UseSoftTree = true to use soft (differentiable) " +
-                "decision trees with sigmoid-based gating.");
-        }
-
-        if (_trees.Count == 0)
-        {
-            throw new InvalidOperationException(
-                "Cannot export computation graph: the Random Forest has not been trained. " +
-                "Call Train() or TrainAsync() first to build the trees.");
-        }
-
-        // Ensure all trees have soft mode enabled
-        foreach (var tree in _trees)
-        {
-            tree.UseSoftTree = true;
-            tree.SoftTreeTemperature = SoftTreeTemperature;
-        }
-
-        // Get the number of features from the first tree
-        var tempInputNodes = new List<AiDotNet.Autodiff.ComputationNode<T>>();
-        var firstTreeGraph = _trees[0].ExportComputationGraph(tempInputNodes);
-
-        // Use the input node from the first tree export
-        if (tempInputNodes.Count > 0)
-        {
-            inputNodes.Add(tempInputNodes[0]);
-        }
-        var inputNode = tempInputNodes.Count > 0 ? tempInputNodes[0] : null;
-
-        if (inputNode == null)
-        {
-            throw new InvalidOperationException("Failed to create input node for computation graph.");
-        }
-
-        // If there's only one tree, return its graph directly
-        if (_trees.Count == 1)
-        {
-            return firstTreeGraph;
-        }
-
-        // Export all trees and accumulate their outputs
-        var treeOutputs = new List<AiDotNet.Autodiff.ComputationNode<T>> { firstTreeGraph };
-
-        for (int i = 1; i < _trees.Count; i++)
-        {
-            // Export each tree using the same input node
-            var treeInputNodes = new List<AiDotNet.Autodiff.ComputationNode<T>>();
-            var treeGraph = _trees[i].ExportComputationGraph(treeInputNodes);
-            treeOutputs.Add(treeGraph);
-        }
-
-        // Sum all tree outputs
-        var sumNode = treeOutputs[0];
-        for (int i = 1; i < treeOutputs.Count; i++)
-        {
-            sumNode = TensorOperations<T>.Add(sumNode, treeOutputs[i]);
-        }
-
-        // Divide by number of trees to get average
-        var numTreesTensor = new Tensor<T>(new[] { 1 });
-        numTreesTensor[0] = NumOps.FromDouble(_trees.Count);
-        var numTreesNode = TensorOperations<T>.Constant(numTreesTensor, "num_trees");
-
-        return TensorOperations<T>.Divide(sumNode, numTreesNode);
-    }
-
-    #endregion
 }

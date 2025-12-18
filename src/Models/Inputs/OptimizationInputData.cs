@@ -39,12 +39,6 @@ public class OptimizationInputData<T, TInput, TOutput>
     public TOutput YTest { get; set; }
 
     /// <summary>
-    /// Gets or sets the initial model/solution before optimization.
-    /// Used by distributed optimizers to save parameters before local optimization.
-    /// </summary>
-    public IFullModel<T, TInput, TOutput>? InitialSolution { get; set; }
-
-    /// <summary>
     /// Initializes a new instance of the OptimizationInputData class with empty datasets.
     /// </summary>
     public OptimizationInputData()

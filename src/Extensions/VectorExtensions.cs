@@ -1,5 +1,3 @@
-using AiDotNet.Tensors.Helpers;
-
 namespace AiDotNet.Extensions;
 
 /// <summary>
@@ -31,10 +29,10 @@ public static class VectorExtensions
     public static Vector<T> Slice<T>(this Vector<T> vector, int start, int length)
     {
         var slicedVector = new Vector<T>(length);
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var sourceSpan = vector.AsSpan().Slice(start, length);
-        var destSpan = slicedVector.AsWritableSpan();
-        numOps.Copy(sourceSpan, destSpan);
+        for (int i = 0; i < length; i++)
+        {
+            slicedVector[i] = vector[start + i];
+        }
 
         return slicedVector;
     }
@@ -48,22 +46,21 @@ public static class VectorExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The norm is the "length" of a vector. For a 2D vector [x, y], 
-    /// it's calculated as âˆš(xÂ² + yÂ²), which is the same as the Pythagorean theorem. 
+    /// it's calculated as v(x² + y²), which is the same as the Pythagorean theorem. 
     /// For vectors with more dimensions, it's the square root of the sum of all squared elements.
     /// </para>
     /// </remarks>
     public static T Norm<T>(this Vector<T> vector)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var span = vector.AsSpan();
+        T sum = numOps.Zero;
+        int n = vector.Length;
+        for (int i = 0; i < n; i++)
+        {
+            sum = numOps.Add(sum, numOps.Multiply(vector[i], vector[i]));
+        }
 
-        // Manually compute sum of squares using vectorized multiply + sum
-        var temp = new Vector<T>(vector.Length);
-        var tempSpan = temp.AsWritableSpan();
-        numOps.Multiply(span, span, tempSpan);
-        T sumOfSquares = numOps.Sum(tempSpan);
-
-        return numOps.Sqrt(sumOfSquares);
+        return numOps.Sqrt(sum);
     }
 
     /// <summary>
@@ -144,7 +141,7 @@ public static class VectorExtensions
     /// </remarks>
     public static int[] Argsort<T>(this Vector<T> vector)
     {
-        return Enumerable.Range(0, vector.Length).OrderBy(i => vector[i]).ToArray();
+        return [.. Enumerable.Range(0, vector.Length).OrderBy(i => vector[i])];
     }
 
     /// <summary>
@@ -193,12 +190,12 @@ public static class VectorExtensions
         if (left.Length != right.Length)
             throw new ArgumentException("Vectors must have same dimension");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var operations = MathHelper.GetNumericOperations<T>();
         var result = new Vector<T>(left.Length);
-        var leftSpan = left.AsSpan();
-        var rightSpan = right.AsSpan();
-        var destSpan = result.AsWritableSpan();
-        numOps.Add(leftSpan, rightSpan, destSpan);
+        for (int i = 0; i < left.Length; i++)
+        {
+            result[i] = operations.Add(left[i], right[i]);
+        }
 
         return result;
     }
@@ -274,12 +271,13 @@ public static class VectorExtensions
         if (left.Length != right.Length)
             throw new ArgumentException("Vectors must have same dimension");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var operations = MathHelper.GetNumericOperations<T>();
         var result = new Vector<T>(left.Length);
-        var leftSpan = left.AsSpan();
-        var rightSpan = right.AsSpan();
-        var destSpan = result.AsWritableSpan();
-        numOps.Subtract(leftSpan, rightSpan, destSpan);
+
+        for (int i = 0; i < left.Length; i++)
+        {
+            result[i] = operations.Subtract(left[i], right[i]);
+        }
 
         return result;
     }
@@ -295,7 +293,7 @@ public static class VectorExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The dot product multiplies corresponding elements of two vectors and then adds all the results.
-    /// For example, the dot product of [1, 2, 3] and [4, 5, 6] is (1Ã—4) + (2Ã—5) + (3Ã—6) = 4 + 10 + 18 = 32.
+    /// For example, the dot product of [1, 2, 3] and [4, 5, 6] is (1×4) + (2×5) + (3×6) = 4 + 10 + 18 = 32.
     /// This is fundamental in machine learning for calculating similarities between vectors, projections, and in neural network operations.
     /// </para>
     /// </remarks>
@@ -304,10 +302,14 @@ public static class VectorExtensions
         if (left.Length != right.Length)
             throw new ArgumentException("Vectors must have same dimension");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var leftSpan = left.AsSpan();
-        var rightSpan = right.AsSpan();
-        return numOps.Dot(leftSpan, rightSpan);
+        var operations = MathHelper.GetNumericOperations<T>();
+        var sum = operations.Zero;
+        for (int i = 0; i < left.Length; i++)
+        {
+            sum = operations.Add(sum, operations.Multiply(left[i], right[i]));
+        }
+
+        return sum;
     }
 
     /// <summary>
@@ -326,11 +328,12 @@ public static class VectorExtensions
     /// </remarks>
     public static Vector<T> Divide<T>(this Vector<T> vector, T scalar)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var operations = MathHelper.GetNumericOperations<T>();
         var result = new Vector<T>(vector.Length);
-        var sourceSpan = vector.AsSpan();
-        var destSpan = result.AsWritableSpan();
-        numOps.DivideScalar(sourceSpan, scalar, destSpan);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            result[i] = operations.Divide(vector[i], scalar);
+        }
 
         return result;
     }
@@ -351,11 +354,12 @@ public static class VectorExtensions
     /// </remarks>
     public static Vector<T> Multiply<T>(this Vector<T> vector, T scalar)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var operations = MathHelper.GetNumericOperations<T>();
         var result = new Vector<T>(vector.Length);
-        var sourceSpan = vector.AsSpan();
-        var destSpan = result.AsWritableSpan();
-        numOps.MultiplyScalar(sourceSpan, scalar, destSpan);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            result[i] = operations.Multiply(vector[i], scalar);
+        }
 
         return result;
     }
@@ -376,8 +380,8 @@ public static class VectorExtensions
     /// and implementing linear transformations.
     /// </para>
     /// <para>
-    /// For example, multiplying a vector [1, 2, 3] by a 3Ã—2 matrix [[1, 4], [2, 5], [3, 6]] 
-    /// results in a vector [1Ã—1 + 2Ã—2 + 3Ã—3, 1Ã—4 + 2Ã—5 + 3Ã—6] = [14, 32].
+    /// For example, multiplying a vector [1, 2, 3] by a 3×2 matrix [[1, 4], [2, 5], [3, 6]] 
+    /// results in a vector [1×1 + 2×2 + 3×3, 1×4 + 2×5 + 3×6] = [14, 32].
     /// </para>
     /// </remarks>
     public static Vector<T> Multiply<T>(this Vector<T> vector, Matrix<T> matrix)
@@ -424,12 +428,12 @@ public static class VectorExtensions
         if (left.Length != right.Length)
             throw new ArgumentException("Vectors must have the same length");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var operations = MathHelper.GetNumericOperations<T>();
         var result = new Vector<T>(left.Length);
-        var leftSpan = left.AsSpan();
-        var rightSpan = right.AsSpan();
-        var destSpan = result.AsWritableSpan();
-        numOps.Multiply(leftSpan, rightSpan, destSpan);
+        for (int i = 0; i < left.Length; i++)
+        {
+            result[i] = operations.Multiply(left[i], right[i]);
+        }
 
         return result;
     }
@@ -445,7 +449,7 @@ public static class VectorExtensions
     /// <para>
     /// <b>For Beginners:</b> The outer product creates a matrix by multiplying each element of the first vector
     /// with each element of the second vector. If you have a vector [a,b,c] and another vector [x,y],
-    /// the result is a 3Ã—2 matrix:
+    /// the result is a 3×2 matrix:
     /// [a*x, a*y]
     /// [b*x, b*y]
     /// [c*x, c*y]
@@ -477,22 +481,20 @@ public static class VectorExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The magnitude is the "length" of a vector, calculated using the Pythagorean theorem.
-    /// For a vector [a,b,c], the magnitude is âˆš(aÂ² + bÂ² + cÂ²). This is useful for normalizing vectors
+    /// For a vector [a,b,c], the magnitude is v(a² + b² + c²). This is useful for normalizing vectors
     /// or measuring distances in machine learning algorithms.
     /// </para>
     /// </remarks>
     public static T Magnitude<T>(this Vector<T> vector)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var span = vector.AsSpan();
+        var operations = MathHelper.GetNumericOperations<T>();
+        T sum = operations.Zero;
+        for (int i = 0; i < vector.Length; i++)
+        {
+            sum = operations.Add(sum, operations.Multiply(vector[i], vector[i]));
+        }
 
-        // Manually compute sum of squares using vectorized multiply + sum
-        var temp = new Vector<T>(vector.Length);
-        var tempSpan = temp.AsWritableSpan();
-        numOps.Multiply(span, span, tempSpan);
-        T sumOfSquares = numOps.Sum(tempSpan);
-
-        return numOps.Sqrt(sumOfSquares);
+        return operations.Sqrt(sum);
     }
 
     /// <summary>
@@ -515,12 +517,12 @@ public static class VectorExtensions
         if (left.Length != right.Length)
             throw new ArgumentException("Vectors must have the same length");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var operations = MathHelper.GetNumericOperations<T>();
         var result = new Vector<T>(left.Length);
-        var leftSpan = left.AsSpan();
-        var rightSpan = right.AsSpan();
-        var destSpan = result.AsWritableSpan();
-        numOps.Divide(leftSpan, rightSpan, destSpan);
+        for (int i = 0; i < left.Length; i++)
+        {
+            result[i] = operations.Divide(left[i], right[i]);
+        }
 
         return result;
     }
@@ -544,10 +546,11 @@ public static class VectorExtensions
         if (left.Length != right.Length)
             throw new ArgumentException("Vectors must have the same length");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var leftSpan = left.AsWritableSpan();
-        var rightSpan = right.AsSpan();
-        numOps.Multiply(leftSpan, rightSpan, leftSpan);
+        var operations = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < left.Length; i++)
+        {
+            left[i] = operations.Multiply(left[i], right[i]);
+        }
     }
 
     /// <summary>
@@ -570,9 +573,15 @@ public static class VectorExtensions
         if (vector.Length == 0)
             throw new ArgumentException("Vector cannot be empty");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var span = vector.AsSpan();
-        return numOps.Max(span);
+        var operations = MathHelper.GetNumericOperations<T>();
+        T max = vector[0];
+        for (int i = 1; i < vector.Length; i++)
+        {
+            if (operations.GreaterThan(vector[i], max))
+                max = vector[i];
+        }
+
+        return max;
     }
 
     /// <summary>
@@ -618,9 +627,15 @@ public static class VectorExtensions
         if (vector.Length == 0)
             throw new ArgumentException("Vector cannot be empty");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var span = vector.AsSpan();
-        return numOps.Min(span);
+        var operations = MathHelper.GetNumericOperations<T>();
+        T min = vector[0];
+        for (int i = 1; i < vector.Length; i++)
+        {
+            if (operations.LessThan(vector[i], min))
+                min = vector[i];
+        }
+
+        return min;
     }
 
     /// <summary>
@@ -673,12 +688,16 @@ public static class VectorExtensions
         if (vector.Length == 0)
             throw new ArgumentException("Vector cannot be empty");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var span = vector.AsSpan();
-        var temp = new Vector<T>(vector.Length);
-        var tempSpan = temp.AsWritableSpan();
-        numOps.Abs(span, tempSpan);
-        return numOps.Max(tempSpan);
+        var operations = MathHelper.GetNumericOperations<T>();
+        T maxAbs = operations.Abs(vector[0]);
+        for (int i = 1; i < vector.Length; i++)
+        {
+            T absValue = operations.Abs(vector[i]);
+            if (operations.GreaterThan(absValue, maxAbs))
+                maxAbs = absValue;
+        }
+
+        return maxAbs;
     }
 
     /// <summary>
@@ -780,9 +799,14 @@ public static class VectorExtensions
     /// </remarks>
     public static T Sum<T>(this Vector<T> vector)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var span = vector.AsSpan();
-        return numOps.Sum(span);
+        var operations = MathHelper.GetNumericOperations<T>();
+        T sum = operations.Zero;
+        for (int i = 0; i < vector.Length; i++)
+        {
+            sum = operations.Add(sum, vector[i]);
+        }
+
+        return sum;
     }
 
     /// <summary>
@@ -906,10 +930,10 @@ public static class VectorExtensions
             throw new ArgumentOutOfRangeException(nameof(startIndex));
 
         var result = new Vector<T>(count);
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var sourceSpan = vector.AsSpan().Slice(startIndex, count);
-        var destSpan = result.AsWritableSpan();
-        numOps.Copy(sourceSpan, destSpan);
+        for (int i = 0; i < count; i++)
+        {
+            result[i] = vector[startIndex + i];
+        }
 
         return result;
     }
@@ -1089,10 +1113,10 @@ public static class VectorExtensions
     public static Vector<T> Extract<T>(this Vector<T> vector, int length)
     {
         var result = new Vector<T>(length);
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var sourceSpan = vector.AsSpan().Slice(0, length);
-        var destSpan = result.AsWritableSpan();
-        numOps.Copy(sourceSpan, destSpan);
+        for (int i = 0; i < length; i++)
+        {
+            result[i] = vector[i];
+        }
 
         return result;
     }
@@ -1157,7 +1181,7 @@ public static class VectorExtensions
     /// [4, 5, 6]
     /// </para>
     /// <para>
-    /// The total number of elements must stay the same (rows Ã— columns = vector length).
+    /// The total number of elements must stay the same (rows × columns = vector length).
     /// </para>
     /// </remarks>
     public static Matrix<T> Reshape<T>(this Vector<T> vector, int rows, int columns)
@@ -1333,7 +1357,7 @@ public static class VectorExtensions
     /// </para>
     /// <para>
     /// For example, in 2D space, the Euclidean distance between points (1,2) and (4,6) would be:
-    /// âˆš[(4-1)Â² + (6-2)Â²] = âˆš[9 + 16] = v25 = 5
+    /// v[(4-1)² + (6-2)²] = v[9 + 16] = v25 = 5
     /// </para>
     /// <para>
     /// This concept extends to any number of dimensions. In machine learning, Euclidean distance

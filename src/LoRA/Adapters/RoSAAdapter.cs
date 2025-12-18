@@ -259,7 +259,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private void InitializeSparseWeights()
     {
-        Random random = RandomHelper.CreateSecureRandom();
+        Random random = new Random();
         for (int i = 0; i < _sparseWeights.Rows; i++)
         {
             for (int j = 0; j < _sparseWeights.Columns; j++)

@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Broyden-Fletcher-Goldfarb-Shanno (BFGS) optimization algorithm.
+/// Implements the Broyden�Fletcher�Goldfarb�Shanno (BFGS) optimization algorithm.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
@@ -48,7 +48,13 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </summary>
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the BFGS algorithm.</param>
-    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
+    /// <param name="predictionOptions">Options for prediction statistics.</param>
+    /// <param name="modelOptions">Options for model statistics.</param>
+    /// <param name="modelEvaluator">The model evaluator to use.</param>
+    /// <param name="fitDetector">The fit detector to use.</param>
+    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
+    /// <param name="modelCache">The model cache to use.</param>
+    /// <param name="gradientCache">The gradient cache to use.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This constructor sets up the BFGS optimizer with its initial configuration.
     /// You can customize various aspects of how it works, or use default settings.
@@ -56,8 +62,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     public BFGSOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        BFGSOptimizerOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        BFGSOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
         _options = options ?? new BFGSOptimizerOptions<T, TInput, TOutput>();
@@ -107,7 +112,6 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
             _iteration++;
-            parameters = currentSolution.GetParameters();
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
             var newSolution = UpdateSolution(currentSolution, gradient, inputData);
 
@@ -147,11 +151,9 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// It uses the inverse Hessian approximation to determine the direction and magnitude of the update.
     /// </para>
     /// </remarks>
-    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient,
+    private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient, 
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        // === Vectorized BFGS Update using IEngine (Phase B: US-GPU-015) ===
-
         var parameters = currentSolution.GetParameters();
         if (_previousGradient != null && _previousParameters != null)
         {
@@ -159,12 +161,10 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         }
 
         var direction = _inverseHessian!.Multiply(gradient);
-        // Vectorized negation
-        direction = (Vector<T>)Engine.Multiply(direction, NumOps.Negate(NumOps.One));
+        direction = direction.Transform(x => NumOps.Negate(x));
 
         var step = LineSearch(currentSolution, direction, gradient, inputData);
-        // Vectorized scaling
-        var scaledDirection = (Vector<T>)Engine.Multiply(direction, step);
+        var scaledDirection = direction.Transform(x => NumOps.Multiply(x, step));
         var newCoefficients = parameters.Add(scaledDirection);
 
         return currentSolution.WithParameters(newCoefficients);
@@ -182,12 +182,8 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     private void UpdateInverseHessian(Vector<T> currentParameters, Vector<T> currentGradient)
     {
-        // === Partially Vectorized Hessian Update using IEngine (Phase B: US-GPU-015) ===
-        // s = current_params - previous_params
-        // y = current_grad - previous_grad
-
-        var s = (Vector<T>)Engine.Subtract(currentParameters, _previousParameters!);
-        var y = (Vector<T>)Engine.Subtract(currentGradient, _previousGradient!);
+        var s = currentParameters.Subtract(_previousParameters!);
+        var y = currentGradient.Subtract(_previousGradient!);
 
         var rho = NumOps.Divide(NumOps.FromDouble(1), y.DotProduct(s));
         var I = Matrix<T>.CreateIdentity(currentParameters.Length);

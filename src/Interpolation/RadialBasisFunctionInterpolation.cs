@@ -181,7 +181,7 @@ public class RadialBasisFunctionInterpolation<T> : I2DInterpolation<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method calculates the straight-line distance between two points
-    /// using the Pythagorean theorem (aÂ² + bÂ² = cÂ²).
+    /// using the Pythagorean theorem (a² + b² = c²).
     /// </para>
     /// <para>
     /// The distance is used by the radial basis functions, which create "bumps" that depend

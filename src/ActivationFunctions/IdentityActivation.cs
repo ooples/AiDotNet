@@ -1,5 +1,3 @@
-using AiDotNet.Autodiff;
-
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -101,39 +99,4 @@ public class IdentityActivation<T> : ActivationFunctionBase<T>
     /// </summary>
     /// <returns>Always returns true as the Identity function can be applied to individual values.</returns>
     protected override bool SupportsScalarOperations() => true;
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because Identity activation requires no computation and is trivially differentiable.</value>
-    /// <remarks>
-    /// <para>
-    /// Identity supports JIT compilation because:
-    /// - It's a no-op (returns input unchanged)
-    /// - The gradient is constant (always 1)
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>The same computation node (Identity is a no-op).</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method returns the input node unchanged, as Identity activation does nothing.
-    /// No TensorOperations call is needed.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        // Identity is a no-op, just return the input
-        return input;
-    }
 }

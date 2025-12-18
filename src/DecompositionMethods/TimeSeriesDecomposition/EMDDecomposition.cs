@@ -252,7 +252,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private Vector<T> AddWhiteNoise(Vector<T> signal, double amplitude)
     {
-        Random random = RandomHelper.CreateSecureRandom();
+        Random random = new Random();
         Vector<T> noisySignal = signal.Clone();
         for (int i = 0; i < signal.Length; i++)
         {

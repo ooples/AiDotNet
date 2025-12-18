@@ -125,7 +125,7 @@ public class WaveRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Wave RBF with respect to the radius r.
-    /// The formula for the derivative is (eÂ·rÂ·cos(er) + sin(er))/(er)Â². For r = 0, the derivative
+    /// The formula for the derivative is (e·r·cos(er) + sin(er))/(er)². For r = 0, the derivative
     /// is 0 due to the limit as r approaches 0.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes how fast the function's value changes
@@ -161,16 +161,16 @@ public class WaveRBF<T> : IRadialBasisFunction<T>
         // Calculate sin(er)
         T sinEpsilonR = MathHelper.Sin(epsilonR);
         
-        // Calculate eÂ·rÂ·cos(er)
+        // Calculate e·r·cos(er)
         T epsilonRCosEpsilonR = _numOps.Multiply(epsilonR, cosEpsilonR);
         
-        // Calculate eÂ·rÂ·cos(er) + sin(er)
+        // Calculate e·r·cos(er) + sin(er)
         T numerator = _numOps.Add(epsilonRCosEpsilonR, sinEpsilonR);
         
-        // Calculate (er)Â²
+        // Calculate (er)²
         T epsilonRSquared = _numOps.Multiply(epsilonR, epsilonR);
         
-        // Return (eÂ·rÂ·cos(er) + sin(er))/(er)Â²
+        // Return (e·r·cos(er) + sin(er))/(er)²
         return _numOps.Divide(numerator, epsilonRSquared);
     }
     
@@ -182,8 +182,8 @@ public class WaveRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Wave RBF with respect to the shape parameter epsilon.
-    /// The formula for this derivative is (rÂ²Â·cos(er) + sin(er)/e)/(er)Â² for non-zero r,
-    /// and -rÂ²/3 for r approaching 0. This derivative is useful for optimizing the oscillation frequency.
+    /// The formula for this derivative is (r²·cos(er) + sin(er)/e)/(er)² for non-zero r,
+    /// and -r²/3 for r approaching 0. This derivative is useful for optimizing the oscillation frequency.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the function's value would change
     /// if you were to adjust the shape parameter (epsilon) that controls oscillation frequency.
@@ -194,7 +194,7 @@ public class WaveRBF<T> : IRadialBasisFunction<T>
     /// - With this information, learning algorithms can automatically find the optimal value of epsilon
     /// 
     /// For the Wave RBF, the width derivative:
-    /// - Has a special formula for points very close to the center (approaches -rÂ²/3)
+    /// - Has a special formula for points very close to the center (approaches -r²/3)
     /// - For other points, follows a complex pattern that depends on both the distance and the current epsilon value
     /// - Like the function itself, the width derivative oscillates as distance increases
     /// 
@@ -210,7 +210,7 @@ public class WaveRBF<T> : IRadialBasisFunction<T>
         // Handle the case when epsilonR is very close to zero
         if (MathHelper.AlmostEqual(epsilonR, _numOps.Zero))
         {
-            // For er ? 0, the width derivative approaches -rÂ²/3
+            // For er ? 0, the width derivative approaches -r²/3
             T negativeRSquaredDivThree = _numOps.Divide(
                 _numOps.Negate(rSquared),
                 _numOps.FromDouble(3.0)
@@ -224,19 +224,19 @@ public class WaveRBF<T> : IRadialBasisFunction<T>
         // Calculate sin(er)
         T sinEpsilonR = MathHelper.Sin(epsilonR);
         
-        // Calculate rÂ²Â·cos(er)
+        // Calculate r²·cos(er)
         T rSquaredCosEpsilonR = _numOps.Multiply(rSquared, cosEpsilonR);
         
         // Calculate sin(er)/e
         T sinEpsilonRDivEpsilon = _numOps.Divide(sinEpsilonR, _epsilon);
         
-        // Calculate rÂ²Â·cos(er) + sin(er)/e
+        // Calculate r²·cos(er) + sin(er)/e
         T numerator = _numOps.Add(rSquaredCosEpsilonR, sinEpsilonRDivEpsilon);
         
-        // Calculate (er)Â²
+        // Calculate (er)²
         T epsilonRSquared = _numOps.Multiply(epsilonR, epsilonR);
         
-        // Return (rÂ²Â·cos(er) + sin(er)/e)/(er)Â²
+        // Return (r²·cos(er) + sin(er)/e)/(er)²
         return _numOps.Divide(numerator, epsilonRSquared);
     }
 }

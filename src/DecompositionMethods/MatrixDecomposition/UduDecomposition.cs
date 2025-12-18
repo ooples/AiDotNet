@@ -111,20 +111,10 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
 
         for (int j = 0; j < n; j++)
         {
-            // VECTORIZED: Calculate D[j] using dot product
             T sum = NumOps.Zero;
-            if (j > 0)
+            for (int k = 0; k < j; k++)
             {
-                var ujCol = new T[j];
-                var dSlice = new T[j];
-                for (int k = 0; k < j; k++)
-                {
-                    ujCol[k] = NumOps.Multiply(U[k, j], U[k, j]);
-                    dSlice[k] = D[k];
-                }
-                var ujVec = new Vector<T>(ujCol);
-                var dVec = new Vector<T>(dSlice);
-                sum = ujVec.DotProduct(dVec);
+                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, j], U[k, j]), D[k]));
             }
             D[j] = NumOps.Subtract(A[j, j], sum);
 
@@ -132,14 +122,10 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
 
             for (int i = j + 1; i < n; i++)
             {
-                // VECTORIZED: Calculate U[j,i] using element-wise product and sum
                 sum = NumOps.Zero;
-                if (j > 0)
+                for (int k = 0; k < j; k++)
                 {
-                    for (int k = 0; k < j; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, i], U[k, j]), D[k]));
-                    }
+                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, i], U[k, j]), D[k]));
                 }
                 U[j, i] = NumOps.Divide(NumOps.Subtract(A[j, i], sum), D[j]);
             }
@@ -162,20 +148,10 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            // VECTORIZED: Calculate D[i] using dot product
             T sum = NumOps.Zero;
-            if (i > 0)
+            for (int k = 0; k < i; k++)
             {
-                var uiCol = new T[i];
-                var dSlice = new T[i];
-                for (int k = 0; k < i; k++)
-                {
-                    uiCol[k] = NumOps.Multiply(U[k, i], U[k, i]);
-                    dSlice[k] = D[k];
-                }
-                var uiVec = new Vector<T>(uiCol);
-                var dVec = new Vector<T>(dSlice);
-                sum = uiVec.DotProduct(dVec);
+                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, i], U[k, i]), D[k]));
             }
             D[i] = NumOps.Subtract(A[i, i], sum);
 
@@ -183,14 +159,10 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
 
             for (int j = i + 1; j < n; j++)
             {
-                // VECTORIZED: Calculate U[i,j] using element-wise product and sum
                 sum = NumOps.Zero;
-                if (i > 0)
+                for (int k = 0; k < i; k++)
                 {
-                    for (int k = 0; k < i; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, i], U[k, j]), D[k]));
-                    }
+                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, i], U[k, j]), D[k]));
                 }
                 U[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[i]);
             }
@@ -221,46 +193,28 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
         Vector<T> y = new Vector<T>(b.Length);
         for (int i = 0; i < b.Length; i++)
         {
-            // VECTORIZED: Use dot product for sum computation
             T sum = NumOps.Zero;
-            if (i > 0)
+            for (int j = 0; j < i; j++)
             {
-                var colSlice = new T[i];
-                var ySlice = new T[i];
-                for (int k = 0; k < i; k++)
-                {
-                    colSlice[k] = U[k, i];
-                    ySlice[k] = y[k];
-                }
-                var colVec = new Vector<T>(colSlice);
-                var yVec = new Vector<T>(ySlice);
-                sum = colVec.DotProduct(yVec);
+                sum = NumOps.Add(sum, NumOps.Multiply(U[j, i], y[j]));
             }
             y[i] = NumOps.Subtract(b[i], sum);
         }
 
-        // VECTORIZED: Diagonal scaling using vector division
-        y = y.ElementwiseDivide(D);
+        // Diagonal scaling
+        for (int i = 0; i < b.Length; i++)
+        {
+            y[i] = NumOps.Divide(y[i], D[i]);
+        }
 
         // Backward substitution
         Vector<T> x = new Vector<T>(b.Length);
         for (int i = b.Length - 1; i >= 0; i--)
         {
-            // VECTORIZED: Use dot product for sum computation
             T sum = NumOps.Zero;
-            if (i < b.Length - 1)
+            for (int j = i + 1; j < b.Length; j++)
             {
-                int remaining = b.Length - i - 1;
-                var rowSlice = new T[remaining];
-                var xSlice = new T[remaining];
-                for (int k = 0; k < remaining; k++)
-                {
-                    rowSlice[k] = U[i, i + 1 + k];
-                    xSlice[k] = x[i + 1 + k];
-                }
-                var rowVec = new Vector<T>(rowSlice);
-                var xVec = new Vector<T>(xSlice);
-                sum = rowVec.DotProduct(xVec);
+                sum = NumOps.Add(sum, NumOps.Multiply(U[i, j], x[j]));
             }
             x[i] = NumOps.Subtract(y[i], sum);
         }

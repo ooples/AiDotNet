@@ -10,7 +10,7 @@ namespace AiDotNet.Models.Options;
 /// functions, particularly in nonlinear problems. Unlike line search methods, which determine the step size along 
 /// a predefined direction, trust region methods concurrently optimize both the direction and the magnitude of the 
 /// step within a specified neighborhood (the "trust region") around the current iterate. The central idea is to 
-/// construct a simplified modelâ€”often a quadratic approximationâ€”that represents the objective function near the 
+/// construct a simplified model—often a quadratic approximation—that represents the objective function near the 
 /// current point. This model serves as a surrogate, guiding the search for the optimum within a bounded region. 
 /// The size of the trust region is dynamically adjusted based on how well the model predicts the actual behavior 
 /// of the objective function. This class inherits from GradientBasedOptimizerOptions and adds parameters specific 

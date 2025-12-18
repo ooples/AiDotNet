@@ -212,7 +212,7 @@ public class StratifiedKFoldCrossValidationFitDetectorOptions
     /// - The variation in performance is small relative to the average performance
     /// 
     /// The default value of 0.05 means:
-    /// - If the coefficient of variation (standard deviation Ã· mean) exceeds 5%, the model is considered unstable
+    /// - If the coefficient of variation (standard deviation ÷ mean) exceeds 5%, the model is considered unstable
     /// - This is a relative measure, unlike HighVarianceThreshold which is absolute
     /// 
     /// Think of it like this:

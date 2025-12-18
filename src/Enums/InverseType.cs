@@ -6,7 +6,7 @@ namespace AiDotNet.Enums;
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> A matrix inverse is like finding the opposite of a number. Just as 1/5 is the 
-/// inverse of 5 (because 5 Ã— 1/5 = 1), a matrix inverse is a special matrix that, when multiplied 
+/// inverse of 5 (because 5 × 1/5 = 1), a matrix inverse is a special matrix that, when multiplied 
 /// with the original matrix, gives the identity matrix (the matrix equivalent of the number 1).
 /// 
 /// Matrix inverses are important in AI and machine learning for:
@@ -36,7 +36,7 @@ public enum InverseType
     /// - A good balance between speed and accuracy
     /// 
     /// Best used when:
-    /// - Working with large matrices (typically larger than 128Ã—128)
+    /// - Working with large matrices (typically larger than 128×128)
     /// - Speed is important
     /// - You have sufficient memory available
     /// - The matrix is well-conditioned (not close to being non-invertible)

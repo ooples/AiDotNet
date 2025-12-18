@@ -57,7 +57,7 @@ public class ThresholdOutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TI
     /// 1. For each feature (column), it calculates the median value
     /// 2. It computes how far each data point deviates from this median
     /// 3. It calculates the median of these deviations (the MAD)
-    /// 4. Points that deviate more than (threshold Ã— MAD) from the median are considered outliers
+    /// 4. Points that deviate more than (threshold × MAD) from the median are considered outliers
     /// 
     /// <b>For Beginners:</b> This method examines each feature (column) in your data separately.
     /// It finds the middle value (median) for each feature, then measures how far each data point

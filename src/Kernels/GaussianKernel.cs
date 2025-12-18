@@ -92,7 +92,7 @@ public class GaussianKernel<T> : IKernelFunction<T>
     /// The calculation works by:
     /// 1. Checking that both vectors have the same length (number of features)
     /// 2. Computing the squared Euclidean distance between the vectors (the sum of squared differences for each feature)
-    /// 3. Applying the Gaussian formula: exp(-distanceÂ²/(2*sigmaÂ²))
+    /// 3. Applying the Gaussian formula: exp(-distance²/(2*sigma²))
     /// </para>
     /// <para>
     /// The result is a number between 0 and 1, where:

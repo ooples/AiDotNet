@@ -5,7 +5,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para>
 /// Activation functions introduce non-linearity to neural networks. Non-linearity means the output isn't 
 /// simply proportional to the input (like y = 2x). Instead, it can follow curves or more complex patterns.
-/// Without non-linearity, a neural networkâ€”no matter how many layersâ€”would behave just like a single layer,
+/// Without non-linearity, a neural network—no matter how many layers—would behave just like a single layer,
 /// severely limiting what it can learn.
 /// </para>
 /// <para>
@@ -98,7 +98,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// For example:
     /// ```csharp
     /// // Create a ReLU activation layer for 28x28 images
-    /// var reluLayer = new ActivationLayer<float>(new[] { 32, 28, 28, 1 }, new ReLUActivation<float>());
+    /// var reluLayer = new ActivationLayer<float>(new[] { 32, 28, 28, 1 }, new ReLU<float>());
     /// ```
     /// 
     /// The inputShape parameter defines the dimensions of your data:
@@ -234,120 +234,33 @@ public class ActivationLayer<T> : LayerBase<T>
     /// multiplied by the output gradient. For vector activation, the derivative tensor is multiplied by the output gradient.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the error gradient flows backward through this layer.
-    ///
+    /// 
     /// During backpropagation, the network calculates how each part contributed to the error.
     /// This method:
     /// 1. Checks that Forward() was called first (we need the saved input)
     /// 2. Verifies the gradient has the correct shape
     /// 3. Calculates how the gradient changes as it passes through this layer
     /// 4. Returns the modified gradient
-    ///
+    /// 
     /// For example, with ReLU activation:
     /// - If the input was positive, the gradient passes through unchanged
     /// - If the input was negative, the gradient is blocked (becomes 0)
-    ///
+    /// 
     /// This is because ReLU's derivative is 1 for positive inputs and 0 for negative inputs.
-    ///
+    /// 
     /// This process helps the network understand which neurons to adjust during training.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // Autodiff supports all scalar activations via generic TensorOperations<T>.ApplyActivation
-        // Only vector activations need manual path
-        if (UseAutodiff && !_useVectorActivation)
-            return BackwardViaAutodiff(outputGradient);
-        else
-            return BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation.
-    /// </summary>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
         if (_lastInput == null)
             throw new ForwardPassRequiredException("ActivationLayer", GetType().Name);
 
         TensorValidator.ValidateShapesMatch(_lastInput, outputGradient, "Activation Layer", "Backward Pass");
 
-        return _useVectorActivation
-            ? BackwardVectorActivation(outputGradient)
+        return _useVectorActivation 
+            ? BackwardVectorActivation(outputGradient) 
             : BackwardScalarActivation(outputGradient);
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation with production-grade optimizations.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method uses a production-grade pattern for computing gradients:
-    /// - Uses cached _lastInput from forward pass (locality caching)
-    /// - Builds minimal autodiff graph only for gradient routing
-    /// - Executes inline topological sort for graph traversal
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new ForwardPassRequiredException("ActivationLayer", GetType().Name);
-
-        TensorValidator.ValidateShapesMatch(_lastInput, outputGradient, "Activation Layer", "Backward Pass");
-
-        // 1. Create variable nodes for inputs that need gradients
-        var inputNode = AiDotNet.Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-
-        // 2. Build computation graph
-        var activation = ScalarActivation ?? (IActivationFunction<T>?)VectorActivation;
-        if (activation == null) return outputGradient;
-
-        var outputNode = activation.ApplyToGraph(inputNode);
-
-        // 3. Set output gradient
-        outputNode.Gradient = outputGradient;
-
-        // 4. Inline topological sort
-        var visited = new HashSet<AiDotNet.Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<AiDotNet.Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(AiDotNet.Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // 5. Execute backward pass
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // 6. Extract gradient
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>
@@ -356,13 +269,12 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <param name="input">The input tensor to transform</param>
     /// <returns>A new tensor with the activation function applied to each element</returns>
     /// <remarks>
-    /// This private helper method applies the scalar activation function to the input tensor.
-    /// It delegates to the activation function's Activate(Tensor) method, allowing for potential
-    /// optimizations (like GPU acceleration) implemented within the activation function class.
+    /// This private helper method applies the scalar activation function to each element of the input tensor
+    /// independently. It uses the Transform method of the Tensor class to apply the function element-wise.
     /// </remarks>
     private Tensor<T> ApplyScalarActivation(Tensor<T> input)
     {
-        return ScalarActivation!.Activate(input);
+        return input.Transform((x, _) => ScalarActivation!.Activate(x));
     }
 
     /// <summary>
@@ -387,12 +299,13 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <returns>The gradient with respect to this layer's input</returns>
     /// <remarks>
     /// This private helper method calculates the gradient for the backward pass when using a scalar activation function.
-    /// It uses the activation function's vectorized Derivative method and Engine.TensorMultiply for efficient
-    /// element-wise computation.
+    /// It applies the derivative of the activation function to each element of the last input, then multiplies
+    /// the result by the corresponding element of the output gradient.
     /// </remarks>
     private Tensor<T> BackwardScalarActivation(Tensor<T> outputGradient)
     {
-        return ScalarActivation!.Backward(_lastInput!, outputGradient);
+        return _lastInput!.Transform((x, indices) => 
+            NumOps.Multiply(ScalarActivation!.Derivative(x), outputGradient[indices]));
     }
 
 
@@ -426,8 +339,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardVectorActivation(Tensor<T> outputGradient)
     {
-        // Now unified via IVectorActivationFunction.Backward
-        return VectorActivation!.Backward(_lastInput!, outputGradient);
+        return VectorActivation!.Derivative(_lastInput!) * outputGradient;
     }
 
     /// <summary>
@@ -554,87 +466,5 @@ public class ActivationLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _lastInput = null;
-    }
-
-    /// <summary>
-    /// Exports the activation layer's computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the activation function applied to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method constructs a computation graph representation of the activation layer by:
-    /// 1. Validating input parameters and layer configuration
-    /// 2. Creating a symbolic input node with proper batch dimension
-    /// 3. Applying the activation function to the symbolic input
-    /// </para>
-    /// <para><b>For Beginners:</b> This method converts the activation layer into a computation graph for JIT compilation.
-    ///
-    /// The computation graph describes:
-    /// - Input: A symbolic tensor with batch size = 1 plus the layer's input shape
-    /// - Operation: Apply the activation function (ReLU, Sigmoid, etc.)
-    /// - Output: The activated tensor
-    ///
-    /// JIT compilation can make inference 5-10x faster by optimizing this graph into native code.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        IActivationFunction<T>? activation = ScalarActivation;
-        if (activation == null && VectorActivation != null)
-            activation = (IActivationFunction<T>)VectorActivation;
-
-        if (activation == null)
-            throw new InvalidOperationException("No activation function configured.");
-
-        if (!activation.SupportsJitCompilation)
-        {
-            throw new NotSupportedException(
-                $"Activation function '{activation.GetType().Name}' does not support JIT compilation yet.");
-        }
-
-        // Create symbolic input node (shape definition only, batch size adapts at runtime)
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Build symbolic computation graph by applying activation function
-        return activation.ApplyToGraph(inputNode);
-    }
-
-    /// <summary>
-    /// Gets whether this activation layer supports JIT compilation.
-    /// </summary>
-    /// <value>True if the activation function supports JIT compilation, false otherwise.</value>
-    /// <remarks>
-    /// <para>
-    /// This property checks whether the configured activation function supports JIT compilation.
-    /// Returns false if no activation is configured or if the activation doesn't support JIT.
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you if this layer can use JIT compilation for faster inference.
-    ///
-    /// The layer can be JIT compiled if:
-    /// - The activation function (ReLU, Sigmoid, etc.) has JIT support implemented
-    /// - The activation's gradient computation is available
-    ///
-    /// Common activations like ReLU, Sigmoid, and Tanh typically support JIT.
-    /// Custom or exotic activations may not support it yet.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            IActivationFunction<T>? activation = ScalarActivation;
-            if (activation == null && VectorActivation != null)
-                activation = (IActivationFunction<T>)VectorActivation;
-            return activation?.SupportsJitCompilation ?? false;
-        }
     }
 }

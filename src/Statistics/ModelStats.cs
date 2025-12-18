@@ -439,33 +439,7 @@ public class ModelStats<T, TInput, TOutput>
         FeatureNames = inputs.FeatureNames ?? [];
         FeatureValues = inputs.FeatureValues ?? [];
 
-        // Only calculate statistics if we have actual data to analyze
-        // Skip calculation for empty ModelStats (placeholder objects)
-        if (!IsEmptyInput(inputs))
-        {
-            CalculateModelStats(inputs);
-        }
-    }
-
-    /// <summary>
-    /// Determines whether the input data is empty or uninitialized.
-    /// </summary>
-    /// <param name="inputs">The input data to check.</param>
-    /// <returns>True if the inputs are empty; otherwise, false.</returns>
-    private static bool IsEmptyInput(ModelStatsInputs<T, TInput, TOutput> inputs)
-    {
-        // Check if the XMatrix is empty based on its type
-        if (inputs.XMatrix is Matrix<T> matrix)
-        {
-            return matrix.Rows == 0 || matrix.Columns == 0;
-        }
-        else if (inputs.XMatrix is Tensor<T> tensor)
-        {
-            return tensor.Rank == 0 || tensor.Length == 0;
-        }
-
-        // For unknown types, assume not empty to maintain existing behavior
-        return false;
+        CalculateModelStats(inputs);
     }
 
     /// <summary>
@@ -528,7 +502,7 @@ public class ModelStats<T, TInput, TOutput>
         // Calculate all statistical metrics using the converted data types
         CorrelationMatrix = StatisticsHelper<T>.CalculateCorrelationMatrix(matrix, _options);
         CovarianceMatrix = StatisticsHelper<T>.CalculateCovarianceMatrix(matrix);
-        VIFList = StatisticsHelper<T>.CalculateVIF(CorrelationMatrix, _options);
+        VIFList = StatisticsHelper<T>.CalculateVIF(matrix, _options);
         ConditionNumber = StatisticsHelper<T>.CalculateConditionNumber(matrix, _options);
         LogPointwisePredictiveDensity = StatisticsHelper<T>.CalculateLogPointwisePredictiveDensity(actual, predicted);
 
@@ -569,20 +543,7 @@ public class ModelStats<T, TInput, TOutput>
         CosineSimilarity = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Cosine);
         JaccardSimilarity = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Jaccard);
         HammingDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Hamming);
-
-        // Mahalanobis distance requires vector dimensions to match covariance matrix dimensions
-        // Skip calculation if dimensions don't match (covariance is feature x feature, not sample x sample)
-        try
-        {
-            if (CovarianceMatrix.Rows == actual.Length && CovarianceMatrix.Columns == actual.Length)
-            {
-                MahalanobisDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Mahalanobis, CovarianceMatrix);
-            }
-        }
-        catch (ArgumentException)
-        {
-            // Silently skip Mahalanobis distance calculation when dimensions don't match
-        }
+        MahalanobisDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Mahalanobis, CovarianceMatrix);
     }
 
     /// <summary>

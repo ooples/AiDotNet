@@ -105,40 +105,8 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
     /// <returns>The interpolated z-value at the specified (x,y) coordinates.</returns>
     public T Interpolate(T x, T y)
     {
-        // Check if x and y exactly match grid points - return exact value
-        // Use binary search for O(log n) instead of O(n×m)
-        int exactXIndex = BinarySearchExact(_x, x);
-        if (exactXIndex >= 0)
-        {
-            int exactYIndex = BinarySearchExact(_y, y);
-            if (exactYIndex >= 0)
-            {
-                return _z[exactXIndex, exactYIndex];
-            }
-        }
-
-        int iOriginal = FindInterval(_x, x);
-        int jOriginal = FindInterval(_y, y);
-
-        // Use original intervals for dx/dy normalization (maintains correct interpolation position)
-        T dx = _numOps.Divide(_numOps.Subtract(x, _x[iOriginal]), _numOps.Subtract(_x[iOriginal + 1], _x[iOriginal]));
-        T dy = _numOps.Divide(_numOps.Subtract(y, _y[jOriginal]), _numOps.Subtract(_y[jOriginal + 1], _y[jOriginal]));
-
-        // Clamp indices for 4×4 neighborhood extraction (ensures valid array access)
-        int i = Math.Max(1, Math.Min(iOriginal, _x.Length - 3));
-        int j = Math.Max(1, Math.Min(jOriginal, _y.Length - 3));
-
-        // Adjust dx/dy to account for neighborhood shift when clamping occurred
-        if (i != iOriginal)
-        {
-            // Recalculate dx relative to the clamped cell
-            dx = _numOps.Divide(_numOps.Subtract(x, _x[i]), _numOps.Subtract(_x[i + 1], _x[i]));
-        }
-        if (j != jOriginal)
-        {
-            // Recalculate dy relative to the clamped cell
-            dy = _numOps.Divide(_numOps.Subtract(y, _y[j]), _numOps.Subtract(_y[j + 1], _y[j]));
-        }
+        int i = FindInterval(_x, x);
+        int j = FindInterval(_y, y);
 
         T[,] p = new T[4, 4];
         for (int m = -1; m <= 2; m++)
@@ -148,6 +116,9 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
                 p[m + 1, n + 1] = _z[MathHelper.Clamp(i + m, 0, _z.Rows - 1), MathHelper.Clamp(j + n, 0, _z.Columns - 1)];
             }
         }
+
+        T dx = _numOps.Divide(_numOps.Subtract(x, _x[i]), _numOps.Subtract(_x[i + 1], _x[i]));
+        T dy = _numOps.Divide(_numOps.Subtract(y, _y[j]), _numOps.Subtract(_y[j + 1], _y[j]));
 
         return InterpolateBicubicPatch(p, dx, dy);
     }
@@ -267,38 +238,5 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
         }
 
         return values.Length - 2;
-    }
-
-    /// <summary>
-    /// Binary search for an exact match in a sorted array.
-    /// </summary>
-    /// <param name="values">The sorted array to search.</param>
-    /// <param name="target">The target value to find.</param>
-    /// <returns>The index of the exact match, or -1 if not found.</returns>
-    private int BinarySearchExact(Vector<T> values, T target)
-    {
-        int left = 0;
-        int right = values.Length - 1;
-
-        while (left <= right)
-        {
-            int mid = left + (right - left) / 2;
-
-            if (_numOps.Equals(values[mid], target))
-            {
-                return mid;
-            }
-
-            if (_numOps.LessThan(values[mid], target))
-            {
-                left = mid + 1;
-            }
-            else
-            {
-                right = mid - 1;
-            }
-        }
-
-        return -1; // Not found
     }
 }

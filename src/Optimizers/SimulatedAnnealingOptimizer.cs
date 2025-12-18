@@ -95,7 +95,12 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// </summary>
     /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The simulated annealing options, or null to use default options.</param>
-    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
+    /// <param name="predictionOptions">The prediction statistics options, or null to use default options.</param>
+    /// <param name="modelOptions">The model statistics options, or null to use default options.</param>
+    /// <param name="modelEvaluator">The model evaluator, or null to use the default evaluator.</param>
+    /// <param name="fitDetector">The fit detector, or null to use the default detector.</param>
+    /// <param name="fitnessCalculator">The fitness calculator, or null to use the default calculator.</param>
+    /// <param name="modelCache">The model cache, or null to use the default cache.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new Simulated Annealing optimizer with the specified options and components.
@@ -115,11 +120,10 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// </remarks>
     public SimulatedAnnealingOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        SimulatedAnnealingOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        SimulatedAnnealingOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
-        _random = RandomHelper.CreateSecureRandom();
+        _random = new Random();
         _saOptions = options ?? new SimulatedAnnealingOptions<T, TInput, TOutput>();
         _currentTemperature = NumOps.FromDouble(_saOptions.InitialTemperature);
     }
@@ -468,16 +472,12 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     private IFullModel<T, TInput, TOutput> GenerateNeighborSolution(IFullModel<T, TInput, TOutput> currentSolution)
     {
         var parameters = currentSolution.GetParameters();
-
-        // Generate random perturbations vectorized using Engine
-        var perturbations = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
+        var newCoefficients = new Vector<T>(parameters.Length);
+        for (int i = 0; i < newCoefficients.Length; i++)
         {
-            perturbations[i] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * _saOptions.NeighborGenerationRange);
+            var perturbation = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * _saOptions.NeighborGenerationRange);
+            newCoefficients[i] = NumOps.Add(parameters[i], perturbation);
         }
-
-        // Add perturbations to parameters using vectorized Engine operation
-        var newCoefficients = (Vector<T>)Engine.Add(parameters, perturbations);
 
         return currentSolution.WithParameters(newCoefficients);
     }

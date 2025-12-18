@@ -24,16 +24,14 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<T> AddConstantColumn<T>(this Matrix<T> matrix, T value)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
         var newMatrix = new Matrix<T>(matrix.Rows, matrix.Columns + 1);
-
-        // Vectorized: Copy each row using SIMD operations
         for (int i = 0; i < matrix.Rows; i++)
         {
             newMatrix[i, 0] = value;
-            var sourceRow = matrix.GetRowReadOnlySpan(i);
-            var destRow = newMatrix.GetRowSpan(i);
-            numOps.Copy(sourceRow, destRow.Slice(1, matrix.Columns));
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                newMatrix[i, j + 1] = matrix[i, j];
+            }
         }
 
         return newMatrix;
@@ -64,11 +62,16 @@ public static class MatrixExtensions
 
         int size = matrix.Rows * matrix.Columns;
         var result = new Vector<T>(size);
-
-        // Vectorized: Copy entire matrix data at once
-        var numOps = MathHelper.GetNumericOperations<T>();
-        numOps.Copy(matrix.AsSpan(), result.AsWritableSpan());
-
+            
+        int index = 0;
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[index++] = matrix[i, j];
+            }
+        }
+            
         return result;
     }
 
@@ -90,15 +93,14 @@ public static class MatrixExtensions
         if (matrix.Columns != vector.Length)
             throw new ArgumentException("Vector length must match matrix column count");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var ops = MathHelper.GetNumericOperations<T>();
         var result = new Matrix<T>(matrix.Rows, matrix.Columns);
-
-        // Vectorized: Add vector to each row using SIMD operations
         for (int i = 0; i < matrix.Rows; i++)
         {
-            var sourceRow = matrix.GetRowReadOnlySpan(i);
-            var destRow = result.GetRowSpan(i);
-            numOps.Add(sourceRow, vector.AsSpan(), destRow);
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[i, j] = ops.Add(matrix[i, j], vector[j]);
+            }
         }
 
         return result;
@@ -748,7 +750,7 @@ public static class MatrixExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> A square matrix is simply a matrix with the same number of rows and columns.
-    /// For example, a 3Ã—3 matrix is square, while a 2Ã—3 matrix is not.
+    /// For example, a 3×3 matrix is square, while a 2×3 matrix is not.
     /// </para>
     /// </remarks>
     public static bool IsSquareMatrix<T>(this Matrix<T> matrix)
@@ -765,7 +767,7 @@ public static class MatrixExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> A rectangular matrix has a different number of rows and columns.
-    /// For example, a 2Ã—3 matrix (2 rows, 3 columns) is rectangular.
+    /// For example, a 2×3 matrix (2 rows, 3 columns) is rectangular.
     /// </para>
     /// </remarks>
     public static bool IsRectangularMatrix<T>(this Matrix<T> matrix)
@@ -1483,7 +1485,7 @@ public static class MatrixExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> An idempotent matrix is a matrix that, when multiplied by itself,
-    /// gives the same matrix: AÂ² = A.
+    /// gives the same matrix: A² = A.
     /// 
     /// This property is important in:
     /// - Projection matrices in linear algebra
@@ -1761,9 +1763,9 @@ public static class MatrixExtensions
     /// 2. Each subsequent column is formed by raising the corresponding element in the first column to a power
     /// 
     /// For example, if the first column is [x1, x2, x3], the Vandermonde matrix would be:
-    /// [x1Â°, x1Â¹, x1Â², ...]
-    /// [x2Â°, x2Â¹, x2Â², ...]
-    /// [x3Â°, x3Â¹, x3Â², ...]
+    /// [x1°, x1¹, x1², ...]
+    /// [x2°, x2¹, x2², ...]
+    /// [x3°, x3¹, x3², ...]
     /// 
     /// These matrices are important in polynomial interpolation and solving systems of linear equations.
     /// </para>
@@ -2296,7 +2298,7 @@ public static class MatrixExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> An involutory matrix is a matrix that, when multiplied by itself, gives the identity matrix.
-    /// In other words, it's its own inverse (AÂ² = I). These matrices are useful in various applications including cryptography
+    /// In other words, it's its own inverse (A² = I). These matrices are useful in various applications including cryptography
     /// and computer graphics.
     /// </para>
     /// </remarks>
@@ -2702,7 +2704,7 @@ public static class MatrixExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Matrix inversion is like finding the reciprocal of a number. For example, the reciprocal of 2 is 1/2.
-    /// Similarly, the inverse of a matrix A is another matrix that, when multiplied with A, gives the identity matrix (similar to how 2 Ã— 1/2 = 1).
+    /// Similarly, the inverse of a matrix A is another matrix that, when multiplied with A, gives the identity matrix (similar to how 2 × 1/2 = 1).
     /// The Gaussian-Jordan elimination is a step-by-step process to find this inverse by transforming the original matrix into the identity matrix.
     /// </para>
     /// </remarks>
@@ -2956,14 +2958,12 @@ public static class MatrixExtensions
     /// </remarks>
     public static void SetSubmatrix<T>(this Matrix<T> matrix, int startRow, int startCol, Matrix<T> submatrix)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-
-        // Vectorized: Copy each row using SIMD operations
         for (int i = 0; i < submatrix.Rows; i++)
         {
-            var sourceRow = submatrix.GetRowReadOnlySpan(i);
-            var destRow = matrix.GetRowSpan(startRow + i);
-            numOps.Copy(sourceRow, destRow.Slice(startCol, submatrix.Columns));
+            for (int j = 0; j < submatrix.Columns; j++)
+            {
+                matrix[startRow + i, startCol + j] = submatrix[i, j];
+            }
         }
     }
 
@@ -3014,12 +3014,17 @@ public static class MatrixExtensions
     /// </remarks>
     public static T FrobeniusNorm<T>(this Matrix<T> matrix)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var ops = MathHelper.GetNumericOperations<T>();
+        T sum = ops.Zero;
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                sum = ops.Add(sum, ops.Multiply(matrix[i, j], matrix[i, j]));
+            }
+        }
 
-        // Vectorized: Compute sum of squares using SIMD dot product (x Â· x = sum of xÂ² terms)
-        var span = matrix.AsSpan();
-        T sumOfSquares = numOps.Dot(span, span);
-        return numOps.Sqrt(sumOfSquares);
+        return ops.Sqrt(sum);
     }
 
     /// <summary>
@@ -3036,11 +3041,15 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<T> Negate<T>(this Matrix<T> matrix)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var ops = MathHelper.GetNumericOperations<T>();
         var result = new Matrix<T>(matrix.Rows, matrix.Columns);
-
-        // Vectorized: Negate all elements at once using SIMD operations
-        numOps.Negate(matrix.AsSpan(), result.AsWritableSpan());
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[i, j] = ops.Negate(matrix[i, j]);
+            }
+        }
 
         return result;
     }
@@ -3572,8 +3581,13 @@ public static class MatrixExtensions
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Matrix<T>(matrix.Rows, matrix.Columns);
 
-        // Vectorized: Multiply all elements at once using SIMD operations
-        numOps.Multiply(matrix.AsSpan(), other.AsSpan(), result.AsWritableSpan());
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[i, j] = numOps.Multiply(matrix[i, j], other[i, j]);
+            }
+        }
 
         return result;
     }
@@ -3603,12 +3617,12 @@ public static class MatrixExtensions
         var numOps = MathHelper.GetNumericOperations<T>();
         Matrix<T> result = new(matrix.Rows, matrix.Columns);
 
-        // Vectorized: Scale each row by corresponding vector element using SIMD operations
         for (int i = 0; i < matrix.Rows; i++)
         {
-            var sourceRow = matrix.GetRowReadOnlySpan(i);
-            var destRow = result.GetRowSpan(i);
-            numOps.MultiplyScalar(sourceRow, vector[i], destRow);
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[i, j] = numOps.Multiply(matrix[i, j], vector[i]);
+            }
         }
 
         return result;
@@ -3640,15 +3654,14 @@ public static class MatrixExtensions
             throw new ArgumentException("Column length must match matrix row count.");
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
         Matrix<T> newMatrix = new Matrix<T>(matrix.Rows, matrix.Columns + 1);
 
-        // Vectorized: Copy each row using SIMD operations, then set last column
         for (int i = 0; i < matrix.Rows; i++)
         {
-            var sourceRow = matrix.GetRowReadOnlySpan(i);
-            var destRow = newMatrix.GetRowSpan(i);
-            numOps.Copy(sourceRow, destRow.Slice(0, matrix.Columns));
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                newMatrix[i, j] = matrix[i, j];
+            }
             newMatrix[i, matrix.Columns] = column[i];
         }
 
@@ -3686,15 +3699,14 @@ public static class MatrixExtensions
             throw new ArgumentOutOfRangeException("Invalid submatrix dimensions");
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
         Matrix<T> submatrix = new Matrix<T>(numRows, numCols);
 
-        // Vectorized: Copy row segments using SIMD operations
         for (int i = 0; i < numRows; i++)
         {
-            var sourceRow = matrix.GetRowReadOnlySpan(startRow + i);
-            var destRow = submatrix.GetRowSpan(i);
-            numOps.Copy(sourceRow.Slice(startCol, numCols), destRow);
+            for (int j = 0; j < numCols; j++)
+            {
+                submatrix[i, j] = matrix[startRow + i, startCol + j];
+            }
         }
 
         return submatrix;
@@ -3883,8 +3895,8 @@ public static class MatrixExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The Kronecker product is a special way of combining two matrices that results
-    /// in a much larger matrix. If matrix A is mÃ—n and matrix B is pÃ—q, their Kronecker product will be
-    /// a matrix of size (mÃ—p)Ã—(nÃ—q).
+    /// in a much larger matrix. If matrix A is m×n and matrix B is p×q, their Kronecker product will be
+    /// a matrix of size (m×p)×(n×q).
     /// </para>
     /// <para>
     /// Think of it as replacing each element of matrix A with a scaled copy of matrix B, where the scaling
@@ -3932,7 +3944,7 @@ public static class MatrixExtensions
     /// and puts them into a vector (a one-dimensional array), reading from left to right, top to bottom.
     /// </para>
     /// <para>
-    /// For example, if you have a 2Ã—3 matrix:
+    /// For example, if you have a 2×3 matrix:
     /// [1, 2, 3]
     /// [4, 5, 6]
     /// The flattened vector would be: [1, 2, 3, 4, 5, 6]
@@ -3975,11 +3987,11 @@ public static class MatrixExtensions
     /// all the same values. It's like rearranging the same set of numbers into a different grid pattern.
     /// </para>
     /// <para>
-    /// For example, if you have a 2Ã—3 matrix (2 rows, 3 columns):
+    /// For example, if you have a 2×3 matrix (2 rows, 3 columns):
     /// [1, 2, 3]
     /// [4, 5, 6]
     /// 
-    /// You could reshape it to a 3Ã—2 matrix (3 rows, 2 columns):
+    /// You could reshape it to a 3×2 matrix (3 rows, 2 columns):
     /// [1, 2]
     /// [3, 4]
     /// [5, 6]

@@ -98,7 +98,7 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> SVD is a mathematical technique that breaks down a complex matrix into simpler parts.
-    /// It's like factoring a number (e.g., 12 = 3 Ã— 4), but for matrices. This helps identify the most 
+    /// It's like factoring a number (e.g., 12 = 3 × 4), but for matrices. This helps identify the most 
     /// important patterns in your data.
     /// </para>
     /// </remarks>

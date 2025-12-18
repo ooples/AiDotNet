@@ -27,11 +27,6 @@ public abstract class FeatureSelectorBase<T, TInput> : IFeatureSelector<T, TInpu
     protected readonly INumericOperations<T> NumOps;
 
     /// <summary>
-    /// Gets the global execution engine for vector operations.
-    /// </summary>
-    protected IEngine Engine => AiDotNetEngine.Current;
-
-    /// <summary>
     /// The strategy to use for extracting features from higher-dimensional tensors.
     /// </summary>
     /// <remarks>

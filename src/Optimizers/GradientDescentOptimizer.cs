@@ -46,8 +46,7 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// <param name="options">Options for the Gradient Descent optimizer.</param>
     public GradientDescentOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        GradientDescentOptimizerOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        GradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>())
     {
         _gdOptions = options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>();
@@ -114,54 +113,13 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// <param name="gradient">The calculated gradient.</param>
     /// <returns>The updated solution.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(
-        IFullModel<T, TInput, TOutput> currentSolution,
+        IFullModel<T, TInput, TOutput> currentSolution, 
         Vector<T> gradient)
     {
-        // === Vectorized Gradient Descent Update using IEngine (Phase B: US-GPU-015) ===
-        // params = params - learningRate * gradient
-
         Vector<T> currentParams = currentSolution.GetParameters();
-        var scaledGradient = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
-        var updatedParams = (Vector<T>)Engine.Subtract(currentParams, scaledGradient);
+        Vector<T> updatedParams = currentParams.Subtract(gradient.Multiply(CurrentLearningRate));
 
         return currentSolution.WithParameters(updatedParams);
-    }
-
-    /// <summary>
-    /// Reverses a Gradient Descent update to recover original parameters.
-    /// </summary>
-    /// <param name="updatedParameters">Parameters after GD update</param>
-    /// <param name="appliedGradients">The gradients that were applied</param>
-    /// <returns>Original parameters before the update</returns>
-    /// <remarks>
-    /// <para>
-    /// Gradient Descent uses vanilla SGD update rule: params_new = params_old - lr * gradient.
-    /// The reverse is straightforward: params_old = params_new + lr * gradient.
-    /// </para>
-    /// <para><b>For Beginners:</b> This calculates where parameters were before a Gradient Descent update.
-    /// Since GD uses simple steps (parameter minus learning_rate times gradient), reversing
-    /// just means adding back that step.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
-    {
-        if (updatedParameters == null)
-            throw new ArgumentNullException(nameof(updatedParameters));
-        if (appliedGradients == null)
-            throw new ArgumentNullException(nameof(appliedGradients));
-
-        if (updatedParameters.Length != appliedGradients.Length)
-        {
-            throw new ArgumentException(
-                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
-                nameof(appliedGradients));
-        }
-
-        // === Vectorized Reverse Gradient Descent Update using IEngine (Phase B: US-GPU-015) ===
-        // Reverse: original = updated + lr * gradient
-        var currentLrVec = Vector<T>.CreateDefault(appliedGradients.Length, CurrentLearningRate);
-        var gradientStep = (Vector<T>)Engine.Multiply(currentLrVec, appliedGradients);
-        return (Vector<T>)Engine.Add(updatedParameters, gradientStep);
     }
 
     /// <summary>

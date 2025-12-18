@@ -22,10 +22,10 @@ namespace AiDotNet.Kernels;
 /// </para>
 /// <para>
 /// The formula for the Sigmoid kernel is:
-/// k(x, y) = tanh(a(xÂ·y) + c)
+/// k(x, y) = tanh(a(x·y) + c)
 /// where:
 /// - x and y are the two data points being compared
-/// - xÂ·y is the dot product between them
+/// - x·y is the dot product between them
 /// - a (alpha) controls the steepness of the S-curve
 /// - c is a parameter that shifts the curve horizontally
 /// - tanh is the hyperbolic tangent function (an S-shaped curve)

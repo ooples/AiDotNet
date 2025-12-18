@@ -1,4 +1,4 @@
-using AiDotNet.Data.Structures;
+using AiDotNet.Data.Abstractions;
 using AiDotNet.Models.Results;
 
 namespace AiDotNet.Interfaces;

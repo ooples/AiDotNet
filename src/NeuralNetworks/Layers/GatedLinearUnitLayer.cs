@@ -37,92 +37,92 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public class GatedLinearUnitLayer<T> : LayerBase<T>
 {
     /// <summary>
-    /// The weight tensor for the linear transformation path.
+    /// The weight matrix for the linear transformation path.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This tensor stores the learnable weights for the linear transformation part of the GLU.
+    /// This matrix stores the learnable weights for the linear transformation part of the GLU.
     /// The shape is [outputDimension, inputDimension], where each row represents the weights
     /// for one output neuron in the linear path.
     /// </para>
     /// <para><b>For Beginners:</b> These weights determine how input data is transformed before gating.
-    ///
+    /// 
     /// The linear weights work like in a standard neural network layer:
     /// - They transform the input data into a new representation
     /// - Each output value is a weighted sum of all inputs
     /// - During training, these weights adjust to extract useful features
-    ///
+    /// 
     /// These weights focus on transforming the data without considering
     /// which parts are important to keep or filter out (that's the gate's job).
     /// </para>
     /// </remarks>
-    private Tensor<T> _linearWeights;
+    private Matrix<T> _linearWeights;
 
     /// <summary>
-    /// The weight tensor for the gating path.
+    /// The weight matrix for the gating path.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This tensor stores the learnable weights for the gating transformation part of the GLU.
+    /// This matrix stores the learnable weights for the gating transformation part of the GLU.
     /// The shape is [outputDimension, inputDimension], where each row represents the weights
     /// for one output neuron in the gating path.
     /// </para>
     /// <para><b>For Beginners:</b> These weights determine how each input influences the gates.
-    ///
+    /// 
     /// The gate weights control what information is important:
     /// - They transform input data into control signals (gates)
     /// - These gates will determine how much information passes through
     /// - During training, these weights learn to recognize important patterns
-    ///
+    /// 
     /// Think of these weights as learning when to open or close the valve
     /// for different types of input information.
     /// </para>
     /// </remarks>
-    private Tensor<T> _gateWeights;
+    private Matrix<T> _gateWeights;
 
     /// <summary>
-    /// The bias tensor for the linear transformation path.
+    /// The bias vector for the linear transformation path.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This tensor stores the learnable bias terms for the linear transformation part of the GLU.
+    /// This vector stores the learnable bias terms for the linear transformation part of the GLU.
     /// The biases are added to the weighted sum of inputs in the linear path before being gated.
     /// </para>
     /// <para><b>For Beginners:</b> These biases are default or starting values for the linear path.
-    ///
+    /// 
     /// Linear biases work like in a standard neural network layer:
     /// - They provide an adjustable baseline for each output
     /// - They're added after the weighted sum but before gating
     /// - During training, they adjust to help produce better features
-    ///
+    /// 
     /// Each output neuron in the linear path has its own bias value.
     /// </para>
     /// </remarks>
-    private Tensor<T> _linearBias;
+    private Vector<T> _linearBias;
 
     /// <summary>
-    /// The bias tensor for the gating path.
+    /// The bias vector for the gating path.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This tensor stores the learnable bias terms for the gating part of the GLU.
+    /// This vector stores the learnable bias terms for the gating part of the GLU.
     /// The biases are added to the weighted sum of inputs in the gating path before
     /// applying the activation function.
     /// </para>
     /// <para><b>For Beginners:</b> These biases affect how open or closed the gates are by default.
-    ///
+    /// 
     /// Gate biases control the default state of each gate:
     /// - Positive values make gates tend to be more open
     /// - Negative values make gates tend to be more closed
     /// - They're adjusted during training to find optimal default settings
-    ///
+    /// 
     /// For example, with sigmoid activation:
     /// - A large negative bias makes the gate mostly closed by default
     /// - A large positive bias makes the gate mostly open by default
     /// - A bias near zero lets the gate be more responsive to the input
     /// </para>
     /// </remarks>
-    private Tensor<T> _gateBias;
+    private Vector<T> _gateBias;
 
     /// <summary>
     /// The input tensor from the last forward pass, saved for backpropagation.
@@ -191,84 +191,84 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This tensor stores the gradients of the loss with respect to each linear weight.
+    /// This matrix stores the gradients of the loss with respect to each linear weight.
     /// These gradients are used to update the linear weights during training.
     /// </para>
     /// <para><b>For Beginners:</b> This stores information about how to adjust each linear weight value.
-    ///
+    /// 
     /// During training:
     /// - The network calculates how each linear weight contributed to errors
     /// - Gradients show both direction and amount to change each weight
     /// - Larger gradients mean bigger adjustments are needed
-    ///
+    /// 
     /// These gradients help the linear path learn to produce better features
     /// that, when gated appropriately, lead to better final outputs.
     /// </para>
     /// </remarks>
-    private Tensor<T>? _linearWeightsGradient;
+    private Matrix<T>? _linearWeightsGradient;
 
     /// <summary>
     /// The gradients for the gate weights, computed during backpropagation.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This tensor stores the gradients of the loss with respect to each gate weight.
+    /// This matrix stores the gradients of the loss with respect to each gate weight.
     /// These gradients are used to update the gate weights during training.
     /// </para>
     /// <para><b>For Beginners:</b> This stores information about how to adjust each gate weight value.
-    ///
+    /// 
     /// During training:
     /// - The network calculates how each gate weight contributed to errors
     /// - Gradients show how to change weights to make gates work better
     /// - They help the gates learn to identify important information
-    ///
+    /// 
     /// These gradients help the gating mechanism learn when to allow
     /// information through and when to block it for better results.
     /// </para>
     /// </remarks>
-    private Tensor<T>? _gateWeightsGradient;
+    private Matrix<T>? _gateWeightsGradient;
 
     /// <summary>
     /// The gradients for the linear biases, computed during backpropagation.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This tensor stores the gradients of the loss with respect to each linear bias.
+    /// This vector stores the gradients of the loss with respect to each linear bias.
     /// These gradients are used to update the linear biases during training.
     /// </para>
     /// <para><b>For Beginners:</b> This stores information about how to adjust each linear bias value.
-    ///
+    /// 
     /// During training:
     /// - The network calculates how each linear bias contributed to errors
     /// - Gradients guide adjustments to improve performance
     /// - They help fine-tune the baseline of each feature
-    ///
+    /// 
     /// These gradients help the linear path produce better default values
     /// before gating is applied.
     /// </para>
     /// </remarks>
-    private Tensor<T>? _linearBiasGradient;
+    private Vector<T>? _linearBiasGradient;
 
     /// <summary>
     /// The gradients for the gate biases, computed during backpropagation.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This tensor stores the gradients of the loss with respect to each gate bias.
+    /// This vector stores the gradients of the loss with respect to each gate bias.
     /// These gradients are used to update the gate biases during training.
     /// </para>
     /// <para><b>For Beginners:</b> This stores information about how to adjust each gate bias value.
-    ///
+    /// 
     /// During training:
     /// - The network calculates how each gate bias contributed to errors
     /// - Gradients guide adjustments to improve gating behavior
     /// - They help fine-tune the default openness of each gate
-    ///
+    /// 
     /// These gradients help the gates learn optimal default settings
     /// for controlling information flow.
     /// </para>
     /// </remarks>
-    private Tensor<T>? _gateBiasGradient;
+    private Vector<T>? _gateBiasGradient;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -336,10 +336,10 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     public GatedLinearUnitLayer(int inputDimension, int outputDimension, IActivationFunction<T>? gateActivation = null)
         : base([inputDimension], [outputDimension], gateActivation ?? new SigmoidActivation<T>())
     {
-        _linearWeights = new Tensor<T>([outputDimension, inputDimension]);
-        _gateWeights = new Tensor<T>([outputDimension, inputDimension]);
-        _linearBias = new Tensor<T>([outputDimension]);
-        _gateBias = new Tensor<T>([outputDimension]);
+        _linearWeights = new Matrix<T>(outputDimension, inputDimension);
+        _gateWeights = new Matrix<T>(outputDimension, inputDimension);
+        _linearBias = new Vector<T>(outputDimension);
+        _gateBias = new Vector<T>(outputDimension);
 
         InitializeParameters();
     }
@@ -374,10 +374,10 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     public GatedLinearUnitLayer(int inputDimension, int outputDimension, IVectorActivationFunction<T>? gateActivation = null)
         : base([inputDimension], [outputDimension], gateActivation ?? new SigmoidActivation<T>())
     {
-        _linearWeights = new Tensor<T>([outputDimension, inputDimension]);
-        _gateWeights = new Tensor<T>([outputDimension, inputDimension]);
-        _linearBias = new Tensor<T>([outputDimension]);
-        _gateBias = new Tensor<T>([outputDimension]);
+        _linearWeights = new Matrix<T>(outputDimension, inputDimension);
+        _gateWeights = new Matrix<T>(outputDimension, inputDimension);
+        _linearBias = new Vector<T>(outputDimension);
+        _gateBias = new Vector<T>(outputDimension);
 
         InitializeParameters();
     }
@@ -408,19 +408,47 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        int outputDimension = _linearWeights.Shape[0];
-        int inputDimension = _linearWeights.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (outputDimension + inputDimension)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_linearWeights.Rows + _linearWeights.Columns)));
+        InitializeMatrix(_linearWeights, scale);
+        InitializeMatrix(_gateWeights, scale);
 
-        _linearWeights = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_linearWeights.Shape, Vector<T>.CreateRandom(_linearWeights.Length, -0.5, 0.5)),
-            scale);
-        _gateWeights = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_gateWeights.Shape, Vector<T>.CreateRandom(_gateWeights.Length, -0.5, 0.5)),
-            scale);
+        for (int i = 0; i < _linearBias.Length; i++)
+        {
+            _linearBias[i] = NumOps.Zero;
+            _gateBias[i] = NumOps.Zero;
+        }
+    }
 
-        _linearBias.Fill(NumOps.Zero);
-        _gateBias.Fill(NumOps.Zero);
+    /// <summary>
+    /// Helper method to initialize a matrix with scaled random values.
+    /// </summary>
+    /// <param name="matrix">The matrix to initialize.</param>
+    /// <param name="scale">The scaling factor for the random values.</param>
+    /// <remarks>
+    /// <para>
+    /// This helper method initializes a matrix with random values scaled by the provided factor.
+    /// The random values are centered around zero and scaled to help with training convergence.
+    /// </para>
+    /// <para><b>For Beginners:</b> This fills a weight matrix with appropriate random starting values.
+    /// 
+    /// The method:
+    /// - Goes through each position in the matrix
+    /// - Assigns a random value centered around zero (between -0.5 and 0.5)
+    /// - Scales that value by the provided factor
+    /// 
+    /// This scaling ensures the initial weights are in an appropriate range
+    /// that will allow effective gradient-based learning.
+    /// </para>
+    /// </remarks>
+    private void InitializeMatrix(Matrix<T> matrix, T scale)
+    {
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+            }
+        }
     }
 
     /// <summary>
@@ -457,22 +485,16 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+        int batchSize = input.Shape[0];
+        int inputDimension = input.Shape[1];
 
-        // Linear path: linear = input @ weights^T + bias
-        var linearWeightsT = _linearWeights.Transpose([1, 0]);
-        var linearOutput = input.MatrixMultiply(linearWeightsT);
-        linearOutput = Engine.TensorBroadcastAdd(linearOutput, _linearBias); // Broadcasting
-
-        // Gate path: gate = sigmoid(input @ weights^T + bias)
-        var gateWeightsT = _gateWeights.Transpose([1, 0]);
-        var gateOutput = input.MatrixMultiply(gateWeightsT);
-        gateOutput = Engine.TensorBroadcastAdd(gateOutput, _gateBias); // Broadcasting
+        var linearOutput = input.Multiply(_linearWeights).Add(_linearBias);
+        var gateOutput = input.Multiply(_gateWeights).Add(_gateBias);
 
         _lastLinearOutput = linearOutput;
         _lastGateOutput = ApplyActivation(gateOutput);
 
-        // GLU output: output = linear * gate
-        var output = Engine.TensorMultiply(_lastLinearOutput, _lastGateOutput);
+        var output = _lastLinearOutput.ElementwiseMultiply(_lastGateOutput);
 
         return output;
     }
@@ -494,8 +516,8 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// The backward pass is more complex in GLU layers because of the two paths:
     /// 
     /// 1. First, compute gradients for both paths:
-    ///    - Linear path gradient: outputGradient Ã— gate values
-    ///    - Gate path gradient: outputGradient Ã— linear output
+    ///    - Linear path gradient: outputGradient × gate values
+    ///    - Gate path gradient: outputGradient × linear output
     /// 
     /// 2. For the gate path, apply the activation derivative
     ///    - This accounts for how the activation affected the gates
@@ -515,95 +537,22 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
         if (_lastInput == null || _lastLinearOutput == null || _lastGateOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // dL/dLinear = dL/dOutput * gate
-        var linearGradient = Engine.TensorMultiply(outputGradient, _lastGateOutput);
-        // dL/dGate = dL/dOutput * linear
-        var gateGradient = Engine.TensorMultiply(outputGradient, _lastLinearOutput);
+        var linearGradient = outputGradient.ElementwiseMultiply(_lastGateOutput);
+        var gateGradient = outputGradient.ElementwiseMultiply(_lastLinearOutput);
 
-        // Apply gate activation derivative
         gateGradient = ApplyActivationDerivative(_lastGateOutput, gateGradient);
 
-        // Weight gradients: dW = grad^T @ input
-        var linearGradT = linearGradient.Transpose([1, 0]);
-        var gateGradT = gateGradient.Transpose([1, 0]);
-        _linearWeightsGradient = linearGradT.MatrixMultiply(_lastInput);
-        _gateWeightsGradient = gateGradT.MatrixMultiply(_lastInput);
+        _linearWeightsGradient = _lastInput.Transpose([1, 0]).Multiply(linearGradient).ToMatrix();
+        _gateWeightsGradient = _lastInput.Transpose([1, 0]).Multiply(gateGradient).ToMatrix();
 
-        // Bias gradients: sum over batch
-        _linearBiasGradient = linearGradient.Sum([0]);
-        _gateBiasGradient = gateGradient.Sum([0]);
+        _linearBiasGradient = linearGradient.Sum([0]).ToVector();
+        _gateBiasGradient = gateGradient.Sum([0]).ToVector();
 
-        // Input gradient: dL/dInput = linearGrad @ linearWeights + gateGrad @ gateWeights
-        var inputGradFromLinear = linearGradient.MatrixMultiply(_linearWeights);
-        var inputGradFromGate = gateGradient.MatrixMultiply(_gateWeights);
-        var inputGradient = Engine.TensorAdd(inputGradFromLinear, inputGradFromGate);
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation principles.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass using the same mathematical formulas as the manual
-    /// implementation but structured to demonstrate autodiff concepts. Both paths now produce
-    /// identical results by using the same cached values and computation order.
-    /// </para>
-    /// <para>
-    /// For the GLU layer, the computations are:
-    /// - Forward: output = linearOutput * sigmoid(gatePreactivation)
-    /// - Backward: dL/dinput = (dL/dlinearOutput @ linearWeights) + (dL/dgatePreactivation @ gateWeights)
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastLinearOutput == null || _lastGateOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // === Step 1: Compute gradients through the GLU output ===
-        // output = linearOutput * gateOutput (element-wise)
-        // dL/dlinearOutput = dL/dOutput * gateOutput
-        // dL/dgateOutput = dL/dOutput * linearOutput
-        // Production-grade: Use Engine.TensorMultiply for GPU/CPU accelerated element-wise ops
-        var linearGradient = Engine.TensorMultiply(outputGradient, _lastGateOutput);
-        var gateGradient = Engine.TensorMultiply(outputGradient, _lastLinearOutput);
-
-        // === Step 2: Apply activation derivative to gate gradient using cached values ===
-        // This matches BackwardManual exactly by using _lastGateOutput
-        gateGradient = ApplyActivationDerivative(_lastGateOutput, gateGradient);
-
-        // === Step 3: Compute weight and bias gradients ===
-        var linearGradT = linearGradient.Transpose([1, 0]);
-        var gateGradT = gateGradient.Transpose([1, 0]);
-        _linearWeightsGradient = linearGradT.MatrixMultiply(_lastInput);
-        _gateWeightsGradient = gateGradT.MatrixMultiply(_lastInput);
-
-        _linearBiasGradient = linearGradient.Sum([0]);
-        _gateBiasGradient = gateGradient.Sum([0]);
-
-        // === Step 4: Compute input gradient ===
-        // dL/dinput = (linearGradient @ linearWeights) + (gateGradient @ gateWeights)
-        var inputGradFromLinear = linearGradient.MatrixMultiply(_linearWeights);
-        var inputGradFromGate = gateGradient.MatrixMultiply(_gateWeights);
-        var inputGradient = Engine.TensorAdd(inputGradFromLinear, inputGradFromGate);
+        var inputGradient = linearGradient.Multiply(_linearWeights.Transpose())
+                            .Add(gateGradient.Multiply(_gateWeights.Transpose()));
 
         return inputGradient;
     }
@@ -638,20 +587,14 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        if (_linearWeightsGradient == null || _gateWeightsGradient == null ||
+        if (_linearWeightsGradient == null || _gateWeightsGradient == null || 
             _linearBiasGradient == null || _gateBiasGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Use Engine operations for parameter updates
-        var scaledLinearWeightsGrad = Engine.TensorMultiplyScalar(_linearWeightsGradient, learningRate);
-        var scaledGateWeightsGrad = Engine.TensorMultiplyScalar(_gateWeightsGradient, learningRate);
-        var scaledLinearBiasGrad = Engine.TensorMultiplyScalar(_linearBiasGradient, learningRate);
-        var scaledGateBiasGrad = Engine.TensorMultiplyScalar(_gateBiasGradient, learningRate);
-
-        _linearWeights = Engine.TensorSubtract(_linearWeights, scaledLinearWeightsGrad);
-        _gateWeights = Engine.TensorSubtract(_gateWeights, scaledGateWeightsGrad);
-        _linearBias = Engine.TensorSubtract(_linearBias, scaledLinearBiasGrad);
-        _gateBias = Engine.TensorSubtract(_gateBias, scaledGateBiasGrad);
+        _linearWeights = _linearWeights.Subtract(_linearWeightsGradient.Multiply(learningRate));
+        _gateWeights = _gateWeights.Subtract(_gateWeightsGradient.Multiply(learningRate));
+        _linearBias = _linearBias.Subtract(_linearBiasGradient.Multiply(learningRate));
+        _gateBias = _gateBias.Subtract(_gateBiasGradient.Multiply(learningRate));
     }
 
     /// <summary>
@@ -679,8 +622,8 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// - Advanced optimization techniques
     /// 
     /// For a layer with 100 inputs and 50 outputs, this would return:
-    /// - 5,000 linear weight parameters (100 Ã— 50)
-    /// - 5,000 gate weight parameters (100 Ã— 50)
+    /// - 5,000 linear weight parameters (100 × 50)
+    /// - 5,000 gate weight parameters (100 × 50)
     /// - 50 linear bias parameters
     /// - 50 gate bias parameters
     /// - Totaling 10,100 parameters
@@ -688,11 +631,46 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_linearWeights.ToArray()),
-            new Vector<T>(_gateWeights.ToArray()),
-            new Vector<T>(_linearBias.ToArray()),
-            new Vector<T>(_gateBias.ToArray()));
+        // Calculate total number of parameters
+        int totalParams = _linearWeights.Rows * _linearWeights.Columns + 
+                          _gateWeights.Rows * _gateWeights.Columns + 
+                          _linearBias.Length + _gateBias.Length;
+
+        var parameters = new Vector<T>(totalParams);
+
+        int index = 0;
+
+        // Copy linear weights parameters
+        for (int i = 0; i < _linearWeights.Rows; i++)
+        {
+            for (int j = 0; j < _linearWeights.Columns; j++)
+            {
+                parameters[index++] = _linearWeights[i, j];
+            }
+        }
+
+        // Copy gate weights parameters
+        for (int i = 0; i < _gateWeights.Rows; i++)
+        {
+            for (int j = 0; j < _gateWeights.Columns; j++)
+            {
+                parameters[index++] = _gateWeights[i, j];
+            }
+        }
+
+        // Copy linear bias parameters
+        for (int i = 0; i < _linearBias.Length; i++)
+        {
+            parameters[index++] = _linearBias[i];
+        }
+
+        // Copy gate bias parameters
+        for (int i = 0; i < _gateBias.Length; i++)
+        {
+            parameters[index++] = _gateBias[i];
+        }
+
+        return parameters;
     }
 
     /// <summary>
@@ -724,9 +702,8 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int linearWeightsSize = _linearWeights.Shape[0] * _linearWeights.Shape[1];
-        int gateWeightsSize = _gateWeights.Shape[0] * _gateWeights.Shape[1];
-        int expectedLength = linearWeightsSize + gateWeightsSize +
+        int expectedLength = _linearWeights.Rows * _linearWeights.Columns + 
+                             _gateWeights.Rows * _gateWeights.Columns + 
                              _linearBias.Length + _gateBias.Length;
 
         if (parameters.Length != expectedLength)
@@ -735,13 +712,36 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         }
 
         int index = 0;
-        _linearWeights = new Tensor<T>(_linearWeights.Shape, parameters.Slice(index, linearWeightsSize));
-        index += linearWeightsSize;
-        _gateWeights = new Tensor<T>(_gateWeights.Shape, parameters.Slice(index, gateWeightsSize));
-        index += gateWeightsSize;
-        _linearBias = new Tensor<T>(_linearBias.Shape, parameters.Slice(index, _linearBias.Length));
-        index += _linearBias.Length;
-        _gateBias = new Tensor<T>(_gateBias.Shape, parameters.Slice(index, _gateBias.Length));
+
+        // Set linear weights parameters
+        for (int i = 0; i < _linearWeights.Rows; i++)
+        {
+            for (int j = 0; j < _linearWeights.Columns; j++)
+            {
+                _linearWeights[i, j] = parameters[index++];
+            }
+        }
+
+        // Set gate weights parameters
+        for (int i = 0; i < _gateWeights.Rows; i++)
+        {
+            for (int j = 0; j < _gateWeights.Columns; j++)
+            {
+                _gateWeights[i, j] = parameters[index++];
+            }
+        }
+
+        // Set linear bias parameters
+        for (int i = 0; i < _linearBias.Length; i++)
+        {
+            _linearBias[i] = parameters[index++];
+        }
+
+        // Set gate bias parameters
+        for (int i = 0; i < _gateBias.Length; i++)
+        {
+            _gateBias[i] = parameters[index++];
+        }
     }
 
     /// <summary>
@@ -781,38 +781,4 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         _linearBiasGradient = null;
         _gateBiasGradient = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_linearWeights == null || _gateWeights == null)
-            throw new InvalidOperationException("Layer weights not initialized.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Create constant nodes for weights and biases (already Tensor<T>)
-        var linearWeightsNode = TensorOperations<T>.Constant(_linearWeights, "linear_weights");
-        var gateWeightsNode = TensorOperations<T>.Constant(_gateWeights, "gate_weights");
-        var linearBiasNode = TensorOperations<T>.Constant(_linearBias, "linear_bias");
-        var gateBiasNode = TensorOperations<T>.Constant(_gateBias, "gate_bias");
-
-        // Transpose weights for proper matrix multiply
-        var linearWeightsT = TensorOperations<T>.Transpose(linearWeightsNode);
-        var gateWeightsT = TensorOperations<T>.Transpose(gateWeightsNode);
-
-        var linearOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(inputNode, linearWeightsT), linearBiasNode);
-        var gateOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(inputNode, gateWeightsT), gateBiasNode);
-        var sigmoid = TensorOperations<T>.Sigmoid(gateOutput);
-
-        return TensorOperations<T>.ElementwiseMultiply(linearOutput, sigmoid);
-    }
-
-    public override bool SupportsJitCompilation => _linearWeights != null && _gateWeights != null && _linearBias != null && _gateBias != null;
 }

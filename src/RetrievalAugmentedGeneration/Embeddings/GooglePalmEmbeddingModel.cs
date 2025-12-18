@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
+using AiDotNet.Helpers;
 using System.Linq;
 using System.Text;
 
@@ -67,7 +68,7 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
         
         // Generate deterministic features from text
         var hash = text.GetHashCode();
-        var random = RandomHelper.CreateSeededRandom(hash);
+        var random = new Random(hash);
 
         // Character-based features
         var charFreqs = CalculateCharacterFrequencies(text);

@@ -1,5 +1,5 @@
-using AiDotNet.Data.Structures;
-
+using AiDotNet.Data.Abstractions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Config;
@@ -85,7 +85,17 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     /// </summary>
     private readonly bool _supportsGradientComputation;
 
-    // Adam optimizer state for meta-updates
+    /// <summary>
+    /// Optional meta-optimizer for outer loop updates. If null, uses built-in Adam implementation.
+    /// </summary>
+    private readonly IGradientBasedOptimizer<T, TInput, TOutput>? _metaOptimizer;
+
+    /// <summary>
+    /// Optional inner optimizer for task adaptation. If null, uses SGD with inner learning rate.
+    /// </summary>
+    private readonly IGradientBasedOptimizer<T, TInput, TOutput>? _innerOptimizer;
+
+    // Adam optimizer state for meta-updates (used only when _metaOptimizer is null)
     private Vector<T>? _adamFirstMoment;  // m_t in Adam
     private Vector<T>? _adamSecondMoment; // v_t in Adam
     private int _adamTimeStep = 0;
@@ -145,6 +155,51 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
 
         // Check if model supports gradient computation
         _supportsGradientComputation = metaModel is IGradientComputable<T, TInput, TOutput>;
+
+        // Initialize optimizers as null (will use built-in implementation)
+        _metaOptimizer = null;
+        _innerOptimizer = null;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the MAMLTrainer with custom optimizers.
+    /// </summary>
+    /// <param name="metaModel">The model to meta-train.</param>
+    /// <param name="lossFunction">Loss function for evaluating task performance.</param>
+    /// <param name="dataLoader">Episodic data loader for sampling meta-learning tasks.</param>
+    /// <param name="metaOptimizer">Optional custom meta-optimizer for outer loop updates. If null, uses built-in Adam.</param>
+    /// <param name="innerOptimizer">Optional custom inner optimizer for task adaptation. If null, uses SGD with inner learning rate.</param>
+    /// <param name="config">Configuration object containing all hyperparameters. If null, uses default MAMLTrainerConfig.</param>
+    /// <exception cref="ArgumentNullException">Thrown when metaModel, lossFunction, or dataLoader is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when configuration validation fails.</exception>
+    /// <remarks>
+    /// This constructor allows you to inject custom optimizers instead of relying on the built-in Adam implementation.
+    /// When metaOptimizer is provided, the Adam-related settings in config will be ignored.
+    /// When innerOptimizer is provided, the InnerLearningRate in config will be managed by the optimizer.
+    /// </remarks>
+    public MAMLTrainer(
+        IFullModel<T, TInput, TOutput> metaModel,
+        ILossFunction<T> lossFunction,
+        IEpisodicDataLoader<T, TInput, TOutput> dataLoader,
+        IGradientBasedOptimizer<T, TInput, TOutput>? metaOptimizer,
+        IGradientBasedOptimizer<T, TInput, TOutput>? innerOptimizer = null,
+        IMetaLearnerConfig<T>? config = null)
+        : base(metaModel, lossFunction, dataLoader, config ?? new MAMLTrainerConfig<T>())
+    {
+        // Validate that config is actually a MAMLTrainerConfig
+        if (Configuration is not MAMLTrainerConfig<T>)
+        {
+            throw new ArgumentException(
+                $"Configuration must be of type MAMLTrainerConfig<T>, but was {Configuration.GetType().Name}",
+                nameof(config));
+        }
+
+        // Check if model supports gradient computation
+        _supportsGradientComputation = metaModel is IGradientComputable<T, TInput, TOutput>;
+
+        // Store provided optimizers
+        _metaOptimizer = metaOptimizer;
+        _innerOptimizer = innerOptimizer;
     }
 
     /// <inheritdoc/>
@@ -196,8 +251,14 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
 
         // Apply meta-update using appropriate optimizer
         Vector<T> newMetaParameters;
-        if (MAMLConfig.UseAdaptiveMetaOptimizer)
+        if (_metaOptimizer != null)
         {
+            // Use provided meta-optimizer
+            newMetaParameters = _metaOptimizer.UpdateParameters(originalParameters, averageMetaGradient);
+        }
+        else if (MAMLConfig.UseAdaptiveMetaOptimizer)
+        {
+            // Use built-in Adam implementation
             newMetaParameters = AdamMetaUpdate(originalParameters, averageMetaGradient);
         }
         else
@@ -267,7 +328,7 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         out T queryLoss,
         out T queryAccuracy)
     {
-        var gradientModel = (ISecondOrderGradientComputable<T, TInput, TOutput>)MetaModel;
+        var gradientModel = (IGradientComputable<T, TInput, TOutput>)MetaModel;
 
         // Reset to original parameters
         MetaModel.SetParameters(originalParameters.Clone());
@@ -308,7 +369,7 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         out T queryLoss,
         out T queryAccuracy)
     {
-        var gradientModel = (ISecondOrderGradientComputable<T, TInput, TOutput>)MetaModel;
+        var gradientModel = (IGradientComputable<T, TInput, TOutput>)MetaModel;
 
         // Reset to original parameters
         MetaModel.SetParameters(originalParameters.Clone());
@@ -491,13 +552,37 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         var perStepLosses = new List<T> { initialQueryLoss };
 
         // Inner loop: Adapt to task using support set
-        for (int step = 0; step < Configuration.InnerSteps; step++)
+        if (_innerOptimizer != null && _supportsGradientComputation)
         {
-            MetaModel.Train(task.SupportSetX, task.SupportSetY);
+            // Use provided inner optimizer with gradient computation
+            var gradientModel = (IGradientComputable<T, TInput, TOutput>)MetaModel;
 
-            // Track loss after each step for convergence analysis
-            T stepLoss = ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY);
-            perStepLosses.Add(stepLoss);
+            for (int step = 0; step < Configuration.InnerSteps; step++)
+            {
+                // Compute gradients on support set
+                var gradients = gradientModel.ComputeGradients(task.SupportSetX, task.SupportSetY, LossFunction);
+
+                // Update parameters using inner optimizer
+                var currentParams = MetaModel.GetParameters();
+                var newParams = _innerOptimizer.UpdateParameters(currentParams, gradients);
+                MetaModel.SetParameters(newParams);
+
+                // Track loss after each step for convergence analysis
+                T stepLoss = ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY);
+                perStepLosses.Add(stepLoss);
+            }
+        }
+        else
+        {
+            // Use model's built-in Train method (default behavior)
+            for (int step = 0; step < Configuration.InnerSteps; step++)
+            {
+                MetaModel.Train(task.SupportSetX, task.SupportSetY);
+
+                // Track loss after each step for convergence analysis
+                T stepLoss = ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY);
+                perStepLosses.Add(stepLoss);
+            }
         }
 
         // Evaluate after adaptation

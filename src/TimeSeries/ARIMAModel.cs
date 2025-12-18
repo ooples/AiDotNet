@@ -111,8 +111,11 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     private T EstimateConstant(Vector<T> y, Vector<T> arCoefficients, Vector<T> maCoefficients)
     {
         T mean = y.Average();
-        // VECTORIZED: Use Engine.Sum() for AR coefficient summation
-        T arSum = Engine.Sum(arCoefficients);
+        T arSum = NumOps.Zero;
+        for (int i = 0; i < arCoefficients.Length; i++)
+        {
+            arSum = NumOps.Add(arSum, arCoefficients[i]);
+        }
 
         return NumOps.Multiply(mean, NumOps.Subtract(NumOps.One, arSum));
     }
@@ -145,39 +148,30 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         {
             T prediction = _constant;
 
-            // VECTORIZED: Add AR component using dot product
-            if (_arCoefficients.Length > 0)
+            // Add AR component
+            for (int j = 0; j < _arCoefficients.Length; j++)
             {
-                prediction = NumOps.Add(prediction, Engine.DotProduct(_arCoefficients, lastObservedValues));
+                prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[j], lastObservedValues[j]));
             }
 
-            // VECTORIZED: Add MA component using dot product
-            if (_maCoefficients.Length > 0)
+            // Add MA component
+            for (int j = 0; j < _maCoefficients.Length; j++)
             {
-                prediction = NumOps.Add(prediction, Engine.DotProduct(_maCoefficients, lastErrors));
+                prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[j], lastErrors[j]));
             }
 
             predictions[i] = prediction;
 
-            // VECTORIZED: Shift last observed values using slice and copy
-            if (lastObservedValues.Length > 1)
+            // Update last observed values and errors for next prediction
+            for (int j = lastObservedValues.Length - 1; j > 0; j--)
             {
-                var shifted = lastObservedValues.Slice(0, lastObservedValues.Length - 1);
-                for (int j = 1; j < lastObservedValues.Length; j++)
-                {
-                    lastObservedValues[j] = shifted[j - 1];
-                }
+                lastObservedValues[j] = lastObservedValues[j - 1];
             }
             lastObservedValues[0] = prediction;
 
-            // VECTORIZED: Shift last errors using slice and copy
-            if (lastErrors.Length > 1)
+            for (int j = lastErrors.Length - 1; j > 0; j--)
             {
-                var shiftedErrors = lastErrors.Slice(0, lastErrors.Length - 1);
-                for (int j = 1; j < lastErrors.Length; j++)
-                {
-                    lastErrors[j] = shiftedErrors[j - 1];
-                }
+                lastErrors[j] = lastErrors[j - 1];
             }
             lastErrors[0] = NumOps.Zero; // Assume zero error for future predictions
         }

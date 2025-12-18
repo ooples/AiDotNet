@@ -32,8 +32,13 @@ namespace AiDotNet.WaveletFunctions;
 /// The order parameter lets you control the trade-off between smoothness and localization.
 /// </para>
 /// </remarks>
-public class BSplineWavelet<T> : WaveletFunctionBase<T>
+public class BSplineWavelet<T> : IWaveletFunction<T>
 {
+    /// <summary>
+    /// Provides numeric operations for the specific type T.
+    /// </summary>
+    private readonly INumericOperations<T> _numOps;
+    
     /// <summary>
     /// The order of the B-spline used to construct the wavelet.
     /// </summary>
@@ -65,6 +70,7 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public BSplineWavelet(int order = 3)
     {
+        _numOps = MathHelper.GetNumericOperations<T>();
         _order = order;
     }
 
@@ -92,7 +98,7 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// to a signal at specific points.
     /// </para>
     /// </remarks>
-    public override T Calculate(T x)
+    public T Calculate(T x)
     {
         return BSpline(x, _order);
     }
@@ -123,7 +129,7 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// multi-level decomposition and compression applications.
     /// </para>
     /// </remarks>
-    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         var lowPass = GetDecompositionLowPassFilter();
         var highPass = GetDecompositionHighPassFilter();
@@ -161,7 +167,7 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// capture its overall shape.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetScalingCoefficients()
+    public Vector<T> GetScalingCoefficients()
     {
         return GetDecompositionLowPassFilter();
     }
@@ -190,7 +196,7 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// fine structure of the signal.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetWaveletCoefficients()
+    public Vector<T> GetWaveletCoefficients()
     {
         return GetDecompositionHighPassFilter();
     }
@@ -332,7 +338,7 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     private Vector<T> NormalizeAndConvert(double[] coeffs)
     {
         double normFactor = Math.Sqrt(coeffs.Sum(c => c * c));
-        return new Vector<T>(coeffs.Select(c => NumOps.FromDouble(c / normFactor)).ToArray());
+        return new Vector<T>(coeffs.Select(c => _numOps.FromDouble(c / normFactor)).ToArray());
     }
 
     /// <summary>
@@ -366,13 +372,13 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
         var result = new T[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            result[i] = NumOps.Zero;
+            result[i] = _numOps.Zero;
             for (int j = 0; j < filter.Length; j++)
             {
                 int k = i - j + filter.Length / 2;
                 if (k >= 0 && k < input.Length)
                 {
-                    result[i] = NumOps.Add(result[i], NumOps.Multiply(input[k], filter[j]));
+                    result[i] = _numOps.Add(result[i], _numOps.Multiply(input[k], filter[j]));
                 }
             }
         }
@@ -443,12 +449,12 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     {
         if (n == 0)
         {
-            return NumOps.GreaterThanOrEquals(x, NumOps.Zero) && NumOps.LessThan(x, NumOps.One) ? NumOps.One : NumOps.Zero;
+            return _numOps.GreaterThanOrEquals(x, _numOps.Zero) && _numOps.LessThan(x, _numOps.One) ? _numOps.One : _numOps.Zero;
         }
 
-        T term1 = NumOps.Multiply(NumOps.Divide(x, NumOps.FromDouble(n)), BSpline(NumOps.Subtract(x, NumOps.One), n - 1));
-        T term2 = NumOps.Multiply(NumOps.Divide(NumOps.Subtract(NumOps.FromDouble(n + 1), x), NumOps.FromDouble(n)), BSpline(x, n - 1));
+        T term1 = _numOps.Multiply(_numOps.Divide(x, _numOps.FromDouble(n)), BSpline(_numOps.Subtract(x, _numOps.One), n - 1));
+        T term2 = _numOps.Multiply(_numOps.Divide(_numOps.Subtract(_numOps.FromDouble(n + 1), x), _numOps.FromDouble(n)), BSpline(x, n - 1));
 
-        return NumOps.Add(term1, term2);
+        return _numOps.Add(term1, term2);
     }
 }

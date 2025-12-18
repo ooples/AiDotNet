@@ -20,11 +20,11 @@ namespace AiDotNet.Models.Options;
 /// <para><b>For Beginners:</b> Quantile Regression Forests help predict not just a single value, but a range of possible values with their probabilities.
 /// 
 /// Think about weather forecasting:
-/// - A regular forecast might say "tomorrow's temperature will be 75째F"
+/// - A regular forecast might say "tomorrow's temperature will be 75캟"
 /// - But Quantile Regression Forests could tell you:
-///   - "There's a 10% chance it will be below 70째F"
-///   - "There's a 50% chance it will be below 75째F" (the median)
-///   - "There's a 90% chance it will be below 80째F"
+///   - "There's a 10% chance it will be below 70캟"
+///   - "There's a 50% chance it will be below 75캟" (the median)
+///   - "There's a 90% chance it will be below 80캟"
 /// 
 /// What this algorithm does:
 /// - It builds many decision trees, just like a regular Random Forest

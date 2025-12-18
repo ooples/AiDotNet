@@ -1,4 +1,4 @@
-using AiDotNet.Data.Structures;
+using AiDotNet.Data.Abstractions;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Data.Loaders;
@@ -114,7 +114,7 @@ public class StratifiedEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoad
         int totalExamples = datasetY.Length;
         _classWeights = new Dictionary<int, double>();
 
-        foreach (var classLabel in _availableClasses)
+        foreach (var classLabel in AvailableClasses)
         {
             int classCount = ClassToIndices[classLabel].Count;
             _classWeights[classLabel] = (double)classCount / totalExamples;
@@ -167,12 +167,12 @@ public class StratifiedEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoad
 
             // Sample (kShot + queryShots) examples and shuffle
             var sampledIndices = classIndices
-                .OrderBy(_ => RandomInstance.Next())
+                .OrderBy(_ => Random.Next())
                 .Take(KShot + QueryShots)
                 .ToList();
 
             // Shuffle the sampled indices to prevent ordering bias
-            sampledIndices = sampledIndices.OrderBy(_ => RandomInstance.Next()).ToList();
+            sampledIndices = sampledIndices.OrderBy(_ => Random.Next()).ToList();
 
             // Split into support and query
             var supportIndices = sampledIndices.Take(KShot);
@@ -203,7 +203,7 @@ public class StratifiedEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoad
     private int[] WeightedSampleClasses(int sampleSize)
     {
         var selected = new List<int>();
-        var remaining = _availableClasses.ToList();
+        var remaining = AvailableClasses.ToList();
         var remainingWeights = new Dictionary<int, double>(_classWeights);
 
         for (int i = 0; i < sampleSize; i++)
@@ -212,7 +212,7 @@ public class StratifiedEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoad
             var totalWeight = remainingWeights.Values.Sum();
 
             // Generate random value between 0 and totalWeight
-            var randomValue = RandomInstance.NextDouble() * totalWeight;
+            var randomValue = Random.NextDouble() * totalWeight;
 
             // Select based on weighted probability
             double cumulative = NumOps.ToInt32(NumOps.Zero);

@@ -14,7 +14,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// 
 /// Think of it like multiplying numbers together in corresponding positions:
 /// - If you have two vectors [1, 2, 3] and [4, 5, 6]
-/// - The result would be [1Ã—4, 2Ã—5, 3Ã—6] = [4, 10, 18]
+/// - The result would be [1×4, 2×5, 3×6] = [4, 10, 18]
 /// 
 /// This is useful for:
 /// - Controlling information flow (like gates in LSTM or GRU cells)
@@ -240,10 +240,11 @@ public class MultiplyLayer<T> : LayerBase<T>
         }
 
         _lastInputs = inputs;
-
-        // Use Engine.TensorMultiplyMany for GPU/CPU accelerated element-wise multiplication of all tensors
-        // This is production-grade: no loops, single optimized call that batches all multiplications
-        var result = Engine.TensorMultiplyMany(inputs);
+        var result = inputs[0].Clone();
+        for (int i = 1; i < inputs.Length; i++)
+        {
+            result = result.ElementwiseMultiply(inputs[i]);
+        }
 
         _lastOutput = ApplyActivation(result);
         return _lastOutput;
@@ -263,58 +264,29 @@ public class MultiplyLayer<T> : LayerBase<T>
     /// the gradients for all input tensors.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how changes in each input affect the final output.
-    ///
+    /// 
     /// During the backward pass:
     /// - The layer receives gradients indicating how the output should change
     /// - It calculates how each input tensor contributed to the output
     /// - For each input, its gradient is the product of:
     ///   - The output gradient (after applying the activation function derivative)
     ///   - All OTHER input tensors (not including itself)
-    ///
+    /// 
     /// This follows the chain rule of calculus for multiplication:
     /// If z = x * y, then:
     /// - dz/dx = y * (gradient flowing back from later layers)
     /// - dz/dy = x * (gradient flowing back from later layers)
-    ///
+    /// 
     /// The method returns a stacked tensor containing gradients for all inputs.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
         if (_lastInputs == null || _lastOutput == null)
         {
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
-
-        Tensor<T> activationGradient;
-        if (UsingVectorActivation && VectorActivation != null)
-        {
-            // Use element-wise multiplication for gradient computation
-            activationGradient = Tensor<T>.ElementwiseMultiply(VectorActivation.Derivative(_lastOutput), outputGradient);
-        }
-        else if (ScalarActivation != null)
-        {
-            // Vectorized: compute activation derivatives and multiply element-wise using Engine
-            var derivatives = ScalarActivation.Derivative(_lastOutput);
-            activationGradient = Engine.TensorMultiply(derivatives, outputGradient);
-        }
-        else
-        {
-            activationGradient = outputGradient;
-        }
-
+        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
         var inputGradients = new Tensor<T>[_lastInputs.Length];
         for (int i = 0; i < _lastInputs.Length; i++)
         {
@@ -323,110 +295,13 @@ public class MultiplyLayer<T> : LayerBase<T>
             {
                 if (i != j)
                 {
-                    // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
-                    inputGradients[i] = Engine.TensorMultiply(inputGradients[i], _lastInputs[j]);
+                    inputGradients[i] = inputGradients[i].ElementwiseMultiply(_lastInputs[j]);
                 }
             }
         }
         return Tensor<T>.Stack(inputGradients);
     }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation with production-grade optimizations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's inputs (stacked).</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses a production-grade pattern for computing gradients:
-    /// - Uses cached values from forward pass (locality caching)
-    /// - Builds full computation graph including multiplication and activation
-    /// - Executes inline topological sort for graph traversal
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInputs == null || _lastOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        // If vector activation is configured, fall back to manual path
-        if (VectorActivation != null)
-        {
-            return BackwardManual(outputGradient);
-        }
-
-        // 1. Create variable nodes for inputs that need gradients
-        var inputNodes = new List<ComputationNode<T>>();
-        for (int i = 0; i < _lastInputs.Length; i++)
-        {
-            inputNodes.Add(TensorOperations<T>.Variable(_lastInputs[i], $"input_{i}", requiresGradient: true));
-        }
-
-        // 2. Build computation graph (Element-wise Multiply)
-        ComputationNode<T> productNode = inputNodes[0];
-        for (int i = 1; i < inputNodes.Count; i++)
-        {
-            productNode = TensorOperations<T>.ElementwiseMultiply(productNode, inputNodes[i]);
-        }
-
-        // Apply activation function using LayerBase helper
-        var outputNode = ApplyActivationToGraph(productNode);
-
-        // 3. Set output gradient
-        outputNode.Gradient = outputGradient;
-
-        // 4. Inline topological sort
-        var visited = new HashSet<ComputationNode<T>>();
-        var topoOrder = new List<ComputationNode<T>>();
-        var stack = new Stack<(ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // 5. Execute backward pass
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // 6. Collect and stack gradients to match expected output format
-        var gradients = new Tensor<T>[inputNodes.Count];
-        for (int i = 0; i < inputNodes.Count; i++)
-        {
-            gradients[i] = inputNodes[i].Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-        }
-
-        return Tensor<T>.Stack(gradients);
-    }
-
+    
     /// <summary>
     /// Updates the parameters of the multiply layer using the calculated gradients.
     /// </summary>
@@ -504,31 +379,4 @@ public class MultiplyLayer<T> : LayerBase<T>
         _lastInputs = null;
         _lastOutput = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        if (inputNodes.Count > 1)
-        {
-            var result = inputNodes[0];
-            for (int i = 1; i < inputNodes.Count; i++)
-            {
-                result = TensorOperations<T>.ElementwiseMultiply(result, inputNodes[i]);
-            }
-            return result;
-        }
-
-        return inputNode;
-    }
-
-    public override bool SupportsJitCompilation => true;
 }

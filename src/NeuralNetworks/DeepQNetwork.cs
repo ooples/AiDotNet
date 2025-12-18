@@ -1,5 +1,3 @@
-using AiDotNet.ReinforcementLearning.ReplayBuffers;
-
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -74,7 +72,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// and learn from random past experiences, which helps it learn more efficiently and stably.
     /// </para>
     /// </remarks>
-    private readonly List<Experience<T, Tensor<T>, int>> _replayBuffer = [];
+    private readonly List<Experience<T>> _replayBuffer = [];
 
     /// <summary>
     /// Gets the target network, a copy of the main network used to generate target Q-values during training.
@@ -340,7 +338,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public void AddExperience(Tensor<T> state, int action, T reward, Tensor<T> nextState, bool done)
     {
-        _replayBuffer.Add(new Experience<T, Tensor<T>, int>(state, action, reward, nextState, done));
+        _replayBuffer.Add(new Experience<T>(state, action, reward, nextState, done));
         if (_replayBuffer.Count > 10000) // Limit buffer size
         {
             _replayBuffer.RemoveAt(0);
@@ -565,9 +563,9 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// the agent develop a more balanced understanding.
     /// </para>
     /// </remarks>
-    private List<Experience<T, Tensor<T>, int>> SampleBatch(int batchSize)
+    private List<Experience<T>> SampleBatch(int batchSize)
     {
-        var batch = new List<Experience<T, Tensor<T>, int>>(batchSize);
+        var batch = new List<Experience<T>>(batchSize);
     
         for (int i = 0; i < batchSize; i++)
         {

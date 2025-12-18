@@ -122,7 +122,6 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
     {
         var svd = new SvdDecomposition<T>(A);
 
-        // VECTORIZED: Uses matrix multiplication and transpose operations which are already vectorized
         U = svd.U.Multiply(svd.Vt.Transpose());
         var sigma = Matrix<T>.CreateDiagonal(svd.S);
         P = svd.Vt.Transpose().Multiply(sigma).Multiply(svd.Vt);

@@ -1,5 +1,3 @@
-
-
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -34,6 +32,7 @@ public class CTCLoss<T> : ISequenceLossFunction<T>
     private readonly int _blankIndex;
     private readonly bool _inputsAreLogProbs;
     private readonly T _logZero;
+    private readonly T _epsilon;
 
     /// <summary>
     /// Initializes a new instance of the CTCLoss class.
@@ -55,6 +54,7 @@ public class CTCLoss<T> : ISequenceLossFunction<T>
         _blankIndex = blankIndex;
         _inputsAreLogProbs = inputsAreLogProbs;
         _logZero = _numOps.FromDouble(-1000.0); // Effectively zero in log space
+        _epsilon = _numOps.FromDouble(1e-15);
     }
 
     /// <summary>
@@ -232,7 +232,7 @@ public class CTCLoss<T> : ISequenceLossFunction<T>
                     {
                         classGradients[labelIdx] = LogSumExp(
                             classGradients[labelIdx],
-                            NumericalStabilityHelper.SafeLog(expPathProb, NumericalStabilityHelper.SmallEpsilon)
+                            _numOps.Log(expPathProb)
                         );
                     }
                 }
@@ -370,7 +370,9 @@ public class CTCLoss<T> : ISequenceLossFunction<T>
         // If inputs are not already in log space, convert them
         if (!_inputsAreLogProbs)
         {
-            value = NumericalStabilityHelper.SafeLog(value, NumericalStabilityHelper.SmallEpsilon);
+            // Clip small values for numerical stability
+            value = MathHelper.Max(value, _epsilon);
+            value = _numOps.Log(value);
         }
 
         return value;
@@ -390,12 +392,11 @@ public class CTCLoss<T> : ISequenceLossFunction<T>
         T maxVal = MathHelper.Max(x, y);
         return _numOps.Add(
             maxVal,
-            NumericalStabilityHelper.SafeLog(
+            _numOps.Log(
                 _numOps.Add(
                     _numOps.Exp(_numOps.Subtract(x, maxVal)),
                     _numOps.Exp(_numOps.Subtract(y, maxVal))
-                ),
-                NumericalStabilityHelper.SmallEpsilon
+                )
             )
         );
     }

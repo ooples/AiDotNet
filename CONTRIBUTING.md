@@ -3,48 +3,6 @@
 ## Base Branch
 - Use `merge-dev2-to-master` as the working base for CI and PRs.
 
-## Conventional Commits (Auto-Fixed)
-All PR titles are automatically converted to follow [Conventional Commits](https://www.conventionalcommits.org/) specification for automated releases.
-
-### How It Works
-When you create or update a PR, a GitHub workflow automatically:
-1. Detects if your title follows conventional commits format
-2. If not, intelligently determines the correct type based on:
-   - Title keywords (`fix`, `add`, `implement`, `update`, etc.)
-   - Files changed (documentation, tests, CI, source code)
-3. Automatically updates your PR title
-4. Posts a comment explaining the change
-
-### Format
-```text
-<type>(<optional scope>): <description>
-```
-
-### Valid Types and Version Impact
-- `feat:` - New feature (triggers MINOR version bump, e.g., 0.1.0 → 0.2.0)
-- `fix:` - Bug fix (triggers MINOR version bump)
-- `docs:` - Documentation changes (triggers MINOR version bump)
-- `refactor:` - Code refactoring (triggers MINOR version bump)
-- `perf:` - Performance improvement (triggers MINOR version bump)
-- `test:` - Test additions/changes (no release)
-- `chore:` - Build/tooling changes (no release)
-- `ci:` - CI/CD changes (no release)
-- `style:` - Code formatting (no release)
-
-### Breaking Changes
-Add `!` after type or `BREAKING CHANGE:` in commit body to trigger MAJOR version bump (e.g., 0.1.0 → 1.0.0):
-```text
-feat!: redesign public API
-```
-
-### Examples
-Before auto-fix → After auto-fix:
-- `Fix issue 408 in AiDotNet` → `fix: fix issue 408 in AiDotNet`
-- `Implement autodiff backward passes` → `feat: implement autodiff backward passes`
-- `Update outdated GitHub README file` → `docs: update outdated GitHub README file`
-
-**Note:** If the auto-detected type is incorrect, you can manually edit the PR title. PR titles become merge commit messages, which the automated release pipeline uses to determine version bumps and generate changelogs.
-
 ## Copilot Review Loop (Mandatory)
 1. Get the PR `headRefOid` (HEAD SHA).
 2. Retrieve review comments and filter to those where `commit_id == headRefOid` and author matches "copilot".

@@ -370,6 +370,3 @@ FodyWeavers.xsd
 worktrees/
 # Project-specific Claude Code configuration
 CLAUDE.md
-
-# Local progress tracking (not for repository)
-GPU_VECTORIZATION_TODO.md

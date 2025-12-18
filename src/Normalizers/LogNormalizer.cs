@@ -33,7 +33,7 @@ namespace AiDotNet.Normalizers;
 /// - Original: [1,000, 10,000, 100,000, 1,000,000]
 /// - After log normalization: [0.0, 0.33, 0.67, 1.0]
 /// 
-/// Now each step represents a 10Ã— increase, making it easier to compare growth rates across
+/// Now each step represents a 10× increase, making it easier to compare growth rates across
 /// different scales. This is particularly useful when percentage changes or multiplicative
 /// relationships are more important than absolute differences.
 /// </para>

@@ -105,20 +105,12 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
         }
 
         Matrix<T> inverse = new(A.Rows, A.Columns);
-
-        // VECTORIZED: Compute cofactors and construct inverse using row operations
         for (int i = 0; i < A.Rows; i++)
         {
-            Vector<T> inverseRow = new Vector<T>(A.Columns);
             for (int j = 0; j < A.Columns; j++)
             {
                 T cofactor = Cofactor(A, i, j);
-                inverseRow[j] = NumOps.Divide(cofactor, detA);
-            }
-            // Transpose during construction: row i of cofactor matrix → column i of inverse
-            for (int j = 0; j < A.Columns; j++)
-            {
-                inverse[j, i] = inverseRow[j];
+                inverse[j, i] = NumOps.Divide(cofactor, detA);
             }
         }
 
@@ -166,16 +158,18 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
     private T Cofactor(Matrix<T> matrix, int row, int col)
     {
         Matrix<T> minor = new(matrix.Rows - 1, matrix.Columns - 1);
-        int m = 0;
+        int m = 0, n = 0;
 
-        // VECTORIZED: Use row-based operations to construct minor matrix
         for (int i = 0; i < matrix.Rows; i++)
         {
             if (i == row) continue;
-
-            Vector<T> sourceRow = matrix.GetRow(i);
-            Vector<T> minorRow = new Vector<T>(sourceRow.Where((val, idx) => idx != col));
-            minor.SetRow(m, minorRow);
+            n = 0;
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                if (j == col) continue;
+                minor[m, n] = matrix[i, j];
+                n++;
+            }
             m++;
         }
 
@@ -197,9 +191,10 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
     private static Matrix<T> ReplaceColumn(Matrix<T> original, Vector<T> column, int colIndex)
     {
         Matrix<T> result = original.Clone();
-
-        // VECTORIZED: Use SetColumn to replace entire column at once
-        result.SetColumn(colIndex, column);
+        for (int i = 0; i < original.Rows; i++)
+        {
+            result[i, colIndex] = column[i];
+        }
 
         return result;
     }

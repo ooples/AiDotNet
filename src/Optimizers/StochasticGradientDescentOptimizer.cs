@@ -52,8 +52,7 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// </remarks>
     public StochasticGradientDescentOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        StochasticGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        StochasticGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
         _options = options ?? new();
@@ -143,14 +142,7 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// </remarks>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        // === Vectorized SGD Update using IEngine ===
-        // Phase B: US-GPU-015 - GPU-accelerated gradient updates
-        // params = params - learningRate * gradient
-
-        var parameters = currentSolution.GetParameters();
-        var scaledGradient = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
-        var updatedCoefficients = (Vector<T>)Engine.Subtract(parameters, scaledGradient);
-
+        Vector<T> updatedCoefficients = currentSolution.GetParameters().Subtract(gradient.Multiply(CurrentLearningRate));
         return currentSolution.WithParameters(updatedCoefficients);
     }
 

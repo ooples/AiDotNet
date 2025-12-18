@@ -58,11 +58,9 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// </summary>
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">Options for configuring the Trust Region optimizer.</param>
-    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public TrustRegionOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        TrustRegionOptimizerOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        TrustRegionOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
         _options = options ?? new TrustRegionOptimizerOptions<T, TInput, TOutput>();
@@ -229,14 +227,14 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// <returns>A new solution model after moving in the specified direction.</returns>
     private IFullModel<T, TInput, TOutput> MoveInDirection(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, T stepSize)
     {
-        // === Vectorized Direction Move using IEngine (Phase B: US-GPU-015) ===
-        // new_params = current_params + direction * stepSize
-
         var newModel = currentSolution.Clone();
         var currentCoefficients = newModel.GetParameters();
+        var newCoefficients = new Vector<T>(currentCoefficients.Length);
 
-        var scaledDirection = (Vector<T>)Engine.Multiply(direction, stepSize);
-        var newCoefficients = (Vector<T>)Engine.Add(currentCoefficients, scaledDirection);
+        for (int i = 0; i < currentCoefficients.Length; i++)
+        {
+            newCoefficients[i] = NumOps.Add(currentCoefficients[i], NumOps.Multiply(direction[i], stepSize));
+        }
 
         return newModel.WithParameters(newCoefficients);
     }
@@ -260,12 +258,13 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// </remarks>
     private Vector<T> SolveSubproblem(Vector<T> gradient, Matrix<T> hessian)
     {
-        // === Partially Vectorized Steihaug-Toint CG using IEngine (Phase B: US-GPU-015) ===
-
         var z = new Vector<T>(gradient.Length);
         var r = gradient.Clone();
-        // Vectorized negation: d = -r
-        var d = (Vector<T>)Engine.Multiply(r, NumOps.Negate(NumOps.One));
+        var d = r.Clone();
+        for (int i = 0; i < d.Length; i++)
+        {
+            d[i] = NumOps.Negate(d[i]);
+        }
         var g0 = gradient.DotProduct(gradient);
 
         for (int i = 0; i < _options.MaxCGIterations; i++)
@@ -289,11 +288,14 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
             z = zNext;
             var rNext = r.Add(Hd.Multiply(alpha));
             var beta = NumOps.Divide(rNext.DotProduct(rNext), r.DotProduct(r));
-
-            // Vectorized negation: dNext = -rNext
-            var dNext = (Vector<T>)Engine.Multiply(rNext, NumOps.Negate(NumOps.One));
+        
+            var dNext = rNext.Clone();
+            for (int j = 0; j < dNext.Length; j++)
+            {
+                dNext[j] = NumOps.Negate(dNext[j]);
+            }
             d = dNext.Add(d.Multiply(beta));
-
+        
             r = rNext;
 
             if (NumOps.LessThan(r.Norm(), NumOps.Multiply(NumOps.FromDouble(_options.CGTolerance), g0)))

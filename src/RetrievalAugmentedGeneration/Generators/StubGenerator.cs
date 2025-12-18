@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -39,7 +39,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 public class StubGenerator<T> : IGenerator<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly int _maxContextTokens;
     private readonly int _maxGenerationTokens;
 
@@ -80,28 +79,7 @@ public class StubGenerator<T> : IGenerator<T>
         if (string.IsNullOrWhiteSpace(prompt))
             throw new ArgumentException("Prompt cannot be null or empty", nameof(prompt));
 
-        // Return a simple query based on the prompt to simulate LLM reasoning
-        // Extract key terms and formulate a search query
-        if (prompt.Contains("next step", StringComparison.OrdinalIgnoreCase) ||
-            prompt.Contains("what should", StringComparison.OrdinalIgnoreCase))
-        {
-            // This is a multi-step reasoning prompt - generate a search query
-            // Extract the original query if present
-            var queryMatch = Regex.Match(prompt, @"Original Query:\s*(.+?)(\n|$)", RegexOptions.IgnoreCase, RegexTimeout);
-            if (queryMatch.Success)
-            {
-                var originalQuery = queryMatch.Groups[1].Value.Trim();
-                // Validate that the extracted query is not empty
-                if (!string.IsNullOrEmpty(originalQuery))
-                {
-                    return $"Search for more details about: {originalQuery}";
-                }
-            }
-            return "Search for relevant information";
-        }
-
-        // For other prompts (like summarization), return a brief summary
-        return "Summary of findings based on the provided context.";
+        return $"Generated response to: {prompt}";
     }
 
     /// <summary>
@@ -115,18 +93,13 @@ public class StubGenerator<T> : IGenerator<T>
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or empty", nameof(query));
 
-        // Trim and validate the extracted query to ensure it has meaningful content
-        string originalQuery = query.Trim();
-        if (string.IsNullOrEmpty(originalQuery))
-            throw new ArgumentException("Query cannot be empty after trimming whitespace", nameof(query));
-
         var contextList = context?.ToList() ?? new List<Document<T>>();
         
         if (contextList.Count == 0)
         {
             return new GroundedAnswer<T>
             {
-                Query = originalQuery,
+                Query = query,
                 Answer = "I don't have enough information to answer this question.",
                 SourceDocuments = new List<Document<T>>(),
                 Citations = new List<string>(),
@@ -136,7 +109,7 @@ public class StubGenerator<T> : IGenerator<T>
 
         // Build answer with citations
         var answerBuilder = new System.Text.StringBuilder();
-        answerBuilder.AppendLine($"Based on the provided context regarding '{originalQuery}':");
+        answerBuilder.AppendLine($"Based on the provided context regarding '{query}':");
         answerBuilder.AppendLine();
 
         var citations = new List<string>();
@@ -169,7 +142,7 @@ public class StubGenerator<T> : IGenerator<T>
 
         return new GroundedAnswer<T>
         {
-            Query = originalQuery,
+            Query = query,
             Answer = answerBuilder.ToString().Trim(),
             SourceDocuments = contextList,
             Citations = citations,

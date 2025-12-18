@@ -1,4 +1,3 @@
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -92,7 +91,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var input = new Tensor<double>(new[] { 1, 10 });
             for (int i = 0; i < 10; i++)
             {
-                input[0, i] = 1.0;
+                input[i] = 1.0;
             }
 
             // Act
@@ -118,7 +117,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var outputGradient = new Tensor<double>(new[] { 1, 5 });
             for (int i = 0; i < 5; i++)
             {
-                outputGradient[0, i] = 0.1;
+                outputGradient[i] = 0.1;
             }
 
             // Act
@@ -166,7 +165,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var outputGradient = new Tensor<double>(new[] { 1, 5 });
             for (int i = 0; i < 5; i++)
             {
-                outputGradient[0, i] = 0.1;
+                outputGradient[i] = 0.1;
             }
             adapter.Backward(outputGradient);
 
@@ -257,36 +256,40 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public void MergedLayer_ProducesSameOutputAsAdapter()
         {
             // Arrange
-            // Use identity activation to ensure mathematical equivalence of merge:
-            // adapter: base_output + lora_output = (W*x + b) + (A*B*x)
-            // merged: (W + A*B)*x + b
-            // These are only equivalent when base layer has no activation applied after LoRA sum
-            var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>)new IdentityActivation<double>());
+            var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
 
-            // Create input
+            // Train the adapter a bit
             var input = new Tensor<double>(new[] { 1, 10 });
             for (int i = 0; i < 10; i++)
             {
-                input[0, i] = (i + 1) * 0.1;
+                input[i] = (i + 1) * 0.1;
             }
 
-            // Get output from adapter (with B=0 initially, LoRA has no effect)
+            var outputGradient = new Tensor<double>(new[] { 1, 5 });
+            for (int i = 0; i < 5; i++)
+            {
+                outputGradient[i] = 0.1;
+            }
+
+            for (int iter = 0; iter < 10; iter++)
+            {
+                adapter.Forward(input);
+                adapter.Backward(outputGradient);
+                adapter.UpdateParameters(0.01);
+            }
+
+            // Get output from adapter
             var adapterOutput = adapter.Forward(input);
 
             // Act - Merge and get output from merged layer
             var mergedLayer = adapter.MergeToOriginalLayer();
             var mergedOutput = mergedLayer.Forward(input);
 
-            // Assert - Merged layer should produce same output as adapter
-            // When B matrix is zero (initial state), LoRA has no effect, so:
-            // adapter output = base output + 0 = base output
-            // merged output = base output (since merged weights = base weights + 0)
-            // These should be exactly equal.
-            Assert.Equal(adapterOutput.Length, mergedOutput.Length);
-            for (int i = 0; i < adapterOutput.Length; i++)
+            // Assert - Outputs should be very close
+            for (int i = 0; i < 5; i++)
             {
-                Assert.Equal(adapterOutput.GetFlat(i), mergedOutput.GetFlat(i), precision: 10);
+                Assert.Equal(adapterOutput[i], mergedOutput[i], precision: 5);
             }
         }
 

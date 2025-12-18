@@ -1,5 +1,3 @@
-using AiDotNet.Autodiff;
-
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -104,7 +102,7 @@ public class ReLUActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        return Engine.ReLU(input);
+        return input.Transform((x, _) => MathHelper.Max(NumOps.Zero, x));
     }
 
     /// <summary>
@@ -119,40 +117,6 @@ public class ReLUActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        return Engine.TensorGreaterThan(input, NumOps.Zero);
-    }
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because ReLU gradient computation is fully implemented and tested.</value>
-    /// <remarks>
-    /// <para>
-    /// ReLU supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The operation is simple and efficient (max(0, x))
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with ReLU activation applied.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps the ReLU activation to TensorOperations&lt;T&gt;.ReLU(input),
-    /// which handles both forward and backward passes for JIT compilation.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        return TensorOperations<T>.ReLU(input);
+        return input.Transform((x, _) => NumOps.GreaterThan(x, NumOps.Zero) ? NumOps.One : NumOps.Zero);
     }
 }

@@ -1,5 +1,3 @@
-using AiDotNet.Autodiff;
-
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -208,40 +206,5 @@ public class SignActivation<T> : ActivationFunctionBase<T>
         }
 
         return output;
-    }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.Sign provides surrogate gradient support for training.</value>
-    /// <remarks>
-    /// <para>
-    /// Sign supports JIT compilation using surrogate gradients. The forward pass produces
-    /// the hard sign function (-1, 0, or 1), while the backward pass uses a sigmoid surrogate
-    /// for gradient flow. This enables training despite the discontinuous nature of the sign function.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with Sign activation applied using surrogate gradients.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps to TensorOperations&lt;T&gt;.Sign(input) which uses the
-    /// straight-through estimator pattern: hard sign in forward pass, sigmoid surrogate
-    /// gradients in backward pass.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        return TensorOperations<T>.Sign(input);
     }
 }

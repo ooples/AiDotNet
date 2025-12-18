@@ -1,5 +1,5 @@
 ﻿using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Optimizers;
@@ -8,7 +8,6 @@ using AiDotNet.Normalizers;
 using AiDotNet.DataProcessor;
 using AiDotNet.FeatureSelectors;
 using AiDotNet.OutlierRemoval;
-using AiDotNet.Data.Loaders;
 using System.Globalization;
 
 namespace AiDotNet.Examples;
@@ -18,7 +17,7 @@ namespace AiDotNet.Examples;
 /// </summary>
 public class EnhancedTimeSeriesExample
 {
-    public async Task RunExample()
+    public void RunExample()
     {
         Console.WriteLine("Enhanced Time Series Example - Energy Demand Forecasting");
         Console.WriteLine("======================================================\n");
@@ -120,15 +119,15 @@ public class EnhancedTimeSeriesExample
 
             // Train Prophet-like model
             Console.WriteLine("\n1. Training Prophet-like model...");
-            var prophetModel = await TrainProphetModel(dataSplit.XTrain, dataSplit.yTrain);
+            var prophetModel = TrainProphetModel(dataSplit.XTrain, dataSplit.yTrain);
 
             // Train ARIMA model
             Console.WriteLine("\n2. Training ARIMA model...");
-            var arimaModel = await TrainArimaModel(dataSplit.XTrain, dataSplit.yTrain);
+            var arimaModel = TrainArimaModel(dataSplit.XTrain, dataSplit.yTrain);
 
             // Train Exponential Smoothing model
             Console.WriteLine("\n3. Training Exponential Smoothing model...");
-            var esModel = await TrainExponentialSmoothingModel(dataSplit.XTrain, dataSplit.yTrain);
+            var esModel = TrainExponentialSmoothingModel(dataSplit.XTrain, dataSplit.yTrain);
 
             // 8. Evaluate models on test set
             Console.WriteLine("\nEvaluating models on test set:");
@@ -382,7 +381,7 @@ public class EnhancedTimeSeriesExample
     }
 
     // Helper method to train a Prophet-like model
-    private Task<PredictionModelResult<double, Matrix<double>, Vector<double>>> TrainProphetModel(
+    private PredictionModelResult<double, Matrix<double>, Vector<double>> TrainProphetModel(
         Matrix<double> features, Vector<double> target)
     {
         var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
@@ -408,12 +407,11 @@ public class EnhancedTimeSeriesExample
         return modelBuilder
             .ConfigureOptimizer(optimizer)
             .ConfigureModel(new ProphetModel<double, Matrix<double>, Vector<double>>(prophetOptions))
-            .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(features, target))
-            .BuildAsync();
+            .Build(features, target);
     }
 
     // Helper method to train an ARIMA model
-    private Task<PredictionModelResult<double, Matrix<double>, Vector<double>>> TrainArimaModel(
+    private PredictionModelResult<double, Matrix<double>, Vector<double>> TrainArimaModel(
         Matrix<double> features, Vector<double> target)
     {
         var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
@@ -439,12 +437,11 @@ public class EnhancedTimeSeriesExample
         return modelBuilder
             .ConfigureOptimizer(optimizer)
             .ConfigureModel(new ARIMAModel<double>(arimaOptions))
-            .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(features, target))
-            .BuildAsync();
+            .Build(features, target);
     }
 
     // Helper method to train an Exponential Smoothing model
-    private Task<PredictionModelResult<double, Matrix<double>, Vector<double>>> TrainExponentialSmoothingModel(
+    private PredictionModelResult<double, Matrix<double>, Vector<double>> TrainExponentialSmoothingModel(
         Matrix<double> features, Vector<double> target)
     {
         var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
@@ -471,8 +468,7 @@ public class EnhancedTimeSeriesExample
         return modelBuilder
             .ConfigureOptimizer(optimizer)
             .ConfigureModel(new ExponentialSmoothingModel<double>(esOptions))
-            .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(features, target))
-            .BuildAsync();
+            .Build(features, target);
     }
 
     // Helper method to evaluate a model

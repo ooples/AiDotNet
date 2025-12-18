@@ -152,19 +152,15 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <returns>The direction vector for the next step.</returns>
     private Vector<T> CalculateDirection(Vector<T> gradient, Matrix<T> hessian)
     {
-        // === Vectorized Direction Calculation using IEngine (Phase B: US-GPU-015) ===
-        // direction = -H^{-1} * gradient (or -gradient if H is singular)
-
         try
         {
             var inverseHessian = hessian.Inverse();
-            var direction = inverseHessian.Multiply(gradient);
-            return (Vector<T>)Engine.Multiply(direction, NumOps.Negate(NumOps.One));
+            return inverseHessian.Multiply(gradient).Transform(x => NumOps.Negate(x));
         }
         catch (InvalidOperationException)
         {
             // If Hessian is not invertible, fall back to gradient descent
-            return (Vector<T>)Engine.Multiply(gradient, NumOps.Negate(NumOps.One));
+            return gradient.Transform(x => NumOps.Negate(x));
         }
     }
 
@@ -269,13 +265,12 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <returns>A new ISymbolicModel with updated coefficients.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction)
     {
-        // === Vectorized Solution Update using IEngine (Phase B: US-GPU-015) ===
-        // newCoefficients = parameters + learningRate * direction
-        // Note: direction is already negated (-H^{-1} * g), so adding moves downhill
-
         var parameters = currentSolution.GetParameters();
-        var scaledDirection = (Vector<T>)Engine.Multiply(direction, CurrentLearningRate);
-        var newCoefficients = (Vector<T>)Engine.Add(parameters, scaledDirection);
+        var newCoefficients = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            newCoefficients[i] = NumOps.Subtract(currentSolution.GetParameters()[i], NumOps.Multiply(CurrentLearningRate, direction[i]));
+        }
 
         return currentSolution.WithParameters(newCoefficients);
     }

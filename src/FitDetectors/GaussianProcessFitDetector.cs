@@ -124,11 +124,7 @@ public class GaussianProcessFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     {
         (_meanPrediction, _variancePrediction) = PerformGaussianProcessRegression(evaluationData);
         _averageUncertainty = _variancePrediction.Average();
-
-        // Calculate RMSE between model's predictions and actual values to measure model fit quality
-        var actual = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
-        var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Predicted);
-        _rmse = StatisticsHelper<T>.CalculateRootMeanSquaredError(actual, predicted);
+        _rmse = StatisticsHelper<T>.CalculateRootMeanSquaredError(ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual), _meanPrediction);
 
         if (NumOps.LessThan(_rmse, NumOps.FromDouble(_options.GoodFitThreshold)) &&
             NumOps.LessThan(_averageUncertainty, NumOps.FromDouble(_options.LowUncertaintyThreshold)))
@@ -243,20 +239,18 @@ public class GaussianProcessFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     }
 
         /// <summary>
-    /// Performs Gaussian Process regression on the model's residuals.
+    /// Performs Gaussian Process regression on the provided data.
     /// </summary>
     /// <param name="evaluationData">Data containing model predictions and actual values.</param>
-    /// <returns>A tuple containing the GP mean predictions of residuals and variance predictions.</returns>
+    /// <returns>A tuple containing the mean predictions and variance predictions.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This private method implements Gaussian Process regression on the model's
-    /// residuals (differences between predictions and actual values) to detect patterns that indicate
-    /// overfitting, underfitting, or other fit issues.
+    /// <b>For Beginners:</b> This private method implements Gaussian Process regression, which is a 
+    /// probabilistic machine learning technique that provides both predictions and uncertainty estimates.
     /// </para>
     /// <para>
     /// The method performs the following steps:
     /// <list type="number">
-    /// <item><description>Calculate residuals from the model's predictions and actual values</description></item>
     /// <item><description>Optimize the hyperparameters (length scale and noise variance) using grid search</description></item>
     /// <item><description>Calculate the kernel matrix using the optimized hyperparameters</description></item>
     /// <item><description>Perform Cholesky decomposition of the kernel matrix for numerical stability</description></item>
@@ -266,7 +260,7 @@ public class GaussianProcessFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// <para>
     /// The result is a tuple containing:
     /// <list type="bullet">
-    /// <item><description>Mean predictions: The GP model's expected residual patterns (should be near zero for good fit)</description></item>
+    /// <item><description>Mean predictions: The expected values of the model's predictions</description></item>
     /// <item><description>Variance predictions: The uncertainty associated with each prediction</description></item>
     /// </list>
     /// </para>
@@ -274,12 +268,7 @@ public class GaussianProcessFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     private (Vector<T>, Vector<T>) PerformGaussianProcessRegression(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         var X = ConversionsHelper.ConvertToMatrix<T, TInput>(evaluationData.ModelStats.Features);
-        var actual = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
-        var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Predicted);
-
-        // Calculate residuals: the differences between model's predictions and actual values
-        // GP regression on residuals helps detect systematic patterns that indicate fit issues
-        var y = actual - predicted;
+        var y = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
 
         // Hyperparameter optimization
         var optimizedHyperparameters = OptimizeHyperparameters(X, y);
@@ -434,7 +423,7 @@ public class GaussianProcessFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// high kernel values, while distant points will have low kernel values.
     /// </para>
     /// <para>
-    /// The resulting matrix has dimensions [X1.Rows Ã— X2.Rows], where each element [i,j] represents 
+    /// The resulting matrix has dimensions [X1.Rows × X2.Rows], where each element [i,j] represents 
     /// the similarity between point i from X1 and point j from X2.
     /// </para>
     /// </remarks>
@@ -465,12 +454,12 @@ public class GaussianProcessFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// </para>
     /// <para>
     /// The RBF kernel is defined as:
-    /// k(x1, x2) = exp(-||x1 - x2||Â² / (2 * lengthScaleÂ²))
+    /// k(x1, x2) = exp(-||x1 - x2||² / (2 * lengthScale²))
     /// </para>
     /// <para>
     /// Where:
     /// <list type="bullet">
-    /// <item><description>||x1 - x2||Â² is the squared Euclidean distance between the points</description></item>
+    /// <item><description>||x1 - x2||² is the squared Euclidean distance between the points</description></item>
     /// <item><description>lengthScale is a hyperparameter that controls how quickly the similarity decreases with distance</description></item>
     /// </list>
     /// </para>

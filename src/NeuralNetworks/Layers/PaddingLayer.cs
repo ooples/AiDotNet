@@ -1,5 +1,3 @@
-using AiDotNet.Autodiff;
-
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -24,8 +22,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - Preventing loss of information at the edges of the data
 /// - Giving convolutional filters more context at the boundaries
 /// 
-/// For example, if you have a 28Ã—28 image and add padding of 2 pixels on all sides,
-/// you get a 32Ã—32 image with your original data in the center and zeros around the edges.
+/// For example, if you have a 28×28 image and add padding of 2 pixels on all sides,
+/// you get a 32×32 image with your original data in the center and zeros around the edges.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -89,7 +87,7 @@ public class PaddingLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This constructor sets up the layer with the necessary dimensions and padding values.
     /// 
     /// When creating a PaddingLayer, you need to specify:
-    /// - inputShape: The shape of your input data (e.g., [32, 28, 28, 3] for 32 images of size 28Ã—28 with 3 color channels)
+    /// - inputShape: The shape of your input data (e.g., [32, 28, 28, 3] for 32 images of size 28×28 with 3 color channels)
     /// - padding: How much padding to add to each dimension (e.g., [0, 2, 2, 0] to add 2 pixels of padding around the height and width)
     /// - activationFunction: The function that processes the final output (optional)
     /// 
@@ -192,9 +190,9 @@ public class PaddingLayer<T> : LayerBase<T>
     /// - The areas around the edges are implicitly filled with zeros
     /// - Finally, it applies the activation function to the result
     /// 
-    /// For example, with a 3Ã—3 image and padding of 1:
-    /// - The output is a 5Ã—5 image
-    /// - The original 3Ã—3 data is in the center
+    /// For example, with a 3×3 image and padding of 1:
+    /// - The output is a 5×5 image
+    /// - The original 3×3 data is in the center
     /// - The outer border of width 1 is filled with zeros
     /// 
     /// The method also saves the input for later use in backpropagation.
@@ -203,11 +201,22 @@ public class PaddingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        if (_padding.Length != input.Shape.Length)
-            throw new ArgumentException("Padding array length must match input dimensions.");
-
-        // Assume BHWC format: padding order [batch, height, width, channels]
-        var paddedOutput = Engine.Pad(input, _padding[1], _padding[1], _padding[2], _padding[2], NumOps.Zero);
+        var paddedOutput = new Tensor<T>(OutputShape);
+        int batchSize = input.Shape[0];
+        int channels = input.Shape[3];
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int i = 0; i < input.Shape[1]; i++)
+                {
+                    for (int j = 0; j < input.Shape[2]; j++)
+                    {
+                        paddedOutput[b, i + _padding[0], j + _padding[1], c] = input[b, i, j, c];
+                    }
+                }
+            }
+        }
         return ApplyActivation(paddedOutput);
     }
     
@@ -225,66 +234,40 @@ public class PaddingLayer<T> : LayerBase<T>
     /// applies the activation function derivative to the result.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how changes in the input would affect the final output.
-    ///
+    /// 
     /// During the backward pass:
     /// - The layer receives gradients for the entire padded output tensor
     /// - It extracts only the gradients corresponding to the original input area
     /// - The gradients in the padded regions are ignored (since they don't correspond to any input)
-    ///
+    /// 
     /// This is essentially the reverse of the forward pass:
     /// - Forward: copy input to center of larger padded tensor
     /// - Backward: extract central region of gradient tensor that corresponds to the original input
-    ///
+    /// 
     /// This allows the network to learn as if the padding wasn't there,
     /// while still benefiting from the additional context it provides.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Performs the backward pass using manual gradient computation (optimized implementation).
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        if (_padding.Length != _lastInput.Shape.Length)
-            throw new ArgumentException("Padding array length must match input dimensions.");
-
-        var inputGradient = Engine.PadBackward(outputGradient, _padding[1], _padding[2], _lastInput.Shape);
-        return ApplyActivationDerivative(_lastInput, inputGradient);
-    }
-
-    /// <summary>
-    /// Performs the backward pass using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method computes gradients using the same computation as BackwardManual to ensure
-    /// identical results. Both paths use the same indexing logic for extracting the center
-    /// region from the padded gradient tensor.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        if (_padding.Length != _lastInput.Shape.Length)
-            throw new ArgumentException("Padding array length must match input dimensions.");
-
-        var inputGradient = Engine.PadBackward(outputGradient, _padding[1], _padding[2], _lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        int batchSize = _lastInput.Shape[0];
+        int channels = _lastInput.Shape[3];
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int i = 0; i < _lastInput.Shape[1]; i++)
+                {
+                    for (int j = 0; j < _lastInput.Shape[2]; j++)
+                    {
+                        inputGradient[b, i, j, c] = outputGradient[b, i + _padding[0], j + _padding[1], c];
+                    }
+                }
+            }
+        }
         return ApplyActivationDerivative(_lastInput, inputGradient);
     }
     
@@ -364,21 +347,4 @@ public class PaddingLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastInput = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return TensorOperations<T>.Pad(inputNode, _padding);
-    }
-
-    public override bool SupportsJitCompilation => true;
 }

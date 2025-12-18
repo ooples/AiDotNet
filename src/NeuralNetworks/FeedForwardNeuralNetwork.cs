@@ -262,23 +262,10 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
         // Forward pass to get prediction
         var prediction = Forward(input);
 
-        // Calculate primary loss
-        var primaryLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        // Calculate auxiliary losses from layers that support them
-        T auxiliaryLoss = NumOps.Zero;
-        foreach (var auxLayer in Layers.OfType<IAuxiliaryLossLayer<T>>().Where(l => l.UseAuxiliaryLoss))
-        {
-            var layerAuxLoss = auxLayer.ComputeAuxiliaryLoss();
-            var weightedAuxLoss = NumOps.Multiply(layerAuxLoss, auxLayer.AuxiliaryLossWeight);
-            auxiliaryLoss = NumOps.Add(auxiliaryLoss, weightedAuxLoss);
-        }
-
-        // Combine primary and auxiliary losses
-        LastLoss = NumOps.Add(primaryLoss, auxiliaryLoss);
+        // Calculate loss
+        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
         // Calculate output gradient (derivative of loss with respect to network output)
-        // Note: Auxiliary loss gradients are handled within each layer's backward pass
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
         var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
 

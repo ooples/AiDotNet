@@ -1,18 +1,13 @@
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.LossFunctions;
 using AiDotNet.Models;
-using AiDotNet.Autodiff;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 
 /// <summary>
 /// Simple mock model for testing that tracks parameter updates.
-/// Implements ISecondOrderGradientComputable for full MAML testing.
 /// </summary>
-public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>>,
-    ISecondOrderGradientComputable<double, Tensor<double>, Tensor<double>>
+public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>>
 {
     private Vector<double> _parameters;
     public int TrainCallCount { get; private set; }
@@ -63,11 +58,8 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
     public Tensor<double> Predict(Tensor<double> input)
     {
         PredictCallCount++;
-        // Return output matching the batch size (first dimension of input)
-        // Input shape is typically [batch_size, features] for meta-learning tasks
-        // Target shape is [batch_size] (one label per sample)
-        int batchSize = input.Shape.Length > 0 ? input.Shape[0] : 1;
-        return new Tensor<double>(new int[] { batchSize });
+        // Return a tensor of the same shape as input filled with zeros
+        return new Tensor<double>(input.Shape);
     }
 
     public ModelMetadata<double> GetModelMetadata()
@@ -80,10 +72,6 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
     public void LoadModel(string filePath) { }
     public byte[] Serialize() => Array.Empty<byte>();
     public void Deserialize(byte[] data) { }
-
-    // ICheckpointableModel implementation
-    public void SaveState(Stream stream) { }
-    public void LoadState(Stream stream) { }
 
     public IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy()
     {
@@ -107,62 +95,4 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
 
     // IFeatureImportance implementation
     public Dictionary<string, double> GetFeatureImportance() => new Dictionary<string, double>();
-
-    // IGradientComputable implementation
-    public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
-
-    public Vector<double> ComputeGradients(Tensor<double> input, Tensor<double> target, ILossFunction<double>? lossFunction = null)
-    {
-        // Return non-zero gradients so that meta-learning parameter updates work
-        var gradients = new Vector<double>(ParameterCount);
-        for (int i = 0; i < ParameterCount; i++)
-        {
-            gradients[i] = 0.1 * (i + 1);  // Non-zero values for testing
-        }
-        return gradients;
-    }
-
-    public void ApplyGradients(Vector<double> gradients, double learningRate)
-    {
-        // Mock implementation - simple parameter update
-        for (int i = 0; i < Math.Min(gradients.Length, _parameters.Length); i++)
-        {
-            _parameters[i] -= learningRate * gradients[i];
-        }
-    }
-
-    // IJitCompilable implementation
-    public bool SupportsJitCompilation => true;
-
-    public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-    {
-        // Create a simple linear computation graph: output = sum(input * parameters)
-        var inputShape = new int[] { 1, _parameters.Length };
-        var inputTensor = new Tensor<double>(inputShape);
-        var inputNode = TensorOperations<double>.Variable(inputTensor, "input");
-        inputNodes.Add(inputNode);
-
-        // Create parameter node
-        var paramTensor = new Tensor<double>(new int[] { _parameters.Length }, _parameters);
-        var paramNode = TensorOperations<double>.Variable(paramTensor, "parameters");
-        inputNodes.Add(paramNode);
-
-        // Compute element-wise multiply and sum
-        var mulNode = TensorOperations<double>.ElementwiseMultiply(inputNode, paramNode);
-        var outputNode = TensorOperations<double>.Sum(mulNode);
-        return outputNode;
-    }
-
-    // ISecondOrderGradientComputable implementation
-    public Vector<double> ComputeSecondOrderGradients(
-        List<(Tensor<double> input, Tensor<double> target)> adaptationSteps,
-        Tensor<double> queryInput,
-        Tensor<double> queryTarget,
-        ILossFunction<double> lossFunction,
-        double innerLearningRate)
-    {
-        // Simple mock implementation for testing - returns zero gradients
-        // In a real implementation this would compute gradients through the adaptation steps
-        return new Vector<double>(ParameterCount);
-    }
 }

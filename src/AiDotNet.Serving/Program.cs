@@ -32,9 +32,6 @@ public class Program
         builder.Services.AddSingleton<IModelRepository, ModelRepository>();
         builder.Services.AddSingleton<IRequestBatcher, RequestBatcher>();
 
-        // Register hosted service to load startup models at application start
-        builder.Services.AddHostedService<ModelStartupService>();
-
         // Add controllers and API documentation
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();

@@ -10,7 +10,7 @@ namespace AiDotNet.Enums.AlgorithmTypes;
 /// the diagonal), "D" stands for a diagonal matrix (values only on the diagonal), and "U'" is the 
 /// transpose of U.
 /// 
-/// This decomposition expresses a matrix A as: A = U Ã— D Ã— U'
+/// This decomposition expresses a matrix A as: A = U × D × U'
 /// 
 /// Think of it like breaking down a complex shape into basic building blocks:
 /// - U is like the structure

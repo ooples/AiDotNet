@@ -103,7 +103,7 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Random number generator for matrix reinitialization.
     /// </summary>
-    private static readonly Random _rng = RandomHelper.CreateSecureRandom();
+    private static readonly Random _rng = new Random();
 
     /// <summary>
     /// Whether to use warmup after each restart.

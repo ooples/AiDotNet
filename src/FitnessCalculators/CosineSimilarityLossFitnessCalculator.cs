@@ -68,7 +68,7 @@ public class CosineSimilarityLossFitnessCalculator<T, TInput, TOutput> : Fitness
     /// Imagine two arrows:
     /// - If both arrows point in the same direction, the loss is 0 (perfect)
     /// - If they point in somewhat similar directions, the loss is between 0 and 1
-    /// - If they point in perpendicular directions (90Â° angle), the loss is 1
+    /// - If they point in perpendicular directions (90° angle), the loss is 1
     /// - If they point in opposite directions, the loss is 2 (worst case)
     /// 
     /// The method is called internally when you evaluate your model's fitness, so you

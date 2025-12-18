@@ -1,5 +1,3 @@
-using AiDotNet.Autodiff;
-
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -23,7 +21,7 @@ namespace AiDotNet.ActivationFunctions;
 /// - Pattern recognition tasks
 /// - Problems where distance from a central point is important
 /// 
-/// The mathematical formula is: f(x) = exp(-xÂ²)
+/// The mathematical formula is: f(x) = exp(-x²)
 /// </para>
 /// </remarks>
 public class GaussianActivation<T> : ActivationFunctionBase<T>
@@ -42,7 +40,7 @@ public class GaussianActivation<T> : ActivationFunctionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method transforms an input value using the formula:
-    /// f(x) = exp(-xÂ²)
+    /// f(x) = exp(-x²)
     /// 
     /// In simpler terms:
     /// - When input is 0, the output is 1 (the peak of the bell curve)
@@ -77,7 +75,7 @@ public class GaussianActivation<T> : ActivationFunctionBase<T>
     /// - For negative inputs, the derivative is positive (the function is increasing)
     /// - The derivative approaches 0 as inputs get very large in either direction
     /// 
-    /// The mathematical formula is: f'(x) = -2x * exp(-xÂ²)
+    /// The mathematical formula is: f'(x) = -2x * exp(-x²)
     /// </para>
     /// </remarks>
     public override T Derivative(T input)
@@ -87,41 +85,5 @@ public class GaussianActivation<T> : ActivationFunctionBase<T>
         T negativeTwo = NumOps.FromDouble(-2);
 
         return NumOps.Multiply(NumOps.Multiply(negativeTwo, input), activationValue);
-    }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because gradient computation is fully implemented in TensorOperations.Gaussian.</value>
-    /// <remarks>
-    /// <para>
-    /// Gaussian supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The gradient is -2x * exp(-xÂ²)
-    /// - It's useful for RBF networks and pattern recognition
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with Gaussian activation applied.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps the Gaussian activation to TensorOperations&lt;T&gt;.Gaussian(input),
-    /// which handles both forward and backward passes for JIT compilation.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        return TensorOperations<T>.Gaussian(input);
     }
 }
