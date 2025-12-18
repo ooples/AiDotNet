@@ -283,22 +283,25 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
 
             if (useEnsemble)
             {
-                BestModel = (IFullModel<T, TInput, TOutput>)(object)ensemble;
-                BestScore = ensembleScore;
+                if (ensemble is IFullModel<T, TInput, TOutput> typedEnsemble)
+                {
+                    BestModel = typedEnsemble;
+                    BestScore = ensembleScore;
+                }
             }
         }
         catch (OperationCanceledException)
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception ex) when (IsSkippableEnsemblingException(ex))
         {
             // Ensembling is best-effort; if it fails, keep the best single model.
         }
     }
 
     private static bool IsSkippableEnsemblingException(Exception ex)
-        => ex is InvalidOperationException or ArgumentException or NotSupportedException;
+        => ex is InvalidOperationException or ArgumentException or NotSupportedException or ArithmeticException;
 
     private static double[] ComputeEnsembleWeights(IReadOnlyList<double> scores, bool maximize)
     {
