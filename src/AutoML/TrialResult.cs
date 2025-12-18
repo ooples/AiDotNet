@@ -122,7 +122,7 @@ public sealed class TrialResult
 
         if (value is Array array)
         {
-            return array.Clone();
+            return DeepCopyArray(array);
         }
 
         if (value is ICloneable cloneable)
@@ -130,7 +130,39 @@ public sealed class TrialResult
             return cloneable.Clone() ?? value;
         }
 
+        // TODO: Consider deep-copying common collection types (e.g., List<T>/IList) when used in trial metadata.
         return value;
+    }
+
+    private static Array DeepCopyArray(Array source)
+    {
+        var elementType = source.GetType().GetElementType() ?? typeof(object);
+        var lengths = new int[source.Rank];
+        for (int i = 0; i < source.Rank; i++)
+        {
+            lengths[i] = source.GetLength(i);
+        }
+
+        var copy = Array.CreateInstance(elementType, lengths);
+        DeepCopyArrayRecursive(source, copy, dimension: 0, new int[source.Rank]);
+        return copy;
+    }
+
+    private static void DeepCopyArrayRecursive(Array source, Array destination, int dimension, int[] indices)
+    {
+        if (dimension == source.Rank)
+        {
+            var element = source.GetValue(indices);
+            destination.SetValue(element is null ? null : DeepCopyValue(element), indices);
+            return;
+        }
+
+        int length = source.GetLength(dimension);
+        for (int i = 0; i < length; i++)
+        {
+            indices[dimension] = i;
+            DeepCopyArrayRecursive(source, destination, dimension + 1, indices);
+        }
     }
 
     /// <summary>

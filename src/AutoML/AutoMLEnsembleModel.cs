@@ -26,6 +26,12 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    [JsonProperty("Members")]
+    private List<IFullModel<T, Matrix<T>, Vector<T>>> _members = new();
+
+    [JsonIgnore]
+    private IReadOnlyList<IFullModel<T, Matrix<T>, Vector<T>>> _membersView = Array.Empty<IFullModel<T, Matrix<T>, Vector<T>>>();
+
     /// <summary>
     /// Initializes a new instance of the <see cref="AutoMLEnsembleModel{T}"/> class.
     /// </summary>
@@ -34,7 +40,7 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// </remarks>
     public AutoMLEnsembleModel()
     {
-        Members = new List<IFullModel<T, Matrix<T>, Vector<T>>>();
+        SetMembers(new List<IFullModel<T, Matrix<T>, Vector<T>>>());
         Weights = Array.Empty<double>();
     }
 
@@ -54,15 +60,16 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             throw new ArgumentException("Ensemble must include at least one member.", nameof(members));
         }
 
-        Members = list;
+        SetMembers(list);
         PredictionType = predictionType;
         Weights = weights is null ? CreateUniformWeights(list.Count) : NormalizeWeights(weights, list.Count);
     }
 
     /// <summary>
-    /// Gets or sets the member models in the ensemble.
+    /// Gets the member models in the ensemble.
     /// </summary>
-    public List<IFullModel<T, Matrix<T>, Vector<T>>> Members { get; set; }
+    [JsonIgnore]
+    public IReadOnlyList<IFullModel<T, Matrix<T>, Vector<T>>> Members => _membersView;
 
     /// <summary>
     /// Gets or sets the prediction type used to combine outputs (regression vs classification).
@@ -159,9 +166,15 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             throw new InvalidOperationException("Failed to deserialize ensemble model.");
         }
 
-        Members = deserialized.Members ?? new List<IFullModel<T, Matrix<T>, Vector<T>>>();
+        SetMembers(deserialized._members);
         PredictionType = deserialized.PredictionType;
         Weights = deserialized.Weights ?? Array.Empty<double>();
+    }
+
+    private void SetMembers(List<IFullModel<T, Matrix<T>, Vector<T>>>? members)
+    {
+        _members = members ?? new List<IFullModel<T, Matrix<T>, Vector<T>>>();
+        _membersView = _members.AsReadOnly();
     }
 
     public void SaveModel(string filePath)

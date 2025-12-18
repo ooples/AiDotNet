@@ -66,7 +66,13 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
                     .ToArray();
             }
 
-            var rungCounts = AllocateRungTrialCounts(TrialLimit, fidelityFractions.Length, Math.Max(2.0, _options.ReductionFactor));
+            double reductionFactor = _options.ReductionFactor;
+            if (double.IsNaN(reductionFactor) || double.IsInfinity(reductionFactor) || reductionFactor < 2.0)
+            {
+                reductionFactor = 2.0;
+            }
+
+            var rungCounts = AllocateRungTrialCounts(TrialLimit, fidelityFractions.Length, reductionFactor);
 
             // Precompute a single training permutation so data subsets are nested across fidelities.
             int sampleCount = GetSampleCount(inputs);

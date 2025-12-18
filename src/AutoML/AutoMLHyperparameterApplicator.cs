@@ -90,32 +90,74 @@ internal static class AutoMLHyperparameterApplicator
 
         if (targetType == typeof(bool))
         {
-            return Convert.ToBoolean(value, CultureInfo.InvariantCulture);
+            try
+            {
+                return Convert.ToBoolean(value, CultureInfo.InvariantCulture);
+            }
+            catch (Exception ex) when (ex is InvalidCastException or FormatException)
+            {
+                return null;
+            }
         }
 
         if (targetType == typeof(int))
         {
-            return Convert.ToInt32(value, CultureInfo.InvariantCulture);
+            try
+            {
+                return Convert.ToInt32(value, CultureInfo.InvariantCulture);
+            }
+            catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
+            {
+                return null;
+            }
         }
 
         if (targetType == typeof(double))
         {
-            return Convert.ToDouble(value, CultureInfo.InvariantCulture);
+            try
+            {
+                return Convert.ToDouble(value, CultureInfo.InvariantCulture);
+            }
+            catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
+            {
+                return null;
+            }
         }
 
         if (targetType == typeof(float))
         {
-            return Convert.ToSingle(value, CultureInfo.InvariantCulture);
+            try
+            {
+                return Convert.ToSingle(value, CultureInfo.InvariantCulture);
+            }
+            catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
+            {
+                return null;
+            }
         }
 
         if (targetType == typeof(long))
         {
-            return Convert.ToInt64(value, CultureInfo.InvariantCulture);
+            try
+            {
+                return Convert.ToInt64(value, CultureInfo.InvariantCulture);
+            }
+            catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
+            {
+                return null;
+            }
         }
 
         if (targetType == typeof(string))
         {
-            return Convert.ToString(value, CultureInfo.InvariantCulture);
+            try
+            {
+                return Convert.ToString(value, CultureInfo.InvariantCulture);
+            }
+            catch (Exception ex) when (ex is InvalidCastException or FormatException)
+            {
+                return null;
+            }
         }
 
         try
