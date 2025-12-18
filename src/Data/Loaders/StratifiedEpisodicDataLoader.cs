@@ -1,4 +1,4 @@
-using AiDotNet.Data.Abstractions;
+using AiDotNet.Data.Structures;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Data.Loaders;
@@ -149,7 +149,7 @@ public class StratifiedEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoad
     /// - The model learns the true distribution it will see in deployment
     /// </para>
     /// </remarks>
-    protected override MetaLearningTask<T, TInput, TOutput> GetNextTaskCore()
+    protected override IMetaLearningTask<T, TInput, TOutput> GetNextTaskCore()
     {
         // Step 1: Perform weighted random selection of nWay classes (proportional to class frequency)
         var selectedClasses = WeightedSampleClasses(NWay);

@@ -1,4 +1,4 @@
-using AiDotNet.Data.Abstractions;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.Interfaces;
 
@@ -51,5 +51,5 @@ public interface IEpisodicDataLoader<T, TInput, TOutput>
     /// adapt to new tasks by recognizing patterns across diverse problems.
     /// </para>
     /// </remarks>
-    MetaLearningTask<T, TInput, TOutput> GetNextTask();
+    IMetaLearningTask<T, TInput, TOutput> GetNextTask();
 }

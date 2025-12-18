@@ -29,7 +29,7 @@ namespace AiDotNet.MetaLearning.Config;
 /// The trade-off: slightly more complex math, but same or better results with less memory.
 /// </para>
 /// </remarks>
-public class iMAMLTrainerConfig<T> : MetaLearnerConfig<T>
+public class iMAMLTrainerConfig<T> : IMetaLearnerConfig<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

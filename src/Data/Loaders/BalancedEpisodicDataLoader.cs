@@ -1,4 +1,4 @@
-using AiDotNet.Data.Abstractions;
+using AiDotNet.Data.Structures;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Data.Loaders;
@@ -135,7 +135,7 @@ public class BalancedEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoader
     /// leading to more balanced meta-learning training.
     /// </para>
     /// </remarks>
-    protected override MetaLearningTask<T, TInput, TOutput> GetNextTaskCore()
+    protected override IMetaLearningTask<T, TInput, TOutput> GetNextTaskCore()
     {
         // Step 1: Calculate selection weights based on usage (inverse weighting)
         // Classes used less get higher weights

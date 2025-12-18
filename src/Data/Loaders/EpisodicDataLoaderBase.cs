@@ -1,7 +1,8 @@
-using AiDotNet.Data.Abstractions;
+using AiDotNet.Data.Structures;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.MetaLearning.Algorithms;
 
 namespace AiDotNet.Data.Loaders;
 
@@ -141,7 +142,7 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> : IEpisodicData
     /// which contains the specific sampling strategy.
     /// </para>
     /// </remarks>
-    public MetaLearningTask<T, TInput, TOutput> GetNextTask()
+    public IMetaLearningTask<T, TInput, TOutput> GetNextTask()
     {
         return GetNextTaskCore();
     }
@@ -168,7 +169,7 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> : IEpisodicData
     /// 4. Build and return a MetaLearningTask
     /// </para>
     /// </remarks>
-    protected abstract MetaLearningTask<T, TInput, TOutput> GetNextTaskCore();
+    protected abstract IMetaLearningTask<T, TInput, TOutput> GetNextTaskCore();
 
     /// <summary>
     /// Validates the dataset inputs.
@@ -271,7 +272,7 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> : IEpisodicData
     /// <summary>
     /// Builds a MetaLearningTask from lists of examples and labels.
     /// </summary>
-    protected MetaLearningTask<T, TInput, TOutput> BuildMetaLearningTask(
+    protected IMetaLearningTask<T, TInput, TOutput> BuildMetaLearningTask(
         List<Vector<T>> supportExamples,
         List<T> supportLabels,
         List<Vector<T>> queryExamples,
@@ -309,12 +310,12 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> : IEpisodicData
         TInput queryX = ConvertMatrixToInput(queryMatrix);
         TOutput queryY = ConvertVectorToOutput(queryVector);
 
-        return new MetaLearningTask<T, TInput, TOutput>
+        return new BasicMetaLearningTask<T, TInput, TOutput>
         {
-            SupportSetX = supportX,
-            SupportSetY = supportY,
-            QuerySetX = queryX,
-            QuerySetY = queryY
+            SupportInput = supportX,
+            SupportOutput = supportY,
+            QueryInput = queryX,
+            QueryOutput = queryY
         };
     }
 

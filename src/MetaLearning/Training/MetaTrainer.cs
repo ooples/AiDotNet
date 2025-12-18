@@ -1,6 +1,7 @@
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Data;
-using System.Text.Json;
+using AiDotNet.Data.Structures;
+using Newtonsoft.Json;
 
 namespace AiDotNet.MetaLearning.Training;
 
@@ -224,10 +225,7 @@ public class MetaTrainer<T, TInput, TOutput>
                 Timestamp = DateTimeOffset.UtcNow
             };
 
-            string json = JsonSerializer.Serialize(checkpoint, new JsonSerializerOptions
-            {
-                WriteIndented = true
-            });
+            string json = JsonConvert.SerializeObject(checkpoint, Formatting.Indented);
 
             File.WriteAllText(checkpointPath, json);
 

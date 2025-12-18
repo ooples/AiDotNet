@@ -201,7 +201,7 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOut
     }
 
     /// <inheritdoc/>
-    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(ITask<T, TInput, TOutput> task)
+    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
         {
@@ -226,7 +226,7 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOut
     /// <summary>
     /// Trains the NTM on a single episode.
     /// </summary>
-    private T TrainEpisode(ITask<T, TInput, TOutput> task)
+    private T TrainEpisode(IMetaLearningTask<T, TInput, TOutput> task)
     {
         T episodeLoss = NumOps.Zero;
 
@@ -466,7 +466,6 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOut
 /// NTM model for inference with persistent memory.
 /// </summary>
 public class NTMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
-    where T : struct, IEquatable<T>, IFormattable
 {
     private readonly INTMController<T> _controller;
     private readonly NTMMemory<T> _memory;
@@ -517,6 +516,37 @@ public class NTMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
     {
         return _controller.GetParameters();
     }
+
+    /// <summary>
+    /// Gets the model metadata for the NTM model.
+    /// </summary>
+    /// <returns>Model metadata containing memory controller and attention configuration.</returns>
+    public ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            ModelType = "Neural Turing Machine",
+            Version = "1.0.0",
+            Description = "Differentiable neural computer with external memory for sequence learning"
+        };
+
+        // Add NTM specific metadata
+        metadata.AdditionalMetadata["MemorySize"] = _options.MemorySize;
+        metadata.AdditionalMetadata["MemoryWidth"] = _options.MemoryWidth;
+        metadata.AdditionalMetadata["NumReadHeads"] = _options.NumReadHeads;
+        metadata.AdditionalMetadata["ControllerHiddenSize"] = _options.ControllerHiddenSize;
+        metadata.AdditionalMetadata["ControllerLayerSizes"] = _options.ControllerLayerSizes;
+        metadata.AdditionalMetadata["UseLSTMController"] = _options.UseLSTMController;
+
+        return metadata;
+    }
+
+    public void Reset()
+    {
+        // Reset memory and controller state
+        _memory.Reset();
+        _controller.Reset();
+    }
 }
 
 /// <summary>
@@ -524,7 +554,6 @@ public class NTMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
 public class NTMMemory<T>
-    where T : struct, IEquatable<T>, IFormattable
 {
     private readonly Matrix<T> _memoryMatrix;
     private readonly int _size;
@@ -701,7 +730,6 @@ public class NTMMemory<T>
 /// Interface for NTM controller.
 /// </summary>
 public interface INTMController<T>
-    where T : struct, IEquatable<T>, IFormattable
 {
     /// <summary>
     /// Forward pass through the controller.
@@ -748,7 +776,6 @@ public interface INTMController<T>
 /// LSTM-based NTM controller implementation.
 /// </summary>
 public class LSTMNTMController<T> : INTMController<T>
-    where T : struct, IEquatable<T>, IFormattable
 {
     private readonly NTMAlgorithmOptions<T, object, object> _options;
 
@@ -814,7 +841,6 @@ public class LSTMNTMController<T> : INTMController<T>
 /// MLP-based NTM controller implementation.
 /// </summary>
 public class MLPNTMController<T> : INTMController<T>
-    where T : struct, IEquatable<T>, IFormattable
 {
     private readonly NTMAlgorithmOptions<T, object, object> _options;
 
@@ -875,7 +901,6 @@ public class MLPNTMController<T> : INTMController<T>
 /// NTM read head for content-based addressing.
 /// </summary>
 public class NTMReadHead<T>
-    where T : struct, IEquatable<T>, IFormattable
 {
     private readonly NTMAlgorithmOptions<T, object, object> _options;
     private readonly int _headIndex;
@@ -910,7 +935,6 @@ public class NTMReadHead<T>
 /// NTM write head for content-based addressing.
 /// </summary>
 public class NTMWriteHead<T>
-    where T : struct, IEquatable<T>, IFormattable
 {
     private readonly NTMAlgorithmOptions<T, object, object> _options;
 

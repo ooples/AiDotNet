@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.Models;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -55,7 +56,7 @@ public interface IMetaLearningAlgorithm<T, TInput, TOutput>
     /// it can adapt to new tasks with very few examples.
     /// </para>
     /// </remarks>
-    IModel<TInput, TOutput, ModelMetadata<T>> Adapt(ITask<T, TInput, TOutput> task);
+    IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task);
 
     /// <summary>
     /// Evaluates the meta-learning algorithm on a batch of tasks.

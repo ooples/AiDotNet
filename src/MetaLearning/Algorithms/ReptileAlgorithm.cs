@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -101,9 +102,9 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, 
             }
 
             // Evaluate on query set for logging
-            taskModel.UpdateParameters(adaptedParams);
+            taskModel.SetParameters(adaptedParams);
             var queryPredictions = taskModel.Predict(task.QueryInput);
-            T taskLoss = LossFunction.ComputeLoss(queryPredictions, task.QueryOutput);
+            T taskLoss = LossFunction.CalculateLoss(queryPredictions, task.QueryOutput);
             totalLoss = NumOps.Add(totalLoss, taskLoss);
         }
 
@@ -133,14 +134,14 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, 
             );
         }
 
-        MetaModel.UpdateParameters(updatedMetaParams);
+        MetaModel.SetParameters(updatedMetaParams);
 
         // Return average loss
         return NumOps.Divide(totalLoss, batchSize);
     }
 
     /// <inheritdoc/>
-    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(ITask<T, TInput, TOutput> task)
+    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
         {
@@ -152,7 +153,7 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, 
 
         // Perform inner loop adaptation
         var adaptedParameters = InnerLoopAdaptation(adaptedModel, task);
-        adaptedModel.UpdateParameters(adaptedParameters);
+        adaptedModel.SetParameters(adaptedParameters);
 
         return adaptedModel;
     }
@@ -177,7 +178,7 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, 
 
             // Use inner optimizer for parameter updates
             parameters = InnerOptimizer.UpdateParameters(parameters, gradients);
-            model.UpdateParameters(parameters);
+            model.SetParameters(parameters);
         }
 
         return parameters;

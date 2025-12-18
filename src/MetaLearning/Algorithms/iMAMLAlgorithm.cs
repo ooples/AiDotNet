@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -80,11 +81,11 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
 
             // Inner loop: Adapt to the task using support set
             var adaptedParams = InnerLoopAdaptation(taskModel, task);
-            taskModel.UpdateParameters(adaptedParams);
+            taskModel.SetParameters(adaptedParams);
 
             // Compute meta-loss on query set
             var queryPredictions = taskModel.Predict(task.QueryInput);
-            T metaLoss = LossFunction.ComputeLoss(queryPredictions, task.QueryOutput);
+            T metaLoss = LossFunction.CalculateLoss(queryPredictions, task.QueryOutput);
             totalMetaLoss = NumOps.Add(totalMetaLoss, metaLoss);
 
             // Compute implicit meta-gradients
@@ -119,14 +120,14 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
         // Outer loop: Update meta-parameters using the meta-optimizer
         var currentMetaParams = MetaModel.GetParameters();
         var updatedMetaParams = MetaOptimizer.UpdateParameters(currentMetaParams, metaGradients);
-        MetaModel.UpdateParameters(updatedMetaParams);
+        MetaModel.SetParameters(updatedMetaParams);
 
         // Return average meta-loss
         return NumOps.Divide(totalMetaLoss, batchSize);
     }
 
     /// <inheritdoc/>
-    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(ITask<T, TInput, TOutput> task)
+    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
         {
@@ -138,7 +139,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
 
         // Perform inner loop adaptation
         var adaptedParameters = InnerLoopAdaptation(adaptedModel, task);
-        adaptedModel.UpdateParameters(adaptedParameters);
+        adaptedModel.SetParameters(adaptedParameters);
 
         return adaptedModel;
     }
@@ -161,7 +162,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
 
             // Use inner optimizer for parameter updates
             parameters = InnerOptimizer.UpdateParameters(parameters, gradients);
-            model.UpdateParameters(parameters);
+            model.SetParameters(parameters);
         }
 
         return parameters;
@@ -181,7 +182,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
     {
         // Step 1: Compute gradient of query loss with respect to adapted parameters
         var model = CloneModel();
-        model.UpdateParameters(adaptedParams);
+        model.SetParameters(adaptedParams);
         var queryGradients = ComputeGradients(model, task.QueryInput, task.QueryOutput);
 
         // Step 2: Solve the implicit equation using Conjugate Gradient

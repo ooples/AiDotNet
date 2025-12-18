@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Config;
 
@@ -34,7 +35,7 @@ namespace AiDotNet.MetaLearning.Config;
 /// - Support for both classification and regression
 /// </para>
 /// </remarks>
-public class MatchingNetworksAlgorithmOptions<T, TInput, TOutput> : MetaLearningOptions<T, TInput, TOutput>
+public class MatchingNetworksAlgorithmOptions<T, TInput, TOutput> 
     where T : struct, IEquatable<T>, IFormattable
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -69,7 +70,7 @@ public class MatchingNetworksAlgorithmOptions<T, TInput, TOutput> : MetaLearning
     /// - <b>Euclidean:</b> Negative Euclidean distance
     /// - <b>Learned:</b> Small neural network learns similarity (most flexible)
     /// </remarks>
-    public AttentionFunction AttentionFunction { get; set; } = AttentionFunction.Cosine;
+    public AttentionFunction AttentionType { get; set; } = AttentionFunction.Cosine;
 
     /// <summary>
     /// Gets or sets whether to use full context encoding.
@@ -286,7 +287,7 @@ public class MatchingNetworksAlgorithmOptions<T, TInput, TOutput> : MetaLearning
         int numEpisodes = 10000)
     {
         Encoder = encoder;
-        AttentionFunction = attentionFunction;
+        AttentionType = attentionFunction;
         NumClasses = numClasses;
         UseFullContext = useFullContext;
         UseBidirectionalEncoding = useBidirectionalEncoding;
@@ -302,10 +303,9 @@ public class MatchingNetworksAlgorithmOptions<T, TInput, TOutput> : MetaLearning
     /// Validates the configuration parameters.
     /// </summary>
     /// <returns>True if all parameters are valid, false otherwise.</returns>
-    public override bool IsValid()
+    public virtual bool IsValid()
     {
         // Check base class validation
-        if (!base.IsValid())
             return false;
 
         // Check encoder

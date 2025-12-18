@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Config;
 
@@ -35,7 +36,7 @@ namespace AiDotNet.MetaLearning.Config;
 /// - Message passing with support sets
 /// </para>
 /// </remarks>
-public class GNNMetaAlgorithmOptions<T, TInput, TOutput> : MetaLearningOptions<T, TInput, TOutput>
+public class GNNMetaAlgorithmOptions<T, TInput, TOutput>
     where T : struct, IEquatable<T>, IFormattable
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -436,10 +437,9 @@ public class GNNMetaAlgorithmOptions<T, TInput, TOutput> : MetaLearningOptions<T
     /// Validates the configuration parameters.
     /// </summary>
     /// <returns>True if all parameters are valid, false otherwise.</returns>
-    public override bool IsValid()
+    public virtual bool IsValid()
     {
         // Check base class validation
-        if (!base.IsValid())
             return false;
 
         // Check dimensions

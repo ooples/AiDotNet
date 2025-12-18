@@ -163,7 +163,7 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearningBase<T,
     }
 
     /// <inheritdoc/>
-    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(ITask<T, TInput, TOutput> task)
+    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
         {
@@ -681,6 +681,31 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
     public Vector<T> GetParameters()
     {
         return _encoder.GetLearnableParameters();
+    }
+
+    /// <summary>
+    /// Gets the model metadata for the Matching Networks model.
+    /// </summary>
+    /// <returns>Model metadata containing configuration and attention function information.</returns>
+    public ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            ModelType = "Matching Networks",
+            Version = "1.0.0",
+            Description = "Neural architecture for few-shot learning with attention mechanisms"
+        };
+
+        // Add matching networks specific metadata
+        metadata.AdditionalMetadata["EncoderLayerSizes"] = _options.EncoderLayerSizes;
+        metadata.AdditionalMetadata["EmbeddingDimension"] = _options.EmbeddingDimension;
+        metadata.AdditionalMetadata["UseFullyConnectedEmbedding"] = _options.UseFullyConnectedEmbedding;
+        metadata.AdditionalMetadata["AttentionFunction"] = _options.AttentionFunction.ToString();
+        metadata.AdditionalMetadata["UseCosineSimilarity"] = _options.UseCosineSimilarity;
+        metadata.AdditionalMetadata["LearnableScaling"] = _options.LearnableScaling;
+        metadata.AdditionalMetadata["Temperature"] = _options.Temperature;
+
+        return metadata;
     }
 
     private Tensor<T> ConvertToTensor(TInput input)

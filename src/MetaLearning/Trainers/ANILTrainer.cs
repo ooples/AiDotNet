@@ -93,9 +93,9 @@ public class ANILTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     private readonly int[] _adaptableParameterIndices;
 
     /// <summary>
-    /// Current iteration counter.
+    /// Current ANIL iteration counter.
     /// </summary>
-    private int _currentIteration;
+    private int _anilIteration;
 
     /// <summary>
     /// Initializes a new instance of the ANILTrainer with a configuration object.
@@ -136,7 +136,7 @@ public class ANILTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         : base(metaModel, lossFunction, dataLoader, config ?? new ANILTrainerConfig<T>())
     {
         // Determine which parameters to freeze
-        (_frozenParameterIndices, _adaptableParameterIndices) = DetermineParameterSplit();
+        (_frozenParameterIndices, _adaptableParameterIndices) = DetermineFrozenParameters();
     }
 
     /// <inheritdoc/>
@@ -220,7 +220,7 @@ public class ANILTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         MetaModel.SetParameters(newMetaParameters);
 
         // Increment iteration counter
-        _currentIteration++;
+        _anilIteration++;
 
         startTime.Stop();
 
@@ -237,12 +237,12 @@ public class ANILTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
             taskLoss: meanLoss,
             accuracy: meanAccuracy,
             numTasks: batchSize,
-            iteration: _currentIteration,
+            iteration: _anilIteration,
             timeMs: startTime.Elapsed.TotalMilliseconds);
     }
 
     /// <inheritdoc/>
-    public override MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T, TInput, TOutput> task)
+    public override MetaAdaptationResult<T> AdaptAndEvaluate(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
             throw new ArgumentNullException(nameof(task));
@@ -320,7 +320,7 @@ public class ANILTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     /// Determines which parameters to freeze based on configuration.
     /// </summary>
     /// <returns>Tuples of frozen and adaptable parameter indices.</returns>
-    private (int[] frozenIndices, int[] adaptableIndices)
+    private (int[] frozenIndices, int[] adaptableIndices) DetermineFrozenParameters()
     {
         int totalParams = MetaModel.GetParameters().Length;
         int numFrozen = (int)(totalParams * ANILConfig.FrozenLayerRatio);

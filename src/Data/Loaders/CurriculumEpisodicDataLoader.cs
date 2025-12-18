@@ -1,4 +1,4 @@
-using AiDotNet.Data.Abstractions;
+using AiDotNet.Data.Structures;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Data.Loaders;
@@ -226,7 +226,7 @@ public class CurriculumEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoad
     /// - Result: 5-way 1-shot (target/hardest)
     /// </para>
     /// </remarks>
-    protected override MetaLearningTask<T, TInput, TOutput> GetNextTaskCore()
+    protected override IMetaLearningTask<T, TInput, TOutput> GetNextTaskCore()
     {
         // Step 1: Calculate current difficulty based on progress
         int currentNWay = CalculateCurrentNWay();

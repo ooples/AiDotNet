@@ -147,7 +147,7 @@ public class ReptileTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         for (int taskIdx = 0; taskIdx < batchSize; taskIdx++)
         {
             // Sample a task using configured data loader
-            MetaLearningTask<T, TInput, TOutput> task = DataLoader.GetNextTask();
+            IMetaLearningTask<T, TInput, TOutput> task = DataLoader.GetNextTask();
 
             // Reset model to original meta-parameters for this task
             MetaModel.SetParameters(originalParameters.Clone());
@@ -245,7 +245,7 @@ public class ReptileTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     }
 
     /// <inheritdoc/>
-    public override MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T, TInput, TOutput> task)
+    public override MetaAdaptationResult<T> AdaptAndEvaluate(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
             throw new ArgumentNullException(nameof(task));

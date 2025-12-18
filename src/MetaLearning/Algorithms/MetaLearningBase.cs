@@ -3,6 +3,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -46,10 +48,9 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
         MetaModel = options.BaseModel;
         LossFunction = options.LossFunction ?? throw new ArgumentException("LossFunction cannot be null.", nameof(options));
 
-        // Initialize optimizers - use provided ones or create defaults
         // Use provided optimizers or create defaults
-        MetaOptimizer = options.MetaOptimizer ?? CreateDefaultAdamOptimizer(Options.OuterLearningRate);
-        InnerOptimizer = options.InnerOptimizer ?? CreateDefaultAdamOptimizer(Options.InnerLearningRate);
+        MetaOptimizer = options.MetaOptimizer ?? new AdamOptimizer<T>(Options.OuterLearningRate);
+        InnerOptimizer = options.InnerOptimizer ?? new AdamOptimizer<T>(Options.InnerLearningRate);
 
         if (options.RandomSeed.HasValue)
         {
@@ -61,103 +62,7 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
         }
     }
 
-    /// <summary>
-    /// Creates a default Adam optimizer with the specified learning rate.
-    /// </summary>
-    /// <param name="learningRate">The learning rate for the optimizer.</param>
-    /// <returns>A configured Adam optimizer instance.</returns>
-    private IGradientBasedOptimizer<T, TInput, TOutput> CreateDefaultAdamOptimizer(double learningRate)
-    {
-        // Create a simple wrapper that adapts the optimizer to our needs
-        return new AdamOptimizerWrapper(learningRate);
-    }
-
-    /// <summary>
-    /// Simple wrapper for Adam optimizer that doesn't require a model at construction.
-    /// </summary>
-    private class AdamOptimizerWrapper : IGradientBasedOptimizer<T, TInput, TOutput>
-    {
-        private readonly double _learningRate;
-        private Dictionary<string, object> _state = new();
-
-        public AdamOptimizerWrapper(double learningRate)
-        {
-            _learningRate = learningRate;
-        }
-
-        public Matrix<T> UpdateParameters(Matrix<T> parameters, Matrix<T> gradient)
-        {
-            // Simple SGD-like update for now - can be enhanced later
-            var scaledGradient = gradient.Multiply(NumOps.FromDouble(_learningRate));
-            return parameters.Subtract(scaledGradient);
-        }
-
-        public Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
-        {
-            var scaledGradient = gradient.Multiply(NumOps.FromDouble(_learningRate));
-            return parameters.Subtract(scaledGradient);
-        }
-
-        public T[,] UpdateParameters(T[,] parameters, T[,] gradient)
-        {
-            // Implementation for 2D arrays
-            int rows = parameters.GetLength(0);
-            int cols = parameters.GetLength(1);
-            T[,] result = new T[rows, cols];
-
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < cols; j++)
-                {
-                    result[i, j] = NumOps.Subtract(parameters[i, j],
-                        NumOps.Multiply(gradient[i, j], NumOps.FromDouble(_learningRate)));
-                }
-            }
-
-            return result;
-        }
-
-        public T[][] UpdateParameters(T[][] parameters, T[][] gradient)
-        {
-            // Implementation for jagged arrays
-            int rows = parameters.Length;
-            T[][] result = new T[rows][];
-
-            for (int i = 0; i < rows; i++)
-            {
-                int cols = parameters[i].Length;
-                result[i] = new T[cols];
-                for (int j = 0; j < cols; j++)
-                {
-                    result[i][j] = NumOps.Subtract(parameters[i][j],
-                        NumOps.Multiply(gradient[i][j], NumOps.FromDouble(_learningRate)));
-                }
-            }
-
-            return result;
-        }
-
-        public object GetState(string key)
-        {
-            return _state.TryGetValue(key, out var value) ? value : null;
-        }
-
-        public void SetState(string key, object value)
-        {
-            _state[key] = value;
-        }
-
-        public void Reset()
-        {
-            _state.Clear();
-        }
-
-        public void Dispose()
-        {
-            // Nothing to dispose
-        }
-    }
-
+  
     /// <inheritdoc/>
     public abstract string AlgorithmName { get; }
 
@@ -174,7 +79,7 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
     public abstract T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch);
 
     /// <inheritdoc/>
-    public abstract IModel<TInput, TOutput, ModelMetadata<T>> Adapt(ITask<T, TInput, TOutput> task);
+    public abstract IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task);
 
     /// <inheritdoc/>
     public virtual T Evaluate(TaskBatch<T, TInput, TOutput> taskBatch)
@@ -189,7 +94,7 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
 
             // Evaluate on query set
             var queryPredictions = adaptedModel.Predict(task.QueryInput);
-            var queryLoss = LossFunction.ComputeLoss(queryPredictions, task.QueryOutput);
+            var queryLoss = LossFunction.CalculateLoss(queryPredictions, task.QueryOutput);
 
             totalLoss = NumOps.Add(totalLoss, queryLoss);
             taskCount++;
@@ -235,15 +140,15 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
 
             // Compute loss with parameter + epsilon
             parameters[i] = NumOps.Add(originalValue, epsilon);
-            model.UpdateParameters(parameters);
+            model.SetParameters(parameters);
             var predictions1 = model.Predict(input);
-            T loss1 = LossFunction.ComputeLoss(predictions1, expectedOutput);
+            T loss1 = LossFunction.CalculateLoss(predictions1, expectedOutput);
 
             // Compute loss with parameter - epsilon
             parameters[i] = NumOps.Subtract(originalValue, epsilon);
-            model.UpdateParameters(parameters);
+            model.SetParameters(parameters);
             var predictions2 = model.Predict(input);
-            T loss2 = LossFunction.ComputeLoss(predictions2, expectedOutput);
+            T loss2 = LossFunction.CalculateLoss(predictions2, expectedOutput);
 
             // Compute gradient using central difference
             T gradient = NumOps.Divide(
@@ -257,7 +162,7 @@ public abstract class MetaLearningBase<T, TInput, TOutput> : IMetaLearningAlgori
         }
 
         // Restore original parameters
-        model.UpdateParameters(parameters);
+        model.SetParameters(parameters);
 
         return gradients;
     }

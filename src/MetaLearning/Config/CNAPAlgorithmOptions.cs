@@ -35,7 +35,7 @@ namespace AiDotNet.MetaLearning.Config;
 /// - Hierarchical meta-learning
 /// </para>
 /// </remarks>
-public class CNAPAlgorithmOptions<T, TInput, TOutput> : MetaLearningOptions<T, TInput, TOutput>
+public class CNAPAlgorithmOptions<T, TInput, TOutput>
     where T : struct, IEquatable<T>, IFormattable
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -393,11 +393,8 @@ public class CNAPAlgorithmOptions<T, TInput, TOutput> : MetaLearningOptions<T, T
     /// Validates the configuration parameters.
     /// </summary>
     /// <returns>True if all parameters are valid, false otherwise.</returns>
-    public override bool IsValid()
+    public virtual bool IsValid()
     {
-        // Check base class validation
-        if (!base.IsValid())
-            return false;
 
         // Check dimensions
         if (InputDimension <= 0 || InputDimension > 10000)

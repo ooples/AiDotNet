@@ -1,4 +1,4 @@
-using AiDotNet.Data.Abstractions;
+using AiDotNet.Data.Structures;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Data.Loaders;
@@ -159,7 +159,7 @@ public class UniformEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderB
     /// Creates new tensor objects on each call.
     /// </para>
     /// </remarks>
-    protected override MetaLearningTask<T, TInput, TOutput> GetNextTaskCore()
+    protected override IMetaLearningTask<T, TInput, TOutput> GetNextTaskCore()
     {
         // Step 1: Randomly select nWay unique classes
         var selectedClasses = AvailableClasses

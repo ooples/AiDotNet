@@ -230,7 +230,7 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         for (int taskIdx = 0; taskIdx < batchSize; taskIdx++)
         {
             // Sample a task using configured data loader
-            MetaLearningTask<T, TInput, TOutput> task = DataLoader.GetNextTask();
+            IMetaLearningTask<T, TInput, TOutput> task = DataLoader.GetNextTask();
 
             // Compute meta-gradient for this task
             Vector<T> metaGradient = ComputeTaskMetaGradient(task, originalParameters, out T queryLoss, out T queryAccuracy);
@@ -296,7 +296,7 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     /// Computes the meta-gradient for a single task using appropriate method based on configuration and model capabilities.
     /// </summary>
     private Vector<T> ComputeTaskMetaGradient(
-        MetaLearningTask<T, TInput, TOutput> task,
+        IMetaLearningTask<T, TInput, TOutput> task,
         Vector<T> originalParameters,
         out T queryLoss,
         out T queryAccuracy)
@@ -323,7 +323,7 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     /// Computes full second-order MAML meta-gradient by backpropagating through adaptation.
     /// </summary>
     private Vector<T> ComputeSecondOrderMetaGradient(
-        MetaLearningTask<T, TInput, TOutput> task,
+        IMetaLearningTask<T, TInput, TOutput> task,
         Vector<T> originalParameters,
         out T queryLoss,
         out T queryAccuracy)
@@ -364,7 +364,7 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     /// Computes first-order MAML (FOMAML) meta-gradient.
     /// </summary>
     private Vector<T> ComputeFirstOrderMetaGradient(
-        MetaLearningTask<T, TInput, TOutput> task,
+        IMetaLearningTask<T, TInput, TOutput> task,
         Vector<T> originalParameters,
         out T queryLoss,
         out T queryAccuracy)
@@ -401,7 +401,7 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     /// Computes Reptile-style approximation for models without explicit gradient support.
     /// </summary>
     private Vector<T> ComputeReptileStyleApproximation(
-        MetaLearningTask<T, TInput, TOutput> task,
+        IMetaLearningTask<T, TInput, TOutput> task,
         Vector<T> originalParameters,
         out T queryLoss,
         out T queryAccuracy)
@@ -536,7 +536,7 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     }
 
     /// <inheritdoc/>
-    public override MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T, TInput, TOutput> task)
+    public override MetaAdaptationResult<T> AdaptAndEvaluate(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
             throw new ArgumentNullException(nameof(task));

@@ -133,7 +133,7 @@ public class iMAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         for (int taskIdx = 0; taskIdx < batchSize; taskIdx++)
         {
             // Sample a task using configured data loader
-            MetaLearningTask<T, TInput, TOutput> task = DataLoader.GetNextTask();
+            IMetaLearningTask<T, TInput, TOutput> task = DataLoader.GetNextTask();
 
             // Compute implicit meta-gradient for this task
             Vector<T> metaGradient = ComputeImplicitMetaGradient(task, originalParameters, out T queryLoss, out T queryAccuracy);
@@ -203,7 +203,7 @@ public class iMAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     }
 
     /// <inheritdoc/>
-    public override MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T, TInput, TOutput> task)
+    public override MetaAdaptationResult<T> AdaptAndEvaluate(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
             throw new ArgumentNullException(nameof(task));
@@ -281,7 +281,7 @@ public class iMAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// <param name="queryAccuracy">The computed query accuracy after adaptation.</param>
     /// <returns>The implicit meta-gradient vector.</returns>
     private Vector<T> ComputeImplicitMetaGradient(
-        MetaLearningTask<T, TInput, TOutput> task,
+        IMetaLearningTask<T, TInput, TOutput> task,
         Vector<T> initialParams,
         out T queryLoss,
         out T queryAccuracy)
@@ -326,7 +326,7 @@ public class iMAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// <param name="model">The model to adapt.</param>
     /// <param name="task">The task to adapt to.</param>
     /// <returns>The adapted parameters.</returns>
-    private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, MetaLearningTask<T, TInput, TOutput> task)
+    private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, IMetaLearningTask<T, TInput, TOutput> task)
     {
         var parameters = model.GetParameters();
 

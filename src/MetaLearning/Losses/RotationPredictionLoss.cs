@@ -378,4 +378,49 @@ public class RotationPredictionLoss<T, TInput, TOutput> : ISelfSupervisedLoss<T,
         // For now, return a placeholder value
         return NumOps.FromDouble(0.5); // 50% accuracy for random classifier
     }
+
+    // Required ILossFunction<T> interface methods
+    public T CalculateLoss(Vector<T> predictions, Vector<T> targets)
+    {
+        return ComputeCrossEntropyLoss((TOutput)(object)predictions, (TOutput)(object)targets);
+    }
+
+    public Vector<T> CalculateDerivative(Vector<T> predictions, Vector<T> targets)
+    {
+        return ComputeCrossEntropyDerivative((TOutput)(object)predictions, (TOutput)(object)targets);
+    }
+
+    // Required ISelfSupervisedLoss<T, TInput, TOutput> interface methods
+    public IMetaLearningTask<T, TInput, TOutput> CreateSelfSupervisedTask(TInput unlabeledInput)
+    {
+        // Create a rotation pretext task
+        var (rotatedInput, targets) = CreatePretextTask(unlabeledInput);
+
+        // Create a dummy input for the original (unrotated) version
+        // In a real implementation, you'd have proper support/query sets
+        return new BasicMetaLearningTask<T, TInput, TOutput>(
+            supportInput: rotatedInput,
+            supportOutput: targets,
+            queryInput: unlabeledInput,
+            queryOutput: default(TOutput) // We don't need query labels for self-supervised learning
+        );
+    }
+
+    public TInput ApplyAugmentation(TInput input, Dictionary<string, object> augmentationParams)
+    {
+        // Get rotation angle from parameters, default to random
+        int angle;
+        if (augmentationParams.TryGetValue("rotation_angle", out var angleObj) && angleObj is int parsedAngle)
+        {
+            angle = parsedAngle;
+        }
+        else
+        {
+            // Random rotation if not specified
+            var randomIndex = _random.Next(_rotations.Length);
+            angle = _rotations[randomIndex];
+        }
+
+        return ApplyRotation(input, angle);
+    }
 }

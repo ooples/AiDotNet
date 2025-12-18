@@ -171,7 +171,7 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput
     }
 
     /// <inheritdoc/>
-    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(ITask<T, TInput, TOutput> task)
+    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
         {
@@ -932,6 +932,31 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
     public Vector<T> GetParameters()
     {
         throw new NotSupportedException("Prototype models don't have trainable parameters.");
+    }
+
+    /// <summary>
+    /// Gets the model metadata for the Prototypical Networks model.
+    /// </summary>
+    /// <returns>Model metadata containing distance function and feature extraction configuration.</returns>
+    public ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            ModelType = "Prototypical Networks",
+            Version = "1.0.0",
+            Description = "Few-shot learning algorithm that classifies based on distance to class prototypes"
+        };
+
+        // Add Prototypical Networks specific metadata
+        metadata.AdditionalMetadata["EncoderLayerSizes"] = _options.EncoderLayerSizes;
+        metadata.AdditionalMetadata["EmbeddingDimension"] = _options.EmbeddingDimension;
+        metadata.AdditionalMetadata["DistanceFunction"] = _options.DistanceFunction.ToString();
+        metadata.AdditionalMetadata["UseLearnablePrototypes"] = _options.UseLearnablePrototypes;
+        metadata.AdditionalMetadata["UseAttention"] = _options.UseAttention;
+        metadata.AdditionalMetadata["Temperature"] = _options.Temperature;
+        metadata.AdditionalMetadata["LearnDistanceMetric"] = _options.LearnDistanceMetric;
+
+        return metadata;
     }
 
     /// <summary>

@@ -157,7 +157,7 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
     }
 
     /// <inheritdoc/>
-    public abstract MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T, TInput, TOutput> task);
+    public abstract MetaAdaptationResult<T> AdaptAndEvaluate(IMetaLearningTask<T, TInput, TOutput> task);
 
     /// <inheritdoc/>
     public virtual MetaTrainingResult<T> Train()

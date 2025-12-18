@@ -35,7 +35,7 @@ namespace AiDotNet.MetaLearning.Config;
 /// - Memory usage regularization
 /// </para>
 /// </remarks>
-public class MANNAlgorithmOptions<T, TInput, TOutput> : MetaLearningOptions<T, TInput, TOutput>
+public class MANNAlgorithmOptions<T, TInput, TOutput>
     where T : struct, IEquatable<T>, IFormattable
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -341,10 +341,9 @@ public class MANNAlgorithmOptions<T, TInput, TOutput> : MetaLearningOptions<T, T
     /// Validates the configuration parameters.
     /// </summary>
     /// <returns>True if all parameters are valid, false otherwise.</returns>
-    public override bool IsValid()
+    public virtual bool IsValid()
     {
         // Check base class validation
-        if (!base.IsValid())
             return false;
 
         // Check controller

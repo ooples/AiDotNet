@@ -169,7 +169,7 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, 
     }
 
     /// <inheritdoc/>
-    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(ITask<T, TInput, TOutput> task)
+    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
         {
@@ -849,6 +849,31 @@ public class RelationNetworkModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
             combined[encoderParams.Length + i] = relationParams[i];
 
         return combined;
+    }
+
+    /// <summary>
+    /// Gets the model metadata for the Relation Network model.
+    /// </summary>
+    /// <returns>Model metadata containing feature encoder and relation module configuration.</returns>
+    public ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            ModelType = "Relation Network",
+            Version = "1.0.0",
+            Description = "Meta-learning algorithm that learns a deep metric for comparing query and support examples"
+        };
+
+        // Add Relation Network specific metadata
+        metadata.AdditionalMetadata["FeatureEncoderLayerSizes"] = _options.FeatureEncoderLayerSizes;
+        metadata.AdditionalMetadata["RelationModuleLayerSizes"] = _options.RelationModuleLayerSizes;
+        metadata.AdditionalMetadata["EmbeddingDimension"] = _options.EmbeddingDimension;
+        metadata.AdditionalMetadata["UseBatchNorm"] = _options.UseBatchNorm;
+        metadata.AdditionalMetadata["UseDropout"] = _options.UseDropout;
+        metadata.AdditionalMetadata["DropoutRate"] = _options.DropoutRate;
+        metadata.AdditionalMetadata["UseResidualConnections"] = _options.UseResidualConnections;
+
+        return metadata;
     }
 
     /// <summary>

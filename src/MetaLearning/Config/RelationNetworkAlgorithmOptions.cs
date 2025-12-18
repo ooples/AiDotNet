@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.MetaLearning.Algorithms;
 
 namespace AiDotNet.MetaLearning.Config;
 
@@ -34,7 +35,7 @@ namespace AiDotNet.MetaLearning.Config;
 /// - Support for both few-shot and many-shot scenarios
 /// </para>
 /// </remarks>
-public class RelationNetworkAlgorithmOptions<T, TInput, TOutput> : MetaLearningOptions<T, TInput, TOutput>
+public class RelationNetworkAlgorithmOptions<T, TInput, TOutput> 
     where T : struct, IEquatable<T>, IFormattable
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -363,10 +364,9 @@ public class RelationNetworkAlgorithmOptions<T, TInput, TOutput> : MetaLearningO
     /// Validates the configuration parameters.
     /// </summary>
     /// <returns>True if all parameters are valid, false otherwise.</returns>
-    public override bool IsValid()
+    public virtual bool IsValid()
     {
         // Check base class validation
-        if (!base.IsValid())
             return false;
 
         // Check feature encoder

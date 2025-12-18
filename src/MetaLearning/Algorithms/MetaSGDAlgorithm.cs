@@ -176,7 +176,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, 
     }
 
     /// <inheritdoc/>
-    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(ITask<T, TInput, TOutput> task)
+    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
         {
@@ -268,8 +268,8 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, 
     /// <summary>
     /// Computes gradients of the loss with respect to parameters.
     /// </summary>
-    private Vector<T> ComputeGradients(
-        IFullModel<T, TInput, TOutput, ModelMetadata<T>> model,
+    private new Vector<T> ComputeGradients(
+        IFullModel<T, TInput, TOutput> model,
         TInput inputs,
         TOutput targets)
     {
@@ -473,13 +473,13 @@ public class PerParameterOptimizer<T>
 
                 var biasCorrectedFirst = NumOps.Divide(
                     _firstMoments[parameterIndex],
-                    NumOps.Subtract(NumOps.One, NumOps.Power(_adamBeta1[parameterIndex], 1000))));
+                    NumOps.Subtract(NumOps.One, NumOps.Power(_adamBeta1[parameterIndex], NumOps.FromDouble(1000))));
 
                 var biasCorrectedSecond = NumOps.Divide(
                     _secondMoments[parameterIndex],
-                    NumOps.Subtract(NumOps.One, NumOps.Power(_adamBeta2[parameterIndex], 1000))));
+                    NumOps.Subtract(NumOps.One, NumOps.Power(_adamBeta2[parameterIndex], NumOps.FromDouble(1000))));
 
-                var sqrtSecond = NumOps.FromDouble(Math.Sqrt(Math.Max(0, Convert.ToDouble(biasCorrectedSecond))));
+                var sqrtSecond = NumOps.Sqrt(NumOps.Max(NumOps.Zero, biasCorrectedSecond));
                 update = NumOps.Divide(
                     NumOps.Multiply(lr, biasCorrectedFirst),
                     NumOps.Add(sqrtSecond, _adamEpsilon[parameterIndex]));
@@ -488,10 +488,10 @@ public class PerParameterOptimizer<T>
             case UpdateRuleType.RMSprop:
                 // RMSprop update rule
                 _secondMoments[parameterIndex] = NumOps.Add(
-                    NumOps.Multiply(0.9, _secondMoments[parameterIndex]),
-                    NumOps.Multiply(0.1, NumOps.Multiply(gradient, gradient)));
+                    NumOps.Multiply(NumOps.FromDouble(0.9), _secondMoments[parameterIndex]),
+                    NumOps.Multiply(NumOps.FromDouble(0.1), NumOps.Multiply(gradient, gradient)));
 
-                var sqrtSecond = NumOps.FromDouble(Math.Sqrt(Math.Max(0, Convert.ToDouble(_secondMoments[parameterIndex]))));
+                var sqrtSecond = NumOps.Sqrt(NumOps.Max(NumOps.Zero, _secondMoments[parameterIndex]));
                 update = NumOps.Divide(
                     NumOps.Multiply(lr, gradient),
                     NumOps.Add(sqrtSecond, NumOps.FromDouble(1e-6)));
@@ -736,7 +736,7 @@ public class PerParameterOptimizer<T>
 public class MetaSGDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
     where T : struct, IEquatable<T>, IFormattable
 {
-    private readonly IFullModel<T, TInput, TOutput, ModelMetadata<T>> _model;
+    private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly PerParameterOptimizer<T> _optimizer;
     private readonly MetaSGDAlgorithmOptions<T, TInput, TOutput> _options;
 
@@ -744,7 +744,7 @@ public class MetaSGDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
     /// Initializes a new instance of the MetaSGDModel.
     /// </summary>
     public MetaSGDModel(
-        IFullModel<T, TInput, TOutput, ModelMetadata<T>> model,
+        IFullModel<T, TInput, TOutput> model,
         PerParameterOptimizer<T> optimizer,
         MetaSGDAlgorithmOptions<T, TInput, TOutput> options)
     {
@@ -779,7 +779,7 @@ public class MetaSGDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
     /// </summary>
     public void UpdateParameters(Vector<T> parameters)
     {
-        _model.UpdateParameters(parameters);
+        _model.SetParameters(parameters);
     }
 
     /// <summary>
@@ -788,6 +788,32 @@ public class MetaSGDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
     public Vector<T> GetParameters()
     {
         return _model.GetParameters();
+    }
+
+    /// <summary>
+    /// Gets the model metadata for the Meta-SGD model.
+    /// </summary>
+    /// <returns>Model metadata containing per-parameter learning rates and update rule information.</returns>
+    public ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            ModelType = "Meta-SGD",
+            Version = "1.0.0",
+            Description = "Meta-learning algorithm that learns per-parameter learning rates and update directions"
+        };
+
+        // Add Meta-SGD specific metadata
+        metadata.AdditionalMetadata["UpdateRule"] = _options.UpdateRule.ToString();
+        metadata.AdditionalMetadata["LearnableLearningRates"] = _options.LearnableLearningRates;
+        metadata.AdditionalMetadata["LearnableDirections"] = _options.LearnableDirections;
+        metadata.AdditionalMetadata["UseTrustRegion"] = _options.UseTrustRegion;
+        metadata.AdditionalMetadata["TrustRegionSize"] = _options.TrustRegionSize;
+        metadata.AdditionalMetadata["UseMomentum"] = _options.UseMomentum;
+        metadata.AdditionalMetadata["MomentumCoefficient"] = _options.MomentumCoefficient;
+        metadata.AdditionalMetadata["MetaLearningRate"] = _options.MetaLearningRate;
+
+        return metadata;
     }
 
     /// <summary>

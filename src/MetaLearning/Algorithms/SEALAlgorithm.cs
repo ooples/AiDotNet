@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -72,11 +73,11 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
             // Inner loop: Adapt to the task using support set
             var adaptedParameters = InnerLoopAdaptation(taskModel, task);
-            taskModel.UpdateParameters(adaptedParameters);
+            taskModel.SetParameters(adaptedParameters);
 
             // Evaluate on query set to get meta-loss
             var queryPredictions = taskModel.Predict(task.QueryInput);
-            T metaLoss = LossFunction.ComputeLoss(queryPredictions, task.QueryOutput);
+            T metaLoss = LossFunction.CalculateLoss(queryPredictions, task.QueryOutput);
 
             // Add temperature scaling if configured
             if (Math.Abs(_sealOptions.Temperature - 1.0) > 1e-10)
@@ -144,14 +145,14 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
         // Outer loop: Update meta-parameters using the meta-optimizer
         var currentMetaParams = MetaModel.GetParameters();
         var updatedMetaParams = MetaOptimizer.UpdateParameters(currentMetaParams, metaGradients);
-        MetaModel.UpdateParameters(updatedMetaParams);
+        MetaModel.SetParameters(updatedMetaParams);
 
         // Return average meta-loss
         return NumOps.Divide(totalMetaLoss, batchSize);
     }
 
     /// <inheritdoc/>
-    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(ITask<T, TInput, TOutput> task)
+    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
         {
@@ -163,7 +164,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
         // Perform inner loop adaptation
         var adaptedParameters = InnerLoopAdaptation(adaptedModel, task);
-        adaptedModel.UpdateParameters(adaptedParameters);
+        adaptedModel.SetParameters(adaptedParameters);
 
         return adaptedModel;
     }
@@ -174,7 +175,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
     /// <param name="model">The model to adapt.</param>
     /// <param name="task">The task to adapt to.</param>
     /// <returns>The adapted parameters.</returns>
-    private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, ITask<T, TInput, TOutput> task)
+    private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, IMetaLearningTask<T, TInput, TOutput> task)
     {
         var parameters = model.GetParameters();
 
@@ -186,7 +187,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
             // Use inner optimizer for parameter updates
             parameters = InnerOptimizer.UpdateParameters(parameters, gradients);
-            model.UpdateParameters(parameters);
+            model.SetParameters(parameters);
         }
 
         return parameters;
@@ -223,7 +224,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
     /// <param name="gradients">The gradient vector to clip.</param>
     /// <param name="threshold">The clipping threshold.</param>
     /// <returns>The clipped gradients.</returns>
-    private Vector<T> ClipGradients(Vector<T> gradients, double threshold)
+    private new Vector<T> ClipGradients(Vector<T> gradients, double threshold)
     {
         // Compute L2 norm of gradients
         T squaredSum = NumOps.Zero;
@@ -265,7 +266,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
         // Adapt to the task
         var adaptedParameters = InnerLoopAdaptation(model, task);
-        model.UpdateParameters(adaptedParameters);
+        model.SetParameters(adaptedParameters);
 
         // Compute gradients on query set
         var metaGradients = ComputeGradients(model, task.QueryInput, task.QueryOutput);

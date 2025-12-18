@@ -132,12 +132,12 @@ public class ANILTrainerConfig<T> : IMetaLearnerConfig<T>
     /// Flat freezing (simple):
     /// - Treats all parameters equally
     /// - Freezes first X% of parameters
-    - Easy to implement and understand
+    /// - Easy to implement and understand
     ///
     /// Layer-aware freezing (advanced):
     /// - Freezes entire layers together
     /// - Keeps layer structure intact
-    - More principled approach
+    /// - More principled approach
     ///
     /// Example with layer-aware:
     /// - Freeze: Conv1, Conv2, Conv3 (early layers)

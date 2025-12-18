@@ -193,7 +193,7 @@ public class MANNAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
     }
 
     /// <inheritdoc/>
-    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(ITask<T, TInput, TOutput> task)
+    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
         {
@@ -928,5 +928,30 @@ public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
     public Vector<T> GetParameters()
     {
         return _controller.GetLearnableParameters();
+    }
+
+    /// <summary>
+    /// Gets the model metadata for the MANN model.
+    /// </summary>
+    /// <returns>Model metadata containing memory size and configuration information.</returns>
+    public ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            ModelType = "Memory-Augmented Neural Network",
+            Version = "1.0.0",
+            Description = "MANN with external memory for rapid learning"
+        };
+
+        // Add memory-specific metadata
+        metadata.AdditionalMetadata["MemorySize"] = _options.MemorySize;
+        metadata.AdditionalMetadata["MemoryKeySize"] = _options.MemoryKeySize;
+        metadata.AdditionalMetadata["MemoryValueSize"] = _options.MemoryValueSize;
+        metadata.AdditionalMetadata["NumReadHeads"] = _options.NumReadHeads;
+        metadata.AdditionalMetadata["NumWriteHeads"] = _options.NumWriteHeads;
+        metadata.AdditionalMetadata["ControllerLayers"] = _options.ControllerLayerSizes.Length;
+        metadata.AdditionalMetadata["UseLeastRecentlyUsed"] = _options.UseLeastRecentlyUsed;
+
+        return metadata;
     }
 }

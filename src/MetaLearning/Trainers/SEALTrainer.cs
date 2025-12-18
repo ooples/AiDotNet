@@ -91,7 +91,7 @@ namespace AiDotNet.MetaLearning.Trainers;
 /// </remarks>
 public class SEALTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
-    private readonly ISelfSupervisedLoss<T> _selfSupervisedLoss;
+    private readonly ISelfSupervisedLoss<T, TInput, TOutput> _selfSupervisedLoss;
     private Dictionary<string, T>? _adaptiveLearningRates;
 
     /// <summary>
@@ -128,7 +128,7 @@ public class SEALTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     public SEALTrainer(
         IFullModel<T, TInput, TOutput> metaModel,
         ILossFunction<T> lossFunction,
-        ISelfSupervisedLoss<T> selfSupervisedLoss,
+        ISelfSupervisedLoss<T, TInput, TOutput> selfSupervisedLoss,
         IEpisodicDataLoader<T, TInput, TOutput> dataLoader,
         SEALTrainerConfig<T>? config = null)
         : base(metaModel, lossFunction, dataLoader, config ?? new SEALTrainerConfig<T>())
@@ -162,7 +162,7 @@ public class SEALTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         for (int taskIdx = 0; taskIdx < batchSize; taskIdx++)
         {
             // Sample task
-            MetaLearningTask<T, TInput, TOutput> task = DataLoader.GetNextTask();
+            IMetaLearningTask<T, TInput, TOutput> task = DataLoader.GetNextTask();
 
             // Reset model to original meta-parameters
             MetaModel.SetParameters(originalParameters.Clone());
@@ -254,7 +254,7 @@ public class SEALTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     }
 
     /// <inheritdoc/>
-    public override MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T, TInput, TOutput> task)
+    public override MetaAdaptationResult<T> AdaptAndEvaluate(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
             throw new ArgumentNullException(nameof(task));
@@ -343,7 +343,7 @@ public class SEALTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     /// </para>
     /// </remarks>
     private void SelfSupervisedPreTraining(
-        MetaLearningTask<T, TInput, TOutput> task,
+        IMetaLearningTask<T, TInput, TOutput> task,
         int steps)
     {
         var config = (SEALTrainerConfig<T>)Configuration;
@@ -427,7 +427,7 @@ public class SEALTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     /// </para>
     /// </remarks>
     private (TInput pseudoX, TOutput pseudoY) ActiveLearningSelection(
-        MetaLearningTask<T, TInput, TOutput> task,
+        IMetaLearningTask<T, TInput, TOutput> task,
         int k)
     {
         // Make predictions on query set
@@ -470,7 +470,7 @@ public class SEALTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     /// </para>
     /// </remarks>
     private void SupervisedFineTuning(
-        MetaLearningTask<T, TInput, TOutput> task,
+        IMetaLearningTask<T, TInput, TOutput> task,
         TInput pseudoX,
         TOutput pseudoY,
         int steps)
