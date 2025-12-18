@@ -229,15 +229,7 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
                 {
                     model = await CreateModelAsync(modelType, trial.Parameters);
                 }
-                catch (InvalidOperationException)
-                {
-                    continue;
-                }
-                catch (ArgumentException)
-                {
-                    continue;
-                }
-                catch (NotSupportedException)
+                catch (Exception ex) when (IsSkippableEnsemblingException(ex))
                 {
                     continue;
                 }
@@ -249,15 +241,7 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
                 {
                     score = await EvaluateModelAsync(model, validationInputs, validationTargets);
                 }
-                catch (InvalidOperationException)
-                {
-                    continue;
-                }
-                catch (ArgumentException)
-                {
-                    continue;
-                }
-                catch (NotSupportedException)
+                catch (Exception ex) when (IsSkippableEnsemblingException(ex))
                 {
                     continue;
                 }
@@ -285,15 +269,7 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
             {
                 ensembleScore = await EvaluateModelAsync((IFullModel<T, TInput, TOutput>)(object)ensemble, validationInputs, validationTargets);
             }
-            catch (InvalidOperationException)
-            {
-                return;
-            }
-            catch (ArgumentException)
-            {
-                return;
-            }
-            catch (NotSupportedException)
+            catch (Exception ex) when (IsSkippableEnsemblingException(ex))
             {
                 return;
             }
@@ -320,6 +296,9 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
             // Ensembling is best-effort; if it fails, keep the best single model.
         }
     }
+
+    private static bool IsSkippableEnsemblingException(Exception ex)
+        => ex is InvalidOperationException or ArgumentException or NotSupportedException;
 
     private static double[] ComputeEnsembleWeights(IReadOnlyList<double> scores, bool maximize)
     {
