@@ -142,7 +142,7 @@ namespace AiDotNet.AutoML
         {
             lock (_lock)
             {
-                return _trialHistory.Select(t => t.Clone()).ToList();
+                return _trialHistory.Select(t => t.CloneRedacted()).ToList();
             }
         }
 
@@ -180,6 +180,7 @@ namespace AiDotNet.AutoML
                     var trial = new TrialResult
                     {
                         TrialId = _trialHistory.Count + 1,
+                        CandidateModelType = TryExtractCandidateModelType(parameters),
                         Parameters = new Dictionary<string, object>(parameters),
                         Score = score,
                         Duration = duration,
@@ -629,6 +630,11 @@ namespace AiDotNet.AutoML
 
             var numOps = MathHelper.GetNumericOperations<T>();
 
+            if (evaluationData.ModelStats.HasMetric(_optimizationMetric))
+            {
+                return numOps.ToDouble(evaluationData.ModelStats.GetMetric(_optimizationMetric));
+            }
+
             if (validationStats.ErrorStats.HasMetric(_optimizationMetric))
             {
                 return numOps.ToDouble(validationStats.ErrorStats.GetMetric(_optimizationMetric));
@@ -667,6 +673,7 @@ namespace AiDotNet.AutoML
                     var trial = new TrialResult
                     {
                         TrialId = _trialHistory.Count + 1,
+                        CandidateModelType = TryExtractCandidateModelType(parameters),
                         Parameters = new Dictionary<string, object>(parameters),
                         Score = _maximize ? double.NegativeInfinity : double.PositiveInfinity,
                         Duration = duration,
@@ -682,6 +689,26 @@ namespace AiDotNet.AutoML
         }
 
         #region IAutoMLModel Additional Interface Members
+
+        private static ModelType? TryExtractCandidateModelType(IReadOnlyDictionary<string, object> parameters)
+        {
+            if (parameters is null || !parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is null)
+            {
+                return null;
+            }
+
+            if (modelTypeObj is ModelType modelType)
+            {
+                return modelType;
+            }
+
+            if (modelTypeObj is string text && Enum.TryParse<ModelType>(text, ignoreCase: true, out var parsed))
+            {
+                return parsed;
+            }
+
+            return null;
+        }
 
         /// <summary>
         /// Configures the search space for hyperparameter optimization
