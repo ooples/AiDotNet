@@ -267,9 +267,14 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
 
     private static int[] AllocateRungTrialCounts(int totalTrials, int rungCount, double reductionFactor)
     {
+        if (rungCount <= 0)
+        {
+            return Array.Empty<int>();
+        }
+
         if (totalTrials <= 0)
         {
-            return new[] { 0 };
+            return new int[rungCount];
         }
 
         if (rungCount <= 1)
@@ -291,14 +296,16 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
 
         for (int i = 0; i < rungCount; i++)
         {
-            counts[i] = Math.Max(1, (int)Math.Floor(baseCount / Math.Pow(reductionFactor, i)));
+            int raw = (int)Math.Floor(baseCount / Math.Pow(reductionFactor, i));
+            counts[i] = i == 0 ? Math.Max(1, raw) : Math.Max(0, raw);
             allocated += counts[i];
         }
 
-        // If rounding pushed us over budget, decrement from the earliest rungs first.
-        for (int i = 0; allocated > totalTrials && i < rungCount; i++)
+        // If rounding pushed us over budget, decrement from later rungs first, keeping rung 0 at >= 1.
+        for (int i = rungCount - 1; allocated > totalTrials && i >= 0; i--)
         {
-            while (allocated > totalTrials && counts[i] > 1)
+            int min = (i == 0) ? 1 : 0;
+            while (allocated > totalTrials && counts[i] > min)
             {
                 counts[i]--;
                 allocated--;
