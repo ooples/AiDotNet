@@ -156,7 +156,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
                 for (int j = 0; j < seqLenK; j++)
                 {
                     float weight = scores[i * seqLenK + j];
-                    if (weight == 0f)
+                    if (weight <= 0f)
                     {
                         continue;
                     }
