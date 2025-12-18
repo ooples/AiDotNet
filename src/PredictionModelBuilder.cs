@@ -1869,7 +1869,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             && !IsBuiltInSupervisedTaskFamilySupported(taskFamilyOverride))
         {
             throw new NotSupportedException(
-                $"Facade AutoML options currently support only Regression/Binary/MultiClass/TimeSeries task families. " +
+                $"Facade AutoML options currently support only Regression/Binary/MultiClass/TimeSeriesForecasting/TimeSeriesAnomalyDetection/Ranking/Recommendation task families. " +
                 $"Received '{taskFamilyOverride}'. Use {nameof(ConfigureAutoML)}(IAutoMLModel<...>) to plug in a custom implementation.");
         }
 
@@ -1934,7 +1934,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         return taskFamily == AutoMLTaskFamily.Regression
                || taskFamily == AutoMLTaskFamily.BinaryClassification
                || taskFamily == AutoMLTaskFamily.MultiClassClassification
-               || taskFamily == AutoMLTaskFamily.TimeSeriesForecasting;
+               || taskFamily == AutoMLTaskFamily.TimeSeriesForecasting
+               || taskFamily == AutoMLTaskFamily.TimeSeriesAnomalyDetection
+               || taskFamily == AutoMLTaskFamily.Ranking
+               || taskFamily == AutoMLTaskFamily.Recommendation;
     }
 
     private IAutoMLModel<T, TInput, TOutput> CreateBuiltInAutoMLModel(AutoMLSearchStrategy strategy)

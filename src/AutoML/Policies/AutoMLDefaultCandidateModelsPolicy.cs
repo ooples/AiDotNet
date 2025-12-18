@@ -89,11 +89,24 @@ internal static class AutoMLDefaultCandidateModelsPolicy
                     }
                 };
 
+            case AutoMLTaskFamily.TimeSeriesAnomalyDetection:
+                // Default to the same conservative candidate set as binary classification.
+                // Many anomaly detection setups are supervised binary problems (anomaly vs normal),
+                // and we keep defaults focused on models supported by the current evaluator pipeline.
+                return GetDefaultCandidates(AutoMLTaskFamily.BinaryClassification, featureCount, preset);
+
             case AutoMLTaskFamily.TimeSeriesForecasting:
                 return new[]
                 {
                     ModelType.TimeSeriesRegression
                 };
+
+            case AutoMLTaskFamily.Ranking:
+            case AutoMLTaskFamily.Recommendation:
+                // Ranking/recommendation are often framed as learning-to-rank with scalar relevance targets.
+                // The built-in defaults treat this as a supervised regression-style objective and rely on
+                // ranking metrics (NDCG/MAP/MRR) for scoring.
+                return GetRegressionCandidates(featureCount, preset);
 
             case AutoMLTaskFamily.Regression:
                 return GetRegressionCandidates(featureCount, preset);
