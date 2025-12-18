@@ -167,11 +167,11 @@ namespace AiDotNet.AutoML.NAS
         private T ComputeChoiceLogit(Vector<T> hiddenState, Vector<T> weights, int choiceIdx, int hiddenSize)
         {
             T logit = _ops.Zero;
-            int weightBase = choiceIdx * _controllerHiddenSize;
 
             for (int j = 0; j < hiddenSize; j++)
             {
-                logit = _ops.Add(logit, _ops.Multiply(hiddenState[j], weights[weightBase + j]));
+                int weightIdx = (choiceIdx * _controllerHiddenSize) + j;
+                logit = _ops.Add(logit, _ops.Multiply(hiddenState[j], weights[weightIdx]));
             }
 
             return logit;
@@ -182,8 +182,7 @@ namespace AiDotNet.AutoML.NAS
         /// </summary>
         private int SampleFromDistribution(List<T> probs)
         {
-            double rand = _random.NextDouble();
-            double cumulative = 0.0;
+            double rand = _random.NextDouble(), cumulative = 0.0;
 
             for (int i = 0; i < probs.Count; i++)
             {
