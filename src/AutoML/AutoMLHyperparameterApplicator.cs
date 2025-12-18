@@ -67,7 +67,18 @@ internal static class AutoMLHyperparameterApplicator
         {
             if (value is string s)
             {
-                return Enum.Parse(targetType, s, ignoreCase: true);
+                try
+                {
+                    return Enum.Parse(targetType, s, ignoreCase: true);
+                }
+                catch (ArgumentException)
+                {
+                    return null;
+                }
+                catch (OverflowException)
+                {
+                    return null;
+                }
             }
 
             try
