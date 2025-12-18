@@ -124,6 +124,147 @@ internal static class AutoMLTabularSearchSpaceRegistry
                 }
             },
 
+            ModelType.DecisionTree => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+            {
+                ["MaxDepth"] = new ParameterRange
+                {
+                    Type = ParameterType.Integer,
+                    MinValue = 2,
+                    MaxValue = 50,
+                    Step = 1,
+                    DefaultValue = 10
+                },
+                ["MinSamplesSplit"] = new ParameterRange
+                {
+                    Type = ParameterType.Integer,
+                    MinValue = 2,
+                    MaxValue = 50,
+                    Step = 1,
+                    DefaultValue = 2
+                },
+                ["MaxFeatures"] = new ParameterRange
+                {
+                    Type = ParameterType.Float,
+                    MinValue = 0.2,
+                    MaxValue = 1.0,
+                    Step = 0.05,
+                    DefaultValue = 1.0
+                },
+                ["UseSoftTree"] = new ParameterRange
+                {
+                    Type = ParameterType.Boolean,
+                    DefaultValue = false
+                },
+                ["SoftTreeTemperature"] = new ParameterRange
+                {
+                    Type = ParameterType.Float,
+                    MinValue = 0.1,
+                    MaxValue = 10.0,
+                    UseLogScale = true,
+                    DefaultValue = 1.0
+                }
+            },
+
+            ModelType.ExtremelyRandomizedTrees => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+            {
+                ["NumberOfTrees"] = new ParameterRange
+                {
+                    Type = ParameterType.Integer,
+                    MinValue = 50,
+                    MaxValue = 500,
+                    Step = 10,
+                    DefaultValue = 100
+                },
+                ["MaxDepth"] = new ParameterRange
+                {
+                    Type = ParameterType.Integer,
+                    MinValue = 2,
+                    MaxValue = 50,
+                    Step = 1,
+                    DefaultValue = 10
+                },
+                ["MinSamplesSplit"] = new ParameterRange
+                {
+                    Type = ParameterType.Integer,
+                    MinValue = 2,
+                    MaxValue = 50,
+                    Step = 1,
+                    DefaultValue = 2
+                },
+                ["MaxFeatures"] = new ParameterRange
+                {
+                    Type = ParameterType.Float,
+                    MinValue = 0.2,
+                    MaxValue = 1.0,
+                    Step = 0.05,
+                    DefaultValue = 1.0
+                }
+            },
+
+            ModelType.AdaBoostR2 => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+            {
+                ["NumberOfEstimators"] = new ParameterRange
+                {
+                    Type = ParameterType.Integer,
+                    MinValue = 25,
+                    MaxValue = 300,
+                    Step = 5,
+                    DefaultValue = 50
+                },
+                ["MaxDepth"] = new ParameterRange
+                {
+                    Type = ParameterType.Integer,
+                    MinValue = 1,
+                    MaxValue = 10,
+                    Step = 1,
+                    DefaultValue = 3
+                },
+                ["MinSamplesSplit"] = new ParameterRange
+                {
+                    Type = ParameterType.Integer,
+                    MinValue = 2,
+                    MaxValue = 50,
+                    Step = 1,
+                    DefaultValue = 2
+                }
+            },
+
+            ModelType.QuantileRegressionForests => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+            {
+                ["NumberOfTrees"] = new ParameterRange
+                {
+                    Type = ParameterType.Integer,
+                    MinValue = 50,
+                    MaxValue = 500,
+                    Step = 10,
+                    DefaultValue = 100
+                },
+                ["MaxDepth"] = new ParameterRange
+                {
+                    Type = ParameterType.Integer,
+                    MinValue = 2,
+                    MaxValue = 50,
+                    Step = 1,
+                    DefaultValue = 10
+                },
+                ["MinSamplesSplit"] = new ParameterRange
+                {
+                    Type = ParameterType.Integer,
+                    MinValue = 2,
+                    MaxValue = 50,
+                    Step = 1,
+                    DefaultValue = 2
+                },
+                ["MaxFeatures"] = new ParameterRange
+                {
+                    Type = ParameterType.Float,
+                    MinValue = 0.2,
+                    MaxValue = 1.0,
+                    Step = 0.05,
+                    DefaultValue = 1.0
+                }
+            },
+
             ModelType.GradientBoosting => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
             {
                 ["NumberOfTrees"] = new ParameterRange

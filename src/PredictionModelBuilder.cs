@@ -782,7 +782,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             if (_autoMLOptions?.TaskFamilyOverride is AutoMLTaskFamily taskFamilyOverride)
             {
                 int featureCount = InputHelper<T, TInput>.GetInputSize(autoMLXTrain);
-                var candidates = AutoMLDefaultCandidateModelsPolicy.GetDefaultCandidates(taskFamilyOverride, featureCount);
+                var candidates = AutoMLDefaultCandidateModelsPolicy.GetDefaultCandidates(taskFamilyOverride, featureCount, _autoMLOptions.Budget.Preset);
                 if (candidates.Count > 0)
                 {
                     _autoMLModel.SetCandidateModels(candidates.ToList());
@@ -1880,6 +1880,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         if (_autoMLModel is AiDotNet.AutoML.SupervisedAutoMLModelBase<T, TInput, TOutput> supervised)
         {
             supervised.EnsembleOptions = _autoMLOptions.Ensembling ?? ResolveDefaultEnsembling(_autoMLOptions.Budget.Preset);
+            supervised.BudgetPreset = _autoMLOptions.Budget.Preset;
         }
 
         if (_autoMLOptions.OptimizationMetricOverride.HasValue)

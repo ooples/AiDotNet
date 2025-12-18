@@ -64,7 +64,7 @@ public abstract class BuiltInSupervisedAutoMLModelBase<T, TInput, TOutput> : Sup
 
             int featureCount = InputHelper<T, TInput>.GetInputSize(inputs);
             var taskFamily = AutoMLTaskFamilyInference.InferFromTargets<T, TOutput>(targets);
-            foreach (var candidate in AutoMLDefaultCandidateModelsPolicy.GetDefaultCandidates(taskFamily, featureCount))
+            foreach (var candidate in AutoMLDefaultCandidateModelsPolicy.GetDefaultCandidates(taskFamily, featureCount, BudgetPreset))
             {
                 _candidateModels.Add(candidate);
             }

@@ -60,6 +60,19 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
     public AutoMLEnsembleOptions EnsembleOptions { get; set; } = new();
 
     /// <summary>
+    /// Gets or sets the compute budget preset used to choose sensible built-in defaults.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Built-in AutoML defaults (for example, candidate model sets) can vary by budget preset so CI runs remain fast
+    /// while thorough runs consider a broader model catalog.
+    /// </para>
+    /// <para><b>For Beginners:</b> A budget preset is like choosing how much time/effort AutoML should spend searching:
+    /// CI is very fast, Standard is balanced, and Thorough tries more options.</para>
+    /// </remarks>
+    public AutoMLBudgetPreset BudgetPreset { get; set; } = AutoMLBudgetPreset.Standard;
+
+    /// <summary>
     /// Runs a single trial (create, train, evaluate, record history).
     /// </summary>
     protected async Task<double> ExecuteTrialAsync(

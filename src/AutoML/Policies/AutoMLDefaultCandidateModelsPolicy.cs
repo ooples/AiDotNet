@@ -20,31 +20,105 @@ internal static class AutoMLDefaultCandidateModelsPolicy
 {
     public static IReadOnlyList<ModelType> GetDefaultCandidates(AutoMLTaskFamily taskFamily, int featureCount)
     {
-        return taskFamily switch
+        return GetDefaultCandidates(taskFamily, featureCount, AutoMLBudgetPreset.Standard);
+    }
+
+    public static IReadOnlyList<ModelType> GetDefaultCandidates(AutoMLTaskFamily taskFamily, int featureCount, AutoMLBudgetPreset preset)
+    {
+        switch (taskFamily)
         {
-            AutoMLTaskFamily.BinaryClassification => new[]
-            {
-                ModelType.LogisticRegression,
-                ModelType.RandomForest,
-                ModelType.GradientBoosting,
-                ModelType.KNearestNeighbors,
-                ModelType.SupportVectorRegression
-            },
+            case AutoMLTaskFamily.BinaryClassification:
+                return preset switch
+                {
+                    AutoMLBudgetPreset.CI => new[]
+                    {
+                        ModelType.LogisticRegression,
+                        ModelType.RandomForest
+                    },
+                    AutoMLBudgetPreset.Fast => new[]
+                    {
+                        ModelType.LogisticRegression,
+                        ModelType.RandomForest,
+                        ModelType.GradientBoosting
+                    },
+                    AutoMLBudgetPreset.Thorough => new[]
+                    {
+                        ModelType.LogisticRegression,
+                        ModelType.RandomForest,
+                        ModelType.GradientBoosting,
+                        ModelType.DecisionTree,
+                        ModelType.ExtremelyRandomizedTrees,
+                        ModelType.AdaBoostR2,
+                        ModelType.KNearestNeighbors,
+                        ModelType.SupportVectorRegression
+                    },
+                    _ => new[]
+                    {
+                        ModelType.LogisticRegression,
+                        ModelType.RandomForest,
+                        ModelType.GradientBoosting,
+                        ModelType.KNearestNeighbors,
+                        ModelType.SupportVectorRegression
+                    }
+                };
 
-            AutoMLTaskFamily.MultiClassClassification => new[]
-            {
-                ModelType.MultinomialLogisticRegression,
-                ModelType.RandomForest,
-                ModelType.GradientBoosting,
-                ModelType.KNearestNeighbors
-            },
+            case AutoMLTaskFamily.MultiClassClassification:
+                return preset switch
+                {
+                    AutoMLBudgetPreset.CI => new[]
+                    {
+                        ModelType.MultinomialLogisticRegression,
+                        ModelType.RandomForest
+                    },
+                    AutoMLBudgetPreset.Fast => new[]
+                    {
+                        ModelType.MultinomialLogisticRegression,
+                        ModelType.RandomForest,
+                        ModelType.GradientBoosting
+                    },
+                    AutoMLBudgetPreset.Thorough => new[]
+                    {
+                        ModelType.MultinomialLogisticRegression,
+                        ModelType.RandomForest,
+                        ModelType.GradientBoosting,
+                        ModelType.KNearestNeighbors,
+                        ModelType.NeuralNetworkRegression
+                    },
+                    _ => new[]
+                    {
+                        ModelType.MultinomialLogisticRegression,
+                        ModelType.RandomForest,
+                        ModelType.GradientBoosting,
+                        ModelType.KNearestNeighbors
+                    }
+                };
 
-            AutoMLTaskFamily.TimeSeriesForecasting => new[]
-            {
-                ModelType.TimeSeriesRegression
-            },
+            case AutoMLTaskFamily.TimeSeriesForecasting:
+                return new[]
+                {
+                    ModelType.TimeSeriesRegression
+                };
 
-            AutoMLTaskFamily.Regression => featureCount == 1
+            case AutoMLTaskFamily.Regression:
+                return GetRegressionCandidates(featureCount, preset);
+
+            default:
+                return Array.Empty<ModelType>();
+        }
+    }
+
+    private static IReadOnlyList<ModelType> GetRegressionCandidates(int featureCount, AutoMLBudgetPreset preset)
+    {
+        if (preset == AutoMLBudgetPreset.CI)
+        {
+            return featureCount == 1
+                ? new[] { ModelType.SimpleRegression, ModelType.RandomForest }
+                : new[] { ModelType.MultipleRegression, ModelType.RandomForest };
+        }
+
+        if (preset == AutoMLBudgetPreset.Fast)
+        {
+            return featureCount == 1
                 ? new[]
                 {
                     ModelType.SimpleRegression,
@@ -53,8 +127,7 @@ internal static class AutoMLDefaultCandidateModelsPolicy
                     ModelType.RandomForest,
                     ModelType.GradientBoosting,
                     ModelType.KNearestNeighbors,
-                    ModelType.SupportVectorRegression,
-                    ModelType.NeuralNetworkRegression
+                    ModelType.SupportVectorRegression
                 }
                 : new[]
                 {
@@ -63,11 +136,89 @@ internal static class AutoMLDefaultCandidateModelsPolicy
                     ModelType.RandomForest,
                     ModelType.GradientBoosting,
                     ModelType.KNearestNeighbors,
-                    ModelType.SupportVectorRegression,
-                    ModelType.NeuralNetworkRegression
-                },
+                    ModelType.SupportVectorRegression
+                };
+        }
 
-            _ => Array.Empty<ModelType>()
-        };
+        if (preset == AutoMLBudgetPreset.Thorough)
+        {
+            return featureCount == 1
+                ? new[]
+                {
+                    ModelType.SimpleRegression,
+                    ModelType.MultipleRegression,
+                    ModelType.PolynomialRegression,
+                    ModelType.BayesianRegression,
+                    ModelType.GaussianProcessRegression,
+                    ModelType.KernelRidgeRegression,
+                    ModelType.RandomForest,
+                    ModelType.ExtremelyRandomizedTrees,
+                    ModelType.DecisionTree,
+                    ModelType.ConditionalInferenceTree,
+                    ModelType.M5ModelTree,
+                    ModelType.AdaBoostR2,
+                    ModelType.QuantileRegressionForests,
+                    ModelType.GradientBoosting,
+                    ModelType.KNearestNeighbors,
+                    ModelType.SupportVectorRegression,
+                    ModelType.RadialBasisFunctionRegression,
+                    ModelType.GeneralizedAdditiveModelRegression,
+                    ModelType.MultilayerPerceptronRegression,
+                    ModelType.QuantileRegression,
+                    ModelType.RobustRegression,
+                    ModelType.NeuralNetworkRegression
+                }
+                : new[]
+                {
+                    ModelType.MultipleRegression,
+                    ModelType.PolynomialRegression,
+                    ModelType.BayesianRegression,
+                    ModelType.GaussianProcessRegression,
+                    ModelType.KernelRidgeRegression,
+                    ModelType.RandomForest,
+                    ModelType.ExtremelyRandomizedTrees,
+                    ModelType.DecisionTree,
+                    ModelType.ConditionalInferenceTree,
+                    ModelType.M5ModelTree,
+                    ModelType.AdaBoostR2,
+                    ModelType.QuantileRegressionForests,
+                    ModelType.GradientBoosting,
+                    ModelType.KNearestNeighbors,
+                    ModelType.SupportVectorRegression,
+                    ModelType.RadialBasisFunctionRegression,
+                    ModelType.GeneralizedAdditiveModelRegression,
+                    ModelType.MultilayerPerceptronRegression,
+                    ModelType.QuantileRegression,
+                    ModelType.RobustRegression,
+                    ModelType.NeuralNetworkRegression
+                };
+        }
+
+        return featureCount == 1
+            ? new[]
+            {
+                ModelType.SimpleRegression,
+                ModelType.MultipleRegression,
+                ModelType.PolynomialRegression,
+                ModelType.RandomForest,
+                ModelType.GradientBoosting,
+                ModelType.KNearestNeighbors,
+                ModelType.SupportVectorRegression,
+                ModelType.BayesianRegression,
+                ModelType.KernelRidgeRegression,
+                ModelType.NeuralNetworkRegression
+            }
+            : new[]
+            {
+                ModelType.MultipleRegression,
+                ModelType.PolynomialRegression,
+                ModelType.RandomForest,
+                ModelType.GradientBoosting,
+                ModelType.KNearestNeighbors,
+                ModelType.SupportVectorRegression,
+                ModelType.BayesianRegression,
+                ModelType.KernelRidgeRegression,
+                ModelType.NeuralNetworkRegression
+            };
     }
 }
