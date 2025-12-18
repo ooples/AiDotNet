@@ -586,24 +586,24 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         var newModel = new MultinomialLogisticRegression<T>(_options, Regularization);
-        
+
         // Copy the number of classes
         newModel._numClasses = _numClasses;
-        
+
         // Deep copy the coefficients matrix if it exists
         if (_coefficients != null)
         {
             newModel._coefficients = _coefficients.Clone();
         }
-        
+
         // Copy coefficients and intercept from base class
         if (Coefficients != null)
         {
             newModel.Coefficients = Coefficients.Clone();
         }
-        
+
         newModel.Intercept = Intercept;
-        
+
         return newModel;
     }
 }

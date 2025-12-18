@@ -32,7 +32,7 @@ public class TableAwareTextSplitter : ChunkingStrategyBase
     {
         if (maxRowsPerChunk <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxRowsPerChunk), "Max rows per chunk must be positive");
-            
+
         _maxRowsPerChunk = maxRowsPerChunk;
         _includeHeadersInEachChunk = includeHeadersInEachChunk;
     }
@@ -44,7 +44,7 @@ public class TableAwareTextSplitter : ChunkingStrategyBase
     {
         var chunks = new List<(string Chunk, int StartPosition, int EndPosition)>();
         var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
-        
+
         var position = 0;
         var i = 0;
         while (i < lines.Length)
@@ -74,7 +74,7 @@ public class TableAwareTextSplitter : ChunkingStrategyBase
             return false;
 
         var line = lines[index].Trim();
-        
+
         // Markdown table (starts with |)
         if (line.StartsWith("|"))
             return true;
@@ -108,7 +108,7 @@ public class TableAwareTextSplitter : ChunkingStrategyBase
             {
                 dataRows.Add(lines[index]);
             }
-            
+
             position += lines[index].Length + Environment.NewLine.Length;
             index++;
 
@@ -125,7 +125,7 @@ public class TableAwareTextSplitter : ChunkingStrategyBase
                 var chunkText = string.Join(Environment.NewLine, chunkContent);
                 var chunkStart = startPosition;
                 var chunkEnd = position;
-                
+
                 chunks.Add((chunkText, chunkStart, chunkEnd));
 
                 dataRows.Clear();
@@ -156,8 +156,8 @@ public class TableAwareTextSplitter : ChunkingStrategyBase
     private bool IsTableRow(string line)
     {
         var trimmed = line.Trim();
-        return trimmed.StartsWith("|") || 
-               trimmed.Contains(",") || 
+        return trimmed.StartsWith("|") ||
+               trimmed.Contains(",") ||
                trimmed.StartsWith("<tr", StringComparison.OrdinalIgnoreCase);
     }
 }

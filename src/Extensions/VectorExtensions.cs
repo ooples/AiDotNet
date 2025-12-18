@@ -219,7 +219,7 @@ public static class VectorExtensions
     public static VectorBase<T> PointwiseExp<T>(this Vector<T> vector)
     {
         var operations = MathHelper.GetNumericOperations<T>();
-        return vector.Transform(value => 
+        return vector.Transform(value =>
         {
             double doubleValue = Convert.ToDouble(value);
             double expValue = Math.Exp(doubleValue);
@@ -245,7 +245,7 @@ public static class VectorExtensions
     public static VectorBase<T> PointwiseLog<T>(this Vector<T> vector)
     {
         var operations = MathHelper.GetNumericOperations<T>();
-        return vector.Transform(value => 
+        return vector.Transform(value =>
         {
             double doubleValue = Convert.ToDouble(value);
             double logValue = Math.Log(doubleValue);
@@ -643,7 +643,7 @@ public static class VectorExtensions
     public static VectorBase<T> PointwiseSign<T>(this Vector<T> vector)
     {
         var operations = MathHelper.GetNumericOperations<T>();
-        return vector.Transform(value => 
+        return vector.Transform(value =>
         {
             if (operations.GreaterThan(value, operations.Zero))
                 return operations.One;
@@ -942,7 +942,7 @@ public static class VectorExtensions
         {
             if (indices[i] >= vector.Length)
                 throw new ArgumentOutOfRangeException(nameof(indices), "Index out of range");
-        
+
             result[i] = vector[indices[i]];
         }
 
@@ -1043,7 +1043,7 @@ public static class VectorExtensions
         {
             matrix[0, i] = vector[i];
         }
-        
+
         return matrix;
     }
 
@@ -1227,7 +1227,7 @@ public static class VectorExtensions
         {
             matrix[i, 0] = vector[i];
         }
-        
+
         return matrix;
     }
 
@@ -1257,7 +1257,7 @@ public static class VectorExtensions
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         int n = vector.Length;
-            
+
         if (n < 2)
         {
             return numOps.Zero;

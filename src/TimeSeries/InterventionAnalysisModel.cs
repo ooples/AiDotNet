@@ -597,7 +597,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
         // Write model parameters
         SerializationHelper<T>.SerializeVector(writer, _arParameters);
         SerializationHelper<T>.SerializeVector(writer, _maParameters);
-            
+
         // Write intervention effects
         writer.Write(_interventionEffects.Count);
         foreach (var effect in _interventionEffects)
@@ -802,13 +802,13 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     {
         // Store the target values for later use
         _y = y;
-    
+
         // Initialize the model parameters with small random values
         InitializeParameters();
-    
+
         // Find the optimal parameter values using the optimizer
         OptimizeParameters(x, y);
-    
+
         // Calculate the residuals (errors) between actual and predicted values
         ComputeResiduals(x, y);
     }
@@ -844,16 +844,16 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
         {
             inputMatrix[0, i] = input[i];
         }
-    
+
         // Get the prediction vector (which will have only one element)
         Vector<T> predictions = Predict(inputMatrix);
-    
+
         // Return that single prediction
         if (predictions.Length == 0)
         {
             throw new InvalidOperationException("Failed to generate a prediction. The model may not be properly trained.");
         }
-    
+
         return predictions[0];
     }
 }

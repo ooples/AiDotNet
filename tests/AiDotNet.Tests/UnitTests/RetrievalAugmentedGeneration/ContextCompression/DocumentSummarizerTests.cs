@@ -1,9 +1,9 @@
-using AiDotNet.Helpers;
-using AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Helpers;
+using AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompression

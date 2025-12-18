@@ -36,12 +36,12 @@ public class ZScoreOutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInpu
     /// (in absolute value) are considered outliers.
     /// </summary>
     private readonly T _threshold;
-    
+
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ZScoreOutlierRemoval{T, TInput, TOutput}"/> class with the specified threshold.
     /// </summary>
@@ -68,7 +68,7 @@ public class ZScoreOutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInpu
         _numOps = MathHelper.GetNumericOperations<T>();
         _threshold = _numOps.FromDouble(threshold);
     }
-    
+
     /// <summary>
     /// Removes outliers from the provided inputs and outputs based on the Z-Score algorithm.
     /// </summary>
@@ -101,14 +101,14 @@ public class ZScoreOutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInpu
     {
         // Convert to concrete types
         var (inputMatrix, outputVector) = OutlierRemovalHelper<T, TInput, TOutput>.ConvertToMatrixVector(inputs, outputs);
-        
+
         var cleanedInputs = new List<Vector<T>>();
         var cleanedOutputs = new List<T>();
-        
+
         for (int i = 0; i < outputVector.Length; i++)
         {
             bool isOutlier = false;
-            
+
             for (int j = 0; j < inputMatrix.Columns; j++)
             {
                 var column = inputMatrix.GetColumn(j);
@@ -129,22 +129,22 @@ public class ZScoreOutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInpu
                     break;
                 }
             }
-            
+
             if (!isOutlier)
             {
                 cleanedInputs.Add(inputMatrix.GetRow(i));
                 cleanedOutputs.Add(outputVector[i]);
             }
         }
-        
+
         var cleanedInputMatrix = new Matrix<T>(cleanedInputs);
         var cleanedOutputVector = new Vector<T>(cleanedOutputs);
-        
+
         // Convert back to original types
         return OutlierRemovalHelper<T, TInput, TOutput>.ConvertToOriginalTypes(
-            cleanedInputMatrix, 
-            cleanedOutputVector, 
-            typeof(TInput), 
+            cleanedInputMatrix,
+            cleanedOutputVector,
+            typeof(TInput),
             typeof(TOutput));
     }
 }

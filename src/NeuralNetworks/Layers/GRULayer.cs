@@ -296,7 +296,7 @@ public class GRULayer<T> : LayerBase<T>
     /// but requires more data and time to train effectively.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => 
+    public override int ParameterCount =>
         _hiddenSize * _inputSize * 3 +  // Wz, Wr, Wh
         _hiddenSize * _hiddenSize * 3 + // Uz, Ur, Uh
         _hiddenSize * 3;                // bz, br, bh
@@ -525,7 +525,7 @@ public class GRULayer<T> : LayerBase<T>
         {
             // Extract current time step input
             var xt = input.Slice(0, t).Reshape([batchSize, _inputSize]);
-    
+
             var z = ApplyActivation(xt.Multiply(_Wz).Add(currentHiddenState.Multiply(_Uz)).Add(_bz), true);
             var r = ApplyActivation(xt.Multiply(_Wr).Add(currentHiddenState.Multiply(_Ur)).Add(_br), true);
             var h_candidate = ApplyActivation(xt.Multiply(_Wh).Add(r.ElementwiseMultiply(currentHiddenState.Multiply(_Uh))).Add(_bh), false);
@@ -543,9 +543,9 @@ public class GRULayer<T> : LayerBase<T>
                 oneMinusZ.ElementwiseMultiply(h_candidate)
 
             );
-    
+
             currentHiddenState = h;
-    
+
             // Save the last timestep's activations
             if (t == sequenceLength - 1)
             {
@@ -553,7 +553,7 @@ public class GRULayer<T> : LayerBase<T>
                 lastR = r;
                 lastH_candidate = h_candidate;
             }
-    
+
             if (_returnSequences && _allHiddenStates != null)
             {
                 _allHiddenStates.Add(h.Clone());

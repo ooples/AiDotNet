@@ -307,7 +307,7 @@ public enum MatrixDecompositionType
     /// </remarks>
     Polar,
 
-        /// <summary>
+    /// <summary>
     /// Transforms a matrix into a tridiagonal form (non-zero elements only on the main diagonal and the diagonals above and below it).
     /// </summary>
     /// <remarks>
@@ -330,7 +330,7 @@ public enum MatrixDecompositionType
     /// </para>
     /// </remarks>
     Tridiagonal,
-    
+
     /// <summary>
     /// Transforms a matrix into a bidiagonal form (non-zero elements only on the main diagonal and either the diagonal above or below it).
     /// </summary>
@@ -351,7 +351,7 @@ public enum MatrixDecompositionType
     /// </para>
     /// </remarks>
     Bidiagonal,
-    
+
     /// <summary>
     /// Decomposes a symmetric matrix into the product U·D·Uᵀ, where U is upper triangular with 1s on the diagonal and D is diagonal.
     /// </summary>
@@ -375,7 +375,7 @@ public enum MatrixDecompositionType
     /// </para>
     /// </remarks>
     Udu,
-    
+
     /// <summary>
     /// Decomposes a symmetric matrix into the product L·D·Lᵀ, where L is lower triangular with 1s on the diagonal and D is diagonal.
     /// </summary>

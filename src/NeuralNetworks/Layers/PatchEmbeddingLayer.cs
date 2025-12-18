@@ -218,10 +218,10 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         // Input: [B, C, H, W]
         // 1. Reshape to split H and W into patches: [B, C, Nh, P, Nw, P]
         var reshaped = input.Reshape(batchSize, _channels, _numPatchesHeight, _patchSize, _numPatchesWidth, _patchSize);
-        
+
         // 2. Transpose to group patch dimensions: [B, Nh, Nw, C, P, P]
         var transposed = reshaped.Transpose(new[] { 0, 2, 4, 1, 3, 5 });
-        
+
         // 3. Flatten patches: [B, Nh*Nw, C*P*P] = [B, N, patchDim]
         var patches = transposed.Reshape(batchSize, _numPatches, patchDim);
 
@@ -231,7 +231,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         var projectedFlat = Engine.TensorMatMul(patchesFlat, _projectionWeights);
         // Reshape back to 3D: [B, N, embedDim]
         var projected = projectedFlat.Reshape(batchSize, _numPatches, _embeddingDim);
-        
+
         // Add bias (broadcast)
         var biasBroadcast = _projectionBias.Reshape(1, 1, _embeddingDim);
         var preActivation = Engine.TensorBroadcastAdd(projected, biasBroadcast);
@@ -291,7 +291,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         int patchDim = _channels * _patchSize * _patchSize;
 
         // Reshape to split H and W into patches: [B, C, Nh, P, Nw, P]
-        var reshapedNode = Autodiff.TensorOperations<T>.Reshape(inputNode, 
+        var reshapedNode = Autodiff.TensorOperations<T>.Reshape(inputNode,
             batchSize, _channels, _numPatchesHeight, _patchSize, _numPatchesWidth, _patchSize);
 
         // Permute to group patch dimensions: [B, Nh, Nw, C, P, P]
@@ -406,10 +406,10 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         // 5. Un-patchify: Reshape/Transpose back to image [B, C, H, W]
         // [B, N, P] -> [B, Nh, Nw, C, P, P]
         var gradReshaped = patchesGrad.Reshape(batchSize, _numPatchesHeight, _numPatchesWidth, _channels, _patchSize, _patchSize);
-        
+
         // Transpose to [B, C, Nh, P, Nw, P]
         var gradTransposed = gradReshaped.Transpose(new[] { 0, 3, 1, 4, 2, 5 });
-        
+
         // Reshape to [B, C, H, W]
         return gradTransposed.Reshape(_lastInput.Shape);
     }

@@ -165,13 +165,13 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// </remarks>
     private PredictionStats<T> CalculatePredictionStats(Vector<T> actual, Vector<T> predicted, int featureCount)
     {
-        return new PredictionStats<T>(new PredictionStatsInputs<T> 
-        { 
-            Actual = actual, 
-            Predicted = predicted, 
-            NumberOfParameters = featureCount, 
-            ConfidenceLevel = _predictionOptions.ConfidenceLevel, 
-            LearningCurveSteps = _predictionOptions.LearningCurveSteps 
+        return new PredictionStats<T>(new PredictionStatsInputs<T>
+        {
+            Actual = actual,
+            Predicted = predicted,
+            NumberOfParameters = featureCount,
+            ConfidenceLevel = _predictionOptions.ConfidenceLevel,
+            LearningCurveSteps = _predictionOptions.LearningCurveSteps
         });
     }
 

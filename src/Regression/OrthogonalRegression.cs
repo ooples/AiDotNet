@@ -272,16 +272,16 @@ public class OrthogonalRegression<T> : RegressionBase<T>
     {
         // Create a new instance with the same options and regularization
         var newModel = new OrthogonalRegression<T>(_options, Regularization);
-        
+
         // Copy coefficients if they exist
         if (Coefficients != null)
         {
             newModel.Coefficients = Coefficients.Clone();
         }
-        
+
         // Copy the intercept
         newModel.Intercept = Intercept;
-        
+
         return newModel;
     }
 }

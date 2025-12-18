@@ -77,7 +77,7 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
     /// determines what kind of calculations it can perform and how it will process information.
     /// </para>
     /// </remarks>
-    public RecurrentNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double learningRate = 0.01, ILossFunction<T>? lossFunction = null) : 
+    public RecurrentNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double learningRate = 0.01, ILossFunction<T>? lossFunction = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _learningRate = NumOps.FromDouble(learningRate);

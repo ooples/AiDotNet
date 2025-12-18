@@ -1,6 +1,6 @@
 using AiDotNet.LinearAlgebra;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Serving.Padding;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Serving.Tests;

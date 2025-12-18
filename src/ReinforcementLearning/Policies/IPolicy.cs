@@ -1,7 +1,7 @@
-using AiDotNet.LinearAlgebra;
-using AiDotNet.NeuralNetworks;
 using System;
 using System.Collections.Generic;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.NeuralNetworks;
 
 namespace AiDotNet.ReinforcementLearning.Policies
 {

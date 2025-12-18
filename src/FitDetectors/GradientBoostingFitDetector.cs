@@ -95,14 +95,14 @@ public class GradientBoostingFitDetector<T, TInput, TOutput> : FitDetectorBase<T
 
         if (NumOps.LessThan(errorDifference, NumOps.FromDouble(_options.OverfitThreshold)))
         {
-            return NumOps.LessThan(validationError, NumOps.FromDouble(_options.GoodFitThreshold)) 
-                ? FitType.GoodFit 
+            return NumOps.LessThan(validationError, NumOps.FromDouble(_options.GoodFitThreshold))
+                ? FitType.GoodFit
                 : FitType.Moderate;
         }
         else
         {
-            return NumOps.GreaterThan(errorDifference, NumOps.FromDouble(_options.SevereOverfitThreshold)) 
-                ? FitType.VeryPoorFit 
+            return NumOps.GreaterThan(errorDifference, NumOps.FromDouble(_options.SevereOverfitThreshold))
+                ? FitType.VeryPoorFit
                 : FitType.PoorFit;
         }
     }

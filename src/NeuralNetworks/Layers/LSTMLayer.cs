@@ -830,10 +830,10 @@ public class LSTMLayer<T> : LayerBase<T>
         int timeSteps = input.Shape[1];
 
         var output = new Tensor<T>([batchSize, timeSteps, _hiddenSize]);
-        
+
         _cachedHiddenStates = new Tensor<T>([batchSize, timeSteps, _hiddenSize]);
         _cachedCellStates = new Tensor<T>([batchSize, timeSteps, _hiddenSize]);
-        
+
         var currentH = new Tensor<T>([batchSize, _hiddenSize]);
         var currentC = new Tensor<T>([batchSize, _hiddenSize]);
 
@@ -889,14 +889,14 @@ public class LSTMLayer<T> : LayerBase<T>
             _cachedHiddenStates.SetSlice(t, currentH);
             _cachedCellStates.SetSlice(t, currentC);
         }
-        
+
         _lastHiddenState = currentH;
         _lastCellState = currentC;
 
         return output;
     }
 
-   /// <summary>
+    /// <summary>
     /// Performs the backward pass of the LSTM layer.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
@@ -1221,12 +1221,12 @@ public class LSTMLayer<T> : LayerBase<T>
     /// weight and bias to improve performance.
     /// </para>
     /// </remarks>
-    private (Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>) 
+    private (Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>)
         BackwardStep(Tensor<T> dh, Tensor<T> dc_next, Tensor<T> x, Tensor<T> prev_h, Tensor<T> prev_c)
     {
         // Forward pass calculations (needed for backward pass)
         var concat = Tensor<T>.Concatenate([x, prev_h], 1);
-        var f = ActivateTensorConditional(_sigmoidVectorActivation, _sigmoidActivation, 
+        var f = ActivateTensorConditional(_sigmoidVectorActivation, _sigmoidActivation,
             concat.Multiply(Tensor<T>.Concatenate([_weightsFi, _weightsFh], 0)).Add(_biasF));
         var i = ActivateTensorConditional(_sigmoidVectorActivation, _sigmoidActivation,
             concat.Multiply(Tensor<T>.Concatenate([_weightsIi, _weightsIh], 0)).Add(_biasI));

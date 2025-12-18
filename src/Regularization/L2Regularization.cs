@@ -39,11 +39,11 @@ public class L2Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     /// </para>
     /// </remarks>
     public L2Regularization(RegularizationOptions? options = null) : base(options ?? new RegularizationOptions
-        {
-            Type = RegularizationType.L2,
-            Strength = 0.01, // Default L2 regularization strength
-            L1Ratio = 0.0  // For L2, this should always be 0.0
-        })
+    {
+        Type = RegularizationType.L2,
+        Strength = 0.01, // Default L2 regularization strength
+        L1Ratio = 0.0  // For L2, this should always be 0.0
+    })
     {
     }
 
@@ -63,7 +63,7 @@ public class L2Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     public override TOutput Regularize(TOutput gradient, TOutput coefficients)
     {
         var regularizationStrength = NumOps.FromDouble(Options.Strength);
-        
+
         if (gradient is Vector<T> gradientVector && coefficients is Vector<T> coefficientVector)
         {
             var result = gradientVector.Add(coefficientVector.Multiply(regularizationStrength));
@@ -74,20 +74,20 @@ public class L2Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
             // Convert tensors to vectors for calculation
             var gradientFlattenedVector = gradientTensor.ToVector();
             var coefficientFlattenedVector = coefficientTensor.ToVector();
-            
+
             // Apply regularization to gradient
             var result = gradientFlattenedVector.Add(coefficientFlattenedVector.Multiply(regularizationStrength));
-            
+
             // Convert back to tensor with the same shape as the gradient tensor
             var resultTensor = Tensor<T>.FromVector(result);
             if (gradientTensor.Shape.Length > 1)
             {
                 resultTensor = resultTensor.Reshape(gradientTensor.Shape);
             }
-            
+
             return (TOutput)(object)resultTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported output types {typeof(TOutput).Name} for L2 regularization gradient. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -111,7 +111,7 @@ public class L2Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
         var regularizationStrength = NumOps.FromDouble(Options.Strength);
         var shrinkageFactor = NumOps.Subtract(NumOps.One, regularizationStrength);
         var result = new Matrix<T>(data.Rows, data.Columns);
-    
+
         for (int i = 0; i < data.Rows; i++)
         {
             for (int j = 0; j < data.Columns; j++)
@@ -119,7 +119,7 @@ public class L2Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
                 result[i, j] = NumOps.Multiply(data[i, j], shrinkageFactor);
             }
         }
-    
+
         return result;
     }
 
@@ -141,12 +141,12 @@ public class L2Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
         var regularizationStrength = NumOps.FromDouble(Options.Strength);
         var shrinkageFactor = NumOps.Subtract(NumOps.One, regularizationStrength);
         var result = new Vector<T>(data.Length);
-    
+
         for (int i = 0; i < data.Length; i++)
         {
             result[i] = NumOps.Multiply(data[i], shrinkageFactor);
         }
-    
+
         return result;
     }
 }

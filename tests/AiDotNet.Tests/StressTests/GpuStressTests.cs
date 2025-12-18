@@ -1,14 +1,14 @@
-using AiDotNet.Tensors.LinearAlgebra;
-using AiDotNet.Engines;
-using AiDotNet.Enums;
-using AiDotNet.Tensors.LinearAlgebra;
-using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ActivationFunctions;
-using Xunit;
 using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Engines;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
+using Xunit;
 
 namespace AiDotNet.Tests.StressTests;
 

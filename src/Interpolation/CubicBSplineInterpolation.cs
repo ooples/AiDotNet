@@ -19,12 +19,12 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The knot vector that defines the B-spline curve.
     /// </summary>
@@ -33,17 +33,17 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// They're like invisible control points that determine where the curve bends.
     /// </remarks>
     private readonly Vector<T> _knots;
-    
+
     /// <summary>
     /// The calculated coefficients that define the B-spline curve.
     /// </summary>
     private readonly Vector<T> _coefficients;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// The degree of the B-spline curve (default is 3 for cubic).
     /// </summary>
@@ -52,7 +52,7 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// creates a curve that's smooth in both direction and curvature.
     /// </remarks>
     private readonly int _degree;
-    
+
     /// <summary>
     /// The type of matrix decomposition used for solving the linear system.
     /// </summary>
@@ -260,10 +260,10 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
             {
                 // Calculate the denominator (knot distance)
                 T temp = _numOps.Divide(basis[r], _numOps.Add(right[r + 1], left[j - r]));
-            
+
                 // Update the current basis function
                 basis[r] = _numOps.Add(saved, _numOps.Multiply(right[r + 1], temp));
-            
+
                 // Save the left term for the next basis function
                 saved = _numOps.Multiply(left[j - r], temp);
             }

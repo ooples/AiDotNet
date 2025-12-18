@@ -171,7 +171,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// a curiosity level (epsilon) that determines how often they'll experiment versus stick with what they know.
     /// </para>
     /// </remarks>
-    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, double epsilon = 1e16) : 
+    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, double epsilon = 1e16) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _epsilon = NumOps.FromDouble(epsilon);
@@ -433,13 +433,13 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         var current = input;
-    
+
         // Forward pass through all layers
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
-    
+
         return current;
     }
 
@@ -568,13 +568,13 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     private List<Experience<T, Tensor<T>, int>> SampleBatch(int batchSize)
     {
         var batch = new List<Experience<T, Tensor<T>, int>>(batchSize);
-    
+
         for (int i = 0; i < batchSize; i++)
         {
             int randomIndex = Random.Next(_replayBuffer.Count);
             batch.Add(_replayBuffer[randomIndex]);
         }
-    
+
         return batch;
     }
 
@@ -601,19 +601,19 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T> ForwardWithMemoryBatch(Tensor<T> inputs)
     {
         var current = inputs;
-    
+
         for (int i = 0; i < Layers.Count; i++)
         {
             // Store input to each layer for backpropagation
             _layerInputs[i] = current;
-        
+
             // Forward pass through layer
             current = Layers[i].Forward(current);
-        
+
             // Store output from each layer for backpropagation
             _layerOutputs[i] = current;
         }
-    
+
         return current;
     }
 
@@ -639,7 +639,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     private void BackpropagateBatch(Tensor<T> outputGradients)
     {
         var gradientTensor = outputGradients;
-    
+
         // Backpropagate through layers in reverse order
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
@@ -739,13 +739,13 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     {
         // Save exploration rate (epsilon)
         writer.Write(Convert.ToDouble(_epsilon));
-    
+
         // Save action space size
         writer.Write(_actionSpace);
-    
+
         // Save replay buffer size (but not the actual experiences)
         writer.Write(_replayBuffer.Count);
-    
+
         // Serialize target network
         for (int i = 0; i < _targetNetwork.Layers.Count; i++)
         {
@@ -777,14 +777,14 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     {
         // Load exploration rate (epsilon)
         T epsilon = NumOps.FromDouble(reader.ReadDouble());
-    
+
         // Load action space size
         int actionSpace = reader.ReadInt32();
         _actionSpace = actionSpace;
-    
+
         // Load replay buffer size (but can't restore actual experiences)
         int replayBufferSize = reader.ReadInt32();
-    
+
         // Deserialize target network
         for (int i = 0; i < _targetNetwork.Layers.Count; i++)
         {

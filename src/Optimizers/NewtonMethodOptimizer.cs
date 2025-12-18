@@ -310,8 +310,8 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateDecreaseFactor));
             }
 
-            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate, 
-                NumOps.FromDouble(_options.MinLearningRate), 
+            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate,
+                NumOps.FromDouble(_options.MinLearningRate),
                 NumOps.FromDouble(_options.MaxLearningRate));
         }
     }

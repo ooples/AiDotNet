@@ -40,12 +40,12 @@ public class MultiquadricRBF<T> : IRadialBasisFunction<T>
     /// The shape parameter (epsilon) controlling the width of the function.
     /// </summary>
     private readonly T _epsilon;
-    
+
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MultiquadricRBF{T}"/> class with a specified shape parameter.
     /// </summary>
@@ -75,7 +75,7 @@ public class MultiquadricRBF<T> : IRadialBasisFunction<T>
         _numOps = MathHelper.GetNumericOperations<T>();
         _epsilon = _numOps.FromDouble(epsilon);
     }
-    
+
     /// <summary>
     /// Computes the value of the Multiquadric Radial Basis Function for a given radius.
     /// </summary>
@@ -106,7 +106,7 @@ public class MultiquadricRBF<T> : IRadialBasisFunction<T>
     {
         return _numOps.Sqrt(_numOps.Add(_numOps.Multiply(r, r), _numOps.Multiply(_epsilon, _epsilon)));
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Multiquadric RBF with respect to the radius.
     /// </summary>
@@ -134,23 +134,23 @@ public class MultiquadricRBF<T> : IRadialBasisFunction<T>
     public T ComputeDerivative(T r)
     {
         // Derivative with respect to r: r/v(r² + e²)
-        
+
         // Calculate r²
         T rSquared = _numOps.Multiply(r, r);
-        
+
         // Calculate e²
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
-        
+
         // Calculate r² + e²
         T sum = _numOps.Add(rSquared, epsilonSquared);
-        
+
         // Calculate v(r² + e²)
         T sqrtSum = _numOps.Sqrt(sum);
-        
+
         // Return r/v(r² + e²)
         return _numOps.Divide(r, sqrtSum);
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Multiquadric RBF with respect to the shape parameter epsilon.
     /// </summary>
@@ -177,19 +177,19 @@ public class MultiquadricRBF<T> : IRadialBasisFunction<T>
     public T ComputeWidthDerivative(T r)
     {
         // Derivative with respect to e: e/v(r² + e²)
-        
+
         // Calculate r²
         T rSquared = _numOps.Multiply(r, r);
-        
+
         // Calculate e²
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
-        
+
         // Calculate r² + e²
         T sum = _numOps.Add(rSquared, epsilonSquared);
-        
+
         // Calculate v(r² + e²)
         T sqrtSum = _numOps.Sqrt(sum);
-        
+
         // Return e/v(r² + e²)
         return _numOps.Divide(_epsilon, sqrtSum);
     }

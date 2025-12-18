@@ -1,7 +1,7 @@
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Normalizers;
-using AiDotNet.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Normalizers;

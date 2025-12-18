@@ -38,32 +38,32 @@ public class GraphNode<T>
     /// Unique identifier for this node.
     /// </summary>
     public string Id { get; set; }
-    
+
     /// <summary>
     /// The entity label or type (e.g., PERSON, ORGANIZATION, LOCATION).
     /// </summary>
     public string Label { get; set; }
-    
+
     /// <summary>
     /// Additional properties and metadata for this entity.
     /// </summary>
     public Dictionary<string, object> Properties { get; set; }
-    
+
     /// <summary>
     /// Vector embedding for similarity search and clustering.
     /// </summary>
     public Vector<T>? Embedding { get; set; }
-    
+
     /// <summary>
     /// Timestamp when this node was created.
     /// </summary>
     public DateTime CreatedAt { get; set; }
-    
+
     /// <summary>
     /// Timestamp when this node was last updated.
     /// </summary>
     public DateTime UpdatedAt { get; set; }
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GraphNode{T}"/> class.
     /// </summary>
@@ -75,14 +75,14 @@ public class GraphNode<T>
             throw new ArgumentException("Node ID cannot be null or whitespace", nameof(id));
         if (string.IsNullOrWhiteSpace(label))
             throw new ArgumentException("Node label cannot be null or whitespace", nameof(label));
-            
+
         Id = id;
         Label = label;
         Properties = new Dictionary<string, object>();
         CreatedAt = DateTime.UtcNow;
         UpdatedAt = DateTime.UtcNow;
     }
-    
+
     /// <summary>
     /// Adds or updates a property on this node.
     /// </summary>
@@ -93,7 +93,7 @@ public class GraphNode<T>
         Properties[key] = value;
         UpdatedAt = DateTime.UtcNow;
     }
-    
+
     /// <summary>
     /// Gets a property value from this node.
     /// </summary>
@@ -145,18 +145,18 @@ public class GraphNode<T>
 
         return default;
     }
-    
+
     public override string ToString()
     {
         var name = GetProperty<string>("name") ?? Id;
         return $"{Label}:{name}";
     }
-    
+
     public override bool Equals(object? obj)
     {
         return obj is GraphNode<T> other && Id == other.Id;
     }
-    
+
     public override int GetHashCode()
     {
         return Id.GetHashCode();

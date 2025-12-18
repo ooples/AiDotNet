@@ -22,12 +22,12 @@ public class BilinearInterpolation<T> : I2DInterpolation<T>
     /// The x-coordinates of the grid points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the grid points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The z-values (data values) at each grid point, organized as a matrix.
     /// </summary>
@@ -37,7 +37,7 @@ public class BilinearInterpolation<T> : I2DInterpolation<T>
     /// at each measured location.
     /// </remarks>
     private readonly Matrix<T> _z;
-    
+
     /// <summary>
     /// Helper object for performing numeric operations on generic type T.
     /// </summary>

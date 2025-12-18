@@ -194,7 +194,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         // Validate feature dimensions
         int studentDim = studentFeatures[0].Length;
         int teacherDim = teacherFeatures[0].Length;
-        
+
         for (int i = 0; i < studentFeatures.Length; i++)
         {
             if (studentFeatures[i].Length != studentDim)

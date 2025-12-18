@@ -21,12 +21,12 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the known data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates (values) of the known data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The slopes at each data point, calculated to ensure monotonicity.
     /// </summary>
@@ -36,7 +36,7 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
     /// smooth but doesn't create unwanted oscillations.
     /// </remarks>
     private readonly Vector<T> _m;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

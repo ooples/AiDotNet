@@ -41,7 +41,7 @@ public class PiecewisePolynomialKernel<T> : IKernelFunction<T>
     /// The default value is 3, which works well for many applications.
     /// </remarks>
     private readonly int _degree;
-    
+
     /// <summary>
     /// The cutoff distance parameter that determines when the kernel value becomes zero.
     /// </summary>
@@ -54,7 +54,7 @@ public class PiecewisePolynomialKernel<T> : IKernelFunction<T>
     /// The default value is 1.0, but you might want to adjust it based on the scale of your data.
     /// </remarks>
     private readonly T _c;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
@@ -135,15 +135,15 @@ public class PiecewisePolynomialKernel<T> : IKernelFunction<T>
     public T Calculate(Vector<T> x1, Vector<T> x2)
     {
         T distance = x1.EuclideanDistance(x2);
-        
+
         if (_numOps.GreaterThan(distance, _c))
         {
             return _numOps.Zero;
         }
-        
+
         T j = _numOps.FromDouble(_degree);
         T term = _numOps.Subtract(_numOps.One, _numOps.Divide(distance, _c));
-        
+
         return _numOps.Power(term, _numOps.Add(j, _numOps.One));
     }
 }

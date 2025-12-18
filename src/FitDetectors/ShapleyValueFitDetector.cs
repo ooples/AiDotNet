@@ -25,7 +25,7 @@ public class ShapleyValueFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TI
     /// Configuration options for the Shapley value fit detector.
     /// </summary>
     private readonly ShapleyValueFitDetectorOptions _options;
-    
+
     /// <summary>
     /// Random number generator used for Monte Carlo sampling.
     /// </summary>

@@ -112,7 +112,7 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
-        
+
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var parameters = currentSolution.GetParameters();
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
@@ -295,8 +295,8 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(_options.LearningRateDecreaseFactor));
             }
 
-            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate, 
-                NumOps.FromDouble(_options.MinLearningRate), 
+            CurrentLearningRate = MathHelper.Clamp(CurrentLearningRate,
+                NumOps.FromDouble(_options.MinLearningRate),
                 NumOps.FromDouble(_options.MaxLearningRate));
         }
     }

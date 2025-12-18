@@ -29,7 +29,7 @@ public interface ILossFunction<T>
     /// <param name="actual">The actual (target) values.</param>
     /// <returns>The loss value.</returns>
     T CalculateLoss(Vector<T> predicted, Vector<T> actual);
-    
+
     /// <summary>
     /// Calculates the derivative (gradient) of the loss function.
     /// </summary>

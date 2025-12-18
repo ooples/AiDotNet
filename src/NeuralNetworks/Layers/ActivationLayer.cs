@@ -27,7 +27,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// and will be null until Forward() is called at least once.
     /// </remarks>
     private Tensor<T>? _lastInput;
-    
+
     /// <summary>
     /// Indicates whether this layer uses a vector activation function instead of a scalar one.
     /// </summary>

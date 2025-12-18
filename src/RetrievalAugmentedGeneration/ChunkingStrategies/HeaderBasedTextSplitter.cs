@@ -30,10 +30,10 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
     {
         if (minChunkSize < 0)
             throw new ArgumentOutOfRangeException(nameof(minChunkSize), "Min chunk size cannot be negative");
-        
+
         if (minChunkSize > chunkSize)
             throw new ArgumentOutOfRangeException(nameof(minChunkSize), "Min chunk size cannot exceed max chunk size");
-            
+
         _minChunkSize = minChunkSize;
         _combineSmallChunks = combineSmallChunks;
     }
@@ -63,14 +63,14 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
                 {
                     var content = string.Join(Environment.NewLine, currentChunk);
                     chunks.Add((content, chunkStart, position));
-                    
+
                     // Store lines for overlap
                     previousChunkLines = GetOverlapLines(currentChunk);
                     currentChunk.Clear();
                 }
 
                 chunkStart = position;
-                
+
                 // Add overlap from previous chunk (after setting chunkStart)
                 if (ChunkOverlap > 0 && previousChunkLines.Count > 0)
                 {
@@ -92,13 +92,13 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
                 {
                     var content = string.Join(Environment.NewLine, currentChunk);
                     chunks.Add((content, chunkStart, position + lineLength));
-                    
+
                     // Store lines for overlap
                     previousChunkLines = GetOverlapLines(currentChunk);
                     currentChunk.Clear();
-                    
+
                     chunkStart = position + lineLength;
-                    
+
                     // Add overlap from previous chunk (after setting chunkStart)
                     if (ChunkOverlap > 0 && previousChunkLines.Count > 0)
                     {
@@ -139,7 +139,7 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
             return 2;
         if (afterLine.StartsWith("\n") || afterLine.StartsWith("\r"))
             return 1;
-        
+
         return 0;
     }
 
@@ -166,7 +166,7 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
             return false;
 
         var trimmed = line.TrimStart();
-        
+
         // Markdown headers (# ## ### etc.)
         if (trimmed.StartsWith("#"))
             return true;
@@ -206,12 +206,12 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
             while (j < chunks.Count && combined.Length < _minChunkSize)
             {
                 var next = chunks[j];
-                
+
                 // Check if adding next chunk would exceed max chunk size
                 var nextLength = Environment.NewLine.Length + next.content.Length;
                 if (combined.Length + nextLength >= ChunkSize)
                     break;
-                    
+
                 combined += Environment.NewLine + next.content;
                 combinedEnd = next.end;
                 j++;

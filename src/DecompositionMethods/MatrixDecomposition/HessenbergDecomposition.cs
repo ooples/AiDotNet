@@ -123,7 +123,7 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
         return H;
     }
 
-        /// <summary>
+    /// <summary>
     /// Computes the Hessenberg form using Givens rotations.
     /// </summary>
     /// <param name="matrix">The matrix to transform.</param>

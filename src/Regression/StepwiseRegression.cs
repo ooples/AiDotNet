@@ -51,7 +51,7 @@ public class StepwiseRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     private readonly StepwiseRegressionOptions<T> _options;
-    
+
     /// <summary>
     /// The calculator used to evaluate the fitness or quality of models during feature selection.
     /// </summary>
@@ -73,7 +73,7 @@ public class StepwiseRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     private readonly IFitnessCalculator<T, Matrix<T>, Vector<T>> _fitnessCalculator;
-    
+
     /// <summary>
     /// The list of feature indices that have been selected for the final model.
     /// </summary>
@@ -94,7 +94,7 @@ public class StepwiseRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     private List<int> _selectedFeatures;
-    
+
     /// <summary>
     /// The evaluator used to assess the performance of models during the feature selection process.
     /// </summary>
@@ -159,10 +159,10 @@ public class StepwiseRegression<T> : RegressionBase<T>
     /// and discover which features are most important for your predictions.
     /// </para>
     /// </remarks>
-    public StepwiseRegression(StepwiseRegressionOptions<T>? options = null, 
-        PredictionStatsOptions? predictionOptions = null, 
-        IFitnessCalculator<T, Matrix<T>, Vector<T>>? fitnessCalculator = null, 
-        IRegularization<T, Matrix<T>, Vector<T>>? regularization = null, 
+    public StepwiseRegression(StepwiseRegressionOptions<T>? options = null,
+        PredictionStatsOptions? predictionOptions = null,
+        IFitnessCalculator<T, Matrix<T>, Vector<T>>? fitnessCalculator = null,
+        IRegularization<T, Matrix<T>, Vector<T>>? regularization = null,
         IModelEvaluator<T, Matrix<T>, Vector<T>>? modelEvaluator = null)
         : base(options, regularization)
     {
@@ -564,24 +564,24 @@ public class StepwiseRegression<T> : RegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         var newModel = new StepwiseRegression<T>(
-            options: _options, 
-            predictionOptions: null, 
-            fitnessCalculator: _fitnessCalculator, 
-            regularization: Regularization, 
+            options: _options,
+            predictionOptions: null,
+            fitnessCalculator: _fitnessCalculator,
+            regularization: Regularization,
             modelEvaluator: _modelEvaluator);
-        
+
         // Copy the coefficients
         if (Coefficients != null)
         {
             newModel.Coefficients = Coefficients.Clone();
         }
-        
+
         // Copy the intercept
         newModel.Intercept = Intercept;
-        
+
         // Create a deep copy of the selected features list
         newModel._selectedFeatures = [.. _selectedFeatures];
-        
+
         return newModel;
     }
 }

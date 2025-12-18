@@ -82,7 +82,7 @@ public class OrdinalRegressionLossFitnessCalculator<T, TInput, TOutput> : Fitnes
     /// - When the distance between categories matters in your problem
     /// </para>
     /// </remarks>
-    public OrdinalRegressionLossFitnessCalculator(int? numberOfClassifications = null, DataSetType dataSetType = DataSetType.Validation) 
+    public OrdinalRegressionLossFitnessCalculator(int? numberOfClassifications = null, DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
         _numClasses = numberOfClassifications;
@@ -118,7 +118,7 @@ public class OrdinalRegressionLossFitnessCalculator<T, TInput, TOutput> : Fitnes
     {
         if (_numClasses.HasValue)
         {
-            return new OrdinalRegressionLoss<T>(_numClasses.Value).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            return new OrdinalRegressionLoss<T>(_numClasses.Value).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
                 ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
         }
         else
@@ -155,13 +155,13 @@ public class OrdinalRegressionLossFitnessCalculator<T, TInput, TOutput> : Fitnes
         {
             // For classification, use the number of unique values in Actual as numClasses
             int numClasses = ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual).Distinct().Count();
-            return new OrdinalRegressionLoss<T>(numClasses).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            return new OrdinalRegressionLoss<T>(numClasses).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
                 ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
         }
         else
         {
             // For regression or other problems, use a different loss calculation
-            return new MeanSquaredErrorLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+            return new MeanSquaredErrorLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
                 ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
         }
     }

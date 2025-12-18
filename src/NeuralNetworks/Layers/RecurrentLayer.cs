@@ -66,7 +66,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// activation function, giving it more flexibility to fit the data.
     /// </remarks>
     private Tensor<T> _biases;
-    
+
     /// <summary>
     /// Stores the input tensor from the most recent forward pass for use in backpropagation.
     /// </summary>
@@ -76,7 +76,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// is null before the first forward pass or after a reset.
     /// </remarks>
     private Tensor<T>? _lastInput;
-    
+
     /// <summary>
     /// Stores the hidden state tensor from the most recent forward pass for use in backpropagation.
     /// </summary>
@@ -86,7 +86,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// is null before the first forward pass or after a reset.
     /// </remarks>
     private Tensor<T>? _lastHiddenState;
-    
+
     /// <summary>
     /// Stores the output tensor from the most recent forward pass for use in backpropagation.
     /// </summary>
@@ -96,7 +96,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// The tensor is null before the first forward pass or after a reset.
     /// </remarks>
     private Tensor<T>? _lastOutput;
-    
+
     /// <summary>
     /// Stores the gradients of the loss with respect to the input weight parameters.
     /// </summary>

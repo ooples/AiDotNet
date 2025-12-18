@@ -73,10 +73,10 @@ public class MultiQueryExpansion : QueryExpansionBase
     {
         _llmEndpoint = llmEndpoint ?? throw new ArgumentNullException(nameof(llmEndpoint));
         _llmApiKey = llmApiKey ?? throw new ArgumentNullException(nameof(llmApiKey));
-        
+
         if (numVariations <= 0)
             throw new ArgumentOutOfRangeException(nameof(numVariations), "Number of variations must be positive");
-            
+
         _numVariations = numVariations;
     }
 
@@ -117,7 +117,7 @@ public class MultiQueryExpansion : QueryExpansionBase
 
         var questionWords = new[] { "what", "how", "why", "when", "where", "who", "which" };
         var lowerQuery = query.ToLower();
-        
+
         if (questionWords.Any(w => lowerQuery.StartsWith(w)))
             return query.TrimEnd('.', ' ') + "?";
 

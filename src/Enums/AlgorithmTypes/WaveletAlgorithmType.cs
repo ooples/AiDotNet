@@ -50,7 +50,7 @@ public enum WaveletAlgorithmType
     /// </para>
     /// </remarks>
     DWT,
-    
+
     /// <summary>
     /// Maximal Overlap Discrete Wavelet Transform - a redundant wavelet transform that preserves time invariance.
     /// </summary>
@@ -79,7 +79,7 @@ public enum WaveletAlgorithmType
     /// </para>
     /// </remarks>
     MODWT,
-    
+
     /// <summary>
     /// Stationary Wavelet Transform - another non-decimated wavelet transform similar to MODWT.
     /// </summary>

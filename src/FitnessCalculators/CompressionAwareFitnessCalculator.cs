@@ -1,7 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.Models;
 using AiDotNet.ModelCompression;
+using AiDotNet.Models;
 
 namespace AiDotNet.FitnessCalculators;
 

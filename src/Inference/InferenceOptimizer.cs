@@ -1,7 +1,7 @@
 using AiDotNet.Configuration;
+using AiDotNet.Inference.SpeculativeDecoding;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Inference.SpeculativeDecoding;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Inference;

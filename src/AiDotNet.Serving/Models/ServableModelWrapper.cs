@@ -1,5 +1,5 @@
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Serving.Models;
 

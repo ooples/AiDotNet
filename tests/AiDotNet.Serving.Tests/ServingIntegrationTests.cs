@@ -1,15 +1,15 @@
 using System.Net;
-using AiDotNet.Tensors.LinearAlgebra;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.DependencyInjection;
-using Xunit;
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
-using AiDotNet.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace AiDotNet.Serving.Tests;
 

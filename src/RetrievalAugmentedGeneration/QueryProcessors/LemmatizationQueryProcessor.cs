@@ -51,7 +51,7 @@ public class LemmatizationQueryProcessor : QueryProcessorBase
             }
 
             var lowerWord = word.ToLowerInvariant();
-            
+
             if (_lemmaMap.TryGetValue(lowerWord, out var lemma))
             {
                 lemmatized.Add(PreserveCase(word, lemma));

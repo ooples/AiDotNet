@@ -338,8 +338,8 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         results["R2"] = r2;
 
         // Calculate peak frequency difference
-        T peakFreqDiff = StatisticsHelper<T>.CalculatePeakDifference(_frequencies, _periodogram, 
-                                                                     testSpectralAnalysis._frequencies, 
+        T peakFreqDiff = StatisticsHelper<T>.CalculatePeakDifference(_frequencies, _periodogram,
+                                                                     testSpectralAnalysis._frequencies,
                                                                      testSpectralAnalysis._periodogram);
         results["PeakFrequencyDifference"] = peakFreqDiff;
 
@@ -370,7 +370,7 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
 
         int n = y.Length;
         int nfft = _spectralOptions.NFFT;
-        
+
         // If NFFT wasn't specified or is invalid, use the next power of 2 >= n
         if (nfft <= 0)
         {
@@ -383,8 +383,8 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         }
 
         // Apply window function if specified
-        Vector<T> windowedSignal = _spectralOptions.UseWindowFunction 
-            ? ApplyWindowFunction(y) 
+        Vector<T> windowedSignal = _spectralOptions.UseWindowFunction
+            ? ApplyWindowFunction(y)
             : new Vector<T>(y); // Create a copy to avoid modifying the input
 
         // Compute FFT
@@ -395,10 +395,10 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < _periodogram.Length; i++)
         {
             T magnitude = NumOps.Sqrt(NumOps.Add(
-                NumOps.Multiply(fft[i].Real, fft[i].Real), 
+                NumOps.Multiply(fft[i].Real, fft[i].Real),
                 NumOps.Multiply(fft[i].Imaginary, fft[i].Imaginary)
             ));
-            
+
             // Scale by 1/n for proper normalization
             _periodogram[i] = NumOps.Divide(NumOps.Multiply(magnitude, magnitude), NumOps.FromDouble(n));
         }
@@ -456,7 +456,7 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         // Find the dominant frequency (excluding DC component at index 0)
         int dominantIndex = 1;
         T maxPower = _periodogram[1];
-        
+
         for (int i = 2; i < _periodogram.Length; i++)
         {
             if (NumOps.GreaterThan(_periodogram[i], maxPower))
@@ -465,31 +465,31 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
                 dominantIndex = i;
             }
         }
-        
+
         // Get the dominant frequency
         T dominantFreq = _frequencies[dominantIndex];
-        
+
         // Generate a sinusoidal value at the specified time index using the dominant frequency
         T timeIndex = input[0];
         T amplitude = NumOps.Sqrt(maxPower);
-        
+
         // Calculate sin(2p * frequency * timeIndex)
         T angle = NumOps.Multiply(
             NumOps.Multiply(NumOps.FromDouble(2 * Math.PI), dominantFreq),
             timeIndex
         );
-        
+
         // Convert angle to a value between 0 and 2p
         while (NumOps.GreaterThan(angle, NumOps.FromDouble(2 * Math.PI)))
         {
             angle = NumOps.Subtract(angle, NumOps.FromDouble(2 * Math.PI));
         }
-        
+
         while (NumOps.LessThan(angle, NumOps.Zero))
         {
             angle = NumOps.Add(angle, NumOps.FromDouble(2 * Math.PI));
         }
-        
+
         // Calculate sine using an approximation
         T sinValue;
         if (NumOps.LessThan(angle, NumOps.FromDouble(Math.PI)))
@@ -513,7 +513,7 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         {
             // For p to 2p, use sin(x) = -sin(x - p)
             T reducedAngle = NumOps.Subtract(angle, NumOps.FromDouble(Math.PI));
-            
+
             // Calculate sin for reduced angle between 0 and p
             T reducedSin;
             if (NumOps.LessThan(reducedAngle, NumOps.FromDouble(Math.PI / 2)))
@@ -528,11 +528,11 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
                 T diffSquared = NumOps.Multiply(diff, diff);
                 reducedSin = NumOps.Subtract(NumOps.One, NumOps.Divide(diffSquared, NumOps.FromDouble(2)));
             }
-            
+
             // Negate for the full range
             sinValue = NumOps.Negate(reducedSin);
         }
-        
+
         // Scale by amplitude
         return NumOps.Multiply(amplitude, sinValue);
     }
@@ -561,26 +561,26 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
             ModelType = ModelType.SpectralAnalysisModel,
             AdditionalInfo = new Dictionary<string, object>()
         };
-    
+
         // Add configuration parameters
         metadata.AdditionalInfo["NFFT"] = _spectralOptions.NFFT;
         metadata.AdditionalInfo["UseWindowFunction"] = _spectralOptions.UseWindowFunction;
         metadata.AdditionalInfo["WindowFunctionType"] = _spectralOptions.WindowFunction?.GetWindowFunctionType().ToString() ?? "None";
         metadata.AdditionalInfo["OverlapPercentage"] = _spectralOptions.OverlapPercentage;
-    
+
         // Only include sampling rate if it was specified
         if (NumOps.GreaterThan(NumOps.FromDouble(_spectralOptions.SamplingRate), NumOps.Zero))
         {
             metadata.AdditionalInfo["SamplingRate"] = Convert.ToDouble(_spectralOptions.SamplingRate);
         }
-    
+
         // Add metadata about the frequencies and periodogram
         if (_frequencies != null && _frequencies.Length > 0 && _periodogram != null && _periodogram.Length > 0)
         {
             // Find dominant frequency (excluding DC component at index 0)
             int dominantIndex = 0;
             T maxPower = NumOps.Zero;
-        
+
             for (int i = 1; i < _periodogram.Length; i++)
             {
                 if (NumOps.GreaterThan(_periodogram[i], maxPower))
@@ -589,14 +589,14 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
                     dominantIndex = i;
                 }
             }
-        
+
             // Add frequency statistics
             metadata.AdditionalInfo["FrequencyCount"] = _frequencies.Length;
             metadata.AdditionalInfo["MinFrequency"] = Convert.ToDouble(_frequencies[0]);
             metadata.AdditionalInfo["MaxFrequency"] = Convert.ToDouble(_frequencies[_frequencies.Length - 1]);
             metadata.AdditionalInfo["DominantFrequency"] = Convert.ToDouble(_frequencies[dominantIndex]);
             metadata.AdditionalInfo["DominantFrequencyPower"] = Convert.ToDouble(maxPower);
-        
+
             // Calculate the total power (sum of periodogram)
             T totalPower = NumOps.Zero;
             for (int i = 0; i < _periodogram.Length; i++)
@@ -604,7 +604,7 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
                 totalPower = NumOps.Add(totalPower, _periodogram[i]);
             }
             metadata.AdditionalInfo["TotalPower"] = Convert.ToDouble(totalPower);
-        
+
             // Calculate the spectral entropy as a measure of randomness
             T logSum = NumOps.Zero;
             for (int i = 0; i < _periodogram.Length; i++)
@@ -618,10 +618,10 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
             }
             metadata.AdditionalInfo["SpectralEntropy"] = Convert.ToDouble(logSum);
         }
-    
+
         // Add the serialized model data
         metadata.ModelData = this.Serialize();
-    
+
         return metadata;
     }
 
@@ -649,14 +649,14 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
             OverlapPercentage = _spectralOptions.OverlapPercentage,
             SamplingRate = _spectralOptions.SamplingRate
         };
-    
+
         // Copy the window function if one is specified
         if (_spectralOptions.WindowFunction != null)
         {
             newOptions.WindowFunction = WindowFunctionFactory.CreateWindowFunction<T>(
                 _spectralOptions.WindowFunction.GetWindowFunctionType());
         }
-    
+
         // Create a new instance with the copied options
         return new SpectralAnalysisModel<T>(newOptions);
     }

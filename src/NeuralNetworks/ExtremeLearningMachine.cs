@@ -174,12 +174,12 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     {
         // Process the input through each layer sequentially
         Tensor<T> current = input;
-        
+
         for (int i = 0; i < Layers.Count; i++)
         {
             current = Layers[i].Forward(current);
         }
-        
+
         return current;
     }
 
@@ -274,16 +274,16 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
 
         // Step 1: Calculate A^T (transpose)
         Matrix<T> transposeA = matrix.Transpose();
-        
+
         // Step 2: Calculate A^T × A
         Matrix<T> aTa = transposeA.Multiply(matrix);
-        
+
         // Step 3: Calculate (A^T × A)^(-1)
         Matrix<T> aTaInverse = aTa.Inverse();
-        
+
         // Step 4: Calculate (A^T × A)^(-1) × A^T
         Matrix<T> pseudoInverse = aTaInverse.Multiply(transposeA);
-        
+
         return pseudoInverse;
 
         // Note: In a production implementation, you might want to use singular value decomposition (SVD)
@@ -311,7 +311,7 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     {
         // Get the last layer (output layer)
         var outputLayer = Layers[Layers.Count - 1];
-        
+
         // Convert the output weights to the format expected by the layer
         Vector<T> flattenedWeights = new Vector<T>(outputWeights.Rows * outputWeights.Columns);
         int index = 0;
@@ -322,7 +322,7 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
                 flattenedWeights[index++] = outputWeights[i, j];
             }
         }
-        
+
         // Update the output layer weights
         outputLayer.UpdateParameters(flattenedWeights);
     }
@@ -390,7 +390,7 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     {
         // Write hidden layer size
         writer.Write(_hiddenLayerSize);
-        
+
         // Write whether we're in training mode
         writer.Write(IsTrainingMode);
     }
@@ -420,18 +420,18 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     {
         // Read hidden layer size
         int hiddenLayerSize = reader.ReadInt32();
-        
+
         // Check if the hiddenLayerSize matches the current instance
         if (hiddenLayerSize != _hiddenLayerSize)
         {
             Console.WriteLine($"Warning: Loaded ELM has hidden layer size {hiddenLayerSize}, " +
                              $"but current instance has size {_hiddenLayerSize}");
         }
-        
+
         // Read training mode
         IsTrainingMode = reader.ReadBoolean();
     }
-    
+
     /// <summary>
     /// Trains the ELM using regularized least squares for improved generalization.
     /// </summary>
@@ -463,29 +463,29 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
         {
             throw new InvalidOperationException("ELM requires at least 3 layers: input projection, activation, and output.");
         }
-        
+
         // STEP 1: Get the hidden layer activations by projecting the input through the fixed random weights
         Tensor<T> hiddenActivations = input;
-        
+
         // Process through all layers except the last one (which is the output layer)
         for (int i = 0; i < Layers.Count - 1; i++)
         {
             hiddenActivations = Layers[i].Forward(hiddenActivations);
         }
-        
+
         // STEP 2: Calculate the optimal output weights using regularized pseudoinverse
-        
+
         // Convert hidden activations and expected output to matrices for the calculation
         Matrix<T> H = hiddenActivations.ConvertToMatrix();
         Matrix<T> T = expectedOutput.ConvertToMatrix();
-        
+
         // Calculate regularized pseudoinverse: (H^T * H + λI)^(-1) * H^T
         Matrix<T> transposeH = H.Transpose();
         Matrix<T> hTh = transposeH.Multiply(H);
-        
+
         // Create identity matrix for regularization
         Matrix<T> identity = Matrix<T>.CreateIdentity(hTh.Rows);
-        
+
         // Apply regularization: hTh + λI
         T regFactor = NumOps.FromDouble(regularizationFactor);
         for (int i = 0; i < identity.Rows; i++)
@@ -498,16 +498,16 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
                 }
             }
         }
-        
+
         // Calculate inverse of regularized matrix
         Matrix<T> regularizedInverse = hTh.Inverse();
-        
+
         // Calculate final pseudoinverse
         Matrix<T> regularizedPseudoInverse = regularizedInverse.Multiply(transposeH);
-        
+
         // Calculate output weights
         Matrix<T> outputWeights = regularizedPseudoInverse.Multiply(T);
-        
+
         // STEP 3: Update only the last layer (output layer) with the calculated weights
         UpdateOutputLayerWeights(outputWeights);
     }

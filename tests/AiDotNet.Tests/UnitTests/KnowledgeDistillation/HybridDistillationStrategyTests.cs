@@ -27,10 +27,10 @@ public class HybridDistillationStrategyTests
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.3);
         var strategy2 = new DistillationLoss<double>(temperature: 2.0, alpha: 0.5);
-        var strategies = new (IDistillationStrategy<double>, double)[] 
-        { 
-            (strategy1, 0.6), 
-            (strategy2, 0.4) 
+        var strategies = new (IDistillationStrategy<double>, double)[]
+        {
+            (strategy1, 0.6),
+            (strategy2, 0.4)
         };
 
         // Act
@@ -51,10 +51,10 @@ public class HybridDistillationStrategyTests
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.3);
         var strategy2 = new DistillationLoss<double>(temperature: 2.0, alpha: 0.5);
-        var strategies = new (IDistillationStrategy<double>, double)[] 
-        { 
-            (strategy1, 0.5), 
-            (strategy2, 0.3) 
+        var strategies = new (IDistillationStrategy<double>, double)[]
+        {
+            (strategy1, 0.5),
+            (strategy2, 0.3)
         }; // Sum = 0.8, not 1.0
 
         // Act & Assert

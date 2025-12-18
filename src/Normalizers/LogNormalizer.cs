@@ -114,7 +114,7 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
             var normalizedVector = vector.Transform(x =>
             {
                 T shiftedValue = NumOps.Add(x, shift);
-                return NumOps.GreaterThan(shiftedValue, NumOps.Zero) 
+                return NumOps.GreaterThan(shiftedValue, NumOps.Zero)
                     ? NumOps.Divide(
                         NumOps.Subtract(NumOps.Log(shiftedValue), NumOps.Log(NumOps.Add(min, shift))),
                         NumOps.Subtract(NumOps.Log(NumOps.Add(max, shift)), NumOps.Log(NumOps.Add(min, shift))))
@@ -133,28 +133,28 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
         {
             // Flatten tensor to apply log normalization
             var flattenedTensor = tensor.ToVector();
-            
+
             T min = flattenedTensor.Min();
             T max = flattenedTensor.Max();
             T shift = NumOps.GreaterThan(min, NumOps.Zero) ? NumOps.Zero : NumOps.Add(NumOps.Negate(min), NumOps.One);
-            
+
             var normalizedVector = flattenedTensor.Transform(x =>
             {
                 T shiftedValue = NumOps.Add(x, shift);
-                return NumOps.GreaterThan(shiftedValue, NumOps.Zero) 
+                return NumOps.GreaterThan(shiftedValue, NumOps.Zero)
                     ? NumOps.Divide(
                         NumOps.Subtract(NumOps.Log(shiftedValue), NumOps.Log(NumOps.Add(min, shift))),
                         NumOps.Subtract(NumOps.Log(NumOps.Add(max, shift)), NumOps.Log(NumOps.Add(min, shift))))
                     : NumOps.Zero;
             });
-            
+
             // Convert back to tensor with the same shape
             var normalizedTensor = Tensor<T>.FromVector(normalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 normalizedTensor = normalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             var parameters = new NormalizationParameters<T>
             {
                 Method = NormalizationMethod.Log,
@@ -162,10 +162,10 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
                 Max = max,
                 Shift = shift
             };
-            
+
             return ((TOutput)(object)normalizedTensor, parameters);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -207,7 +207,7 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
         {
             var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
             var parametersList = new List<NormalizationParameters<T>>();
-            
+
             for (int i = 0; i < matrix.Columns; i++)
             {
                 var column = matrix.GetColumn(i);
@@ -225,7 +225,7 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
                         $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
                 }
             }
-            
+
             return ((TInput)(object)normalizedMatrix, parametersList);
         }
         else if (data is Tensor<T> tensor && tensor.Shape.Length == 2)
@@ -234,7 +234,7 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
             var rows = tensor.Shape[0];
             var cols = tensor.Shape[1];
             var newMatrix = new Matrix<T>(rows, cols);
-            
+
             for (int i = 0; i < rows; i++)
             {
                 for (int j = 0; j < cols; j++)
@@ -242,11 +242,11 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
                     newMatrix[i, j] = tensor[i, j];
                 }
             }
-            
+
             // Normalize each column separately
             var normalizedColumns = new List<Vector<T>>();
             var parametersList = new List<NormalizationParameters<T>>();
-            
+
             for (int i = 0; i < cols; i++)
             {
                 var column = newMatrix.GetColumn(i);
@@ -264,14 +264,14 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
                         $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
                 }
             }
-            
+
             // Convert back to tensor
             var normalizedMatrix = Matrix<T>.FromColumnVectors(normalizedColumns);
             var normalizedTensor = new Tensor<T>(new[] { normalizedMatrix.Rows, normalizedMatrix.Columns }, normalizedMatrix);
-            
+
             return ((TInput)(object)normalizedTensor, parametersList);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TInput).Name}. " +
             $"Supported types are Matrix<{typeof(T).Name}> and 2D Tensor<{typeof(T).Name}>.");
@@ -321,14 +321,14 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
                     NumOps.Log(NumOps.Add(parameters.Min, parameters.Shift))));
                 return NumOps.Subtract(expValue, parameters.Shift);
             });
-            
+
             return (TOutput)(object)denormalizedVector;
         }
         else if (data is Tensor<T> tensor)
         {
             // Flatten tensor for denormalization
             var flattenedTensor = tensor.ToVector();
-            
+
             var denormalizedVector = flattenedTensor.Transform(x =>
             {
                 T expValue = NumOps.Exp(NumOps.Add(
@@ -338,17 +338,17 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
                     NumOps.Log(NumOps.Add(parameters.Min, parameters.Shift))));
                 return NumOps.Subtract(expValue, parameters.Shift);
             });
-            
+
             // Convert back to tensor with the same shape
             var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             return (TOutput)(object)denormalizedTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -396,29 +396,29 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
                 xParams.Select(p => NumOps.Divide(
                     NumOps.Subtract(NumOps.Log(NumOps.Add(yParams.Max, yParams.Shift)), NumOps.Log(NumOps.Add(yParams.Min, yParams.Shift))),
                     NumOps.Subtract(NumOps.Log(NumOps.Add(p.Max, p.Shift)), NumOps.Log(NumOps.Add(p.Min, p.Shift)))))));
-                    
+
             return (TOutput)(object)denormalizedCoefficients;
         }
         else if (coefficients is Tensor<T> tensor)
         {
             // Flatten tensor for denormalization
             var flattenedTensor = tensor.ToVector();
-            
+
             var denormalizedVector = flattenedTensor.PointwiseMultiply(Vector<T>.FromEnumerable(
                 xParams.Select(p => NumOps.Divide(
                     NumOps.Subtract(NumOps.Log(NumOps.Add(yParams.Max, yParams.Shift)), NumOps.Log(NumOps.Add(yParams.Min, yParams.Shift))),
                     NumOps.Subtract(NumOps.Log(NumOps.Add(p.Max, p.Shift)), NumOps.Log(NumOps.Add(p.Min, p.Shift)))))));
-            
+
             // Convert back to tensor with the same shape
             var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             return (TOutput)(object)denormalizedTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported coefficients type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -460,7 +460,7 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
     /// The predictions will be properly calibrated to match your original data scale.
     /// </para>
     /// </remarks>
-    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, 
+    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients,
         List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
         // Extract vectors from inputs
@@ -479,7 +479,7 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
                 $"Unsupported coefficients type {typeof(TOutput).Name}. " +
                 $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
         }
-        
+
         Vector<T> yVector;
         if (y is Vector<T> yVec)
         {
@@ -495,7 +495,7 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
                 $"Unsupported y type {typeof(TOutput).Name}. " +
                 $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
         }
-        
+
         // Get columns from xMatrix
         IEnumerable<Vector<T>> columns;
         if (xMatrix is Matrix<T> matrix)
@@ -507,7 +507,7 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
             var rows = xTensor.Shape[0];
             var cols = xTensor.Shape[1];
             var newMatrix = new Matrix<T>(rows, cols);
-            
+
             for (int i = 0; i < rows; i++)
             {
                 for (int j = 0; j < cols; j++)
@@ -515,7 +515,7 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
                     newMatrix[i, j] = xTensor[i, j];
                 }
             }
-            
+
             columns = newMatrix.GetColumns();
         }
         else
@@ -524,7 +524,7 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
                 $"Unsupported xMatrix type {typeof(TInput).Name}. " +
                 $"Supported types are Matrix<{typeof(T).Name}> and 2D Tensor<{typeof(T).Name}>.");
         }
-        
+
         // Calculate denormalized intercept
         TOutput denormalizedCoefficients = Denormalize(coefficients, xParams, yParams);
         Vector<T> denormalizedCoefficientsVector;
@@ -547,10 +547,10 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
 
         var meanX = Vector<T>.FromEnumerable(columns.Select(col => col.Mean()));
         var meanY = yVector.Mean();
-        
+
         // Start with mean of target variable
         T intercept = meanY;
-        
+
         // For log normalization, we need to adjust for the effect of each coefficient on the mean values
         for (int i = 0; i < denormalizedCoefficientsVector.Length; i++)
         {
@@ -559,9 +559,9 @@ public class LogNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutp
             T logMeanX = NumOps.GreaterThan(meanX[i], NumOps.Zero)
                 ? NumOps.Log(NumOps.Add(meanX[i], xParams[i].Shift))
                 : NumOps.Zero;
-                
+
             intercept = NumOps.Subtract(
-                intercept, 
+                intercept,
                 NumOps.Multiply(denormalizedCoefficientsVector[i], logMeanX)
             );
         }

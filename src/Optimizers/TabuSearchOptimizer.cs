@@ -270,7 +270,8 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
 
         // Create an individual from the current solution
         Func<ICollection<ModelParameterGene<T>>, IFullModel<T, TInput, TOutput>> modelFactory =
-            g => {
+            g =>
+            {
                 var model = currentSolution.DeepCopy();
 
                 var newParams = new Vector<T>(g.Count);

@@ -85,7 +85,7 @@ public class NoNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutpu
         {
             return (data, new NormalizationParameters<T> { Method = NormalizationMethod.None });
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -128,7 +128,7 @@ public class NoNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutpu
             var parameters = Enumerable.Repeat(new NormalizationParameters<T> { Method = NormalizationMethod.None }, columns).ToList();
             return (data, parameters);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TInput).Name}. " +
             $"Supported types are Matrix<{typeof(T).Name}> and 2D Tensor<{typeof(T).Name}>.");
@@ -165,7 +165,7 @@ public class NoNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutpu
         {
             return data;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -202,7 +202,7 @@ public class NoNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutpu
         {
             return coefficients;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported coefficients type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -234,7 +234,7 @@ public class NoNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutpu
     /// adjustments, this can directly calculate the intercept from the original data.
     /// </para>
     /// </remarks>
-    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, 
+    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients,
         List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
         // Extract vectors from inputs for calculation
@@ -248,7 +248,7 @@ public class NoNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutpu
             var rows = xTensor.Shape[0];
             var cols = xTensor.Shape[1];
             var newMatrix = new Matrix<T>(rows, cols);
-            
+
             for (int i = 0; i < rows; i++)
             {
                 for (int j = 0; j < cols; j++)
@@ -256,7 +256,7 @@ public class NoNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutpu
                     newMatrix[i, j] = xTensor[i, j];
                 }
             }
-            
+
             // Extract vectors from coefficients and y
             Vector<T> coeffVector2;
             if (coefficients is Vector<T> vector)
@@ -273,7 +273,7 @@ public class NoNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutpu
                     $"Unsupported coefficients type {coefficients?.GetType().Name}. " +
                     $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
             }
-            
+
             Vector<T> yVector2;
             if (y is Vector<T> yVec)
             {
@@ -289,10 +289,10 @@ public class NoNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutpu
                     $"Unsupported y type {y?.GetType().Name}. " +
                     $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
             }
-            
+
             return MathHelper.CalculateYIntercept(newMatrix, yVector2, coeffVector2);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported input types. xMatrix: {xMatrix?.GetType().Name}, " +
             $"y: {y?.GetType().Name}, coefficients: {coefficients?.GetType().Name}. " +

@@ -42,7 +42,7 @@ public class OptimizationStepData<T, TInput, TOutput>
     /// Gets or sets the current solution (model) for this optimization step.
     /// </summary>
     public IFullModel<T, TInput, TOutput> Solution { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the list of selected feature vectors for this optimization step.
     /// </summary>
@@ -71,7 +71,7 @@ public class OptimizationStepData<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public List<Vector<T>> SelectedFeatures { get; set; } = [];
-    
+
     /// <summary>
     /// Gets or sets the subset of the training data used for this optimization step.
     /// </summary>
@@ -101,7 +101,7 @@ public class OptimizationStepData<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public TInput XTrainSubset { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the subset of the validation data used for this optimization step.
     /// </summary>
@@ -131,7 +131,7 @@ public class OptimizationStepData<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public TInput XValSubset { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the subset of the test data used for this optimization step.
     /// </summary>
@@ -161,7 +161,7 @@ public class OptimizationStepData<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public TInput XTestSubset { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the fitness score for this optimization step.
     /// </summary>
@@ -190,7 +190,7 @@ public class OptimizationStepData<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public T FitnessScore { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the result of overfitting detection for this optimization step.
     /// </summary>
@@ -220,7 +220,7 @@ public class OptimizationStepData<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public FitDetectorResult<T> FitDetectionResult { get; set; } = new();
-    
+
     /// <summary>
     /// Gets or sets the comprehensive evaluation data for this optimization step.
     /// </summary>
@@ -277,9 +277,9 @@ public class OptimizationStepData<T, TInput, TOutput>
         var numOps = MathHelper.GetNumericOperations<T>();
         FitnessScore = numOps.Zero;
 
-         // Create default model data
+        // Create default model data
         var (x, y, _) = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData();
-        
+
         // Initialize properties with default values
         XTrainSubset = x;
         XValSubset = x;

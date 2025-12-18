@@ -269,7 +269,7 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
         }
     }
 
-        /// <summary>
+    /// <summary>
     /// Gets metadata about the model.
     /// </summary>
     /// <returns>A ModelMetadata object containing information about the model.</returns>
@@ -436,13 +436,13 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         var newModel = new QuantileRegressionForests<T>(_options, Regularization);
-        
+
         // Copy feature importances if they exist
         if (FeatureImportances != null)
         {
             newModel.FeatureImportances = new Vector<T>([.. FeatureImportances]);
         }
-        
+
         // Deep copy all the trees
         newModel._trees = new List<DecisionTreeRegression<T>>(_trees.Count);
         foreach (var tree in _trees)
@@ -453,13 +453,13 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
             treeCopy.Deserialize(treeData);
             newModel._trees.Add(treeCopy);
         }
-        
+
         // Initialize the random number generator with the same seed if available
         if (_options.Seed.HasValue)
         {
             newModel._random = RandomHelper.CreateSeededRandom(_options.Seed.Value);
         }
-        
+
         return newModel;
     }
 }

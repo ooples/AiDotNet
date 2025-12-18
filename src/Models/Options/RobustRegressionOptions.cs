@@ -76,7 +76,7 @@ public class RobustRegressionOptions<T> : RegressionOptions<T>
     /// </para>
     /// </remarks>
     public double TuningConstant { get; set; } = 1.345;
-    
+
     /// <summary>
     /// Gets or sets the maximum number of iterations for the iterative reweighting procedure.
     /// </summary>
@@ -113,7 +113,7 @@ public class RobustRegressionOptions<T> : RegressionOptions<T>
     /// </para>
     /// </remarks>
     public int MaxIterations { get; set; } = 100;
-    
+
     /// <summary>
     /// Gets or sets the convergence tolerance for the iterative reweighting procedure.
     /// </summary>
@@ -150,7 +150,7 @@ public class RobustRegressionOptions<T> : RegressionOptions<T>
     /// </para>
     /// </remarks>
     public double Tolerance { get; set; } = 1e-6;
-    
+
     /// <summary>
     /// Gets or sets the weight function used to reduce the influence of outliers.
     /// </summary>
@@ -192,7 +192,7 @@ public class RobustRegressionOptions<T> : RegressionOptions<T>
     /// </para>
     /// </remarks>
     public WeightFunction WeightFunction { get; set; } = WeightFunction.Huber;
-    
+
     /// <summary>
     /// Gets or sets the initial regression model used to start the iterative procedure.
     /// </summary>

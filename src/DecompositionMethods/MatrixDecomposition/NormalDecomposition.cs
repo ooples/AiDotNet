@@ -20,7 +20,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 public class NormalDecomposition<T> : MatrixDecompositionBase<T>
 {
     // A property is inherited from MatrixDecompositionBase<T>
-    
+
     /// <summary>
     /// The product of A-transpose and A, forming a square, symmetric matrix.
     /// </summary>
@@ -29,7 +29,7 @@ public class NormalDecomposition<T> : MatrixDecompositionBase<T>
     /// It's always square (same number of rows and columns) which makes it more manageable.
     /// </remarks>
     private Matrix<T> _aTA { get; set; }
-    
+
     /// <summary>
     /// The Cholesky decomposition of the A^T*A matrix, used to efficiently solve the system.
     /// </summary>

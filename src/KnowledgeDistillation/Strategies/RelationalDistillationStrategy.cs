@@ -721,7 +721,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         {
             int studentDim = studentEmbeddings[0].Length;
             int teacherDim = teacherEmbeddings[0].Length;
-            
+
             for (int i = 0; i < studentEmbeddings.Length; i++)
             {
                 if (studentEmbeddings[i].Length != studentDim)

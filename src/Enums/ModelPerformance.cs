@@ -23,7 +23,7 @@ public enum ModelPerformance
     /// </para>
     /// </remarks>
     Good,
-    
+
     /// <summary>
     /// Indicates that the model performs acceptably but has room for improvement.
     /// </summary>
@@ -35,7 +35,7 @@ public enum ModelPerformance
     /// </para>
     /// </remarks>
     Moderate,
-    
+
     /// <summary>
     /// Indicates that the model performs poorly and may not be suitable for the given data or task.
     /// </summary>

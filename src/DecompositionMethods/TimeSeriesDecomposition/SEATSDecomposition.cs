@@ -34,7 +34,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// - forecastHorizon: How many future periods you want to predict (e.g., 12 for a year of monthly data)
     /// - algorithm: Which calculation method to use (Standard is a good default)
     /// </remarks>
-    public SEATSDecomposition(Vector<T> timeSeries, SARIMAOptions<T>? sarimaOptions = null, int forecastHorizon = 12, SEATSAlgorithmType algorithm = SEATSAlgorithmType.Standard) 
+    public SEATSDecomposition(Vector<T> timeSeries, SARIMAOptions<T>? sarimaOptions = null, int forecastHorizon = 12, SEATSAlgorithmType algorithm = SEATSAlgorithmType.Standard)
         : base(timeSeries)
     {
         _sarimaOptions = sarimaOptions ?? new();
@@ -321,10 +321,10 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
 
         for (int k = -filterLength / 2; k <= filterLength / 2; k++)
         {
-            T integral = NumericIntegration(freq => 
+            T integral = NumericIntegration(freq =>
             {
                 T cosine = NumOps.FromDouble(Math.Cos(k * Convert.ToDouble(freq)));
-                return NumOps.Multiply(cosine, 
+                return NumOps.Multiply(cosine,
                     NumOps.Divide(NumOps.One, spectralDensity(NumOps.FromDouble(Convert.ToDouble(freq)))));
             }, NumOps.Zero, NumOps.FromDouble(Math.PI), 1000);
 
@@ -495,10 +495,10 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
 
         for (int k = 0; k < _filterLength; k++)
         {
-            T _integral = NumericIntegration(freq => 
+            T _integral = NumericIntegration(freq =>
             {
                 T _cosine = NumOps.FromDouble(Math.Cos(k * Convert.ToDouble(freq)));
-                return NumOps.Multiply(_cosine, 
+                return NumOps.Multiply(_cosine,
                     NumOps.Divide(NumOps.One, _spectralDensity(freq)));
             }, NumOps.Zero, NumOps.FromDouble(2 * Math.PI), 1000);
 

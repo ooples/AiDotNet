@@ -35,7 +35,7 @@ public class ANOVAKernel<T> : IKernelFunction<T>
     /// the kernel more tolerant of differences.
     /// </remarks>
     private readonly T _sigma;
-    
+
     /// <summary>
     /// The polynomial degree parameter that controls the complexity of the kernel.
     /// </summary>
@@ -45,7 +45,7 @@ public class ANOVAKernel<T> : IKernelFunction<T>
     /// (where the model learns noise in the data rather than the true pattern).
     /// </remarks>
     private readonly int _degree;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

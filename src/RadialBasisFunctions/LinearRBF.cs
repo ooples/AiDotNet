@@ -39,7 +39,7 @@ public class LinearRBF<T> : IRadialBasisFunction<T>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="LinearRBF{T}"/> class.
     /// </summary>
@@ -59,7 +59,7 @@ public class LinearRBF<T> : IRadialBasisFunction<T>
     {
         _numOps = MathHelper.GetNumericOperations<T>();
     }
-    
+
     /// <summary>
     /// Computes the value of the Linear Radial Basis Function for a given radius.
     /// </summary>
@@ -84,7 +84,7 @@ public class LinearRBF<T> : IRadialBasisFunction<T>
     {
         return r;
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Linear RBF with respect to the radius.
     /// </summary>
@@ -111,7 +111,7 @@ public class LinearRBF<T> : IRadialBasisFunction<T>
         // The derivative of r with respect to r is 1
         return _numOps.One;
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Linear RBF with respect to a width parameter.
     /// </summary>

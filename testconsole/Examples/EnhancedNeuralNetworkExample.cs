@@ -1,13 +1,13 @@
 ﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.DataProcessor;
 using AiDotNet.Enums;
+using AiDotNet.FeatureSelectors;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Normalizers;
-using AiDotNet.FeatureSelectors;
 using AiDotNet.OutlierRemoval;
-using AiDotNet.DataProcessor;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNetTestConsole.Examples;
 

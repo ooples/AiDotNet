@@ -40,7 +40,7 @@ public class CircularKernel<T> : IKernelFunction<T>
     /// more distant points will still be considered somewhat similar.
     /// </remarks>
     private readonly T _sigma;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

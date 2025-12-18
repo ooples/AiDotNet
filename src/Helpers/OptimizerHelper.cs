@@ -147,7 +147,7 @@ public static class OptimizerHelper<T, TInput, TOutput>
             // All vectors should have the same length (number of rows)
             int rows = featureList[0].Length;
             int cols = featureList.Count;
-        
+
             // Check all vectors have same length
             for (int i = 1; i < featureList.Count; i++)
             {
@@ -156,10 +156,10 @@ public static class OptimizerHelper<T, TInput, TOutput>
                     throw new ArgumentException("All feature vectors must have the same length");
                 }
             }
-        
+
             // Create a new 2D tensor
             var result = new Tensor<T>([rows, cols]);
-        
+
             // Fill the tensor with the data from the selected columns
             for (int col = 0; col < cols; col++)
             {
@@ -168,7 +168,7 @@ public static class OptimizerHelper<T, TInput, TOutput>
                     result[row, col] = featureList[col][row];
                 }
             }
-        
+
             return (TInput)(object)result;
         }
         else

@@ -36,12 +36,12 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// Configuration options specific to the VARMA model.
     /// </summary>
     private readonly VARMAModelOptions<T> _varmaOptions;
-    
+
     /// <summary>
     /// Matrix of Moving Average (MA) coefficients that capture the dependency on past error terms.
     /// </summary>
     private Matrix<T> _maCoefficients;
-    
+
     /// <summary>
     /// Matrix of residuals (errors) from the model fit.
     /// </summary>
@@ -222,13 +222,13 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
     private Vector<T> PredictMA()
     {
         Vector<T> maPrediction = new Vector<T>(_varmaOptions.OutputDimension);
-        
+
         // Build flattened residual vector matching the training feature layout
         // (concatenate the last MaLag residual rows in the same order as PrepareLaggedResiduals)
         int m = _varmaOptions.OutputDimension;
         int p = _varmaOptions.MaLag;
         int availableLags = Math.Min(p, _residuals.Rows);
-        
+
         List<T> laggedResidualData = new List<T>(m * p);
         for (int j = 0; j < p; j++)
         {
@@ -246,7 +246,7 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
                 }
             }
         }
-        
+
         Vector<T> laggedResidualVector = new Vector<T>(laggedResidualData.ToArray());
 
         // VECTORIZED: Use Engine.DotProduct to compute MA prediction for each output
@@ -335,7 +335,7 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// 
     /// This method:
     /// 1. First calls the base class's serialization method to save the VAR part of the model
-        /// 2. Then saves the VARMA-specific options (like the MA lag)
+    /// 2. Then saves the VARMA-specific options (like the MA lag)
     /// 3. Finally saves the MA coefficients matrix
     /// 
     /// The MA coefficients are saved row by row, column by column, as double values.
@@ -415,4 +415,3 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
         }
     }
 }
-    

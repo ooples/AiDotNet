@@ -1,8 +1,8 @@
 using System.Diagnostics;
-using Microsoft.AspNetCore.Mvc;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
+using AiDotNet.Tensors.LinearAlgebra;
+using Microsoft.AspNetCore.Mvc;
 
 namespace AiDotNet.Serving.Controllers;
 

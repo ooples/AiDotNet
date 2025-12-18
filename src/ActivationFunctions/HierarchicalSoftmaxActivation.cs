@@ -33,12 +33,12 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// The total number of output classes.
     /// </summary>
     private readonly int _numClasses;
-    
+
     /// <summary>
     /// The depth of the binary tree used to represent the hierarchical structure.
     /// </summary>
     private readonly int _treeDepth;
-    
+
     /// <summary>
     /// The weights for each node in the binary tree.
     /// </summary>

@@ -1,5 +1,5 @@
-using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System.Text;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
 
@@ -73,7 +73,7 @@ public class AutoCompressor<T> : ContextCompressorBase<T>
             return string.Empty;
 
         var targetSentenceCount = Math.Max(1, (int)(sentences.Count * _compressionRatio));
-        
+
         var scoredSentences = sentences
             .Select((sentence, index) => new
             {

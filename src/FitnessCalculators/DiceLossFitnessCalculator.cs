@@ -47,7 +47,7 @@ public class DiceLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBa
     /// better performance (0 would be a perfect model). This tells the system that smaller numbers are better.
     /// </para>
     /// </remarks>
-    public DiceLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) 
+    public DiceLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
     }
@@ -78,7 +78,7 @@ public class DiceLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBa
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return new DiceLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+        return new DiceLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

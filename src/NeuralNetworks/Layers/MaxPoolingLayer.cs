@@ -92,7 +92,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// <b>For Beginners:</b> This constructor sets up the max pooling layer with your chosen settings.
     /// It calculates what the output shape will be based on your input shape, pool size, and strides.
     /// </remarks>
-    public MaxPoolingLayer(int[] inputShape, int poolSize, int strides) 
+    public MaxPoolingLayer(int[] inputShape, int poolSize, int strides)
         : base(inputShape, CalculateOutputShape(inputShape, poolSize, strides))
     {
         PoolSize = poolSize;
@@ -196,7 +196,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
 
         // Reshape to 4D
         var gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
-        
+
         var inputShape4D = new int[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] };
         var poolSizeArr = new int[] { PoolSize, PoolSize };
         var strideArr = new int[] { Strides, Strides };

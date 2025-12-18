@@ -55,7 +55,7 @@ public class NoRegularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     public NoRegularization()
     {
     }
-    
+
     /// <summary>
     /// Returns the input data unchanged, applying no regularization.
     /// </summary>

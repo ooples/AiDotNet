@@ -84,7 +84,7 @@ public class DiversityReranker<T> : RerankerBase<T>
     public DiversityReranker(T? lambda = default) : base()
     {
         var lambdaValue = lambda ?? NumOps.FromDouble(0.5);
-        
+
         // Validate lambda is in [0, 1]
         if (NumOps.LessThan(lambdaValue, NumOps.Zero) || NumOps.GreaterThan(lambdaValue, NumOps.One))
         {
@@ -112,8 +112,9 @@ public class DiversityReranker<T> : RerankerBase<T>
         var remainingDocs = new List<Document<T>>(docList);
 
         // Start with the most relevant document
-        var firstDoc = remainingDocs.OrderByDescending(d => d.RelevanceScore, 
-            Comparer<T>.Create((a, b) => {
+        var firstDoc = remainingDocs.OrderByDescending(d => d.RelevanceScore,
+            Comparer<T>.Create((a, b) =>
+            {
                 if (NumOps.GreaterThan(a, b)) return 1;
                 if (NumOps.LessThan(a, b)) return -1;
                 return 0;
@@ -172,7 +173,7 @@ public class DiversityReranker<T> : RerankerBase<T>
             // Score decreases with rank: (totalDocs - rank + 1) / totalDocs
             var numerator = NumOps.Add(NumOps.Subtract(totalDocs, rank), NumOps.One);
             var newScore = NumOps.Divide(numerator, totalDocs);
-            
+
             rerankedDocs[i].RelevanceScore = newScore;
             rerankedDocs[i].HasRelevanceScore = true;
         }
@@ -196,12 +197,12 @@ public class DiversityReranker<T> : RerankerBase<T>
         // Tokenize and create word sets
         var words1 = new HashSet<string>(
             text1.ToLowerInvariant()
-                .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', ';', ':', '!', '?' }, 
+                .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', ';', ':', '!', '?' },
                     StringSplitOptions.RemoveEmptyEntries));
 
         var words2 = new HashSet<string>(
             text2.ToLowerInvariant()
-                .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', ';', ':', '!', '?' }, 
+                .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', ';', ':', '!', '?' },
                     StringSplitOptions.RemoveEmptyEntries));
 
         // Calculate Jaccard similarity: |intersection| / |union|

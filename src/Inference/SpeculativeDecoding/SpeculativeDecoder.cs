@@ -240,7 +240,7 @@ public class SpeculativeDecoder<T>
             }
         }
 
-        done:
+    done:
         _totalTokensGenerated += generated;
 
         var resultTokens = new Vector<int>(tokens.ToArray());

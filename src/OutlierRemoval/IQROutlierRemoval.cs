@@ -71,7 +71,7 @@ public class IQROutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInput, 
     {
         // Convert to concrete types
         var (inputMatrix, outputVector) = OutlierRemovalHelper<T, TInput, TOutput>.ConvertToMatrixVector(inputs, outputs);
-        
+
         var cleanedInputs = new List<Vector<T>>();
         var cleanedOutputs = new List<T>();
 
@@ -104,12 +104,12 @@ public class IQROutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInput, 
 
         var cleanedInputMatrix = new Matrix<T>(cleanedInputs);
         var cleanedOutputVector = new Vector<T>(cleanedOutputs);
-        
+
         // Convert back to original types
         return OutlierRemovalHelper<T, TInput, TOutput>.ConvertToOriginalTypes(
-            cleanedInputMatrix, 
-            cleanedOutputVector, 
-            typeof(TInput), 
+            cleanedInputMatrix,
+            cleanedOutputVector,
+            typeof(TInput),
             typeof(TOutput));
     }
 }

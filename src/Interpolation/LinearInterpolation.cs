@@ -20,12 +20,12 @@ public class LinearInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the known data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates (values) of the known data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

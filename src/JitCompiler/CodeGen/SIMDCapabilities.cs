@@ -1,6 +1,6 @@
 #if NET6_0_OR_GREATER
-using System.Runtime.Intrinsics.X86;
 using System.Runtime.Intrinsics.Arm;
+using System.Runtime.Intrinsics.X86;
 #endif
 
 namespace AiDotNet.JitCompiler.CodeGen;

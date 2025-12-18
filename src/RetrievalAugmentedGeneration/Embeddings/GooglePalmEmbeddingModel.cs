@@ -1,8 +1,8 @@
+using System.Linq;
+using System.Text;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
-using System.Linq;
-using System.Text;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 
@@ -64,23 +64,23 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var embedding = new T[dimension];
-        
+
         // Generate deterministic features from text
         var hash = text.GetHashCode();
         var random = RandomHelper.CreateSeededRandom(hash);
 
         // Character-based features
         var charFreqs = CalculateCharacterFrequencies(text);
-        
+
         // Word-based features
         var words = text.ToLower().Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
         var wordLength = words.Length > 0 ? words.Average(w => w.Length) : 0;
-        
+
         // Generate embedding vector
         for (int i = 0; i < dimension; i++)
         {
             double value;
-            
+
             if (i < charFreqs.Length)
             {
                 value = charFreqs[i];
@@ -98,14 +98,14 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
                 // Random component based on text hash
                 value = random.NextDouble() * 2.0 - 1.0;
             }
-            
+
             embedding[i] = numOps.FromDouble(value);
         }
 
         // Normalize to unit length
         var vector = new Vector<T>(embedding);
         var magnitude = CalculateMagnitude(vector, numOps);
-        
+
         if (Convert.ToDouble(magnitude) > 0)
         {
             for (int i = 0; i < dimension; i++)

@@ -43,7 +43,7 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </para>
     /// </remarks>
     private readonly T _temperature;
-    
+
     /// <summary>
     /// Random number generator used for sampling Gumbel noise.
     /// </summary>

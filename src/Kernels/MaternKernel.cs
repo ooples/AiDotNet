@@ -55,7 +55,7 @@ public class MaternKernel<T> : IKernelFunction<T>
     /// for many applications.
     /// </remarks>
     private readonly T _nu;
-    
+
     /// <summary>
     /// Controls how quickly the similarity decreases with distance between points.
     /// </summary>
@@ -72,7 +72,7 @@ public class MaternKernel<T> : IKernelFunction<T>
     /// if your data points are densely packed and local patterns are important.
     /// </remarks>
     private readonly T _length;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
@@ -142,14 +142,14 @@ public class MaternKernel<T> : IKernelFunction<T>
     public T Calculate(Vector<T> x1, Vector<T> x2)
     {
         T distance = _numOps.Sqrt(x1.Subtract(x2).DotProduct(x1.Subtract(x2)));
-        T scaledDistance = _numOps.Multiply(_numOps.Sqrt(_numOps.Multiply(_numOps.FromDouble(2), _nu)), 
+        T scaledDistance = _numOps.Multiply(_numOps.Sqrt(_numOps.Multiply(_numOps.FromDouble(2), _nu)),
                                             _numOps.Divide(distance, _length));
-        
+
         T besselTerm = ModifiedBesselFunction(_nu, scaledDistance);
-        
+
         T powerTerm = _numOps.Power(_numOps.FromDouble(2), _numOps.Subtract(_numOps.One, _nu));
         T gammaTerm = StatisticsHelper<T>.Gamma(_nu);
-        
+
         return _numOps.Multiply(_numOps.Multiply(powerTerm, _numOps.Divide(_numOps.One, gammaTerm)),
                                 _numOps.Multiply(besselTerm, _numOps.Power(scaledDistance, _nu)));
     }
@@ -268,7 +268,7 @@ public class MaternKernel<T> : IKernelFunction<T>
         /// Calculates the square root of p/(2x) term used in the asymptotic expansion.
         /// </summary>
         T sqrtPiOver2x = _numOps.Divide(_numOps.Sqrt(_numOps.FromDouble(Math.PI / 2)), _numOps.Sqrt(x));
-    
+
         /// <summary>
         /// Calculates the exponential decay term e^(-x) used in the asymptotic expansion.
         /// </summary>
@@ -278,7 +278,7 @@ public class MaternKernel<T> : IKernelFunction<T>
         /// The first term in the asymptotic series expansion.
         /// </summary>
         T p = _numOps.One;
-    
+
         /// <summary>
         /// The second term in the asymptotic series expansion, which improves accuracy.
         /// </summary>

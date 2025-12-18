@@ -231,7 +231,7 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
     private Vector<T> ApplyDifferencing(Vector<T> y)
     {
         Vector<T> result = y;
-        
+
         // Apply seasonal differencing
         for (int i = 0; i < _D; i++)
         {
@@ -307,7 +307,7 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         for (int i = maxLag; i < n; i++)
         {
             T predicted = NumOps.Zero;
-            
+
             // Non-seasonal AR component
             for (int j = 0; j < _p; j++)
             {
@@ -327,7 +327,7 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
     }
 
 
-        /// <summary>
+    /// <summary>
     /// Estimates the seasonal moving average (SMA) coefficients.
     /// </summary>
     /// <param name="residuals">The residuals after applying AR and seasonal AR components.</param>
@@ -583,7 +583,7 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         {
             throw new ArgumentException("Target vector cannot be null or empty", nameof(y));
         }
-    
+
         // Check if we have enough data for the seasonal component
         int minRequiredLength = Math.Max(_d + _m * _D, _p + _P * _m) + _m * Math.Max(_P, _Q);
         if (y.Length < minRequiredLength)
@@ -592,7 +592,7 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
                 $"Time series is too short (length: {y.Length}) for the specified model parameters. " +
                 $"Minimum required length: {minRequiredLength}.", nameof(y));
         }
-    
+
         // Step 1: Apply seasonal and non-seasonal differencing
         Vector<T> diffY = ApplyDifferencing(y);
 
@@ -639,60 +639,60 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         {
             throw new ArgumentNullException(nameof(input), "Input vector cannot be null");
         }
-    
+
         int minRequiredInputLength = Math.Max(_p, _P * _m);
         if (input.Length < minRequiredInputLength)
         {
             throw new ArgumentException(
-                $"Input vector is too short. Length: {input.Length}, required: {minRequiredInputLength}", 
+                $"Input vector is too short. Length: {input.Length}, required: {minRequiredInputLength}",
                 nameof(input));
         }
-    
+
         // Start with the constant term
         T prediction = _constant;
-    
+
         // Add non-seasonal AR component
         for (int j = 0; j < _p && j < input.Length; j++)
         {
             prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[j], input[j]));
         }
-    
+
         // Add seasonal AR component
         for (int j = 0; j < _P && (j + 1) * _m - 1 < input.Length; j++)
         {
-            prediction = NumOps.Add(prediction, 
+            prediction = NumOps.Add(prediction,
                 NumOps.Multiply(_sarCoefficients[j], input[(j + 1) * _m - 1]));
         }
-    
+
         // Note: For single-point prediction, we typically assume zero errors for MA terms
         // since the actual errors are unknown until after the prediction is made and
         // compared to the actual value.
-    
+
         // If the input contains error terms (optional additional data), we could use them:
         if (input.Length > minRequiredInputLength)
         {
             int errorStartIndex = minRequiredInputLength;
             int errorLength = input.Length - errorStartIndex;
-        
+
             // Add non-seasonal MA component if errors are provided
             for (int j = 0; j < _q && j < errorLength; j++)
             {
-                prediction = NumOps.Add(prediction, 
+                prediction = NumOps.Add(prediction,
                     NumOps.Multiply(_maCoefficients[j], input[errorStartIndex + j]));
             }
-        
+
             // Add seasonal MA component if errors are provided
             for (int j = 0; j < _Q && j * _m < errorLength; j++)
             {
                 int index = errorStartIndex + j * _m;
                 if (index < input.Length)
                 {
-                    prediction = NumOps.Add(prediction, 
+                    prediction = NumOps.Add(prediction,
                         NumOps.Multiply(_smaCoefficients[j], input[index]));
                 }
             }
         }
-    
+
         return prediction;
     }
 
@@ -746,7 +746,7 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
             },
             ModelData = this.Serialize()
         };
-    
+
         return metadata;
     }
 
@@ -779,7 +779,7 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
             MaxIterations = _sarimaOptions.MaxIterations,
             Tolerance = _sarimaOptions.Tolerance
         };
-    
+
         // Create a new instance with the copied options
         return new SARIMAModel<T>(newOptions);
     }

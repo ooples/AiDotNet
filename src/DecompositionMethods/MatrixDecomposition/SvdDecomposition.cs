@@ -69,7 +69,7 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
         : base(matrix)
     {
         _algorithm = svdAlgorithm;
-    
+
         Decompose();
     }
 

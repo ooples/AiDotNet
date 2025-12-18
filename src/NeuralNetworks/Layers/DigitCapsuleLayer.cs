@@ -534,7 +534,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         // 2. Compute Predictions: input @ weights
         // Input: [B, I, D_in] -> Reshape to [B, I, 1, D_in] to broadcast over C
         var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, batchSize, inputCapsules, 1, 1, inputDim);
-        
+
         // Weights: [I, C, D_in, D_out] -> Reshape to [1, I, C, D_in, D_out] to broadcast over B
         var weightsReshaped = Autodiff.TensorOperations<T>.Reshape(weightsNode, 1, inputCapsules, numClasses, inputDim, outputDim);
 
@@ -576,7 +576,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
             var one = Autodiff.TensorOperations<T>.Constant(Tensor<T>.CreateDefault(new int[] { 1 }, NumOps.One));
             var scale = Autodiff.TensorOperations<T>.Divide(normSq, Autodiff.TensorOperations<T>.Add(one, normSq));
             var unitVec = Autodiff.TensorOperations<T>.Divide(weightedSum, norm);
-            
+
             // output = scale * unitVec
             output = Autodiff.TensorOperations<T>.ElementwiseMultiply(scale, unitVec);
 
@@ -586,13 +586,13 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
                 // Agreement = predictions . output
                 // predictions [B, I, C, D], output [B, C, D] -> reshape output to [B, 1, C, D]
                 var outputBroad = Autodiff.TensorOperations<T>.Reshape(output, batchSize, 1, numClasses, outputDim);
-                
+
                 // Elementwise multiply -> [B, I, C, D]
                 var agreementRaw = Autodiff.TensorOperations<T>.ElementwiseMultiply(predictions, outputBroad);
-                
+
                 // Sum over D (axis 3) -> [B, I, C]
                 var agreement = Autodiff.TensorOperations<T>.Sum(agreementRaw, new int[] { 3 }, keepDims: false);
-                
+
                 couplings = Autodiff.TensorOperations<T>.Add(couplings, agreement);
             }
         }

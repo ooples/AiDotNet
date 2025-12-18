@@ -1,18 +1,18 @@
 ﻿using AiDotNet;
+using AiDotNet.Data.Loaders;
 using AiDotNet.DataProcessor;
 using AiDotNet.Enums;
 using AiDotNet.FeatureSelectors;
 using AiDotNet.FitnessCalculators;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Normalizers;
 using AiDotNet.Optimizers;
 using AiDotNet.OutlierRemoval;
 using AiDotNet.Regression;
-using AiDotNet.Data.Loaders;
 using AiDotNet.Regularization;
+using AiDotNet.Tensors.LinearAlgebra;
 
 public class EnhancedRegressionExample
 {

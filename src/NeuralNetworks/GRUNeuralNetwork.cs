@@ -51,7 +51,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// that will determine how information flows through your network.
     /// </para>
     /// </remarks>
-    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) : 
+    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
     }
@@ -159,13 +159,13 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         var current = input;
-    
+
         // Forward pass through all layers
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
-    
+
         return current;
     }
 
@@ -241,19 +241,19 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     public override Tensor<T> ForwardWithMemory(Tensor<T> input)
     {
         var current = input;
-    
+
         for (int i = 0; i < Layers.Count; i++)
         {
             // Store input to each layer for backpropagation
             _layerInputs[i] = current;
-        
+
             // Forward pass through layer
             current = Layers[i].Forward(current);
-        
+
             // Store output from each layer for backpropagation
             _layerOutputs[i] = current;
         }
-    
+
         return current;
     }
 

@@ -1,13 +1,12 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
-
-using AiDotNet.Enums;
-using AiDotNet.LossFunctions;
 
 namespace AiDotNet.ReinforcementLearning.Agents.MuZero;
 
@@ -51,12 +50,12 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     private int _updateCount;
 
     public MuZeroAgent(MuZeroOptions<T> options) : base(new ReinforcementLearningOptions<T>
-        {
-            LearningRate = options.LearningRate,
-            DiscountFactor = options.DiscountFactor,
-            LossFunction = new MeanSquaredErrorLoss<T>(),
-            Seed = options.Seed
-        })
+    {
+        LearningRate = options.LearningRate,
+        DiscountFactor = options.DiscountFactor,
+        LossFunction = new MeanSquaredErrorLoss<T>(),
+        Seed = options.Seed
+    })
     {
         _options = options;
         _updateCount = 0;
@@ -123,8 +122,8 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             // Greedy: just use policy network
             var policyValueTensor = Tensor<T>.FromVector(hiddenState);
-        var policyValueTensorOutput = _predictionNetwork.Predict(policyValueTensor);
-        var policyValue = policyValueTensorOutput.ToVector();
+            var policyValueTensorOutput = _predictionNetwork.Predict(policyValueTensor);
+            var policyValue = policyValueTensorOutput.ToVector();
             int bestAction = ArgMax(ExtractPolicy(policyValue));
             var action = new Vector<T>(_options.ActionSize);
             action[bestAction] = NumOps.One;
@@ -302,7 +301,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             nextHiddenState[i] = dynamicsOutput[i];
         }
-        
+
         // Extract predicted reward (last element of dynamics output)
         var predictedReward = dynamicsOutput[_options.LatentStateSize];
 
@@ -370,7 +369,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Compute value loss for initial state
             var valueTarget = experience.Done ? experience.Reward :
                 NumOps.Add(experience.Reward, NumOps.Multiply(DiscountFactor, predictedValue));
-            
+
             var valueDiff = NumOps.Subtract(valueTarget, predictedValue);
             var valueLoss = NumOps.Multiply(valueDiff, valueDiff);
             totalLoss = NumOps.Add(totalLoss, valueLoss);

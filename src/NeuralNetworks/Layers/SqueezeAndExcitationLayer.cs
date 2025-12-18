@@ -688,7 +688,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // input: [B, H, W, C], excitation: [B, C]
         // Reshape excitation to [B, 1, 1, C] for broadcasting
         var excitationReshaped = excitation.Reshape(batchSize, 1, 1, _channels);
-        
+
         var output = Engine.TensorMultiply(input, excitationReshaped);
 
         _lastOutput = output;
@@ -843,7 +843,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Build computation graph mirroring Forward
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        
+
         // 1. Squeeze: Global Average Pooling
         // Input [B, H, W, C] -> [B, C]
         var axes = new int[] { 1, 2 };
@@ -853,10 +853,10 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var w1Node = Autodiff.TensorOperations<T>.Variable(_weights1, "w1", requiresGradient: true);
         var b1Node = Autodiff.TensorOperations<T>.Variable(_bias1, "b1", requiresGradient: true);
         var fc1 = Autodiff.TensorOperations<T>.MatrixMultiply(squeezed, w1Node);
-        
+
         // Broadcast bias (assumed supported by Add)
         var fc1Biased = Autodiff.TensorOperations<T>.Add(fc1, b1Node);
-        
+
         // Activation 1
         var act1 = ApplyActivationToGraphNode(fc1Biased, true);
 
@@ -865,7 +865,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var b2Node = Autodiff.TensorOperations<T>.Variable(_bias2, "b2", requiresGradient: true);
         var fc2 = Autodiff.TensorOperations<T>.MatrixMultiply(act1, w2Node);
         var fc2Biased = Autodiff.TensorOperations<T>.Add(fc2, b2Node);
-        
+
         // Activation 2
         var excitation = ApplyActivationToGraphNode(fc2Biased, false);
 
@@ -873,12 +873,12 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // excitation [B, C] -> [B, 1, 1, C]
         var reshapeShape = new int[] { batchSize, 1, 1, _channels };
         var excitationReshaped = Autodiff.TensorOperations<T>.Reshape(excitation, reshapeShape);
-        
+
         var outputNode = Autodiff.TensorOperations<T>.ElementwiseMultiply(inputNode, excitationReshaped);
 
         // Backward
         outputNode.Gradient = outputGradient;
-        
+
         // Inline topological sort
         var visited = new HashSet<Autodiff.ComputationNode<T>>();
         var topoOrder = new List<Autodiff.ComputationNode<T>>();

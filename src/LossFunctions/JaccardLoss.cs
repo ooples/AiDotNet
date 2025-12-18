@@ -43,7 +43,7 @@ public class JaccardLoss<T> : LossFunctionBase<T>
     public JaccardLoss()
     {
     }
-    
+
     /// <summary>
     /// Calculates the Jaccard loss between predicted and actual values.
     /// </summary>
@@ -53,10 +53,10 @@ public class JaccardLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T intersection = NumOps.Zero;
         T union = NumOps.Zero;
-        
+
         for (int i = 0; i < predicted.Length; i++)
         {
             // Intersection is the sum of minimums
@@ -69,7 +69,7 @@ public class JaccardLoss<T> : LossFunctionBase<T>
         // Jaccard loss = 1 - Jaccard Index
         return NumOps.Subtract(NumOps.One, NumericalStabilityHelper.SafeDiv(intersection, union, NumericalStabilityHelper.SmallEpsilon));
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Jaccard loss function.
     /// </summary>
@@ -79,18 +79,18 @@ public class JaccardLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         // Calculate intersection and union first
         T intersection = NumOps.Zero;
         T union = NumOps.Zero;
-        
+
         for (int i = 0; i < predicted.Length; i++)
         {
             intersection = NumOps.Add(intersection, MathHelper.Min(predicted[i], actual[i]));
             union = NumOps.Add(union, MathHelper.Max(predicted[i], actual[i]));
         }
-        
-        
+
+
         // Calculate derivative for each element
         Vector<T> derivative = new Vector<T>(predicted.Length);
         T unionSquared = NumOps.Power(union, NumOps.FromDouble(2));
@@ -116,7 +116,7 @@ public class JaccardLoss<T> : LossFunctionBase<T>
                 derivative[i] = NumOps.Zero;
             }
         }
-        
+
         return derivative;
     }
 }

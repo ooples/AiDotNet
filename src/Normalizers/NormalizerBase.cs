@@ -34,7 +34,7 @@ public abstract class NormalizerBase<T, TInput, TOutput> : INormalizer<T, TInput
     {
         NumOps = MathHelper.GetNumericOperations<T>();
     }
-    
+
     /// <summary>
     /// Normalizes output data to a standard range.
     /// </summary>
@@ -45,7 +45,7 @@ public abstract class NormalizerBase<T, TInput, TOutput> : INormalizer<T, TInput
     /// It returns both the normalized data and information needed to convert back later.</para>
     /// </remarks>
     public abstract (TOutput, NormalizationParameters<T>) NormalizeOutput(TOutput data);
-    
+
     /// <summary>
     /// Normalizes input data to a standard range.
     /// </summary>
@@ -56,7 +56,7 @@ public abstract class NormalizerBase<T, TInput, TOutput> : INormalizer<T, TInput
     /// Each feature (column) is normalized separately, and parameters for each are returned.</para>
     /// </remarks>
     public abstract (TInput, List<NormalizationParameters<T>>) NormalizeInput(TInput data);
-    
+
     /// <summary>
     /// Reverses the normalization of data using the original normalization parameters.
     /// </summary>
@@ -67,7 +67,7 @@ public abstract class NormalizerBase<T, TInput, TOutput> : INormalizer<T, TInput
     /// <para><b>For Beginners:</b> This method converts normalized values back to their original scale.</para>
     /// </remarks>
     public abstract TOutput Denormalize(TOutput data, NormalizationParameters<T> parameters);
-    
+
     /// <summary>
     /// Denormalizes model coefficients to make them applicable to non-normalized input data.
     /// </summary>
@@ -79,7 +79,7 @@ public abstract class NormalizerBase<T, TInput, TOutput> : INormalizer<T, TInput
     /// <para><b>For Beginners:</b> This adjusts model weights to work with your original data.</para>
     /// </remarks>
     public abstract TOutput Denormalize(TOutput coefficients, List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams);
-    
+
     /// <summary>
     /// Calculates the denormalized Y-intercept (constant term) for a linear model.
     /// </summary>
@@ -92,6 +92,6 @@ public abstract class NormalizerBase<T, TInput, TOutput> : INormalizer<T, TInput
     /// <remarks>
     /// <para><b>For Beginners:</b> This calculates the starting point for your model's predictions.</para>
     /// </remarks>
-    public abstract T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, 
+    public abstract T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients,
         List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams);
 }

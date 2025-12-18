@@ -1,7 +1,7 @@
-using AiDotNet.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
 {
@@ -35,7 +35,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         protected override IEnumerable<(string Chunk, int StartPosition, int EndPosition)> ChunkCore(string text)
         {
             var chunks = SplitTextRecursive(text, _separators);
-            
+
             var position = 0;
             foreach (var chunk in chunks)
             {
@@ -84,7 +84,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
 
                     if (currentChunk.Length > 0)
                         currentChunk.Append(separator);
-                    
+
                     currentChunk.Append(split);
                 }
 

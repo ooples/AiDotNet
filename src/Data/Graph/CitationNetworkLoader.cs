@@ -1,10 +1,10 @@
+using System.IO.Compression;
+using System.Net.Http;
 using AiDotNet.Data.Loaders;
 using AiDotNet.Data.Structures;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using System.IO.Compression;
-using System.Net.Http;
 
 namespace AiDotNet.Data.Graph;
 

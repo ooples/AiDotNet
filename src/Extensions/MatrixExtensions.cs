@@ -213,7 +213,7 @@ public static class MatrixExtensions
     /// For example, if your matrix is "sparse" (mostly zeros), you can use special techniques that
     /// save memory and computation time.
     /// </remarks>
-    public static IEnumerable<MatrixType> GetMatrixTypes<T>(this Matrix<T> matrix, IMatrixDecomposition<T> matrixDecomposition, 
+    public static IEnumerable<MatrixType> GetMatrixTypes<T>(this Matrix<T> matrix, IMatrixDecomposition<T> matrixDecomposition,
     T? tolerance = default, int subDiagonalThreshold = 1, int superDiagonalThreshold = 1, T? sparsityThreshold = default, T? denseThreshold = default,
     int blockRows = 2, int blockCols = 2)
     {
@@ -575,7 +575,7 @@ public static class MatrixExtensions
         var rows = block.Rows;
         var cols = block.Columns;
         var ops = MathHelper.GetNumericOperations<T>();
-    
+
         // Implement your own logic to check consistency within the block
         // For simplicity, let's assume the block is consistent if all elements are the same
         T firstElement = block[0, 0];
@@ -1978,30 +1978,30 @@ public static class MatrixExtensions
     {
         // Get numeric operations for the type T
         var numOps = MathHelper.GetNumericOperations<T>();
-        
+
         // Check if the matrix is square
         if (matrix.Rows != matrix.Columns)
         {
             return false;
         }
-        
+
         try
         {
             // For small matrices (2x2 or 3x3), calculating the determinant directly is efficient
             if (matrix.Rows <= 3)
             {
                 T determinant = matrix.Determinant();
-                
+
                 // Check if determinant is zero or very close to zero
-                if (numOps.Equals(determinant, numOps.Zero) || 
+                if (numOps.Equals(determinant, numOps.Zero) ||
                     MathHelper.AlmostEqual(determinant, numOps.Zero))
                 {
                     return false;
                 }
-                
+
                 return true;
             }
-            
+
             // For larger matrices, another approach is to try an LU decomposition
             // If successful, the matrix is invertible
             var decomposition = new LuDecomposition<T>(matrix);
@@ -2011,13 +2011,13 @@ public static class MatrixExtensions
             // If any diagonal element is zero, the matrix is not invertible
             for (int i = 0; i < u.Rows; i++)
             {
-                if (numOps.Equals(u[i, i], numOps.Zero) || 
+                if (numOps.Equals(u[i, i], numOps.Zero) ||
                     MathHelper.AlmostEqual(u[i, i], numOps.Zero))
                 {
                     return false;
                 }
             }
-            
+
             return true;
         }
         catch (Exception)
@@ -2152,7 +2152,7 @@ public static class MatrixExtensions
             }
 
             // Check if the sum of each row and column is zero
-            if (ops.GreaterThan(ops.Abs(rowSum), ops.FromDouble(1e-10)) || 
+            if (ops.GreaterThan(ops.Abs(rowSum), ops.FromDouble(1e-10)) ||
                 ops.GreaterThan(ops.Abs(colSum), ops.FromDouble(1e-10)))
             {
                 return false;
@@ -3242,8 +3242,8 @@ public static class MatrixExtensions
         var ops = MathHelper.GetNumericOperations<T>();
         var weightsVector = new Vector<T>(columns);
         var epsilon = ops.FromDouble(1e-10); // Small number instead of Epsilon
-        var thresh = ops.GreaterThanOrEquals(threshold, ops.Zero) 
-            ? threshold 
+        var thresh = ops.GreaterThanOrEquals(threshold, ops.Zero)
+            ? threshold
             : ops.Multiply(ops.FromDouble(0.5 * Math.Sqrt(rows + columns + 1)), ops.Multiply(weightsVector[0], epsilon));
         int rank = 0;
 
@@ -3524,7 +3524,7 @@ public static class MatrixExtensions
     public static T LogDeterminant<T>(this Matrix<T> matrix)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        
+
         if (matrix.Rows != matrix.Columns)
         {
             throw new ArgumentException("Matrix must be square to calculate determinant.");
@@ -3719,7 +3719,7 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<T> GetColumns<T>(this Matrix<T> matrix, IEnumerable<int> columnIndices)
     {
-        return new Matrix<T>(GetColumnVectors(matrix, [..columnIndices]));
+        return new Matrix<T>(GetColumnVectors(matrix, [.. columnIndices]));
     }
 
     /// <summary>
@@ -3748,13 +3748,13 @@ public static class MatrixExtensions
     {
         if (indices == null)
             throw new ArgumentNullException(nameof(indices));
-    
+
         Vector<T>[] columns = new Vector<T>[indices.Length];
         for (int i = 0; i < indices.Length; i++)
         {
             if (indices[i] < 0 || indices[i] >= matrix.Columns)
             {
-                throw new ArgumentOutOfRangeException(nameof(indices), 
+                throw new ArgumentOutOfRangeException(nameof(indices),
                     $"Column index {indices[i]} is out of range for matrix with {matrix.Columns} columns");
             }
             columns[i] = matrix.GetColumn(indices[i]);

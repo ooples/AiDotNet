@@ -49,7 +49,7 @@ public class InverseMultiquadricKernel<T> : IKernelFunction<T>
     /// adjust it based on your specific needs.
     /// </remarks>
     private readonly T _c;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

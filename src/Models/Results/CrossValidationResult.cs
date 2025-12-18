@@ -258,16 +258,16 @@ public class CrossValidationResult<T, TInput, TOutput>
     {
         try
         {
-            var values = FoldResults.Select(fold => 
+            var values = FoldResults.Select(fold =>
             {
                 // Try to get the metric from ValidationPredictionStats
                 if (fold.ValidationPredictionStats.HasMetric(metricType))
                     return fold.ValidationPredictionStats.GetMetric(metricType);
-            
+
                 // If not found, try to get it from ValidationErrors
                 if (fold.ValidationErrors.HasMetric(metricType))
                     return fold.ValidationErrors.GetMetric(metricType);
-            
+
                 // If still not found, throw an exception
                 throw new ArgumentException($"Metric '{metricType}' not found in fold results", nameof(metricType));
             }).ToArray();

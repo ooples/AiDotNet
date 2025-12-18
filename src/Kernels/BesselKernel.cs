@@ -33,7 +33,7 @@ public class BesselKernel<T> : IKernelFunction<T>
     /// Order 0 (the default) is the most commonly used and works well for many applications.
     /// </remarks>
     private readonly T _order;
-    
+
     /// <summary>
     /// The scaling parameter that controls the width of the kernel.
     /// </summary>
@@ -43,7 +43,7 @@ public class BesselKernel<T> : IKernelFunction<T>
     /// while a larger sigma makes the kernel more tolerant of differences.
     /// </remarks>
     private readonly T _sigma;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
@@ -97,7 +97,7 @@ public class BesselKernel<T> : IKernelFunction<T>
     {
         T norm = x1.EuclideanDistance(x2);
         T scaledNorm = _numOps.Divide(norm, _sigma);
-        
+
         return _numOps.Divide(BesselFunction(_order, scaledNorm), _numOps.Power(scaledNorm, _order));
     }
 

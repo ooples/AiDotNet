@@ -695,7 +695,7 @@ public class PagedAttentionKernelTests
         kernel.ComputeAttention(query, 1, 0, output, 1.0f / MathF.Sqrt(8));
 
         // Assert
-        Assert.True(output.Any(v => v != 0)); // Output should not be all zeros
+        Assert.Contains(output, v => v != 0); // Output should not be all zeros
     }
 
     [Fact]
@@ -724,7 +724,7 @@ public class PagedAttentionKernelTests
         kernel.ComputeTiledPagedAttention(query, 1, 0, output, 1.0f / MathF.Sqrt(8));
 
         // Assert
-        Assert.True(output.Any(v => v != 0));
+        Assert.Contains(output, v => v != 0);
     }
 
     [Fact]
@@ -775,7 +775,7 @@ public class PagedAttentionKernelTests
         kernel.ComputeBatchedAttention(queries, new long[] { 1, 2 }, 0, outputs, 0.35f);
 
         // Assert
-        Assert.True(outputs.Any(v => v != 0));
+        Assert.Contains(outputs, v => v != 0);
     }
 }
 

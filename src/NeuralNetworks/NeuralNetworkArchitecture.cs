@@ -272,7 +272,7 @@ public class NeuralNetworkArchitecture<T>
     /// This information helps the network properly process the structure of your data.
     /// </para>
     /// </remarks>
-    public int InputDimension => 
+    public int InputDimension =>
         InputType == InputType.OneDimensional ? 1 :
         InputType == InputType.TwoDimensional ? 2 : 3;
 
@@ -824,7 +824,7 @@ public class NeuralNetworkArchitecture<T>
         {
             var firstLayer = Layers[0];
             int firstLayerInputSize = firstLayer.GetInputShape().Aggregate(1, (a, b) => a * b);
-        
+
             if (firstLayerInputSize != InputSize)
             {
                 throw new ArgumentException($"The first layer's input size ({firstLayerInputSize}) must match the input size ({InputSize}).");

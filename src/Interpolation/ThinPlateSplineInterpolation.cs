@@ -24,42 +24,42 @@ public class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
     /// The x-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The z-values (heights) at each data point.
     /// </summary>
     private readonly Vector<T> _z;
-    
+
     /// <summary>
     /// The weights calculated for each data point used in the interpolation.
     /// </summary>
     private Vector<T> _weights;
-    
+
     /// <summary>
     /// The constant term in the polynomial part of the TPS equation.
     /// </summary>
     private T _a0;
-    
+
     /// <summary>
     /// The coefficient for x in the polynomial part of the TPS equation.
     /// </summary>
     private T _ax;
-    
+
     /// <summary>
     /// The coefficient for y in the polynomial part of the TPS equation.
     /// </summary>
     private T _ay;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// The matrix decomposition method used to solve the linear system.
     /// </summary>
@@ -252,7 +252,7 @@ public class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
     {
         if (_numOps.Equals(r, _numOps.Zero))
             return _numOps.Zero;
-        
+
         return _numOps.Multiply(
             _numOps.Multiply(r, r),
             _numOps.Log(r)

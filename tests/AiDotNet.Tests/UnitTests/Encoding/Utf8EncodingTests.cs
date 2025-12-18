@@ -1,7 +1,7 @@
-using Xunit;
 using System.IO;
 using System.Linq;
 using System.Text;
+using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Encoding;
 

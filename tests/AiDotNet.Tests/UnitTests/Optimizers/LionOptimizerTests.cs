@@ -1,8 +1,8 @@
-using AiDotNet.Tensors.LinearAlgebra;
 using System;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.Optimizers

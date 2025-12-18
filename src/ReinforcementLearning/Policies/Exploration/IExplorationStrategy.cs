@@ -1,5 +1,5 @@
-using AiDotNet.LinearAlgebra;
 using System;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ReinforcementLearning.Policies.Exploration
 {

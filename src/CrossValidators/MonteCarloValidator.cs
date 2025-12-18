@@ -49,7 +49,7 @@ public class MonteCarloValidator<T, TInput, TOutput> : CrossValidatorBase<T, TIn
     /// </remarks>
     private new MonteCarloValidationOptions Options => (MonteCarloValidationOptions)base.Options;
 
-    public MonteCarloValidator(MonteCarloValidationOptions? options = null) 
+    public MonteCarloValidator(MonteCarloValidationOptions? options = null)
         : base(options ?? new MonteCarloValidationOptions())
     {
     }

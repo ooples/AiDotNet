@@ -1,7 +1,7 @@
-using AiDotNet.Interpretability;
-using AiDotNet.Interfaces;
-using AiDotNet.MixedPrecision;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
+using AiDotNet.Interpretability;
+using AiDotNet.MixedPrecision;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -94,7 +94,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// This is necessary for the learning process (backpropagation).
     /// </remarks>
     protected Dictionary<int, Tensor<T>> _layerInputs = [];
-    
+
     /// <summary>
     /// Stores the output values from each layer during forward pass.
     /// </summary>
@@ -330,7 +330,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         int totalParameterCount = ParameterCount;
         var parameters = new Vector<T>(totalParameterCount);
-    
+
         int currentIndex = 0;
         foreach (var layer in Layers)
         {
@@ -346,7 +346,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 currentIndex += layerParameterCount;
             }
         }
-    
+
         return parameters;
     }
 
@@ -800,7 +800,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Check for dimension compatibility in case of Reshape or Flatten layers
         if (prevLayer is ReshapeLayer<T> reshapeLayer)
         {
-            return reshapeLayer.GetOutputShape().Aggregate((a, b) => a * b) == 
+            return reshapeLayer.GetOutputShape().Aggregate((a, b) => a * b) ==
                    currentLayer.GetInputShape().Aggregate((a, b) => a * b);
         }
 
@@ -826,7 +826,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         // Collect gradients from all layers
         List<Vector<T>> allGradients = [];
-    
+
         foreach (var layer in Layers)
         {
             if (layer.SupportsTraining && layer.ParameterCount > 0)
@@ -834,13 +834,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 allGradients.Add(layer.GetParameterGradients());
             }
         }
-    
+
         // Concatenate all gradients into a single vector
         if (allGradients.Count == 0)
         {
             return new Vector<T>(0);
         }
-    
+
         return Vector<T>.Concatenate(allGradients.ToArray());
     }
 
@@ -1436,10 +1436,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         // Create a deep copy of the current network
         var newNetwork = (NeuralNetworkBase<T>)DeepCopy();
-    
+
         // Update the parameters of the new network
         newNetwork.UpdateParameters(parameters);
-    
+
         return newNetwork;
     }
 
@@ -1476,7 +1476,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // If the network has no layers, return an empty list
         if (Layers.Count == 0)
             return Array.Empty<int>();
-    
+
         // Get the first layer for analysis
         var firstLayer = Layers[0];
 
@@ -1486,37 +1486,37 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Return all indices as potentially active (conservative approach)
             return Enumerable.Range(0, firstLayer.GetInputShape()[0]);
         }
-    
+
         // Get the weights from the first layer
         Vector<T> weights = firstLayer.GetParameters();
         int inputSize = firstLayer.GetInputShape()[0];
         int outputSize = firstLayer.GetOutputShape()[0];
-    
+
         // Calculate feature importance by summing absolute weights per input feature
         var featureImportance = new Dictionary<int, T>();
-    
+
         for (int i = 0; i < inputSize; i++)
         {
             T importance = NumOps.Zero;
-        
+
             // For each neuron in the first layer, add the absolute weight for this feature
             for (int j = 0; j < outputSize; j++)
             {
                 // In most layers, weights are organized as [input1-neuron1, input2-neuron1, ..., input1-neuron2, ...]
                 int weightIndex = j * inputSize + i;
-            
+
                 if (weightIndex < weights.Length)
                 {
                     importance = NumOps.Add(importance, NumOps.Abs(weights[weightIndex]));
                 }
             }
-        
+
             featureImportance[i] = importance;
         }
-    
+
         // Sort features by importance and get the top 50% (or at least 1)
         int featuresCount = Math.Max(1, inputSize / 2);
-    
+
         return featureImportance
             .OrderByDescending(pair => Convert.ToDouble(pair.Value))
             .Take(featuresCount)
@@ -1565,10 +1565,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // If feature index is out of range, it's not used
         if (Layers.Count == 0 || featureIndex < 0 || featureIndex >= Layers[0].GetInputShape()[0])
             return false;
-    
+
         // Get active feature indices
         var activeIndices = GetActiveFeatureIndices().ToList();
-    
+
         // Check if the specified index is in the active indices
         return activeIndices.Contains(featureIndex);
     }
@@ -1600,13 +1600,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         // The most reliable way to create a deep copy is through serialization/deserialization
         byte[] serialized = Serialize();
-    
+
         // Create a new instance of the same type as this network
         var copy = CreateNewInstance();
-    
+
         // Load the serialized data into the new instance
         copy.Deserialize(serialized);
-    
+
         return copy;
     }
 

@@ -48,13 +48,15 @@ jobs:
           OWNER=$(echo "$REPO" | cut -d'/' -f1)
           REPO_NAME=$(echo "$REPO" | cut -d'/' -f2)
           
-          # Query unresolved threads from bot users
+          # Query unresolved threads from Copilot review bot(s).
+          # Note: GitHub Advanced Security / code-scanning threads are tracked separately (CodeQL/Sonar/etc.)
+          # and cannot always be manually resolved like normal review threads.
           UNRESOLVED=$(gh api graphql \
             -f query="$QUERY" \
             -f owner="$OWNER" \
             -f repo="$REPO_NAME" \
             -F pr="$PR_NUMBER" \
-            --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false and (.comments.nodes[0].author.login | test("copilot|advanced|security|bot"; "i")))] | length')
+            --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false and (.comments.nodes[0].author.login | test("copilot"; "i")))] | length')
           
           echo "Unresolved bot review threads: $UNRESOLVED"
           if [ "$UNRESOLVED" -gt 0 ]; then

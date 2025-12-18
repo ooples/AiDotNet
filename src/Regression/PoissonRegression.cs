@@ -359,16 +359,16 @@ public class PoissonRegression<T> : RegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         var newModel = new PoissonRegression<T>(_options, Regularization);
-        
+
         // Copy coefficients if they exist
         if (Coefficients != null)
         {
             newModel.Coefficients = Coefficients.Clone();
         }
-        
+
         // Copy the intercept
         newModel.Intercept = Intercept;
-        
+
         return newModel;
     }
 }

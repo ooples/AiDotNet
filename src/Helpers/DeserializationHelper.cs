@@ -203,7 +203,7 @@ public static class DeserializationHelper
             throw new InvalidOperationException($"Type {typeName} does not implement interface {typeof(TInterface).Name}");
         }
 
-        return (TInterface?)Activator.CreateInstance(type) 
+        return (TInterface?)Activator.CreateInstance(type)
             ?? throw new InvalidOperationException($"Failed to create instance of type {typeName}");
     }
 }

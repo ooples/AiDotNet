@@ -1,6 +1,6 @@
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
-using AiDotNet.LossFunctions;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 

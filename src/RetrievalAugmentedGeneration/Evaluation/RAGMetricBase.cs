@@ -50,7 +50,7 @@ public abstract class RAGMetricBase<T> : IRAGMetric<T>
     public T Evaluate(GroundedAnswer<T> answer, string? groundTruth = null)
     {
         ValidateAnswer(answer);
-        
+
         if (RequiresGroundTruth && string.IsNullOrWhiteSpace(groundTruth))
             throw new ArgumentException("This metric requires ground truth for evaluation", nameof(groundTruth));
 
