@@ -382,7 +382,7 @@ public static class MathHelper
                 term = numOps.Multiply(term,
                     numOps.Multiply(numOps.Add(numOps.Multiply(numOps.FromDouble(4),
                         numOps.Power(nu, numOps.FromDouble(2))),
-                        numOps.Subtract(numOps.Power(numOps.FromDouble(2 * k - 1), numOps.FromDouble(2)),
+                        numOps.Subtract(numOps.Power(numOps.FromDouble((2d * k) - 1d), numOps.FromDouble(2)),
                             numOps.One)),
                         numOps.Divide(y, numOps.FromDouble(k))));
                 sum = numOps.Add(sum, term);

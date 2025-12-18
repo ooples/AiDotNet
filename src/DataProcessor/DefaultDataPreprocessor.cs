@@ -182,9 +182,19 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
                 yTest[i] = yVector[indices[i + trainSize + validationSize]];
             }
 
-            return ((TInput)(object)XTrain, (TOutput)(object)yTrain,
-                    (TInput)(object)XValidation, (TOutput)(object)yValidation,
-                    (TInput)(object)XTest, (TOutput)(object)yTest);
+            if (XTrain is not TInput xTrainOut ||
+                yTrain is not TOutput yTrainOut ||
+                XValidation is not TInput xValidationOut ||
+                yValidation is not TOutput yValidationOut ||
+                XTest is not TInput xTestOut ||
+                yTest is not TOutput yTestOut)
+            {
+                throw new InvalidOperationException(
+                    $"SplitData produced data of unexpected runtime types. " +
+                    $"Expected X to be {typeof(TInput).Name} and y to be {typeof(TOutput).Name}.");
+            }
+
+            return (xTrainOut, yTrainOut, xValidationOut, yValidationOut, xTestOut, yTestOut);
         }
         else if (X is Tensor<T> xTensor && y is Tensor<T> yTensor)
         {
@@ -246,9 +256,19 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
                 CopySample(yTensor, yTest, indices[i + trainSize + validationSize], i);
             }
 
-            return ((TInput)(object)XTrain, (TOutput)(object)yTrain,
-                    (TInput)(object)XValidation, (TOutput)(object)yValidation,
-                    (TInput)(object)XTest, (TOutput)(object)yTest);
+            if (XTrain is not TInput xTrainOut ||
+                yTrain is not TOutput yTrainOut ||
+                XValidation is not TInput xValidationOut ||
+                yValidation is not TOutput yValidationOut ||
+                XTest is not TInput xTestOut ||
+                yTest is not TOutput yTestOut)
+            {
+                throw new InvalidOperationException(
+                    $"SplitData produced data of unexpected runtime types. " +
+                    $"Expected X to be {typeof(TInput).Name} and y to be {typeof(TOutput).Name}.");
+            }
+
+            return (xTrainOut, yTrainOut, xValidationOut, yValidationOut, xTestOut, yTestOut);
         }
         else
         {

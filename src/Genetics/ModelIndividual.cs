@@ -389,7 +389,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     {
         get
         {
-            if (_innerModel is null || _innerModel == null)
+            if (_innerModel is null)
                 return false;
 
             return _innerModel.SupportsJitCompilation;
@@ -429,7 +429,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));
 
-        if (_innerModel is null || _innerModel == null)
+        if (_innerModel is null)
             throw new InvalidOperationException(
                 "Cannot export computation graph: Inner model is null.");
 
