@@ -91,6 +91,7 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
     public (TInput X, TOutput y, NormalizationInfo<T, TInput, TOutput> normInfo) PreprocessData(TInput X, TOutput y)
     {
         NormalizationInfo<T, TInput, TOutput> normInfo = new();
+        normInfo.Normalizer = _normalizer;
 
         (X, y) = _outlierRemoval.RemoveOutliers(X, y);
 

@@ -95,7 +95,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         var inputSize = InputHelper<T, TInput>.GetInputSize(X);
         var actual = ConversionsHelper.ConvertToVector<T, TOutput>(y);
 
-        return new DataSetStats<T, TInput, TOutput>
+        var stats = new DataSetStats<T, TInput, TOutput>
         {
             ErrorStats = CalculateErrorStats(actual, predicted, inputSize),
             ActualBasicStats = CalculateBasicStats(actual),
@@ -105,6 +105,45 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
             Features = X,
             Actual = y
         };
+
+        TryPopulateUncertaintyStats(stats, X, model);
+        return stats;
+    }
+
+    private static void TryPopulateUncertaintyStats(DataSetStats<T, TInput, TOutput> stats, TInput X, IFullModel<T, TInput, TOutput> model)
+    {
+        if (model is not AiDotNet.Models.Results.PredictionModelResult<T, TInput, TOutput> predictionModelResult)
+        {
+            return;
+        }
+
+        if (predictionModelResult.UncertaintyQuantificationOptions is not { Enabled: true })
+        {
+            return;
+        }
+
+        var uq = predictionModelResult.PredictWithUncertainty(X);
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        stats.UncertaintyStats = new UncertaintyStats<T>();
+        stats.UncertaintyStats.Metrics["predictive_entropy"] = MeanOf(uq.Metrics["predictive_entropy"], numOps);
+        stats.UncertaintyStats.Metrics["mutual_information"] = MeanOf(uq.Metrics["mutual_information"], numOps);
+    }
+
+    private static T MeanOf(Tensor<T> values, INumericOperations<T> numOps)
+    {
+        if (values.Length == 0)
+        {
+            return numOps.Zero;
+        }
+
+        var sum = numOps.Zero;
+        for (int i = 0; i < values.Length; i++)
+        {
+            sum = numOps.Add(sum, values[i]);
+        }
+
+        return numOps.Divide(sum, numOps.FromDouble(values.Length));
     }
 
     /// <summary>

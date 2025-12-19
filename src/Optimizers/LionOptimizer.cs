@@ -220,6 +220,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         var parameters = currentSolution.GetParameters();
         var weightDecay = NumOps.FromDouble(_options.WeightDecay);
+        var effectiveLearningRate = _currentLearningRate;
 
         // Step 1: Interpolate between momentum and gradient
         var oneMinusBeta1 = NumOps.Subtract(NumOps.One, _currentBeta1);
@@ -445,6 +446,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Reshape back to matrix
         return updatedParams.Reshape(parameters.Rows, parameters.Columns);
     }
+
 
     /// <summary>
     /// Resets the optimizer's internal state.

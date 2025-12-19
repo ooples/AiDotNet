@@ -109,8 +109,6 @@ namespace AiDotNet.Interpretability
             var orderedRates = groupPositiveRates.Values.OrderBy(r => Convert.ToDouble(r)).ToList();
             T minRate = orderedRates.First();
             T maxRate = orderedRates.Last();
-
-            // Compute Statistical Parity Difference (max rate - min rate)
             result.StatisticalParityDifference = _numOps.Subtract(maxRate, minRate);
 
             // Avoid division by zero

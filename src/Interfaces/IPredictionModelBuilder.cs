@@ -2,7 +2,10 @@ using AiDotNet.Configuration;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.MixedPrecision;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.PromptEngineering.FewShot;
 using AiDotNet.Reasoning.Models;
@@ -344,6 +347,37 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="loraConfiguration">The LoRA configuration implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration);
+
+    /// <summary>
+    /// Configures uncertainty quantification for inference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Uncertainty quantification augments standard point predictions with an uncertainty estimate (variance).
+    /// This can be used to make safer decisions by detecting when the model is less confident.
+    /// </para>
+    /// <para><b>For Beginners:</b> This enables a "confidence signal" alongside predictions, so you can
+    /// decide when to trust the model and when to defer.</para>
+    /// </remarks>
+    /// <param name="options">Uncertainty quantification options. Use defaults for industry-standard behavior.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureUncertaintyQuantification(UncertaintyQuantificationOptions options);
+
+    /// <summary>
+    /// Configures a regression-style calibration dataset used by uncertainty features that require a separate calibration split (e.g. conformal prediction intervals).
+    /// </summary>
+    /// <param name="xCalibration">Calibration inputs (must be independent from training/test for valid guarantees).</param>
+    /// <param name="yCalibration">Calibration targets.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureUncertaintyCalibrationData(TInput xCalibration, TOutput yCalibration);
+
+    /// <summary>
+    /// Configures a classification calibration dataset (inputs + labels) used by conformal prediction sets.
+    /// </summary>
+    /// <param name="xCalibration">Calibration inputs (must be independent from training/test for valid guarantees).</param>
+    /// <param name="calibrationLabels">True class labels for calibration samples.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureUncertaintyCalibrationData(TInput xCalibration, Vector<int> calibrationLabels);
 
     /// <summary>
     /// Configures the retrieval-augmented generation (RAG) components for use during model inference.
@@ -1385,6 +1419,8 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
     /// <exception cref="InvalidOperationException">Thrown if neither ConfigureDataLoader nor ConfigureMetaLearning has been called.</exception>
+    Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(TInput x, TOutput y);
+
     Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync();
 
 }

@@ -106,7 +106,8 @@ namespace AiDotNet.Interpretability
                 throw new ArgumentException($"Predictions and sensitive feature lengths must match. Predictions: {predictions.Length}, Sensitive feature: {sensitiveFeature.Length}");
 
             if (actualLabels != null && predictions.Length != actualLabels.Length)
-                throw new ArgumentException($"Predictions and actual labels must have the same length. Predictions: {predictions.Length}, Actual labels: {actualLabels.Length}");
+                throw new ArgumentException(
+                    $"Predictions and actual labels lengths must match. Predictions: {predictions.Length}, Actual labels: {actualLabels.Length}");
 
             return GetBiasDetectionResult(predictions, sensitiveFeature, actualLabels);
         }

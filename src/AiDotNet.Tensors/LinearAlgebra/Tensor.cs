@@ -121,7 +121,7 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     /// This is useful when you need to iterate through all elements without worrying about dimensions.
     /// </para>
     /// </remarks>
-    public T this[int flatIndex]
+    public override T this[int flatIndex]
     {
         get => GetFlat(flatIndex);
         set => SetFlat(flatIndex, value);

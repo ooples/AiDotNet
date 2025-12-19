@@ -2,6 +2,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.JitCompiler;
 using AiDotNet.Models.Options;
+using AiDotNet.Regularization;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -27,7 +28,7 @@ public class RegressionJitCompilationTests
     {
         // Arrange
         var model = new SimpleRegression<double>();
-        var (X, y) = GenerateLinearTestData(100, 5);
+        var (X, y) = GenerateLinearTestData(100, 1);
         model.Train(X, y);
 
         // Assert
@@ -39,7 +40,7 @@ public class RegressionJitCompilationTests
     {
         // Arrange
         var model = new SimpleRegression<double>();
-        var (X, y) = GenerateLinearTestData(100, 5);
+        var (X, y) = GenerateLinearTestData(100, 1);
         model.Train(X, y);
 
         // Act
@@ -56,7 +57,7 @@ public class RegressionJitCompilationTests
     {
         // Arrange
         var model = new SimpleRegression<double>();
-        var (X, y) = GenerateLinearTestData(100, 5);
+        var (X, y) = GenerateLinearTestData(100, 1);
         model.Train(X, y);
 
         var inputNodes = new List<ComputationNode<double>>();
@@ -298,7 +299,7 @@ public class RegressionJitCompilationTests
     {
         // Arrange
         var model = new SimpleRegression<double>();
-        var (X, y) = GenerateLinearTestData(100, 5);
+        var (X, y) = GenerateLinearTestData(100, 1);
         model.Train(X, y);
 
         var inputNodes = new List<ComputationNode<double>>();
@@ -400,28 +401,37 @@ public class RegressionJitCompilationTests
 
     private static object? CreateAndTrainLinearModel(Type modelType)
     {
-        var (X, y) = GenerateLinearTestData(100, 5);
-
         if (modelType == typeof(SimpleRegression<double>))
         {
+            var (X, y) = GenerateLinearTestData(100, 1);
             var model = new SimpleRegression<double>();
             model.Train(X, y);
             return model;
         }
         else if (modelType == typeof(MultipleRegression<double>))
         {
+            var (X, y) = GenerateLinearTestData(100, 5);
             var model = new MultipleRegression<double>();
             model.Train(X, y);
             return model;
         }
         else if (modelType == typeof(PolynomialRegression<double>))
         {
-            var model = new PolynomialRegression<double>();
+            var (X, y) = GenerateLinearTestData(100, 5);
+            var regularization = new L2Regularization<double, Matrix<double>, Vector<double>>(
+                new AiDotNet.Models.RegularizationOptions
+            {
+                Type = RegularizationType.L2,
+                Strength = 1e-6,
+                L1Ratio = 0.0
+            });
+            var model = new PolynomialRegression<double>(regularization: regularization);
             model.Train(X, y);
             return model;
         }
         else if (modelType == typeof(LogisticRegression<double>))
         {
+            var (X, y) = GenerateLinearTestData(100, 5);
             var model = new LogisticRegression<double>();
             model.Train(X, y);
             return model;

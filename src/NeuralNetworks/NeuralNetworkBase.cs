@@ -42,6 +42,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     public List<ILayer<T>> Layers => _layers;
 
     /// <summary>
+    /// Gets the collection of layers that make up this neural network (internal read-only access).
+    /// </summary>
+    /// <remarks>
+    /// This accessor enables internal integrations (e.g., builder-time augmentation) without exposing the mutable layer list
+    /// as part of the public API surface area.
+    /// </remarks>
+    internal IReadOnlyList<ILayer<T>> LayersReadOnly => _layers;
+
+    /// <summary>
+    /// Inserts a layer into the internal layer collection and invalidates the parameter count cache.
+    /// </summary>
+    /// <remarks>
+    /// This is intended for internal composition features that need to augment a network safely while maintaining cache correctness.
+    /// </remarks>
+    internal void InsertLayerIntoCollection(int index, ILayer<T> layer)
+    {
+        _layers.Insert(index, layer);
+        InvalidateParameterCountCache();
+    }
+
+    /// <summary>
     /// Gets the number of layers in this neural network.
     /// </summary>
     /// <remarks>

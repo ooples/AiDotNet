@@ -109,8 +109,15 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
         if (config == null)
             throw new ArgumentNullException(nameof(config), "Configuration cannot be null");
 
+        if (config.NumMetaIterations < 1)
+            throw new ArgumentException("Configuration validation failed: invalid meta-iterations (NumMetaIterations must be at least 1).", nameof(config));
+        if (config.MetaBatchSize < 1)
+            throw new ArgumentException("Configuration validation failed: invalid meta-batch size (MetaBatchSize must be at least 1).", nameof(config));
+        if (config.InnerSteps < 1)
+            throw new ArgumentException("Configuration validation failed: invalid inner steps (InnerSteps must be at least 1).", nameof(config));
+
         if (!config.IsValid())
-            throw new ArgumentException("Configuration validation failed", nameof(config));
+            throw new ArgumentException("Configuration validation failed.", nameof(config));
 
         MetaModel = metaModel;
         LossFunction = lossFunction;

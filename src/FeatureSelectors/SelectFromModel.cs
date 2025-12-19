@@ -244,8 +244,10 @@ public class SelectFromModel<T, TInput> : FeatureSelectorBase<T, TInput>
             }
 
             // Select features above threshold
+            var tolerance = GetThresholdTolerance();
+            var effectiveThreshold = NumOps.Subtract(threshold, tolerance);
             selectedFeatures = sortedFeatures
-                .Where(fi => NumOps.GreaterThanOrEquals(fi.importance, threshold))
+                .Where(fi => NumOps.GreaterThanOrEquals(fi.importance, effectiveThreshold))
                 .Select(fi => fi.index)
                 .ToList();
 
@@ -263,6 +265,21 @@ public class SelectFromModel<T, TInput> : FeatureSelectorBase<T, TInput>
         }
 
         return selectedFeatures.OrderBy(x => x).ToList();
+    }
+
+    private T GetThresholdTolerance()
+    {
+        if (typeof(T) == typeof(float))
+        {
+            return NumOps.FromDouble(1e-6);
+        }
+
+        if (typeof(T) == typeof(double))
+        {
+            return NumOps.FromDouble(1e-12);
+        }
+
+        return NumOps.Zero;
     }
 
     /// <summary>

@@ -71,6 +71,14 @@ public class DataSetStats<T, TInput, TOutput>
     public PredictionStats<T> PredictionStats { get; set; } = PredictionStats<T>.Empty();
 
     /// <summary>
+    /// Gets or sets uncertainty quantification diagnostics for the dataset.
+    /// </summary>
+    /// <remarks>
+    /// This is populated when uncertainty quantification is enabled and the evaluation flow requests UQ diagnostics.
+    /// </remarks>
+    public UncertaintyStats<T> UncertaintyStats { get; set; } = UncertaintyStats<T>.Empty();
+
+    /// <summary>
     /// Gets or sets the predicted values.
     /// </summary>
     /// <value>The predicted values of type TOutput.</value>

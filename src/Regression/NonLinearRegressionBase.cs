@@ -1261,7 +1261,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
             };
 
             // Multiply by alpha coefficient
-            var alphaShape = new int[] { 1, 1 };
+            var alphaShape = new int[] { 1 };
             var alphaTensor = new Tensor<T>(alphaShape, new Vector<T>(new T[] { Alphas[i] }));
             var alphaNode = new ComputationNode<T>(alphaTensor);
             var weightedNode = TensorOperations<T>.ElementwiseMultiply(kernelNode, alphaNode);
@@ -1278,7 +1278,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         }
 
         // Add bias term
-        var biasShape = new int[] { 1, 1 };
+        var biasShape = new int[] { 1 };
         var biasTensor = new Tensor<T>(biasShape, new Vector<T>(new T[] { B }));
         var biasNode = new ComputationNode<T>(biasTensor);
         var outputNode = TensorOperations<T>.Add(sumNode!, biasNode);
@@ -1313,7 +1313,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         var sumSquared = TensorOperations<T>.Sum(squared);
 
         // Multiply by -gamma
-        var gammaShape = new int[] { 1, 1 };
+        var gammaShape = new int[] { 1 };
         var gammaTensor = new Tensor<T>(gammaShape, new Vector<T>(new T[] { NumOps.FromDouble(-Options.Gamma) }));
         var gammaNode = new ComputationNode<T>(gammaTensor);
         var scaled = TensorOperations<T>.ElementwiseMultiply(sumSquared, gammaNode);
@@ -1334,13 +1334,13 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         var dotProduct = TensorOperations<T>.Sum(product);
 
         // Multiply by gamma
-        var gammaShape = new int[] { 1, 1 };
+        var gammaShape = new int[] { 1 };
         var gammaTensor = new Tensor<T>(gammaShape, new Vector<T>(new T[] { NumOps.FromDouble(Options.Gamma) }));
         var gammaNode = new ComputationNode<T>(gammaTensor);
         var scaled = TensorOperations<T>.ElementwiseMultiply(dotProduct, gammaNode);
 
         // Add coef0
-        var coef0Shape = new int[] { 1, 1 };
+        var coef0Shape = new int[] { 1 };
         var coef0Tensor = new Tensor<T>(coef0Shape, new Vector<T>(new T[] { NumOps.FromDouble(Options.Coef0) }));
         var coef0Node = new ComputationNode<T>(coef0Tensor);
         var sum = TensorOperations<T>.Add(scaled, coef0Node);
@@ -1361,13 +1361,13 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         var dotProduct = TensorOperations<T>.Sum(product);
 
         // Multiply by gamma
-        var gammaShape = new int[] { 1, 1 };
+        var gammaShape = new int[] { 1 };
         var gammaTensor = new Tensor<T>(gammaShape, new Vector<T>(new T[] { NumOps.FromDouble(Options.Gamma) }));
         var gammaNode = new ComputationNode<T>(gammaTensor);
         var scaled = TensorOperations<T>.ElementwiseMultiply(dotProduct, gammaNode);
 
         // Add coef0
-        var coef0Shape = new int[] { 1, 1 };
+        var coef0Shape = new int[] { 1 };
         var coef0Tensor = new Tensor<T>(coef0Shape, new Vector<T>(new T[] { NumOps.FromDouble(Options.Coef0) }));
         var coef0Node = new ComputationNode<T>(coef0Tensor);
         var sum = TensorOperations<T>.Add(scaled, coef0Node);
@@ -1395,7 +1395,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         var l1Norm = TensorOperations<T>.Sum(absDiff);
 
         // Multiply by -gamma
-        var gammaShape = new int[] { 1, 1 };
+        var gammaShape = new int[] { 1 };
         var gammaTensor = new Tensor<T>(gammaShape, new Vector<T>(new T[] { NumOps.FromDouble(-Options.Gamma) }));
         var gammaNode = new ComputationNode<T>(gammaTensor);
         var scaled = TensorOperations<T>.ElementwiseMultiply(l1Norm, gammaNode);

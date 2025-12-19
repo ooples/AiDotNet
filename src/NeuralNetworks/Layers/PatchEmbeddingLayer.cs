@@ -138,7 +138,10 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         int patchSize,
         int embeddingDim,
         IActivationFunction<T>? activationFunction = null)
-        : base([channels, imageHeight, imageWidth], [0, 0], activationFunction ?? new IdentityActivation<T>())
+        : base(
+            [channels, imageHeight, imageWidth],
+            [(imageHeight / patchSize) * (imageWidth / patchSize), embeddingDim],
+            activationFunction ?? new IdentityActivation<T>())
     {
         if (imageHeight % patchSize != 0)
         {
