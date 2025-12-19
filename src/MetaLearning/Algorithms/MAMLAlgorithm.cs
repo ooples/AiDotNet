@@ -143,7 +143,7 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
     /// <param name="model">The model to adapt.</param>
     /// <param name="task">The task to adapt to.</param>
     /// <returns>The adapted parameters.</returns>
-    private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, ITask<T, TInput, TOutput> task)
+    private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, IMetaLearningTask<T, TInput, TOutput> task)
     {
         var parameters = model.GetParameters();
 
@@ -167,7 +167,7 @@ public class MAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
     /// <param name="initialParams">The initial parameters before adaptation.</param>
     /// <param name="task">The task to compute meta-gradients for.</param>
     /// <returns>The meta-gradient vector.</returns>
-    private Vector<T> ComputeMetaGradients(Vector<T> initialParams, ITask<T, TInput, TOutput> task)
+    private Vector<T> ComputeMetaGradients(Vector<T> initialParams, IMetaLearningTask<T, TInput, TOutput> task)
     {
         // Clone meta model
         var model = CloneModel();

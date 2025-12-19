@@ -37,7 +37,7 @@ public interface IEpisodicDataset<T, TInput, TOutput>
     /// and additional examples for testing (query set).
     /// </para>
     /// </remarks>
-    ITask<T, TInput, TOutput>[] SampleTasks(int numTasks, int numWays, int numShots, int numQueryPerClass);
+    IMetaLearningTask<T, TInput, TOutput>[] SampleTasks(int numTasks, int numWays, int numShots, int numQueryPerClass);
 
     /// <summary>
     /// Gets the total number of classes available in the dataset.

@@ -100,4 +100,36 @@ public interface IMetaLearningTask<T, TInput, TOutput>
     /// - Other relevant attributes
     /// </remarks>
     Dictionary<string, object>? Metadata { get; }
+
+    /// <summary>
+    /// Gets the query set inputs (alias for QueryInput).
+    /// </summary>
+    /// <value>
+    /// Input data for evaluating adaptation performance.
+    /// </value>
+    TInput QuerySetX => QueryInput;
+
+    /// <summary>
+    /// Gets the query set outputs (alias for QueryOutput).
+    /// </summary>
+    /// <value>
+    /// True labels for evaluating query set performance.
+    /// </value>
+    TOutput QuerySetY => QueryOutput;
+
+    /// <summary>
+    /// Gets the support set inputs (alias for SupportInput).
+    /// </summary>
+    /// <value>
+    /// Input data containing examples for task adaptation.
+    /// </value>
+    TInput SupportSetX => SupportInput;
+
+    /// <summary>
+    /// Gets the support set outputs (alias for SupportOutput).
+    /// </summary>
+    /// <value>
+    /// Output data containing labels corresponding to SupportInput.
+    /// </value>
+    TOutput SupportSetY => SupportOutput;
 }

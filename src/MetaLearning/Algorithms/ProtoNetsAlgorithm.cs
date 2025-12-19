@@ -202,7 +202,7 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput
     /// 5. Compute cross-entropy loss
     /// 6. Backpropagate and update encoder
     /// </remarks>
-    private T TrainEpisode(ITask<T, TInput, TOutput> task)
+    private T TrainEpisode(IMetaLearningTask<T, TInput, TOutput> task)
     {
         // Step 1: Encode support set examples to feature space
         var supportFeatures = EncodeExamples(task.SupportInput);

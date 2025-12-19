@@ -198,7 +198,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, 
     /// <summary>
     /// Trains the model and per-parameter optimizer on a single episode.
     /// </summary>
-    private T TrainEpisode(ITask<T, TInput, TOutput> task)
+    private T TrainEpisode(IMetaLearningTask<T, TInput, TOutput> task)
     {
         // Get initial parameters
         var initialParams = _model.GetParameters();
@@ -243,7 +243,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, 
     /// Performs adaptation using the learned per-parameter optimizer.
     /// </summary>
     private void AdaptWithLearnedOptimizer(
-        ITask<T, TInput, TOutput> task,
+        IMetaLearningTask<T, TInput, TOutput> task,
         MetaSGDModel<T, TInput, TOutput> adaptedModel)
     {
         var currentParams = adaptedModel.GetParameters();

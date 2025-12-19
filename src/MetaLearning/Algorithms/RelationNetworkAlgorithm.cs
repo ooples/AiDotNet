@@ -192,7 +192,7 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, 
     /// </summary>
     /// <param name="task">The meta-learning task containing support and query sets.</param>
     /// <returns>The episode loss.</returns>
-    private T TrainEpisode(ITask<T, TInput, TOutput> task)
+    private T TrainEpisode(IMetaLearningTask<T, TInput, TOutput> task)
     {
         // Step 1: Encode support and query examples
         var supportFeatures = EncodeExamples(task.SupportInput);

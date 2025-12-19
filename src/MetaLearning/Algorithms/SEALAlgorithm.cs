@@ -259,7 +259,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
     /// </summary>
     /// <param name="task">The task to compute meta-gradients for.</param>
     /// <returns>The meta-gradient vector.</returns>
-    private Vector<T> ComputeMetaGradients(ITask<T, TInput, TOutput> task)
+    private Vector<T> ComputeMetaGradients(IMetaLearningTask<T, TInput, TOutput> task)
     {
         // Clone meta model for gradient computation
         var model = CloneModel();

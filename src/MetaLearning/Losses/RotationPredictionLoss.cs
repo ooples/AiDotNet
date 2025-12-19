@@ -137,7 +137,7 @@ public class RotationPredictionLoss<T, TInput, TOutput> : ISelfSupervisedLoss<T,
             {
                 sampleNorm = NumOps.Add(sampleNorm, NumOps.Multiply(features[i, j], features[i, j]));
             }
-            featureNorm = NumOps.Add(featureNorm, NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sampleNorm))));
+            featureNorm = NumOps.Add(featureNorm, NumOps.FromDouble(Math.Sqrt(Convert.ToDouble(sampleNorm))));
         }
         metrics["AverageFeatureNorm"] = NumOps.Divide(featureNorm, NumOps.FromDouble(numSamples));
 
@@ -286,7 +286,7 @@ public class RotationPredictionLoss<T, TInput, TOutput> : ISelfSupervisedLoss<T,
                 T p = probabilities[i];
                 // Avoid log(0) with small epsilon
                 p = NumOps.Add(p, NumOps.FromDouble(1e-8));
-                T logP = NumOps.FromDouble(Math.Log(NumOps.ToDouble(p)));
+                T logP = NumOps.FromDouble(Math.Log(Convert.ToDouble(p)));
                 loss = NumOps.Subtract(loss, logP);
             }
         }
@@ -334,7 +334,7 @@ public class RotationPredictionLoss<T, TInput, TOutput> : ISelfSupervisedLoss<T,
         for (int i = 0; i < logits.Length; i++)
         {
             T shifted = NumOps.Subtract(logits[i], maxLogit);
-            expValues[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(shifted)));
+            expValues[i] = NumOps.FromDouble(Math.Exp(Convert.ToDouble(shifted)));
             sumExp = NumOps.Add(sumExp, expValues[i]);
         }
 

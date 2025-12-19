@@ -164,7 +164,7 @@ public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, 
     /// <param name="model">The model to adapt.</param>
     /// <param name="task">The task to adapt to.</param>
     /// <returns>The adapted parameters.</returns>
-    private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, ITask<T, TInput, TOutput> task)
+    private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, IMetaLearningTask<T, TInput, TOutput> task)
     {
         var parameters = model.GetParameters();
 

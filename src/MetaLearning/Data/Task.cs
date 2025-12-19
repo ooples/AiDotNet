@@ -12,7 +12,7 @@ namespace AiDotNet.MetaLearning.Data;
 /// including the support set (training examples) and query set (test examples).
 /// </para>
 /// </remarks>
-public class Task<T, TInput, TOutput> : ITask<T, TInput, TOutput>
+public class Task<T, TInput, TOutput> : IMetaLearningTask<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the Task class.
@@ -82,6 +82,20 @@ public class Task<T, TInput, TOutput> : ITask<T, TInput, TOutput>
 
     /// <inheritdoc/>
     public string TaskId { get; }
+
+    /// <inheritdoc/>
+    public string? Name => TaskId;
+
+    /// <inheritdoc/>
+    public Dictionary<string, object>? Metadata => new Dictionary<string, object>
+    {
+        ["task_id"] = TaskId,
+        ["num_ways"] = NumWays,
+        ["num_shots"] = NumShots,
+        ["num_query_per_class"] = NumQueryPerClass,
+        ["total_support_examples"] = TotalSupportExamples,
+        ["total_query_examples"] = TotalQueryExamples
+    };
 
     /// <summary>
     /// Gets the total number of support examples (NumWays * NumShots).

@@ -218,7 +218,7 @@ public class MANNAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
     /// <summary>
     /// Trains the controller and memory mechanisms on a single episode.
     /// </summary>
-    private T TrainEpisode(ITask<T, TInput, TOutput> task)
+    private T TrainEpisode(IMetaLearningTask<T, TInput, TOutput> task)
     {
         T episodeLoss = NumOps.Zero;
 

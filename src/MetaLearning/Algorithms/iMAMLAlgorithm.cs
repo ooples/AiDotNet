@@ -150,7 +150,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
     /// <param name="model">The model to adapt.</param>
     /// <param name="task">The task to adapt to.</param>
     /// <returns>The adapted parameters.</returns>
-    private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, ITask<T, TInput, TOutput> task)
+    private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, IMetaLearningTask<T, TInput, TOutput> task)
     {
         var parameters = model.GetParameters();
 
@@ -178,7 +178,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
     private Vector<T> ComputeImplicitMetaGradients(
         Vector<T> initialParams,
         Vector<T> adaptedParams,
-        ITask<T, TInput, TOutput> task)
+        IMetaLearningTask<T, TInput, TOutput> task)
     {
         // Step 1: Compute gradient of query loss with respect to adapted parameters
         var model = CloneModel();
