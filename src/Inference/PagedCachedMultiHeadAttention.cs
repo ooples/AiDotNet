@@ -174,6 +174,18 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
             var hidden = hiddenBuffer.AsSpan(0, embDim);
             var tokenOut = tokenOutBuffer.AsSpan(0, embDim);
 
+            var wQInt8 = _cachedWQInt8;
+            var wKInt8 = _cachedWKInt8;
+            var wVInt8 = _cachedWVInt8;
+            var wOInt8 = _cachedWOInt8;
+
+            bool useQuantized = EnableWeightOnlyQuantization &&
+                                typeof(T) == typeof(float) &&
+                                wQInt8.HasValue &&
+                                wKInt8.HasValue &&
+                                wVInt8.HasValue &&
+                                wOInt8.HasValue;
+
             for (int t = 0; t < seqLen; t++)
             {
                 for (int d = 0; d < embDim; d++)
@@ -181,19 +193,14 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                     hidden[d] = Convert.ToSingle(input[0, t, d]);
                 }
 
-                if (EnableWeightOnlyQuantization &&
-                    typeof(T) == typeof(float) &&
-                    _cachedWQInt8.HasValue &&
-                    _cachedWKInt8.HasValue &&
-                    _cachedWVInt8.HasValue &&
-                    _cachedWOInt8.HasValue)
+                if (useQuantized)
                 {
                     Kernel.ForwardQuantized(
                         hiddenStates: hidden,
-                        wQ: _cachedWQInt8.Value,
-                        wK: _cachedWKInt8.Value,
-                        wV: _cachedWVInt8.Value,
-                        wO: _cachedWOInt8.Value,
+                        wQ: wQInt8!.Value,
+                        wK: wKInt8!.Value,
+                        wV: wVInt8!.Value,
+                        wO: wOInt8!.Value,
                         sequenceId: SequenceId,
                         position: _currentPosition,
                         layer: LayerIndex,
@@ -404,34 +411,85 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
 
     private void EnsureKernelWeightCache()
     {
-        if (_cachedWQ != null && _cachedWK != null && _cachedWV != null && _cachedWO != null)
+        bool enableQuantization = EnableWeightOnlyQuantization && typeof(T) == typeof(float);
+
+        bool hasDenseWeights = _cachedWQ != null && _cachedWK != null && _cachedWV != null && _cachedWO != null;
+        bool hasQuantizedWeights = _cachedWQInt8.HasValue && _cachedWKInt8.HasValue && _cachedWVInt8.HasValue && _cachedWOInt8.HasValue;
+
+        if (hasDenseWeights && (!enableQuantization || hasQuantizedWeights))
         {
             return;
         }
 
+        float[]? localWQ = null;
+        float[]? localWK = null;
+        float[]? localWV = null;
+        float[]? localWO = null;
+
+        Int8WeightOnlyQuantization.QuantizedWeights? localWQInt8 = null;
+        Int8WeightOnlyQuantization.QuantizedWeights? localWKInt8 = null;
+        Int8WeightOnlyQuantization.QuantizedWeights? localWVInt8 = null;
+        Int8WeightOnlyQuantization.QuantizedWeights? localWOInt8 = null;
+
+        // First, determine what's missing and take a quick snapshot inside the lock.
         lock (_kernelWeightsLock)
         {
-            _cachedWQ ??= MatrixToFloatForKernel(_queryWeights);
-            _cachedWK ??= MatrixToFloatForKernel(_keyWeights);
-            _cachedWV ??= MatrixToFloatForKernel(_valueWeights);
-            _cachedWO ??= MatrixToFloatForKernel(_outputWeights);
+            hasDenseWeights = _cachedWQ != null && _cachedWK != null && _cachedWV != null && _cachedWO != null;
+            hasQuantizedWeights = _cachedWQInt8.HasValue && _cachedWKInt8.HasValue && _cachedWVInt8.HasValue && _cachedWOInt8.HasValue;
 
-            if (EnableWeightOnlyQuantization && typeof(T) == typeof(float))
+            if (hasDenseWeights && (!enableQuantization || hasQuantizedWeights))
             {
-                int projDim = _headCount * _headDimension;
-                int hiddenDim = _embeddingDimension;
-
-                _cachedWQInt8 = Int8WeightOnlyQuantization.QuantizePerRow(_cachedWQ, projDim, hiddenDim);
-                _cachedWKInt8 = Int8WeightOnlyQuantization.QuantizePerRow(_cachedWK, projDim, hiddenDim);
-                _cachedWVInt8 = Int8WeightOnlyQuantization.QuantizePerRow(_cachedWV, projDim, hiddenDim);
-                _cachedWOInt8 = Int8WeightOnlyQuantization.QuantizePerRow(_cachedWO, hiddenDim, projDim);
+                return;
             }
-            else
+
+            if (_cachedWQ == null) localWQ = MatrixToFloatForKernel(_queryWeights);
+            if (_cachedWK == null) localWK = MatrixToFloatForKernel(_keyWeights);
+            if (_cachedWV == null) localWV = MatrixToFloatForKernel(_valueWeights);
+            if (_cachedWO == null) localWO = MatrixToFloatForKernel(_outputWeights);
+
+            if (!enableQuantization)
             {
                 _cachedWQInt8 = null;
                 _cachedWKInt8 = null;
                 _cachedWVInt8 = null;
                 _cachedWOInt8 = null;
+            }
+        }
+
+        // Compute expensive quantization outside the lock to minimize contention.
+        if (enableQuantization)
+        {
+            int projDim = _headCount * _headDimension;
+            int hiddenDim = _embeddingDimension;
+
+            var wq = _cachedWQ ?? localWQ;
+            var wk = _cachedWK ?? localWK;
+            var wv = _cachedWV ?? localWV;
+            var wo = _cachedWO ?? localWO;
+
+            if (wq != null && wk != null && wv != null && wo != null)
+            {
+                localWQInt8 = Int8WeightOnlyQuantization.QuantizePerRow(wq, projDim, hiddenDim);
+                localWKInt8 = Int8WeightOnlyQuantization.QuantizePerRow(wk, projDim, hiddenDim);
+                localWVInt8 = Int8WeightOnlyQuantization.QuantizePerRow(wv, projDim, hiddenDim);
+                localWOInt8 = Int8WeightOnlyQuantization.QuantizePerRow(wo, hiddenDim, projDim);
+            }
+        }
+
+        // Publish results under lock (double-checked to avoid overwriting).
+        lock (_kernelWeightsLock)
+        {
+            _cachedWQ ??= localWQ;
+            _cachedWK ??= localWK;
+            _cachedWV ??= localWV;
+            _cachedWO ??= localWO;
+
+            if (enableQuantization)
+            {
+                _cachedWQInt8 ??= localWQInt8;
+                _cachedWKInt8 ??= localWKInt8;
+                _cachedWVInt8 ??= localWVInt8;
+                _cachedWOInt8 ??= localWOInt8;
             }
         }
     }
