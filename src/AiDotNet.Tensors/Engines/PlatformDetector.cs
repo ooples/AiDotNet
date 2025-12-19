@@ -60,7 +60,7 @@ namespace AiDotNet.Tensors.Engines
                 caps.HasArmBase = ArmBase.IsSupported;
                 caps.HasArmAes = System.Runtime.Intrinsics.Arm.Aes.IsSupported;
                 caps.HasArmCrc32 = Crc32.IsSupported;
-                caps.HasArmDp = AdvSimd.Arm64.IsSupported;
+                caps.HasArmDp = caps.Architecture == Architecture.Arm64 && Dp.Arm64.IsSupported;
             }
 #endif
 
