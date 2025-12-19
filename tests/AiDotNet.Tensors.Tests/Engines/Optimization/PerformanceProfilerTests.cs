@@ -9,34 +9,55 @@ public class PerformanceProfilerTests
     public void Profile_WhenEnabled_RecordsStats()
     {
         var profiler = PerformanceProfiler.Instance;
+        string operationName = $"op-{Guid.NewGuid():N}";
+        bool wasEnabled = profiler.Enabled;
+
         profiler.Clear();
         profiler.Enabled = true;
 
-        using (profiler.Profile("op"))
+        try
         {
-            _ = 1 + 1;
-        }
+            using (profiler.Profile(operationName))
+            {
+                _ = 1 + 1;
+            }
 
-        var stats = profiler.GetStats("op");
-        Assert.NotNull(stats);
-        Assert.Equal("op", stats!.OperationName);
-        Assert.True(stats.CallCount >= 1);
-        Assert.True(stats.TotalTicks > 0);
+            var stats = profiler.GetStats(operationName);
+            Assert.NotNull(stats);
+            Assert.Equal(operationName, stats!.OperationName);
+            Assert.Equal(1, stats.CallCount);
+            Assert.True(stats.TotalTicks > 0);
+        }
+        finally
+        {
+            profiler.Enabled = wasEnabled;
+            profiler.Clear();
+        }
     }
 
     [Fact]
     public void Profile_WhenDisabled_ReturnsEmptyDisposable()
     {
         var profiler = PerformanceProfiler.Instance;
+        string operationName = $"op-disabled-{Guid.NewGuid():N}";
+        bool wasEnabled = profiler.Enabled;
+
         profiler.Clear();
         profiler.Enabled = false;
 
-        using (profiler.Profile("op-disabled"))
+        try
         {
-            _ = 1 + 1;
-        }
+            using (profiler.Profile(operationName))
+            {
+                _ = 1 + 1;
+            }
 
-        Assert.Null(profiler.GetStats("op-disabled"));
+            Assert.Null(profiler.GetStats(operationName));
+        }
+        finally
+        {
+            profiler.Enabled = wasEnabled;
+            profiler.Clear();
+        }
     }
 }
-
