@@ -1339,17 +1339,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        if (layer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationMetadata metadataProvider)
-        {
-            foreach (var kvp in metadataProvider.GetSerializationMetadata())
-            {
-                metadata[kvp.Key] = kvp.Value;
-            }
-        }
-
         // Persist activation types for LayerBase-derived layers so Clone/DeepCopy round-trips behavior.
         if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layerBase)
         {
+            foreach (var kvp in layerBase.GetMetadata())
+            {
+                metadata[kvp.Key] = kvp.Value;
+            }
+
             if (layerBase.VectorActivation != null)
             {
                 metadata["VectorActivationType"] = layerBase.VectorActivation.GetType().AssemblyQualifiedName ?? layerBase.VectorActivation.GetType().FullName ?? string.Empty;

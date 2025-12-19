@@ -34,7 +34,7 @@ namespace AiDotNet.Inference;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations.</typeparam>
-internal class CachedMultiHeadAttention<T> : LayerBase<T>, ILayerSerializationMetadata
+internal class CachedMultiHeadAttention<T> : LayerBase<T>
 {
     private readonly int _headCount;
     private readonly int _headDimension;
@@ -606,7 +606,7 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>, ILayerSerializationMe
         return tensor;
     }
 
-    Dictionary<string, string> AiDotNet.NeuralNetworks.Layers.ILayerSerializationMetadata.GetSerializationMetadata()
+    internal override Dictionary<string, string> GetMetadata()
     {
         return new Dictionary<string, string>
         {

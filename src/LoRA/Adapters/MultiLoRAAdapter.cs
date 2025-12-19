@@ -51,7 +51,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// You can switch between tasks at runtime, and each task only trains its specific LoRA weights!
 /// </para>
 /// </remarks>
-public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, ILayerSerializationExtras<T>, AiDotNet.NeuralNetworks.Layers.ILayerSerializationMetadata
+public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, ILayerSerializationExtras<T>
 {
     /// <summary>
     /// Dictionary mapping task names to their specific LoRA layers.
@@ -678,7 +678,7 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, ILayerSerializationExtras
         _baseLayer.SetParameters(extraParameters);
     }
 
-    Dictionary<string, string> AiDotNet.NeuralNetworks.Layers.ILayerSerializationMetadata.GetSerializationMetadata()
+    internal override Dictionary<string, string> GetMetadata()
     {
         var meta = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -707,16 +707,13 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, ILayerSerializationExtras
         string typeName = layer.GetType().Name;
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        if (layer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationMetadata meta)
+        if (layer is LayerBase<T> layerBase)
         {
-            foreach (var kvp in meta.GetSerializationMetadata())
+            foreach (var kvp in layerBase.GetMetadata())
             {
                 metadata[kvp.Key] = kvp.Value;
             }
-        }
 
-        if (layer is LayerBase<T> layerBase)
-        {
             if (layerBase.VectorActivation != null)
             {
                 metadata["VectorActivationType"] = layerBase.VectorActivation.GetType().AssemblyQualifiedName ?? layerBase.VectorActivation.GetType().FullName ?? string.Empty;

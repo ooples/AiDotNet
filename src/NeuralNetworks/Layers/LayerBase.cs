@@ -1654,6 +1654,19 @@ public abstract class LayerBase<T> : ILayer<T>
     }
 
     /// <summary>
+    /// Gets layer metadata required to reliably round-trip this layer via serialization.
+    /// </summary>
+    /// <remarks>
+    /// This is intentionally internal to avoid expanding the public API surface area. Derived layers can
+    /// override to provide constructor-level settings that are not inferable from shapes/parameters alone
+    /// (e.g., attention head count, masking mode, configuration flags).
+    /// </remarks>
+    internal virtual Dictionary<string, string> GetMetadata()
+    {
+        return new Dictionary<string, string>(StringComparer.Ordinal);
+    }
+
+    /// <summary>
     /// Applies the layer's configured activation function to a computation graph node.
     /// </summary>
     /// <param name="input">The computation node to apply activation to.</param>

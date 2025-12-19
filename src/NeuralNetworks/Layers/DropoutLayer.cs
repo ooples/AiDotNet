@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for computations (e.g., float, double).</typeparam>
-public class DropoutLayer<T> : LayerBase<T>, ILayerSerializationMetadata
+public class DropoutLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The probability of dropping out (deactivating) a neuron during training.
@@ -555,7 +555,7 @@ public class DropoutLayer<T> : LayerBase<T>, ILayerSerializationMetadata
     /// </remarks>
     public override bool SupportsJitCompilation => true;
 
-    Dictionary<string, string> ILayerSerializationMetadata.GetSerializationMetadata()
+    internal override Dictionary<string, string> GetMetadata()
     {
         return new Dictionary<string, string>
         {

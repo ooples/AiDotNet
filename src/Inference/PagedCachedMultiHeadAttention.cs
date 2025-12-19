@@ -19,7 +19,7 @@ namespace AiDotNet.Inference;
 /// For concurrent serving, create one sequence per request (distinct <see cref="SequenceId"/> values).
 /// </para>
 /// </remarks>
-internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralNetworks.Layers.ILayerSerializationMetadata
+internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
 {
     private readonly int _headCount;
     private readonly int _headDimension;
@@ -475,7 +475,7 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, AiDotNet.NeuralN
         throw new NotSupportedException($"{nameof(PagedCachedMultiHeadAttention<T>)} does not support JIT compilation.");
     }
 
-    Dictionary<string, string> AiDotNet.NeuralNetworks.Layers.ILayerSerializationMetadata.GetSerializationMetadata()
+    internal override Dictionary<string, string> GetMetadata()
     {
         return new Dictionary<string, string>
         {

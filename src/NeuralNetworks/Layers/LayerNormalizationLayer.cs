@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class LayerNormalizationLayer<T> : LayerBase<T>, ILayerSerializationMetadata
+public class LayerNormalizationLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// A small value added to the variance for numerical stability.
@@ -595,7 +595,7 @@ public class LayerNormalizationLayer<T> : LayerBase<T>, ILayerSerializationMetad
         }
     }
 
-    Dictionary<string, string> ILayerSerializationMetadata.GetSerializationMetadata()
+    internal override Dictionary<string, string> GetMetadata()
     {
         return new Dictionary<string, string>
         {

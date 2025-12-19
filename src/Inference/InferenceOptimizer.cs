@@ -635,10 +635,10 @@ internal class InferenceOptimizer<T>
 
     private static int? TryGetHeadCountFromMetadata(ILayer<T> layer)
     {
-        if (layer is not ILayerSerializationMetadata meta)
+        if (layer is not LayerBase<T> layerBase)
             return null;
 
-        if (!meta.GetSerializationMetadata().TryGetValue("HeadCount", out var raw) || string.IsNullOrWhiteSpace(raw))
+        if (!layerBase.GetMetadata().TryGetValue("HeadCount", out var raw) || string.IsNullOrWhiteSpace(raw))
             return null;
 
         return int.TryParse(raw, out var parsed) ? parsed : null;

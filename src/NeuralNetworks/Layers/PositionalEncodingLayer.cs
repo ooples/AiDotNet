@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class PositionalEncodingLayer<T> : LayerBase<T>, ILayerSerializationMetadata
+public class PositionalEncodingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The maximum sequence length that this layer can handle.
@@ -430,7 +430,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>, ILayerSerializationMetad
 
     public override bool SupportsJitCompilation => true;
 
-    Dictionary<string, string> ILayerSerializationMetadata.GetSerializationMetadata()
+    internal override Dictionary<string, string> GetMetadata()
     {
         return new Dictionary<string, string>
         {
