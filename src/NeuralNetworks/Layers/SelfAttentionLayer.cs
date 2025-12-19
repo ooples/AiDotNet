@@ -1371,4 +1371,12 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                    _valueWeights.Shape.Length >= 2 && _valueWeights.Shape[0] > 0;
         }
     }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        return new Dictionary<string, string>
+        {
+            ["HeadCount"] = _headCount.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
+    }
 }

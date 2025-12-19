@@ -594,4 +594,12 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
             return _gamma != null && _beta != null;
         }
     }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        return new Dictionary<string, string>
+        {
+            ["Epsilon"] = Convert.ToDouble(_epsilon).ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
+    }
 }

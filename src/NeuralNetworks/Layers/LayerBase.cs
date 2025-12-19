@@ -1381,7 +1381,9 @@ public abstract class LayerBase<T> : ILayer<T>
             throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}");
         }
 
-        Parameters = parameters;
+        // Delegate to SetParameters so derived layers that manage structured weights/biases
+        // can correctly materialize the provided flat parameter vector.
+        SetParameters(parameters);
     }
 
     /// <summary>
@@ -1649,6 +1651,19 @@ public abstract class LayerBase<T> : ILayer<T>
         }
 
         return diagnostics;
+    }
+
+    /// <summary>
+    /// Gets layer metadata required to reliably round-trip this layer via serialization.
+    /// </summary>
+    /// <remarks>
+    /// This is intentionally internal to avoid expanding the public API surface area. Derived layers can
+    /// override to provide constructor-level settings that are not inferable from shapes/parameters alone
+    /// (e.g., attention head count, masking mode, configuration flags).
+    /// </remarks>
+    internal virtual Dictionary<string, string> GetMetadata()
+    {
+        return new Dictionary<string, string>(StringComparer.Ordinal);
     }
 
     /// <summary>

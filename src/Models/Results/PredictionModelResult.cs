@@ -10,6 +10,8 @@ using AiDotNet.Deployment.Mobile.TensorFlowLite;
 using AiDotNet.Deployment.Runtime;
 using AiDotNet.Deployment.TensorRT;
 using AiDotNet.Enums;
+using AiDotNet.Inference;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -455,7 +457,25 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     [JsonIgnore]  // Don't serialize - will need to be recompiled after deserialization
     private Func<Tensor<T>[], Tensor<T>[]>? JitCompiledFunction { get; set; }
+
+    [JsonProperty]
     private AiDotNet.Configuration.InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
+
+    [JsonIgnore]
+    private readonly object _inferenceOptimizationLock = new();
+
+    [JsonIgnore]
+    private InferenceOptimizer<T>? _inferenceOptimizer;
+
+    [JsonIgnore]
+    private NeuralNetworkBase<T>? _inferenceOptimizedNeuralModel;
+
+    [JsonIgnore]
+    private bool _inferenceOptimizationsInitialized;
+
+    // Serving assembly uses InternalsVisibleTo; keep this internal to avoid expanding user-facing API surface.
+    internal AiDotNet.Configuration.InferenceOptimizationConfig? GetInferenceOptimizationConfigForServing()
+        => InferenceOptimizationConfig;
 
     /// <summary>
     /// Gets the reasoning configuration for advanced Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency reasoning.
@@ -939,10 +959,34 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         // Use JIT-compiled function if available for 5-10x faster predictions
         TOutput normalizedPredictions;
-        if (JitCompiledFunction != null && normalizedNewData is Tensor<T> inputTensor)
+
+        // INFERENCE OPTIMIZATION PATH: apply configured inference optimizations for neural network models
+        if (InferenceOptimizationConfig != null &&
+            Model is NeuralNetworkBase<T> neuralModel &&
+            normalizedNewData is Tensor<T> inputTensor)
+        {
+            var optimizedNeuralModel = EnsureStatelessInferenceOptimizationsInitialized(neuralModel);
+            if (optimizedNeuralModel != null)
+            {
+                var optimizedOutput = optimizedNeuralModel.Predict(inputTensor);
+                if ((object)optimizedOutput is TOutput output)
+                {
+                    normalizedPredictions = output;
+                }
+                else
+                {
+                    // Fallback to the wrapped model if type mismatch occurs
+                    normalizedPredictions = Model.Predict(normalizedNewData);
+                }
+
+                return NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, NormalizationInfo.YParams);
+            }
+        }
+
+        if (JitCompiledFunction != null && normalizedNewData is Tensor<T> inputTensor2)
         {
             // JIT PATH: Use compiled function for accelerated inference
-            var jitResult = JitCompiledFunction(new[] { inputTensor });
+            var jitResult = JitCompiledFunction(new[] { inputTensor2 });
             if (jitResult != null && jitResult.Length > 0 && jitResult[0] is TOutput output)
             {
                 normalizedPredictions = output;
@@ -963,9 +1007,389 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
+    /// Begins an inference session for stateful inference features (e.g., KV-cache).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Sessions are intended for serving-style workloads where you run many sequential inference steps.
+    /// A session can create multiple independent sequences, each maintaining its own state (like KV-cache).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Use a session when you are doing "token-by-token" inference.
+    ///
+    /// - Use <see cref="Predict(TInput)"/> for one-off, stateless predictions.
+    /// - Use <see cref="BeginInferenceSession"/> when you need the model to remember prior calls in the same sequence.
+    /// </para>
+    /// </remarks>
+    public InferenceSession BeginInferenceSession()
+    {
+        return new InferenceSession(this, InferenceOptimizationConfig);
+    }
+
+    private NeuralNetworkBase<T>? EnsureStatelessInferenceOptimizationsInitialized(NeuralNetworkBase<T> model)
+    {
+        if (_inferenceOptimizationsInitialized)
+        {
+            return _inferenceOptimizedNeuralModel;
+        }
+
+        lock (_inferenceOptimizationLock)
+        {
+            if (_inferenceOptimizationsInitialized)
+            {
+                return _inferenceOptimizedNeuralModel;
+            }
+
+            try
+            {
+                if (InferenceOptimizationConfig != null)
+                {
+                    // Stateless-only optimizations for plain Predict(): avoid stateful features that can leak across calls.
+                    var statelessConfig = CreateStatelessInferenceConfig(InferenceOptimizationConfig);
+                    var optimizer = new InferenceOptimizer<T>(statelessConfig);
+                    var (optimizedModel, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: true);
+
+                    _inferenceOptimizer = optimizer;
+                    _inferenceOptimizedNeuralModel = anyApplied ? optimizedModel : null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Warning: inference optimizations failed: {ex.Message}");
+                _inferenceOptimizer = null;
+                _inferenceOptimizedNeuralModel = null;
+            }
+            finally
+            {
+                _inferenceOptimizationsInitialized = true;
+            }
+
+            return _inferenceOptimizedNeuralModel;
+        }
+    }
+
+    private static AiDotNet.Configuration.InferenceOptimizationConfig CreateStatelessInferenceConfig(
+        AiDotNet.Configuration.InferenceOptimizationConfig config)
+    {
+        return new AiDotNet.Configuration.InferenceOptimizationConfig
+        {
+            EnableFlashAttention = config.EnableFlashAttention,
+            AttentionMasking = config.AttentionMasking,
+
+            // Disable stateful/session-centric features for plain Predict().
+            EnableKVCache = false,
+            EnablePagedKVCache = false,
+            EnableBatching = false,
+            EnableSpeculativeDecoding = false
+        };
+    }
+
+    /// <summary>
+    /// Facade-friendly inference session that owns stateful inference internals.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This type intentionally keeps inference internals behind the facade. Users create sequences via
+    /// <see cref="CreateSequence"/> and run inference via <see cref="InferenceSequence.Predict(TInput)"/>.
+    /// </para>
+    /// </remarks>
+    public sealed class InferenceSession : IDisposable
+    {
+        private readonly PredictionModelResult<T, TInput, TOutput> _result;
+        private readonly AiDotNet.Configuration.InferenceOptimizationConfig? _config;
+        private bool _disposed;
+
+        internal InferenceSession(
+            PredictionModelResult<T, TInput, TOutput> result,
+            AiDotNet.Configuration.InferenceOptimizationConfig? config)
+        {
+            _result = result ?? throw new ArgumentNullException(nameof(result));
+            _config = config;
+        }
+
+        /// <summary>
+        /// Creates an independent sequence within this session.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Each sequence represents an independent stream (e.g., one chat) and owns its own state.
+        /// </para>
+        /// </remarks>
+        public InferenceSequence CreateSequence()
+        {
+            ThrowIfDisposed();
+            return new InferenceSequence(_result, _config, multiLoRATask: null);
+        }
+
+        // Internal (serving/tests): allow selecting a Multi-LoRA task per sequence without expanding public API surface.
+        internal InferenceSequence CreateSequence(string? multiLoRATask)
+        {
+            ThrowIfDisposed();
+            return new InferenceSequence(_result, _config, multiLoRATask);
+        }
+
+        public void Dispose()
+        {
+            _disposed = true;
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(InferenceSession));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Represents one independent, stateful inference sequence (e.g., one chat/generation stream).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A sequence may keep internal state across calls when inference optimizations are enabled (e.g., KV-cache).
+    /// Call <see cref="Reset"/> to start a new logical sequence on the same object.
+    /// </para>
+    /// </remarks>
+    public sealed class InferenceSequence : IDisposable
+    {
+        private readonly PredictionModelResult<T, TInput, TOutput> _result;
+        private readonly AiDotNet.Configuration.InferenceOptimizationConfig? _config;
+        private bool _disposed;
+
+        // Session-local inference state (populated lazily when used).
+        private InferenceOptimizer<T>? _sequenceOptimizer;
+        private NeuralNetworkBase<T>? _sequenceOptimizedNeuralModel;
+        private bool _sequenceInitialized;
+        private readonly object _sequenceLock = new();
+
+        internal InferenceSequence(
+            PredictionModelResult<T, TInput, TOutput> result,
+            AiDotNet.Configuration.InferenceOptimizationConfig? config,
+            string? multiLoRATask)
+        {
+            _result = result ?? throw new ArgumentNullException(nameof(result));
+            _config = config;
+            _multiLoRATask = multiLoRATask;
+        }
+
+        private string? _multiLoRATask;
+
+        public TOutput Predict(TInput newData)
+        {
+            ThrowIfDisposed();
+
+            if (_result.Model == null)
+            {
+                throw new InvalidOperationException("Model is not initialized.");
+            }
+
+            if (_result.NormalizationInfo.Normalizer == null)
+            {
+                throw new InvalidOperationException("Normalizer is not initialized.");
+            }
+
+            var (normalizedNewData, _) = _result.NormalizationInfo.Normalizer.NormalizeInput(newData);
+
+            // Session inference: use configured inference optimizations, including stateful ones, if applicable.
+            if (_config != null &&
+                _result.Model is NeuralNetworkBase<T> neuralModel &&
+                normalizedNewData is Tensor<T> inputTensor)
+            {
+                var optimized = EnsureSequenceOptimizationsInitialized(neuralModel);
+                if (optimized != null)
+                {
+                    var optimizedOutput = optimized.Predict(inputTensor);
+                    if ((object)optimizedOutput is TOutput output)
+                    {
+                        return _result.NormalizationInfo.Normalizer.Denormalize(output, _result.NormalizationInfo.YParams);
+                    }
+                }
+            }
+
+            // Fallback: normal predict path (no JIT inside a session to keep behavior consistent).
+            var normalizedPredictions = _result.Model.Predict(normalizedNewData);
+            return _result.NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, _result.NormalizationInfo.YParams);
+        }
+
+        public void Reset()
+        {
+            ThrowIfDisposed();
+            lock (_sequenceLock)
+            {
+                _sequenceOptimizer?.ClearCache();
+            }
+        }
+
+        // Internal: switch Multi-LoRA task for this sequence, resetting state to avoid cache leakage.
+        internal void SetMultiLoRATask(string? taskName)
+        {
+            ThrowIfDisposed();
+            lock (_sequenceLock)
+            {
+                if (string.Equals(_multiLoRATask, taskName, StringComparison.Ordinal))
+                    return;
+
+                _multiLoRATask = taskName;
+
+                try
+                {
+                    _sequenceOptimizer?.ClearCache();
+                }
+                catch
+                {
+                    // Best-effort.
+                }
+
+                _sequenceOptimizer = null;
+                _sequenceOptimizedNeuralModel = null;
+                _sequenceInitialized = false;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            try
+            {
+                _sequenceOptimizer?.ClearCache();
+            }
+            catch
+            {
+                // Best-effort cleanup; disposal must not throw.
+            }
+
+            _disposed = true;
+        }
+
+        // Exposed to AiDotNetTests via InternalsVisibleTo for integration verification without expanding the public API surface.
+        internal Dictionary<string, object> GetInferenceStatistics()
+        {
+            ThrowIfDisposed();
+            lock (_sequenceLock)
+            {
+                return _sequenceOptimizer?.GetStatistics() ?? new Dictionary<string, object>();
+            }
+        }
+
+        private NeuralNetworkBase<T>? EnsureSequenceOptimizationsInitialized(NeuralNetworkBase<T> model)
+        {
+            if (_sequenceInitialized)
+            {
+                return _sequenceOptimizedNeuralModel;
+            }
+
+            lock (_sequenceLock)
+            {
+                if (_sequenceInitialized)
+                {
+                    return _sequenceOptimizedNeuralModel;
+                }
+
+                try
+                {
+                    if (_config != null)
+                    {
+                        // If Multi-LoRA is in use, isolate per-sequence task selection by cloning and selecting task
+                        // before applying any further inference optimizations.
+                        NeuralNetworkBase<T> modelForSequence = model;
+                        bool hasMultiLoRATask = !string.IsNullOrWhiteSpace(_multiLoRATask);
+                        if (hasMultiLoRATask)
+                        {
+                            try
+                            {
+                                modelForSequence = (NeuralNetworkBase<T>)model.Clone();
+
+                                int appliedCount = 0;
+                                foreach (var layer in modelForSequence.Layers)
+                                {
+                                    if (layer is AiDotNet.LoRA.Adapters.MultiLoRAAdapter<T> multi)
+                                    {
+                                        multi.SetCurrentTask(_multiLoRATask!);
+                                        appliedCount++;
+                                    }
+                                }
+
+                                InferenceDiagnostics.RecordDecision(
+                                    area: "InferenceSession",
+                                    feature: "MultiLoRA",
+                                    enabled: appliedCount > 0,
+                                    reason: appliedCount > 0 ? $"Task={_multiLoRATask}" : $"NoMultiLoRAAdapters(Task={_multiLoRATask})");
+                            }
+                            catch (Exception ex)
+                            {
+                                InferenceDiagnostics.RecordException("InferenceSession", "MultiLoRA", ex, $"Task={_multiLoRATask};FallbackToBaseModel");
+                                modelForSequence = model;
+                            }
+                        }
+
+                        // In a session, prefer causal masking defaults when user left it as Auto.
+                        var sessionConfig = _config.AttentionMasking == AiDotNet.Configuration.AttentionMaskingMode.Auto
+                            ? new AiDotNet.Configuration.InferenceOptimizationConfig
+                            {
+                                EnableFlashAttention = _config.EnableFlashAttention,
+                                EnableKVCache = _config.EnableKVCache,
+                                EnablePagedKVCache = _config.EnablePagedKVCache,
+                                PagedKVCacheBlockSize = _config.PagedKVCacheBlockSize,
+                                MaxBatchSize = _config.MaxBatchSize,
+                                KVCacheMaxSizeMB = _config.KVCacheMaxSizeMB,
+                                KVCachePrecision = _config.KVCachePrecision,
+                                KVCacheQuantization = _config.KVCacheQuantization,
+                                UseSlidingWindowKVCache = _config.UseSlidingWindowKVCache,
+                                KVCacheWindowSize = _config.KVCacheWindowSize,
+                                EnableBatching = _config.EnableBatching,
+                                EnableSpeculativeDecoding = _config.EnableSpeculativeDecoding,
+                                SpeculationPolicy = _config.SpeculationPolicy,
+                                SpeculativeMethod = _config.SpeculativeMethod,
+                                DraftModelType = _config.DraftModelType,
+                                SpeculationDepth = _config.SpeculationDepth,
+                                UseTreeSpeculation = _config.UseTreeSpeculation,
+                                EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization,
+                                AttentionMasking = AiDotNet.Configuration.AttentionMaskingMode.Causal
+                            }
+                            : _config;
+
+                        var optimizer = new InferenceOptimizer<T>(sessionConfig);
+                        var (optimizedModel, anyApplied) = optimizer.OptimizeForInference(modelForSequence, cloneModel: ReferenceEquals(modelForSequence, model));
+
+                        _sequenceOptimizer = optimizer;
+                        // If Multi-LoRA was requested, keep the per-sequence model even when no other optimizations apply.
+                        _sequenceOptimizedNeuralModel = anyApplied || !ReferenceEquals(modelForSequence, model) ? optimizedModel : null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Warning: inference session optimizations failed: {ex.Message}");
+                    _sequenceOptimizer = null;
+                    _sequenceOptimizedNeuralModel = null;
+                }
+                finally
+                {
+                    _sequenceInitialized = true;
+                }
+
+                return _sequenceOptimizedNeuralModel;
+            }
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(InferenceSequence));
+            }
+        }
+    }
+
+    /// <summary>
     /// Gets the default loss function used by this model for gradient computation.
     /// </summary>
     /// <exception cref="InvalidOperationException">If Model is not initialized.</exception>
+    [JsonIgnore]
     public ILossFunction<T> DefaultLossFunction
     {
         get
@@ -1680,6 +2104,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 ModelMetaData = deserializedObject.ModelMetaData;
                 BiasDetector = deserializedObject.BiasDetector;
                 FairnessEvaluator = deserializedObject.FairnessEvaluator;
+                InferenceOptimizationConfig = deserializedObject.InferenceOptimizationConfig;
 
                 // Preserve RAG components and all configuration properties
                 RagRetriever = deserializedObject.RagRetriever;
@@ -1691,6 +2116,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 AgentConfig = deserializedObject.AgentConfig;
                 AgentRecommendation = deserializedObject.AgentRecommendation;
                 DeploymentConfiguration = deserializedObject.DeploymentConfiguration;
+
+                // Reset transient runtime state (will be reinitialized lazily)
+                JitCompiledFunction = null;
+                _inferenceOptimizer = null;
+                _inferenceOptimizedNeuralModel = null;
+                _inferenceOptimizationsInitialized = false;
             }
             else
             {

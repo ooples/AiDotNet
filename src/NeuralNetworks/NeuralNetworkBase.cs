@@ -1263,6 +1263,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
 
+        // Serialization format:
+        // - V1: [layerCount:int32] ...
+        // - V2+: [-version:int32][layerCount:int32] ... (supports per-layer extra parameter blocks)
+        const int serializationVersion = 2;
+        writer.Write(-serializationVersion);
+
         // Write the number of layers
         writer.Write(Layers.Count);
 
@@ -1270,7 +1276,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         foreach (var layer in Layers)
         {
             // Write layer type
-            writer.Write(layer.GetType().Name);
+            writer.Write(GetSerializedLayerTypeIdentifier(layer));
 
             // Write input shape
             var inputShape = layer.GetInputShape();
@@ -1300,12 +1306,69 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     writer.Write(Convert.ToDouble(param));
                 }
             }
+
+            // Write any extra parameter blocks (V2+).
+            int extraCount = 0;
+            AiDotNet.Tensors.LinearAlgebra.Vector<T>? extras = null;
+            if (layer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> extraProvider &&
+                extraProvider.ExtraParameterCount > 0)
+            {
+                extras = extraProvider.GetExtraParameters();
+                extraCount = extras.Length;
+            }
+
+            writer.Write(extraCount);
+            if (extraCount > 0 && extras != null)
+            {
+                for (int i = 0; i < extras.Length; i++)
+                {
+                    writer.Write(Convert.ToDouble(extras[i]));
+                }
+            }
         }
 
         // Write network-specific data
         SerializeNetworkSpecificData(writer);
 
         return ms.ToArray();
+    }
+
+    private static string GetSerializedLayerTypeIdentifier(ILayer<T> layer)
+    {
+        string typeName = layer.GetType().Name;
+
+        var metadata = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        // Persist activation types for LayerBase-derived layers so Clone/DeepCopy round-trips behavior.
+        if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layerBase)
+        {
+            foreach (var kvp in layerBase.GetMetadata())
+            {
+                metadata[kvp.Key] = kvp.Value;
+            }
+
+            if (layerBase.VectorActivation != null)
+            {
+                metadata["VectorActivationType"] = layerBase.VectorActivation.GetType().AssemblyQualifiedName ?? layerBase.VectorActivation.GetType().FullName ?? string.Empty;
+            }
+            else if (layerBase.ScalarActivation != null)
+            {
+                metadata["ScalarActivationType"] = layerBase.ScalarActivation.GetType().AssemblyQualifiedName ?? layerBase.ScalarActivation.GetType().FullName ?? string.Empty;
+            }
+        }
+
+        if (metadata.Count == 0)
+        {
+            return typeName;
+        }
+
+        // Stable ordering for deterministic serialization.
+        foreach (var kvp in metadata.OrderBy(k => k.Key, StringComparer.Ordinal))
+        {
+            typeName += $";{kvp.Key}={kvp.Value}";
+        }
+
+        return typeName;
     }
 
     /// <summary>
@@ -1320,8 +1383,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Clear existing layers
         ClearLayers();
 
-        // Read the number of layers
-        int layerCount = reader.ReadInt32();
+        // Read the number of layers (support both V1 and V2+ formats).
+        int first = reader.ReadInt32();
+        int serializationVersion;
+        int layerCount;
+        if (first < 0)
+        {
+            serializationVersion = -first;
+            layerCount = reader.ReadInt32();
+        }
+        else
+        {
+            serializationVersion = 1;
+            layerCount = first;
+        }
 
         // Read and recreate each layer
         for (int i = 0; i < layerCount; i++)
@@ -1361,6 +1436,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 }
                 // Update layer parameters
                 layer.UpdateParameters(parameters);
+            }
+
+            if (serializationVersion >= 2)
+            {
+                int extraCount = reader.ReadInt32();
+                if (extraCount > 0)
+                {
+                    var extraParams = new Vector<T>(extraCount);
+                    for (int j = 0; j < extraCount; j++)
+                    {
+                        extraParams[j] = NumOps.FromDouble(reader.ReadDouble());
+                    }
+
+                    if (layer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> extraProvider)
+                    {
+                        extraProvider.SetExtraParameters(extraParams);
+                    }
+                }
             }
 
             // Add the layer to the network

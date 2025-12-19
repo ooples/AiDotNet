@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Attention;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations (typically float or double).</typeparam>
-public static class FlashAttention<T>
+internal static class FlashAttention<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -43,12 +43,17 @@ public static class FlashAttention<T>
     /// <param name="key">Key tensor of shape [batch, seqLen, headDim] or [batch, heads, seqLen, headDim].</param>
     /// <param name="value">Value tensor of shape [batch, seqLen, headDim] or [batch, heads, seqLen, headDim].</param>
     /// <param name="config">Flash Attention configuration.</param>
+    /// <param name="queryOffset">
+    /// Optional offset for causal masking when <paramref name="query"/> represents a window into a longer KV sequence.
+    /// Use this for KV-cached decoding where Q is the newly appended tokens and K/V contain the full cached sequence.
+    /// </param>
     /// <returns>Output tensor of same shape as query, and optionally attention weights if configured.</returns>
     public static (Tensor<T> Output, Tensor<T>? AttentionWeights) Forward(
         Tensor<T> query,
         Tensor<T> key,
         Tensor<T> value,
-        FlashAttentionConfig? config = null)
+        FlashAttentionConfig? config = null,
+        int queryOffset = 0)
     {
         config ??= FlashAttentionConfig.Default;
 
@@ -58,14 +63,18 @@ public static class FlashAttention<T>
         // Determine if inputs are 3D [batch, seq, dim] or 4D [batch, heads, seq, dim]
         bool is4D = query.Shape.Length == 4;
 
-        if (is4D)
+        int seqLenQ = is4D ? query.Shape[2] : query.Shape[1];
+        int seqLenKV = is4D ? key.Shape[2] : key.Shape[1];
+        if (queryOffset < 0 || queryOffset + seqLenQ > seqLenKV)
         {
-            return Forward4D(query, key, value, config);
+            throw new ArgumentOutOfRangeException(
+                nameof(queryOffset),
+                $"queryOffset ({queryOffset}) must satisfy 0 <= queryOffset and queryOffset + seqLenQ ({seqLenQ}) <= seqLenKV ({seqLenKV}).");
         }
-        else
-        {
-            return Forward3D(query, key, value, config);
-        }
+
+        return is4D
+            ? Forward4D(query, key, value, config, queryOffset)
+            : Forward3D(query, key, value, config, queryOffset);
     }
 
     /// <summary>
@@ -75,7 +84,8 @@ public static class FlashAttention<T>
         Tensor<T> query,
         Tensor<T> key,
         Tensor<T> value,
-        FlashAttentionConfig config)
+        FlashAttentionConfig config,
+        int queryOffset)
     {
         int batchSize = query.Shape[0];
         int seqLenQ = query.Shape[1];
@@ -100,7 +110,7 @@ public static class FlashAttention<T>
         {
             FlashAttentionCore(
                 query, key, value, output, attentionWeights,
-                b, 0, seqLenQ, seqLenKV, headDim, scale, config);
+                b, 0, seqLenQ, seqLenKV, headDim, scale, config, queryOffset);
         }
 
         return (output, attentionWeights);
@@ -113,7 +123,8 @@ public static class FlashAttention<T>
         Tensor<T> query,
         Tensor<T> key,
         Tensor<T> value,
-        FlashAttentionConfig config)
+        FlashAttentionConfig config,
+        int queryOffset)
     {
         int batchSize = query.Shape[0];
         int numHeads = query.Shape[1];
@@ -141,7 +152,7 @@ public static class FlashAttention<T>
             {
                 FlashAttentionCore4D(
                     query, key, value, output, attentionWeights,
-                    b, h, seqLenQ, seqLenKV, headDim, scale, config);
+                    b, h, seqLenQ, seqLenKV, headDim, scale, config, queryOffset);
             }
         }
 
@@ -173,7 +184,8 @@ public static class FlashAttention<T>
         int seqLenKV,
         int headDim,
         T scale,
-        FlashAttentionConfig config)
+        FlashAttentionConfig config,
+        int queryOffset)
     {
         int blockSizeQ = Math.Min(config.BlockSizeQ, seqLenQ);
         int blockSizeKV = Math.Min(config.BlockSizeKV, seqLenKV);
@@ -211,7 +223,7 @@ public static class FlashAttention<T>
                 int kvBlockSize = kvEnd - kvStart;
 
                 // Apply causal mask: skip blocks that are entirely masked
-                if (config.UseCausalMask && kvStart > qEnd - 1)
+                if (config.UseCausalMask && kvStart > queryOffset + qEnd - 1)
                 {
                     continue;
                 }
@@ -228,7 +240,7 @@ public static class FlashAttention<T>
                         int kIdx = kvStart + kj;
 
                         // Apply causal mask
-                        if (config.UseCausalMask && kIdx > qIdx)
+                        if (config.UseCausalMask && kIdx > queryOffset + qIdx)
                         {
                             scores[qi, kj] = negInf;
                             continue;
@@ -349,7 +361,8 @@ public static class FlashAttention<T>
         int seqLenKV,
         int headDim,
         T scale,
-        FlashAttentionConfig config)
+        FlashAttentionConfig config,
+        int queryOffset)
     {
         int blockSizeQ = Math.Min(config.BlockSizeQ, seqLenQ);
         int blockSizeKV = Math.Min(config.BlockSizeKV, seqLenKV);
@@ -381,7 +394,7 @@ public static class FlashAttention<T>
                 int kvEnd = Math.Min(kvStart + blockSizeKV, seqLenKV);
                 int kvBlockSize = kvEnd - kvStart;
 
-                if (config.UseCausalMask && kvStart > qEnd - 1)
+                if (config.UseCausalMask && kvStart > queryOffset + qEnd - 1)
                 {
                     continue;
                 }
@@ -397,7 +410,7 @@ public static class FlashAttention<T>
                     {
                         int kIdx = kvStart + kj;
 
-                        if (config.UseCausalMask && kIdx > qIdx)
+                        if (config.UseCausalMask && kIdx > queryOffset + qIdx)
                         {
                             scores[qi, kj] = negInf;
                             continue;

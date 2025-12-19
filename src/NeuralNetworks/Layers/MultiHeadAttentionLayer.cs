@@ -477,6 +477,14 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         };
     }
 
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        return new Dictionary<string, string>
+        {
+            ["HeadCount"] = _headCount.ToString()
+        };
+    }
+
     /// <summary>
     /// Gets diagnostic information about this component's state and behavior.
     /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.

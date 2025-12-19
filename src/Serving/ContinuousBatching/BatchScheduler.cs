@@ -108,7 +108,19 @@ public class BatchScheduler<T>
         lock (_lock)
         {
             var batch = new List<SequenceState<T>>();
-            int availableSlots = _config.MaxBatchSize - _runningSequences.Count;
+
+            // Always include already-running sequences (continuous batching).
+            // These sequences must be processed every iteration until they complete or are preempted.
+            foreach (var seq in _runningSequences)
+            {
+                if (batch.Count >= _config.MaxBatchSize)
+                    break;
+
+                if (seq.Status is SequenceStatus.Generating or SequenceStatus.Prefilling)
+                    batch.Add(seq);
+            }
+
+            int availableSlots = _config.MaxBatchSize - batch.Count;
             long availableMemory = _config.MaxMemoryBytes - _usedMemoryBytes;
 
             // First, try to resume preempted sequences (FIFO order)

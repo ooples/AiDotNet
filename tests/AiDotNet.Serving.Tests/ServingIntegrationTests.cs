@@ -226,6 +226,69 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     }
 
     /// <summary>
+    /// Verifies that serving can route to a pre-loaded model variant via an adapter header (Multi-LoRA MVP).
+    /// </summary>
+    [Fact]
+    public async Task Predict_WithAdapterHeader_RoutesToModelVariant()
+    {
+        // Arrange
+        using var scope = _factory.Services.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IModelRepository>();
+
+        var baseName = "test-model-variant";
+        var adapterId = "adapterA";
+        var variantName = $"{baseName}__{adapterId}";
+
+        repository.LoadModel(baseName, CreateSimpleTestModel(baseName));
+
+        // Variant model returns (sum + 100) so we can detect routing.
+        var numOps = MathHelper.GetNumericOperations<double>();
+        var variant = new ServableModelWrapper<double>(
+            modelName: variantName,
+            inputDimension: 3,
+            outputDimension: 1,
+            predictFunc: input =>
+            {
+                var sum = numOps.Zero;
+                for (int i = 0; i < input.Length; i++)
+                {
+                    sum = numOps.Add(sum, input[i]);
+                }
+                return new Vector<double>(new[] { sum + 100.0 });
+            });
+        repository.LoadModel(variantName, variant);
+
+        var request = new PredictionRequest
+        {
+            Features = new[] { new[] { 1.0, 2.0, 3.0 } },
+            RequestId = "test-request-variant"
+        };
+
+        // Act
+        var message = new HttpRequestMessage(HttpMethod.Post, $"/api/inference/predict/{baseName}")
+        {
+            Content = JsonContent.Create(request)
+        };
+        message.Headers.Add("X-AiDotNet-Lora", adapterId);
+
+        var response = await _client.SendAsync(message);
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<PredictionResponse>();
+        Assert.NotNull(result);
+        Assert.Equal("test-request-variant", result.RequestId);
+        Assert.NotNull(result.Predictions);
+        Assert.Single(result.Predictions);
+        Assert.Single(result.Predictions[0]);
+        Assert.Equal(106.0, result.Predictions[0][0], 5);
+
+        // Cleanup
+        repository.UnloadModel(baseName);
+        repository.UnloadModel(variantName);
+    }
+
+    /// <summary>
     /// Critical test: Verifies that batch processing works correctly.
     /// This test ensures that multiple concurrent requests are batched together
     /// and the model is called once with the full batch.

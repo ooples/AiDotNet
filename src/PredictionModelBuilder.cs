@@ -1090,6 +1090,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             QueryProcessors = _queryProcessors,
             AgentConfig = _agentConfig,
             DeploymentConfiguration = deploymentConfig,
+            InferenceOptimizationConfig = _inferenceOptimizationConfig,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
             GraphStore = _graphStore,

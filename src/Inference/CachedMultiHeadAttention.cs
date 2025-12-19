@@ -34,12 +34,13 @@ namespace AiDotNet.Inference;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations.</typeparam>
-public class CachedMultiHeadAttention<T> : LayerBase<T>
+internal class CachedMultiHeadAttention<T> : LayerBase<T>
 {
     private readonly int _headCount;
     private readonly int _headDimension;
     private readonly int _embeddingDimension;
     private readonly bool _useFlashAttention;
+    private readonly bool _useCausalMask;
 
     // Projection weights
     private Matrix<T> _queryWeights;
@@ -93,6 +94,15 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
     public bool UsesFlashAttention => _useFlashAttention;
 
     /// <summary>
+    /// Gets whether causal masking is enabled for attention.
+    /// </summary>
+    /// <remarks>
+    /// Causal masking is required for autoregressive decoding (GPT-style), where each token may only attend
+    /// to itself and previous tokens. Disable for bidirectional attention (BERT-style) and most encoders.
+    /// </remarks>
+    public bool UsesCausalMask => _useCausalMask;
+
+    /// <summary>
     /// Gets or sets the KV-Cache. Must be set before inference.
     /// </summary>
     public KVCache<T>? Cache
@@ -118,15 +128,20 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
     /// <param name="headCount">Number of attention heads.</param>
     /// <param name="useFlashAttention">Whether to use Flash Attention algorithm.</param>
     /// <param name="layerIndex">Index of this layer in the transformer (for cache access).</param>
+    /// <param name="useCausalMask">Whether to apply causal masking (required for autoregressive decoding).</param>
+    /// <param name="activationFunction">Optional activation function (defaults to identity).</param>
     public CachedMultiHeadAttention(
         int sequenceLength,
         int embeddingDimension,
         int headCount,
         bool useFlashAttention = true,
-        int layerIndex = 0)
+        int layerIndex = 0,
+        bool useCausalMask = true,
+        IActivationFunction<T>? activationFunction = null)
         : base(
             [sequenceLength, embeddingDimension],
-            [sequenceLength, embeddingDimension])
+            [sequenceLength, embeddingDimension],
+            activationFunction ?? new IdentityActivation<T>())
     {
         if (embeddingDimension % headCount != 0)
         {
@@ -139,6 +154,7 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
         _embeddingDimension = embeddingDimension;
         _useFlashAttention = useFlashAttention;
         _layerIndex = layerIndex;
+        _useCausalMask = useCausalMask;
 
         // Initialize projection weights
         _queryWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
@@ -230,13 +246,18 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
         Tensor<T> attentionOutput;
         if (_useFlashAttention)
         {
-            var config = new FlashAttentionConfig { UseCausalMask = true };
-            var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config);
+            var config = FlashAttentionConfig.Default;
+            config.UseCausalMask = _useCausalMask;
+
+            int seqLenKV = keys.Shape[2];
+            int seqLenQ = queries.Shape[2];
+            int queryOffset = Math.Max(0, seqLenKV - seqLenQ);
+            var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config, queryOffset: queryOffset);
             attentionOutput = flashOutput;
         }
         else
         {
-            attentionOutput = StandardAttention(queries, keys, values, useCausalMask: true);
+            attentionOutput = StandardAttention(queries, keys, values, useCausalMask: _useCausalMask);
         }
 
         // Reshape back to [batch, seq, embDim]
@@ -244,9 +265,9 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
 
         // Output projection
         var output = attentionOutput.Multiply(_outputWeights).Add(_outputBias);
-        _lastOutput = output;
+        _lastOutput = ApplyActivation(output);
 
-        return output;
+        return _lastOutput;
     }
 
     /// <summary>
@@ -272,12 +293,13 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
         if (_useFlashAttention)
         {
             var config = FlashAttentionConfig.Default;
+            config.UseCausalMask = _useCausalMask;
             var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config);
             attentionOutput = flashOutput;
         }
         else
         {
-            attentionOutput = StandardAttention(queries, keys, values, useCausalMask: false);
+            attentionOutput = StandardAttention(queries, keys, values, useCausalMask: _useCausalMask);
         }
 
         // Reshape back
@@ -285,9 +307,9 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
 
         // Output projection
         var output = attentionOutput.Multiply(_outputWeights).Add(_outputBias);
-        _lastOutput = output;
+        _lastOutput = ApplyActivation(output);
 
-        return output;
+        return _lastOutput;
     }
 
     /// <summary>
@@ -387,6 +409,8 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
+        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+
         // Standard backward pass (no cache during training)
         // Implementation similar to MultiHeadAttentionLayer
         var inputGradient = new Tensor<T>(_lastInput.Shape);
@@ -397,7 +421,7 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
         _keyWeightsGradient = new Matrix<T>(_keyWeights.Rows, _keyWeights.Columns);
         _valueWeightsGradient = new Matrix<T>(_valueWeights.Rows, _valueWeights.Columns);
         _outputWeightsGradient = new Matrix<T>(_outputWeights.Rows, _outputWeights.Columns);
-        _outputBiasGradient = outputGradient.Sum([0, 1]).ToVector();
+        _outputBiasGradient = activationGradient.Sum([0, 1]).ToVector();
 
         return inputGradient;
     }
@@ -512,6 +536,7 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
         diagnostics["HeadDimension"] = _headDimension.ToString();
         diagnostics["InferenceMode"] = InferenceMode.ToString();
         diagnostics["UsesFlashAttention"] = _useFlashAttention.ToString();
+        diagnostics["UsesCausalMask"] = _useCausalMask.ToString();
         diagnostics["LayerIndex"] = _layerIndex.ToString();
         diagnostics["CacheAttached"] = (_cache != null).ToString();
 
@@ -579,5 +604,15 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
             }
         }
         return tensor;
+    }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        return new Dictionary<string, string>
+        {
+            ["HeadCount"] = _headCount.ToString(),
+            ["UseFlashAttention"] = _useFlashAttention.ToString(),
+            ["UseCausalMask"] = _useCausalMask.ToString()
+        };
     }
 }
