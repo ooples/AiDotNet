@@ -3,6 +3,7 @@ using AiDotNet.MetaLearning.Data;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Data.Structures;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -85,7 +86,9 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TO
 
             // Compute meta-loss on query set
             var queryPredictions = taskModel.Predict(task.QueryInput);
-            T metaLoss = LossFunction.CalculateLoss(queryPredictions, task.QueryOutput);
+            T metaLoss = LossFunction.CalculateLoss(
+                ConversionsHelper.ConvertToVector<T, TOutput>(queryPredictions),
+                ConversionsHelper.ConvertToVector<T, TOutput>(task.QueryOutput));
             totalMetaLoss = NumOps.Add(totalMetaLoss, metaLoss);
 
             // Compute implicit meta-gradients

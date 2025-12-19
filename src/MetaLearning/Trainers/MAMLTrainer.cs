@@ -713,7 +713,7 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
 
             // Apply depth-based decay
             int depthFromStart = i + 1;
-            T depthFactor = NumOps.Pow(MAMLConfig.LayerDepthDecay, NumOps.FromDouble(depthFromStart));
+            T depthFactor = NumOps.Power(MAMLConfig.LayerDepthDecay, NumOps.FromDouble(depthFromStart));
             multiplier = NumOps.Multiply(multiplier, depthFactor);
 
             // Compute final learning rate for this parameter

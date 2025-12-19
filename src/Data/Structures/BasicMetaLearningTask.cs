@@ -89,7 +89,7 @@ public class BasicMetaLearningTask<T, TInput, TOutput> : MetaLearningTaskBase<T,
         try
         {
             var defaultData = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData();
-            if (defaultData != null)
+            if (defaultData.X != null && defaultData.Y != null && defaultData.Predictions != null)
             {
                 SupportInput = defaultData.X;
                 SupportOutput = defaultData.Y;

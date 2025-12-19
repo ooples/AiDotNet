@@ -3,6 +3,7 @@ using AiDotNet.MetaLearning.Data;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Data.Structures;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -77,7 +78,9 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
 
             // Evaluate on query set to get meta-loss
             var queryPredictions = taskModel.Predict(task.QueryInput);
-            T metaLoss = LossFunction.CalculateLoss(queryPredictions, task.QueryOutput);
+            T metaLoss = LossFunction.CalculateLoss(
+                ConversionsHelper.ConvertToVector<T, TOutput>(queryPredictions),
+                ConversionsHelper.ConvertToVector<T, TOutput>(task.QueryOutput));
 
             // Add temperature scaling if configured
             if (Math.Abs(_sealOptions.Temperature - 1.0) > 1e-10)
@@ -208,7 +211,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
             T gradNorm = NumOps.Multiply(gradients[i], gradients[i]); // |g_i|²
 
             // Adaptive LR = base_lr / (sqrt(grad_norm) + epsilon)
-            T sqrtNorm = NumOps.FromDouble(Math.Sqrt(Math.Max(NumOps.ToDouble(gradNorm), 1e-8)));
+            T sqrtNorm = NumOps.FromDouble(Math.Sqrt(Math.Max(Convert.ToDouble(gradNorm), 1e-8)));
             T epsilon = NumOps.FromDouble(1e-8);
             T denominator = NumOps.Add(sqrtNorm, epsilon);
 
@@ -233,7 +236,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
             squaredSum = NumOps.Add(squaredSum, NumOps.Multiply(gradients[i], gradients[i]));
         }
 
-        T norm = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(squaredSum)));
+        T norm = NumOps.FromDouble(Math.Sqrt(Convert.ToDouble(squaredSum)));
         T thresholdT = NumOps.FromDouble(threshold);
 
         // If norm is below threshold, return gradients unchanged
@@ -330,7 +333,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
                 p = NumOps.Divide(p, sum);
 
                 // Compute p * log(p)
-                T logP = NumOps.FromDouble(Math.Log(NumOps.ToDouble(p)));
+                T logP = NumOps.FromDouble(Math.Log(Convert.ToDouble(p)));
                 T contribution = NumOps.Multiply(p, logP);
                 entropy = NumOps.Subtract(entropy, contribution);
             }
@@ -358,7 +361,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearningBase<T, TInput, TOu
         else if (typeof(TOutput) == typeof(Tensor<T>))
         {
             var tensor = (Tensor<T>)(object)predictions;
-            logits = tensor.Flatten();
+            logits = tensor.ToVector();
         }
         else
         {

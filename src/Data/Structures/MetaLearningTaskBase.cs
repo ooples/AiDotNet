@@ -50,7 +50,7 @@ public abstract class MetaLearningTaskBase<T, TInput, TOutput> : IMetaLearningTa
     /// <exception cref="ArgumentNullException">Thrown when trying to set null value.</exception>
     public virtual TInput SupportInput
     {
-        get => _supportInput;
+        get => _supportInput!;
         set
         {
             if (value == null)
@@ -68,7 +68,7 @@ public abstract class MetaLearningTaskBase<T, TInput, TOutput> : IMetaLearningTa
     /// <exception cref="ArgumentNullException">Thrown when trying to set null value.</exception>
     public virtual TOutput SupportOutput
     {
-        get => _supportOutput;
+        get => _supportOutput!;
         set
         {
             if (value == null)
@@ -86,7 +86,7 @@ public abstract class MetaLearningTaskBase<T, TInput, TOutput> : IMetaLearningTa
     /// <exception cref="ArgumentNullException">Thrown when trying to set null value.</exception>
     public virtual TInput QueryInput
     {
-        get => _queryInput;
+        get => _queryInput!;
         set
         {
             if (value == null)
@@ -104,7 +104,7 @@ public abstract class MetaLearningTaskBase<T, TInput, TOutput> : IMetaLearningTa
     /// <exception cref="ArgumentNullException">Thrown when trying to set null value.</exception>
     public virtual TOutput QueryOutput
     {
-        get => _queryOutput;
+        get => _queryOutput!;
         set
         {
             if (value == null)
