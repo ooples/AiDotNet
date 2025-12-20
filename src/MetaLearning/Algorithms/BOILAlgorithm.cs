@@ -631,7 +631,63 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         {
             return ComputeFirstOrderMetaGradients(task, adaptedBodyParams);
         }
-        return ComputeFirstOrderMetaGradients(task, adaptedBodyParams);
+        return ComputeSecondOrderMetaGradients(task, adaptedBodyParams, queryLoss);
+    }
+
+    /// <summary>
+    /// Computes second-order meta-gradients by differentiating through the inner adaptation loop.
+    /// </summary>
+    private (Vector<T> bodyGrads, Vector<T> headGrads) ComputeSecondOrderMetaGradients(
+        IMetaLearningTask<T, TInput, TOutput> task,
+        Vector<T> adaptedBodyParams,
+        T queryLoss)
+    {
+        double epsilon = 1e-5;
+        var initialBodyParams = CloneBodyParameters();
+        var bodyGrads = new Vector<T>(initialBodyParams.Length);
+
+        // Compute second-order gradients by measuring how perturbations to initial params
+        // affect the final query loss after adaptation
+        int sampleCount = Math.Min(100, initialBodyParams.Length);
+        double scaleFactor = (double)initialBodyParams.Length / sampleCount;
+
+        for (int i = 0; i < sampleCount; i++)
+        {
+            int idx = sampleCount > 0 ? (i * initialBodyParams.Length / sampleCount) : i;
+
+            // Perturb initial body parameter
+            T original = initialBodyParams[idx];
+            initialBodyParams[idx] = NumOps.Add(original, NumOps.FromDouble(epsilon));
+
+            // Re-run adaptation with perturbed initial params
+            var perturbedAdapted = new Vector<T>(initialBodyParams.Length);
+            for (int j = 0; j < initialBodyParams.Length; j++)
+            {
+                perturbedAdapted[j] = initialBodyParams[j];
+            }
+
+            for (int step = 0; step < _boilOptions.AdaptationSteps; step++)
+            {
+                var grads = ComputeBodyGradients(task.SupportInput, task.SupportOutput, perturbedAdapted);
+                perturbedAdapted = ApplyGradients(perturbedAdapted, grads, _boilOptions.InnerLearningRate);
+            }
+
+            // Compute query loss with perturbed adapted params
+            var perturbedPred = ForwardWithBody(task.QueryInput, perturbedAdapted);
+            T perturbedLoss = ComputeLossFromOutput(perturbedPred, task.QueryOutput);
+
+            // Gradient w.r.t. initial parameter = (perturbedLoss - queryLoss) / epsilon
+            double grad = (NumOps.ToDouble(perturbedLoss) - NumOps.ToDouble(queryLoss)) / epsilon;
+            bodyGrads[idx] = NumOps.FromDouble(grad * scaleFactor);
+
+            // Restore
+            initialBodyParams[idx] = original;
+        }
+
+        // Head gradients are computed at the adapted point (same as first-order)
+        var headGrads = ComputeHeadGradients(task.QueryInput, task.QueryOutput, adaptedBodyParams);
+
+        return (bodyGrads, headGrads);
     }
 
     /// <summary>

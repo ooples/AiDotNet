@@ -560,24 +560,47 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     }
 
     /// <summary>
-    /// Transforms embedding using message passing weights.
+    /// Transforms embedding using message passing weights with a two-layer projection.
+    /// Uses the allocated embDim → hidDim → embDim weight structure.
     /// </summary>
     private Vector<T> TransformEmbedding(Vector<T> embedding, int layer)
     {
         int embDim = _gnnOptions.NodeEmbeddingDimension;
         int hidDim = _gnnOptions.GNNHiddenDimension;
+        var hidden = new Vector<T>(hidDim);
         var output = new Vector<T>(embDim);
 
-        // Simple linear transformation
+        // Two-layer transformation: embDim → hidDim → embDim
         int layerOffset = layer * (embDim * hidDim + hidDim * embDim);
 
-        for (int i = 0; i < embDim; i++)
+        // First layer: embDim → hidDim
+        for (int i = 0; i < hidDim; i++)
         {
             T sum = NumOps.Zero;
             for (int j = 0; j < Math.Min(embDim, embedding.Length); j++)
             {
-                int weightIdx = (layerOffset + i * embDim + j) % _messagePassingWeights.Length;
-                sum = NumOps.Add(sum, NumOps.Multiply(_messagePassingWeights[weightIdx], embedding[j]));
+                int weightIdx = layerOffset + i * embDim + j;
+                if (weightIdx < _messagePassingWeights.Length)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_messagePassingWeights[weightIdx], embedding[j]));
+                }
+            }
+            // Apply tanh nonlinearity
+            hidden[i] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(sum)));
+        }
+
+        // Second layer: hidDim → embDim
+        int secondLayerOffset = layerOffset + embDim * hidDim;
+        for (int i = 0; i < embDim; i++)
+        {
+            T sum = NumOps.Zero;
+            for (int j = 0; j < hidDim; j++)
+            {
+                int weightIdx = secondLayerOffset + i * hidDim + j;
+                if (weightIdx < _messagePassingWeights.Length)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_messagePassingWeights[weightIdx], hidden[j]));
+                }
             }
             output[i] = sum;
         }

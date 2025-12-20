@@ -538,7 +538,7 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         double encoderScaleFactor = (double)_encoderWeights.Length / encoderSampleCount;
         for (int i = 0; i < encoderSampleCount; i++)
         {
-            int idx = (i * _encoderWeights.Length / 100) % _encoderWeights.Length;
+            int idx = encoderSampleCount > 0 ? (i * _encoderWeights.Length / encoderSampleCount) : i;
 
             // Perturb encoder weight
             T original = _encoderWeights[idx];
@@ -566,7 +566,7 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         double adaptScaleFactor = (double)_adaptationNetworkWeights.Length / adaptSampleCount;
         for (int i = 0; i < adaptSampleCount; i++)
         {
-            int idx = (i * _adaptationNetworkWeights.Length / 100) % _adaptationNetworkWeights.Length;
+            int idx = adaptSampleCount > 0 ? (i * _adaptationNetworkWeights.Length / adaptSampleCount) : i;
 
             // Perturb adaptation weight
             T original = _adaptationNetworkWeights[idx];
