@@ -1,7 +1,7 @@
+using System.Globalization;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
-using System.Globalization;
 
 namespace AiDotNet.LoRA.Adapters;
 

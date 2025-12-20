@@ -650,7 +650,7 @@ public class SpeculativeDecodingIntegrationTests
         Assert.True(decoder.TotalDraftTokens > 0);
         Assert.True(result.StepStatistics.Count > 0);
         Assert.True(result.TokensPerVerification > 0);
-        Assert.True(result.StepStatistics.Any(s => s.DraftTokens > 0));
+        Assert.Contains(result.StepStatistics, s => s.DraftTokens > 0);
     }
 
     [Fact]

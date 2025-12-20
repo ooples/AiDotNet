@@ -1,5 +1,5 @@
-using AiDotNet.Tensors.Engines.Simd;
 using System;
+using AiDotNet.Tensors.Engines.Simd;
 using Xunit;
 
 namespace AiDotNet.Tests.InferenceOptimization;

@@ -1,9 +1,9 @@
-using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Jobs;
+using System;
 using AiDotNet.InferenceOptimization;
 using AiDotNet.InferenceOptimization.Kernels;
 using AiDotNet.LinearAlgebra;
-using System;
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Jobs;
 
 namespace AiDotNetBenchmarkTests.InferenceOptimization
 {

@@ -72,9 +72,9 @@ namespace AiDotNet.Tensors.Engines.Optimization
                         TotalTicks = existing.TotalTicks + elapsedTicks,
                         MinTicks = Math.Min(existing.MinTicks, elapsedTicks),
                         MaxTicks = Math.Max(existing.MaxTicks, elapsedTicks),
-                         TotalMemoryBytes = existing.TotalMemoryBytes + memoryBytes
-                     };
-                 });
+                        TotalMemoryBytes = existing.TotalMemoryBytes + memoryBytes
+                    };
+                });
 
             _ = updated.CallCount;
         }
