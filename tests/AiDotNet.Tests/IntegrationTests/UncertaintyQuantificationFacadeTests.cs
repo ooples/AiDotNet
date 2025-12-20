@@ -11,6 +11,7 @@ using AiDotNet.Models.Results;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.UncertaintyQuantification.Layers;
 using AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
+using AiDotNet.Evaluation;
 using AiDotNet.Tests.TestUtilities;
 using Xunit;
 
@@ -310,6 +311,62 @@ public sealed class UncertaintyQuantificationFacadeTests
 
         Assert.True(uq.Metrics.ContainsKey("predictive_entropy"));
         Assert.True(uq.Metrics.ContainsKey("mutual_information"));
+    }
+
+    [Fact]
+    public async Task EvaluateModel_WithUqCalibration_PopulatesExpectedCalibrationError()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 2,
+            outputSize: 3);
+        var model = new NeuralNetworkModel<double>(architecture);
+
+        var optimizer = new DeterministicNeuralNetworkParameterOptimizer<Tensor<double>, Tensor<double>>(model);
+
+        var xTrain = Tensor<double>.FromMatrix(new Matrix<double>(new double[,]
+        {
+            { 0.0, 0.0 },
+            { 1.0, 0.0 },
+            { 0.0, 1.0 },
+            { 1.0, 1.0 }
+        }));
+        var yTrain = Tensor<double>.FromVector(new Vector<double>(new[] { 0.0, 1.0, 2.0, 0.0 }));
+
+        var xCal = xTrain;
+        var yCalLabels = new Vector<int>(new[] { 0, 1, 2, 0 });
+
+        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureModel(model)
+            .ConfigureOptimizer(optimizer)
+            .ConfigureUncertaintyQuantification(new UncertaintyQuantificationOptions
+            {
+                Enabled = true,
+                Method = UncertaintyQuantificationMethod.Auto,
+                EnableTemperatureScaling = true
+            })
+            .ConfigureUncertaintyCalibrationData(xCal, yCalLabels)
+            .BuildAsync(xTrain, yTrain);
+
+        var evaluator = new DefaultModelEvaluator<double, Tensor<double>, Tensor<double>>();
+        var eval = evaluator.EvaluateModel(new ModelEvaluationInput<double, Tensor<double>, Tensor<double>>
+        {
+            Model = result,
+            NormInfo = result.NormalizationInfo,
+            InputData = new OptimizationInputData<double, Tensor<double>, Tensor<double>>
+            {
+                XTrain = xTrain,
+                YTrain = yTrain,
+                XValidation = xTrain,
+                YValidation = yTrain,
+                XTest = xTrain,
+                YTest = yTrain
+            }
+        });
+
+        Assert.True(eval.TrainingSet.UncertaintyStats.Metrics.ContainsKey("expected_calibration_error"));
     }
 
     [Fact]

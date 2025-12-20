@@ -17,5 +17,7 @@ internal sealed class UncertaintyCalibrationArtifacts<T>
 
     internal bool HasTemperatureScaling { get; set; }
     internal T TemperatureScalingTemperature { get; set; } = default!;
-}
 
+    internal bool HasExpectedCalibrationError { get; set; }
+    internal T ExpectedCalibrationError { get; set; } = default!;
+}

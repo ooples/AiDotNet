@@ -3718,8 +3718,33 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             calibratedProbs = ApplyTemperatureScalingToProbabilities(calibratedProbs, temperature, batch, numClasses, numOps);
         }
 
+        var confidence = new Vector<T>(batch);
+        var predictions = new Vector<int>(batch);
+        var flatCalibrated = calibratedProbs.ToVector();
+        for (int i = 0; i < batch; i++)
+        {
+            var bestLabel = 0;
+            var bestScore = flatCalibrated[i * numClasses];
+            for (int c = 1; c < numClasses; c++)
+            {
+                var score = flatCalibrated[i * numClasses + c];
+                if (numOps.GreaterThan(score, bestScore))
+                {
+                    bestScore = score;
+                    bestLabel = c;
+                }
+            }
+
+            predictions[i] = bestLabel;
+            confidence[i] = bestScore;
+        }
+
+        var ece = new AiDotNet.UncertaintyQuantification.Calibration.ExpectedCalibrationError<T>(numBins: 10);
+        artifacts.HasExpectedCalibrationError = true;
+        artifacts.ExpectedCalibrationError = ece.Compute(confidence, predictions, labels);
+
         var scores = new T[batch];
-        var flat = calibratedProbs.ToVector();
+        var flat = flatCalibrated;
         for (int i = 0; i < batch; i++)
         {
             var label = labels[i];

@@ -45,6 +45,12 @@ public partial class PredictionModelResult<T, TInput, TOutput>
     [JsonProperty]
     internal T TemperatureScalingTemperature { get; private set; } = default!;
 
+    [JsonProperty]
+    internal bool HasExpectedCalibrationError { get; private set; }
+
+    [JsonProperty]
+    internal T ExpectedCalibrationError { get; private set; } = default!;
+
     internal void SetUncertaintyQuantificationOptions(UncertaintyQuantificationOptions? options)
         => UncertaintyQuantificationOptions = options;
 
@@ -57,6 +63,8 @@ public partial class PredictionModelResult<T, TInput, TOutput>
         ConformalClassificationNumClasses = artifacts.ConformalClassificationNumClasses;
         HasTemperatureScaling = artifacts.HasTemperatureScaling;
         TemperatureScalingTemperature = artifacts.TemperatureScalingTemperature;
+        HasExpectedCalibrationError = artifacts.HasExpectedCalibrationError;
+        ExpectedCalibrationError = artifacts.ExpectedCalibrationError;
     }
 
     internal void SetDeepEnsembleModels(List<IFullModel<T, TInput, TOutput>> models)

@@ -94,13 +94,14 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(predictions);
         var inputSize = InputHelper<T, TInput>.GetInputSize(X);
         var actual = ConversionsHelper.ConvertToVector<T, TOutput>(y);
+        var aligned = predicted.Length == actual.Length;
 
         var stats = new DataSetStats<T, TInput, TOutput>
         {
-            ErrorStats = CalculateErrorStats(actual, predicted, inputSize),
+            ErrorStats = aligned ? CalculateErrorStats(actual, predicted, inputSize) : ErrorStats<T>.Empty(),
             ActualBasicStats = CalculateBasicStats(actual),
             PredictedBasicStats = CalculateBasicStats(predicted),
-            PredictionStats = CalculatePredictionStats(actual, predicted, inputSize),
+            PredictionStats = aligned ? CalculatePredictionStats(actual, predicted, inputSize) : PredictionStats<T>.Empty(),
             Predicted = predictions,
             Features = X,
             Actual = y
@@ -128,6 +129,11 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         stats.UncertaintyStats = new UncertaintyStats<T>();
         stats.UncertaintyStats.Metrics["predictive_entropy"] = MeanOf(uq.Metrics["predictive_entropy"], numOps);
         stats.UncertaintyStats.Metrics["mutual_information"] = MeanOf(uq.Metrics["mutual_information"], numOps);
+
+        if (predictionModelResult.HasExpectedCalibrationError)
+        {
+            stats.UncertaintyStats.Metrics["expected_calibration_error"] = predictionModelResult.ExpectedCalibrationError;
+        }
     }
 
     private static T MeanOf(Tensor<T> values, INumericOperations<T> numOps)
@@ -232,20 +238,27 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// </remarks>
     private static ModelStats<T, TInput, TOutput> CalculateModelStats(IFullModel<T, TInput, TOutput>? model, TInput xTrain, NormalizationInfo<T, TInput, TOutput> normInfo)
     {
-        var optimizationResult = new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
-        var options = new PredictionModelResultOptions<T, TInput, TOutput>
+        try
         {
-            OptimizationResult = optimizationResult,
-            NormalizationInfo = normInfo
-        };
-        var predictionModelResult = new PredictionModelResult<T, TInput, TOutput>(options);
+            var optimizationResult = new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
+            var options = new PredictionModelResultOptions<T, TInput, TOutput>
+            {
+                OptimizationResult = optimizationResult,
+                NormalizationInfo = normInfo
+            };
+            var predictionModelResult = new PredictionModelResult<T, TInput, TOutput>(options);
 
-        return new ModelStats<T, TInput, TOutput>(new ModelStatsInputs<T, TInput, TOutput>
+            return new ModelStats<T, TInput, TOutput>(new ModelStatsInputs<T, TInput, TOutput>
+            {
+                XMatrix = xTrain,
+                FeatureCount = InputHelper<T, TInput>.GetInputSize(xTrain),
+                Model = predictionModelResult?.Model
+            });
+        }
+        catch (Exception)
         {
-            XMatrix = xTrain,
-            FeatureCount = InputHelper<T, TInput>.GetInputSize(xTrain),
-            Model = predictionModelResult?.Model
-        });
+            return ModelStats<T, TInput, TOutput>.Empty();
+        }
     }
 
     /// <summary>
