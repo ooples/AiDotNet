@@ -1,3 +1,5 @@
+using System.Linq;
+using System.Threading.Tasks;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -8,8 +10,6 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Normalizers;
 using AiDotNet.Tensors.LinearAlgebra;
-using System.Linq;
-using System.Threading.Tasks;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Inference;

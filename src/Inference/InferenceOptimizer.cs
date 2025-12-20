@@ -1,3 +1,4 @@
+using System.Threading;
 using AiDotNet.Configuration;
 using AiDotNet.Helpers;
 using AiDotNet.Inference.PagedAttention;
@@ -8,7 +9,6 @@ using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
-using System.Threading;
 
 namespace AiDotNet.Inference;
 
