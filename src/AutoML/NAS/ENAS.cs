@@ -99,37 +99,20 @@ namespace AiDotNet.AutoML.NAS
 
             for (int nodeIdx = 1; nodeIdx <= _numNodes; nodeIdx++)
             {
-                // Sample which previous node to connect from
-                int maxPrevNodes = nodeIdx;
                 int prevDecisionIdx = (nodeIdx - 1) * 2;
-                var prevNodeProbs = ComputeProbabilities(hiddenState, maxPrevNodes, prevDecisionIdx);
-                int selectedPrevNode = SampleFromDistribution(prevNodeProbs);
 
-                // Update log probability and entropy
-                totalLogProb = _ops.Add(totalLogProb, _ops.Log(_ops.Add(prevNodeProbs[selectedPrevNode], _ops.FromDouble(1e-10))));
-                totalEntropy = _ops.Add(totalEntropy, ComputeEntropy(prevNodeProbs));
+                // Sample previous node connection
+                int selectedPrevNode = SampleAndUpdateState(
+                    hiddenState, nodeIdx, prevDecisionIdx,
+                    ref totalLogProb, ref totalEntropy);
 
-                // Update hidden state
-                UpdateHiddenState(hiddenState, selectedPrevNode);
-
-                // Sample which operation to apply
-                int opDecisionIdx = prevDecisionIdx + 1;
-                var opProbs = ComputeProbabilities(hiddenState, _numOperations, opDecisionIdx);
-                int selectedOp = SampleFromDistribution(opProbs);
-
-                // Update log probability and entropy
-                totalLogProb = _ops.Add(totalLogProb, _ops.Log(_ops.Add(opProbs[selectedOp], _ops.FromDouble(1e-10))));
-                totalEntropy = _ops.Add(totalEntropy, ComputeEntropy(opProbs));
-
-                // Update hidden state
-                UpdateHiddenState(hiddenState, selectedOp);
+                // Sample operation to apply
+                int selectedOp = SampleAndUpdateState(
+                    hiddenState, _numOperations, prevDecisionIdx + 1,
+                    ref totalLogProb, ref totalEntropy);
 
                 // Add to architecture
-                if (_nasSearchSpace.Operations != null && selectedOp < _nasSearchSpace.Operations.Count)
-                {
-                    var operation = _nasSearchSpace.Operations[selectedOp];
-                    architecture.AddOperation(nodeIdx, selectedPrevNode, operation);
-                }
+                AddOperationToArchitecture(architecture, nodeIdx, selectedPrevNode, selectedOp);
             }
 
             return (architecture, totalLogProb, totalEntropy);
@@ -218,6 +201,38 @@ namespace AiDotNet.AutoML.NAS
             {
                 hiddenState[i] = _ops.Multiply(hiddenState[i], _ops.FromDouble(0.9));
                 hiddenState[i] = _ops.Add(hiddenState[i], choiceValue);
+            }
+        }
+
+        /// <summary>
+        /// Samples a choice, updates log probability, entropy, and hidden state
+        /// </summary>
+        private int SampleAndUpdateState(
+            Vector<T> hiddenState,
+            int numChoices,
+            int decisionIdx,
+            ref T totalLogProb,
+            ref T totalEntropy)
+        {
+            var probs = ComputeProbabilities(hiddenState, numChoices, decisionIdx);
+            int selected = SampleFromDistribution(probs);
+
+            totalLogProb = _ops.Add(totalLogProb, _ops.Log(_ops.Add(probs[selected], _ops.FromDouble(1e-10))));
+            totalEntropy = _ops.Add(totalEntropy, ComputeEntropy(probs));
+            UpdateHiddenState(hiddenState, selected);
+
+            return selected;
+        }
+
+        /// <summary>
+        /// Adds an operation to the architecture if valid
+        /// </summary>
+        private void AddOperationToArchitecture(Architecture<T> architecture, int nodeIdx, int selectedPrevNode, int selectedOp)
+        {
+            if (_nasSearchSpace.Operations != null && selectedOp < _nasSearchSpace.Operations.Count)
+            {
+                var operation = _nasSearchSpace.Operations[selectedOp];
+                architecture.AddOperation(nodeIdx, selectedPrevNode, operation);
             }
         }
 
