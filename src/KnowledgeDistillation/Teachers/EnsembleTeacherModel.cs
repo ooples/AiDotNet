@@ -456,7 +456,8 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
             var teacherOutput = jitTeacher.ExportComputationGraph(teacherInputNodes);
 
             // Scale by weight
-            var weightTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(_weights![i]) }));
+            var weightTensor = new Tensor<T>(teacherOutput.Value.Shape);
+            weightTensor.Fill(NumOps.FromDouble(_weights![i]));
             var weightNode = TensorOperations<T>.Constant(weightTensor, $"teacher_{i}_weight");
             var scaledOutput = TensorOperations<T>.ElementwiseMultiply(teacherOutput, weightNode);
 
