@@ -1,5 +1,6 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.UncertaintyQuantification.Interfaces;
 
 namespace AiDotNet.UncertaintyQuantification.Layers;
@@ -78,7 +79,9 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         _inputSize = inputSize;
         _outputSize = outputSize;
         _priorSigma = NumOps.FromDouble(priorSigma);
-        _rng = randomSeed.HasValue ? new Random(randomSeed.Value) : new Random();
+        _rng = randomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(randomSeed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Initialize weight and bias parameters
         InitializeParameters();

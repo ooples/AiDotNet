@@ -1,5 +1,6 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
 using System.Threading;
 
 namespace AiDotNet.UncertaintyQuantification.Layers;
@@ -74,16 +75,16 @@ public class MCDropoutLayer<T> : LayerBase<T>
         {
             if (_initialSeed.HasValue)
             {
-                return new Random(unchecked(_initialSeed.Value + Thread.CurrentThread.ManagedThreadId));
+                return RandomHelper.CreateSeededRandom(unchecked(_initialSeed.Value + Thread.CurrentThread.ManagedThreadId));
             }
 
-            return new Random();
+            return RandomHelper.CreateSecureRandom();
         });
     }
 
     internal void ResetRng(int seed)
     {
-        _rng.Value = new Random(seed);
+        _rng.Value = RandomHelper.CreateSeededRandom(seed);
     }
 
     /// <summary>

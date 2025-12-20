@@ -30,6 +30,7 @@ global using AiDotNet.Tokenization.Configuration;
 global using AiDotNet.Tokenization.HuggingFace;
 global using AiDotNet.Tokenization.Interfaces;
 global using AiDotNet.Tools;
+global using AiDotNet.Tensors.Helpers;
 global using AiDotNet.UncertaintyQuantification.Layers;
 global using AiDotNet.LinearAlgebra;
 
@@ -3409,7 +3410,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         int baseSeed,
         int memberIndex)
     {
-        var rng = new Random(unchecked(baseSeed + (memberIndex + 1) * 10007));
+        var rng = RandomHelper.CreateSeededRandom(unchecked(baseSeed + (memberIndex + 1) * 10007));
 
         if (TryBootstrapTrainingData(baseInputData.XTrain, baseInputData.YTrain, rng, out var bootstrappedXTrain, out var bootstrappedYTrain))
         {
@@ -3536,7 +3537,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             return;
         }
 
-        var rng = new Random(unchecked(baseSeed + (memberIndex + 1) * 10007));
+        var rng = RandomHelper.CreateSeededRandom(unchecked(baseSeed + (memberIndex + 1) * 10007));
         var perturbed = new Vector<T>(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
         {
