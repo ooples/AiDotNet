@@ -5,18 +5,18 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.ActiveLearning;
 
 /// <summary>
-/// Unit tests for the UncertaintySampling class.
+/// Unit tests for the ExpectedModelChange class.
 /// </summary>
-public class UncertaintySamplingTests
+public class ExpectedModelChangeTests
 {
     #region Test Data
 
-    public static IEnumerable<object[]> UncertaintyMeasures =>
+    public static IEnumerable<object[]> ChangeMetrics =>
         new List<object[]>
         {
-            new object[] { UncertaintySampling<double>.UncertaintyMeasure.LeastConfidence },
-            new object[] { UncertaintySampling<double>.UncertaintyMeasure.MarginSampling },
-            new object[] { UncertaintySampling<double>.UncertaintyMeasure.Entropy }
+            new object[] { ExpectedModelChange<double>.ChangeMetric.ExpectedGradientLength },
+            new object[] { ExpectedModelChange<double>.ChangeMetric.MaxGradientLength },
+            new object[] { ExpectedModelChange<double>.ChangeMetric.GradientVariance }
         };
 
     #endregion
@@ -24,26 +24,26 @@ public class UncertaintySamplingTests
     #region Constructor Tests
 
     [Fact]
-    public void Constructor_DefaultMeasure_InitializesWithEntropy()
+    public void Constructor_DefaultMetric_InitializesWithExpectedGradientLength()
     {
         // Arrange & Act
-        var sampler = new UncertaintySampling<double>();
+        var emc = new ExpectedModelChange<double>();
 
         // Assert
-        Assert.NotNull(sampler);
-        Assert.Contains("Entropy", sampler.Name);
+        Assert.NotNull(emc);
+        Assert.Contains("ExpectedGradientLength", emc.Name);
     }
 
     [Theory]
-    [MemberData(nameof(UncertaintyMeasures))]
-    public void Constructor_DifferentMeasures_InitializesCorrectly(UncertaintySampling<double>.UncertaintyMeasure measure)
+    [MemberData(nameof(ChangeMetrics))]
+    public void Constructor_DifferentMetrics_InitializesCorrectly(ExpectedModelChange<double>.ChangeMetric metric)
     {
         // Arrange & Act
-        var sampler = new UncertaintySampling<double>(measure);
+        var emc = new ExpectedModelChange<double>(metric);
 
         // Assert
-        Assert.NotNull(sampler);
-        Assert.Contains(measure.ToString(), sampler.Name);
+        Assert.NotNull(emc);
+        Assert.Contains(metric.ToString(), emc.Name);
     }
 
     #endregion
@@ -51,42 +51,33 @@ public class UncertaintySamplingTests
     #region Name Property Tests
 
     [Fact]
-    public void Name_LeastConfidence_ContainsMeasureName()
+    public void Name_ExpectedGradientLength_ContainsMetricName()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>(UncertaintySampling<double>.UncertaintyMeasure.LeastConfidence);
+        var emc = new ExpectedModelChange<double>(ExpectedModelChange<double>.ChangeMetric.ExpectedGradientLength);
 
-        // Act
-        var name = sampler.Name;
-
-        // Assert
-        Assert.Equal("UncertaintySampling-LeastConfidence", name);
+        // Act & Assert
+        Assert.Equal("ExpectedModelChange-ExpectedGradientLength", emc.Name);
     }
 
     [Fact]
-    public void Name_MarginSampling_ContainsMeasureName()
+    public void Name_MaxGradientLength_ContainsMetricName()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>(UncertaintySampling<double>.UncertaintyMeasure.MarginSampling);
+        var emc = new ExpectedModelChange<double>(ExpectedModelChange<double>.ChangeMetric.MaxGradientLength);
 
-        // Act
-        var name = sampler.Name;
-
-        // Assert
-        Assert.Equal("UncertaintySampling-MarginSampling", name);
+        // Act & Assert
+        Assert.Equal("ExpectedModelChange-MaxGradientLength", emc.Name);
     }
 
     [Fact]
-    public void Name_Entropy_ContainsMeasureName()
+    public void Name_GradientVariance_ContainsMetricName()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>(UncertaintySampling<double>.UncertaintyMeasure.Entropy);
+        var emc = new ExpectedModelChange<double>(ExpectedModelChange<double>.ChangeMetric.GradientVariance);
 
-        // Act
-        var name = sampler.Name;
-
-        // Assert
-        Assert.Equal("UncertaintySampling-Entropy", name);
+        // Act & Assert
+        Assert.Equal("ExpectedModelChange-GradientVariance", emc.Name);
     }
 
     #endregion
@@ -97,23 +88,23 @@ public class UncertaintySamplingTests
     public void UseBatchDiversity_DefaultValue_IsFalse()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>();
+        var emc = new ExpectedModelChange<double>();
 
         // Act & Assert
-        Assert.False(sampler.UseBatchDiversity);
+        Assert.False(emc.UseBatchDiversity);
     }
 
     [Fact]
     public void UseBatchDiversity_SetToTrue_UpdatesCorrectly()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>();
+        var emc = new ExpectedModelChange<double>();
 
         // Act
-        sampler.UseBatchDiversity = true;
+        emc.UseBatchDiversity = true;
 
         // Assert
-        Assert.True(sampler.UseBatchDiversity);
+        Assert.True(emc.UseBatchDiversity);
     }
 
     #endregion
@@ -124,34 +115,34 @@ public class UncertaintySamplingTests
     public void SelectSamples_NullModel_ThrowsArgumentNullException()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>();
+        var emc = new ExpectedModelChange<double>();
         var pool = CreateTestPool(numSamples: 10, featureSize: 5);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => sampler.SelectSamples(null!, pool, batchSize: 3));
+        Assert.Throws<ArgumentNullException>(() => emc.SelectSamples(null!, pool, batchSize: 3));
     }
 
     [Fact]
     public void SelectSamples_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>();
+        var emc = new ExpectedModelChange<double>();
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => sampler.SelectSamples(model, null!, batchSize: 3));
+        Assert.Throws<ArgumentNullException>(() => emc.SelectSamples(model, null!, batchSize: 3));
     }
 
     [Fact]
     public void SelectSamples_ValidInputs_ReturnsRequestedBatchSize()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>();
+        var emc = new ExpectedModelChange<double>();
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
         var pool = CreateTestPool(numSamples: 20, featureSize: 10);
 
         // Act
-        var selected = sampler.SelectSamples(model, pool, batchSize: 5);
+        var selected = emc.SelectSamples(model, pool, batchSize: 5);
 
         // Assert
         Assert.Equal(5, selected.Length);
@@ -161,12 +152,12 @@ public class UncertaintySamplingTests
     public void SelectSamples_BatchSizeLargerThanPool_ReturnsAllSamples()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>();
+        var emc = new ExpectedModelChange<double>();
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
         var pool = CreateTestPool(numSamples: 5, featureSize: 10);
 
         // Act
-        var selected = sampler.SelectSamples(model, pool, batchSize: 10);
+        var selected = emc.SelectSamples(model, pool, batchSize: 10);
 
         // Assert
         Assert.Equal(5, selected.Length);
@@ -176,12 +167,12 @@ public class UncertaintySamplingTests
     public void SelectSamples_ReturnsUniqueIndices()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>();
+        var emc = new ExpectedModelChange<double>();
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
         var pool = CreateTestPool(numSamples: 20, featureSize: 10);
 
         // Act
-        var selected = sampler.SelectSamples(model, pool, batchSize: 10);
+        var selected = emc.SelectSamples(model, pool, batchSize: 10);
 
         // Assert
         Assert.Equal(selected.Length, selected.Distinct().Count());
@@ -191,13 +182,13 @@ public class UncertaintySamplingTests
     public void SelectSamples_WithBatchDiversity_ReturnsValidIndices()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>();
-        sampler.UseBatchDiversity = true;
+        var emc = new ExpectedModelChange<double>();
+        emc.UseBatchDiversity = true;
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
         var pool = CreateTestPool(numSamples: 20, featureSize: 10);
 
         // Act
-        var selected = sampler.SelectSamples(model, pool, batchSize: 5);
+        var selected = emc.SelectSamples(model, pool, batchSize: 5);
 
         // Assert
         Assert.Equal(5, selected.Length);
@@ -205,16 +196,16 @@ public class UncertaintySamplingTests
     }
 
     [Theory]
-    [MemberData(nameof(UncertaintyMeasures))]
-    public void SelectSamples_AllMeasures_ReturnValidIndices(UncertaintySampling<double>.UncertaintyMeasure measure)
+    [MemberData(nameof(ChangeMetrics))]
+    public void SelectSamples_AllMetrics_ReturnValidIndices(ExpectedModelChange<double>.ChangeMetric metric)
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>(measure);
+        var emc = new ExpectedModelChange<double>(metric);
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
         var pool = CreateTestPool(numSamples: 15, featureSize: 10);
 
         // Act
-        var selected = sampler.SelectSamples(model, pool, batchSize: 5);
+        var selected = emc.SelectSamples(model, pool, batchSize: 5);
 
         // Assert
         Assert.Equal(5, selected.Length);
@@ -229,34 +220,34 @@ public class UncertaintySamplingTests
     public void ComputeInformativenessScores_NullModel_ThrowsArgumentNullException()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>();
+        var emc = new ExpectedModelChange<double>();
         var pool = CreateTestPool(numSamples: 10, featureSize: 5);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => sampler.ComputeInformativenessScores(null!, pool));
+        Assert.Throws<ArgumentNullException>(() => emc.ComputeInformativenessScores(null!, pool));
     }
 
     [Fact]
     public void ComputeInformativenessScores_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>();
+        var emc = new ExpectedModelChange<double>();
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => sampler.ComputeInformativenessScores(model, null!));
+        Assert.Throws<ArgumentNullException>(() => emc.ComputeInformativenessScores(model, null!));
     }
 
     [Fact]
     public void ComputeInformativenessScores_ValidInputs_ReturnsScorePerSample()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>();
+        var emc = new ExpectedModelChange<double>();
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
         var pool = CreateTestPool(numSamples: 15, featureSize: 10);
 
         // Act
-        var scores = sampler.ComputeInformativenessScores(model, pool);
+        var scores = emc.ComputeInformativenessScores(model, pool);
 
         // Assert
         Assert.Equal(15, scores.Length);
@@ -266,12 +257,12 @@ public class UncertaintySamplingTests
     public void ComputeInformativenessScores_ReturnsNonNegativeScores()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>();
+        var emc = new ExpectedModelChange<double>();
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
         var pool = CreateTestPool(numSamples: 10, featureSize: 10);
 
         // Act
-        var scores = sampler.ComputeInformativenessScores(model, pool);
+        var scores = emc.ComputeInformativenessScores(model, pool);
 
         // Assert
         for (int i = 0; i < scores.Length; i++)
@@ -281,16 +272,16 @@ public class UncertaintySamplingTests
     }
 
     [Theory]
-    [MemberData(nameof(UncertaintyMeasures))]
-    public void ComputeInformativenessScores_AllMeasures_ReturnsValidScores(UncertaintySampling<double>.UncertaintyMeasure measure)
+    [MemberData(nameof(ChangeMetrics))]
+    public void ComputeInformativenessScores_AllMetrics_ReturnsValidScores(ExpectedModelChange<double>.ChangeMetric metric)
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>(measure);
+        var emc = new ExpectedModelChange<double>(metric);
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
         var pool = CreateTestPool(numSamples: 10, featureSize: 10);
 
         // Act
-        var scores = sampler.ComputeInformativenessScores(model, pool);
+        var scores = emc.ComputeInformativenessScores(model, pool);
 
         // Assert
         Assert.Equal(10, scores.Length);
@@ -309,10 +300,10 @@ public class UncertaintySamplingTests
     public void GetSelectionStatistics_BeforeAnySelection_ReturnsZeroStatistics()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>();
+        var emc = new ExpectedModelChange<double>();
 
         // Act
-        var stats = sampler.GetSelectionStatistics();
+        var stats = emc.GetSelectionStatistics();
 
         // Assert
         Assert.NotNull(stats);
@@ -328,13 +319,13 @@ public class UncertaintySamplingTests
     public void GetSelectionStatistics_AfterSelection_ReturnsValidStatistics()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>();
+        var emc = new ExpectedModelChange<double>();
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
         var pool = CreateTestPool(numSamples: 10, featureSize: 10);
-        sampler.SelectSamples(model, pool, batchSize: 5);
+        emc.SelectSamples(model, pool, batchSize: 5);
 
         // Act
-        var stats = sampler.GetSelectionStatistics();
+        var stats = emc.GetSelectionStatistics();
 
         // Assert
         Assert.NotNull(stats);
@@ -345,22 +336,83 @@ public class UncertaintySamplingTests
 
     #endregion
 
+    #region Gradient Computation Tests
+
+    [Fact]
+    public void ExpectedGradientLength_UniformProbabilities_ReturnsConsistentScores()
+    {
+        // Arrange
+        var emc = new ExpectedModelChange<double>(ExpectedModelChange<double>.ChangeMetric.ExpectedGradientLength);
+        var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
+        var pool = CreateUniformPool(numSamples: 5, featureSize: 10);
+
+        // Act
+        var scores = emc.ComputeInformativenessScores(model, pool);
+
+        // Assert - All uniform samples should have similar EGL
+        Assert.Equal(5, scores.Length);
+        for (int i = 0; i < scores.Length; i++)
+        {
+            Assert.True(scores[i] > 0);
+        }
+    }
+
+    [Fact]
+    public void MaxGradientLength_ComputesMaximumAcrossLabels()
+    {
+        // Arrange
+        var emc = new ExpectedModelChange<double>(ExpectedModelChange<double>.ChangeMetric.MaxGradientLength);
+        var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
+        var pool = CreateTestPool(numSamples: 10, featureSize: 10);
+
+        // Act
+        var scores = emc.ComputeInformativenessScores(model, pool);
+
+        // Assert
+        Assert.Equal(10, scores.Length);
+        for (int i = 0; i < scores.Length; i++)
+        {
+            Assert.True(scores[i] > 0);
+        }
+    }
+
+    [Fact]
+    public void GradientVariance_ComputesVarianceAcrossLabels()
+    {
+        // Arrange
+        var emc = new ExpectedModelChange<double>(ExpectedModelChange<double>.ChangeMetric.GradientVariance);
+        var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
+        var pool = CreateTestPool(numSamples: 10, featureSize: 10);
+
+        // Act
+        var scores = emc.ComputeInformativenessScores(model, pool);
+
+        // Assert
+        Assert.Equal(10, scores.Length);
+        for (int i = 0; i < scores.Length; i++)
+        {
+            Assert.True(scores[i] >= 0);
+        }
+    }
+
+    #endregion
+
     #region Integration Tests
 
     [Fact]
-    public void UncertaintySampling_CompleteWorkflow_ExecutesCorrectly()
+    public void ExpectedModelChange_CompleteWorkflow_ExecutesCorrectly()
     {
         // Arrange
-        var sampler = new UncertaintySampling<double>(UncertaintySampling<double>.UncertaintyMeasure.Entropy);
+        var emc = new ExpectedModelChange<double>(ExpectedModelChange<double>.ChangeMetric.ExpectedGradientLength);
         var model = new MockNeuralNetwork(parameterCount: 20, outputSize: 5);
         var pool = CreateTestPool(numSamples: 50, featureSize: 20);
 
         // Act - Select multiple batches
-        var batch1 = sampler.SelectSamples(model, pool, batchSize: 10);
-        var stats1 = sampler.GetSelectionStatistics();
+        var batch1 = emc.SelectSamples(model, pool, batchSize: 10);
+        var stats1 = emc.GetSelectionStatistics();
 
-        var batch2 = sampler.SelectSamples(model, pool, batchSize: 10);
-        var stats2 = sampler.GetSelectionStatistics();
+        var batch2 = emc.SelectSamples(model, pool, batchSize: 10);
+        var stats2 = emc.GetSelectionStatistics();
 
         // Assert
         Assert.Equal(10, batch1.Length);
@@ -370,24 +422,23 @@ public class UncertaintySamplingTests
     }
 
     [Fact]
-    public void UncertaintySampling_DiversityMode_ProducesDifferentResults()
+    public void ExpectedModelChange_DiversityMode_ProducesDifferentResults()
     {
         // Arrange
-        var samplerNoDiversity = new UncertaintySampling<double>();
-        var samplerWithDiversity = new UncertaintySampling<double>();
-        samplerWithDiversity.UseBatchDiversity = true;
+        var emcNoDiversity = new ExpectedModelChange<double>();
+        var emcWithDiversity = new ExpectedModelChange<double>();
+        emcWithDiversity.UseBatchDiversity = true;
 
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
         var pool = CreateVariedTestPool(numSamples: 30, featureSize: 10);
 
         // Act
-        var selectedNoDiversity = samplerNoDiversity.SelectSamples(model, pool, batchSize: 10);
-        var selectedWithDiversity = samplerWithDiversity.SelectSamples(model, pool, batchSize: 10);
+        var selectedNoDiversity = emcNoDiversity.SelectSamples(model, pool, batchSize: 10);
+        var selectedWithDiversity = emcWithDiversity.SelectSamples(model, pool, batchSize: 10);
 
         // Assert - Both should return valid results
         Assert.Equal(10, selectedNoDiversity.Length);
         Assert.Equal(10, selectedWithDiversity.Length);
-        // Note: Results may or may not differ depending on data distribution
     }
 
     #endregion
@@ -400,6 +451,16 @@ public class UncertaintySamplingTests
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = i * 0.01;
+        }
+        return tensor;
+    }
+
+    private static Tensor<double> CreateUniformPool(int numSamples, int featureSize)
+    {
+        var tensor = new Tensor<double>(new int[] { numSamples, featureSize });
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = 0.5;
         }
         return tensor;
     }
