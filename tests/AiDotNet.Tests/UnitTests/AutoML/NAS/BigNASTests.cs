@@ -303,5 +303,196 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(bignasLow);
             Assert.NotNull(bignasHigh);
         }
+
+        #region Edge Case Tests
+
+        [Fact]
+        public void BigNAS_SingleElementElasticLists_SamplesCorrectly()
+        {
+            // Arrange - single element in each list means only one possible config
+            var searchSpace = new SearchSpaceBase<double>();
+            var bignas = new BigNAS<double>(
+                searchSpace,
+                elasticDepths: new List<int> { 3 },
+                elasticWidthMultipliers: new List<double> { 1.0 },
+                elasticKernelSizes: new List<int> { 5 },
+                elasticExpansionRatios: new List<int> { 4 },
+                elasticResolutions: new List<int> { 224 },
+                useSandwichSampling: false);
+
+            // Act
+            var samples = bignas.SandwichSample();
+
+            // Assert - all samples should have the same values
+            foreach (var sample in samples)
+            {
+                Assert.Equal(3, sample.Depth);
+                Assert.Equal(1.0, sample.WidthMultiplier);
+                Assert.Equal(5, sample.KernelSize);
+                Assert.Equal(4, sample.ExpansionRatio);
+                Assert.Equal(224, sample.Resolution);
+            }
+        }
+
+        [Fact]
+        public void BigNAS_ComputeDistillationLoss_WithVeryLowTemperature_HandlesCorrectly()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var bignas = new BigNAS<double>(searchSpace);
+            var teacherLogits = new Vector<double>(5);
+            var studentLogits = new Vector<double>(5);
+
+            for (int i = 0; i < 5; i++)
+            {
+                teacherLogits[i] = i * 0.5;
+                studentLogits[i] = i * 0.3;
+            }
+
+            // Act - very low temperature makes softmax sharper
+            double veryLowTemperature = 0.1;
+            var loss = bignas.ComputeDistillationLoss(teacherLogits, studentLogits, veryLowTemperature);
+
+            // Assert - should produce valid (non-NaN, non-Infinity) result
+            Assert.True(!double.IsNaN(loss) && !double.IsInfinity(loss));
+        }
+
+        [Fact]
+        public void BigNAS_ComputeDistillationLoss_WithHighTemperature_HandlesCorrectly()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var bignas = new BigNAS<double>(searchSpace);
+            var teacherLogits = new Vector<double>(5);
+            var studentLogits = new Vector<double>(5);
+
+            for (int i = 0; i < 5; i++)
+            {
+                teacherLogits[i] = i * 0.5;
+                studentLogits[i] = i * 0.3;
+            }
+
+            // Act - high temperature makes softmax smoother
+            double highTemperature = 100.0;
+            var loss = bignas.ComputeDistillationLoss(teacherLogits, studentLogits, highTemperature);
+
+            // Assert - should produce valid result
+            Assert.True(!double.IsNaN(loss) && !double.IsInfinity(loss));
+        }
+
+        [Fact]
+        public void BigNAS_ComputeDistillationLoss_SingleElementLogits_HandlesCorrectly()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var bignas = new BigNAS<double>(searchSpace);
+            var teacherLogits = new Vector<double>(1);
+            var studentLogits = new Vector<double>(1);
+            teacherLogits[0] = 1.0;
+            studentLogits[0] = 0.5;
+
+            // Act
+            var loss = bignas.ComputeDistillationLoss(teacherLogits, studentLogits, 2.0);
+
+            // Assert - single element should give valid loss
+            Assert.True(!double.IsNaN(loss) && !double.IsInfinity(loss));
+        }
+
+        [Fact]
+        public void BigNAS_MultiObjectiveSearch_EmptyDeviceList_ReturnsEmptyResults()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var bignas = new BigNAS<double>(searchSpace);
+            var emptyDevices = new List<(string name, HardwareConstraints<double> constraints)>();
+
+            // Act
+            var results = bignas.MultiObjectiveSearch(
+                emptyDevices,
+                inputChannels: 32,
+                spatialSize: 14,
+                populationSize: 10,
+                generations: 3);
+
+            // Assert
+            Assert.NotNull(results);
+            Assert.Empty(results);
+        }
+
+        [Fact]
+        public void BigNAS_MultiObjectiveSearch_MinimalPopulationAndGenerations_Works()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var bignas = new BigNAS<double>(searchSpace);
+            var devices = new List<(string name, HardwareConstraints<double> constraints)>
+            {
+                ("test", new HardwareConstraints<double> { MaxLatency = 50.0 })
+            };
+
+            // Act - minimal viable population/generations
+            var results = bignas.MultiObjectiveSearch(
+                devices,
+                inputChannels: 32,
+                spatialSize: 14,
+                populationSize: 2,
+                generations: 1);
+
+            // Assert
+            Assert.NotNull(results);
+            Assert.Single(results);
+            Assert.True(results.ContainsKey("test"));
+        }
+
+        [Fact]
+        public void BigNAS_SandwichSample_WithSingleElementLists_LargestEqualsSmallest()
+        {
+            // Arrange - single element in each list
+            var searchSpace = new SearchSpaceBase<double>();
+            var bignas = new BigNAS<double>(
+                searchSpace,
+                elasticDepths: new List<int> { 4 },
+                elasticWidthMultipliers: new List<double> { 1.0 },
+                elasticKernelSizes: new List<int> { 5 },
+                elasticExpansionRatios: new List<int> { 4 },
+                elasticResolutions: new List<int> { 224 },
+                useSandwichSampling: true);
+
+            // Act
+            var samples = bignas.SandwichSample();
+
+            // Assert - largest (index 0) and smallest (index 1) should be identical
+            Assert.Equal(samples[0].Depth, samples[1].Depth);
+            Assert.Equal(samples[0].WidthMultiplier, samples[1].WidthMultiplier);
+            Assert.Equal(samples[0].KernelSize, samples[1].KernelSize);
+            Assert.Equal(samples[0].ExpansionRatio, samples[1].ExpansionRatio);
+            Assert.Equal(samples[0].Resolution, samples[1].Resolution);
+        }
+
+        [Fact]
+        public void BigNAS_ComputeDistillationLoss_WithZeroLogits_HandlesCorrectly()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var bignas = new BigNAS<double>(searchSpace);
+            var teacherLogits = new Vector<double>(5);
+            var studentLogits = new Vector<double>(5);
+
+            // All zeros
+            for (int i = 0; i < 5; i++)
+            {
+                teacherLogits[i] = 0.0;
+                studentLogits[i] = 0.0;
+            }
+
+            // Act
+            var loss = bignas.ComputeDistillationLoss(teacherLogits, studentLogits, 2.0);
+
+            // Assert - same distributions should give near-zero loss
+            Assert.True(!double.IsNaN(loss) && !double.IsInfinity(loss));
+            Assert.True(Math.Abs(loss) < 0.1);
+        }
+
+        #endregion
     }
 }

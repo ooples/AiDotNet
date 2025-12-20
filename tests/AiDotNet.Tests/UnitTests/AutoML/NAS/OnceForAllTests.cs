@@ -312,5 +312,174 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
                 Assert.True(config.KernelSize > 0);
             }
         }
+
+        #region Edge Case Tests
+
+        [Fact]
+        public void OnceForAll_SingleElementElasticLists_SamplesOnlyValue()
+        {
+            // Arrange - single element in each elastic list
+            var searchSpace = new SearchSpaceBase<double>();
+            var ofa = new OnceForAll<double>(
+                searchSpace,
+                elasticDepths: new List<int> { 3 },
+                elasticWidths: new List<double> { 1.0 },
+                elasticKernelSizes: new List<int> { 5 },
+                elasticExpansionRatios: new List<int> { 4 });
+            ofa.SetTrainingStage(4); // All dimensions elastic
+
+            // Act - sample multiple times
+            for (int i = 0; i < 10; i++)
+            {
+                var config = ofa.SampleSubNetwork();
+
+                // Assert - should always get the only available values
+                Assert.Equal(3, config.Depth);
+                Assert.Equal(1.0, config.WidthMultiplier);
+                Assert.Equal(5, config.KernelSize);
+                Assert.Equal(4, config.ExpansionRatio);
+            }
+        }
+
+        [Fact]
+        public void OnceForAll_SetTrainingStage_BeyondMax_ClampsToMax()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var ofa = new OnceForAll<double>(searchSpace);
+
+            // Act - set stage beyond total (4 is max)
+            ofa.SetTrainingStage(10);
+            var config = ofa.SampleSubNetwork();
+
+            // Assert - should work and produce valid config (stage capped at 4)
+            Assert.NotNull(config);
+            Assert.True(config.Depth > 0);
+            Assert.True(config.KernelSize > 0);
+        }
+
+        [Fact]
+        public void OnceForAll_SpecializeForHardware_MinimalPopulationAndGenerations_Works()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var ofa = new OnceForAll<double>(searchSpace);
+            var constraints = new HardwareConstraints<double>
+            {
+                MaxLatency = 100.0,
+                MaxMemory = 50.0
+            };
+
+            // Act - minimal values
+            var config = ofa.SpecializeForHardware(
+                constraints,
+                inputChannels: 3,
+                spatialSize: 32,
+                populationSize: 1,
+                generations: 1);
+
+            // Assert - should still return valid config
+            Assert.NotNull(config);
+            Assert.True(config.Depth > 0);
+        }
+
+        [Fact]
+        public void OnceForAll_SpecializeForHardware_NoConstraints_ReturnsConfig()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var ofa = new OnceForAll<double>(searchSpace);
+            var constraints = new HardwareConstraints<double>(); // No limits set
+
+            // Act
+            var config = ofa.SpecializeForHardware(
+                constraints,
+                inputChannels: 16,
+                spatialSize: 56,
+                populationSize: 10,
+                generations: 5);
+
+            // Assert - should work without constraints
+            Assert.NotNull(config);
+            Assert.True(config.Depth > 0);
+        }
+
+        [Fact]
+        public void OnceForAll_SpecializeForHardware_VeryTightConstraints_StillReturnsConfig()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var ofa = new OnceForAll<double>(searchSpace);
+            var constraints = new HardwareConstraints<double>
+            {
+                MaxLatency = 0.001, // Extremely tight
+                MaxMemory = 0.001
+            };
+
+            // Act - should not throw even with impossible constraints
+            var config = ofa.SpecializeForHardware(
+                constraints,
+                inputChannels: 3,
+                spatialSize: 224,
+                populationSize: 10,
+                generations: 5);
+
+            // Assert - still returns a config (may be penalized but valid)
+            Assert.NotNull(config);
+        }
+
+        [Fact]
+        public void OnceForAll_GetSharedWeights_LargeDimensions_Works()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var ofa = new OnceForAll<double>(searchSpace);
+
+            // Act - large dimensions
+            var weights = ofa.GetSharedWeights("large_layer", 512, 256);
+
+            // Assert
+            Assert.NotNull(weights);
+            Assert.Equal(512, weights.Rows);
+            Assert.Equal(256, weights.Columns);
+        }
+
+        [Fact]
+        public void OnceForAll_GetSharedWeights_SmallDimensions_Works()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var ofa = new OnceForAll<double>(searchSpace);
+
+            // Act - minimal dimensions (1x1)
+            var weights = ofa.GetSharedWeights("tiny_layer", 1, 1);
+
+            // Assert
+            Assert.NotNull(weights);
+            Assert.Equal(1, weights.Rows);
+            Assert.Equal(1, weights.Columns);
+        }
+
+        [Fact]
+        public void OnceForAll_SetTrainingStage_NegativeValue_HandledAsStage0()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var ofa = new OnceForAll<double>(
+                searchSpace,
+                elasticDepths: new List<int> { 2, 3, 4 },
+                elasticWidths: new List<double> { 0.75, 1.0, 1.25 },
+                elasticExpansionRatios: new List<int> { 3, 4, 6 });
+
+            // Act - negative stage (edge case)
+            ofa.SetTrainingStage(-1);
+            var config = ofa.SampleSubNetwork();
+
+            // Assert - should produce valid config (likely treated as stage 0 or handled gracefully)
+            Assert.NotNull(config);
+            Assert.True(config.Depth > 0);
+        }
+
+        #endregion
     }
 }

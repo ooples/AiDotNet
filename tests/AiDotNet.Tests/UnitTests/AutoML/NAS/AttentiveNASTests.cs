@@ -347,5 +347,178 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             // Assert - first element should reflect average performance
             Assert.True(Math.Abs(contextAfterUpdate[0] - 0.85) < 0.01);
         }
+
+        #region Edge Case Tests
+
+        [Fact]
+        public void AttentiveNAS_SingleElementElasticLists_SamplesCorrectly()
+        {
+            // Arrange - boundary condition with single choices
+            var searchSpace = new SearchSpaceBase<double>();
+            var attentive = new AttentiveNAS<double>(
+                searchSpace,
+                elasticDepths: new List<int> { 3 },
+                elasticWidthMultipliers: new List<double> { 1.0 },
+                elasticKernelSizes: new List<int> { 5 },
+                attentionHiddenSize: 64);
+
+            var context = attentive.CreateContextVector();
+
+            // Act
+            var config = attentive.AttentiveSample(context);
+
+            // Assert - should always return the only choices
+            Assert.Equal(3, config.Depth);
+            Assert.Equal(1.0, config.WidthMultiplier);
+            Assert.Equal(5, config.KernelSize);
+        }
+
+        [Fact]
+        public void AttentiveNAS_UpdateAttention_WithNegativePerformance_HandlesCorrectly()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var attentive = new AttentiveNAS<double>(searchSpace);
+            var context = attentive.CreateContextVector();
+            var config = attentive.AttentiveSample(context);
+
+            // Act - negative performance (e.g., penalty-adjusted score)
+            double negativePerformance = -5.0;
+            attentive.UpdateAttention(config, negativePerformance, 0.001);
+            var memory = attentive.GetPerformanceMemory();
+
+            // Assert - should still record the performance
+            Assert.True(memory.Count > 0);
+            Assert.True(memory.Values.Any(v => v < 0));
+        }
+
+        [Fact]
+        public void AttentiveNAS_UpdateAttention_WithConfigNotInElasticLists_ReturnsEarly()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var attentive = new AttentiveNAS<double>(
+                searchSpace,
+                elasticDepths: new List<int> { 2, 3, 4 },
+                elasticWidthMultipliers: new List<double> { 0.5, 1.0 },
+                elasticKernelSizes: new List<int> { 3, 5 });
+
+            // Create a config with values NOT in the elastic lists
+            var invalidConfig = new AttentiveNASConfig<double>
+            {
+                Depth = 99,  // Not in elastic list
+                WidthMultiplier = 99.0,  // Not in elastic list
+                KernelSize = 99,  // Not in elastic list
+                Embedding = new Vector<double>(128)
+            };
+
+            var weightsBefore = attentive.GetAttentionWeights()[0, 0];
+
+            // Act
+            attentive.UpdateAttention(invalidConfig, 0.9, 0.001);
+
+            var weightsAfter = attentive.GetAttentionWeights()[0, 0];
+
+            // Assert - weights should not change for invalid config
+            Assert.Equal(weightsBefore, weightsAfter);
+        }
+
+        [Fact]
+        public void AttentiveNAS_Search_ZeroIterations_ReturnsDefaultConfig()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var attentive = new AttentiveNAS<double>(searchSpace);
+            var constraints = new HardwareConstraints<double> { MaxLatency = 100.0 };
+
+            // Act
+            var config = attentive.Search(
+                constraints,
+                inputChannels: 32,
+                spatialSize: 14,
+                numIterations: 0);
+
+            // Assert - should return default config (not crash)
+            Assert.NotNull(config);
+        }
+
+        [Fact]
+        public void AttentiveNAS_AttentiveSample_WithShortContextVector_HandlesGracefully()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var attentive = new AttentiveNAS<double>(searchSpace, attentionHiddenSize: 128);
+            var shortContext = new Vector<double>(5); // Much shorter than hidden size
+            for (int i = 0; i < shortContext.Length; i++)
+                shortContext[i] = 0.1;
+
+            // Act
+            var config = attentive.AttentiveSample(shortContext);
+
+            // Assert - should still produce valid config
+            Assert.NotNull(config);
+            Assert.True(config.Depth > 0);
+        }
+
+        [Fact]
+        public void AttentiveNAS_UpdateAttention_WithZeroLearningRate_NoWeightChange()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var attentive = new AttentiveNAS<double>(
+                searchSpace,
+                elasticDepths: new List<int> { 2, 3, 4 },
+                elasticWidthMultipliers: new List<double> { 0.5, 1.0 },
+                elasticKernelSizes: new List<int> { 3, 5 });
+            var context = attentive.CreateContextVector();
+            var config = attentive.AttentiveSample(context);
+
+            var weightsBefore = attentive.GetAttentionWeights()[0, 0];
+
+            // Act - zero learning rate should cause no weight update
+            attentive.UpdateAttention(config, 0.9, 0.0);
+
+            var weightsAfter = attentive.GetAttentionWeights()[0, 0];
+
+            // Assert
+            Assert.Equal(weightsBefore, weightsAfter);
+        }
+
+        [Fact]
+        public void AttentiveNAS_AttentiveSample_WithVeryLargeContext_HandlesCorrectly()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var attentive = new AttentiveNAS<double>(searchSpace, attentionHiddenSize: 64);
+            var largeContext = new Vector<double>(1000); // Much larger than hidden size
+            for (int i = 0; i < largeContext.Length; i++)
+                largeContext[i] = 0.01;
+
+            // Act
+            var config = attentive.AttentiveSample(largeContext);
+
+            // Assert - should still work (uses min of context and hidden size)
+            Assert.NotNull(config);
+            Assert.True(config.Depth > 0);
+        }
+
+        [Fact]
+        public void AttentiveNAS_UpdateAttention_WithZeroPerformance_RecordsCorrectly()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var attentive = new AttentiveNAS<double>(searchSpace);
+            var context = attentive.CreateContextVector();
+            var config = attentive.AttentiveSample(context);
+
+            // Act
+            attentive.UpdateAttention(config, 0.0, 0.001);
+            var memory = attentive.GetPerformanceMemory();
+
+            // Assert
+            Assert.True(memory.Count > 0);
+        }
+
+        #endregion
     }
 }

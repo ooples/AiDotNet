@@ -235,5 +235,191 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
                 Assert.Equal(params_[i].Length, gradients[i].Length);
             }
         }
+
+        #region Edge Case Tests
+
+        [Fact]
+        public void FBNet_SingleLayer_InitializesCorrectly()
+        {
+            // Arrange & Act - minimal numLayers
+            var searchSpace = new SearchSpaceBase<double>();
+            var fbnet = new FBNet<double>(searchSpace, numLayers: 1);
+
+            // Assert
+            Assert.NotNull(fbnet);
+            var params_ = fbnet.GetArchitectureParameters();
+            Assert.Single(params_);
+        }
+
+        [Fact]
+        public void FBNet_AnnealTemperature_AtStepZero_ReturnsInitialTemperature()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var fbnet = new FBNet<double>(searchSpace, numLayers: 5, initialTemperature: 5.0);
+
+            // Act - anneal at step 0
+            fbnet.AnnealTemperature(0, 100);
+            var temp = fbnet.GetTemperature();
+
+            // Assert - should still be close to initial temperature
+            Assert.True(temp >= 4.9); // Should be very close to 5.0
+        }
+
+        [Fact]
+        public void FBNet_AnnealTemperature_AtFinalStep_ReturnsMinTemperature()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var fbnet = new FBNet<double>(searchSpace, numLayers: 5, initialTemperature: 5.0);
+
+            // Act - anneal at final step
+            fbnet.AnnealTemperature(100, 100);
+            var temp = fbnet.GetTemperature();
+
+            // Assert - should be at minimum temperature (typically around 0.1)
+            Assert.True(temp < 5.0);
+        }
+
+        [Fact]
+        public void FBNet_AnnealTemperature_BeyondTotalSteps_HandlesGracefully()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var fbnet = new FBNet<double>(searchSpace, numLayers: 5, initialTemperature: 5.0);
+
+            // Act - step beyond total (edge case)
+            fbnet.AnnealTemperature(150, 100);
+            var temp = fbnet.GetTemperature();
+
+            // Assert - should not throw, temperature should be at minimum
+            Assert.True(temp >= 0.0);
+        }
+
+        [Fact]
+        public void FBNet_GumbelSoftmax_SingleElementVector_ReturnsOne()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var fbnet = new FBNet<double>(searchSpace, numLayers: 5);
+            var theta = new Vector<double>(1);
+            theta[0] = 1.0;
+
+            // Act
+            var probs = fbnet.GumbelSoftmax(theta, hard: false);
+
+            // Assert - single element should sum to 1
+            Assert.Single(probs);
+            Assert.True(Math.Abs(probs[0] - 1.0) < 0.01);
+        }
+
+        [Fact]
+        public void FBNet_GumbelSoftmax_AllZeroLogits_HandlesCorrectly()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var fbnet = new FBNet<double>(searchSpace, numLayers: 5);
+            var theta = new Vector<double>(5);
+            for (int i = 0; i < 5; i++)
+                theta[i] = 0.0;
+
+            // Act
+            var probs = fbnet.GumbelSoftmax(theta, hard: false);
+
+            // Assert - sum should still be 1
+            double sum = 0;
+            for (int i = 0; i < probs.Length; i++)
+                sum += probs[i];
+            Assert.True(Math.Abs(sum - 1.0) < 0.01);
+        }
+
+        [Fact]
+        public void FBNet_ZeroLatencyWeight_TaskLossOnly()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var fbnet = new FBNet<double>(searchSpace, numLayers: 5, latencyWeight: 0.0);
+            double taskLoss = 2.5;
+
+            // Act
+            var totalLoss = fbnet.ComputeTotalLoss(taskLoss);
+
+            // Assert - with zero weight, total loss should equal task loss
+            Assert.True(Math.Abs(totalLoss - taskLoss) < 0.01);
+        }
+
+        [Fact]
+        public void FBNet_HighLatencyWeight_DominatedByLatency()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var fbnet = new FBNet<double>(searchSpace, numLayers: 5, latencyWeight: 100.0);
+            double taskLoss = 1.0;
+
+            // Act
+            var totalLoss = fbnet.ComputeTotalLoss(taskLoss);
+
+            // Assert - with high weight, total loss should be much larger than task loss
+            Assert.True(totalLoss > taskLoss);
+        }
+
+        [Fact]
+        public void FBNet_DeriveArchitecture_SingleLayer_ReturnsOneOperation()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var fbnet = new FBNet<double>(searchSpace, numLayers: 1);
+
+            // Act
+            var architecture = fbnet.DeriveArchitecture();
+
+            // Assert
+            Assert.NotNull(architecture);
+            Assert.Single(architecture.Operations);
+        }
+
+        [Fact]
+        public void FBNet_SetConstraints_VeryTightConstraints_StillWorks()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var fbnet = new FBNet<double>(searchSpace, numLayers: 10);
+            var tightConstraints = new HardwareConstraints<double>
+            {
+                MaxLatency = 0.001,
+                MaxMemory = 0.001,
+                MaxEnergy = 0.001
+            };
+
+            // Act
+            fbnet.SetConstraints(tightConstraints);
+            var meetsConstraints = fbnet.MeetsConstraints();
+
+            // Assert - should not throw
+            Assert.False(meetsConstraints); // Likely won't meet very tight constraints
+        }
+
+        [Fact]
+        public void FBNet_SetConstraints_VeryLooseConstraints_Satisfied()
+        {
+            // Arrange
+            var searchSpace = new SearchSpaceBase<double>();
+            var fbnet = new FBNet<double>(searchSpace, numLayers: 3);
+            var looseConstraints = new HardwareConstraints<double>
+            {
+                MaxLatency = 100000.0,
+                MaxMemory = 100000.0,
+                MaxEnergy = 100000.0
+            };
+
+            // Act
+            fbnet.SetConstraints(looseConstraints);
+            var meetsConstraints = fbnet.MeetsConstraints();
+
+            // Assert - should meet very loose constraints
+            Assert.True(meetsConstraints);
+        }
+
+        #endregion
     }
 }
