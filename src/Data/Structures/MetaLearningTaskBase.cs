@@ -287,13 +287,14 @@ public abstract class MetaLearningTaskBase<T, TInput, TOutput> : IMetaLearningTa
     /// <exception cref="InvalidOperationException">Thrown when required data is missing.</exception>
     public virtual void Validate()
     {
-        if (SupportInput == null)
+        // Check backing fields directly to avoid property getters throwing first
+        if (_supportInput == null)
             throw new InvalidOperationException("SupportInput is required but is null.");
-        if (SupportOutput == null)
+        if (_supportOutput == null)
             throw new InvalidOperationException("SupportOutput is required but is null.");
-        if (QueryInput == null)
+        if (_queryInput == null)
             throw new InvalidOperationException("QueryInput is required but is null.");
-        if (QueryOutput == null)
+        if (_queryOutput == null)
             throw new InvalidOperationException("QueryOutput is required but is null.");
     }
 
@@ -304,6 +305,7 @@ public abstract class MetaLearningTaskBase<T, TInput, TOutput> : IMetaLearningTa
     public override string ToString()
     {
         var name = string.IsNullOrEmpty(Name) ? GetType().Name : Name;
-        return $"{name} (Support: {SupportInput?.GetType().Name}, Query: {QueryInput?.GetType().Name})";
+        // Use backing fields to avoid property getters throwing on uninitialized state
+        return $"{name} (Support: {_supportInput?.GetType().Name ?? "null"}, Query: {_queryInput?.GetType().Name ?? "null"})";
     }
 }

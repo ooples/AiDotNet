@@ -532,9 +532,11 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         // Use finite differences for gradient computation
         double epsilon = 1e-5;
 
-        // Compute encoder gradients
+        // Compute encoder gradients with scale factor for unbiased estimation
         var encoderGradients = new Vector<T>(_encoderWeights.Length);
-        for (int i = 0; i < Math.Min(_encoderWeights.Length, 100); i++) // Limit for efficiency
+        int encoderSampleCount = Math.Min(_encoderWeights.Length, 100);
+        double encoderScaleFactor = (double)_encoderWeights.Length / encoderSampleCount;
+        for (int i = 0; i < encoderSampleCount; i++)
         {
             int idx = (i * _encoderWeights.Length / 100) % _encoderWeights.Length;
 
@@ -550,17 +552,19 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             var perturbedPred = perturbedModel.Predict(task.QueryInput);
             T perturbedLoss = ComputeLossFromOutput(perturbedPred, task.QueryOutput);
 
-            // Compute gradient
+            // Compute gradient with scale factor
             double grad = (NumOps.ToDouble(perturbedLoss) - NumOps.ToDouble(currentLoss)) / epsilon;
-            encoderGradients[idx] = NumOps.FromDouble(grad);
+            encoderGradients[idx] = NumOps.FromDouble(grad * encoderScaleFactor);
 
             // Restore
             _encoderWeights[idx] = original;
         }
 
-        // Compute adaptation network gradients
+        // Compute adaptation network gradients with scale factor for unbiased estimation
         var adaptationGradients = new Vector<T>(_adaptationNetworkWeights.Length);
-        for (int i = 0; i < Math.Min(_adaptationNetworkWeights.Length, 100); i++)
+        int adaptSampleCount = Math.Min(_adaptationNetworkWeights.Length, 100);
+        double adaptScaleFactor = (double)_adaptationNetworkWeights.Length / adaptSampleCount;
+        for (int i = 0; i < adaptSampleCount; i++)
         {
             int idx = (i * _adaptationNetworkWeights.Length / 100) % _adaptationNetworkWeights.Length;
 
@@ -575,9 +579,9 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             var perturbedPred = perturbedModel.Predict(task.QueryInput);
             T perturbedLoss = ComputeLossFromOutput(perturbedPred, task.QueryOutput);
 
-            // Compute gradient
+            // Compute gradient with scale factor
             double grad = (NumOps.ToDouble(perturbedLoss) - NumOps.ToDouble(currentLoss)) / epsilon;
-            adaptationGradients[idx] = NumOps.FromDouble(grad);
+            adaptationGradients[idx] = NumOps.FromDouble(grad * adaptScaleFactor);
 
             // Restore
             _adaptationNetworkWeights[idx] = original;

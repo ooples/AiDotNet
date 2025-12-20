@@ -255,10 +255,55 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         // Step 4: Compute loss
         T episodeLoss = ComputeCrossEntropyLoss(predictions, task.QueryOutput);
 
-        // Step 5: Compute gradients
-        var gradients = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
+        // Step 5: Compute gradients through the attention mechanism using finite differences
+        // This ensures gradients reflect the attention-based predictions, not a separate forward pass
+        var gradients = ComputeAttentionGradients(task, episodeLoss);
 
         return (episodeLoss, gradients);
+    }
+
+    /// <summary>
+    /// Computes gradients with respect to the attention-based loss using finite differences.
+    /// This ensures the gradients properly account for the attention mechanism.
+    /// </summary>
+    private Vector<T> ComputeAttentionGradients(IMetaLearningTask<T, TInput, TOutput> task, T currentLoss)
+    {
+        var parameters = MetaModel.GetParameters();
+        var gradients = new Vector<T>(parameters.Length);
+        double epsilon = 1e-5;
+        double currentLossVal = NumOps.ToDouble(currentLoss);
+
+        // Sample parameters for efficiency (scale for unbiased estimation)
+        int sampleCount = Math.Min(parameters.Length, 100);
+        double scaleFactor = (double)parameters.Length / sampleCount;
+
+        for (int s = 0; s < sampleCount; s++)
+        {
+            int i = (int)(s * parameters.Length / (double)sampleCount);
+
+            // Perturb parameter
+            T original = parameters[i];
+            parameters[i] = NumOps.Add(original, NumOps.FromDouble(epsilon));
+            MetaModel.SetParameters(parameters);
+
+            // Recompute loss through the attention mechanism
+            var supportEmbeddings = EncodeExamples(task.SupportInput);
+            var queryEmbeddings = EncodeExamples(task.QueryInput);
+            var predictions = ComputePredictions(queryEmbeddings, supportEmbeddings, task.SupportOutput);
+            T perturbedLoss = ComputeCrossEntropyLoss(predictions, task.QueryOutput);
+
+            // Compute scaled gradient
+            double grad = (NumOps.ToDouble(perturbedLoss) - currentLossVal) / epsilon;
+            gradients[i] = NumOps.FromDouble(grad * scaleFactor);
+
+            // Restore parameter
+            parameters[i] = original;
+        }
+
+        // Restore original parameters
+        MetaModel.SetParameters(parameters);
+
+        return gradients;
     }
 
     /// <summary>

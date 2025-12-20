@@ -26,7 +26,7 @@ public class MockNeuralNetwork<T, TInput, TOutput> : IFullModel<T, TInput, TOutp
         _inputFeatureCount = inputFeatureCount;
         _outputFeatureCount = outputFeatureCount;
 
-        // Initialize parameters with small values
+        // Initialize parameters with zeros
         int paramCount = inputFeatureCount * outputFeatureCount + outputFeatureCount;
         _parameters = new Vector<T>(paramCount);
     }

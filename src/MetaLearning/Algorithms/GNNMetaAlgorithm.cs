@@ -115,8 +115,10 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         int mpWeightsSize = _gnnOptions.NumMessagePassingLayers * (embDim * hidDim + hidDim * embDim);
         _messagePassingWeights = InitializeWeights(mpWeightsSize);
 
-        // Aggregation weights: combines final node embeddings
-        int aggWeightsSize = embDim * MetaModel.GetParameters().Length;
+        // Aggregation weights: use a compact projection with fixed dimensions
+        // This avoids O(embDim * numParams) memory which could be very large for big models
+        // Project: embDim -> hidDim -> hidDim (fixed-size bottleneck for graph context)
+        int aggWeightsSize = embDim * hidDim + hidDim * hidDim;
         _aggregationWeights = InitializeWeights(aggWeightsSize);
 
         // Edge weights: if learning edge weights
@@ -204,7 +206,6 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 
         // Step 4: Train each task with graph context
         Vector<T>? accumulatedMetaGradients = null;
-        Vector<T>? accumulatedMPGradients = null;
         T totalLoss = NumOps.Zero;
 
         for (int taskIdx = 0; taskIdx < taskBatch.Tasks.Length; taskIdx++)
@@ -228,7 +229,6 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             if (accumulatedMetaGradients == null)
             {
                 accumulatedMetaGradients = metaGradients;
-                accumulatedMPGradients = new Vector<T>(_messagePassingWeights.Length);
             }
             else
             {
@@ -595,16 +595,16 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         switch (_gnnOptions.AggregationType)
         {
             case GNNAggregationType.Mean:
-                foreach (var embedding in nodeEmbeddings)
+                for (int nodeIdx = 0; nodeIdx < nodeEmbeddings.Count; nodeIdx++)
                 {
-                    graphContexts.Add(ComputeMeanContext(nodeEmbeddings, embedding));
+                    graphContexts.Add(ComputeMeanContext(nodeEmbeddings, nodeIdx, adjacencyMatrix));
                 }
                 break;
 
             case GNNAggregationType.Attention:
-                foreach (var embedding in nodeEmbeddings)
+                for (int nodeIdx = 0; nodeIdx < nodeEmbeddings.Count; nodeIdx++)
                 {
-                    graphContexts.Add(ComputeAttentionContext(nodeEmbeddings, embedding));
+                    graphContexts.Add(ComputeAttentionContext(nodeEmbeddings, nodeEmbeddings[nodeIdx]));
                 }
                 break;
 
@@ -613,9 +613,9 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             case GNNAggregationType.Set2Set:
             default:
                 // Default to mean aggregation
-                foreach (var embedding in nodeEmbeddings)
+                for (int nodeIdx = 0; nodeIdx < nodeEmbeddings.Count; nodeIdx++)
                 {
-                    graphContexts.Add(ComputeMeanContext(nodeEmbeddings, embedding));
+                    graphContexts.Add(ComputeMeanContext(nodeEmbeddings, nodeIdx, adjacencyMatrix));
                 }
                 break;
         }
@@ -624,25 +624,47 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     }
 
     /// <summary>
-    /// Computes mean context from all node embeddings.
+    /// Computes mean context from neighbor embeddings using the adjacency matrix.
     /// </summary>
-    private Vector<T> ComputeMeanContext(List<Vector<T>> embeddings, Vector<T> currentEmbedding)
+    private Vector<T> ComputeMeanContext(List<Vector<T>> embeddings, int nodeIndex, Matrix<T> adjacencyMatrix)
     {
         int embDim = _gnnOptions.NodeEmbeddingDimension;
         var context = new Vector<T>(embDim);
+        int neighborCount = 0;
 
-        foreach (var embedding in embeddings)
+        // Aggregate embeddings of neighbors based on adjacency matrix
+        for (int j = 0; j < embeddings.Count; j++)
         {
-            for (int i = 0; i < embDim; i++)
+            // Check if there's an edge from nodeIndex to j (non-zero adjacency)
+            T edgeWeight = adjacencyMatrix[nodeIndex, j];
+            if (NumOps.ToDouble(edgeWeight) > 0)
             {
-                context[i] = NumOps.Add(context[i], embedding[i]);
+                for (int i = 0; i < embDim; i++)
+                {
+                    // Weight the embedding by the edge weight
+                    context[i] = NumOps.Add(context[i], NumOps.Multiply(edgeWeight, embeddings[j][i]));
+                }
+                neighborCount++;
             }
         }
 
-        T count = NumOps.FromDouble(embeddings.Count);
-        for (int i = 0; i < embDim; i++)
+        // Normalize by neighbor count (if any neighbors exist)
+        if (neighborCount > 0)
         {
-            context[i] = NumOps.Divide(context[i], count);
+            T count = NumOps.FromDouble(neighborCount);
+            for (int i = 0; i < embDim; i++)
+            {
+                context[i] = NumOps.Divide(context[i], count);
+            }
+        }
+        else
+        {
+            // If no neighbors, use the node's own embedding
+            var selfEmbedding = embeddings[nodeIndex];
+            for (int i = 0; i < embDim; i++)
+            {
+                context[i] = selfEmbedding[i];
+            }
         }
 
         return context;
@@ -772,17 +794,21 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     }
 
     /// <summary>
-    /// Updates GNN weights using finite differences.
+    /// Updates GNN weights using finite differences with scaled gradient estimation.
     /// </summary>
     private void UpdateGNNWeights(TaskBatch<T, TInput, TOutput> taskBatch, T currentLoss)
     {
         double epsilon = 1e-5;
         double currentLossVal = NumOps.ToDouble(currentLoss);
 
-        // Update message passing weights (sample a few for efficiency)
-        for (int i = 0; i < Math.Min(_messagePassingWeights.Length, 50); i++)
+        // Update message passing weights (sample a subset for efficiency)
+        int sampleCount = Math.Min(_messagePassingWeights.Length, 50);
+        // Scale factor for unbiased gradient estimation when subsampling
+        double scaleFactor = (double)_messagePassingWeights.Length / sampleCount;
+
+        for (int i = 0; i < sampleCount; i++)
         {
-            int idx = (i * _messagePassingWeights.Length / 50) % _messagePassingWeights.Length;
+            int idx = (i * _messagePassingWeights.Length / sampleCount) % _messagePassingWeights.Length;
 
             T original = _messagePassingWeights[idx];
             _messagePassingWeights[idx] = NumOps.Add(original, NumOps.FromDouble(epsilon));
@@ -791,7 +817,9 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             T newLoss = ComputeBatchLoss(taskBatch);
             double grad = (NumOps.ToDouble(newLoss) - currentLossVal) / epsilon;
 
-            _messagePassingWeights[idx] = NumOps.Subtract(original, NumOps.FromDouble(_gnnOptions.OuterLearningRate * grad));
+            // Apply scaled gradient update
+            _messagePassingWeights[idx] = NumOps.Subtract(original,
+                NumOps.FromDouble(_gnnOptions.OuterLearningRate * grad * scaleFactor));
         }
     }
 

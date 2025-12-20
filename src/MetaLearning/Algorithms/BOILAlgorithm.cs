@@ -553,7 +553,20 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         {
             return (TOutput)(object)vector;
         }
-        return MetaModel.Predict(default!);
+
+        if (typeof(TOutput) == typeof(Tensor<T>))
+        {
+            return (TOutput)(object)Tensor<T>.FromVector(vector);
+        }
+
+        if (typeof(TOutput) == typeof(T[]))
+        {
+            return (TOutput)(object)vector.ToArray();
+        }
+
+        throw new InvalidOperationException(
+            $"Cannot convert Vector<{typeof(T).Name}> to {typeof(TOutput).Name}. " +
+            $"Supported types: Vector<T>, Tensor<T>, T[]");
     }
 
     #endregion
@@ -574,6 +587,8 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
         // Compute gradients using finite differences (sample subset for efficiency)
         int sampleCount = Math.Min(100, bodyParams.Length);
+        // Scale factor for unbiased gradient estimation when subsampling
+        double scaleFactor = (double)bodyParams.Length / sampleCount;
         double fraction = _boilOptions.BodyAdaptationFraction;
 
         for (int s = 0; s < sampleCount; s++)
@@ -595,7 +610,7 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             T perturbedLoss = ComputeLossFromOutput(perturbedPred, expectedOutput);
 
             double grad = (NumOps.ToDouble(perturbedLoss) - NumOps.ToDouble(baseLoss)) / epsilon;
-            gradients[i] = NumOps.FromDouble(grad);
+            gradients[i] = NumOps.FromDouble(grad * scaleFactor);
 
             // Restore
             bodyParams[i] = original;
