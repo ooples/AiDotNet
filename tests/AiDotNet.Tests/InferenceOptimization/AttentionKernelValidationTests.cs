@@ -1,6 +1,6 @@
+using System;
 using AiDotNet.InferenceOptimization.Kernels;
 using AiDotNet.LinearAlgebra;
-using System;
 using Xunit;
 
 namespace AiDotNet.Tests.InferenceOptimization;

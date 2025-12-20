@@ -1,9 +1,9 @@
+using System;
+using AiDotNet.InferenceOptimization;
+using AiDotNet.Tensors.Engines.Simd;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
-using AiDotNet.InferenceOptimization;
-using AiDotNet.Tensors.Engines.Simd;
-using System;
 
 namespace AiDotNetBenchmarkTests.InferenceOptimization
 {
