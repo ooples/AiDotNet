@@ -1,4 +1,5 @@
 
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Data.Structures;
@@ -62,8 +63,50 @@ namespace AiDotNet.Data.Structures;
 /// var outerLoss = model.Evaluate(task.QuerySetX, task.QuerySetY);
 /// </code>
 /// </example>
-public class MetaLearningTask<T, TInput, TOutput>
+public class MetaLearningTask<T, TInput, TOutput> : IMetaLearningTask<T, TInput, TOutput>
 {
+    /// <summary>
+    /// Gets or sets the number of ways (classes) in this task.
+    /// </summary>
+    /// <remarks>
+    /// In N-way K-shot learning, this represents N (number of classes per task).
+    /// For example, in 5-way 1-shot learning, NumWays = 5.
+    /// </remarks>
+    public int NumWays { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets the number of shots (examples per class) in the support set.
+    /// </summary>
+    /// <remarks>
+    /// In N-way K-shot learning, this represents K (number of examples per class).
+    /// For example, in 5-way 1-shot learning, NumShots = 1.
+    /// </remarks>
+    public int NumShots { get; set; } = 1;
+
+    /// <summary>
+    /// Gets or sets the number of query examples per class.
+    /// </summary>
+    /// <remarks>
+    /// The number of examples in the query set for each class.
+    /// Used for evaluating performance after adaptation.
+    /// </remarks>
+    public int NumQueryPerClass { get; set; } = 15;
+
+    /// <summary>
+    /// Gets or sets an optional name or identifier for the task.
+    /// </summary>
+    public string? Name { get; set; }
+
+    /// <summary>
+    /// Gets or sets the additional metadata about the task.
+    /// </summary>
+    public Dictionary<string, object>? Metadata { get; set; }
+
+    /// <summary>
+    /// Gets or sets an optional task identifier.
+    /// </summary>
+    public int? TaskId { get; set; }
+
     /// <summary>
     /// Gets or sets the input features for the support set.
     /// </summary>
@@ -148,4 +191,24 @@ public class MetaLearningTask<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public TOutput QuerySetY { get; set; } = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData().Y;
+
+    /// <summary>
+    /// Gets the input features for the support set (alias for SupportSetX).
+    /// </summary>
+    public TInput SupportInput => SupportSetX;
+
+    /// <summary>
+    /// Gets the target labels for the support set (alias for SupportSetY).
+    /// </summary>
+    public TOutput SupportOutput => SupportSetY;
+
+    /// <summary>
+    /// Gets the input features for the query set (alias for QuerySetX).
+    /// </summary>
+    public TInput QueryInput => QuerySetX;
+
+    /// <summary>
+    /// Gets the target labels for the query set (alias for QuerySetY).
+    /// </summary>
+    public TOutput QueryOutput => QuerySetY;
 }
