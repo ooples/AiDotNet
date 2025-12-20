@@ -29,7 +29,7 @@ namespace AiDotNet.Deployment.Configuration;
 /// var result = await builder
 ///     .ConfigureModel(model)
 ///     .ConfigureCompression()
-///     .BuildAsync(x, y);
+///     .BuildAsync();
 ///
 /// // Or customize compression settings
 /// var result = await builder
@@ -39,7 +39,7 @@ namespace AiDotNet.Deployment.Configuration;
 ///         Type = CompressionType.HybridHuffmanClustering,
 ///         NumClusters = 256
 ///     })
-///     .BuildAsync(x, y);
+///     .BuildAsync();
 /// </code>
 /// </para>
 /// </remarks>

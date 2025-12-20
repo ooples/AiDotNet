@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -66,7 +67,9 @@ public sealed class UncertaintyQuantificationFacadeTests
 
         var y = Tensor<double>.FromVector(new Vector<double>(new[] { 0.0, 1.0, 1.0, 0.0 }));
 
-        var result = await builder.BuildAsync(x, y);
+        var result = await builder
+            .ConfigureDataLoader(DataLoaders.FromTensors(x, y))
+            .BuildAsync();
 
         var trainedModel = Assert.IsType<NeuralNetworkModel<double>>(result.OptimizationResult.BestSolution);
         var injectedMcDropoutLayers = trainedModel.Network.LayersReadOnly.OfType<MCDropoutLayer<double>>().ToList();
@@ -133,7 +136,9 @@ public sealed class UncertaintyQuantificationFacadeTests
         }));
         var y = Tensor<double>.FromVector(new Vector<double>(new[] { 0.0, 1.0 }));
 
-        var result = await builder.BuildAsync(x, y);
+        var result = await builder
+            .ConfigureDataLoader(DataLoaders.FromTensors(x, y))
+            .BuildAsync();
         var trainedModel = Assert.IsType<NeuralNetworkModel<double>>(result.OptimizationResult.BestSolution);
         var parameters = trainedModel.Network.GetParameters();
         for (int i = 0; i < parameters.Length; i++)
@@ -224,15 +229,17 @@ public sealed class UncertaintyQuantificationFacadeTests
         var yCal = Tensor<double>.FromVector(new Vector<double>(new[] { 4.0, 5.0, 6.0 }));
 
         var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
-            .ConfigureUncertaintyQuantification(new UncertaintyQuantificationOptions
-            {
-                Method = UncertaintyQuantificationMethod.ConformalPrediction,
-                ConformalConfidenceLevel = 0.9
-            })
-            .ConfigureUncertaintyCalibrationData(xCal, yCal)
-            .BuildAsync(xTrain, yTrain);
+            .ConfigureUncertaintyQuantification(
+                new UncertaintyQuantificationOptions
+                {
+                    Method = UncertaintyQuantificationMethod.ConformalPrediction,
+                    ConformalConfidenceLevel = 0.9
+                },
+                UncertaintyCalibrationData<Tensor<double>, Tensor<double>>.ForRegression(xCal, yCal))
+            .BuildAsync();
 
         var uq = result.PredictWithUncertainty(xCal);
         Assert.NotNull(uq.RegressionInterval);
@@ -280,16 +287,18 @@ public sealed class UncertaintyQuantificationFacadeTests
         var labels = new Vector<int>(new[] { 1, 0 });
 
         var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
-            .ConfigureUncertaintyQuantification(new UncertaintyQuantificationOptions
-            {
-                Method = UncertaintyQuantificationMethod.ConformalPrediction,
-                ConformalConfidenceLevel = 0.9,
-                EnableTemperatureScaling = true
-            })
-            .ConfigureUncertaintyCalibrationData(xCal, labels)
-            .BuildAsync(xTrain, yTrain);
+            .ConfigureUncertaintyQuantification(
+                new UncertaintyQuantificationOptions
+                {
+                    Method = UncertaintyQuantificationMethod.ConformalPrediction,
+                    ConformalConfidenceLevel = 0.9,
+                    EnableTemperatureScaling = true
+                },
+                UncertaintyCalibrationData<Tensor<double>, Tensor<double>>.ForClassification(xCal, labels))
+            .BuildAsync();
 
         var uq = result.PredictWithUncertainty(xCal);
         Assert.NotNull(uq.ClassificationSet);
@@ -339,16 +348,18 @@ public sealed class UncertaintyQuantificationFacadeTests
         var yCalLabels = new Vector<int>(new[] { 0, 1, 2, 0 });
 
         var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
-            .ConfigureUncertaintyQuantification(new UncertaintyQuantificationOptions
-            {
-                Enabled = true,
-                Method = UncertaintyQuantificationMethod.Auto,
-                EnableTemperatureScaling = true
-            })
-            .ConfigureUncertaintyCalibrationData(xCal, yCalLabels)
-            .BuildAsync(xTrain, yTrain);
+            .ConfigureUncertaintyQuantification(
+                new UncertaintyQuantificationOptions
+                {
+                    Enabled = true,
+                    Method = UncertaintyQuantificationMethod.Auto,
+                    EnableTemperatureScaling = true
+                },
+                UncertaintyCalibrationData<Tensor<double>, Tensor<double>>.ForClassification(xCal, yCalLabels))
+            .BuildAsync();
 
         var evaluator = new DefaultModelEvaluator<double, Tensor<double>, Tensor<double>>();
         var eval = evaluator.EvaluateModel(new ModelEvaluationInput<double, Tensor<double>, Tensor<double>>
@@ -391,6 +402,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         var y = Tensor<double>.FromVector(new Vector<double>(new[] { 0.0, 1.0, 2.0 }));
 
         var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureDataLoader(DataLoaders.FromTensors(x, y))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
             .ConfigureUncertaintyQuantification(new UncertaintyQuantificationOptions
@@ -400,7 +412,7 @@ public sealed class UncertaintyQuantificationFacadeTests
                 DeepEnsembleInitialNoiseStdDev = 0.05,
                 RandomSeed = 123
             })
-            .BuildAsync(x, y);
+            .BuildAsync();
 
         var uq = result.PredictWithUncertainty(x);
         Assert.NotNull(uq.Variance);
@@ -437,13 +449,14 @@ public sealed class UncertaintyQuantificationFacadeTests
         }));
 
         var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureDataLoader(DataLoaders.FromTensors(x, y))
             .ConfigureModel(bayesianModel)
             .ConfigureOptimizer(optimizer)
             .ConfigureUncertaintyQuantification(new UncertaintyQuantificationOptions
             {
                 Method = UncertaintyQuantificationMethod.BayesianNeuralNetwork
             })
-            .BuildAsync(x, y);
+            .BuildAsync();
 
         var uq = result.PredictWithUncertainty(x);
 
@@ -465,7 +478,15 @@ public sealed class UncertaintyQuantificationFacadeTests
         var model = new NeuralNetworkModel<double>(architecture);
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
+        var xTrain = Tensor<double>.FromMatrix(new Matrix<double>(new double[,]
+        {
+            { 1.0, 2.0 },
+            { 3.0, 4.0 }
+        }));
+        var yTrain = Tensor<double>.FromVector(new Vector<double>(new[] { 0.0, 1.0 }));
+
         var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
             .ConfigureUncertaintyQuantification(new UncertaintyQuantificationOptions
@@ -475,13 +496,7 @@ public sealed class UncertaintyQuantificationFacadeTests
                 MonteCarloDropoutRate = 0.5,
                 RandomSeed = 7
             })
-            .BuildAsync(
-                Tensor<double>.FromMatrix(new Matrix<double>(new double[,]
-                {
-                    { 1.0, 2.0 },
-                    { 3.0, 4.0 }
-                })),
-                Tensor<double>.FromVector(new Vector<double>(new[] { 0.0, 1.0 })));
+            .BuildAsync();
 
         var x = Tensor<double>.FromMatrix(new Matrix<double>(new double[,]
         {

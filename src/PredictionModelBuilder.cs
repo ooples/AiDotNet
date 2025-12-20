@@ -52,7 +52,7 @@ namespace AiDotNet;
 /// your model without having to understand all the complex details at once.
 /// </para>
 /// </remarks>
-public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilder<T, TInput, TOutput>
+public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilder<T, TInput, TOutput>
 {
     private IFeatureSelector<T, TInput>? _featureSelector;
     private INormalizer<T, TInput, TOutput>? _normalizer;
@@ -115,8 +115,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IPromptCompressor? _promptCompressor;
 
     private UncertaintyQuantificationOptions? _uncertaintyQuantificationOptions;
-    private (TInput X, TOutput Y)? _uncertaintyRegressionCalibrationData;
-    private (TInput X, Vector<int> Labels)? _uncertaintyClassificationCalibrationData;
+    private AiDotNet.Models.Inputs.UncertaintyCalibrationData<TInput, TOutput>? _uncertaintyCalibrationData;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -298,7 +297,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///     .ConfigureModel(network)
     ///     .ConfigureOptimizer(optimizer)
     ///     .ConfigureMixedPrecision()  // Enable mixed-precision
-    ///     .BuildAsync(trainingData, labels);
+    ///     .BuildAsync();
     ///
     /// // Or with custom configuration
     /// builder.ConfigureMixedPrecision(MixedPrecisionConfig.Conservative());
@@ -342,7 +341,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(agentConfig)
     ///     .ConfigureReasoning()
-    ///     .BuildAsync(data, labels);
+    ///     .BuildAsync();
     ///
     /// // Use reasoning on the trained model
     /// var reasoningResult = await result.ReasonAsync(
@@ -409,7 +408,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///         },
     ///         ThrowOnFailure = false  // Graceful fallback if JIT not supported
     ///     })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     ///
     /// // Predictions now use JIT-compiled code (5-10x faster!)
     /// var prediction = result.Predict(newData);
@@ -420,7 +419,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// var result = await new PredictionModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
     ///     .ConfigureModel(myModel)
     ///     .ConfigureJitCompilation()  // Enables JIT with default settings
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </para>
     /// </remarks>
@@ -449,7 +448,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// var result = await new PredictionModelBuilder&lt;double, ...&gt;()
     ///     .ConfigureModel(myModel)
     ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     ///
     /// // Or with custom settings:
     /// var config = new InferenceOptimizationConfig
@@ -461,7 +460,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// 
     /// var result = await builder
     ///     .ConfigureInferenceOptimizations(config)
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </para>
     /// </remarks>
@@ -471,43 +470,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         return this;
     }
 
-    /// <summary>
-    /// Configures uncertainty quantification (UQ) behavior for inference-time uncertainty estimates.
-    /// </summary>
-    /// <param name="options">Uncertainty quantification options.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureUncertaintyQuantification(UncertaintyQuantificationOptions options)
-    {
-        _uncertaintyQuantificationOptions = options ?? throw new ArgumentNullException(nameof(options));
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a regression-style calibration dataset used by uncertainty features that require a separate calibration split
-    /// (e.g. conformal prediction intervals).
-    /// </summary>
-    /// <param name="xCalibration">Calibration inputs (must be independent from training/test for valid guarantees).</param>
-    /// <param name="yCalibration">Calibration targets.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureUncertaintyCalibrationData(TInput xCalibration, TOutput yCalibration)
-    {
-        _uncertaintyRegressionCalibrationData = (xCalibration, yCalibration);
-        _uncertaintyClassificationCalibrationData = null;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a classification calibration dataset used by conformal prediction sets and probability calibration.
-    /// </summary>
-    /// <param name="xCalibration">Calibration inputs.</param>
-    /// <param name="calibrationLabels">True class labels for calibration samples.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureUncertaintyCalibrationData(TInput xCalibration, Vector<int> calibrationLabels)
-    {
-        _uncertaintyClassificationCalibrationData = (xCalibration, calibrationLabels);
-        _uncertaintyRegressionCalibrationData = null;
-        return this;
-    }
+    // Uncertainty quantification configuration lives in PredictionModelBuilder.UncertaintyQuantification.cs to keep this file focused.
 
     /// <summary>
     /// Enables GPU acceleration for training and inference with optional configuration.
@@ -576,7 +539,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///     .ConfigureModel(network)
     ///     .ConfigureOptimizer(optimizer)
     ///     .ConfigureGpuAcceleration()  // Enable GPU acceleration with sensible defaults
-    ///     .BuildAsync(trainingData, labels);
+    ///     .BuildAsync();
     ///
     /// // Or with custom configuration for high-end GPUs
     /// builder.ConfigureGpuAcceleration(new GpuAccelerationConfig
@@ -705,9 +668,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    public Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(TInput x, TOutput y)
-        => BuildSupervisedInternalAsync(x, y);
-
     public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync()
     {
         // RL TRAINING PATH - check if RL options are configured with an environment
@@ -748,7 +708,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             "- ConfigureReinforcementLearning() for RL training\n" +
             "- ConfigureDataLoader() for supervised learning\n" +
             "- ConfigureMetaLearning() for meta-learning\n" +
-            "For explicit data training, use BuildAsync(x, y) with your input and output data.");
+            "For supervised learning, configure a data loader via ConfigureDataLoader() and then call BuildAsync().");
     }
 
     /// <summary>
@@ -1825,7 +1785,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(agentConfig)
-    ///     .BuildAsync(data, labels);
+    ///     .BuildAsync();
     /// </code>
     ///
     /// Example with customization:
@@ -1843,7 +1803,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(agentConfig)
-    ///     .BuildAsync(data, labels);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(AgentConfiguration<T> configuration)
@@ -1966,7 +1926,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureModel(studentModel)
     ///     .ConfigureKnowledgeDistillation(distillationOptions)
-    ///     .BuildAsync(trainInputs, trainLabels);
+    ///     .BuildAsync();
     /// </code>
     /// </para>
     ///
@@ -3350,6 +3310,23 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 #endif
     }
 
+    /// <summary>
+    /// Computes deep ensemble members and attaches them to the result when deep ensemble uncertainty quantification is enabled.
+    /// </summary>
+    /// <param name="result">The prediction model result to update.</param>
+    /// <param name="deepEnsembleTemplate">A template model used to create additional ensemble members.</param>
+    /// <param name="optimizationInputData">Optimization/training data for the ensemble members.</param>
+    /// <param name="templateOptimizer">The optimizer used for the main model, used as a template for ensemble member optimizers.</param>
+    /// <param name="options">Uncertainty quantification configuration.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A deep ensemble trains multiple similar models and combines their predictions. If the models disagree,
+    /// it usually means the prediction is less certain.</para>
+    /// <para>
+    /// This method reuses the best solution from the primary optimization run (if available) and then trains additional members using:
+    /// - Optional bootstrapping (sampling training rows with replacement)
+    /// - Optional parameter perturbation (small Gaussian noise)
+    /// </para>
+    /// </remarks>
     private static void TryComputeAndAttachDeepEnsembleModels(
         PredictionModelResult<T, TInput, TOutput> result,
         IFullModel<T, TInput, TOutput>? deepEnsembleTemplate,
@@ -3367,26 +3344,23 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             return;
         }
 
-        if (options.DeepEnsembleSize < 2)
-        {
-            throw new ArgumentOutOfRangeException(nameof(options.DeepEnsembleSize), "DeepEnsembleSize must be at least 2.");
-        }
+        var ensembleSize = Math.Max(2, options.DeepEnsembleSize);
+        var members = new List<IFullModel<T, TInput, TOutput>>(capacity: ensembleSize);
 
-        var members = new List<IFullModel<T, TInput, TOutput>>(capacity: options.DeepEnsembleSize);
         if (result.OptimizationResult.BestSolution != null)
         {
             members.Add(result.OptimizationResult.BestSolution);
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
         var baseSeed = options.RandomSeed ?? Environment.TickCount;
 
-        for (int memberIndex = members.Count; memberIndex < options.DeepEnsembleSize; memberIndex++)
+        for (int memberIndex = members.Count; memberIndex < ensembleSize; memberIndex++)
         {
             var memberModel = deepEnsembleTemplate is Models.NeuralNetworkModel<T> nnTemplate
                 ? (IFullModel<T, TInput, TOutput>)(object)new Models.NeuralNetworkModel<T>(nnTemplate.Architecture)
                 : deepEnsembleTemplate.DeepCopy();
-            PerturbInitialParametersIfSupported(memberModel, numOps, baseSeed, memberIndex, options.DeepEnsembleInitialNoiseStdDev);
+
+            PerturbInitialParametersIfSupported(memberModel, baseSeed, memberIndex, options.DeepEnsembleInitialNoiseStdDev);
 
             var memberOptimizer = CreateOptimizerForEnsembleMember(memberModel, templateOptimizer);
             memberOptimizer.Reset();
@@ -3405,6 +3379,18 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         }
     }
 
+    /// <summary>
+    /// Creates per-member optimization input data for deep ensembles.
+    /// </summary>
+    /// <param name="baseInputData">The baseline input data.</param>
+    /// <param name="baseSeed">Seed used to deterministically vary members.</param>
+    /// <param name="memberIndex">The ensemble member index.</param>
+    /// <returns>Optimization input data for the ensemble member.</returns>
+    /// <remarks>
+    /// <para>
+    /// This optionally bootstraps training data to encourage diversity across members while keeping validation/test stable.
+    /// </para>
+    /// </remarks>
     private static OptimizationInputData<T, TInput, TOutput> CreateDeepEnsembleMemberOptimizationInputData(
         OptimizationInputData<T, TInput, TOutput> baseInputData,
         int baseSeed,
@@ -3436,6 +3422,20 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         };
     }
 
+    /// <summary>
+    /// Attempts to bootstrap the training data (sample with replacement) for deep-ensemble diversity.
+    /// </summary>
+    /// <param name="xTrain">Training inputs.</param>
+    /// <param name="yTrain">Training targets.</param>
+    /// <param name="rng">Random number generator.</param>
+    /// <param name="bootstrappedXTrain">Bootstrapped inputs if supported.</param>
+    /// <param name="bootstrappedYTrain">Bootstrapped targets if supported.</param>
+    /// <returns>True if bootstrapping was applied; otherwise false.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method is best-effort and only supports common vector/matrix/tensor training data representations.
+    /// </para>
+    /// </remarks>
     private static bool TryBootstrapTrainingData(
         TInput xTrain,
         TOutput yTrain,
@@ -3514,13 +3514,25 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         return false;
     }
 
+    /// <summary>
+    /// Perturbs initial model parameters to avoid ensemble member collapse to identical solutions.
+    /// </summary>
+    /// <param name="model">The model to perturb.</param>
+    /// <param name="baseSeed">Base seed for deterministic perturbation.</param>
+    /// <param name="memberIndex">Ensemble member index.</param>
+    /// <param name="noiseStdDev">Standard deviation of Gaussian noise to add.</param>
+    /// <remarks>
+    /// <para>
+    /// The perturbation is only applied when the model supports parameter get/set via <see cref="IParameterizable{T,TInput,TOutput}"/>.
+    /// </para>
+    /// </remarks>
     private static void PerturbInitialParametersIfSupported(
         IFullModel<T, TInput, TOutput> model,
-        INumericOperations<T> numOps,
         int baseSeed,
         int memberIndex,
         double noiseStdDev)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         if (model is not IParameterizable<T, TInput, TOutput> parameterizable)
         {
             return;
@@ -3548,6 +3560,13 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         parameterizable.SetParameters(perturbed);
     }
 
+    /// <summary>
+    /// Generates a Gaussian random value using the Box-Muller transform.
+    /// </summary>
+    /// <param name="rng">Random source.</param>
+    /// <param name="mean">Gaussian mean.</param>
+    /// <param name="stdDev">Gaussian standard deviation.</param>
+    /// <returns>A normally distributed random value.</returns>
     private static double NextGaussian(Random rng, double mean, double stdDev)
     {
         var u1 = 1.0 - rng.NextDouble();
@@ -3556,6 +3575,17 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         return mean + stdDev * randStdNormal;
     }
 
+    /// <summary>
+    /// Creates an optimizer instance for an ensemble member based on the template optimizer type and options.
+    /// </summary>
+    /// <param name="model">The ensemble member model.</param>
+    /// <param name="templateOptimizer">The optimizer used as a template.</param>
+    /// <returns>An optimizer instance that targets <paramref name="model"/>.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is best-effort and supports common optimizer constructors (model + options, or model only).
+    /// </para>
+    /// </remarks>
     private static IOptimizer<T, TInput, TOutput> CreateOptimizerForEnsembleMember(
         IFullModel<T, TInput, TOutput> model,
         IOptimizer<T, TInput, TOutput> templateOptimizer)
@@ -3588,298 +3618,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         throw new InvalidOperationException(
             $"Unable to construct a deep ensemble optimizer of type '{optimizerType.FullName}'. " +
             $"Expected a constructor with signature ({typeof(IFullModel<T, TInput, TOutput>).Name}, {options?.GetType().Name ?? "null"}) or ({typeof(IFullModel<T, TInput, TOutput>).Name}).");
-    }
-
-    private void TryComputeAndAttachUncertaintyCalibrationArtifacts(PredictionModelResult<T, TInput, TOutput> result)
-    {
-        if (_uncertaintyQuantificationOptions is not { Enabled: true })
-        {
-            return;
-        }
-
-        var effectiveMethod = _uncertaintyQuantificationOptions.Method;
-        if (effectiveMethod != UncertaintyQuantificationMethod.Auto &&
-            effectiveMethod != UncertaintyQuantificationMethod.ConformalPrediction)
-        {
-            return;
-        }
-
-        var artifacts = new AiDotNet.Models.Results.UncertaintyCalibrationArtifacts<T>();
-
-        if (_uncertaintyClassificationCalibrationData is { } classificationCal)
-        {
-            TryComputeClassificationCalibrationArtifacts(result, classificationCal.X, classificationCal.Labels, _uncertaintyQuantificationOptions, artifacts);
-        }
-        else if (_uncertaintyRegressionCalibrationData is { } regressionCal)
-        {
-            TryComputeRegressionConformalArtifacts(result, regressionCal.X, regressionCal.Y, artifacts);
-        }
-
-        if (artifacts.HasConformalRegression || artifacts.HasConformalClassification || artifacts.HasTemperatureScaling)
-        {
-            result.SetUncertaintyCalibrationArtifacts(artifacts);
-        }
-    }
-
-    private static void TryComputeRegressionConformalArtifacts(
-        PredictionModelResult<T, TInput, TOutput> result,
-        TInput xCalibration,
-        TOutput yCalibration,
-        AiDotNet.Models.Results.UncertaintyCalibrationArtifacts<T> artifacts)
-    {
-        var actual = ConversionsHelper.ConvertToVector<T, TOutput>(yCalibration);
-        var predictedOutput = result.Predict(xCalibration);
-        var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(predictedOutput);
-
-        if (actual.Length == 0 || actual.Length != predicted.Length)
-        {
-            return;
-        }
-
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var residuals = new T[actual.Length];
-        for (int i = 0; i < actual.Length; i++)
-        {
-            residuals[i] = numOps.Abs(numOps.Subtract(actual[i], predicted[i]));
-        }
-
-        Array.Sort(residuals, (a, b) => Convert.ToDouble(a).CompareTo(Convert.ToDouble(b)));
-        var quantile = ComputeConformalRegressionQuantile(residuals, result.UncertaintyQuantificationOptions?.ConformalConfidenceLevel ?? 0.9, numOps);
-
-        artifacts.HasConformalRegression = true;
-        artifacts.ConformalRegressionQuantile = quantile;
-    }
-
-    private static T ComputeConformalRegressionQuantile(T[] sortedResiduals, double confidenceLevel, INumericOperations<T> numOps)
-    {
-        var n = sortedResiduals.Length;
-        if (n == 0)
-        {
-            return numOps.Zero;
-        }
-
-        var adjustedLevel = Math.Ceiling((n + 1) * confidenceLevel) / n;
-        if (adjustedLevel > 1.0)
-        {
-            adjustedLevel = 1.0;
-        }
-
-        var index = (int)Math.Ceiling(n * adjustedLevel) - 1;
-        if (index < 0) index = 0;
-        if (index >= n) index = n - 1;
-
-        return sortedResiduals[index];
-    }
-
-    private static void TryComputeClassificationCalibrationArtifacts(
-        PredictionModelResult<T, TInput, TOutput> result,
-        TInput xCalibration,
-        Vector<int> labels,
-        UncertaintyQuantificationOptions options,
-        AiDotNet.Models.Results.UncertaintyCalibrationArtifacts<T> artifacts)
-    {
-        if (labels.Length == 0)
-        {
-            return;
-        }
-
-        var probsOutput = result.Predict(xCalibration);
-        var probsTensor = ConversionsHelper.ConvertToTensor<T>(probsOutput!).Clone();
-        if (probsTensor.Rank < 1)
-        {
-            return;
-        }
-
-        var numClasses = probsTensor.Shape[probsTensor.Shape.Length - 1];
-        if (numClasses <= 1)
-        {
-            return;
-        }
-
-        var batch = probsTensor.Rank == 1 ? 1 : probsTensor.Length / numClasses;
-        if (batch <= 0)
-        {
-            return;
-        }
-
-        if (labels.Length != batch)
-        {
-            return;
-        }
-
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var calibratedProbs = probsTensor;
-
-        if (options.EnableTemperatureScaling)
-        {
-            var temperature = FitTemperatureFromProbabilities(calibratedProbs, labels, batch, numClasses, numOps);
-            artifacts.HasTemperatureScaling = true;
-            artifacts.TemperatureScalingTemperature = temperature;
-            calibratedProbs = ApplyTemperatureScalingToProbabilities(calibratedProbs, temperature, batch, numClasses, numOps);
-        }
-
-        var confidence = new Vector<T>(batch);
-        var predictions = new Vector<int>(batch);
-        var flatCalibrated = calibratedProbs.ToVector();
-        for (int i = 0; i < batch; i++)
-        {
-            var bestLabel = 0;
-            var bestScore = flatCalibrated[i * numClasses];
-            for (int c = 1; c < numClasses; c++)
-            {
-                var score = flatCalibrated[i * numClasses + c];
-                if (numOps.GreaterThan(score, bestScore))
-                {
-                    bestScore = score;
-                    bestLabel = c;
-                }
-            }
-
-            predictions[i] = bestLabel;
-            confidence[i] = bestScore;
-        }
-
-        var ece = new AiDotNet.UncertaintyQuantification.Calibration.ExpectedCalibrationError<T>(numBins: 10);
-        artifacts.HasExpectedCalibrationError = true;
-        artifacts.ExpectedCalibrationError = ece.Compute(confidence, predictions, labels);
-
-        var scores = new T[batch];
-        var flat = flatCalibrated;
-        for (int i = 0; i < batch; i++)
-        {
-            var label = labels[i];
-            if (label < 0 || label >= numClasses)
-            {
-                return;
-            }
-
-            scores[i] = flat[i * numClasses + label];
-        }
-
-        Array.Sort(scores, (a, b) => Convert.ToDouble(a).CompareTo(Convert.ToDouble(b)));
-        var threshold = ComputeConformalClassificationThreshold(scores, result.UncertaintyQuantificationOptions?.ConformalConfidenceLevel ?? 0.9, numOps);
-
-        artifacts.HasConformalClassification = true;
-        artifacts.ConformalClassificationThreshold = threshold;
-        artifacts.ConformalClassificationNumClasses = numClasses;
-    }
-
-    private static T FitTemperatureFromProbabilities(Tensor<T> probabilities, Vector<int> labels, int batch, int classes, INumericOperations<T> numOps)
-    {
-        var eps = numOps.FromDouble(1e-12);
-        var sumTolerance = numOps.FromDouble(1e-3);
-        var uniformProbability = numOps.Divide(numOps.One, numOps.FromDouble(classes));
-        var logits = new Matrix<T>(batch, classes);
-        var flat = probabilities.ToVector();
-
-        for (int i = 0; i < batch; i++)
-        {
-            var sum = numOps.Zero;
-            for (int c = 0; c < classes; c++)
-            {
-                var p = flat[i * classes + c];
-                if (numOps.LessThan(p, numOps.Zero))
-                {
-                    p = numOps.Zero;
-                }
-                sum = numOps.Add(sum, p);
-            }
-
-            var fallbackToUniform = numOps.LessThan(sum, eps);
-            var shouldNormalize = !fallbackToUniform && numOps.GreaterThan(numOps.Abs(numOps.Subtract(sum, numOps.One)), sumTolerance);
-
-            for (int c = 0; c < classes; c++)
-            {
-                var p = fallbackToUniform ? uniformProbability : flat[i * classes + c];
-                if (!fallbackToUniform)
-                {
-                    if (numOps.LessThan(p, numOps.Zero))
-                    {
-                        p = numOps.Zero;
-                    }
-                    if (shouldNormalize)
-                    {
-                        p = numOps.Divide(p, sum);
-                    }
-                }
-                if (numOps.LessThan(p, eps))
-                {
-                    p = eps;
-                }
-                logits[i, c] = numOps.Log(p);
-            }
-        }
-
-        var scaler = new AiDotNet.UncertaintyQuantification.Calibration.TemperatureScaling<T>(initialTemperature: 1.0);
-        scaler.Calibrate(logits, labels);
-        return scaler.Temperature;
-    }
-
-    private static Tensor<T> ApplyTemperatureScalingToProbabilities(
-        Tensor<T> probabilities,
-        T temperature,
-        int batch,
-        int classes,
-        INumericOperations<T> numOps)
-    {
-        var eps = numOps.FromDouble(1e-12);
-        var scaled = new Vector<T>(batch * classes);
-        var flat = probabilities.ToVector();
-
-        for (int i = 0; i < batch; i++)
-        {
-            var maxLogit = default(T)!;
-            for (int c = 0; c < classes; c++)
-            {
-                var p = flat[i * classes + c];
-                if (numOps.LessThan(p, eps))
-                {
-                    p = eps;
-                }
-                var logit = numOps.Divide(numOps.Log(p), temperature);
-                if (c == 0 || numOps.GreaterThan(logit, maxLogit))
-                {
-                    maxLogit = logit;
-                }
-            }
-
-            var sumExp = numOps.Zero;
-            for (int c = 0; c < classes; c++)
-            {
-                var p = flat[i * classes + c];
-                if (numOps.LessThan(p, eps))
-                {
-                    p = eps;
-                }
-                var logit = numOps.Divide(numOps.Log(p), temperature);
-                var exp = numOps.Exp(numOps.Subtract(logit, maxLogit));
-                scaled[i * classes + c] = exp;
-                sumExp = numOps.Add(sumExp, exp);
-            }
-
-            for (int c = 0; c < classes; c++)
-            {
-                scaled[i * classes + c] = numOps.Divide(scaled[i * classes + c], sumExp);
-            }
-        }
-
-        return new Tensor<T>([batch, classes], scaled).Reshape(probabilities.Shape);
-    }
-
-    private static T ComputeConformalClassificationThreshold(T[] sortedScores, double confidenceLevel, INumericOperations<T> numOps)
-    {
-        var n = sortedScores.Length;
-        if (n == 0)
-        {
-            return numOps.Zero;
-        }
-
-        var quantileLevel = 1.0 - confidenceLevel;
-        var index = (int)Math.Floor(n * quantileLevel);
-        if (index < 0) index = 0;
-        if (index >= n) index = n - 1;
-
-        return sortedScores[index];
     }
 
     private static void ApplyUncertaintyQuantificationIfConfigured(

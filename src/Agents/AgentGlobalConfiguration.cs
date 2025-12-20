@@ -41,7 +41,7 @@ namespace AiDotNet.Agents;
 /// <code>
 /// var result = await new PredictionModelBuilder&lt;double&gt;()
 ///     .ConfigureAgentAssistance(options => options.EnableModelSelection())
-///     .BuildAsync(data, labels);  // Automatically uses global OpenAI configuration
+///     .BuildAsync();  // Automatically uses global OpenAI configuration
 /// </code>
 ///
 /// This is especially useful in production applications where you want centralized credential management
@@ -131,14 +131,14 @@ public static class AgentGlobalConfiguration
     /// // Later, when building models, Anthropic is automatically used
     /// var result = await builder
     ///     .ConfigureAgentAssistance(options => options.EnableModelSelection())
-    ///     .BuildAsync(data, labels);  // Uses Anthropic by default
+    ///     .BuildAsync();  // Uses Anthropic by default
     ///
     /// // But you can still override for specific models
     /// var result2 = await builder
     ///     .ConfigureAgentAssistance(
     ///         options => options.EnableModelSelection(),
     ///         provider: LLMProvider.OpenAI)  // Override to use OpenAI
-    ///     .BuildAsync(data, labels);
+    ///     .BuildAsync();
     /// </code>
     ///
     /// Choose your default based on which provider you've configured and prefer to use most often.

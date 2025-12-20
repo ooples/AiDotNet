@@ -3406,7 +3406,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CPU })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// model.ExportToOnnx("model.onnx");
     /// </code>
     /// </para>
@@ -3448,7 +3448,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TensorRT, Quantization = QuantizationMode.Float16 })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// model.ExportToTensorRT("model.trt");
     /// </code>
     /// </para>
@@ -3489,7 +3489,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CoreML, Quantization = QuantizationMode.Float16 })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// model.ExportToCoreML("model.mlmodel");
     /// </code>
     /// </para>
@@ -3531,7 +3531,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TFLite, Quantization = QuantizationMode.Int8 })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// model.ExportToTFLite("model.tflite");
     /// </code>
     /// </para>
