@@ -318,6 +318,17 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
             }
         }
 
+        // If rounding left us under budget, add remaining trials starting from rung 0.
+        // Early rungs are cheaper (lower fidelity), so they should get extra exploration budget.
+        while (allocated < totalTrials)
+        {
+            for (int i = 0; i < rungCount && allocated < totalTrials; i++)
+            {
+                counts[i]++;
+                allocated++;
+            }
+        }
+
         return counts;
     }
 
