@@ -106,6 +106,8 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     // Cached inputs/outputs for gradient computation
     private TInput? _cachedQueryInput;
     private TOutput? _cachedQueryOutput;
+    private TInput? _cachedSupportInput;
+    private TOutput? _cachedSupportOutput;
 
     /// <summary>
     /// Initializes a new instance of the NTMAlgorithm class.
@@ -237,12 +239,14 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// </summary>
     private T TrainEpisode(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        // Process support set to initialize memory
-        ProcessSupportSet(task.SupportInput, task.SupportOutput, null);
-
-        // Cache query data for gradient computation
+        // Cache both support and query data for gradient computation
+        _cachedSupportInput = task.SupportInput;
+        _cachedSupportOutput = task.SupportOutput;
         _cachedQueryInput = task.QueryInput;
         _cachedQueryOutput = task.QueryOutput;
+
+        // Process support set to initialize memory
+        ProcessSupportSet(task.SupportInput, task.SupportOutput, null);
 
         // Process query set
         var queryPredictions = ProcessSequence(task.QueryInput, task.QueryOutput);
@@ -262,16 +266,32 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// <summary>
     /// Processes support set to initialize memory state.
     /// </summary>
+    /// <param name="supportInputs">The support set inputs.</param>
+    /// <param name="supportOutputs">The support set outputs.</param>
+    /// <param name="model">Optional model to use for processing. If null, uses the algorithm's own components.</param>
     private void ProcessSupportSet(TInput supportInputs, TOutput supportOutputs, NTMModel<T, TInput, TOutput>? model)
     {
         // Convert inputs to sequence format
         var inputSequence = ConvertToSequence(supportInputs);
         var targetSequence = ConvertOutputToSequence(supportOutputs);
 
-        // Process each time step
-        for (int t = 0; t < inputSequence.Length; t++)
+        // Process each time step - use the model's components if provided
+        if (model != null)
         {
-            ProcessTimestep(inputSequence[t], targetSequence[t]);
+            // Process through the model to prime its memory
+            for (int t = 0; t < inputSequence.Length; t++)
+            {
+                // Use model.Predict which processes through the model's own memory/controller
+                model.ProcessTimestepInternal(inputSequence[t]);
+            }
+        }
+        else
+        {
+            // Use the algorithm's own components
+            for (int t = 0; t < inputSequence.Length; t++)
+            {
+                ProcessTimestep(inputSequence[t], targetSequence[t]);
+            }
         }
     }
 
@@ -516,20 +536,30 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 
     /// <summary>
     /// Computes current loss by running forward pass on cached inputs.
+    /// Resets memory state and re-runs support set processing to ensure
+    /// consistent gradient computation for finite differences.
     /// </summary>
     private T ComputeCurrentLoss()
     {
         // If no cached inputs, return zero loss
-        if (_cachedQueryInput == null || _cachedQueryOutput == null)
+        if (_cachedQueryInput == null || _cachedQueryOutput == null
+            || _cachedSupportInput == null || _cachedSupportOutput == null)
         {
             return NumOps.Zero;
         }
 
+        // Reset to a clean episode state to ensure consistent gradient computation
+        ResetMemoryState();
+
+        // Re-run support set processing to rebuild memory state
+        ProcessSupportSet(_cachedSupportInput, _cachedSupportOutput, null);
+
         // Run forward pass with current controller parameters on cached query data
         var predictions = ProcessSequence(_cachedQueryInput, _cachedQueryOutput);
 
-        // Compute and return actual loss
-        return ComputeLoss(predictions, _cachedQueryOutput);
+        // Compute loss including memory regularization (same objective as TrainEpisode)
+        T loss = ComputeLoss(predictions, _cachedQueryOutput);
+        return AddMemoryRegularization(loss);
     }
 
     // Helper methods
@@ -753,6 +783,45 @@ public class NTMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
         }
 
         return ConvertTensorToOutput(output);
+    }
+
+    /// <summary>
+    /// Processes a single timestep using the model's internal components.
+    /// This is used during adaptation to prime the model's memory.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    internal void ProcessTimestepInternal(Tensor<T> input)
+    {
+        // Combine input with previous read contents
+        var controllerInput = CombineInputWithReadContents(input);
+
+        // Forward pass through controller
+        var controllerOutput = _controller.Forward(controllerInput, _readContents);
+
+        // Generate addressing parameters
+        var readKeys = _controller.GenerateReadKeys(controllerOutput);
+        var writeKey = _controller.GenerateWriteKey(controllerOutput);
+        var eraseVector = _controller.GenerateEraseVector(controllerOutput);
+        var addVector = _controller.GenerateAddVector(controllerOutput);
+
+        // Read from memory using all read heads
+        var currentReadContents = new List<Tensor<T>>();
+        for (int i = 0; i < _readHeads.Count; i++)
+        {
+            var readWeights = _readHeads[i].ComputeReadWeights(readKeys[i], _memory);
+            var readContent = _memory.Read(readWeights);
+            currentReadContents.Add(readContent);
+        }
+
+        // Write to memory
+        var writeWeights = _writeHead.ComputeWriteWeights(writeKey, _memory);
+        _memory.Write(writeWeights, eraseVector, addVector);
+
+        // Update read contents for next timestep
+        for (int i = 0; i < _readContents.Count && i < currentReadContents.Count; i++)
+        {
+            _readContents[i] = currentReadContents[i];
+        }
     }
 
     /// <summary>
