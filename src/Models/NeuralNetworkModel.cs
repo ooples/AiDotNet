@@ -871,11 +871,24 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         return DeepCopy();
     }
 
+    /// <inheritdoc/>
     public virtual int ParameterCount
     {
         get { return Network.GetParameterCount(); }
     }
 
+    /// <summary>
+    /// Saves the model to disk.
+    /// </summary>
+    /// <param name="filePath">The file path to write the model to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the model and writes the bytes to the provided path, creating the directory if needed.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is how you save your trained model so you can load it later without training again.
+    /// </para>
+    /// </remarks>
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -894,6 +907,18 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when saving model to '{filePath}': {ex.Message}", ex); }
     }
 
+    /// <summary>
+    /// Loads the model from disk.
+    /// </summary>
+    /// <param name="filePath">The file path to read the model from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads the model bytes from the provided path and deserializes them into this instance.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This restores a model you saved earlier so you can run predictions right away.
+    /// </para>
+    /// </remarks>
     public virtual void LoadModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -911,20 +936,27 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         catch (Exception ex) { throw new InvalidOperationException($"Failed to deserialize model from file '{filePath}'. The file may be corrupted or incompatible: {ex.Message}", ex); }
     }
 
+    /// <inheritdoc/>
     public ILossFunction<T> DefaultLossFunction => Network.DefaultLossFunction;
 
+    /// <inheritdoc/>
     public Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
         => Network.ComputeGradients(input, target, lossFunction);
 
+    /// <inheritdoc/>
     public void ApplyGradients(Vector<T> gradients, T learningRate)
         => Network.ApplyGradients(gradients, learningRate);
 
+    /// <inheritdoc/>
     public void SaveState(Stream stream) => Network.SaveState(stream);
 
+    /// <inheritdoc/>
     public void LoadState(Stream stream) => Network.LoadState(stream);
 
+    /// <inheritdoc/>
     public bool SupportsJitCompilation => Network.SupportsJitCompilation;
 
+    /// <inheritdoc/>
     public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
         => Network.ExportComputationGraph(inputNodes);
 }

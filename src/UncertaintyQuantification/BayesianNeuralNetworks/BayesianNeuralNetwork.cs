@@ -29,6 +29,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
 {
     private readonly int _numSamples;
 
+    /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -50,6 +51,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
         _numSamples = numSamples;
     }
 
+    /// <inheritdoc/>
     protected override void InitializeLayers()
     {
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
@@ -62,6 +64,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
         Layers.AddRange(LayerHelper<T>.CreateDefaultBayesianNeuralNetworkLayers(Architecture));
     }
 
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Ensure we're in training mode

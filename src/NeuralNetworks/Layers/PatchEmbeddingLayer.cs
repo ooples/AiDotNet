@@ -527,6 +527,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         _projectionBiasGradient = null;
     }
 
+    /// <inheritdoc/>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
         if (inputNodes == null)
@@ -550,5 +551,6 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         return TensorOperations<T>.Add(output, biasNode);
     }
 
+    /// <inheritdoc/>
     public override bool SupportsJitCompilation => _projectionWeights != null && _projectionBias != null;
 }

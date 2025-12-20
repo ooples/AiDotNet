@@ -962,6 +962,18 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         get { return Alphas.Length + 1; } // Alphas + bias term
     }
 
+    /// <summary>
+    /// Saves the model to disk.
+    /// </summary>
+    /// <param name="filePath">The file path to write the model to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the model and writes the bytes to the provided path, creating the directory if needed.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is how you save your trained model so you can load it later without training again.
+    /// </para>
+    /// </remarks>
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -980,6 +992,18 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when saving model to '{filePath}': {ex.Message}", ex); }
     }
 
+    /// <summary>
+    /// Loads the model from disk.
+    /// </summary>
+    /// <param name="filePath">The file path to read the model from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reads the model bytes from the provided path and deserializes them into this instance.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This restores a model you saved earlier so you can run predictions right away.
+    /// </para>
+    /// </remarks>
     public virtual void LoadModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))

@@ -185,6 +185,7 @@ public class MCDropoutLayer<T> : LayerBase<T>
         _dropoutMask.Value = null;
     }
 
+    /// <inheritdoc/>
     public override LayerBase<T> Clone()
     {
         var copy = new MCDropoutLayer<T>(_dropoutRate, _mcMode, _initialSeed);
@@ -192,8 +193,10 @@ public class MCDropoutLayer<T> : LayerBase<T>
         return copy;
     }
 
+    /// <inheritdoc/>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
         => throw new NotSupportedException($"{GetType().Name} does not currently support JIT compilation.");
 
+    /// <inheritdoc/>
     public override bool SupportsJitCompilation => false;
 }

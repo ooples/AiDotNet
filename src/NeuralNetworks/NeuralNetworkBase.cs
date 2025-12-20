@@ -2344,8 +2344,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return activations;
     }
 
+    /// <summary>
+    /// Gets the default loss function for this network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A loss function measures how wrong the network's predictions are.
+    /// This is used during training to guide learning.
+    /// </para>
+    /// </remarks>
     public virtual ILossFunction<T> DefaultLossFunction => LossFunction;
 
+    /// <summary>
+    /// Computes a flattened gradient vector for all trainable parameters in the network.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="target">The target tensor.</param>
+    /// <param name="lossFunction">Optional override loss function (defaults to <see cref="DefaultLossFunction"/>).</param>
+    /// <returns>A vector containing the concatenated gradients for all layer parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs a forward pass, computes the loss derivative, backpropagates gradients, and then
+    /// concatenates the parameter gradients across all layers into a single vector.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Gradients are the "direction to change weights" so the model makes fewer mistakes.
+    /// </para>
+    /// </remarks>
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
         var loss = lossFunction ?? DefaultLossFunction;
@@ -2366,6 +2391,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return new Vector<T>(gradients.ToArray());
     }
 
+    /// <summary>
+    /// Applies a flattened gradient vector to update the network's parameters.
+    /// </summary>
+    /// <param name="gradients">The concatenated gradients for all parameters.</param>
+    /// <param name="learningRate">The learning rate to scale updates.</param>
+    /// <remarks>
+    /// <para>
+    /// This method slices the provided gradient vector per layer, updates each layer's parameters, and writes them back.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> The learning rate controls how big each update step is. Smaller values are safer but slower.
+    /// </para>
+    /// </remarks>
     public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         if (gradients == null)

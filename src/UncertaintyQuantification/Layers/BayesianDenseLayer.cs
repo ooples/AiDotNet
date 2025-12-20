@@ -73,6 +73,20 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BayesianDenseLayer{T}"/> class with a custom activation.
+    /// </summary>
+    /// <param name="inputSize">The number of input features.</param>
+    /// <param name="outputSize">The number of output features.</param>
+    /// <param name="scalarActivation">The activation function to apply.</param>
+    /// <param name="priorSigma">The standard deviation of the prior distribution (default: 1.0).</param>
+    /// <param name="randomSeed">Optional random seed for reproducible sampling.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This overload lets you choose what activation the layer uses, while still keeping
+    /// Bayesian uncertainty for the weights.
+    /// </para>
+    /// </remarks>
     public BayesianDenseLayer(int inputSize, int outputSize, IActivationFunction<T>? scalarActivation, double priorSigma = 1.0, int? randomSeed = null)
         : base([inputSize], [outputSize], scalarActivation ?? new ReLUActivation<T>())
     {
@@ -87,6 +101,7 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         InitializeParameters();
     }
 
+    /// <inheritdoc/>
     public override int ParameterCount => _outputSize * _inputSize * 2 + _outputSize * 2;
 
     private void InitializeParameters()
@@ -379,6 +394,7 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         return new Tensor<T>(_lastInput.Shape, inputGradient);
     }
 
+    /// <inheritdoc/>
     public void AddKLDivergenceGradients(T klScale)
     {
         var priorVar = NumOps.Multiply(_priorSigma, _priorSigma);
@@ -443,6 +459,7 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         ClearGradients();
     }
 
+    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         SetParameters(parameters);
@@ -530,6 +547,7 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         }
     }
 
+    /// <inheritdoc/>
     public override void ClearGradients()
     {
         base.ClearGradients();
@@ -547,9 +565,11 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         _biasLogVarGradient.Fill(NumOps.Zero);
     }
 
+    /// <inheritdoc/>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
         => throw new NotSupportedException($"{GetType().Name} does not currently support JIT compilation.");
 
+    /// <inheritdoc/>
     public override bool SupportsJitCompilation => false;
 }
 

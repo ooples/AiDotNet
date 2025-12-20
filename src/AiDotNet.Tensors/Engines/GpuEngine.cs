@@ -15989,6 +15989,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Exp(ReadOnlySpan<float> x, Span<float> destination)
     {
         if (x.Length < _thresholds.VectorSqrt)
@@ -16007,6 +16008,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Exp(ReadOnlySpan<double> x, Span<double> destination)
     {
         if (x.Length < _thresholds.VectorSqrt)
@@ -16025,6 +16027,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Log(ReadOnlySpan<float> x, Span<float> destination)
     {
         if (x.Length < _thresholds.VectorSqrt)
@@ -16043,6 +16046,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Log(ReadOnlySpan<double> x, Span<double> destination)
     {
         if (x.Length < _thresholds.VectorSqrt)
@@ -21556,6 +21560,7 @@ public class GpuEngine : IEngine, IDisposable
 
     #region IDisposable
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (_disposed) return;

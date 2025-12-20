@@ -1128,6 +1128,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
             return new InferenceSequence(_result, _config, multiLoRATask);
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             _disposed = true;
@@ -1175,6 +1176,21 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
 
         private string? _multiLoRATask;
 
+        /// <summary>
+        /// Runs a prediction for the given input within this sequence.
+        /// </summary>
+        /// <param name="newData">The input to predict on.</param>
+        /// <returns>The predicted output.</returns>
+        /// <remarks>
+        /// <para>
+        /// When inference optimizations are configured, this method may keep and reuse sequence-local state
+        /// (such as a KV-cache) across calls for improved throughput and latency.
+        /// </para>
+        /// <para>
+        /// <b>For Beginners:</b> This is like predicting with "memory". Each call can reuse what was computed
+        /// previously for the same sequence so the next call can be faster.
+        /// </para>
+        /// </remarks>
         public TOutput Predict(TInput newData)
         {
             ThrowIfDisposed();
@@ -1212,6 +1228,17 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
             return _result.NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, _result.NormalizationInfo.YParams);
         }
 
+        /// <summary>
+        /// Resets sequence-local inference state.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This clears any cached state for the current sequence so the next prediction starts fresh.
+        /// </para>
+        /// <para>
+        /// <b>For Beginners:</b> Call this when you want to start a new conversation/stream using the same sequence object.
+        /// </para>
+        /// </remarks>
         public void Reset()
         {
             ThrowIfDisposed();
@@ -1247,6 +1274,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
             }
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             if (_disposed)

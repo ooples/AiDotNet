@@ -160,10 +160,25 @@ internal class CalibrationBin<T>
 {
     private readonly INumericOperations<T> _numOps;
 
+    /// <summary>
+    /// Sum of the confidence values added to this bin.
+    /// </summary>
     public T SumConfidence { get; private set; }
+
+    /// <summary>
+    /// Number of samples added to this bin.
+    /// </summary>
     public int Count { get; private set; }
+
+    /// <summary>
+    /// Number of correctly predicted samples in this bin.
+    /// </summary>
     public int CorrectCount { get; private set; }
 
+    /// <summary>
+    /// Initializes a new calibration bin.
+    /// </summary>
+    /// <param name="numOps">Numeric operations implementation for <typeparamref name="T"/>.</param>
     public CalibrationBin(INumericOperations<T> numOps)
     {
         _numOps = numOps;
@@ -172,6 +187,11 @@ internal class CalibrationBin<T>
         CorrectCount = 0;
     }
 
+    /// <summary>
+    /// Adds a prediction outcome to the bin.
+    /// </summary>
+    /// <param name="confidence">The predicted confidence.</param>
+    /// <param name="isCorrect">Whether the prediction was correct.</param>
     public void Add(T confidence, bool isCorrect)
     {
         SumConfidence = _numOps.Add(SumConfidence, confidence);
