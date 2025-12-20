@@ -614,7 +614,9 @@ public class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
 
         for (int i = 0; i < numSamples; i++)
         {
-            int classIdx = (int)Math.Round(NumOps.ToDouble(vec[i])) % _metaOptNetOptions.NumClasses;
+            // Handle negative values by using Math.Abs to ensure non-negative index
+            int rawIdx = (int)Math.Round(NumOps.ToDouble(vec[i]));
+            int classIdx = Math.Abs(rawIdx) % _metaOptNetOptions.NumClasses;
             for (int c = 0; c < _metaOptNetOptions.NumClasses; c++)
             {
                 labels[i, c] = c == classIdx ? NumOps.One : NumOps.Zero;
@@ -674,7 +676,20 @@ public class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         {
             return (TOutput)(object)vector;
         }
-        return MetaModel.Predict(default!);
+
+        if (typeof(TOutput) == typeof(Tensor<T>))
+        {
+            return (TOutput)(object)Tensor<T>.FromVector(vector);
+        }
+
+        if (typeof(TOutput) == typeof(T[]))
+        {
+            return (TOutput)(object)vector.ToArray();
+        }
+
+        throw new InvalidOperationException(
+            $"Cannot convert Vector<{typeof(T).Name}> to {typeof(TOutput).Name}. " +
+            $"Supported types: Vector<T>, Tensor<T>, T[]");
     }
 
     #endregion

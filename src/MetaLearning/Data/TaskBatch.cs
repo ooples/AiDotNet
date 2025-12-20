@@ -276,7 +276,7 @@ public class TaskBatch<T, TInput, TOutput>
             var numOps = MathHelper.GetNumericOperations<T>();
 
             // Calculate mean
-            T sum = default!;
+            T sum = numOps.Zero;
             foreach (var diff in TaskDifficulties)
             {
                 sum = numOps.Add(sum, diff);
@@ -284,7 +284,7 @@ public class TaskBatch<T, TInput, TOutput>
             AverageDifficulty = numOps.Divide(sum, numOps.FromDouble(TaskDifficulties.Length));
 
             // Calculate variance
-            T varianceSum = default!;
+            T varianceSum = numOps.Zero;
             foreach (var diff in TaskDifficulties)
             {
                 var diffFromMean = numOps.Subtract(diff, AverageDifficulty);
@@ -298,7 +298,7 @@ public class TaskBatch<T, TInput, TOutput>
         if (TaskSimilarities != null)
         {
             var numOps = MathHelper.GetNumericOperations<T>();
-            T similaritySum = default!;
+            T similaritySum = numOps.Zero;
             int count = 0;
 
             for (int i = 0; i < TaskSimilarities.GetLength(0); i++)

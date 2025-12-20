@@ -778,31 +778,15 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     {
         if (output is Vector<T> vector)
         {
-            // For one-hot encoding or class indices
-            if (vector.Length == 1)
+            if (index < vector.Length)
             {
-                // Single class index
-                return (int)NumOps.ToDouble(vector[0]);
-            }
-            else if (index < vector.Length)
-            {
-                // Multi-example output - get value at index
+                // Get class label at the specified index
                 return (int)NumOps.ToDouble(vector[index]);
             }
             else
             {
-                // One-hot encoding - find max
-                int maxIdx = 0;
-                T maxVal = vector[0];
-                for (int i = 1; i < vector.Length; i++)
-                {
-                    if (NumOps.ToDouble(vector[i]) > NumOps.ToDouble(maxVal))
-                    {
-                        maxVal = vector[i];
-                        maxIdx = i;
-                    }
-                }
-                return maxIdx;
+                throw new ArgumentOutOfRangeException(nameof(index),
+                    $"Index {index} is out of range for vector of length {vector.Length}");
             }
         }
         else if (output is Tensor<T> tensor)

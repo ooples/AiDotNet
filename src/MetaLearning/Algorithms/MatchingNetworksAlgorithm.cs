@@ -760,7 +760,15 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
         for (int s = 0; s < numSupport; s++)
         {
             var supportEmbedding = GetRow(_supportEmbeddings, s);
-            T similarity = ComputeCosineSimilarity(queryEmbedding, supportEmbedding);
+
+            // Respect the AttentionFunction option (consistent with algorithm's ComputeAttentionWeights)
+            T similarity = _options.AttentionFunction switch
+            {
+                MatchingNetworksAttentionFunction.Cosine => ComputeCosineSimilarity(queryEmbedding, supportEmbedding),
+                MatchingNetworksAttentionFunction.DotProduct => ComputeDotProduct(queryEmbedding, supportEmbedding),
+                MatchingNetworksAttentionFunction.Euclidean => ComputeNegativeEuclideanDistance(queryEmbedding, supportEmbedding),
+                _ => ComputeCosineSimilarity(queryEmbedding, supportEmbedding)
+            };
 
             if (Math.Abs(_options.Temperature - 1.0) >= 1e-10)
             {
@@ -771,6 +779,30 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
         }
 
         return ApplySoftmax(weights);
+    }
+
+    private T ComputeDotProduct(Vector<T> a, Vector<T> b)
+    {
+        T dotProduct = _numOps.Zero;
+        int minLen = Math.Min(a.Length, b.Length);
+        for (int i = 0; i < minLen; i++)
+        {
+            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(a[i], b[i]));
+        }
+        return dotProduct;
+    }
+
+    private T ComputeNegativeEuclideanDistance(Vector<T> a, Vector<T> b)
+    {
+        T sumSq = _numOps.Zero;
+        int minLen = Math.Min(a.Length, b.Length);
+        for (int i = 0; i < minLen; i++)
+        {
+            T diff = _numOps.Subtract(a[i], b[i]);
+            sumSq = _numOps.Add(sumSq, _numOps.Multiply(diff, diff));
+        }
+        // Return negative distance so larger (less negative) = more similar
+        return _numOps.Negate(_numOps.Sqrt(sumSq));
     }
 
     private T ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
