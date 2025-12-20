@@ -436,19 +436,19 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         var newModel = new NegativeBinomialRegression<T>(_options, Regularization);
-        
+
         // Copy coefficients if they exist
         if (Coefficients != null)
         {
             newModel.Coefficients = Coefficients.Clone();
         }
-        
+
         // Copy the intercept
         newModel.Intercept = Intercept;
-        
+
         // Copy the dispersion parameter
         newModel._dispersion = _dispersion;
-        
+
         return newModel;
     }
 }

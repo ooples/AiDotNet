@@ -413,7 +413,7 @@ public class DDIMSchedulerTests
         {
             double current = scheduler.GetAlphaCumulativeProduct(t);
             Assert.True(current < prev,
-                $"Alpha cumprod at t={t} ({current}) should be less than at t={t-100} ({prev})");
+                $"Alpha cumprod at t={t} ({current}) should be less than at t={t - 100} ({prev})");
             prev = current;
         }
     }

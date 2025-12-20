@@ -1,11 +1,11 @@
 
+using System.Collections.Generic;
+using System.Linq;
+using AiDotNet.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
-using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
@@ -116,16 +116,16 @@ public class ParentDocumentRetriever<T> : RetrieverBase<T>
     {
         _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
         _embeddingModel = embeddingModel ?? throw new ArgumentNullException(nameof(embeddingModel));
-        
+
         if (chunkSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(chunkSize), "Chunk size must be positive");
-            
+
         if (parentSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(parentSize), "Parent size must be positive");
-            
+
         if (parentSize < chunkSize)
             throw new ArgumentException("Parent size must be greater than or equal to chunk size");
-            
+
         _chunkSize = chunkSize;
         _parentSize = parentSize;
         _includeNeighboringChunks = includeNeighboringChunks;
@@ -190,10 +190,10 @@ public class ParentDocumentRetriever<T> : RetrieverBase<T>
 
         // Retrieve chunks at higher K to ensure we get enough parent documents
         var chunkK = topK * 3;
-        
+
         // Embed the query to get query vector
         var queryVector = _embeddingModel.Embed(query);
-        
+
         // Use the document store to find similar chunks
         // The chunks should have metadata indicating their parent document
         var similarChunks = _documentStore.GetSimilarWithFilters(
@@ -204,7 +204,7 @@ public class ParentDocumentRetriever<T> : RetrieverBase<T>
 
         // Group by parent document ID
         var parentDocuments = new Dictionary<string, (Document<T> doc, T maxScore)>();
-        
+
         foreach (var chunk in similarChunks)
         {
             // Extract parent document ID from metadata
@@ -220,7 +220,7 @@ public class ParentDocumentRetriever<T> : RetrieverBase<T>
                 continue;
 
             var score = chunk.RelevanceScore;
-            
+
             if (!parentDocuments.ContainsKey(parentId))
             {
                 // Create parent document by combining chunks
@@ -235,7 +235,7 @@ public class ParentDocumentRetriever<T> : RetrieverBase<T>
                 {
                     parentDocuments[parentId] = (existing.doc, score);
                 }
-                
+
                 // Append chunk content if including neighboring chunks
                 if (_includeNeighboringChunks)
                 {
@@ -260,7 +260,7 @@ public class ParentDocumentRetriever<T> : RetrieverBase<T>
     {
         // Retrieve the full parent document from the store
         var fullParent = _documentStore.GetById(parentId);
-        
+
         if (fullParent != null)
         {
             // Return the complete parent document from store
@@ -271,7 +271,7 @@ public class ParentDocumentRetriever<T> : RetrieverBase<T>
                 Metadata = new Dictionary<string, object>(fullParent.Metadata ?? new Dictionary<string, object>())
             };
         }
-        
+
         // Fallback: if parent not found, start with chunk content
         // This will be expanded as more chunks from same parent are processed
         var parentDoc = new Document<T>

@@ -46,7 +46,7 @@ public class GeneralizedHistogramIntersectionKernel<T> : IKernelFunction<T>
     /// overall similarity measure.
     /// </remarks>
     private readonly T _beta;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

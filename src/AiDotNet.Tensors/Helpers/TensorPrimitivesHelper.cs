@@ -1,6 +1,6 @@
 using System;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 using static AiDotNet.Tensors.ErrorMessages;
 
 namespace AiDotNet.Tensors.Helpers;

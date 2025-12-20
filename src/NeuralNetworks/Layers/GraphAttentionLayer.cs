@@ -1207,4 +1207,14 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         return output;
     }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        return new Dictionary<string, string>
+        {
+            ["NumHeads"] = _numHeads.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["Alpha"] = Convert.ToDouble(_alpha).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["DropoutRate"] = _dropoutRate.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
+    }
 }

@@ -456,12 +456,12 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         int featureCount,
         PredictionType predictionType)
     {
-        return new PredictionStats<T>(new PredictionStatsInputs<T> 
-        { 
-            Actual = actual, 
-            Predicted = predicted, 
-            NumberOfParameters = featureCount, 
-            ConfidenceLevel = _predictionOptions.ConfidenceLevel, 
+        return new PredictionStats<T>(new PredictionStatsInputs<T>
+        {
+            Actual = actual,
+            Predicted = predicted,
+            NumberOfParameters = featureCount,
+            ConfidenceLevel = _predictionOptions.ConfidenceLevel,
             LearningCurveSteps = _predictionOptions.LearningCurveSteps,
             PredictionType = predictionType
         });

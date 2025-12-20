@@ -33,11 +33,11 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// - ARIMA algorithm: More advanced approach that can handle more complex patterns
     /// - Multivariate algorithm: Used when you have multiple related time series
     /// </remarks>
-    public BeveridgeNelsonDecomposition(Vector<T> timeSeries, 
+    public BeveridgeNelsonDecomposition(Vector<T> timeSeries,
         BeveridgeNelsonAlgorithmType algorithm = BeveridgeNelsonAlgorithmType.Standard,
         ARIMAOptions<T>? arimaOptions = null,
         int forecastHorizon = 100,
-        Matrix<T>? multivariateSeries = null) 
+        Matrix<T>? multivariateSeries = null)
         : base(timeSeries)
     {
         _algorithm = algorithm;
@@ -301,8 +301,8 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
         int inputDimension = Math.Max(_arimaOptions.P, _arimaOptions.Q + 1);
         if (_arimaOptions.SeasonalPeriod > 0)
         {
-            inputDimension = Math.Max(inputDimension, 
-                Math.Max(_arimaOptions.P + _arimaOptions.SeasonalP * _arimaOptions.SeasonalPeriod, 
+            inputDimension = Math.Max(inputDimension,
+                Math.Max(_arimaOptions.P + _arimaOptions.SeasonalP * _arimaOptions.SeasonalPeriod,
                          _arimaOptions.Q + _arimaOptions.SeasonalQ * _arimaOptions.SeasonalPeriod + 1));
         }
 

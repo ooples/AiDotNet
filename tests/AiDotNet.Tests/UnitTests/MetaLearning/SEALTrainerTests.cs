@@ -4,11 +4,11 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Config;
 using AiDotNet.MetaLearning.Trainers;
 using AiDotNet.Models;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
 

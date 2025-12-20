@@ -143,9 +143,9 @@ public class PartialDependencePlotFitDetector<T, TInput, TOutput> : FitDetectorB
         var averageNonlinearity = NumOps.Divide(sumNonlinearity, NumOps.FromDouble(nonlinearityScores.Count));
 
         // Normalize confidence level to be between 0 and 1
-        return NumOps.Subtract(NumOps.One, 
+        return NumOps.Subtract(NumOps.One,
             NumOps.Divide(
-                averageNonlinearity, 
+                averageNonlinearity,
                 NumOps.FromDouble(_options.OverfitThreshold)
             )
         );

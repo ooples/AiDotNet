@@ -74,7 +74,7 @@ public class VIFFitDetectorOptions
     /// </para>
     /// </remarks>
     public double SevereMulticollinearityThreshold { get; set; } = 10.0;
-    
+
     /// <summary>
     /// Gets or sets the threshold for detecting moderate multicollinearity.
     /// </summary>
@@ -115,7 +115,7 @@ public class VIFFitDetectorOptions
     /// </para>
     /// </remarks>
     public double ModerateMulticollinearityThreshold { get; set; } = 5.0;
-    
+
     /// <summary>
     /// Gets or sets the threshold for determining a good fit in terms of the primary metric.
     /// </summary>
@@ -156,7 +156,7 @@ public class VIFFitDetectorOptions
     /// </para>
     /// </remarks>
     public double GoodFitThreshold { get; set; } = 0.7;
-    
+
     /// <summary>
     /// Gets or sets the primary metric used to evaluate model fit.
     /// </summary>

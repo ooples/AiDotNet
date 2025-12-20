@@ -127,14 +127,14 @@ public class MeasurementLayer<T> : LayerBase<T>
         _lastInput = input;
         // Assume input is a complex-valued tensor representing quantum states
         var probabilities = new Tensor<T>(new[] { input.Shape[0] });
-    
+
         // Get numeric operations for complex numbers
         var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
         for (int i = 0; i < input.Shape[0]; i++)
         {
             // Get the complex value from the input tensor
             var complexValue = Tensor<T>.GetComplex(input, i);
-        
+
             // Calculate |z|² = real² + imag²
             var realSquared = NumOps.Multiply(complexValue.Real, complexValue.Real);
             var imagSquared = NumOps.Multiply(complexValue.Imaginary, complexValue.Imaginary);
@@ -209,9 +209,9 @@ public class MeasurementLayer<T> : LayerBase<T>
             var dProbdReal = NumOps.Divide(NumOps.Multiply(two, complexValue.Real), prob);
             var dProbdImag = NumOps.Divide(NumOps.Multiply(two, complexValue.Imaginary), prob);
             // Combine gradients
-            var gradientValue = NumOps.Multiply(outputGradient[i], 
+            var gradientValue = NumOps.Multiply(outputGradient[i],
                 NumOps.Add(dProbdReal, dProbdImag));
-        
+
             inputGradientData[i] = gradientValue;
         }
         // Create a new tensor with the calculated gradients

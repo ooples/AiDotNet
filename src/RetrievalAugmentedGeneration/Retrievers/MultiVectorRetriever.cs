@@ -1,11 +1,11 @@
 
+using System.Collections.Generic;
+using System.Linq;
+using AiDotNet.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
-using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
@@ -97,10 +97,10 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         string aggregationMethod)
     {
         _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
-        
+
         if (vectorsPerDocument <= 0)
             throw new ArgumentOutOfRangeException(nameof(vectorsPerDocument), "Vectors per document must be positive");
-            
+
         _vectorsPerDocument = vectorsPerDocument;
         _aggregationMethod = aggregationMethod ?? throw new ArgumentNullException(nameof(aggregationMethod));
     }
@@ -173,7 +173,7 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         foreach (var doc in allDocuments)
         {
             var docId = GetBaseDocumentId(doc.Id);
-            
+
             if (!documentScores.ContainsKey(docId))
             {
                 documentScores[docId] = (doc, new List<T>());
@@ -236,7 +236,7 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
                 // Weight by position (first vectors get higher weight)
                 var weightedSum = NumOps.Zero;
                 var totalWeight = 0.0;
-                
+
                 for (int i = 0; i < scores.Count; i++)
                 {
                     var weight = 1.0 / (i + 1.0); // Decreasing weights
@@ -246,7 +246,7 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
                     );
                     totalWeight += weight;
                 }
-                
+
                 return NumOps.Divide(weightedSum, NumOps.FromDouble(totalWeight));
 
             default:

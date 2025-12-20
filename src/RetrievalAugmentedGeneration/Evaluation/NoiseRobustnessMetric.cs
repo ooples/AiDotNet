@@ -1,5 +1,5 @@
-using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System.Linq;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 
@@ -141,7 +141,7 @@ public class NoiseRobustnessMetric<T> : RAGMetricBase<T>
 
         // Robustness score: ratio of top to bottom scores (higher = more robust)
         var robustnessRatio = bottomAvg > 0 ? topAvg / bottomAvg : topAvg;
-        
+
         // Normalize to 0-1 range using sigmoid-like function
         var normalizedScore = Math.Min(1.0, robustnessRatio / (1.0 + robustnessRatio));
 

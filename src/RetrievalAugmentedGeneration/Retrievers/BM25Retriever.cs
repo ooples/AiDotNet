@@ -1,9 +1,9 @@
 
-using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 {
@@ -17,7 +17,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
         private readonly T _k1;
         private readonly T _b;
 
-        public BM25Retriever(IDocumentStore<T> documentStore, int defaultTopK = 5, double k1 = 1.5, double b = 0.75) 
+        public BM25Retriever(IDocumentStore<T> documentStore, int defaultTopK = 5, double k1 = 1.5, double b = 0.75)
             : base(defaultTopK)
         {
             if (documentStore == null)
@@ -35,14 +35,14 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 
             var candidates = _documentStore.GetAll().ToList();
             var corpusStats = BuildCorpusStatistics(candidates);
-            
+
             // Build document lookup dictionary for O(1) access
             var documentLookup = candidates.ToDictionary(d => d.Id);
 
             foreach (var doc in candidates.Where(d => MatchesFilters(d, metadataFilters)))
             {
                 var score = NumOps.Zero;
-                
+
                 foreach (var term in queryTerms)
                 {
                     var termScore = CalculateBM25Term(doc.Id, term, corpusStats);
@@ -101,7 +101,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             var numerator = NumOps.FromDouble(corpusStats.TotalDocuments - df + 0.5);
             var denominator = NumOps.FromDouble(df + 0.5);
             var ratio = NumOps.Divide(numerator, denominator);
-            
+
             return NumOps.FromDouble(Math.Log(Convert.ToDouble(ratio)));
         }
 
@@ -136,7 +136,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             {
                 var terms = Tokenize(doc.Content);
                 var termCounts = new Dictionary<string, T>();
-                
+
                 foreach (var term in terms)
                 {
                     if (termCounts.TryGetValue(term, out var count))
@@ -160,10 +160,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             }
 
             stats.AvgDocLength = NumOps.Divide(totalLength, NumOps.FromDouble(stats.TotalDocuments));
-            
+
             if (!NumOps.GreaterThan(stats.AvgDocLength, NumOps.Zero))
                 stats.AvgDocLength = NumOps.One;
-                
+
             return stats;
         }
 

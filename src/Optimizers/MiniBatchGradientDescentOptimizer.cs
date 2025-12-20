@@ -98,53 +98,53 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
-    
+
         // Get dimensions
         var batchSize = InputHelper<T, TInput>.GetBatchSize(inputData.XTrain);
-    
+
         // Initialize parameters
         InitializeAdaptiveParameters();
-    
+
         for (int epoch = 0; epoch < Options.MaxIterations; epoch++)
         {
             // Shuffle indices for stochastic gradient descent
             var shuffledIndices = Enumerable.Range(0, batchSize).OrderBy(x => Random.Next()).ToArray();
-        
+
             for (int i = 0; i < batchSize; i += _options.BatchSize)
             {
                 // Get batch indices
                 var batchIndices = shuffledIndices.Skip(i).Take(_options.BatchSize).ToArray();
-            
+
                 // Process batch and calculate gradient using our existing methods
                 var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain, batchIndices);
-            
+
                 // Update solution
                 var newSolution = UpdateSolution(currentSolution, gradient);
-            
+
                 // Evaluate the solution
                 var currentStepData = EvaluateSolution(newSolution, inputData);
                 UpdateBestSolution(currentStepData, ref bestStepData);
                 UpdateAdaptiveParameters(currentStepData, previousStepData);
-            
+
                 // Check early stopping criteria
                 if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
                 {
                     return CreateOptimizationResult(bestStepData, inputData);
                 }
-            
+
                 // Check convergence
                 if (NumOps.LessThan(
-                    NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), 
+                    NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
                     NumOps.FromDouble(_options.Tolerance)))
                 {
                     return CreateOptimizationResult(bestStepData, inputData);
                 }
-            
+
                 currentSolution = newSolution;
                 previousStepData = currentStepData;
             }
         }
-    
+
         return CreateOptimizationResult(bestStepData, inputData);
     }
 

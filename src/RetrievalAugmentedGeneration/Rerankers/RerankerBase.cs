@@ -1,7 +1,7 @@
 
+using System.Collections.Generic;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using System.Collections.Generic;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 
@@ -63,7 +63,7 @@ public abstract class RerankerBase<T> : IReranker<T>
     public IEnumerable<Document<T>> Rerank(string query, IEnumerable<Document<T>> documents, int topK)
     {
         ValidateTopK(topK);
-        
+
         var reranked = Rerank(query, documents);
         return reranked.Take(topK).ToList();
     }

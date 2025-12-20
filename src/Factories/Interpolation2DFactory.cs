@@ -56,7 +56,7 @@ public static class Interpolation2DFactory<T>
     /// </para>
     /// </remarks>
     public static IInterpolation<T> Create1DFromSlice(
-        Vector<T> x, Vector<T> y, Matrix<T> zMatrix, Vector<T> zVector, Interpolation2DType type, T fixedCoordinate, bool isXFixed, IKernelFunction<T>? kernelFunction = null, 
+        Vector<T> x, Vector<T> y, Matrix<T> zMatrix, Vector<T> zVector, Interpolation2DType type, T fixedCoordinate, bool isXFixed, IKernelFunction<T>? kernelFunction = null,
         IMatrixDecomposition<T>? matrixDecomposition = null)
     {
         I2DInterpolation<T> interpolation2D = type switch

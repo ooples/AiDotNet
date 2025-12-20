@@ -1,5 +1,5 @@
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Serving.Models;
 
@@ -8,13 +8,15 @@ namespace AiDotNet.Serving.Models;
 /// This allows any model with a Predict method to be served via the REST API.
 /// </summary>
 /// <typeparam name="T">The numeric type used by the model</typeparam>
-public class ServableModelWrapper<T> : IServableModel<T>
+public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenceOptions
 {
     private readonly Func<Vector<T>, Vector<T>> _predictFunc;
     private readonly Func<Matrix<T>, Matrix<T>>? _predictBatchFunc;
     private readonly string _modelName;
     private readonly int _inputDimension;
     private readonly int _outputDimension;
+    private readonly bool _enableBatching;
+    private readonly bool _enableSpeculativeDecoding;
 
     /// <summary>
     /// Initializes a new instance of the ServableModelWrapper with custom prediction functions.
@@ -24,18 +26,24 @@ public class ServableModelWrapper<T> : IServableModel<T>
     /// <param name="outputDimension">The number of output dimensions</param>
     /// <param name="predictFunc">Function to perform single prediction</param>
     /// <param name="predictBatchFunc">Optional function to perform batch prediction. If not provided, batch prediction will use multiple single predictions.</param>
+    /// <param name="enableBatching">Whether this model supports serving-side batching.</param>
+    /// <param name="enableSpeculativeDecoding">Whether this model supports speculative decoding in serving/session workflows.</param>
     public ServableModelWrapper(
         string modelName,
         int inputDimension,
         int outputDimension,
         Func<Vector<T>, Vector<T>> predictFunc,
-        Func<Matrix<T>, Matrix<T>>? predictBatchFunc = null)
+        Func<Matrix<T>, Matrix<T>>? predictBatchFunc = null,
+        bool enableBatching = true,
+        bool enableSpeculativeDecoding = false)
     {
         _modelName = modelName ?? throw new ArgumentNullException(nameof(modelName));
         _inputDimension = inputDimension;
         _outputDimension = outputDimension;
         _predictFunc = predictFunc ?? throw new ArgumentNullException(nameof(predictFunc));
         _predictBatchFunc = predictBatchFunc;
+        _enableBatching = enableBatching;
+        _enableSpeculativeDecoding = enableSpeculativeDecoding;
     }
 
     /// <summary>
@@ -52,6 +60,8 @@ public class ServableModelWrapper<T> : IServableModel<T>
         _modelName = modelName ?? throw new ArgumentNullException(nameof(modelName));
         _inputDimension = inputDimension;
         _outputDimension = 1; // Regression models typically output a single value
+        _enableBatching = true;
+        _enableSpeculativeDecoding = false;
 
         if (regressionModel == null)
         {
@@ -135,4 +145,7 @@ public class ServableModelWrapper<T> : IServableModel<T>
 
         return result;
     }
+
+    bool IServableModelInferenceOptions.EnableBatching => _enableBatching;
+    bool IServableModelInferenceOptions.EnableSpeculativeDecoding => _enableSpeculativeDecoding;
 }

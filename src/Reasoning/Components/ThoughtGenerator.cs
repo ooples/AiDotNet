@@ -1,8 +1,8 @@
+using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System.Text.RegularExpressions;
 
 namespace AiDotNet.Reasoning.Components;
 

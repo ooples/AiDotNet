@@ -13,19 +13,44 @@ jobs:
     name: Check and Fix Non-Compliant Commits
     runs-on: ubuntu-latest
     # Skip for dependabot PRs (they have special handling)
-    if: github.actor != 'dependabot[bot]'
+    if: |
+      github.actor != 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      AUTOFIX_GPG_PRIVATE_KEY: ${{ secrets.AUTOFIX_GPG_PRIVATE_KEY }}
+      AUTOFIX_GPG_PASSPHRASE: ${{ secrets.AUTOFIX_GPG_PASSPHRASE }}
+      AUTOFIX_BOT_NAME: AiDotNetAutofixBot
+      AUTOFIX_BOT_EMAIL: autofix-bot@ooples.com
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: Import GPG key for signed commits
+        if: env.AUTOFIX_GPG_PRIVATE_KEY != ''
+        uses: crazy-max/ghaction-import-gpg@e89d40939c28e39f97cf32126055eeae86ba74ec # v6
+        with:
+          gpg_private_key: ${{ env.AUTOFIX_GPG_PRIVATE_KEY }}
+          passphrase: ${{ env.AUTOFIX_GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
 
       - name: Configure Git
+        env:
+          AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -n "$AUTOFIX_PAT" ]; then
+            git config user.name "$AUTOFIX_BOT_NAME"
+            git config user.email "$AUTOFIX_BOT_EMAIL"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+          fi
 
       - name: Get commits to check
         id: get-commits
@@ -50,6 +75,8 @@ jobs:
           COMMITS="${{ steps.get-commits.outputs.commits }}"
           NEEDS_FIX=false
           FIXED_COMMITS=()
+          # Bash [[ =~ ]] regex must be a single token: avoid literal spaces (use [[:space:]]).
+          PATTERN='^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)(\([^)]+\))?:[[:space:]].+'
 
           while IFS= read -r commit_sha; do
             if [ -z "$commit_sha" ]; then continue; fi
@@ -65,7 +92,7 @@ jobs:
 
             # Check if commit follows conventional commits
             # Valid types: feat, fix, docs, refactor, perf, test, chore, ci, style, deps
-            if [[ "$FIRST_LINE" =~ ^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)(\([^)]+\))?: .+ ]]; then
+            if [[ "$FIRST_LINE" =~ $PATTERN ]]; then
               # Extract description after colon
               DESCRIPTION=$(echo "$FIRST_LINE" | cut -d':' -f2- | sed 's/^ *//')
 
@@ -144,6 +171,11 @@ jobs:
       - name: Apply fixes to commits
         if: steps.check-commits.outputs.needs_fix == 'true'
         run: |
+          if [ -z "$AUTOFIX_GPG_PRIVATE_KEY" ]; then
+            echo "::error::Repository rules require signed commits. Configure secrets AUTOFIX_GPG_PRIVATE_KEY and AUTOFIX_GPG_PASSPHRASE so this workflow can create signed rewritten commits."
+            exit 1
+          fi
+
           COMMITS="${{ steps.get-commits.outputs.commits }}"
           BASE_BRANCH="${{ github.base_ref }}"
 
@@ -154,66 +186,115 @@ jobs:
           # Note: This is a simplified approach - in practice, we might want to preserve the original commit structure
           echo "All changes have been staged. Creating a single commit with fixes..."
 
-          git commit -F- <<'EOF'
-chore: fix commit messages for conventional compliance
-
-This commit fixes one or more commit messages that didn't follow
-conventional commits format. The original commits have been
-squashed and their messages updated to comply with the project's
-standards.
-
-Original issues fixed:
-- Subject line now follows lowercase convention
-- Type now uses valid conventional commit types
-
-Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
-EOF
+          cat <<'EOF' | sed 's/^__MSG__//' | git commit -F-
+          __MSG__chore: fix commit messages for conventional compliance
+          __MSG__
+          __MSG__This commit fixes one or more commit messages that didn't follow
+          __MSG__conventional commits format. The original commits have been
+          __MSG__squashed and their messages updated to comply with the project's
+          __MSG__standards.
+          __MSG__
+          __MSG__Original issues fixed:
+          __MSG__- Subject line now follows lowercase convention
+          __MSG__- Type now uses valid conventional commit types
+          __MSG__
+          __MSG__Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
+          EOF
 
       - name: Force push fixes
         if: steps.check-commits.outputs.needs_fix == 'true'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
         run: |
-          BRANCH="${{ github.head_ref }}"
-          git push origin "$BRANCH" --force-with-lease
+          BRANCH="$HEAD_REF"
+          git checkout -B "$BRANCH"
+          push_with_token () {
+            local token="$1"
+            git remote set-url origin "https://x-access-token:${token}@github.com/${GITHUB_REPOSITORY}.git"
+            git push origin "$BRANCH" --force-with-lease
+          }
+
+          if [ -n "$AUTOFIX_PAT" ]; then
+            echo "Attempting push using AUTOFIX_PAT..."
+            if push_with_token "$AUTOFIX_PAT"; then
+              exit 0
+            fi
+            echo "::warning::Push using AUTOFIX_PAT failed. Falling back to GITHUB_TOKEN."
+          else
+            echo "::warning::AUTOFIX_PAT is not set. Downstream PR checks may not rerun automatically after this workflow force-pushes."
+          fi
+
+          echo "Attempting push using GITHUB_TOKEN..."
+          push_with_token "$GITHUB_TOKEN"
 
       - name: Comment on PR
         if: steps.check-commits.outputs.needs_fix == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `### 🤖 Commit Messages Auto-Fixed
-
-The commitlint check failed because one or more commit messages didn't follow [Conventional Commits](https://www.conventionalcommits.org/) format.
-
-**Action taken** — All non-compliant commits have been fixed to follow the conventional commits format.
-
-**Changes made:**
-- Subject lines are now lowercase (except 'deps' type)
-- Types are now one of: \`feat\`, \`fix\`, \`docs\`, \`refactor\`, \`perf\`, \`test\`, \`chore\`, \`ci\`, \`style\`, or \`deps\`
-
-The PR branch has been force-pushed with the fixed commits. If you had local changes, you may need to \`git pull --rebase\`.`
+              body: [
+                '### 🤖 Commit Messages Auto-Fixed',
+                '',
+                "The commitlint check failed because one or more commit messages didn't follow [Conventional Commits](https://www.conventionalcommits.org/) format.",
+                '',
+                '**Action taken** — All non-compliant commits have been fixed to follow the conventional commits format.',
+                '',
+                '**Changes made:**',
+                "- Subject lines are now lowercase (except 'deps' type)",
+                '- Types are now one of: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `chore`, `ci`, `style`, or `deps`',
+                '',
+                'The PR branch has been force-pushed with the fixed commits. If you had local changes, you may need to `git pull --rebase`.'
+              ].join('\n')
             });
 
   handle-dependabot:
     name: Handle Dependabot PR
     runs-on: ubuntu-latest
     # Only run for dependabot PRs
-    if: github.actor == 'dependabot[bot]'
+    if: |
+      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      AUTOFIX_GPG_PRIVATE_KEY: ${{ secrets.AUTOFIX_GPG_PRIVATE_KEY }}
+      AUTOFIX_GPG_PASSPHRASE: ${{ secrets.AUTOFIX_GPG_PASSPHRASE }}
+      AUTOFIX_BOT_NAME: AiDotNetAutofixBot
+      AUTOFIX_BOT_EMAIL: autofix-bot@ooples.com
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: Import GPG key for signed commits
+        if: env.AUTOFIX_GPG_PRIVATE_KEY != ''
+        uses: crazy-max/ghaction-import-gpg@e89d40939c28e39f97cf32126055eeae86ba74ec # v6
+        with:
+          gpg_private_key: ${{ env.AUTOFIX_GPG_PRIVATE_KEY }}
+          passphrase: ${{ env.AUTOFIX_GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
 
       - name: Configure Git
+        env:
+          AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -n "$AUTOFIX_PAT" ]; then
+            git config user.name "$AUTOFIX_BOT_NAME"
+            git config user.email "$AUTOFIX_BOT_EMAIL"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+          fi
 
       - name: Get dependabot commit
         id: get-commit
@@ -255,6 +336,11 @@ The PR branch has been force-pushed with the fixed commits. If you had local cha
       - name: Fix dependabot commit
         if: steps.check-needs-fix.outputs.needs_fix == 'true'
         run: |
+          if [ -z "$AUTOFIX_GPG_PRIVATE_KEY" ]; then
+            echo "::error::Repository rules require signed commits. Configure secrets AUTOFIX_GPG_PRIVATE_KEY and AUTOFIX_GPG_PASSPHRASE so this workflow can create signed rewritten commits."
+            exit 1
+          fi
+
           COMMIT_SHA="${{ steps.get-commit.outputs.commit_sha }}"
           NEW_SUBJECT="${{ steps.check-needs-fix.outputs.new_subject }}"
           COMMIT_MSG=$(git log -1 --format=%B "$COMMIT_SHA")
@@ -274,28 +360,57 @@ The PR branch has been force-pushed with the fixed commits. If you had local cha
 
       - name: Force push fix
         if: steps.check-needs-fix.outputs.needs_fix == 'true'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
         run: |
-          BRANCH="${{ github.head_ref }}"
-          git push origin "$BRANCH" --force-with-lease
+          BRANCH="$HEAD_REF"
+          git checkout -B "$BRANCH"
+          push_with_token () {
+            local token="$1"
+            git remote set-url origin "https://x-access-token:${token}@github.com/${GITHUB_REPOSITORY}.git"
+            git push origin "$BRANCH" --force-with-lease
+          }
+
+          if [ -n "$AUTOFIX_PAT" ]; then
+            echo "Attempting push using AUTOFIX_PAT..."
+            if push_with_token "$AUTOFIX_PAT"; then
+              exit 0
+            fi
+            echo "::warning::Push using AUTOFIX_PAT failed. Falling back to GITHUB_TOKEN."
+          else
+            echo "::warning::AUTOFIX_PAT is not set. Downstream PR checks may not rerun automatically after this workflow force-pushes."
+          fi
+
+          echo "Attempting push using GITHUB_TOKEN..."
+          push_with_token "$GITHUB_TOKEN"
 
       - name: Comment on PR
         if: steps.check-needs-fix.outputs.needs_fix == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          ORIGINAL_SUBJECT: ${{ steps.get-commit.outputs.first_line }}
+          NEW_SUBJECT: ${{ steps.check-needs-fix.outputs.new_subject }}
         with:
           script: |
-            const newSubject = `${{ steps.check-needs-fix.outputs.new_subject }}`;
+            const originalSubject = process.env.ORIGINAL_SUBJECT ?? '';
+            const newSubject = process.env.NEW_SUBJECT ?? '';
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `### 🤖 Dependabot Commit Message Fixed
 
-The commitlint check failed because the dependabot commit message didn't follow the required format.
-
-**Action taken** — Fixed the subject line to be lowercase.
-
-**Original:** \`${{ steps.get-commit.outputs.first_line }}\`
-**Fixed:** \`${newSubject}\`
-
-The PR branch has been force-pushed with the fixed commit.`
+              body: [
+                '### Dependabot Commit Message Fixed',
+                '',
+                "The commitlint check failed because the dependabot commit message didn't follow the required format.",
+                '',
+                '**Action taken** - Fixed the subject line to be lowercase.',
+                '',
+                '**Original:** ' + '`' + originalSubject + '`',
+                '**Fixed:** ' + '`' + newSubject + '`',
+                '',
+                'The PR branch has been force-pushed with the fixed commit.'
+              ].join('\\n')
             });

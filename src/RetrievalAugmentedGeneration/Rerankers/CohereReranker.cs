@@ -1,9 +1,9 @@
 
+using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Rerankers;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies;
 
@@ -163,22 +163,22 @@ public class CohereReranker<T> : RerankerBase<T>
     {
         // For production, this would call Cohere Rerank API
         // Fallback: Use cross-encoder-like scoring with term overlap and relevance
-        
+
         var queryTerms = ExtractTerms(query);
         var scoredDocuments = new List<(Document<T> doc, double score)>();
 
         foreach (var doc in documents)
         {
             var docTerms = ExtractTerms(doc.Content);
-            
+
             // Calculate relevance score based on multiple factors
             var termOverlapScore = CalculateTermOverlap(queryTerms, docTerms);
             var proximityScore = CalculateTermProximity(query, doc.Content);
             var lengthPenalty = CalculateLengthPenalty(doc.Content.Length);
-            
+
             // Combine scores
             var rerankScore = (termOverlapScore * 0.5 + proximityScore * 0.3 + lengthPenalty * 0.2);
-            
+
             // Blend with original score if available
             if (doc.HasRelevanceScore)
             {
@@ -255,7 +255,7 @@ public class CohereReranker<T> : RerankerBase<T>
         // Prefer documents of moderate length (not too short, not too long)
         var idealLength = 500.0;
         var lengthRatio = contentLength / idealLength;
-        
+
         if (lengthRatio < 0.3) // Too short
             return 0.5;
         else if (lengthRatio > 3.0) // Too long

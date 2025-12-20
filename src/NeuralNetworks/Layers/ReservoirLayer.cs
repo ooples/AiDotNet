@@ -46,7 +46,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// It is set during initialization and cannot be changed afterward.
     /// </remarks>
     private readonly int _inputSize;
-    
+
     /// <summary>
     /// The size of the reservoir, determining the dimensionality of the reservoir state.
     /// </summary>
@@ -56,7 +56,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// cannot be changed afterward.
     /// </remarks>
     private readonly int _reservoirSize;
-    
+
     /// <summary>
     /// The probability of connection between any two neurons in the reservoir.
     /// </summary>
@@ -66,7 +66,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// overfitting. It is set during initialization and cannot be changed afterward.
     /// </remarks>
     private readonly double _connectionProbability;
-    
+
     /// <summary>
     /// The spectral radius of the reservoir weight matrix, affecting the memory of the network.
     /// </summary>
@@ -77,7 +77,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// It is set during initialization and cannot be changed afterward.
     /// </remarks>
     private readonly double _spectralRadius;
-    
+
     /// <summary>
     /// The scaling factor applied to input before it enters the reservoir.
     /// </summary>
@@ -87,7 +87,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// internal dynamics. It is set during initialization and cannot be changed afterward.
     /// </remarks>
     private readonly double _inputScaling;
-    
+
     /// <summary>
     /// The leaking rate determining how quickly the reservoir state updates.
     /// </summary>
@@ -186,11 +186,11 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public ReservoirLayer(
-        int inputSize, 
-        int reservoirSize, 
-        double connectionProbability = 0.1, 
-        double spectralRadius = 0.9, 
-        double inputScaling = 1.0, 
+        int inputSize,
+        int reservoirSize,
+        double connectionProbability = 0.1,
+        double spectralRadius = 0.9,
+        double inputScaling = 1.0,
         double leakingRate = 1.0)
         : base([inputSize], [reservoirSize])
     {

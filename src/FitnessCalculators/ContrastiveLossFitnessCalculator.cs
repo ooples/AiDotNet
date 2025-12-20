@@ -63,7 +63,7 @@ public class ContrastiveLossFitnessCalculator<T, TInput, TOutput> : FitnessCalcu
     /// better performance (0 would be a perfect model). This tells the system that smaller numbers are better.
     /// </para>
     /// </remarks>
-    public ContrastiveLossFitnessCalculator(T? margin = default, DataSetType dataSetType = DataSetType.Validation) 
+    public ContrastiveLossFitnessCalculator(T? margin = default, DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
         _margin = margin ?? _numOps.FromDouble(1.0);

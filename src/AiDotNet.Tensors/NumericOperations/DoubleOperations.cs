@@ -56,7 +56,7 @@ public class DoubleOperations : INumericOperations<double>
     /// Be aware that doubles can have small precision errors with certain decimal fractions.
     /// </para>
     /// </remarks>
-    
+
     public double Add(double a, double b) => a + b;
     /// <summary>
     /// Subtracts the second double value from the first.

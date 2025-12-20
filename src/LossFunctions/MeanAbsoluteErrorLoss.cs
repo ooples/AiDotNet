@@ -37,7 +37,7 @@ public class MeanAbsoluteErrorLoss<T> : LossFunctionBase<T>
         ValidateVectorLengths(predicted, actual);
         return StatisticsHelper<T>.CalculateMeanAbsoluteError(predicted, actual);
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Mean Absolute Error loss function.
     /// </summary>

@@ -52,7 +52,7 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     private readonly SplineRegressionOptions _options;
-    
+
     /// <summary>
     /// The collection of knot points for each feature.
     /// </summary>
@@ -73,7 +73,7 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     private List<Vector<T>> _knots;
-    
+
     /// <summary>
     /// The coefficients for the spline model.
     /// </summary>
@@ -509,20 +509,20 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         var newModel = new SplineRegression<T>(_options, Regularization);
-        
+
         // Deep copy the knots list
         newModel._knots = new List<Vector<T>>();
         foreach (var knotVector in _knots)
         {
             newModel._knots.Add(knotVector.Clone());
         }
-        
+
         // Deep copy the coefficients
         if (_coefficients != null)
         {
             newModel._coefficients = _coefficients.Clone();
         }
-        
+
         return newModel;
     }
 }

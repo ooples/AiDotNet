@@ -1,6 +1,6 @@
 global using AiDotNet.Factories;
-using Newtonsoft.Json;
 using AiDotNet.Autodiff;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Regression;
 

@@ -53,7 +53,7 @@ public class ProbabilisticKernel<T> : IKernelFunction<T>
     /// you might want to use a larger sigma value.
     /// </remarks>
     private readonly T _sigma;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
@@ -128,10 +128,10 @@ public class ProbabilisticKernel<T> : IKernelFunction<T>
         T dotProduct = x1.DotProduct(x2);
         T x1Norm = x1.DotProduct(x1);
         T x2Norm = x2.DotProduct(x2);
-        T exponent = _numOps.Divide(_numOps.Negate(_numOps.Square(_numOps.Subtract(x1Norm, x2Norm))), 
+        T exponent = _numOps.Divide(_numOps.Negate(_numOps.Square(_numOps.Subtract(x1Norm, x2Norm))),
                                     _numOps.Multiply(_numOps.FromDouble(2), _numOps.Square(_sigma)));
-        
-        return _numOps.Multiply(_numOps.Exp(exponent), 
+
+        return _numOps.Multiply(_numOps.Exp(exponent),
                                 _numOps.Divide(dotProduct, _numOps.Sqrt(_numOps.Multiply(x1Norm, x2Norm))));
     }
 }

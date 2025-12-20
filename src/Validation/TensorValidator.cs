@@ -19,7 +19,7 @@ public static class TensorValidator
     public static void ValidateShape<T>(Tensor<T> tensor, int[] expectedShape, string component = "", string operation = "")
     {
         var (resolvedComponent, resolvedOperation) = ValidationHelper<T>.ResolveCallerInfo(component, operation);
-        
+
         if (!tensor.Shape.SequenceEqual(expectedShape))
         {
             throw new TensorShapeMismatchException(expectedShape, tensor.Shape, resolvedComponent, resolvedOperation);
@@ -38,7 +38,7 @@ public static class TensorValidator
     public static void ValidateForwardPassPerformed<T>(Tensor<T>? lastInput, string componentName = "", string componentType = "", string operation = "")
     {
         var (resolvedComponent, resolvedOperation) = ValidationHelper<T>.ResolveCallerInfo(componentName, operation);
-        
+
         if (lastInput == null)
         {
             throw new ForwardPassRequiredException(resolvedComponent, componentType.Length > 0 ? componentType : resolvedComponent, resolvedOperation);
@@ -56,7 +56,7 @@ public static class TensorValidator
     public static void ValidateForwardPassPerformedForLayer<T>(Tensor<T>? lastInput, string layerName = "", string layerType = "")
     {
         var (resolvedComponent, _) = ValidationHelper<T>.ResolveCallerInfo(layerName);
-        
+
         if (lastInput == null)
         {
             throw new ForwardPassRequiredException(resolvedComponent, layerType.Length > 0 ? layerType : resolvedComponent);
@@ -75,7 +75,7 @@ public static class TensorValidator
     public static void ValidateShapesMatch<T>(Tensor<T> tensor1, Tensor<T> tensor2, string component = "", string operation = "")
     {
         var (resolvedComponent, resolvedOperation) = ValidationHelper<T>.ResolveCallerInfo(component, operation);
-        
+
         if (!tensor1.Shape.SequenceEqual(tensor2.Shape))
         {
             throw new TensorShapeMismatchException(tensor1.Shape, tensor2.Shape, resolvedComponent, resolvedOperation);

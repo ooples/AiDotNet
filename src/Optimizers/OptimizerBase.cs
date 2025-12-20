@@ -1,7 +1,7 @@
-global using AiDotNet.Models.Inputs;
-global using AiDotNet.Evaluation;
 global using AiDotNet.Caching;
 global using AiDotNet.Enums;
+global using AiDotNet.Evaluation;
+global using AiDotNet.Models.Inputs;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -449,7 +449,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <param name="inputData">The input data for evaluation.</param>
     /// <returns>The calculated loss value.</returns>
     protected virtual T CalculateLoss(
-        IFullModel<T, TInput, TOutput> solution, 
+        IFullModel<T, TInput, TOutput> solution,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
         var stepData = EvaluateSolution(solution, inputData);
@@ -775,7 +775,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 IterationsWithoutImprovement = 0;
             }
 
-            CurrentLearningRate = MathHelper.Max(NumOps.FromDouble(Options.MinLearningRate), 
+            CurrentLearningRate = MathHelper.Max(NumOps.FromDouble(Options.MinLearningRate),
                 MathHelper.Min(NumOps.FromDouble(Options.MaxLearningRate), CurrentLearningRate));
         }
 
@@ -790,7 +790,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 CurrentMomentum = NumOps.Multiply(CurrentMomentum, NumOps.FromDouble(Options.MomentumDecreaseFactor));
             }
 
-            CurrentMomentum = MathHelper.Max(NumOps.FromDouble(Options.MinMomentum), 
+            CurrentMomentum = MathHelper.Max(NumOps.FromDouble(Options.MinMomentum),
                 MathHelper.Min(NumOps.FromDouble(Options.MaxMomentum), CurrentMomentum));
         }
     }

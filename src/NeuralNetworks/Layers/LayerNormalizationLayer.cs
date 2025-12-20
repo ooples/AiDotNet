@@ -218,11 +218,11 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
         // Use Engine for GPU/CPU accelerated Layer Normalization
         // This replaces the manual loop over batch items
         var output = Engine.LayerNorm(
-            input, 
-            _gamma, 
-            _beta, 
-            NumOps.ToDouble(_epsilon), 
-            out var mean, 
+            input,
+            _gamma,
+            _beta,
+            NumOps.ToDouble(_epsilon),
+            out var mean,
             out var variance);
 
         _lastMean = mean;
@@ -593,5 +593,13 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
             // No running statistics needed (unlike BatchNorm)
             return _gamma != null && _beta != null;
         }
+    }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        return new Dictionary<string, string>
+        {
+            ["Epsilon"] = Convert.ToDouble(_epsilon).ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
     }
 }

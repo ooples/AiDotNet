@@ -207,7 +207,7 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         T result = B;
         for (int i = 0; i < SupportVectors.Rows; i++)
         {
-            result = NumOps.Add(result, NumOps.Multiply(Alphas[i], 
+            result = NumOps.Add(result, NumOps.Multiply(Alphas[i],
                 KernelFunction(SupportVectors.GetRow(i), input)));
         }
 
@@ -564,22 +564,22 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         var newModel = new SupportVectorRegression<T>(_options, Regularization);
-        
+
         // Copy support vectors if they exist
         if (SupportVectors != null)
         {
             newModel.SupportVectors = SupportVectors.Clone();
         }
-        
+
         // Copy alpha coefficients if they exist
         if (Alphas != null)
         {
             newModel.Alphas = Alphas.Clone();
         }
-        
+
         // Copy the bias term
         newModel.B = B;
-        
+
         return newModel;
     }
 }

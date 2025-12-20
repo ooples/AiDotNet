@@ -224,7 +224,7 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     /// </remarks>
     private async Task<(int Feature, T Threshold)?> FindBestSplitAsync(Matrix<T> x, Vector<T> y)
     {
-        var tasks = Enumerable.Range(0, x.Columns).Select(feature => 
+        var tasks = Enumerable.Range(0, x.Columns).Select(feature =>
             Task.Run(() => FindBestSplitForFeature(x, y, feature)));
 
         var results = await ParallelProcessingHelper.ProcessTasksInParallel(tasks);
@@ -694,7 +694,7 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         var meanPrediction = CalculateAveragePrediction(node);
-        var error = node.Samples.Select(sample => 
+        var error = node.Samples.Select(sample =>
             NumOps.Multiply(
                 NumOps.Subtract(sample.Target, meanPrediction),
                 NumOps.Subtract(sample.Target, meanPrediction)

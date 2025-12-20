@@ -80,7 +80,7 @@ public class STLDecompositionOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public new int SeasonalPeriod { get; set; } = 12;
-    
+
     /// <summary>
     /// Gets or sets the degree of the polynomial used in the seasonal LOESS smoothing.
     /// </summary>
@@ -117,7 +117,7 @@ public class STLDecompositionOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int SeasonalDegree { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the degree of the polynomial used in the trend LOESS smoothing.
     /// </summary>
@@ -154,7 +154,7 @@ public class STLDecompositionOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int TrendDegree { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the step size for the seasonal LOESS smoothing.
     /// </summary>
@@ -192,7 +192,7 @@ public class STLDecompositionOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int SeasonalJump { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the step size for the trend LOESS smoothing.
     /// </summary>
@@ -230,7 +230,7 @@ public class STLDecompositionOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int TrendJump { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the number of passes through the inner loop of the STL algorithm.
     /// </summary>

@@ -75,7 +75,7 @@ public class TripletLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculato
     /// lower values indicate better performance (0 would be a perfect model).
     /// </para>
     /// </remarks>
-    public TripletLossFitnessCalculator(T? margin = default, DataSetType dataSetType = DataSetType.Validation) 
+    public TripletLossFitnessCalculator(T? margin = default, DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
         _margin = margin ?? _numOps.FromDouble(1.0);
@@ -105,7 +105,7 @@ public class TripletLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculato
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        var (anchor, positive, negative) = PrepareTripletData(ConversionsHelper.ConvertToMatrix<T, TInput>(dataSet.Features), 
+        var (anchor, positive, negative) = PrepareTripletData(ConversionsHelper.ConvertToMatrix<T, TInput>(dataSet.Features),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
         return new TripletLoss<T>(Convert.ToDouble(_margin)).CalculateLoss(anchor, positive, negative);
     }

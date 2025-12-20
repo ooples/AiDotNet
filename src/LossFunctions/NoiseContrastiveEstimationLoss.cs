@@ -42,7 +42,7 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
     {
         _numNoiseSamples = numNoiseSamples;
     }
-    
+
     /// <summary>
     /// Calculates the NCE loss between target and noise samples.
     /// </summary>
@@ -56,12 +56,12 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
         {
             throw new ArgumentException("Number of target samples must match number of rows in noise samples.");
         }
-        
+
         if (noiseLogits.Columns != _numNoiseSamples)
         {
             throw new ArgumentException("Number of noise samples per target must match the configured value.");
         }
-        
+
         T loss = NumOps.Zero;
         for (int i = 0; i < targetLogits.Length; i++)
         {
@@ -86,10 +86,10 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
             // -(log P(target is real) + sum(log P(noise is noise)))
             loss = NumOps.Add(loss, NumOps.Negate(NumOps.Add(targetTerm, noiseSum)));
         }
-        
+
         return NumOps.Divide(loss, NumOps.FromDouble(targetLogits.Length));
     }
-    
+
     /// <summary>
     /// Calculates the gradient of the NCE loss function.
     /// </summary>
@@ -103,41 +103,41 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
         {
             throw new ArgumentException("Number of target samples must match number of rows in noise samples.");
         }
-        
+
         if (noiseLogits.Columns != _numNoiseSamples)
         {
             throw new ArgumentException("Number of noise samples per target must match the configured value.");
         }
-        
+
         Vector<T> targetGradient = new Vector<T>(targetLogits.Length);
         Matrix<T> noiseGradient = new Matrix<T>(noiseLogits.Rows, noiseLogits.Columns);
-        
+
         for (int i = 0; i < targetLogits.Length; i++)
         {
             // P(target is real | target)
             T targetProb = Sigmoid(targetLogits[i]);
-            
+
             // -(1 - P(target is real | target))
             targetGradient[i] = NumOps.Negate(NumOps.Subtract(NumOps.One, targetProb));
-            
+
             for (int j = 0; j < _numNoiseSamples; j++)
             {
                 // P(noise is real | noise)
                 T noiseProb = Sigmoid(noiseLogits[i, j]);
-                
+
                 // P(noise is real | noise)
                 noiseGradient[i, j] = noiseProb;
             }
         }
-        
+
         // Scale by batch size
         T scale = NumOps.Divide(NumOps.One, NumOps.FromDouble(targetLogits.Length));
         targetGradient = targetGradient.Transform(x => NumOps.Multiply(x, scale));
         noiseGradient = noiseGradient.Transform((x, _, __) => NumOps.Multiply(x, scale));
-        
+
         return (targetGradient, noiseGradient);
     }
-    
+
     /// <summary>
     /// This method is not used for NCE Loss as it requires specific input formats.
     /// </summary>
@@ -152,7 +152,7 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
             "Use the Calculate(Vector<T>, Matrix<T>) method instead."
         );
     }
-    
+
     /// <summary>
     /// This method is not used for NCE Loss as it requires specific input formats.
     /// </summary>
@@ -167,7 +167,7 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
             "Use the CalculateDerivative(Vector<T>, Matrix<T>) method instead."
         );
     }
-    
+
     /// <summary>
     /// Applies the sigmoid function to a scalar value.
     /// </summary>

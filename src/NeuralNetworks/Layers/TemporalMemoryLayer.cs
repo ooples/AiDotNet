@@ -14,9 +14,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// <para><b>For Beginners:</b> This layer helps the network remember and predict sequences of patterns.
 /// 
-    /// Think of it like learning to anticipate what comes next in a song:
-    /// - The layer organizes memory cells into columns (like musical notes)
-    /// - Each column can have multiple cells (representing different contexts for the same note)
+/// Think of it like learning to anticipate what comes next in a song:
+/// - The layer organizes memory cells into columns (like musical notes)
+/// - Each column can have multiple cells (representing different contexts for the same note)
 /// - When a note plays, the layer activates specific cells based on what came before
 /// - Over time, it learns which notes typically follow others in different contexts
 /// 

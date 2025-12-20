@@ -4140,7 +4140,7 @@ public class CpuEngine : IEngine
         // Validate kernel in_channels matches input in_channels
         if (kernelInChannels != inChannels)
             throw new ArgumentException($"Weight's input channels ({kernelInChannels}) must match input tensor's in_channels ({inChannels}).");
-        
+
         // Ensure output shape derived from input/kernel/stride matches weights
         int expectedOutputH = (inputHeight - kernelHeight) / strideH + 1;
         int expectedOutputW = (inputWidth - kernelWidth) / strideW + 1;
@@ -4183,7 +4183,7 @@ public class CpuEngine : IEngine
                                 }
                             }
                         }
-                        
+
                         // Add bias if provided
                         if (biasData != null)
                         {

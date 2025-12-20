@@ -1,14 +1,13 @@
-﻿using System.Threading.Tasks;
-using AiDotNet.Autodiff;
-using AiDotNet.Interpretability;
-using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-
-using AiDotNet.Enums;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
+using AiDotNet.Autodiff;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.Interpretability;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Models;
 
@@ -38,7 +37,7 @@ namespace AiDotNet.Models;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretableModel<T> 
+public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretableModel<T>
 {
     /// <summary>
     /// Gets the vector of coefficients used by the model.
@@ -66,7 +65,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// </para>
     /// </remarks>
     public Vector<T> Coefficients { get; }
-    
+
     /// <summary>
     /// The numeric operations provider used for mathematical operations on type T.
     /// </summary>
@@ -245,10 +244,10 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     {
         if (featureIndex < 0 || featureIndex >= FeatureCount)
         {
-            throw new ArgumentOutOfRangeException(nameof(featureIndex), 
+            throw new ArgumentOutOfRangeException(nameof(featureIndex),
                 $"Feature index must be between 0 and {FeatureCount - 1}");
         }
-        
+
         return !_numOps.Equals(Coefficients[featureIndex], _numOps.Zero);
     }
 
@@ -385,7 +384,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         {
             throw new ArgumentNullException(nameof(input));
         }
-        
+
         if (input.Length != Coefficients.Length)
         {
             throw new ArgumentException($"Input vector length ({input.Length}) must match coefficients length ({Coefficients.Length}).", nameof(input));
@@ -440,12 +439,12 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         {
             throw new ArgumentNullException(nameof(X));
         }
-        
+
         if (y == null)
         {
             throw new ArgumentNullException(nameof(y));
         }
-        
+
         if (X.Rows != y.Length)
         {
             throw new ArgumentException($"Number of rows in X ({X.Rows}) must match the length of y ({y.Length}).");
@@ -462,14 +461,14 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
             // (X^T * X)^-1 * X^T * y
             Matrix<T> XTranspose = X.Transpose();
             Matrix<T> XTX = XTranspose * X;
-            
+
             // Check if XTX is singular (not invertible)
             if (!XTX.IsInvertible())
             {
                 throw new InvalidOperationException("The matrix X^T * X is not invertible. " +
                     "This can happen when features are linearly dependent or when there are more features than data points.");
             }
-            
+
             Matrix<T> XTXInverse = XTX.Inverse();
             Matrix<T> XTY = XTranspose * Matrix<T>.FromVector(y);
             Vector<T> newCoefficients = (XTXInverse * XTY).GetColumn(0);
@@ -524,7 +523,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         {
             throw new ArgumentNullException(nameof(input));
         }
-        
+
         if (input.Columns != FeatureCount)
         {
             throw new ArgumentException($"Input matrix has {input.Columns} columns, but the model expects {FeatureCount} features.", nameof(input));
@@ -632,7 +631,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
 
         // Write a version number for forward compatibility
         writer.Write(1); // Version 1
-        
+
         // Write the number of coefficients
         writer.Write(Coefficients.Length);
 
@@ -685,7 +684,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         {
             throw new ArgumentNullException(nameof(data));
         }
-        
+
         if (data.Length == 0)
         {
             throw new ArgumentException("Serialized data cannot be empty.", nameof(data));
@@ -698,10 +697,10 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
 
             // Read version number
             int version = reader.ReadInt32();
-            
+
             // Read the number of coefficients
             int length = reader.ReadInt32();
-            
+
             // Validate coefficient count
             if (length != Coefficients.Length)
             {
@@ -856,12 +855,12 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         {
             throw new ArgumentNullException(nameof(input));
         }
-        
+
         if (expectedOutput == null)
         {
             throw new ArgumentNullException(nameof(expectedOutput));
         }
-        
+
         TrainInternal(input, expectedOutput);
     }
 
@@ -893,7 +892,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         {
             throw new ArgumentNullException(nameof(input));
         }
-        
+
         return PredictInternal(input);
     }
 
@@ -927,7 +926,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         {
             parameters[i] = Coefficients[i];
         }
-        
+
         return parameters;
     }
 
@@ -960,12 +959,12 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         {
             throw new ArgumentNullException(nameof(parameters));
         }
-        
+
         if (parameters.Length != Coefficients.Length)
         {
             throw new ArgumentException($"Parameters length ({parameters.Length}) must match coefficients length ({Coefficients.Length}).", nameof(parameters));
         }
-        
+
         // Update coefficients from parameters
         for (int i = 0; i < parameters.Length; i++)
         {
@@ -1010,12 +1009,12 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         {
             throw new ArgumentNullException(nameof(parameters));
         }
-        
+
         if (parameters.Length != Coefficients.Length)
         {
             throw new ArgumentException($"Parameters length ({parameters.Length}) must match coefficients length ({Coefficients.Length}).", nameof(parameters));
         }
-        
+
         // Create a new model with the provided parameters
         return new VectorModel<T>(parameters);
     }
@@ -1122,19 +1121,19 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     {
         if (featureIndices == null)
             throw new ArgumentNullException(nameof(featureIndices));
-        
+
         var indices = featureIndices.ToList();
-        
+
         // Validate indices
         foreach (var index in indices)
         {
             if (index < 0 || index >= FeatureCount)
             {
-                throw new ArgumentOutOfRangeException(nameof(featureIndices), 
+                throw new ArgumentOutOfRangeException(nameof(featureIndices),
                     $"Feature index {index} is out of range. Must be between 0 and {FeatureCount - 1}.");
             }
         }
-        
+
         // Since Coefficients is read-only, we need to modify the underlying data
         // Set non-active features to zero
         for (int i = 0; i < FeatureCount; i++)
@@ -1191,90 +1190,122 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
 
     #region IInterpretableModel Implementation
 
-        protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
-        protected Vector<int>? _sensitiveFeatures;
-        protected readonly List<FairnessMetric> _fairnessMetrics = new();
-        protected IFullModel<T, Matrix<T>, Vector<T>>? _baseModel;
+    protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
+    protected Vector<int>? _sensitiveFeatures;
+    protected readonly List<FairnessMetric> _fairnessMetrics = new();
+    protected IFullModel<T, Matrix<T>, Vector<T>>? _baseModel;
 
-        /// <summary>
-        /// Gets the global feature importance across all predictions.
-        /// </summary>
-        public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync()
-        {
+    /// <summary>
+    /// Gets the global feature importance across all predictions.
+    /// </summary>
+    public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync()
+    {
         return await InterpretableModelHelper.GetGlobalFeatureImportanceAsync<T>(this, _enabledMethods);
-        }
+    }
 
-        /// <summary>
-        /// Gets the local feature importance for a specific input.
-        /// </summary>
-        public virtual async Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Matrix<T> input)
-        {
+    /// <summary>
+    /// Gets the local feature importance for a specific input.
+    /// </summary>
+    public virtual async Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Matrix<T> input)
+    {
         return await InterpretableModelHelper.GetLocalFeatureImportanceAsync<T>(this, _enabledMethods, ConversionsHelper.ConvertToTensor<T>(input));
-        }
+    }
 
-        /// <summary>
-        /// Gets SHAP values for the given inputs.
-        /// </summary>
-        public virtual async Task<Matrix<T>> GetShapValuesAsync(Matrix<T> inputs)
-        {
+    /// <summary>
+    /// Gets SHAP values for the given inputs.
+    /// </summary>
+    public virtual async Task<Matrix<T>> GetShapValuesAsync(Matrix<T> inputs)
+    {
         return await InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods, ConversionsHelper.ConvertToTensor<T>(inputs));
-        }
+    }
 
-        /// <summary>
-        /// Gets LIME explanation for a specific input.
-        /// </summary>
-        public virtual async Task<LimeExplanation<T>> GetLimeExplanationAsync(Matrix<T> input, int numFeatures = 10)
-        {
+    /// <summary>
+    /// Gets LIME explanation for a specific input.
+    /// </summary>
+    public virtual async Task<LimeExplanation<T>> GetLimeExplanationAsync(Matrix<T> input, int numFeatures = 10)
+    {
         return await InterpretableModelHelper.GetLimeExplanationAsync<T>(this, _enabledMethods, ConversionsHelper.ConvertToTensor<T>(input), numFeatures);
+    }
+
+    /// <summary>
+    /// Gets partial dependence data for specified features.
+    /// </summary>
+    public virtual async Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
+    {
+        await Task.CompletedTask; // Satisfy async method signature
+
+        if (featureIndices == null)
+        {
+            throw new ArgumentNullException(nameof(featureIndices));
         }
 
-        /// <summary>
-        /// Gets partial dependence data for specified features.
-        /// </summary>
-        public virtual async Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
+        if (featureIndices.Length == 0)
         {
-            await Task.CompletedTask; // Satisfy async method signature
+            throw new ArgumentException("Feature indices cannot be empty.", nameof(featureIndices));
+        }
 
-            if (featureIndices == null)
+        if (gridResolution <= 0)
+        {
+            throw new ArgumentException("Grid resolution must be greater than zero.", nameof(gridResolution));
+        }
+
+        // Validate feature indices
+        for (int i = 0; i < featureIndices.Length; i++)
+        {
+            if (featureIndices[i] < 0 || featureIndices[i] >= FeatureCount)
             {
-                throw new ArgumentNullException(nameof(featureIndices));
+                throw new ArgumentOutOfRangeException(nameof(featureIndices),
+                    $"Feature index {featureIndices[i]} is out of range. Must be between 0 and {FeatureCount - 1}.");
+            }
+        }
+
+        // For a linear model (VectorModel), partial dependence is simply the coefficient
+        // times the grid values for each feature, since the model is additive.
+        // PD(x_j) = coefficient_j * x_j (for a linear model with no intercept)
+
+        var gridValues = new Dictionary<int, Vector<T>>();
+        var pdpMatrix = new List<Vector<T>>();
+
+        // For VectorModel, we compute partial dependence for one feature at a time
+        // since the model is linear and additive
+        if (featureIndices.Length == 1)
+        {
+            int featureIdx = featureIndices[0];
+
+            // Generate grid values for the feature
+            // Using a range from -1 to 1 as a default since we don't have training data
+            T minVal = _numOps.FromDouble(-1.0);
+            T maxVal = _numOps.FromDouble(1.0);
+
+            Vector<T> gridVals = new Vector<T>(gridResolution);
+            for (int i = 0; i < gridResolution; i++)
+            {
+                T ratio = _numOps.FromDouble((double)i / (gridResolution - 1));
+                T range = _numOps.Subtract(maxVal, minVal);
+                gridVals[i] = _numOps.Add(minVal, _numOps.Multiply(range, ratio));
             }
 
-            if (featureIndices.Length == 0)
+            gridValues[featureIdx] = gridVals;
+
+            // For a linear model, partial dependence is simply coefficient * feature_value
+            Vector<T> pdValues = new Vector<T>(gridResolution);
+            for (int i = 0; i < gridResolution; i++)
             {
-                throw new ArgumentException("Feature indices cannot be empty.", nameof(featureIndices));
+                pdValues[i] = _numOps.Multiply(Coefficients[featureIdx], gridVals[i]);
             }
 
-            if (gridResolution <= 0)
+            pdpMatrix.Add(pdValues);
+        }
+        else
+        {
+            // For multiple features, compute the interaction effect
+            // For a linear model without interaction terms, this is just the sum
+            // of individual feature effects
+
+            // Generate grid for each feature
+            var grids = new List<Vector<T>>();
+            foreach (int featureIdx in featureIndices)
             {
-                throw new ArgumentException("Grid resolution must be greater than zero.", nameof(gridResolution));
-            }
-
-            // Validate feature indices
-            for (int i = 0; i < featureIndices.Length; i++)
-            {
-                if (featureIndices[i] < 0 || featureIndices[i] >= FeatureCount)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(featureIndices),
-                        $"Feature index {featureIndices[i]} is out of range. Must be between 0 and {FeatureCount - 1}.");
-                }
-            }
-
-            // For a linear model (VectorModel), partial dependence is simply the coefficient
-            // times the grid values for each feature, since the model is additive.
-            // PD(x_j) = coefficient_j * x_j (for a linear model with no intercept)
-
-            var gridValues = new Dictionary<int, Vector<T>>();
-            var pdpMatrix = new List<Vector<T>>();
-
-            // For VectorModel, we compute partial dependence for one feature at a time
-            // since the model is linear and additive
-            if (featureIndices.Length == 1)
-            {
-                int featureIdx = featureIndices[0];
-
-                // Generate grid values for the feature
-                // Using a range from -1 to 1 as a default since we don't have training data
                 T minVal = _numOps.FromDouble(-1.0);
                 T maxVal = _numOps.FromDouble(1.0);
 
@@ -1287,263 +1318,231 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
                 }
 
                 gridValues[featureIdx] = gridVals;
-
-                // For a linear model, partial dependence is simply coefficient * feature_value
-                Vector<T> pdValues = new Vector<T>(gridResolution);
-                for (int i = 0; i < gridResolution; i++)
-                {
-                    pdValues[i] = _numOps.Multiply(Coefficients[featureIdx], gridVals[i]);
-                }
-
-                pdpMatrix.Add(pdValues);
-            }
-            else
-            {
-                // For multiple features, compute the interaction effect
-                // For a linear model without interaction terms, this is just the sum
-                // of individual feature effects
-
-                // Generate grid for each feature
-                var grids = new List<Vector<T>>();
-                foreach (int featureIdx in featureIndices)
-                {
-                    T minVal = _numOps.FromDouble(-1.0);
-                    T maxVal = _numOps.FromDouble(1.0);
-
-                    Vector<T> gridVals = new Vector<T>(gridResolution);
-                    for (int i = 0; i < gridResolution; i++)
-                    {
-                        T ratio = _numOps.FromDouble((double)i / (gridResolution - 1));
-                        T range = _numOps.Subtract(maxVal, minVal);
-                        gridVals[i] = _numOps.Add(minVal, _numOps.Multiply(range, ratio));
-                    }
-
-                    gridValues[featureIdx] = gridVals;
-                    grids.Add(gridVals);
-                }
-
-                // Compute partial dependence for each combination
-                // For a 2D case with gridResolution=20, we'd have 20x20=400 points
-                int totalPoints = 1;
-                for (int i = 0; i < featureIndices.Length; i++)
-                {
-                    totalPoints *= gridResolution;
-                }
-
-                // Generate all combinations and compute PD values
-                Vector<T> pdValues = new Vector<T>(totalPoints);
-                int pointIdx = 0;
-
-                // Generate combinations recursively
-                var currentPoint = new T[featureIndices.Length];
-                ComputePDCombinations(featureIndices, grids, 0, currentPoint, pdValues, ref pointIdx);
-
-                pdpMatrix.Add(pdValues);
+                grids.Add(gridVals);
             }
 
-            // Create the result matrix
-            Matrix<T> pdMatrix;
-            if (pdpMatrix.Count == 1)
+            // Compute partial dependence for each combination
+            // For a 2D case with gridResolution=20, we'd have 20x20=400 points
+            int totalPoints = 1;
+            for (int i = 0; i < featureIndices.Length; i++)
             {
-                // Single row for 1D or single vector for multi-feature
-                pdMatrix = new Matrix<T>(1, pdpMatrix[0].Length);
-                for (int j = 0; j < pdpMatrix[0].Length; j++)
-                {
-                    pdMatrix[0, j] = pdpMatrix[0][j];
-                }
-            }
-            else
-            {
-                pdMatrix = new Matrix<T>(pdpMatrix.Count, pdpMatrix[0].Length);
-                for (int i = 0; i < pdpMatrix.Count; i++)
-                {
-                    for (int j = 0; j < pdpMatrix[i].Length; j++)
-                    {
-                        pdMatrix[i, j] = pdpMatrix[i][j];
-                    }
-                }
+                totalPoints *= gridResolution;
             }
 
-            return new PartialDependenceData<T>
-            {
-                FeatureIndices = featureIndices,
-                GridValues = gridValues,
-                PartialDependenceValues = pdMatrix,
-                GridResolution = gridResolution,
-                IceCurves = new List<Matrix<T>>()
-            };
+            // Generate all combinations and compute PD values
+            Vector<T> pdValues = new Vector<T>(totalPoints);
+            int pointIdx = 0;
+
+            // Generate combinations recursively
+            var currentPoint = new T[featureIndices.Length];
+            ComputePDCombinations(featureIndices, grids, 0, currentPoint, pdValues, ref pointIdx);
+
+            pdpMatrix.Add(pdValues);
         }
 
-        /// <summary>
-        /// Helper method to recursively compute partial dependence combinations.
-        /// </summary>
-        private void ComputePDCombinations(Vector<int> featureIndices, List<Vector<T>> grids,
-            int depth, T[] currentPoint, Vector<T> pdValues, ref int pointIdx)
+        // Create the result matrix
+        Matrix<T> pdMatrix;
+        if (pdpMatrix.Count == 1)
         {
-            if (depth == featureIndices.Length)
+            // Single row for 1D or single vector for multi-feature
+            pdMatrix = new Matrix<T>(1, pdpMatrix[0].Length);
+            for (int j = 0; j < pdpMatrix[0].Length; j++)
             {
-                // Compute PD value for this combination
-                T pdValue = _numOps.Zero;
-                for (int i = 0; i < featureIndices.Length; i++)
-                {
-                    int featureIdx = featureIndices[i];
-                    pdValue = _numOps.Add(pdValue, _numOps.Multiply(Coefficients[featureIdx], currentPoint[i]));
-                }
-                pdValues[pointIdx++] = pdValue;
-                return;
+                pdMatrix[0, j] = pdpMatrix[0][j];
             }
-
-            // Recurse through grid values for this feature
-            Vector<T> currentGrid = grids[depth];
-            for (int i = 0; i < currentGrid.Length; i++)
+        }
+        else
+        {
+            pdMatrix = new Matrix<T>(pdpMatrix.Count, pdpMatrix[0].Length);
+            for (int i = 0; i < pdpMatrix.Count; i++)
             {
-                currentPoint[depth] = currentGrid[i];
-                ComputePDCombinations(featureIndices, grids, depth + 1, currentPoint, pdValues, ref pointIdx);
+                for (int j = 0; j < pdpMatrix[i].Length; j++)
+                {
+                    pdMatrix[i, j] = pdpMatrix[i][j];
+                }
             }
         }
 
-        /// <summary>
-        /// Gets counterfactual explanation for a given input and desired output.
-        /// </summary>
-        public virtual async Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Matrix<T> input, Vector<T> desiredOutput, int maxChanges = 5)
+        return new PartialDependenceData<T>
         {
+            FeatureIndices = featureIndices,
+            GridValues = gridValues,
+            PartialDependenceValues = pdMatrix,
+            GridResolution = gridResolution,
+            IceCurves = new List<Matrix<T>>()
+        };
+    }
+
+    /// <summary>
+    /// Helper method to recursively compute partial dependence combinations.
+    /// </summary>
+    private void ComputePDCombinations(Vector<int> featureIndices, List<Vector<T>> grids,
+        int depth, T[] currentPoint, Vector<T> pdValues, ref int pointIdx)
+    {
+        if (depth == featureIndices.Length)
+        {
+            // Compute PD value for this combination
+            T pdValue = _numOps.Zero;
+            for (int i = 0; i < featureIndices.Length; i++)
+            {
+                int featureIdx = featureIndices[i];
+                pdValue = _numOps.Add(pdValue, _numOps.Multiply(Coefficients[featureIdx], currentPoint[i]));
+            }
+            pdValues[pointIdx++] = pdValue;
+            return;
+        }
+
+        // Recurse through grid values for this feature
+        Vector<T> currentGrid = grids[depth];
+        for (int i = 0; i < currentGrid.Length; i++)
+        {
+            currentPoint[depth] = currentGrid[i];
+            ComputePDCombinations(featureIndices, grids, depth + 1, currentPoint, pdValues, ref pointIdx);
+        }
+    }
+
+    /// <summary>
+    /// Gets counterfactual explanation for a given input and desired output.
+    /// </summary>
+    public virtual async Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Matrix<T> input, Vector<T> desiredOutput, int maxChanges = 5)
+    {
         return await InterpretableModelHelper.GetCounterfactualAsync<T>(this, _enabledMethods, ConversionsHelper.ConvertToTensor<T>(input), ConversionsHelper.ConvertToTensor<T>(desiredOutput), maxChanges);
-        }
+    }
 
-        /// <summary>
-        /// Gets model-specific interpretability information.
-        /// </summary>
-        public virtual async Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync()
-        {
+    /// <summary>
+    /// Gets model-specific interpretability information.
+    /// </summary>
+    public virtual async Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync()
+    {
         return await InterpretableModelHelper.GetModelSpecificInterpretabilityAsync<T>(this);
-        }
+    }
 
-        /// <summary>
-        /// Generates a text explanation for a prediction.
-        /// </summary>
-        public virtual async Task<string> GenerateTextExplanationAsync(Matrix<T> input, Vector<T> prediction)
-        {
+    /// <summary>
+    /// Generates a text explanation for a prediction.
+    /// </summary>
+    public virtual async Task<string> GenerateTextExplanationAsync(Matrix<T> input, Vector<T> prediction)
+    {
         return await InterpretableModelHelper.GenerateTextExplanationAsync<T>(this, ConversionsHelper.ConvertToTensor<T>(input), ConversionsHelper.ConvertToTensor<T>(prediction));
-        }
+    }
 
-        /// <summary>
-        /// Gets feature interaction effects between two features.
-        /// </summary>
-        public virtual async Task<T> GetFeatureInteractionAsync(int feature1Index, int feature2Index)
-        {
+    /// <summary>
+    /// Gets feature interaction effects between two features.
+    /// </summary>
+    public virtual async Task<T> GetFeatureInteractionAsync(int feature1Index, int feature2Index)
+    {
         return await InterpretableModelHelper.GetFeatureInteractionAsync<T>(_enabledMethods, feature1Index, feature2Index);
-        }
+    }
 
-        /// <summary>
-        /// Validates fairness metrics for the given inputs.
-        /// </summary>
-        public virtual async Task<FairnessMetrics<T>> ValidateFairnessAsync(Matrix<T> inputs, int sensitiveFeatureIndex)
-        {
+    /// <summary>
+    /// Validates fairness metrics for the given inputs.
+    /// </summary>
+    public virtual async Task<FairnessMetrics<T>> ValidateFairnessAsync(Matrix<T> inputs, int sensitiveFeatureIndex)
+    {
         return await InterpretableModelHelper.ValidateFairnessAsync<T>(_fairnessMetrics);
-        }
+    }
 
-        /// <summary>
-        /// Gets anchor explanation for a given input.
-        /// </summary>
-        public virtual async Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Matrix<T> input, T threshold)
-        {
+    /// <summary>
+    /// Gets anchor explanation for a given input.
+    /// </summary>
+    public virtual async Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Matrix<T> input, T threshold)
+    {
         return await InterpretableModelHelper.GetAnchorExplanationAsync(this, _enabledMethods, ConversionsHelper.ConvertToTensor<T>(input), threshold);
-        }
+    }
 
-        // IInterpretableModel<T> interface implementations with Tensor<T> parameters
+    // IInterpretableModel<T> interface implementations with Tensor<T> parameters
 
-        /// <summary>
-        /// Gets the local feature importance for a specific input (IInterpretableModel implementation).
-        /// </summary>
-        public virtual Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Tensor<T> input)
-        {
-            return InterpretableModelHelper.GetLocalFeatureImportanceAsync<T>(this, _enabledMethods, input);
-        }
+    /// <summary>
+    /// Gets the local feature importance for a specific input (IInterpretableModel implementation).
+    /// </summary>
+    public virtual Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Tensor<T> input)
+    {
+        return InterpretableModelHelper.GetLocalFeatureImportanceAsync<T>(this, _enabledMethods, input);
+    }
 
-        /// <summary>
-        /// Gets SHAP values for the given inputs (IInterpretableModel implementation).
-        /// </summary>
-        public virtual Task<Matrix<T>> GetShapValuesAsync(Tensor<T> inputs)
-        {
-            return InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods, inputs);
-        }
+    /// <summary>
+    /// Gets SHAP values for the given inputs (IInterpretableModel implementation).
+    /// </summary>
+    public virtual Task<Matrix<T>> GetShapValuesAsync(Tensor<T> inputs)
+    {
+        return InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods, inputs);
+    }
 
-        /// <summary>
-        /// Gets LIME explanation for a specific input (IInterpretableModel implementation).
-        /// </summary>
-        public virtual Task<LimeExplanation<T>> GetLimeExplanationAsync(Tensor<T> input, int numFeatures = 10)
-        {
-            return InterpretableModelHelper.GetLimeExplanationAsync<T>(this, _enabledMethods, input, numFeatures);
-        }
+    /// <summary>
+    /// Gets LIME explanation for a specific input (IInterpretableModel implementation).
+    /// </summary>
+    public virtual Task<LimeExplanation<T>> GetLimeExplanationAsync(Tensor<T> input, int numFeatures = 10)
+    {
+        return InterpretableModelHelper.GetLimeExplanationAsync<T>(this, _enabledMethods, input, numFeatures);
+    }
 
-        /// <summary>
-        /// Gets counterfactual explanation for a given input and desired output (IInterpretableModel implementation).
-        /// </summary>
-        public virtual Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Tensor<T> input, Tensor<T> desiredOutput, int maxChanges = 5)
-        {
-            return InterpretableModelHelper.GetCounterfactualAsync<T>(this, _enabledMethods, input, desiredOutput, maxChanges);
-        }
+    /// <summary>
+    /// Gets counterfactual explanation for a given input and desired output (IInterpretableModel implementation).
+    /// </summary>
+    public virtual Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Tensor<T> input, Tensor<T> desiredOutput, int maxChanges = 5)
+    {
+        return InterpretableModelHelper.GetCounterfactualAsync<T>(this, _enabledMethods, input, desiredOutput, maxChanges);
+    }
 
-        /// <summary>
-        /// Generates a text explanation for a prediction (IInterpretableModel implementation).
-        /// </summary>
-        public virtual Task<string> GenerateTextExplanationAsync(Tensor<T> input, Tensor<T> prediction)
-        {
-            return InterpretableModelHelper.GenerateTextExplanationAsync<T>(this, input, prediction);
-        }
+    /// <summary>
+    /// Generates a text explanation for a prediction (IInterpretableModel implementation).
+    /// </summary>
+    public virtual Task<string> GenerateTextExplanationAsync(Tensor<T> input, Tensor<T> prediction)
+    {
+        return InterpretableModelHelper.GenerateTextExplanationAsync<T>(this, input, prediction);
+    }
 
-        /// <summary>
-        /// Validates fairness metrics for the given inputs (IInterpretableModel implementation).
-        /// </summary>
-        public virtual Task<FairnessMetrics<T>> ValidateFairnessAsync(Tensor<T> inputs, int sensitiveFeatureIndex)
-        {
-            return InterpretableModelHelper.ValidateFairnessAsync<T>(_fairnessMetrics);
-        }
+    /// <summary>
+    /// Validates fairness metrics for the given inputs (IInterpretableModel implementation).
+    /// </summary>
+    public virtual Task<FairnessMetrics<T>> ValidateFairnessAsync(Tensor<T> inputs, int sensitiveFeatureIndex)
+    {
+        return InterpretableModelHelper.ValidateFairnessAsync<T>(_fairnessMetrics);
+    }
 
-        /// <summary>
-        /// Gets anchor explanation for a given input (IInterpretableModel implementation).
-        /// </summary>
-        public virtual Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Tensor<T> input, T threshold)
-        {
-            return InterpretableModelHelper.GetAnchorExplanationAsync(this, _enabledMethods, input, threshold);
-        }
+    /// <summary>
+    /// Gets anchor explanation for a given input (IInterpretableModel implementation).
+    /// </summary>
+    public virtual Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Tensor<T> input, T threshold)
+    {
+        return InterpretableModelHelper.GetAnchorExplanationAsync(this, _enabledMethods, input, threshold);
+    }
 
-        /// <summary>
-        /// Sets the base model for interpretability analysis (IInterpretableModel implementation).
-        /// </summary>
-        public virtual void SetBaseModel<TInput, TOutput>(IFullModel<T, TInput, TOutput> model)
-        {
-            _baseModel = model as IFullModel<T, Matrix<T>, Vector<T>> ?? throw new ArgumentException("Base model must be compatible with Matrix<T> input and Vector<T> output.", nameof(model));
-        }
+    /// <summary>
+    /// Sets the base model for interpretability analysis (IInterpretableModel implementation).
+    /// </summary>
+    public virtual void SetBaseModel<TInput, TOutput>(IFullModel<T, TInput, TOutput> model)
+    {
+        _baseModel = model as IFullModel<T, Matrix<T>, Vector<T>> ?? throw new ArgumentException("Base model must be compatible with Matrix<T> input and Vector<T> output.", nameof(model));
+    }
 
-        /// <summary>
-        /// Sets the base model for interpretability analysis.
-        /// </summary>
-        public virtual void SetBaseModel(IFullModel<T, Matrix<T>, Vector<T>> model)
-        {
-            _baseModel = model ?? throw new ArgumentNullException(nameof(model));
-        }
+    /// <summary>
+    /// Sets the base model for interpretability analysis.
+    /// </summary>
+    public virtual void SetBaseModel(IFullModel<T, Matrix<T>, Vector<T>> model)
+    {
+        _baseModel = model ?? throw new ArgumentNullException(nameof(model));
+    }
 
-        /// <summary>
-        /// Enables specific interpretation methods.
-        /// </summary>
-        public virtual void EnableMethod(params InterpretationMethod[] methods)
-        {
+    /// <summary>
+    /// Enables specific interpretation methods.
+    /// </summary>
+    public virtual void EnableMethod(params InterpretationMethod[] methods)
+    {
         foreach (var method in methods)
         {
             _enabledMethods.Add(method);
         }
-        }
+    }
 
-        /// <summary>
-        /// Configures fairness evaluation settings.
-        /// </summary>
-        public virtual void ConfigureFairness(Vector<int> sensitiveFeatures, params FairnessMetric[] fairnessMetrics)
-        {
+    /// <summary>
+    /// Configures fairness evaluation settings.
+    /// </summary>
+    public virtual void ConfigureFairness(Vector<int> sensitiveFeatures, params FairnessMetric[] fairnessMetrics)
+    {
         _sensitiveFeatures = sensitiveFeatures ?? throw new ArgumentNullException(nameof(sensitiveFeatures));
         _fairnessMetrics.Clear();
         _fairnessMetrics.AddRange(fairnessMetrics);
-        }
+    }
 
     #endregion
 

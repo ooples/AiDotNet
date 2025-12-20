@@ -337,7 +337,7 @@ namespace AiDotNet.AutoML.NAS
 
                 // Compute fitness
                 T fitness = _ops.FromDouble(config.Depth * config.WidthMultiplier * config.KernelSize);
-                if (constraints.MaxLatency != null && _ops.GreaterThan(cost.Latency, constraints.MaxLatency))
+                if (constraints.MaxLatency.HasValue && _ops.ToDouble(cost.Latency) > constraints.MaxLatency.Value)
                 {
                     fitness = _ops.Subtract(fitness, _ops.FromDouble(10000.0));
                 }

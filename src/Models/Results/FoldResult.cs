@@ -175,21 +175,21 @@ public class FoldResult<T, TInput, TOutput>
         FoldIndex = foldIndex;
         ActualValues = validationActual;
         PredictedValues = validationPredicted;
-        
-        TrainingErrors = new ErrorStats<T>(new ErrorStatsInputs<T> 
-        { 
-            Actual = trainingActual, 
+
+        TrainingErrors = new ErrorStats<T>(new ErrorStatsInputs<T>
+        {
+            Actual = trainingActual,
             Predicted = trainingPredicted,
             FeatureCount = featureCount
         });
-        
-        ValidationErrors = new ErrorStats<T>(new ErrorStatsInputs<T> 
-        { 
-            Actual = validationActual, 
+
+        ValidationErrors = new ErrorStats<T>(new ErrorStatsInputs<T>
+        {
+            Actual = validationActual,
             Predicted = validationPredicted,
             FeatureCount = featureCount
         });
-        
+
         ValidationPredictionStats = new PredictionStats<T>(new PredictionStatsInputs<T>
         {
             Actual = validationActual,
@@ -198,7 +198,7 @@ public class FoldResult<T, TInput, TOutput>
             ConfidenceLevel = 0.95,
             LearningCurveSteps = 5
         });
-        
+
         FeatureImportance = featureImportance ?? [];
         TrainingTime = trainingTime ?? TimeSpan.Zero;
         EvaluationTime = evaluationTime ?? TimeSpan.Zero;

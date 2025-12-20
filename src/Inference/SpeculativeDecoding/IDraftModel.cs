@@ -13,7 +13,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations.</typeparam>
-public interface IDraftModel<T>
+internal interface IDraftModel<T>
 {
     /// <summary>
     /// Gets the maximum number of tokens this draft model can generate in one call.

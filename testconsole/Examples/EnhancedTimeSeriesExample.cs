@@ -1,15 +1,15 @@
-﻿using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
-using AiDotNet.Models.Options;
-using AiDotNet.Models.Results;
-using AiDotNet.Optimizers;
-using AiDotNet.TimeSeries;
-using AiDotNet.Normalizers;
+﻿using System.Globalization;
+using AiDotNet.Data.Loaders;
 using AiDotNet.DataProcessor;
 using AiDotNet.FeatureSelectors;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.Models.Results;
+using AiDotNet.Normalizers;
+using AiDotNet.Optimizers;
 using AiDotNet.OutlierRemoval;
-using AiDotNet.Data.Loaders;
-using System.Globalization;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.TimeSeries;
 
 namespace AiDotNet.Examples;
 

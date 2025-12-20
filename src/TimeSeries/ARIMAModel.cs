@@ -372,28 +372,28 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     {
         // Start with the constant term as the baseline prediction
         T prediction = _constant;
-    
+
         // Check if model has been trained
         if (_arCoefficients.Length == 0 && _maCoefficients.Length == 0)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
-    
+
         // For ARIMA models, we typically use recent observations from the time series
         // rather than arbitrary input features.
         // This implementation assumes input contains recent observations in reverse order
         // (most recent first)
-    
+
         // Add AR component - influence of past observations
         for (int j = 0; j < _arCoefficients.Length && j < input.Length; j++)
         {
             prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[j], input[j]));
         }
-    
+
         // Since we can't know the actual errors for future predictions,
         // the MA component is often excluded when predicting a single value
         // or we assume errors of zero for simplicity
-    
+
         return prediction;
     }
 
@@ -438,7 +438,7 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
             },
             ModelData = this.Serialize()
         };
-    
+
         return metadata;
     }
 

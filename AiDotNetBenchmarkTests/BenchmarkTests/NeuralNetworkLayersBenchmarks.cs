@@ -1,6 +1,6 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
-using AiDotNet.ActivationFunctions;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 

@@ -74,7 +74,7 @@ public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
                 {
                     T update = NumOps.Multiply(LearningRate, NumOps.Multiply(delta, _eligibilityTraces[s][a]));
                     _qTable[s][a] = NumOps.Add(_qTable[s][a], update);
-                    
+
                     T decayFactor = NumOps.Multiply(DiscountFactor, NumOps.FromDouble(_options.Lambda));
                     _eligibilityTraces[s][a] = NumOps.Multiply(_eligibilityTraces[s][a], decayFactor);
                 }
@@ -109,7 +109,7 @@ public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
     }
 
     private string GetStateKey(Vector<T> state) => string.Join(",", Enumerable.Range(0, state.Length).Select(i => NumOps.ToDouble(state[i]).ToString("F4")));
-    
+
     private int ArgMax(Vector<T> values)
     {
         int maxIndex = 0;

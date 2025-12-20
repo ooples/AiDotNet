@@ -38,13 +38,13 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T loss = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
             // z = y * f(x)
             T z = NumOps.Multiply(actual[i], predicted[i]);
-            
+
             if (NumOps.GreaterThanOrEquals(z, NumOps.FromDouble(-1)))
             {
                 // For z = -1: max(0, 1 - z)²
@@ -58,10 +58,10 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
                 loss = NumOps.Add(loss, NumOps.Multiply(NumOps.FromDouble(-4), z));
             }
         }
-        
+
         return NumOps.Divide(loss, NumOps.FromDouble(predicted.Length));
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Modified Huber Loss function.
     /// </summary>
@@ -71,13 +71,13 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
             // z = y * f(x)
             T z = NumOps.Multiply(actual[i], predicted[i]);
-            
+
             if (NumOps.GreaterThanOrEquals(z, NumOps.FromDouble(-1)))
             {
                 if (NumOps.LessThan(z, NumOps.One))
@@ -100,7 +100,7 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
                 derivative[i] = NumOps.Multiply(NumOps.FromDouble(-4), actual[i]);
             }
         }
-        
+
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
 }

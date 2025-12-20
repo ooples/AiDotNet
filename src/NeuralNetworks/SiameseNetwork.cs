@@ -92,7 +92,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// This network creates the embeddings (compact representations) for each input.
     /// </remarks>
     private ConvolutionalNeuralNetwork<T> _subnetwork;
-    
+
     /// <summary>
     /// The final layer that compares the embeddings and produces a similarity score.
     /// </summary>
@@ -401,7 +401,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Make sure we're in inference mode
         bool originalTrainingMode = IsTrainingMode;
         SetTrainingMode(false);
-    
+
         try
         {
             // Validate input shape - should have at least 2 dimensions with second dimension = 2
@@ -410,28 +410,28 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 throw new ArgumentException(
                     $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese comparison. Got shape: {string.Join(",", input.Shape)}");
             }
-        
+
             int batchSize = input.Shape[0];
             var output = new Tensor<T>(new[] { batchSize, 1 });
-        
+
             // Process each pair in the batch
             for (int b = 0; b < batchSize; b++)
             {
                 // Extract the pair of inputs - GetSlice returns a tensor
                 var input1 = input.GetSlice(b).GetSlice(0);
                 var input2 = input.GetSlice(b).GetSlice(1);
-            
+
                 // Process each input through the shared subnetwork
                 var embedding1 = _subnetwork.Predict(input1).ToVector();
                 var embedding2 = _subnetwork.Predict(input2).ToVector();
-            
+
                 // Combine embeddings and compute similarity
                 var combinedEmbedding = CombineEmbeddings(embedding1, embedding2);
                 var similarityScore = _outputLayer.Forward(Tensor<T>.FromVector(combinedEmbedding)).ToVector();
-            
+
                 output[b, 0] = similarityScore[0];
             }
-        
+
             return output;
         }
         finally
@@ -519,53 +519,53 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 T label = expectedOutput[b, 0];
                 _cachedEmbeddingPairs.Add((embedding1, embedding2, label));
             }
-        
+
             // Combine embeddings
             var combinedEmbedding = CombineEmbeddings(embedding1, embedding2);
-        
+
             // Backpropagate through output layer
             var outputGradient = new Tensor<T>(new[] { 1, 1 });
             outputGradient[0, 0] = outputGradients[b, 0];
             var embeddingGradients = _outputLayer.Backward(outputGradient).ToVector();
-        
+
             // Split gradients for each embedding
             int embeddingSize = embedding1.Length;
             var embedding1Gradients = new Vector<T>(embeddingSize);
             var embedding2Gradients = new Vector<T>(embeddingSize);
-        
+
             for (int i = 0; i < embeddingSize; i++)
             {
                 embedding1Gradients[i] = embeddingGradients[i];
                 embedding2Gradients[i] = embeddingGradients[i + embeddingSize];
             }
-        
+
             // Backpropagate through the subnetwork for each input
             _subnetwork.Backward(Tensor<T>.FromVector(embedding1Gradients).Reshape(input1.Shape));
             _subnetwork.Backward(Tensor<T>.FromVector(embedding2Gradients).Reshape(input2.Shape));
         }
-    
+
         // Get the learning rate from the architecture or use default
         T learningRate = NumOps.FromDouble(0.001);
-    
+
         // Update parameters for the subnetwork
         // Assume the subnetwork has internal logic to update all its layers
         Vector<T> subnetworkGradients = _subnetwork.GetParameterGradients();
         Vector<T> subnetworkParameters = _subnetwork.GetParameters();
         Vector<T> updatedParameters = new Vector<T>(subnetworkParameters.Length);
-    
+
         // Apply learning rate to gradients
         for (int i = 0; i < subnetworkParameters.Length; i++)
         {
             T gradientStep = NumOps.Multiply(subnetworkGradients[i], learningRate);
             updatedParameters[i] = NumOps.Add(subnetworkParameters[i], gradientStep);
         }
-    
+
         // Update the subnetwork with new parameters
         _subnetwork.UpdateParameters(updatedParameters);
-    
+
         // Update output layer parameters directly using the learning rate
         _outputLayer.UpdateParameters(learningRate);
-    
+
         // Reset training mode
         _subnetwork.SetTrainingMode(false);
     }
@@ -594,7 +594,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Serialize the output layer parameters
         Vector<T> outputLayerParams = _outputLayer.GetParameters();
         writer.Write(outputLayerParams.Length);
-    
+
         for (int i = 0; i < outputLayerParams.Length; i++)
         {
             writer.Write(Convert.ToDouble(outputLayerParams[i]));
@@ -621,16 +621,16 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         _subnetwork = new ConvolutionalNeuralNetwork<T>(Architecture);
         var subNetworkCount = reader.ReadInt32();
         _subnetwork.Deserialize(reader.ReadBytes(subNetworkCount));
-    
+
         // Deserialize the output layer parameters
         int paramCount = reader.ReadInt32();
         Vector<T> outputLayerParams = new Vector<T>(paramCount);
-    
+
         for (int i = 0; i < paramCount; i++)
         {
             outputLayerParams[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-    
+
         // Initialize the output layer with the correct dimensions
         int embeddingSize = Architecture.GetOutputShape()[0];
         _outputLayer = new DenseLayer<T>(embeddingSize * 2, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
@@ -667,7 +667,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             },
             ModelData = this.Serialize()
         };
-    
+
         return metadata;
     }
 

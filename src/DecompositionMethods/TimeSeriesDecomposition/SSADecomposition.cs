@@ -126,7 +126,7 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         int N = TimeSeries.Length;
         int K = N - _windowSize + 1;
-    
+
         Matrix<T> X = CreateTrajectoryMatrix();
         Matrix<T> U = new Matrix<T>(_windowSize, _numberOfComponents);
         Vector<T> S = new Vector<T>(_numberOfComponents);
@@ -228,11 +228,11 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
     private void AssignComponents(Vector<T>[] reconstructedComponents)
     {
         AddComponent(DecompositionComponentType.Trend, reconstructedComponents[0]);
-        
+
         if (reconstructedComponents.Length > 2)
         {
             AddComponent(DecompositionComponentType.Seasonal, reconstructedComponents[1]);
-            
+
             var residual = new Vector<T>(TimeSeries.Length);
             for (int i = 2; i < reconstructedComponents.Length; i++)
             {

@@ -41,8 +41,8 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// <param name="options">The optimization options.</param>
     /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public NormalOptimizer(IFullModel<T, TInput, TOutput> model, GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null)
-		: base(model, options ?? new())
-	{
+        : base(model, options ?? new())
+    {
         _normalOptions = options ?? new();
 
         InitializeAdaptiveParameters();

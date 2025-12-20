@@ -205,7 +205,7 @@ public class BasicUsageExample
             OperationType = OperationType.ReLU
         };
 
-        var (compiled1, stats1) = jit.CompileWithStats(relu1, new List<ComputationNode<float>> { input1 });
+        var (_, stats1) = jit.CompileWithStats(relu1, new List<ComputationNode<float>> { input1 });
         Console.WriteLine($"First compilation:");
         Console.WriteLine($"  Cache hit: {stats1.CacheHit}");
         Console.WriteLine($"  Compilation time: {stats1.CompilationTime.TotalMilliseconds:F2}ms\n");
@@ -219,7 +219,7 @@ public class BasicUsageExample
             OperationType = OperationType.ReLU
         };
 
-        var (compiled2, stats2) = jit.CompileWithStats(relu2, new List<ComputationNode<float>> { input2 });
+        var (_, stats2) = jit.CompileWithStats(relu2, new List<ComputationNode<float>> { input2 });
         Console.WriteLine($"Second compilation (same structure):");
         Console.WriteLine($"  Cache hit: {stats2.CacheHit}");
         Console.WriteLine($"  Compilation time: {stats2.CompilationTime.TotalMilliseconds:F2}ms\n");
@@ -232,7 +232,7 @@ public class BasicUsageExample
             OperationType = OperationType.Sigmoid
         };
 
-        var (compiled3, stats3) = jit.CompileWithStats(sigmoid2, new List<ComputationNode<float>> { input2 });
+        var (_, stats3) = jit.CompileWithStats(sigmoid2, new List<ComputationNode<float>> { input2 });
         Console.WriteLine($"Third compilation (different structure):");
         Console.WriteLine($"  Cache hit: {stats3.CacheHit}");
         Console.WriteLine($"  Compilation time: {stats3.CompilationTime.TotalMilliseconds:F2}ms\n");

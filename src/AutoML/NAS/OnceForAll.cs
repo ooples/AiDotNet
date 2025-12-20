@@ -197,17 +197,17 @@ namespace AiDotNet.AutoML.NAS
             // Penalty for violating constraints
             T penalty = _ops.Zero;
 
-            if (constraints.MaxLatency != null && _ops.GreaterThan(cost.Latency, constraints.MaxLatency))
+            if (constraints.MaxLatency.HasValue && _ops.ToDouble(cost.Latency) > constraints.MaxLatency.Value)
             {
                 penalty = _ops.Add(penalty, _ops.Multiply(
-                    _ops.Subtract(cost.Latency, constraints.MaxLatency),
+                    _ops.Subtract(cost.Latency, _ops.FromDouble(constraints.MaxLatency.Value)),
                     _ops.FromDouble(100.0)));
             }
 
-            if (constraints.MaxMemory != null && _ops.GreaterThan(cost.Memory, constraints.MaxMemory))
+            if (constraints.MaxMemory.HasValue && _ops.ToDouble(cost.Memory) > constraints.MaxMemory.Value)
             {
                 penalty = _ops.Add(penalty, _ops.Multiply(
-                    _ops.Subtract(cost.Memory, constraints.MaxMemory),
+                    _ops.Subtract(cost.Memory, _ops.FromDouble(constraints.MaxMemory.Value)),
                     _ops.FromDouble(100.0)));
             }
 

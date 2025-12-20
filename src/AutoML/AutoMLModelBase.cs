@@ -1,15 +1,15 @@
-using AiDotNet.Autodiff;
-using AiDotNet.Enums;
-using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.Models;
-using AiDotNet.Models.Inputs;
-using AiDotNet.Evaluation;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using AiDotNet.Autodiff;
+using AiDotNet.Enums;
+using AiDotNet.Evaluation;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Inputs;
 
 namespace AiDotNet.AutoML
 {
@@ -26,7 +26,7 @@ namespace AiDotNet.AutoML
         protected readonly List<ModelType> _candidateModels = new();
         protected readonly List<SearchConstraint> _constraints = new();
         protected readonly object _lock = new();
-        
+
         protected MetricType _optimizationMetric = MetricType.Accuracy;
         protected bool _maximize = true;
         protected bool _optimizationMetricExplicitlySet;
@@ -130,7 +130,7 @@ namespace AiDotNet.AutoML
             _optimizationMetric = metric;
             _maximize = maximize;
             _optimizationMetricExplicitlySet = true;
-            
+
             // Reset best score when metric changes
             BestScore = maximize ? double.NegativeInfinity : double.PositiveInfinity;
         }
@@ -366,7 +366,7 @@ namespace AiDotNet.AutoML
         {
             if (BestModel == null)
                 throw new InvalidOperationException("No best model found. Run SearchAsync first.");
-            
+
             return BestModel.Predict(input);
         }
 
@@ -382,7 +382,7 @@ namespace AiDotNet.AutoML
         {
             if (BestModel == null)
                 throw new InvalidOperationException("No best model to save.");
-            
+
             BestModel.SaveModel(filePath);
         }
 
@@ -407,7 +407,7 @@ namespace AiDotNet.AutoML
         {
             if (BestModel == null)
                 throw new InvalidOperationException("No best model to serialize.");
-            
+
             return BestModel.Serialize();
         }
 
@@ -436,7 +436,7 @@ namespace AiDotNet.AutoML
         {
             if (BestModel == null)
                 throw new InvalidOperationException("No best model found.");
-            
+
             return BestModel.GetParameters();
         }
 
@@ -447,7 +447,7 @@ namespace AiDotNet.AutoML
         {
             if (BestModel == null)
                 throw new InvalidOperationException("No best model found.");
-            
+
             BestModel.SetParameters(parameters);
         }
 
@@ -508,7 +508,7 @@ namespace AiDotNet.AutoML
         {
             if (BestModel == null)
                 throw new InvalidOperationException("No best model found.");
-            
+
             return BestModel.IsFeatureUsed(featureIndex);
         }
 
@@ -519,7 +519,7 @@ namespace AiDotNet.AutoML
         {
             if (BestModel == null)
                 throw new InvalidOperationException("No best model found.");
-            
+
             BestModel.SetActiveFeatureIndices(featureIndices);
         }
 

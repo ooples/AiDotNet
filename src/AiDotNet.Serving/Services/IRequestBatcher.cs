@@ -1,5 +1,5 @@
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Serving.Scheduling;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Serving.Services;
 

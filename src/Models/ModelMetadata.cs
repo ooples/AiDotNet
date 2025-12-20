@@ -122,7 +122,7 @@ public class ModelMetadata<T>
     /// </para>
     /// </remarks>
     public ModelType ModelType { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the number of features used by the model.
     /// </summary>
@@ -151,7 +151,7 @@ public class ModelMetadata<T>
     /// </para>
     /// </remarks>
     public int FeatureCount { get; set; }
-    
+
     /// <summary>
     /// Gets or sets a measure of the model's complexity.
     /// </summary>
@@ -183,7 +183,7 @@ public class ModelMetadata<T>
     /// </para>
     /// </remarks>
     public int Complexity { get; set; }
-    
+
     /// <summary>
     /// Gets or sets a human-readable description of the model.
     /// </summary>
@@ -213,7 +213,7 @@ public class ModelMetadata<T>
     /// </para>
     /// </remarks>
     public string Description { get; set; } = string.Empty;
-    
+
     /// <summary>
     /// Gets or sets additional information about the model as key-value pairs.
     /// </summary>
@@ -246,7 +246,7 @@ public class ModelMetadata<T>
     /// </para>
     /// </remarks>
     public Dictionary<string, object> AdditionalInfo { get; set; } = [];
-    
+
     /// <summary>
     /// Gets or sets the serialized model data.
     /// </summary>

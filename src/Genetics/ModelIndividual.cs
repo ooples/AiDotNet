@@ -1,7 +1,7 @@
-using AiDotNet.Autodiff;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using AiDotNet.Autodiff;
 
 namespace AiDotNet.Genetics;
 
@@ -366,81 +366,81 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     }
 
 
-        #region IJitCompilable Implementation
+    #region IJitCompilable Implementation
 
-        /// <summary>
-        /// Gets whether this model currently supports JIT compilation.
-        /// </summary>
-        /// <value>True if the inner model supports JIT compilation, false otherwise.</value>
-        /// <remarks>
-        /// <para>
-        /// Model individuals delegate JIT compilation support to their inner model.
-        /// Genetic evolution does not affect JIT compilability - it depends on the wrapped model type.
-        /// </para>
-        /// <para><b>For Beginners:</b> Genetically evolved models can be JIT compiled if their inner model supports it.
-        ///
-        /// The genetic algorithm modifies the model's genes (parameters/structure), but:
-        /// - The underlying computation graph can still be JIT compiled
-        /// - Evolution happens at the model level, JIT compilation at the execution level
-        /// - Both work together: evolution finds good parameters, JIT makes them run fast
-        /// </para>
-        /// </remarks>
-        public virtual bool SupportsJitCompilation
+    /// <summary>
+    /// Gets whether this model currently supports JIT compilation.
+    /// </summary>
+    /// <value>True if the inner model supports JIT compilation, false otherwise.</value>
+    /// <remarks>
+    /// <para>
+    /// Model individuals delegate JIT compilation support to their inner model.
+    /// Genetic evolution does not affect JIT compilability - it depends on the wrapped model type.
+    /// </para>
+    /// <para><b>For Beginners:</b> Genetically evolved models can be JIT compiled if their inner model supports it.
+    ///
+    /// The genetic algorithm modifies the model's genes (parameters/structure), but:
+    /// - The underlying computation graph can still be JIT compiled
+    /// - Evolution happens at the model level, JIT compilation at the execution level
+    /// - Both work together: evolution finds good parameters, JIT makes them run fast
+    /// </para>
+    /// </remarks>
+    public virtual bool SupportsJitCompilation
+    {
+        get
         {
-            get
-            {
-                if (_innerModel is null || _innerModel == null)
-                    return false;
+            if (_innerModel is null)
+                return false;
 
-                return _innerModel.SupportsJitCompilation;
-            }
+            return _innerModel.SupportsJitCompilation;
         }
+    }
 
-        /// <summary>
-        /// Exports the computation graph for JIT compilation by delegating to the inner model.
-        /// </summary>
-        /// <param name="inputNodes">List to populate with input computation nodes.</param>
-        /// <returns>The output computation node representing the model's prediction.</returns>
-        /// <remarks>
-        /// <para>
-        /// Model individuals delegate graph export to their inner model.
-        /// The graph represents the current evolved model's computation.
-        /// </para>
-        /// <para><b>For Beginners:</b> This creates a computation graph from the evolved model.
-        ///
-        /// When genetic algorithms evolve a model:
-        /// - The genes determine the model's parameters or structure
-        /// - The inner model is rebuilt from those genes
-        /// - That inner model can then be JIT compiled for fast execution
-        ///
-        /// This allows you to:
-        /// - Evolve models to find good architectures
-        /// - JIT compile the best evolved models for production use
-        /// - Get both the benefits of evolution and fast execution
-        /// </para>
-        /// </remarks>
-        /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-        /// <exception cref="InvalidOperationException">Thrown when inner model is null.</exception>
-        /// <exception cref="NotSupportedException">
-        /// Thrown when the inner model does not support JIT compilation.
-        /// </exception>
-        public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-        {
-            if (inputNodes == null)
-                throw new ArgumentNullException(nameof(inputNodes));
+    /// <summary>
+    /// Exports the computation graph for JIT compilation by delegating to the inner model.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the model's prediction.</returns>
+    /// <remarks>
+    /// <para>
+    /// Model individuals delegate graph export to their inner model.
+    /// The graph represents the current evolved model's computation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a computation graph from the evolved model.
+    ///
+    /// When genetic algorithms evolve a model:
+    /// - The genes determine the model's parameters or structure
+    /// - The inner model is rebuilt from those genes
+    /// - That inner model can then be JIT compiled for fast execution
+    ///
+    /// This allows you to:
+    /// - Evolve models to find good architectures
+    /// - JIT compile the best evolved models for production use
+    /// - Get both the benefits of evolution and fast execution
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when inner model is null.</exception>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the inner model does not support JIT compilation.
+    /// </exception>
+    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
 
-            if (_innerModel is null || _innerModel == null)
-                throw new InvalidOperationException(
-                    "Cannot export computation graph: Inner model is null.");
+        if (_innerModel is null)
+            throw new InvalidOperationException(
+                "Cannot export computation graph: Inner model is null.");
 
-            if (!_innerModel.SupportsJitCompilation)
-                throw new NotSupportedException(
-                    $"The inner model of type {_innerModel.GetType().Name} does not support JIT compilation. " +
-                    "JIT compilation availability depends on the inner model's capabilities.");
+        if (!_innerModel.SupportsJitCompilation)
+            throw new NotSupportedException(
+                $"The inner model of type {_innerModel.GetType().Name} does not support JIT compilation. " +
+                "JIT compilation availability depends on the inner model's capabilities.");
 
-            return _innerModel.ExportComputationGraph(inputNodes);
-        }
+        return _innerModel.ExportComputationGraph(inputNodes);
+    }
 
-        #endregion
+    #endregion
     #endregion
 }

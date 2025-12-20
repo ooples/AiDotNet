@@ -46,7 +46,7 @@ public class GeneralizedTStudentKernel<T> : IKernelFunction<T>
     /// based on how much you want to emphasize or de-emphasize distant points in your analysis.
     /// </remarks>
     private readonly T _degree;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

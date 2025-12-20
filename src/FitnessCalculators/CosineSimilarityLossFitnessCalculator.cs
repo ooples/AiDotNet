@@ -45,7 +45,7 @@ public class CosineSimilarityLossFitnessCalculator<T, TInput, TOutput> : Fitness
     /// better performance (0 would be a perfect model). This tells the system that smaller numbers are better.
     /// </para>
     /// </remarks>
-    public CosineSimilarityLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) 
+    public CosineSimilarityLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
     }
@@ -77,7 +77,7 @@ public class CosineSimilarityLossFitnessCalculator<T, TInput, TOutput> : Fitness
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return new CosineSimilarityLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+        return new CosineSimilarityLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

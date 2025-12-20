@@ -52,7 +52,7 @@ public class PowerKernel<T> : IKernelFunction<T>
     /// while lower values reduce this effect.
     /// </remarks>
     private readonly T _degree;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

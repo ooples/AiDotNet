@@ -25,7 +25,7 @@ public class ROCCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// Configuration options for the ROC curve fit detector.
     /// </summary>
     private readonly ROCCurveFitDetectorOptions _options;
-    
+
     /// <summary>
     /// The Area Under the Curve (AUC) value calculated from the ROC curve.
     /// </summary>
@@ -87,7 +87,7 @@ public class ROCCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
         if (evaluationData == null)
             throw new ArgumentNullException(nameof(evaluationData));
 
-        var (fpr, tpr) = StatisticsHelper<T>.CalculateROCCurve(ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual), 
+        var (fpr, tpr) = StatisticsHelper<T>.CalculateROCCurve(ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual),
             ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Predicted));
         Auc = StatisticsHelper<T>.CalculateAUC(fpr, tpr);
 

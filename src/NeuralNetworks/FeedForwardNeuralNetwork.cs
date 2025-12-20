@@ -74,7 +74,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
         double maxGradNorm = 1.0) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        
+
         // Select appropriate loss function based on task type if not provided
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
@@ -132,9 +132,9 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Ensure the network is in inference mode
         IsTrainingMode = false;
-    
+
         // Validate input shape
-        TensorValidator.ValidateShape(input, Architecture.GetInputShape(), 
+        TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
             nameof(FeedForwardNeuralNetwork<T>), "prediction");
 
         // Just perform a forward pass
@@ -165,7 +165,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        TensorValidator.ValidateShape(input, Architecture.GetInputShape(), 
+        TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
             nameof(FeedForwardNeuralNetwork<T>), "forward pass");
 
         Tensor<T> output = input;
@@ -342,7 +342,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Write optimizer type
         writer.Write(_optimizer.GetType().FullName ?? "AdamOptimizer");
-        
+
         // Write loss function type
         writer.Write(_lossFunction.GetType().FullName ?? "MeanSquaredErrorLoss");
     }
@@ -365,7 +365,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Read optimizer type
         string optimizerType = reader.ReadString();
-        
+
         // Read loss function type
         string lossFunctionType = reader.ReadString();
     }

@@ -67,7 +67,7 @@ public class RegularizationOptions
     /// </para>
     /// </remarks>
     public RegularizationType Type { get; set; } = RegularizationType.None;
-    
+
     /// <summary>
     /// Gets or sets the strength of the regularization penalty.
     /// </summary>
@@ -100,7 +100,7 @@ public class RegularizationOptions
     /// </para>
     /// </remarks>
     public double Strength { get; set; } = 0.0;
-    
+
     /// <summary>
     /// Gets or sets the mixing ratio between L1 and L2 regularization when using Elastic Net.
     /// </summary>

@@ -34,7 +34,7 @@ public class LogCoshLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T sum = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -52,10 +52,10 @@ public class LogCoshLoss<T> : LossFunctionBase<T>
             );
             sum = NumOps.Add(sum, logCosh);
         }
-        
+
         return NumOps.Divide(sum, NumOps.FromDouble(predicted.Length));
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Log-Cosh loss function.
     /// </summary>
@@ -65,7 +65,7 @@ public class LogCoshLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -73,7 +73,7 @@ public class LogCoshLoss<T> : LossFunctionBase<T>
             // The derivative of log(cosh(x)) is tanh(x)
             derivative[i] = MathHelper.Tanh(diff);
         }
-        
+
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
 }

@@ -1,8 +1,8 @@
 
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NestedLearning;
+using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks;
 

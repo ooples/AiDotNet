@@ -1,10 +1,10 @@
-using AiDotNet.RetrievalAugmentedGeneration.Generators;
-using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
-using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Generators;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -182,7 +182,7 @@ public class ChainOfThoughtRetriever<T>
         foreach (var subQuery in subQueries.Take(3)) // Limit to top 3 sub-queries
         {
             var docs = _baseRetriever.Retrieve(subQuery, topK: 5, metadataFilters); // Get 5 per sub-query with filters
-            
+
             foreach (var doc in docs)
             {
                 if (!seenIds.Contains(doc.Id))
@@ -336,219 +336,219 @@ public class ChainOfThoughtRetriever<T>
         return promptBuilder.ToString();
     }
 
-        /// <summary>
-        /// Computes Jaro-Winkler similarity between two strings (0.0 to 1.0, where 1.0 is identical).
-        /// Production-ready implementation for fuzzy string matching.
-        /// </summary>
-        /// <remarks>
-        /// Jaro-Winkler is particularly effective for short strings and handles:
-        /// - Transpositions (swapped characters)
-        /// - Prefixes (rewards common starting sequences)
-        /// - Typos and misspellings
-        /// 
-        /// Algorithm: Combines Jaro distance with prefix scaling bonus
-        /// - Jaro distance considers matching characters within a window
-        /// - Winkler modification adds bonus for common prefix (up to 4 chars)
-        /// - Result: 1.0 = identical, 0.0 = completely different
-        /// </remarks>
-        private double JaroWinklerSimilarity(string s1, string s2)
+    /// <summary>
+    /// Computes Jaro-Winkler similarity between two strings (0.0 to 1.0, where 1.0 is identical).
+    /// Production-ready implementation for fuzzy string matching.
+    /// </summary>
+    /// <remarks>
+    /// Jaro-Winkler is particularly effective for short strings and handles:
+    /// - Transpositions (swapped characters)
+    /// - Prefixes (rewards common starting sequences)
+    /// - Typos and misspellings
+    /// 
+    /// Algorithm: Combines Jaro distance with prefix scaling bonus
+    /// - Jaro distance considers matching characters within a window
+    /// - Winkler modification adds bonus for common prefix (up to 4 chars)
+    /// - Result: 1.0 = identical, 0.0 = completely different
+    /// </remarks>
+    private double JaroWinklerSimilarity(string s1, string s2)
+    {
+        if (string.IsNullOrEmpty(s1) && string.IsNullOrEmpty(s2)) return 1.0;
+        if (string.IsNullOrEmpty(s1) || string.IsNullOrEmpty(s2)) return 0.0;
+        if (s1 == s2) return 1.0;
+
+        // Jaro distance calculation
+        int len1 = s1.Length;
+        int len2 = s2.Length;
+        int matchWindow = Math.Max(len1, len2) / 2 - 1;
+        if (matchWindow < 1) matchWindow = 1;
+
+        bool[] s1Matches = new bool[len1];
+        bool[] s2Matches = new bool[len2];
+        int matches = 0;
+        int transpositions = 0;
+
+        // Find matches
+        for (int i = 0; i < len1; i++)
         {
-            if (string.IsNullOrEmpty(s1) && string.IsNullOrEmpty(s2)) return 1.0;
-            if (string.IsNullOrEmpty(s1) || string.IsNullOrEmpty(s2)) return 0.0;
-            if (s1 == s2) return 1.0;
+            int start = Math.Max(0, i - matchWindow);
+            int end = Math.Min(i + matchWindow + 1, len2);
 
-            // Jaro distance calculation
-            int len1 = s1.Length;
-            int len2 = s2.Length;
-            int matchWindow = Math.Max(len1, len2) / 2 - 1;
-            if (matchWindow < 1) matchWindow = 1;
-
-            bool[] s1Matches = new bool[len1];
-            bool[] s2Matches = new bool[len2];
-            int matches = 0;
-            int transpositions = 0;
-
-            // Find matches
-            for (int i = 0; i < len1; i++)
+            for (int j = start; j < end; j++)
             {
-                int start = Math.Max(0, i - matchWindow);
-                int end = Math.Min(i + matchWindow + 1, len2);
-
-                for (int j = start; j < end; j++)
-                {
-                    if (s2Matches[j] || s1[i] != s2[j]) continue;
-                    s1Matches[i] = true;
-                    s2Matches[j] = true;
-                    matches++;
-                    break;
-                }
+                if (s2Matches[j] || s1[i] != s2[j]) continue;
+                s1Matches[i] = true;
+                s2Matches[j] = true;
+                matches++;
+                break;
             }
-
-            if (matches == 0) return 0.0;
-
-            // Count transpositions
-            int k = 0;
-            for (int i = 0; i < len1; i++)
-            {
-                if (!s1Matches[i]) continue;
-                while (!s2Matches[k]) k++;
-                if (s1[i] != s2[k]) transpositions++;
-                k++;
-            }
-
-            double jaro = ((double)matches / len1 + (double)matches / len2 + 
-                          (matches - transpositions / 2.0) / matches) / 3.0;
-
-            // Winkler modification: add prefix bonus
-            int prefixLength = 0;
-            for (int i = 0; i < Math.Min(Math.Min(len1, len2), 4); i++)
-            {
-                if (s1[i] == s2[i]) prefixLength++;
-                else break;
-            }
-
-            const double prefixScale = 0.1;
-            return jaro + (prefixLength * prefixScale * (1.0 - jaro));
         }
 
-        /// <summary>
-        /// Normalizes a query string for better matching and deduplication.
-        /// </summary>
-        /// <remarks>
-        /// Normalization steps:
-        /// 1. Convert to lowercase
-        /// 2. Remove extra whitespace
-        /// 3. Remove common punctuation (preserve question marks for question detection)
-        /// 4. Trim leading/trailing whitespace
-        /// </remarks>
-        private string NormalizeQuery(string query)
+        if (matches == 0) return 0.0;
+
+        // Count transpositions
+        int k = 0;
+        for (int i = 0; i < len1; i++)
         {
-            if (string.IsNullOrWhiteSpace(query)) return string.Empty;
-
-            // Convert to lowercase and trim
-            var normalized = query.ToLowerInvariant().Trim();
-
-            // Remove extra whitespace
-            normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\s+", " ", System.Text.RegularExpressions.RegexOptions.None, RegexTimeout);
-
-            // Remove punctuation except question marks
-            normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"[^\w\s\?]", "", System.Text.RegularExpressions.RegexOptions.None, RegexTimeout);
-
-            return normalized;
+            if (!s1Matches[i]) continue;
+            while (!s2Matches[k]) k++;
+            if (s1[i] != s2[k]) transpositions++;
+            k++;
         }
 
-        /// <summary>
-        /// Extracts sub-queries from LLM reasoning with production-ready fuzzy deduplication.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// Extraction strategy:
-        /// 1. Extract explicit questions (lines ending with ?)
-        /// 2. Extract concept mentions from reasoning lines
-        /// 3. Normalize all extracted queries
-        /// 4. Deduplicate using Jaro-Winkler fuzzy matching (threshold: 0.85)
-        /// 5. Limit to top 5 unique queries
-        /// </para>
-        /// <para>
-        /// Fuzzy deduplication prevents redundant retrievals for similar queries like:
-        /// - "What is photosynthesis?" vs "what is photosynthesis"
-        /// - "climate change impacts" vs "impacts of climate change"
-        /// </para>
-        /// </remarks>
-        private List<string> ExtractSubQueries(string reasoning, string originalQuery)
+        double jaro = ((double)matches / len1 + (double)matches / len2 +
+                      (matches - transpositions / 2.0) / matches) / 3.0;
+
+        // Winkler modification: add prefix bonus
+        int prefixLength = 0;
+        for (int i = 0; i < Math.Min(Math.Min(len1, len2), 4); i++)
         {
-            var subQueries = new List<string>();
-            var normalizedOriginal = NormalizeQuery(originalQuery);
+            if (s1[i] == s2[i]) prefixLength++;
+            else break;
+        }
 
-            // Always include original query first
-            subQueries.Add(originalQuery);
+        const double prefixScale = 0.1;
+        return jaro + (prefixLength * prefixScale * (1.0 - jaro));
+    }
 
-            // Extract from reasoning
-            var lines = reasoning.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+    /// <summary>
+    /// Normalizes a query string for better matching and deduplication.
+    /// </summary>
+    /// <remarks>
+    /// Normalization steps:
+    /// 1. Convert to lowercase
+    /// 2. Remove extra whitespace
+    /// 3. Remove common punctuation (preserve question marks for question detection)
+    /// 4. Trim leading/trailing whitespace
+    /// </remarks>
+    private string NormalizeQuery(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return string.Empty;
 
-            foreach (var line in lines)
+        // Convert to lowercase and trim
+        var normalized = query.ToLowerInvariant().Trim();
+
+        // Remove extra whitespace
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\s+", " ", System.Text.RegularExpressions.RegexOptions.None, RegexTimeout);
+
+        // Remove punctuation except question marks
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"[^\w\s\?]", "", System.Text.RegularExpressions.RegexOptions.None, RegexTimeout);
+
+        return normalized;
+    }
+
+    /// <summary>
+    /// Extracts sub-queries from LLM reasoning with production-ready fuzzy deduplication.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Extraction strategy:
+    /// 1. Extract explicit questions (lines ending with ?)
+    /// 2. Extract concept mentions from reasoning lines
+    /// 3. Normalize all extracted queries
+    /// 4. Deduplicate using Jaro-Winkler fuzzy matching (threshold: 0.85)
+    /// 5. Limit to top 5 unique queries
+    /// </para>
+    /// <para>
+    /// Fuzzy deduplication prevents redundant retrievals for similar queries like:
+    /// - "What is photosynthesis?" vs "what is photosynthesis"
+    /// - "climate change impacts" vs "impacts of climate change"
+    /// </para>
+    /// </remarks>
+    private List<string> ExtractSubQueries(string reasoning, string originalQuery)
+    {
+        var subQueries = new List<string>();
+        var normalizedOriginal = NormalizeQuery(originalQuery);
+
+        // Always include original query first
+        subQueries.Add(originalQuery);
+
+        // Extract from reasoning
+        var lines = reasoning.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+
+            // Extract explicit questions (lines ending with ?)
+            if (trimmed.EndsWith("?") && trimmed.Length > 10)
             {
-                var trimmed = line.Trim();
-
-                // Extract explicit questions (lines ending with ?)
-                if (trimmed.EndsWith("?") && trimmed.Length > 10)
+                // Remove numbering like "1. ", "- ", etc.
+                var cleaned = System.Text.RegularExpressions.Regex.Replace(trimmed, @"^[\d\.\-\*\)\s]+", "", System.Text.RegularExpressions.RegexOptions.None, RegexTimeout).Trim();
+                if (cleaned.Length > 10)
                 {
-                    // Remove numbering like "1. ", "- ", etc.
-                    var cleaned = System.Text.RegularExpressions.Regex.Replace(trimmed, @"^[\d\.\-\*\)\s]+", "", System.Text.RegularExpressions.RegexOptions.None, RegexTimeout).Trim();
-                    if (cleaned.Length > 10)
+                    var normalized = NormalizeQuery(cleaned);
+                    if (!IsDuplicate(normalized, subQueries))
                     {
-                        var normalized = NormalizeQuery(cleaned);
-                        if (!IsDuplicate(normalized, subQueries))
-                        {
-                            subQueries.Add(cleaned);
-                        }
+                        subQueries.Add(cleaned);
                     }
                 }
-                // Extract concept mentions
-                else if (trimmed.IndexOf("concept", StringComparison.OrdinalIgnoreCase) >= 0 || 
-                        trimmed.IndexOf("understand", StringComparison.OrdinalIgnoreCase) >= 0 || 
-                        trimmed.IndexOf("need to know", StringComparison.OrdinalIgnoreCase) >= 0)
+            }
+            // Extract concept mentions
+            else if (trimmed.IndexOf("concept", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    trimmed.IndexOf("understand", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    trimmed.IndexOf("need to know", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                // Extract noun phrases after keywords
+                var patterns = new[]
                 {
-                    // Extract noun phrases after keywords
-                    var patterns = new[]
-                    {
                         @"(?:understand|concept|about|regarding|need to know)\s+(.+?)(?:\s*[\d\.]|\s*$)",
                         @"(?:what is|what are)\s+(.+?)(?:\?|$)",
                         @"key (?:concept|idea|topic)s?:\s*(.+?)(?:\s*[\d\.]|$)"
                     };
 
-                    foreach (var pattern in patterns)
-                    {
-                        var match = System.Text.RegularExpressions.Regex.Match(
-                            trimmed,
-                            pattern,
-                            System.Text.RegularExpressions.RegexOptions.IgnoreCase,
-                            RegexTimeout
-                        );
+                foreach (var pattern in patterns)
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(
+                        trimmed,
+                        pattern,
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase,
+                        RegexTimeout
+                    );
 
-                        if (match.Success && match.Groups[1].Value.Length > 5)
+                    if (match.Success && match.Groups[1].Value.Length > 5)
+                    {
+                        var extracted = match.Groups[1].Value.Trim();
+                        var normalized = NormalizeQuery(extracted);
+
+                        if (normalized.Length > 5 && !IsDuplicate(normalized, subQueries))
                         {
-                            var extracted = match.Groups[1].Value.Trim();
-                            var normalized = NormalizeQuery(extracted);
-                            
-                            if (normalized.Length > 5 && !IsDuplicate(normalized, subQueries))
-                            {
-                                subQueries.Add($"information about {extracted}");
-                            }
+                            subQueries.Add($"information about {extracted}");
                         }
                     }
                 }
             }
-
-            // Return top 5 unique queries
-            return subQueries.Take(5).ToList();
         }
 
-        /// <summary>
-        /// Checks if a normalized query is a fuzzy duplicate of existing queries.
-        /// </summary>
-        /// <param name="normalizedQuery">The normalized query to check</param>
-        /// <param name="existingQueries">List of existing queries to compare against</param>
-        /// <returns>True if fuzzy duplicate exists (similarity >= 0.85), false otherwise</returns>
-        /// <remarks>
-        /// Uses Jaro-Winkler similarity with 0.85 threshold (85% similarity).
-        /// This catches very similar queries while allowing reasonable variations.
-        /// </remarks>
-        private bool IsDuplicate(string normalizedQuery, List<string> existingQueries)
+        // Return top 5 unique queries
+        return subQueries.Take(5).ToList();
+    }
+
+    /// <summary>
+    /// Checks if a normalized query is a fuzzy duplicate of existing queries.
+    /// </summary>
+    /// <param name="normalizedQuery">The normalized query to check</param>
+    /// <param name="existingQueries">List of existing queries to compare against</param>
+    /// <returns>True if fuzzy duplicate exists (similarity >= 0.85), false otherwise</returns>
+    /// <remarks>
+    /// Uses Jaro-Winkler similarity with 0.85 threshold (85% similarity).
+    /// This catches very similar queries while allowing reasonable variations.
+    /// </remarks>
+    private bool IsDuplicate(string normalizedQuery, List<string> existingQueries)
+    {
+        const double similarityThreshold = 0.85;
+
+        foreach (var existing in existingQueries)
         {
-            const double similarityThreshold = 0.85;
+            var normalizedExisting = NormalizeQuery(existing);
+            var similarity = JaroWinklerSimilarity(normalizedQuery, normalizedExisting);
 
-            foreach (var existing in existingQueries)
+            if (similarity >= similarityThreshold)
             {
-                var normalizedExisting = NormalizeQuery(existing);
-                var similarity = JaroWinklerSimilarity(normalizedQuery, normalizedExisting);
-
-                if (similarity >= similarityThreshold)
-                {
-                    return true;
-                }
+                return true;
             }
-
-            return false;
         }
+
+        return false;
+    }
 }

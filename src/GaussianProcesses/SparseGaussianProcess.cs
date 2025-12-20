@@ -25,47 +25,47 @@ public class SparseGaussianProcess<T> : IGaussianProcess<T>
     /// The kernel function that defines the similarity between data points.
     /// </summary>
     private IKernelFunction<T> _kernel;
-    
+
     /// <summary>
     /// The training input data matrix.
     /// </summary>
     private Matrix<T> _X;
-    
+
     /// <summary>
     /// The training output data vector.
     /// </summary>
     private Vector<T> _y;
-    
+
     /// <summary>
     /// A subset of training points used to approximate the full Gaussian Process.
     /// </summary>
     private Matrix<T> _inducingPoints;
-    
+
     /// <summary>
     /// Helper for performing numeric operations on type T.
     /// </summary>
     private INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// The lower triangular matrix from Cholesky decomposition of the kernel matrix.
     /// </summary>
     private Matrix<T> _L;
-    
+
     /// <summary>
     /// Intermediate matrix used for efficient predictions.
     /// </summary>
     private Matrix<T> _V;
-    
+
     /// <summary>
     /// Diagonal elements used in the sparse approximation.
     /// </summary>
     private Vector<T> _D;
-    
+
     /// <summary>
     /// Weights vector used for mean prediction.
     /// </summary>
     private Vector<T> _alpha;
-    
+
     /// <summary>
     /// The type of matrix decomposition to use for solving linear systems.
     /// </summary>

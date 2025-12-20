@@ -1,4 +1,7 @@
+using System.Globalization;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -48,7 +51,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// You can switch between tasks at runtime, and each task only trains its specific LoRA weights!
 /// </para>
 /// </remarks>
-public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
+public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, ILayerSerializationExtras<T>
 {
     /// <summary>
     /// Dictionary mapping task names to their specific LoRA layers.
@@ -443,12 +446,13 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // All task adapters' parameters
+        // All task adapters' parameters (stable ordering for deterministic serialization)
         // Guard against null _taskAdapters during base constructor calls
         if (_taskAdapters != null)
         {
-            foreach (var adapter in _taskAdapters.Values)
+            foreach (var taskName in _taskAdapters.Keys.OrderBy(k => k, StringComparer.Ordinal))
             {
+                var adapter = _taskAdapters[taskName];
                 Vector<T> taskParams = adapter.GetParameters();
                 for (int i = 0; i < taskParams.Length; i++)
                 {
@@ -485,12 +489,13 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.SetParameters(baseParams);
         }
 
-        // All task adapters' parameters
+        // All task adapters' parameters (stable ordering for deterministic serialization)
         // Guard against null _taskAdapters during construction or early calls
         if (_taskAdapters != null)
         {
-            foreach (var adapter in _taskAdapters.Values)
+            foreach (var taskName in _taskAdapters.Keys.OrderBy(k => k, StringComparer.Ordinal))
             {
+                var adapter = _taskAdapters[taskName];
                 int taskParamCount = adapter.ParameterCount;
                 Vector<T> taskParams = new Vector<T>(taskParamCount);
                 for (int i = 0; i < taskParamCount; i++)
@@ -630,8 +635,9 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
             currentAdapter = _taskAdapters[_currentTask];
         }
 
-        foreach (var adapter in _taskAdapters.Values)
+        foreach (var taskName in _taskAdapters.Keys.OrderBy(k => k, StringComparer.Ordinal))
         {
+            var adapter = _taskAdapters[taskName];
             Vector<T>? grads = (adapter == currentAdapter && currentAdapter != null)
                 ? adapter.GetParameterGradients()
                 : null;
@@ -641,6 +647,94 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
                 ParameterGradients[idx++] = grads != null ? grads[i] : NumOps.Zero;
             }
         }
+    }
+
+    int ILayerSerializationExtras<T>.ExtraParameterCount => _freezeBaseLayer && _baseLayer != null ? _baseLayer.ParameterCount : 0;
+
+    Vector<T> ILayerSerializationExtras<T>.GetExtraParameters()
+    {
+        if (!_freezeBaseLayer || _baseLayer == null)
+        {
+            return new Vector<T>(0);
+        }
+
+        return _baseLayer.GetParameters();
+    }
+
+    void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
+    {
+        if (!_freezeBaseLayer || _baseLayer == null)
+        {
+            return;
+        }
+
+        if (extraParameters.Length != _baseLayer.ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {_baseLayer.ParameterCount} extra parameters for frozen base layer, got {extraParameters.Length}",
+                nameof(extraParameters));
+        }
+
+        _baseLayer.SetParameters(extraParameters);
+    }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var meta = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["FreezeBaseLayer"] = _freezeBaseLayer.ToString(CultureInfo.InvariantCulture),
+            ["BaseLayerTypeId"] = Uri.EscapeDataString(BuildLayerTypeIdentifier(_baseLayer))
+        };
+
+        if (_taskAdapters != null)
+        {
+            var ordered = _taskAdapters.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
+            meta["Tasks"] = string.Join("|", ordered.Select(Uri.EscapeDataString));
+            meta["TaskRanks"] = string.Join("|", ordered.Select(t => _taskAdapters[t].Rank.ToString(CultureInfo.InvariantCulture)));
+            meta["TaskAlphas"] = string.Join("|", ordered.Select(t => Convert.ToDouble(_taskAdapters[t].Alpha).ToString(CultureInfo.InvariantCulture)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(_currentTask))
+        {
+            meta["CurrentTask"] = Uri.EscapeDataString(_currentTask);
+        }
+
+        return meta;
+    }
+
+    private static string BuildLayerTypeIdentifier(ILayer<T> layer)
+    {
+        string typeName = layer.GetType().Name;
+        var metadata = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        if (layer is LayerBase<T> layerBase)
+        {
+            foreach (var kvp in layerBase.GetMetadata())
+            {
+                metadata[kvp.Key] = kvp.Value;
+            }
+
+            if (layerBase.VectorActivation != null)
+            {
+                metadata["VectorActivationType"] = layerBase.VectorActivation.GetType().AssemblyQualifiedName ?? layerBase.VectorActivation.GetType().FullName ?? string.Empty;
+            }
+            else if (layerBase.ScalarActivation != null)
+            {
+                metadata["ScalarActivationType"] = layerBase.ScalarActivation.GetType().AssemblyQualifiedName ?? layerBase.ScalarActivation.GetType().FullName ?? string.Empty;
+            }
+        }
+
+        if (metadata.Count == 0)
+        {
+            return typeName;
+        }
+
+        foreach (var kvp in metadata.OrderBy(k => k.Key, StringComparer.Ordinal))
+        {
+            typeName += $";{kvp.Key}={kvp.Value}";
+        }
+
+        return typeName;
     }
 
     /// <summary>

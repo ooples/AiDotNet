@@ -490,13 +490,13 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
                 Encoding.UTF8,
                 "application/json"
             );
-            
+
             // DELETE with body requires using HttpRequestMessage
             var request = new HttpRequestMessage(HttpMethod.Delete, "_search/scroll")
             {
                 Content = deleteContent
             };
-            
+
             using var deleteResponse = _httpClient.SendAsync(request).GetAwaiter().GetResult();
             deleteResponse.EnsureSuccessStatusCode();
         }

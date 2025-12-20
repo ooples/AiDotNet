@@ -127,16 +127,16 @@ public class MultipleRegression<T> : RegressionBase<T>
     {
         // Create a new MultipleRegression with the same options and regularization
         var newModel = new MultipleRegression<T>(Options, Regularization);
-        
+
         // Copy the coefficients
         if (Coefficients != null)
         {
             newModel.Coefficients = Coefficients.Clone();
         }
-        
+
         // Copy the intercept
         newModel.Intercept = Intercept;
-        
+
         return newModel;
     }
 

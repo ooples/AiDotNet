@@ -1,11 +1,11 @@
+using System.IO.Compression;
+using System.Net.Http;
+using System.Text;
 using AiDotNet.Data.Loaders;
 using AiDotNet.Data.Structures;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using System.IO.Compression;
-using System.Net.Http;
-using System.Text;
 
 namespace AiDotNet.Data.Graph;
 
@@ -707,8 +707,16 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
         // Atom type mapping
         var atomTypeMap = new Dictionary<string, int>
         {
-            ["H"] = 0, ["C"] = 1, ["N"] = 2, ["O"] = 3, ["F"] = 4,
-            ["P"] = 5, ["S"] = 6, ["Cl"] = 7, ["Br"] = 8, ["I"] = 9
+            ["H"] = 0,
+            ["C"] = 1,
+            ["N"] = 2,
+            ["O"] = 3,
+            ["F"] = 4,
+            ["P"] = 5,
+            ["S"] = 6,
+            ["Cl"] = 7,
+            ["Br"] = 8,
+            ["I"] = 9
         };
 
         var atomTypes = new List<int>();

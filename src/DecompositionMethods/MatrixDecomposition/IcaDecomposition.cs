@@ -297,7 +297,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
                     "ICA whitening requires positive definite covariance matrix. " +
                     "This may indicate ill-conditioned or degenerate data.");
             }
-            
+
             T invSqrtEigenvalue = NumOps.Divide(NumOps.One, NumOps.Sqrt(D[i]));
             for (int j = 0; j < C.Rows; j++)
             {

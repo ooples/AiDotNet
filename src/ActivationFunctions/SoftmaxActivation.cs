@@ -189,7 +189,7 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
         // Ideally, Backward should accept 'output' as an optional argument, but for now we recompute.
         // NOTE: In ActivationLayer, we could optimize this by passing cached output if available,
         // but standard Interface only takes input.
-        
+
         var output = Activate(input);
         return Engine.SoftmaxBackward(outputGradient, output);
     }

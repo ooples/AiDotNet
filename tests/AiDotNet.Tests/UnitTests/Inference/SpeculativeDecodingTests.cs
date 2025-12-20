@@ -608,4 +608,122 @@ public class SpeculativeDecodingIntegrationTests
         Assert.Equal(4, config.MaxDepth);
         Assert.Equal(16, config.MaxNodes);
     }
+
+    [Fact]
+    public async Task SpeculativeDecoder_GenerateAsync_TreeMode_RecordsDraftWork()
+    {
+        // Arrange
+        var draftModel = new NGramDraftModel<float>(ngramSize: 2, vocabSize: 20, seed: 42);
+        var corpus = new List<Vector<int>>
+        {
+            new Vector<int>(Enumerable.Range(0, 200).Select(i => i % 10).ToArray())
+        };
+        draftModel.Train(corpus);
+
+        Func<Vector<int>, Matrix<float>> targetForward = tokens =>
+        {
+            var probs = new Matrix<float>(tokens.Length, 20);
+            for (int i = 0; i < tokens.Length; i++)
+            {
+                for (int v = 0; v < 20; v++) probs[i, v] = 0.05f;
+                probs[i, 7] = 0.8f;
+            }
+            return probs;
+        };
+
+        var decoder = new SpeculativeDecoder<float>(
+            draftModel,
+            targetForward,
+            new SpeculativeDecodingConfig<float>
+            {
+                UseTreeSpeculation = true,
+                TreeBranchFactor = 3,
+                MaxTreeDepth = 3,
+                Seed = 42
+            });
+
+        // Act
+        var result = await decoder.GenerateAsync(new Vector<int>(new[] { 1 }), maxNewTokens: 8, temperature: 1.0f);
+
+        // Assert
+        Assert.True(result.NumGenerated > 0);
+        Assert.True(decoder.TotalDraftTokens > 0);
+        Assert.True(result.StepStatistics.Count > 0);
+        Assert.True(result.TokensPerVerification > 0);
+        Assert.Contains(result.StepStatistics, s => s.DraftTokens > 0);
+    }
+
+    [Fact]
+    public async Task SpeculativeDecoder_AdaptiveDraftLength_ReducesDraftTokens_WhenAcceptanceLow()
+    {
+        // Arrange
+        var config = new SpeculativeDecodingConfig<float>
+        {
+            NumDraftTokens = 4,
+            AdaptiveDraftLength = true,
+            MinAcceptanceRate = 0.8f
+        };
+
+        // Target strongly prefers token 2.
+        Func<Vector<int>, Matrix<float>> targetForward = tokens =>
+        {
+            var probs = new Matrix<float>(tokens.Length, 10);
+            for (int i = 0; i < tokens.Length; i++)
+            {
+                for (int v = 0; v < 10; v++) probs[i, v] = 0.0001f;
+                probs[i, 2] = 0.999f;
+            }
+            return probs;
+        };
+
+        // Draft consistently proposes token 1 => low acceptance.
+        var draft = new DeterministicDraftModel(vocabSize: 10, tokenId: 1);
+        var decoder = new SpeculativeDecoder<float>(draft, targetForward, config);
+
+        // Act
+        _ = await decoder.GenerateAsync(new Vector<int>(new[] { 0 }), maxNewTokens: 24, temperature: 1.0f);
+
+        // Assert
+        Assert.True(decoder.CurrentDraftTokens < 4);
+    }
+}
+
+internal sealed class DeterministicDraftModel : IDraftModel<float>
+{
+    private readonly int _vocabSize;
+    private readonly int _tokenId;
+
+    public DeterministicDraftModel(int vocabSize, int tokenId)
+    {
+        _vocabSize = vocabSize;
+        _tokenId = tokenId;
+    }
+
+    public int MaxDraftTokens => 32;
+
+    public int VocabSize => _vocabSize;
+
+    public DraftResult<float> GenerateDraft(Vector<int> inputTokens, int numDraftTokens, float temperature)
+    {
+        int n = Math.Max(0, numDraftTokens);
+        var tokens = new Vector<int>(Enumerable.Repeat(_tokenId, n).ToArray());
+
+        var probs = new Matrix<float>(n, _vocabSize);
+        for (int i = 0; i < n; i++)
+        {
+            probs[i, _tokenId] = 1.0f;
+        }
+
+        var tokenProbs = new Vector<float>(Enumerable.Repeat(1.0f, n).ToArray());
+        return new DraftResult<float>
+        {
+            Tokens = tokens,
+            TokenProbabilities = tokenProbs,
+            Probabilities = probs
+        };
+    }
+
+    public void Reset()
+    {
+    }
 }

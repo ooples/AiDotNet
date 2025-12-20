@@ -387,7 +387,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <param name="X">The input features.</param>
     /// <param name="y">The target values.</param>
     /// <returns>The calculated gradient.</returns>
-        /// <summary>
+    /// <summary>
     /// Calculates the gradient for the given solution and input data.
     /// </summary>
     /// <remarks>
@@ -764,38 +764,38 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </para>
     /// </remarks>
     protected virtual Vector<T> CalculateGradient(
-        IFullModel<T, TInput, TOutput> solution, 
-        TInput xTrain, 
-        TOutput yTrain, 
+        IFullModel<T, TInput, TOutput> solution,
+        TInput xTrain,
+        TOutput yTrain,
         int[] batchIndices)
     {
         // Extract batch data using your InputHelper
         var xBatch = InputHelper<T, TInput>.GetBatch(xTrain, batchIndices);
         var yBatch = InputHelper<T, TOutput>.GetBatch(yTrain, batchIndices);
-    
+
         // Get the current parameters
         var parameters = solution.GetParameters();
         var gradient = new Vector<T>(parameters.Length);
-    
+
         // Initialize gradient vector with zeros
         for (int i = 0; i < gradient.Length; i++)
         {
             gradient[i] = NumOps.Zero;
         }
-    
+
         // For each sample in the batch
         for (int i = 0; i < batchIndices.Length; i++)
         {
             // Get the current input and output for this sample
             var input = InputHelper<T, TInput>.GetItem(xBatch, i);
             var target = InputHelper<T, TOutput>.GetItem(yBatch, i);
-        
+
             // Predict the output
             var prediction = solution.Predict(input);
-        
+
             // Calculate the error
             var error = LossFunction.CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(prediction), ConversionsHelper.ConvertToVector<T, TOutput>(target));
-        
+
             // Update gradient based on the error
             for (int j = 0; j < parameters.Length; j++)
             {
@@ -804,7 +804,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 gradient[j] = NumOps.Add(gradient[j], contribution);
             }
         }
-    
+
         // Average the gradient
         for (int i = 0; i < gradient.Length; i++)
         {
@@ -829,7 +829,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </para>
     /// </remarks>
     protected virtual IFullModel<T, TInput, TOutput> UpdateSolution(
-        IFullModel<T, TInput, TOutput> currentSolution, 
+        IFullModel<T, TInput, TOutput> currentSolution,
         Vector<T> gradient)
     {
         var parameters = currentSolution.GetParameters();

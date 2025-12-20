@@ -90,7 +90,7 @@ public class ChiSquareKernel<T> : IKernelFunction<T>
             var diff = _numOps.Subtract(x1[i], x2[i]);
             var numerator = _numOps.Square(diff);
             var denominator = _numOps.Add(x1[i], x2[i]);
-        
+
             if (!_numOps.Equals(denominator, _numOps.Zero))
             {
                 sum = _numOps.Add(sum, _numOps.Divide(numerator, denominator));

@@ -83,7 +83,7 @@ public class ElasticNetLossFitnessCalculator<T, TInput, TOutput> : FitnessCalcul
     /// better performance (0 would be a perfect model). This tells the system that smaller numbers are better.
     /// </para>
     /// </remarks>
-    public ElasticNetLossFitnessCalculator(T? l1Ratio = default, T? alpha = default, DataSetType dataSetType = DataSetType.Validation) 
+    public ElasticNetLossFitnessCalculator(T? l1Ratio = default, T? alpha = default, DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
         _l1Ratio = l1Ratio ?? _numOps.FromDouble(0.5);

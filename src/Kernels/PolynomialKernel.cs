@@ -55,7 +55,7 @@ public class PolynomialKernel<T> : IKernelFunction<T>
     /// (where the model learns the training data too specifically and performs poorly on new data).
     /// </remarks>
     private readonly T _degree;
-    
+
     /// <summary>
     /// The constant coefficient added to the dot product before raising to the power of the degree.
     /// </summary>
@@ -70,7 +70,7 @@ public class PolynomialKernel<T> : IKernelFunction<T>
     /// The default value is 1.0, which works well as a starting point for many applications.
     /// </remarks>
     private readonly T _coef0;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

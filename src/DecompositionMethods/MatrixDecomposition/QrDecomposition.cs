@@ -63,7 +63,7 @@ public class QrDecomposition<T> : MatrixDecompositionBase<T>
         : base(matrix)
     {
         _algorithm = qrAlgorithm;
-    
+
         Decompose();
     }
 

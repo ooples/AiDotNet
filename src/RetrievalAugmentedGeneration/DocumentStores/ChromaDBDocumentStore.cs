@@ -76,7 +76,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
             throw new ArgumentException($"Vector dimension mismatch. Expected {_vectorDimension}, got {vectorDocument.Embedding.Length}", nameof(vectorDocument));
 
         var embedding = vectorDocument.Embedding.ToArray().Select(v => Convert.ToDouble(v)).ToList();
-        
+
         var payload = new
         {
             ids = new[] { vectorDocument.Document.Id },
@@ -92,7 +92,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
 
         using var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/add", content).GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
-        
+
         _cache[vectorDocument.Document.Id] = vectorDocument;
         _documentCount++;
     }
@@ -100,7 +100,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
     protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
     {
         if (vectorDocuments.Count == 0) return;
-        
+
         if (_vectorDimension == 0)
             _vectorDimension = vectorDocuments[0].Embedding.Length;
 
@@ -111,7 +111,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
         }
 
         var ids = vectorDocuments.Select(vd => vd.Document.Id).ToList();
-        var embeddings = vectorDocuments.Select(vd => 
+        var embeddings = vectorDocuments.Select(vd =>
             vd.Embedding.ToArray().Select(v => Convert.ToDouble(v)).ToList()).ToList();
         var documents = vectorDocuments.Select(vd => vd.Document.Content).ToList();
         var metadatas = vectorDocuments.Select(vd => vd.Document.Metadata).ToList();
@@ -124,7 +124,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
 
         using var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/add", content).GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
-        
+
         foreach (var vd in vectorDocuments)
             _cache[vd.Document.Id] = vd;
         _documentCount += vectorDocuments.Count;
@@ -133,7 +133,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
     {
         var embedding = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToList();
-        
+
         var payload = new
         {
             query_embeddings = new[] { embedding },
@@ -298,7 +298,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
         {
             using var response = _httpClient.DeleteAsync($"/api/v1/collections/{_collectionName}").GetAwaiter().GetResult();
             response.EnsureSuccessStatusCode();
-            
+
             _cache.Clear();
             _documentCount = 0;
             _vectorDimension = 0;

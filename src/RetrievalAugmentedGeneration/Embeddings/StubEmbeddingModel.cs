@@ -56,7 +56,7 @@ public class StubEmbeddingModel<T> : EmbeddingModelBase<T>
     {
         if (embeddingDimension <= 0)
             throw new ArgumentException("Embedding dimension must be greater than zero", nameof(embeddingDimension));
-        
+
         if (maxTokens <= 0)
             throw new ArgumentException("MaxTokens must be greater than zero", nameof(maxTokens));
 
@@ -93,12 +93,12 @@ public class StubEmbeddingModel<T> : EmbeddingModelBase<T>
 
             var u2 = random.NextDouble();
             var normalValue = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            
+
             values[i] = (T)Convert.ChangeType(normalValue, typeof(T));
         }
 
         var vector = new Vector<T>(values);
-        
+
         // Normalize the vector to unit length for cosine similarity
         return NormalizeVector(vector);
     }

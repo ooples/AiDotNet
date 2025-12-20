@@ -86,7 +86,7 @@ public class StateSpaceModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int StateSize { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the dimension of the observation vector in the state space model.
     /// </summary>
@@ -126,7 +126,7 @@ public class StateSpaceModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int ObservationSize { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the learning rate for gradient-based parameter estimation.
     /// </summary>
@@ -166,7 +166,7 @@ public class StateSpaceModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public double LearningRate { get; set; } = 0.01;
-    
+
     /// <summary>
     /// Gets or sets the maximum number of iterations for the parameter estimation algorithm.
     /// </summary>
@@ -206,7 +206,7 @@ public class StateSpaceModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int MaxIterations { get; set; } = 1000;
-    
+
     /// <summary>
     /// Gets or sets the convergence tolerance for the parameter estimation algorithm.
     /// </summary>

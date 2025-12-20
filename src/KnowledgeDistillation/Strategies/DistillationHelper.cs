@@ -19,7 +19,7 @@ internal static class DistillationHelper<T>
         int n = logits.Length;
         var result = new Vector<T>(n);
         var scaledLogits = new T[n];
-        
+
         for (int i = 0; i < n; i++)
         {
             double val = Convert.ToDouble(logits[i]) / temperature;

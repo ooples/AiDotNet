@@ -21,7 +21,7 @@ namespace AiDotNet.Inference;
 /// which don't change once computed for a given position.
 /// </para>
 /// </remarks>
-public class KVCacheConfig
+internal class KVCacheConfig
 {
     /// <summary>
     /// Maximum sequence length the cache can hold.
@@ -115,6 +115,7 @@ public class KVCacheConfig
 
         int bytesPerElement = DataType switch
         {
+            CacheDataType.Int8 => 1,
             CacheDataType.Float16 => 2,
             CacheDataType.Float32 => 4,
             CacheDataType.Float64 => 8,
@@ -187,8 +188,11 @@ public class KVCacheConfig
 /// <summary>
 /// Data types supported for KV-Cache storage.
 /// </summary>
-public enum CacheDataType
+internal enum CacheDataType
 {
+    /// <summary>Signed 8-bit integer quantization (int8) with scaling.</summary>
+    Int8,
+
     /// <summary>Half precision (16-bit float).</summary>
     Float16,
 
@@ -205,7 +209,7 @@ public enum CacheDataType
 /// <summary>
 /// Device placement options for KV-Cache.
 /// </summary>
-public enum CacheDevice
+internal enum CacheDevice
 {
     /// <summary>Automatically select based on available hardware.</summary>
     Auto,

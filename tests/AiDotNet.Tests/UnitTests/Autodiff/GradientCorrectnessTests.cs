@@ -1,11 +1,11 @@
 using System.Linq;
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Autodiff.Testing;
-using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ActivationFunctions;
-using AiDotNet.Interfaces;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Autodiff;

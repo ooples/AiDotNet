@@ -32,12 +32,12 @@ public class OrdinalRegressionLoss<T> : LossFunctionBase<T>
     /// The number of classes or categories in the ordinal scale.
     /// </summary>
     private readonly int _numClasses;
-    
+
     /// <summary>
     /// Small value to prevent numerical instability.
     /// </summary>
     private readonly T _epsilon;
-    
+
     /// <summary>
     /// Initializes a new instance of the OrdinalRegressionLoss class.
     /// </summary>
@@ -48,11 +48,11 @@ public class OrdinalRegressionLoss<T> : LossFunctionBase<T>
         {
             throw new ArgumentException("Number of classes must be at least 2 for ordinal regression.");
         }
-        
+
         _numClasses = numClasses;
         _epsilon = NumOps.FromDouble(1e-15);
     }
-    
+
     /// <summary>
     /// Calculates the Ordinal Regression Loss between predicted and actual values.
     /// </summary>
@@ -62,7 +62,7 @@ public class OrdinalRegressionLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T loss = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -70,20 +70,20 @@ public class OrdinalRegressionLoss<T> : LossFunctionBase<T>
             for (int j = 0; j < _numClasses - 1; j++)
             {
                 // Binary indicator: 1 if actual > j, 0 otherwise
-                T indicator = NumOps.GreaterThan(actual[i], NumOps.FromDouble(j)) ? 
+                T indicator = NumOps.GreaterThan(actual[i], NumOps.FromDouble(j)) ?
                     NumOps.One : NumOps.Zero;
-                
+
                 // Binary logistic loss for each threshold: log(1 + exp(-indicator * predicted))
                 T expTerm = NumOps.Exp(NumOps.Negate(NumOps.Multiply(indicator, predicted[i])));
                 T logTerm = NumOps.Log(NumOps.Add(NumOps.One, expTerm));
-                
+
                 loss = NumOps.Add(loss, logTerm);
             }
         }
-        
+
         return loss;
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Ordinal Regression Loss function.
     /// </summary>
@@ -93,7 +93,7 @@ public class OrdinalRegressionLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -101,23 +101,23 @@ public class OrdinalRegressionLoss<T> : LossFunctionBase<T>
             for (int j = 0; j < _numClasses - 1; j++)
             {
                 // Binary indicator: 1 if actual > j, 0 otherwise
-                T indicator = NumOps.GreaterThan(actual[i], NumOps.FromDouble(j)) ? 
+                T indicator = NumOps.GreaterThan(actual[i], NumOps.FromDouble(j)) ?
                     NumOps.One : NumOps.Zero;
-                
+
                 // exp(-indicator * predicted)
                 T expTerm = NumOps.Exp(NumOps.Negate(NumOps.Multiply(indicator, predicted[i])));
-                
+
                 // -indicator * exp(-indicator * predicted) / (1 + exp(-indicator * predicted))
                 T term = NumOps.Divide(
                     NumOps.Negate(NumOps.Multiply(indicator, expTerm)),
                     NumOps.Add(NumOps.One, expTerm)
                 );
-                
+
                 sum = NumOps.Add(sum, term);
             }
             derivative[i] = sum;
         }
-        
+
         return derivative;
     }
 }

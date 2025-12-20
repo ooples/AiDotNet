@@ -1,6 +1,6 @@
-using Newtonsoft.Json;
-using AiDotNet.Interfaces;
 using System.Net.Http;
+using AiDotNet.Interfaces;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Tools;
 

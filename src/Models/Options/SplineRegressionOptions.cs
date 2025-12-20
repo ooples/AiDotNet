@@ -76,7 +76,7 @@ public class SplineRegressionOptions : NonLinearRegressionOptions
     /// </para>
     /// </remarks>
     public int NumberOfKnots { get; set; } = 3;
-    
+
     /// <summary>
     /// Gets or sets the degree of the polynomial functions used in each segment of the spline.
     /// </summary>
@@ -119,7 +119,7 @@ public class SplineRegressionOptions : NonLinearRegressionOptions
     /// </para>
     /// </remarks>
     public int Degree { get; set; } = 3;
-    
+
     /// <summary>
     /// Gets or sets the matrix decomposition method used to solve the regression equations.
     /// </summary>

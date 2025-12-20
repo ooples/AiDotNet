@@ -270,8 +270,8 @@ namespace AiDotNet.AutoML.NAS
             var cost = _hardwareCostModel.EstimateArchitectureCost(architecture, inputChannels, spatialSize);
 
             T penalty = _ops.Zero;
-            if (constraints.MaxLatency != null && _ops.GreaterThan(cost.Latency, constraints.MaxLatency))
-                penalty = _ops.Add(penalty, _ops.Multiply(_ops.Subtract(cost.Latency, constraints.MaxLatency), _ops.FromDouble(1000.0)));
+            if (constraints.MaxLatency.HasValue && _ops.ToDouble(cost.Latency) > constraints.MaxLatency.Value)
+                penalty = _ops.Add(penalty, _ops.Multiply(_ops.Subtract(cost.Latency, _ops.FromDouble(constraints.MaxLatency.Value)), _ops.FromDouble(1000.0)));
 
             T estimatedAccuracy = _ops.FromDouble(
                 config.Depth * config.WidthMultiplier * config.ExpansionRatio * config.Resolution / 10000.0);

@@ -71,7 +71,7 @@ public class BayesianStructuralTimeSeriesOptions<T> : TimeSeriesRegressionOption
     /// You can include multiple patterns (like both weekly and yearly cycles) by adding multiple numbers to the list. 
     /// If your data doesn't have any repeating patterns, you can leave this empty (the default).</para>
     /// </remarks>
-    public List<int> SeasonalPeriods { get; set; } = new List<int> {  };
+    public List<int> SeasonalPeriods { get; set; } = new List<int> { };
 
     /// <summary>
     /// Gets or sets the initial variance of the observation noise.

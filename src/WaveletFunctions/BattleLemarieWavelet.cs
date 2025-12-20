@@ -306,7 +306,7 @@ public class BattleLemarieWavelet<T> : WaveletFunctionBase<T>
     /// 
     /// This method implements a direct (non-optimized) version of the inverse FFT:
     /// 1. For each output point, it calculates a weighted sum of all input points
-        /// 2. The weights are complex exponentials (cosine and sine functions)
+    /// 2. The weights are complex exponentials (cosine and sine functions)
     /// 3. The result is divided by the number of points to normalize
     /// 
     /// While not as efficient as specialized FFT algorithms, this implementation is

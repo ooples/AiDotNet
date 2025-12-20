@@ -19,12 +19,12 @@ public class LagrangePolynomialInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the known data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates (values) of the known data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
@@ -87,7 +87,7 @@ public class LagrangePolynomialInterpolation<T> : IInterpolation<T>
             {
                 if (i != j)
                 {
-                    term = _numOps.Multiply(term, 
+                    term = _numOps.Multiply(term,
                         _numOps.Divide(
                             _numOps.Subtract(x, _x[j]),
                             _numOps.Subtract(_x[i], _x[j])

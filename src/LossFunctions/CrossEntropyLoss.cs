@@ -31,7 +31,7 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
     public CrossEntropyLoss()
     {
     }
-    
+
     /// <summary>
     /// Calculates the Cross-Entropy loss between predicted and actual probability distributions.
     /// </summary>
@@ -41,7 +41,7 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T sum = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -51,10 +51,10 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
             // -?(actual_i * log(predicted_i))
             sum = NumOps.Add(sum, NumOps.Multiply(actual[i], NumericalStabilityHelper.SafeLog(p, NumericalStabilityHelper.SmallEpsilon)));
         }
-        
+
         return NumOps.Negate(NumOps.Divide(sum, NumOps.FromDouble(predicted.Length)));
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Cross-Entropy loss function.
     /// </summary>
@@ -64,7 +64,7 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -74,7 +74,7 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
             // -actual_i / predicted_i with safe division
             derivative[i] = NumericalStabilityHelper.SafeDiv(NumOps.Negate(actual[i]), p, NumericalStabilityHelper.SmallEpsilon);
         }
-        
+
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
 }

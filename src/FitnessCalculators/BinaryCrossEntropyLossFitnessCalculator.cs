@@ -44,7 +44,7 @@ public class BinaryCrossEntropyLossFitnessCalculator<T, TInput, TOutput> : Fitne
     /// better performance (0 would be a perfect model). This tells the system that smaller numbers are better.
     /// </para>
     /// </remarks>
-    public BinaryCrossEntropyLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) 
+    public BinaryCrossEntropyLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
     }
@@ -74,7 +74,7 @@ public class BinaryCrossEntropyLossFitnessCalculator<T, TInput, TOutput> : Fitne
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return new BinaryCrossEntropyLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+        return new BinaryCrossEntropyLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

@@ -4,10 +4,10 @@ using AiDotNet.Data.Loaders;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace TestConsole.Examples;
 

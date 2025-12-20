@@ -69,7 +69,7 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// to update the biases during the parameter update step.
     /// </remarks>
     private Tensor<T> _biasGradients;
-    
+
     /// <summary>
     /// Stores the input tensor from the most recent forward pass for use in backpropagation.
     /// </summary>

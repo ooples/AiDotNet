@@ -265,7 +265,7 @@ public class RegularizationTool : ToolBase
         }
         techniques.Add((priority++, "L2 Regularization (Ridge)",
             "Shrinks all coefficients, particularly effective when features are correlated.",
-            $"Use Ridge regression with alpha={( samplesPerFeature < 50 ? "10.0 to 0.1" : "1.0 to 0.001")}. Use RidgeCV for CV-based selection."));
+            $"Use Ridge regression with alpha={(samplesPerFeature < 50 ? "10.0 to 0.1" : "1.0 to 0.001")}. Use RidgeCV for CV-based selection."));
         if (nFeatures > 20)
         {
             techniques.Add((priority++, "Feature Selection",

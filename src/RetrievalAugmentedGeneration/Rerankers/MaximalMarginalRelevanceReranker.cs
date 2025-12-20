@@ -112,7 +112,7 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
     {
         if (getEmbedding == null)
             throw new ArgumentNullException(nameof(getEmbedding));
-        
+
         if (lambda < 0 || lambda > 1)
             throw new ArgumentException("Lambda must be between 0 and 1", nameof(lambda));
 
@@ -126,7 +126,7 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
     protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
     {
         var docList = documents.ToList();
-        
+
         if (docList.Count == 0)
             return Enumerable.Empty<Document<T>>();
 
@@ -135,32 +135,32 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
 
         // Get embeddings for all documents
         var embeddings = docList.Select(doc => _getEmbedding(doc)).ToList();
-        
+
         // Track which documents have been selected
         var selected = new List<int>();
         var unselected = Enumerable.Range(0, docList.Count).ToList();
-        
+
         // Select first document (most relevant)
         var firstIdx = unselected
             .OrderByDescending(i => docList[i].HasRelevanceScore ? Convert.ToDouble(docList[i].RelevanceScore) : 0.0)
             .First();
-        
+
         selected.Add(firstIdx);
         unselected.Remove(firstIdx);
-        
+
         // Iteratively select remaining documents using MMR
         while (unselected.Count > 0)
         {
             var bestIdx = -1;
             var bestScore = NumOps.FromDouble(double.MinValue);
-            
+
             foreach (var i in unselected)
             {
                 var doc = docList[i];
-                
+
                 // Relevance component (original score)
                 var relevance = doc.HasRelevanceScore ? doc.RelevanceScore : NumOps.Zero;
-                
+
                 // Diversity component (max similarity to selected docs)
                 var maxSimilarity = NumOps.Zero;
                 foreach (var j in selected)
@@ -169,23 +169,23 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
                     if (NumOps.GreaterThan(similarity, maxSimilarity))
                         maxSimilarity = similarity;
                 }
-                
+
                 // MMR score = λ * relevance - (1 - λ) * maxSimilarity
                 var lambdaT = NumOps.FromDouble(_lambda);
                 var oneMinusLambda = NumOps.FromDouble(1.0 - _lambda);
-                
+
                 var mmrScore = NumOps.Subtract(
                     NumOps.Multiply(lambdaT, relevance),
                     NumOps.Multiply(oneMinusLambda, maxSimilarity)
                 );
-                
+
                 if (bestScore == null || NumOps.GreaterThan(mmrScore, bestScore))
                 {
                     bestScore = mmrScore;
                     bestIdx = i;
                 }
             }
-            
+
             if (bestIdx >= 0)
             {
                 selected.Add(bestIdx);
@@ -196,20 +196,20 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
                 break;
             }
         }
-        
+
         // Return documents in MMR order
         var reranked = new List<Document<T>>();
         for (int i = 0; i < selected.Count; i++)
         {
             var doc = docList[selected[i]];
-            
+
             // Update relevance score to reflect MMR position
             doc.RelevanceScore = NumOps.FromDouble(1.0 - (i / (double)selected.Count));
             doc.HasRelevanceScore = true;
-            
+
             reranked.Add(doc);
         }
-        
+
         return reranked;
     }
 
@@ -220,7 +220,7 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
     {
         if (a == null || b == null)
             throw new ArgumentNullException("Vectors cannot be null");
-        
+
         if (a.Length != b.Length)
             throw new ArgumentException("Vectors must have the same length");
 

@@ -1,7 +1,7 @@
-using AiDotNet.LinearAlgebra;
-using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.NeuralNetworks.Layers;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
 

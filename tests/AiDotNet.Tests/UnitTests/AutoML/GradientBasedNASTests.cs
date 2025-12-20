@@ -1,11 +1,11 @@
-using AiDotNet.Tensors.LinearAlgebra;
+using System;
+using System.Threading.Tasks;
 using AiDotNet.AutoML;
 using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
-using System;
-using System.Threading.Tasks;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.AutoML

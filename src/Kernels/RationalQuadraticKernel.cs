@@ -50,7 +50,7 @@ public class RationalQuadraticKernel<T> : IKernelFunction<T>
     /// The default value is 1.0, which provides a balanced sensitivity for many applications.
     /// </remarks>
     private readonly T _c;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

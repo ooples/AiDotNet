@@ -1,13 +1,12 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.Common;
-
-using AiDotNet.Enums;
 
 namespace AiDotNet.ReinforcementLearning.Agents.A2C;
 
@@ -597,7 +596,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var gradient = new Vector<T>(policyOutput.Length);
         var scaledAdvantage = NumOps.Divide(advantage, NumOps.FromDouble(_trajectory.Length));
-        
+
         if (_a2cOptions.IsContinuous)
         {
             // Continuous: Gaussian policy [mean, log_std]
@@ -609,11 +608,11 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
                 var std = NumOps.Exp(logStd);
                 var actionDiff = NumOps.Subtract(action[i], mean);
                 var stdSquared = NumOps.Multiply(std, std);
-                
+
                 // ∇μ: -(a - μ) / σ² * advantage
                 gradient[i] = NumOps.Negate(
                     NumOps.Multiply(scaledAdvantage, NumOps.Divide(actionDiff, stdSquared)));
-                    
+
                 // ∇log_σ: -((a-μ)² / σ² - 1) * advantage
                 var normalizedDiff = NumOps.Divide(actionDiff, std);
                 var term = NumOps.Subtract(NumOps.Multiply(normalizedDiff, normalizedDiff), NumOps.One);
@@ -625,7 +624,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Discrete: softmax policy
             var softmax = ComputeSoftmax(policyOutput);
             int selectedAction = GetDiscreteAction(action);
-            
+
             for (int i = 0; i < policyOutput.Length; i++)
             {
                 var indicator = (i == selectedAction) ? NumOps.One : NumOps.Zero;
@@ -633,10 +632,10 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
                 gradient[i] = NumOps.Negate(NumOps.Multiply(scaledAdvantage, grad));
             }
         }
-        
+
         return gradient;
     }
-    
+
     private Vector<T> ComputeSoftmax(Vector<T> logits)
     {
         var softmax = new Vector<T>(logits.Length);
@@ -646,7 +645,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             if (NumOps.GreaterThan(logits[i], maxLogit))
                 maxLogit = logits[i];
         }
-        
+
         T sumExp = NumOps.Zero;
         for (int i = 0; i < logits.Length; i++)
         {
@@ -654,15 +653,15 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             softmax[i] = exp;
             sumExp = NumOps.Add(sumExp, exp);
         }
-        
+
         for (int i = 0; i < softmax.Length; i++)
         {
             softmax[i] = NumOps.Divide(softmax[i], sumExp);
         }
-        
+
         return softmax;
     }
-    
+
     private int GetDiscreteAction(Vector<T> action)
     {
         for (int i = 0; i < action.Length; i++)

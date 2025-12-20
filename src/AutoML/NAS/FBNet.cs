@@ -66,9 +66,9 @@ namespace AiDotNet.AutoML.NAS
             // Default hardware constraints (can be customized)
             _hardwareConstraints = new HardwareConstraints<T>
             {
-                MaxLatency = _ops.FromDouble(100.0),  // 100ms
-                MaxMemory = _ops.FromDouble(100.0),    // 100MB
-                MaxEnergy = _ops.FromDouble(500.0)     // 500mJ
+                MaxLatency = 100.0,  // 100ms
+                MaxMemory = 100.0,   // 100MB
+                MaxEnergy = 500.0    // 500mJ
             };
 
             // Initialize architecture parameters (one per layer)

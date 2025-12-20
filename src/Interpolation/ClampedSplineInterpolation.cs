@@ -24,12 +24,12 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The slope of the curve at the first data point.
     /// </summary>
@@ -39,7 +39,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// value means it goes downward, and zero means it's flat (horizontal).
     /// </remarks>
     private readonly T _startSlope;
-    
+
     /// <summary>
     /// The slope of the curve at the last data point.
     /// </summary>
@@ -49,7 +49,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// a negative value means it comes from above, and zero means it approaches horizontally.
     /// </remarks>
     private readonly T _endSlope;
-    
+
     /// <summary>
     /// The matrix decomposition method used to solve the spline equations.
     /// </summary>
@@ -59,7 +59,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// unless you have specific performance requirements.
     /// </remarks>
     private readonly IMatrixDecomposition<T>? _decomposition;
-    
+
     /// <summary>
     /// The coefficients of the cubic polynomials that define the spline segments.
     /// </summary>
@@ -68,7 +68,7 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// between each pair of points. They're calculated automatically when you create the spline.
     /// </remarks>
     private readonly Vector<T>[] _coefficients;
-    
+
     /// <summary>
     /// Helper object for performing numeric operations on generic type T.
     /// </summary>

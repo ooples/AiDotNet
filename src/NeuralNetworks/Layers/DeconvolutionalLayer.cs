@@ -316,9 +316,9 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// that will be improved during training.
     /// </para>
     /// </remarks>
-    public DeconvolutionalLayer(int[] inputShape, int outputDepth, int kernelSize, int stride = 1, int padding = 0, 
+    public DeconvolutionalLayer(int[] inputShape, int outputDepth, int kernelSize, int stride = 1, int padding = 0,
                                 IActivationFunction<T>? activationFunction = null)
-        : base(inputShape, CalculateOutputShape(inputShape, outputDepth, kernelSize, stride, padding), 
+        : base(inputShape, CalculateOutputShape(inputShape, outputDepth, kernelSize, stride, padding),
                activationFunction ?? new ReLUActivation<T>())
     {
         InputDepth = inputShape[1];
@@ -361,9 +361,9 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// needs to be applied to groups of outputs rather than individual values.
     /// </para>
     /// </remarks>
-    public DeconvolutionalLayer(int[] inputShape, int outputDepth, int kernelSize, int stride = 1, int padding = 0, 
+    public DeconvolutionalLayer(int[] inputShape, int outputDepth, int kernelSize, int stride = 1, int padding = 0,
                                 IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base(inputShape, CalculateOutputShape(inputShape, outputDepth, kernelSize, stride, padding), 
+        : base(inputShape, CalculateOutputShape(inputShape, outputDepth, kernelSize, stride, padding),
                vectorActivationFunction ?? new ReLUActivation<T>())
     {
         InputDepth = inputShape[1];

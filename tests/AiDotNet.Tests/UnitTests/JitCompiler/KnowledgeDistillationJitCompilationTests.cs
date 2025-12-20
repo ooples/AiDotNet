@@ -1,9 +1,9 @@
-using Xunit;
-using AiDotNet.KnowledgeDistillation;
-using AiDotNet.KnowledgeDistillation.Teachers;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.KnowledgeDistillation;
+using AiDotNet.KnowledgeDistillation.Teachers;
+using Xunit;
 using JitCompilerClass = AiDotNet.JitCompiler.JitCompiler;
 
 namespace AiDotNet.Tests.UnitTests.JitCompiler;

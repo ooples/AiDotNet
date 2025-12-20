@@ -81,7 +81,7 @@ public class SymbolicRegressionOptions : NonLinearRegressionOptions
     /// </para>
     /// </remarks>
     public int PopulationSize { get; set; } = 100;
-    
+
     /// <summary>
     /// Gets or sets the maximum number of generations for the genetic algorithm.
     /// </summary>
@@ -122,7 +122,7 @@ public class SymbolicRegressionOptions : NonLinearRegressionOptions
     /// </para>
     /// </remarks>
     public int MaxGenerations { get; set; } = 1000;
-    
+
     /// <summary>
     /// Gets or sets the probability of mutation in the genetic algorithm.
     /// </summary>
@@ -163,7 +163,7 @@ public class SymbolicRegressionOptions : NonLinearRegressionOptions
     /// </para>
     /// </remarks>
     public double MutationRate { get; set; } = 0.1;
-    
+
     /// <summary>
     /// Gets or sets the probability of crossover in the genetic algorithm.
     /// </summary>
@@ -204,7 +204,7 @@ public class SymbolicRegressionOptions : NonLinearRegressionOptions
     /// </para>
     /// </remarks>
     public double CrossoverRate { get; set; } = 0.8;
-    
+
     /// <summary>
     /// Gets or sets the fitness threshold for early stopping.
     /// </summary>

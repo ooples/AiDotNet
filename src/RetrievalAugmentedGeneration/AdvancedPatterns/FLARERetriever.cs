@@ -1,12 +1,12 @@
 
-using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Generators;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
-using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Generators;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -119,10 +119,10 @@ public class FLARERetriever<T>
     {
         _generator = generator ?? throw new ArgumentNullException(nameof(generator));
         _baseRetriever = baseRetriever ?? throw new ArgumentNullException(nameof(baseRetriever));
-        
+
         if (uncertaintyThreshold < 0.0 || uncertaintyThreshold > 1.0)
             throw new ArgumentOutOfRangeException(nameof(uncertaintyThreshold), "Threshold must be between 0 and 1");
-            
+
         _uncertaintyThreshold = uncertaintyThreshold;
     }
 
@@ -190,7 +190,7 @@ Please provide a partial answer. If you need more information, indicate what is 
 
             // Detect if more information is needed (simplified confidence check)
             var confidence = CalculateConfidence(partialAnswer, allRetrievedDocs);
-            
+
             if (confidence >= _uncertaintyThreshold)
             {
                 // Confident enough, stop
@@ -207,7 +207,7 @@ Please provide a partial answer. If you need more information, indicate what is 
 
             // Retrieve additional documents
             var additionalDocs = _baseRetriever.Retrieve(missingInfo, topK: 2).ToList();
-            
+
             if (additionalDocs.Count == 0)
             {
                 // No more documents found, stop
@@ -234,13 +234,13 @@ Please provide a partial answer. If you need more information, indicate what is 
     {
         // Simplified confidence: based on text length and document coverage
         // In production, this would use token-level confidence from the LLM
-        
+
         if (string.IsNullOrWhiteSpace(generatedText))
             return 0.0;
 
         // Check for uncertainty indicators
         var uncertaintyPhrases = new[] { "not sure", "don't know", "need more", "unclear", "missing", "uncertain" };
-        var hasUncertainty = uncertaintyPhrases.Any(phrase => 
+        var hasUncertainty = uncertaintyPhrases.Any(phrase =>
             generatedText.ToLower().Contains(phrase));
 
         if (hasUncertainty)
@@ -254,7 +254,7 @@ Please provide a partial answer. If you need more information, indicate what is 
             .Where(d => d.HasRelevanceScore)
             .Select(d => Convert.ToDouble(d.RelevanceScore))
             .ToList();
-        
+
         var avgRelevance = relevanceScores.Any() ? relevanceScores.Average() : 0.5;
 
         return (lengthScore + avgRelevance) / 2.0;

@@ -337,7 +337,7 @@ public enum TimeSeriesModelType
     VARMA,
 
     // Machine Learning based models
-    
+
     /// <summary>
     /// A forecasting model developed by Facebook that handles multiple seasonality patterns and is robust to missing data and outliers.
     /// </summary>
@@ -362,7 +362,7 @@ public enum TimeSeriesModelType
     /// weekly patterns, yearly seasonality, and holiday effects.
     /// </remarks>
     ProphetModel,
-    
+
     /// <summary>
     /// A hybrid model that combines neural networks with traditional ARIMA models to leverage the strengths of both approaches.
     /// </summary>
@@ -386,7 +386,7 @@ public enum TimeSeriesModelType
     NeuralNetworkARIMA,
 
     // Bayesian models
-    
+
     /// <summary>
     /// A flexible Bayesian approach to time series modeling that incorporates prior knowledge and uncertainty.
     /// </summary>
@@ -410,7 +410,7 @@ public enum TimeSeriesModelType
     BayesianStructuralTimeSeriesModel,
 
     // Spectral Analysis models
-    
+
     /// <summary>
     /// Analyzes time series data by decomposing it into different frequency components to identify cyclical patterns.
     /// </summary>
@@ -432,7 +432,7 @@ public enum TimeSeriesModelType
     SpectralAnalysis,
 
     // Decomposition models
-    
+
     /// <summary>
     /// Seasonal and Trend decomposition using Loess - breaks down time series into trend, seasonal, and remainder components.
     /// </summary>
@@ -456,7 +456,7 @@ public enum TimeSeriesModelType
     STLDecomposition,
 
     // Other specialized models
-    
+
     /// <summary>
     /// Analyzes how specific events or interventions affect a time series and quantifies their impact.
     /// </summary>
@@ -478,7 +478,7 @@ public enum TimeSeriesModelType
     /// after the change with the predicted sales if no change had occurred.
     /// </remarks>
     InterventionAnalysis,
-    
+
     /// <summary>
     /// Models how one time series affects another with potential time delays between cause and effect.
     /// </summary>
@@ -501,7 +501,7 @@ public enum TimeSeriesModelType
     /// might influence sales for several weeks or months.
     /// </remarks>
     TransferFunctionModel,
-    
+
     /// <summary>
     /// Models time series by representing them as combinations of unobserved components like trend, cycle, and seasonality.
     /// </summary>

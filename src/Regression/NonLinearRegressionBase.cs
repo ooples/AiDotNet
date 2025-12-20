@@ -1,5 +1,5 @@
-using Newtonsoft.Json;
 using AiDotNet.Autodiff;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Regression;
 
@@ -370,7 +370,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         return result;
     }
 
-        /// <summary>
+    /// <summary>
     /// Computes the kernel function between two vectors.
     /// </summary>
     /// <param name="x1">The first vector.</param>
@@ -633,7 +633,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
 
         // Deserialize regularization options
         var regularizationOptionsJson = reader.ReadString();
-        var regularizationOptions = JsonConvert.DeserializeObject<RegularizationOptions>(regularizationOptionsJson) 
+        var regularizationOptions = JsonConvert.DeserializeObject<RegularizationOptions>(regularizationOptionsJson)
             ?? new RegularizationOptions();
 
         // Create regularization based on deserialized options
@@ -664,16 +664,16 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     {
         // Create a vector to hold all parameters (bias + alphas)
         var parameters = new Vector<T>(Alphas.Length + 1);
-    
+
         // Set the bias term as the first parameter
         parameters[0] = B;
-    
+
         // Copy all alpha coefficients
         for (int i = 0; i < Alphas.Length; i++)
         {
             parameters[i + 1] = Alphas[i];
         }
-    
+
         return parameters;
     }
 
@@ -705,19 +705,19 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
             throw new ArgumentException($"Parameters vector length ({parameters.Length}) " +
                                        $"does not match expected length ({Alphas.Length + 1}).");
         }
-    
+
         // Create a new instance of the model
         var clone = (NonLinearRegressionBase<T>)this.Clone();
-    
+
         // Set the bias term
         clone.B = parameters[0];
-    
+
         // Set the alpha coefficients
         for (int i = 0; i < Alphas.Length; i++)
         {
             clone.Alphas[i] = parameters[i + 1];
         }
-    
+
         return clone;
     }
 
@@ -745,14 +745,14 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         // Create a set to store the active feature indices
         // This set will automatically remove duplicate indices and ensure that we only return unique values
         var activeIndices = new HashSet<int>(); activeIndices = new HashSet<int>();
-    
+
         // Identify features that have non-zero weight in support vectors with non-zero alpha
         for (int i = 0; i < Alphas.Length; i++)
         {
             // Skip if the alpha coefficient is effectively zero
             if (NumOps.LessThan(NumOps.Abs(Alphas[i]), NumOps.FromDouble(1e-5)))
                 continue;
-        
+
             // Check each feature in this support vector
             for (int j = 0; j < SupportVectors.Columns; j++)
             {
@@ -763,7 +763,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
                 }
             }
         }
-    
+
         return activeIndices;
     }
 
@@ -792,24 +792,24 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         // Validate feature index
         if (featureIndex < 0 || featureIndex >= SupportVectors.Columns)
         {
-            throw new ArgumentOutOfRangeException(nameof(featureIndex), 
+            throw new ArgumentOutOfRangeException(nameof(featureIndex),
                 $"Feature index must be between 0 and {SupportVectors.Columns - 1}.");
         }
-    
+
         // Check if the feature has a non-zero value in any support vector with non-zero alpha
         for (int i = 0; i < Alphas.Length; i++)
         {
             // Skip if the alpha coefficient is effectively zero
             if (NumOps.LessThan(NumOps.Abs(Alphas[i]), NumOps.FromDouble(1e-5)))
                 continue;
-        
+
             // Check if this feature has a non-zero value in this support vector
             if (!NumOps.LessThan(NumOps.Abs(SupportVectors[i, featureIndex]), NumOps.FromDouble(1e-5)))
             {
                 return true;
             }
         }
-    
+
         return false;
     }
 
@@ -907,18 +907,18 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     {
         // Create a new instance through cloning
         var clone = (NonLinearRegressionBase<T>)this.Clone();
-    
+
         // Perform deep copy of all mutable fields
         clone.SupportVectors = SupportVectors.Clone();
         clone.Alphas = Alphas.Clone();
         clone.B = B; // Value types are copied by value
         clone.Options = JsonConvert.DeserializeObject<NonLinearRegressionOptions>(
             JsonConvert.SerializeObject(Options)) ?? new NonLinearRegressionOptions();
-    
+
         // Create a new regularization instance with the same options
         var regularizationOptions = Regularization.GetOptions();
         clone.Regularization = RegularizationFactory.CreateRegularization<T, Matrix<T>, Vector<T>>(regularizationOptions);
-    
+
         return clone;
     }
 

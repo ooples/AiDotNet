@@ -1,11 +1,11 @@
 
+using System.Collections.Generic;
+using System.Linq;
+using AiDotNet.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
-using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
@@ -96,13 +96,13 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
     {
         _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
         _modelPath = modelPath ?? throw new ArgumentNullException(nameof(modelPath));
-        
+
         if (maxDocLength <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxDocLength), "Max document length must be positive");
-            
+
         if (maxQueryLength <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxQueryLength), "Max query length must be positive");
-            
+
         _maxDocLength = maxDocLength;
         _maxQueryLength = maxQueryLength;
     }
@@ -150,13 +150,13 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
 
         // Tokenize query
         var queryTokens = TokenizeAndTruncate(query, _maxQueryLength);
-        
+
         // For production ColBERT, this would:
         // 1. Generate embeddings for each query token
         // 2. For each document, get token embeddings
         // 3. Compute MaxSim between query and document tokens
         // 4. Sum MaxSim scores across query tokens
-        
+
         // Fallback: Use standard dense retrieval with enhanced scoring
         var documents = _documentStore.GetSimilarWithFilters(
             new Vector<T>(new T[0]), // Placeholder for query embedding
@@ -169,13 +169,13 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
         {
             var docTokens = TokenizeAndTruncate(doc.Content, _maxDocLength);
             var tokenScore = CalculateTokenOverlapScore(queryTokens, docTokens);
-            
+
             // Combine with original relevance score
             var combinedScore = NumOps.Multiply(
                 doc.RelevanceScore,
                 NumOps.FromDouble(1.0 + tokenScore * 0.5) // Boost by token overlap
             );
-            
+
             return (doc, combinedScore);
         }).ToList();
 
@@ -195,7 +195,7 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
     {
         var tokens = text
             .ToLower()
-            .Split(new[] { ' ', '\t', '\n', '\r', ',', '.', '!', '?', ';', ':' }, 
+            .Split(new[] { ' ', '\t', '\n', '\r', ',', '.', '!', '?', ';', ':' },
                    StringSplitOptions.RemoveEmptyEntries)
             .Take(maxLength)
             .ToList();

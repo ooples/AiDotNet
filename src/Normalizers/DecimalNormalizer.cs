@@ -124,25 +124,25 @@ public class DecimalNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
             {
                 scale = NumOps.Multiply(scale, ten);
             }
-            
+
             var normalizedVector = flattenedTensor.Transform(x => NumOps.Divide(x, scale));
-            
+
             // Convert back to tensor with the same shape
             var normalizedTensor = Tensor<T>.FromVector(normalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 normalizedTensor = normalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             var parameters = new NormalizationParameters<T>
             {
                 Method = NormalizationMethod.Decimal,
                 Scale = scale
             };
-            
+
             return ((TOutput)(object)normalizedTensor, parameters);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -182,7 +182,7 @@ public class DecimalNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
         {
             var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
             var parametersList = new List<NormalizationParameters<T>>();
-            
+
             for (int i = 0; i < matrix.Columns; i++)
             {
                 var column = matrix.GetColumn(i);
@@ -200,7 +200,7 @@ public class DecimalNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
                         $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
                 }
             }
-            
+
             return ((TInput)(object)normalizedMatrix, parametersList);
         }
         else if (data is Tensor<T> tensor && tensor.Shape.Length == 2)
@@ -209,7 +209,7 @@ public class DecimalNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
             var rows = tensor.Shape[0];
             var cols = tensor.Shape[1];
             var newMatrix = new Matrix<T>(rows, cols);
-            
+
             for (int i = 0; i < rows; i++)
             {
                 for (int j = 0; j < cols; j++)
@@ -217,11 +217,11 @@ public class DecimalNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
                     newMatrix[i, j] = tensor[i, j];
                 }
             }
-            
+
             // Normalize each column separately
             var normalizedColumns = new List<Vector<T>>();
             var parametersList = new List<NormalizationParameters<T>>();
-            
+
             for (int i = 0; i < cols; i++)
             {
                 var column = newMatrix.GetColumn(i);
@@ -239,14 +239,14 @@ public class DecimalNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
                         $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
                 }
             }
-            
+
             // Convert back to tensor
             var normalizedMatrix = Matrix<T>.FromColumnVectors(normalizedColumns);
             var normalizedTensor = new Tensor<T>(new[] { normalizedMatrix.Rows, normalizedMatrix.Columns }, normalizedMatrix);
-            
+
             return ((TInput)(object)normalizedTensor, parametersList);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TInput).Name}. " +
             $"Supported types are Matrix<{typeof(T).Name}> and 2D Tensor<{typeof(T).Name}>.");
@@ -289,19 +289,19 @@ public class DecimalNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
         {
             // Flatten tensor for denormalization
             var flattenedTensor = tensor.ToVector();
-            
+
             var denormalizedVector = flattenedTensor.Transform(x => NumOps.Multiply(x, parameters.Scale));
-            
+
             // Convert back to tensor with the same shape
             var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             return (TOutput)(object)denormalizedTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -351,20 +351,20 @@ public class DecimalNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
         {
             // Flatten tensor for denormalization
             var flattenedTensor = tensor.ToVector();
-            
+
             var scalingFactors = xParams.Select(p => NumOps.Divide(yParams.Scale, p.Scale)).ToArray();
             var denormalizedVector = flattenedTensor.PointwiseMultiply(Vector<T>.FromArray(scalingFactors));
-            
+
             // Convert back to tensor with the same shape
             var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             return (TOutput)(object)denormalizedTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported coefficients type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");

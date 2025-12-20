@@ -308,20 +308,20 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public LocallyConnectedLayer(
-        int inputHeight, 
-        int inputWidth, 
-        int inputChannels, 
-        int outputChannels, 
-        int kernelSize, 
-        int stride, 
+        int inputHeight,
+        int inputWidth,
+        int inputChannels,
+        int outputChannels,
+        int kernelSize,
+        int stride,
         IActivationFunction<T>? activationFunction = null)
         : base(
-            [inputHeight, inputWidth, inputChannels], 
+            [inputHeight, inputWidth, inputChannels],
             [
-                (inputHeight - kernelSize) / stride + 1, 
-                (inputWidth - kernelSize) / stride + 1, 
+                (inputHeight - kernelSize) / stride + 1,
+                (inputWidth - kernelSize) / stride + 1,
                 outputChannels
-            ], 
+            ],
             activationFunction ?? new ReLUActivation<T>())
     {
         _inputHeight = inputHeight;
@@ -369,20 +369,20 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public LocallyConnectedLayer(
-        int inputHeight, 
-        int inputWidth, 
-        int inputChannels, 
-        int outputChannels, 
-        int kernelSize, 
-        int stride, 
+        int inputHeight,
+        int inputWidth,
+        int inputChannels,
+        int outputChannels,
+        int kernelSize,
+        int stride,
         IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base(
-            [inputHeight, inputWidth, inputChannels], 
+            [inputHeight, inputWidth, inputChannels],
             [
-                (inputHeight - kernelSize) / stride + 1, 
-                (inputWidth - kernelSize) / stride + 1, 
+                (inputHeight - kernelSize) / stride + 1,
+                (inputWidth - kernelSize) / stride + 1,
                 outputChannels
-            ], 
+            ],
             vectorActivationFunction ?? new ReLUActivation<T>())
     {
         _inputHeight = inputHeight;

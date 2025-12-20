@@ -1,10 +1,10 @@
-using Xunit;
-using AiDotNet.Tensors.LinearAlgebra;
-using AiDotNet.Regression;
 using AiDotNet.Autodiff;
-using AiDotNet.JitCompiler;
 using AiDotNet.Enums;
+using AiDotNet.JitCompiler;
 using AiDotNet.Models.Options;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
+using Xunit;
 using JitCompilerClass = AiDotNet.JitCompiler.JitCompiler;
 
 namespace AiDotNet.Tests.UnitTests.JitCompiler;

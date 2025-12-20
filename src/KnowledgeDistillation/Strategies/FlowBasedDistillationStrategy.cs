@@ -135,7 +135,7 @@ public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T>
         {
             int studentDim = studentFeatures[0].Length;
             int teacherDim = teacherFeatures[0].Length;
-            
+
             for (int i = 0; i < studentFeatures.Length; i++)
             {
                 if (studentFeatures[i].Length != studentDim)

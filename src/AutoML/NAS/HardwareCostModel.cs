@@ -93,20 +93,25 @@ namespace AiDotNet.AutoML.NAS
         }
 
         /// <summary>
-        /// Checks if an architecture meets the hardware constraints
+        /// Checks if an architecture meets the hardware constraints.
         /// </summary>
+        /// <param name="architecture">The architecture to evaluate</param>
+        /// <param name="constraints">The hardware constraints to check against</param>
+        /// <param name="inputChannels">Number of input channels</param>
+        /// <param name="spatialSize">Spatial size of the input (height/width)</param>
+        /// <returns>True if the architecture meets all constraints, false otherwise</returns>
         public bool MeetsConstraints(Architecture<T> architecture, HardwareConstraints<T> constraints,
             int inputChannels, int spatialSize)
         {
             var cost = EstimateArchitectureCost(architecture, inputChannels, spatialSize);
 
-            if (constraints.MaxLatency != null && _ops.GreaterThan(cost.Latency, constraints.MaxLatency))
+            if (constraints.MaxLatency.HasValue && _ops.ToDouble(cost.Latency) > constraints.MaxLatency.Value)
                 return false;
 
-            if (constraints.MaxEnergy != null && _ops.GreaterThan(cost.Energy, constraints.MaxEnergy))
+            if (constraints.MaxEnergy.HasValue && _ops.ToDouble(cost.Energy) > constraints.MaxEnergy.Value)
                 return false;
 
-            if (constraints.MaxMemory != null && _ops.GreaterThan(cost.Memory, constraints.MaxMemory))
+            if (constraints.MaxMemory.HasValue && _ops.ToDouble(cost.Memory) > constraints.MaxMemory.Value)
                 return false;
 
             return true;
