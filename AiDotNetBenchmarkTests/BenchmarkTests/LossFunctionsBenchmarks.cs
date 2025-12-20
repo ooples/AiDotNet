@@ -1,4 +1,5 @@
 using AiDotNet.LossFunctions;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
@@ -48,7 +49,7 @@ public class LossFunctionsBenchmarks
     public void Setup()
     {
         // Using seeded Random for reproducible benchmark data - not used for security purposes
-        var random = new Random(42); // NOSONAR S2245 - benchmarks don't need cryptographic randomness
+        var random = RandomHelper.CreateSeededRandom(42); // NOSONAR S2245 - benchmarks don't need cryptographic randomness
 
         // Initialize regression vectors
         _predicted = new Vector<double>(Size);

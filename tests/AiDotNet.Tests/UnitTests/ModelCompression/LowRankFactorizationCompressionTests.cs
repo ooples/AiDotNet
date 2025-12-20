@@ -217,7 +217,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             var compression = new LowRankFactorizationCompression<double>(
                 targetRank: 10, maxIterations: 50);
             var weights = new double[1000];
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < weights.Length; i++)
             {
                 weights[i] = random.NextDouble();

@@ -234,7 +234,7 @@ public class SEALTrainerTests
         var datasetX = new Matrix<double>(totalExamples, flattenedSize);
         var datasetY = new Vector<double>(totalExamples);
 
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int classIdx = 0; classIdx < numClasses; classIdx++)
         {
@@ -278,7 +278,7 @@ public class SEALTrainerTests
 internal class SEALMockModel : IFullModel<double, Matrix<double>, Vector<double>>
 {
     private Vector<double> _parameters;
-    private Random _random = new Random(42);
+    private Random _random = RandomHelper.CreateSeededRandom(42);
     public int TrainCallCount { get; private set; }
     public int PredictCallCount { get; private set; }
 

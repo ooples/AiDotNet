@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Reasoning.Models;
+using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Reasoning.Training;
@@ -117,7 +118,9 @@ internal class TrainingDataCollector<T>
         _samples = new List<TrainingSample<T>>();
         _numOps = MathHelper.GetNumericOperations<T>();
         _categoryCount = new Dictionary<string, int>();
-        _random = randomSeed.HasValue ? new Random(randomSeed.Value) : new Random();
+        _random = randomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(randomSeed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

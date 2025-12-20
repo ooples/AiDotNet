@@ -373,7 +373,7 @@ public class RegressionJitCompilationTests
 
     private static (Matrix<double> X, Vector<double> y) GenerateLinearTestData(int samples, int features)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var X = new Matrix<double>(samples, features);
         var y = new Vector<double>(samples);
 

@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNetBenchmarkTests.BenchmarkTests;
 
@@ -23,7 +24,7 @@ public class ParallelLoopTests
     public void Setup()
     {
         Array = new double[100];
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
 
         for (var i = 0; i < Array.Length; i++)
         {

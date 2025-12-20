@@ -278,7 +278,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
             var index = new FlatIndex<double>(metric);
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
 
             // Add high-dimensional vectors (simulating modern embeddings like OpenAI ada-002)
             var documents = new Dictionary<string, Vector<double>>();
@@ -398,7 +398,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
 
         private Dictionary<string, Vector<double>> CreateDocumentEmbeddings(int count, int startId = 0)
         {
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             var documents = new Dictionary<string, Vector<double>>();
 
             for (int i = 0; i < count; i++)
@@ -414,7 +414,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
 
         private Vector<double> CreateQueryEmbedding()
         {
-            var random = new Random(123);
+            var random = RandomHelper.CreateSeededRandom(123);
             return new Vector<double>(Enumerable.Range(0, 128)
                 .Select(_ => random.NextDouble())
                 .ToArray());

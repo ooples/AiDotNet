@@ -1,5 +1,6 @@
 using AiDotNet.Data.Structures;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Loaders;
 
@@ -200,7 +201,9 @@ public abstract class GraphDataLoaderBase<T> : DataLoaderBase<T>, IGraphDataLoad
         }
 
         int numNodes = LoadedGraphData.NumNodes;
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Create shuffled indices
         var indices = Enumerable.Range(0, numNodes).OrderBy(_ => random.Next()).ToArray();
@@ -238,7 +241,9 @@ public abstract class GraphDataLoaderBase<T> : DataLoaderBase<T>, IGraphDataLoad
         }
 
         int numGraphs = LoadedGraphs.Count;
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Create shuffled indices
         var indices = Enumerable.Range(0, numGraphs).OrderBy(_ => random.Next()).ToArray();
@@ -314,7 +319,9 @@ public abstract class GraphDataLoaderBase<T> : DataLoaderBase<T>, IGraphDataLoad
             throw new InvalidOperationException("Graph data not loaded.");
         }
 
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
         var edgeIndex = LoadedGraphData.EdgeIndex;
         int numEdges = LoadedGraphData.NumEdges;
         int numNodes = LoadedGraphData.NumNodes;

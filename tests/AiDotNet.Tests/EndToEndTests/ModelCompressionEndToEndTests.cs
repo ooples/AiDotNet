@@ -108,7 +108,7 @@ public class ModelCompressionEndToEndTests
         // 2. Weight clustering
         const int tensorSize = 512;
         var tensor = new Tensor<double>(new int[] { 1, tensorSize }); // Typical layer width
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < tensorSize; i++)
             tensor[0, i] = random.NextDouble() * 2 - 1; // [-1, 1]
 
@@ -187,7 +187,7 @@ public class ModelCompressionEndToEndTests
     {
         // Arrange - Simulate Lottery Ticket Hypothesis iterative pruning
         var initialWeights = new Matrix<double>(10, 10);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 10; i++)
             for (int j = 0; j < 10; j++)
                 initialWeights[i, j] = random.NextDouble();
@@ -318,7 +318,7 @@ public class ModelCompressionEndToEndTests
 
     private static Vector<double> CreateRealisticWeights(int count)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var weights = new Vector<double>(count);
 
         for (int i = 0; i < count; i++)

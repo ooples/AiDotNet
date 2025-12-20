@@ -267,7 +267,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
             var index = new HNSWIndex<double>(metric, maxConnections: 16);
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
 
             // Add 100 vectors
             for (int i = 0; i < 100; i++)
@@ -321,7 +321,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
             var index = new HNSWIndex<double>(metric);
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
 
             // Add high-dimensional vectors
             for (int i = 0; i < 20; i++)

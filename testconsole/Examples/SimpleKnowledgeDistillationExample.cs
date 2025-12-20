@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace TestConsole.Examples;
@@ -60,7 +61,7 @@ public static class SimpleKnowledgeDistillationExample
     private static (Matrix<double>, Vector<double>, Matrix<double>, Vector<double>) LoadYourData()
     {
         // Load your actual training and test data here
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         int numSamples = 1000;
         int numFeatures = 20;
 
@@ -106,7 +107,7 @@ public static class SimpleKnowledgeDistillationExample
     {
         private readonly int _inputDim;
         private readonly int _outputDim;
-        private readonly Random _random = new Random();
+        private readonly Random _random = RandomHelper.CreateSecureRandom();
         private readonly ILossFunction<double> _defaultLossFunction;
 
         public MockModel(int inputDim, int outputDim)

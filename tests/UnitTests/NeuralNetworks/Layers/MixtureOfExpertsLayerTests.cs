@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers;
@@ -736,7 +737,7 @@ public class MixtureOfExpertsLayerTests
     private static Tensor<float> CreateTestInput(int batchSize, int inputDim)
     {
         var input = new Tensor<float>(new[] { batchSize, inputDim });
-        var random = new Random(42); // Fixed seed for reproducibility
+        var random = RandomHelper.CreateSeededRandom(42); // Fixed seed for reproducibility
         for (int i = 0; i < input.Length; i++)
         {
             input[i] = (float)(random.NextDouble() * 2.0 - 1.0); // Range [-1, 1]

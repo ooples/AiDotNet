@@ -1,5 +1,6 @@
 using AiDotNet.Examples.ConcreteExamples;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Examples;
 
@@ -150,7 +151,7 @@ public class Program
 /// </summary>
 internal class MockChatModelForDemo : IChatModel
 {
-    private readonly Random _random = new Random(42);
+    private readonly Random _random = RandomHelper.CreateSeededRandom(42);
 
     public async Task<string> GenerateResponseAsync(
         string prompt,

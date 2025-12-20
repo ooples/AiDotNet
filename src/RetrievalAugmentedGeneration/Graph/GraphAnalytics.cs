@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 
@@ -562,7 +563,7 @@ public static class GraphAnalytics
 
         var nodes = graph.GetAllNodes().ToList();
         var labels = new Dictionary<string, int>();
-        var random = new Random();
+        var random = RandomHelper.ThreadSafeRandom;
 
         // Initialize each node with unique label
         for (int i = 0; i < nodes.Count; i++)

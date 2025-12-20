@@ -41,7 +41,7 @@ public static class QuickPerformanceTest
 
     private static void TestSinDouble(int size)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var input = new double[size];
         var outputScalar = new double[size];
         var outputSimd = new double[size];
@@ -87,7 +87,7 @@ public static class QuickPerformanceTest
 
     private static void TestSinFloat(int size)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var input = new float[size];
         var outputScalar = new float[size];
         var outputSimd = new float[size];
@@ -133,7 +133,7 @@ public static class QuickPerformanceTest
 
     private static void TestCosDouble(int size)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var input = new double[size];
         var outputScalar = new double[size];
         var outputSimd = new double[size];
@@ -179,7 +179,7 @@ public static class QuickPerformanceTest
 
     private static void TestCosFloat(int size)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var input = new float[size];
         var outputScalar = new float[size];
         var outputSimd = new float[size];
@@ -225,7 +225,7 @@ public static class QuickPerformanceTest
 
     private static void TestExpDouble(int size)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var input = new double[size];
         var outputScalar = new double[size];
         var outputSimd = new double[size];
@@ -271,7 +271,7 @@ public static class QuickPerformanceTest
 
     private static void TestExpFloat(int size)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var input = new float[size];
         var outputScalar = new float[size];
         var outputSimd = new float[size];
@@ -317,7 +317,7 @@ public static class QuickPerformanceTest
 
     private static void TestLogDouble(int size)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var input = new double[size];
         var outputScalar = new double[size];
         var outputSimd = new double[size];
@@ -363,7 +363,7 @@ public static class QuickPerformanceTest
 
     private static void TestLogFloat(int size)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var input = new float[size];
         var outputScalar = new float[size];
         var outputSimd = new float[size];

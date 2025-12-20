@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Helpers;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -198,7 +200,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _inputFeatures = inputFeatures;
         _outputFeatures = outputFeatures;
         _useGating = useGating;
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
 
         // Initialize transformation weights for each direction - all Tensor<T>
         _incomingWeights = new Tensor<T>([_inputFeatures, _outputFeatures]);

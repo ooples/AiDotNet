@@ -379,7 +379,9 @@ public class FlashAttentionTests
 
     private static Tensor<float> CreateRandomTensor(int[] shape, int? seed)
     {
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
         var tensor = new Tensor<float>(shape);
 
         int totalElements = 1;

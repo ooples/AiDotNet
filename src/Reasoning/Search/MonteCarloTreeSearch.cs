@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Reasoning.Search;
 
@@ -53,7 +54,7 @@ internal class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
     {
         _explorationConstant = explorationConstant;
         _numSimulations = numSimulations;
-        _random = new Random(42); // Deterministic for reproducibility
+        _random = RandomHelper.CreateSeededRandom(42); // Deterministic for reproducibility
     }
 
     /// <inheritdoc/>

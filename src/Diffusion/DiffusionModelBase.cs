@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Diffusion;
 
@@ -112,7 +113,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
         LearningRate = NumOps.FromDouble(_options.LearningRate);
 
         // Set up random generator
-        RandomGenerator = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+        RandomGenerator = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     #region IDiffusionModel<T> Implementation
@@ -131,7 +134,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
             throw new ArgumentOutOfRangeException(nameof(shape), $"All dimensions must be positive, but found {invalidDims[0]}.");
 
         // Set up random generator
-        var rng = seed.HasValue ? new Random(seed.Value) : RandomGenerator;
+        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
 
         // Initialize with random noise using checked arithmetic to detect overflow
         long totalElements = 1;

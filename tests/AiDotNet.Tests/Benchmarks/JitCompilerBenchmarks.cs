@@ -238,7 +238,7 @@ public class JitCompilerBenchmarks
     private static Tensor<float> CreateRandomTensor(int[] shape)
     {
         var tensor = new Tensor<float>(shape);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < tensor.Length; i++)
         {

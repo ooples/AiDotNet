@@ -1,4 +1,5 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Loaders;
 
@@ -144,7 +145,9 @@ public class InMemoryDataLoader<T, TInput, TOutput> : InputOutputDataLoaderBase<
         var (trainSize, valSize, testSize) = ComputeSplitSizes(_sampleCount, trainRatio, validationRatio);
 
         // Create shuffled indices
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
         var shuffledIndices = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
 
         var trainIndices = shuffledIndices.Take(trainSize).ToArray();

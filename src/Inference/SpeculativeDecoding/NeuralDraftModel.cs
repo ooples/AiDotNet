@@ -44,7 +44,9 @@ internal class NeuralDraftModel<T> : IDraftModel<T>
         _forwardFunc = forwardFunc ?? throw new ArgumentNullException(nameof(forwardFunc));
         _vocabSize = vocabSize;
         _maxDraftTokens = maxDraftTokens;
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc/>

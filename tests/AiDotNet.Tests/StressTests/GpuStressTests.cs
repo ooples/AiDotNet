@@ -534,7 +534,7 @@ public class GpuStressTests
 
     private static Matrix<float> CreateRandomMatrix(int rows, int cols)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var matrix = new Matrix<float>(rows, cols);
         for (int i = 0; i < rows; i++)
         {
@@ -548,7 +548,7 @@ public class GpuStressTests
 
     private static Vector<float> CreateRandomVector(int size)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var vector = new Vector<float>(size);
         for (int i = 0; i < size; i++)
         {
@@ -559,7 +559,7 @@ public class GpuStressTests
 
     private static Tensor<float> CreateRandomTensor(int[] shape)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var tensor = new Tensor<float>(shape);
         for (int i = 0; i < tensor.Length; i++)
         {

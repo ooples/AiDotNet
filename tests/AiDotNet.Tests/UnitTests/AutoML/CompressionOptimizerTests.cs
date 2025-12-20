@@ -143,7 +143,7 @@ namespace AiDotNetTests.UnitTests.AutoML
             };
             var optimizer = new CompressionOptimizer<double>(options);
 
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             var weights = new double[100];
             for (int i = 0; i < weights.Length; i++)
             {

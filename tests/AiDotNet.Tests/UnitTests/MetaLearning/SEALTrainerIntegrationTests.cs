@@ -158,7 +158,7 @@ public class SEALTrainerIntegrationTests
         var datasetX = new Matrix<double>(totalExamples, flattenedSize);
         var datasetY = new Vector<double>(totalExamples);
 
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int classIdx = 0; classIdx < numClasses; classIdx++)
         {
@@ -212,7 +212,7 @@ internal class LearningMockModel : AiDotNet.Interfaces.IFullModel<double, Matrix
     private int _inputSize;
     private int _hiddenSize;
     private int _outputSize;
-    private Random _random = new Random(42);
+    private Random _random = RandomHelper.CreateSeededRandom(42);
     private double _learningRate = 0.01;
 
     public LearningMockModel(int inputSize, int hiddenSize, int outputSize)

@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Helpers;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -224,7 +226,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _headDim = headDim;
         _useStructuralEncoding = useStructuralEncoding;
         _dropoutRate = dropoutRate;
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
         _ffnActivation = ffnActivation ?? new GELUActivation<T>();
         _ffnHiddenDim = 4 * outputFeatures;
 
@@ -276,7 +278,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _headDim = headDim;
         _useStructuralEncoding = useStructuralEncoding;
         _dropoutRate = dropoutRate;
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
         _ffnActivation = ffnActivation ?? new GELUActivation<T>();
         _ffnHiddenDim = 4 * outputFeatures;
 

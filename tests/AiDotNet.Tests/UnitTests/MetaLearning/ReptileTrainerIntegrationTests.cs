@@ -39,7 +39,7 @@ public class ReptileTrainerIntegrationTests
         double minX = 0.0,
         double maxX = 2 * Math.PI)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         int totalSamples = numTasks * samplesPerTask;
         var X = new Matrix<double>(totalSamples, 1);
         var Y = new Vector<double>(totalSamples);
@@ -80,7 +80,9 @@ public class ReptileTrainerIntegrationTests
         double maxX = 2 * Math.PI,
         int? seed = null)
     {
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
         var X = new Tensor<double>(new[] { numSamples, 1 });
         var Y = new Tensor<double>(new[] { numSamples, 1 });
 

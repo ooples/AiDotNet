@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 {
@@ -147,7 +148,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 
             // Initialize centroids with random vectors
             var vectorList = _vectors.Values.ToList();
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < actualClusters; i++)
             {
                 _centroids[i] = vectorList[random.Next(vectorList.Count)];

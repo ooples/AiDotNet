@@ -1,4 +1,5 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Loaders;
 
@@ -142,7 +143,9 @@ public abstract class InputOutputDataLoaderBase<T, TInput, TOutput> :
     {
         EnsureLoaded();
 
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Fisher-Yates shuffle
         for (int i = Indices!.Length - 1; i > 0; i--)

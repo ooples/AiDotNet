@@ -43,7 +43,9 @@ internal class NGramDraftModel<T> : IDraftModel<T>
         _ngramSize = ngramSize;
         _vocabSize = vocabSize;
         _ngrams = new Dictionary<string, Dictionary<int, int>>();
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

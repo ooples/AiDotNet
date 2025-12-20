@@ -8,6 +8,7 @@ using AiDotNet.Models.Results;
 using AiDotNet.Normalizers;
 using AiDotNet.Optimizers;
 using AiDotNet.OutlierRemoval;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TimeSeries;
 
@@ -302,7 +303,7 @@ public class EnhancedTimeSeriesExample
     }
 
     // Random number generator
-    private static readonly Random random = new Random(123);
+    private static readonly Random random = RandomHelper.CreateSeededRandom(123);
 
     // Helper method to generate synthetic energy data
     private (double[] Timestamps, double[] Demand, double[] Temperature, double[] DayType) GenerateEnergyData(int numDays)

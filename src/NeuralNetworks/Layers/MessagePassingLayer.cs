@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Helpers;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -214,7 +216,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _outputFeatures = outputFeatures;
         _messageFeatures = messageFeatures > 0 ? messageFeatures : outputFeatures;
         _useEdgeFeatures = useEdgeFeatures;
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
 
         // Message network: takes concatenated node features (and optionally edge features)
         int messageInputDim = 2 * inputFeatures; // source + target features

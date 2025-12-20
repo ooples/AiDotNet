@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LoRA.Adapters;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -395,7 +396,7 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         int numSamples = 25)
     {
         var lr = NumOps.FromDouble(learningRate);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int epoch = 0; epoch < epochs; epoch++)
         {
@@ -451,7 +452,7 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         int[] targetIndices,
         int numSamples)
     {
-        var random = new Random();
+        var random = RandomHelper.ThreadSafeRandom;
         int numFeatures = nodeFeatures.Shape[1];
         int numClasses = labels.Shape[1];
         int numNodes = nodeFeatures.Shape[0];

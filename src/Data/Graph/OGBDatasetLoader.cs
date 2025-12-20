@@ -6,6 +6,7 @@ using AiDotNet.Data.Structures;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Graph;
 
@@ -940,7 +941,9 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
         int numNodes = graph.NumNodes;
 
         // Create random split
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
         var indices = Enumerable.Range(0, numNodes).OrderBy(_ => random.Next()).ToArray();
         int trainSize = (int)(numNodes * trainRatio);
         int valSize = (int)(numNodes * valRatio);
@@ -980,7 +983,9 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
             throw new InvalidOperationException("No graphs loaded");
         }
 
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
         var shuffledGraphs = LoadedGraphs.OrderBy(_ => random.Next()).ToList();
 
         int trainSize = (int)(shuffledGraphs.Count * trainRatio);
@@ -1033,7 +1038,9 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
         }
 
         var graph = LoadedGraphs[0];
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Get all edges from edge index
         var allEdges = new List<(int src, int dst)>();
@@ -1118,7 +1125,7 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
     private Tensor<T> CollectGraphLabels(List<GraphData<T>> graphs, int numClasses)
     {
         var labels = new Tensor<T>([graphs.Count, numClasses]);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < graphs.Count; i++)
         {

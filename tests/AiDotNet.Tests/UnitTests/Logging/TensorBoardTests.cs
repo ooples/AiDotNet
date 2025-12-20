@@ -83,7 +83,7 @@ public class TensorBoardWriterTests : IDisposable
     {
         // Arrange
         var values = Enumerable.Range(0, 1000)
-            .Select(i => (float)Math.Sin(i * 0.01) + (float)new Random(i).NextDouble())
+            .Select(i => (float)Math.Sin(i * 0.01) + (float)RandomHelper.CreateSeededRandom(i).NextDouble())
             .ToArray();
 
         // Act
@@ -142,7 +142,7 @@ public class TensorBoardWriterTests : IDisposable
     {
         // Arrange
         var embeddings = new float[100, 128];
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 100; i++)
         {
             for (int j = 0; j < 128; j++)
@@ -315,7 +315,7 @@ public class SummaryWriterTests : IDisposable
         // Arrange
         using var writer = new SummaryWriter(_testDir);
         var weights = new float[1000];
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < weights.Length; i++)
         {
             weights[i] = (float)random.NextGaussian();
@@ -336,7 +336,7 @@ public class SummaryWriterTests : IDisposable
         // Arrange
         using var writer = new SummaryWriter(_testDir);
         var matrix = new float[32, 64];
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 32; i++)
         {
             for (int j = 0; j < 64; j++)
@@ -360,7 +360,7 @@ public class SummaryWriterTests : IDisposable
         // Arrange
         using var writer = new SummaryWriter(_testDir);
         var image = new float[3, 28, 28]; // CHW format
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int c = 0; c < 3; c++)
         {
             for (int h = 0; h < 28; h++)
@@ -387,7 +387,7 @@ public class SummaryWriterTests : IDisposable
         // Arrange
         using var writer = new SummaryWriter(_testDir);
         var images = new float[16, 1, 8, 8]; // 16 grayscale 8x8 images
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int n = 0; n < 16; n++)
         {
             for (int h = 0; h < 8; h++)
@@ -455,7 +455,7 @@ public class SummaryWriterTests : IDisposable
         // Arrange
         using var writer = new SummaryWriter(_testDir);
         var embeddings = new float[50, 64];
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 50; i++)
         {
             for (int j = 0; j < 64; j++)
@@ -479,7 +479,7 @@ public class SummaryWriterTests : IDisposable
     {
         // Arrange
         using var writer = new SummaryWriter(_testDir);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var labels = Enumerable.Range(0, 100).Select(_ => random.Next(2)).ToArray();
         var predictions = labels.Select(l => (float)(l * 0.7 + random.NextDouble() * 0.3)).ToArray();
 
@@ -536,7 +536,7 @@ public class SummaryWriterTests : IDisposable
         using var writer = new SummaryWriter(_testDir);
         var weights = new float[1000];
         var gradients = new float[1000];
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 1000; i++)
         {
             weights[i] = (float)random.NextGaussian() * 0.1f;

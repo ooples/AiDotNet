@@ -97,7 +97,7 @@ namespace AiDotNetTests.UnitTests.Helpers
         public void CompressAndDecompress_LargeData_RoundTrip_ReturnsOriginalData()
         {
             // Arrange
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             var originalData = new byte[100000];
             random.NextBytes(originalData);
             var config = new CompressionConfig { Mode = ModelCompressionMode.Full };
