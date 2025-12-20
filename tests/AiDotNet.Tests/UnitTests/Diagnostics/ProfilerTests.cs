@@ -315,12 +315,18 @@ public class ProfilerTests : IDisposable
     {
         // Create baseline report
         Profiler.Enable();
-        using (Profiler.Scope("CompareOp")) { Thread.Sleep(10); }
+        for (int i = 0; i < 2; i++)
+        {
+            using (Profiler.Scope("CompareOp")) { Thread.Sleep(50); }
+        }
         var baseline = Profiler.GetReport();
 
         // Reset and create current report with slower operation
         Profiler.Reset();
-        using (Profiler.Scope("CompareOp")) { Thread.Sleep(50); }
+        for (int i = 0; i < 2; i++)
+        {
+            using (Profiler.Scope("CompareOp")) { Thread.Sleep(200); }
+        }
         var current = Profiler.GetReport();
 
         // Act
