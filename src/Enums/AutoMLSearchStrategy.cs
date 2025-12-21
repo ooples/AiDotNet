@@ -38,6 +38,33 @@ public enum AutoMLSearchStrategy
     /// <summary>
     /// Multi-fidelity search (e.g., HyperBand/ASHA-style scheduling).
     /// </summary>
-    MultiFidelity
+    MultiFidelity,
+
+    /// <summary>
+    /// Neural Architecture Search with automatic algorithm selection.
+    /// Chooses the best NAS algorithm based on task characteristics and constraints.
+    /// </summary>
+    NeuralArchitectureSearch,
+
+    /// <summary>
+    /// DARTS (Differentiable Architecture Search) - gradient-based NAS.
+    /// Jointly learns architecture and weights through continuous relaxation.
+    /// Best for: Fast search, moderate compute budgets.
+    /// </summary>
+    DARTS,
+
+    /// <summary>
+    /// GDAS (Gumbel-softmax DARTS) - improved differentiable NAS.
+    /// Uses Gumbel-softmax sampling for better architecture discretization.
+    /// Best for: When DARTS produces weak architectures due to discretization gap.
+    /// </summary>
+    GDAS,
+
+    /// <summary>
+    /// Once-for-All (OFA) Networks - train once, specialize anywhere.
+    /// Trains a supernet supporting elastic depth, width, and kernel sizes.
+    /// Best for: Multi-hardware deployment, mobile/edge devices.
+    /// </summary>
+    OnceForAll
 }
 

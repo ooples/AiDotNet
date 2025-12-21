@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Models.Options;
 
 namespace AiDotNet.Configuration;
 
@@ -71,4 +72,45 @@ public class AutoMLOptions<T, TInput, TOutput>
     /// If null, sensible defaults are used.
     /// </remarks>
     public RLAutoMLOptions<T>? ReinforcementLearning { get; set; }
+
+    /// <summary>
+    /// Gets or sets Neural Architecture Search (NAS) specific AutoML options.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is used when <see cref="SearchStrategy"/> is set to one of the NAS strategies:
+    /// <see cref="AutoMLSearchStrategy.NeuralArchitectureSearch"/>, <see cref="AutoMLSearchStrategy.DARTS"/>,
+    /// <see cref="AutoMLSearchStrategy.GDAS"/>, or <see cref="AutoMLSearchStrategy.OnceForAll"/>.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> NAS automatically discovers optimal neural network architectures.
+    /// Instead of manually designing layers, NAS explores different designs to find the best one
+    /// for your data and hardware constraints.
+    /// </para>
+    /// <para>
+    /// If null, sensible defaults are used based on the selected NAS strategy.
+    /// </para>
+    /// </remarks>
+    public NASOptions<T>? NAS { get; set; }
+
+    /// <summary>
+    /// Gets or sets cross-validation options for trial evaluation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled, each trial is evaluated using k-fold cross-validation instead of a single
+    /// train/validation split. This provides more robust performance estimates but increases
+    /// computation time by a factor of k (the number of folds).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Cross-validation splits your data into k parts ("folds"). The model
+    /// is trained k times, each time using a different fold for validation. The final score is
+    /// the average across all folds, giving a more reliable estimate of how well the model
+    /// generalizes to unseen data.
+    /// </para>
+    /// <para>
+    /// If null, cross-validation is disabled and trials use a single train/validation split.
+    /// </para>
+    /// </remarks>
+    public CrossValidationOptions? CrossValidation { get; set; }
 }

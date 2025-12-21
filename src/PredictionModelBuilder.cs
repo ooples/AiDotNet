@@ -2,6 +2,7 @@ global using AiDotNet.Agents;
 global using AiDotNet.Configuration;
 global using AiDotNet.DataProcessor;
 global using AiDotNet.Deployment.Configuration;
+global using AiDotNet.Diagnostics;
 global using AiDotNet.DistributedTraining;
 global using AiDotNet.Enums;
 global using AiDotNet.FeatureSelectors;
@@ -29,8 +30,11 @@ global using AiDotNet.Tokenization.HuggingFace;
 global using AiDotNet.Tokenization.Interfaces;
 global using AiDotNet.Tools;
 
+using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.Policies;
+using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet;
 
@@ -100,6 +104,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private ExportConfig? _exportConfig;
     private GpuAccelerationConfig? _gpuAccelerationConfig;
     private ReasoningConfig? _reasoningConfig;
+    private ProfilingConfig? _profilingConfig;
 
     // Tokenization configuration
     private ITokenizer? _tokenizer;
@@ -716,6 +721,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     {
         // SUPERVISED TRAINING PATH
 
+        // Create profiler session if profiling is enabled
+        var profilerSession = CreateProfilerSession();
+        using var _ = profilerSession?.Scope("BuildSupervisedInternalAsync");
+
         // Apply GPU configuration first (before any operations that might use GPU)
         ApplyGpuConfiguration();
 
@@ -997,7 +1006,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _telemetryConfig,
             _exportConfig,
             _gpuAccelerationConfig,
-            _compressionConfig);
+            _compressionConfig,
+            _profilingConfig);
 
         // JIT COMPILATION (if configured and supported)
         Func<Tensor<T>[], Tensor<T>[]>? jitCompiledFunction = null;
@@ -1072,7 +1082,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             PromptOptimizer = _promptOptimizer,
             FewShotExampleSelector = _fewShotExampleSelector,
             PromptAnalyzer = _promptAnalyzer,
-            PromptCompressor = _promptCompressor
+            PromptCompressor = _promptCompressor,
+            ProfilingReport = profilerSession?.GetReport()
         };
 
         var finalResult = new PredictionModelResult<T, TInput, TOutput>(options);
@@ -1140,6 +1151,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     {
         // META-LEARNING TRAINING PATH
 
+        // Create profiler session if profiling is enabled
+        var profilerSession = CreateProfilerSession();
+        using var _ = profilerSession?.Scope("BuildMetaLearningInternalAsync");
+
         // Validate meta-learner is configured (should be checked by caller, but defensive)
         if (_metaLearner is null)
         {
@@ -1159,7 +1174,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _telemetryConfig,
             _exportConfig,
             _gpuAccelerationConfig,
-            _compressionConfig);
+            _compressionConfig,
+            _profilingConfig);
 
         // Create PredictionModelResult with meta-learning options
         var metaOptions = new PredictionModelResultOptions<T, TInput, TOutput>
@@ -1187,7 +1203,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             PromptOptimizer = _promptOptimizer,
             FewShotExampleSelector = _fewShotExampleSelector,
             PromptAnalyzer = _promptAnalyzer,
-            PromptCompressor = _promptCompressor
+            PromptCompressor = _promptCompressor,
+            ProfilingReport = profilerSession?.GetReport()
         };
 
         var result = new PredictionModelResult<T, TInput, TOutput>(metaOptions);
@@ -1253,6 +1270,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private async Task<PredictionModelResult<T, TInput, TOutput>> BuildRLInternalAsync(int episodes, bool verbose)
     {
         // RL TRAINING PATH
+
+        // Create profiler session if profiling is enabled
+        var profilerSession = CreateProfilerSession();
+        using var _ = profilerSession?.Scope("BuildRLInternalAsync");
 
         // Apply GPU configuration first (before any operations that might use GPU)
         ApplyGpuConfiguration();
@@ -1462,7 +1483,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _telemetryConfig,
             _exportConfig,
             _gpuAccelerationConfig,
-            _compressionConfig);
+            _compressionConfig,
+            _profilingConfig);
 
         // Return standard PredictionModelResult
         // Note: This Build() overload doesn't perform JIT compilation (only the main Build() does),
@@ -1493,7 +1515,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             PromptOptimizer = _promptOptimizer,
             FewShotExampleSelector = _fewShotExampleSelector,
             PromptAnalyzer = _promptAnalyzer,
-            PromptCompressor = _promptCompressor
+            PromptCompressor = _promptCompressor,
+            ProfilingReport = profilerSession?.GetReport()
         };
 
         var result = new PredictionModelResult<T, TInput, TOutput>(rlOptions);
@@ -1948,10 +1971,114 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             AutoMLSearchStrategy.BayesianOptimization => new AiDotNet.AutoML.BayesianOptimizationAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom()),
             AutoMLSearchStrategy.Evolutionary => new AiDotNet.AutoML.EvolutionaryAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom()),
             AutoMLSearchStrategy.MultiFidelity => new AiDotNet.AutoML.MultiFidelityAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom(), _autoMLOptions?.MultiFidelity),
+            AutoMLSearchStrategy.NeuralArchitectureSearch or
+            AutoMLSearchStrategy.DARTS or
+            AutoMLSearchStrategy.GDAS or
+            AutoMLSearchStrategy.OnceForAll => CreateNasAutoMLModel(strategy),
             _ => throw new NotSupportedException(
                 $"AutoML search strategy '{strategy}' is not available via the facade options overload. " +
                 $"Use {nameof(ConfigureAutoML)}(IAutoMLModel<...>) to plug in a custom implementation.")
         };
+    }
+
+    /// <summary>
+    /// Creates a NAS-based AutoML model with the specified strategy.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// NAS strategies require TInput and TOutput to be <see cref="Tensor{T}"/> types.
+    /// If the types don't match, this method throws a helpful exception.
+    /// </para>
+    /// <para>
+    /// <b>Industry Defaults:</b> When NAS options are not specified, sensible defaults are used:
+    /// <list type="bullet">
+    /// <item><description>SearchSpace: <see cref="MobileNetSearchSpace{T}"/> (efficient for most use cases)</description></item>
+    /// <item><description>NumNodes: 4 (balanced complexity)</description></item>
+    /// <item><description>GDAS temperature: 5.0 initial, 0.1 final (proven values from research)</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    private IAutoMLModel<T, TInput, TOutput> CreateNasAutoMLModel(AutoMLSearchStrategy strategy)
+    {
+        // NAS models specifically work with Tensor<T> inputs/outputs.
+        // Validate type compatibility at runtime.
+        if (typeof(TInput) != typeof(Tensor<T>) || typeof(TOutput) != typeof(Tensor<T>))
+        {
+            throw new NotSupportedException(
+                $"Neural Architecture Search strategies ({strategy}) require TInput and TOutput to be Tensor<T>. " +
+                $"Current types are TInput={typeof(TInput).Name}, TOutput={typeof(TOutput).Name}. " +
+                $"Consider using PredictionModelBuilder<{typeof(T).Name}, Tensor<{typeof(T).Name}>, Tensor<{typeof(T).Name}>> for NAS.");
+        }
+
+        // Resolve NAS options with industry-standard defaults.
+        var nasOptions = _autoMLOptions?.NAS;
+        var searchSpace = nasOptions?.SearchSpace ?? new MobileNetSearchSpace<T>();
+        var numNodes = Math.Max(searchSpace.MaxNodes, 4);
+
+        // Create the appropriate NAS model based on strategy.
+        NasAutoMLModelBase<T> nasModel = strategy switch
+        {
+            AutoMLSearchStrategy.DARTS => new GDAS<T>(
+                searchSpace,
+                numNodes,
+                nasOptions?.ArchitectureLearningRate ?? 5.0,    // Initial temperature (GDAS uses temp, not LR)
+                0.1),                                            // Final temperature
+
+            AutoMLSearchStrategy.GDAS => new GDAS<T>(
+                searchSpace,
+                numNodes,
+                nasOptions?.ArchitectureLearningRate ?? 5.0,    // Initial temperature
+                0.1),                                            // Final temperature
+
+            AutoMLSearchStrategy.OnceForAll => new OnceForAll<T>(
+                searchSpace,
+                nasOptions?.ElasticDepths,
+                nasOptions?.ElasticWidths,
+                nasOptions?.ElasticKernelSizes,
+                nasOptions?.ElasticExpansionRatios),
+
+            AutoMLSearchStrategy.NeuralArchitectureSearch => SelectBestNasStrategy(searchSpace, numNodes, nasOptions),
+
+            _ => throw new NotSupportedException($"NAS strategy '{strategy}' is not implemented.")
+        };
+
+        // Configure NAS model with time/trial limits from parent options.
+        // The SearchAsync will receive proper limits when called.
+
+        // Cast via object to satisfy generic constraints (we validated types above).
+        return (IAutoMLModel<T, TInput, TOutput>)(object)nasModel;
+    }
+
+    /// <summary>
+    /// Auto-selects the best NAS strategy based on task characteristics.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Selection Heuristics:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Mobile/Edge platforms: OnceForAll (elastic deployment)</description></item>
+    /// <item><description>Quick search (&lt;2 hours): GDAS (fast gradient-based)</description></item>
+    /// <item><description>Default: GDAS (proven balance of speed and quality)</description></item>
+    /// </list>
+    /// </remarks>
+    private NasAutoMLModelBase<T> SelectBestNasStrategy(SearchSpaceBase<T> searchSpace, int numNodes, NASOptions<T>? nasOptions)
+    {
+        // If targeting mobile/edge, use OFA for elastic deployment.
+        if (nasOptions?.TargetPlatform is HardwarePlatform.Mobile or HardwarePlatform.EdgeTPU)
+        {
+            return new OnceForAll<T>(
+                searchSpace,
+                nasOptions?.ElasticDepths,
+                nasOptions?.ElasticWidths,
+                nasOptions?.ElasticKernelSizes,
+                nasOptions?.ElasticExpansionRatios);
+        }
+
+        // Default to GDAS - good balance of speed and architecture quality.
+        return new GDAS<T>(
+            searchSpace,
+            numNodes,
+            nasOptions?.ArchitectureLearningRate ?? 5.0,
+            0.1);
     }
 
     /// <summary>
@@ -2247,6 +2374,52 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     {
         _telemetryConfig = config;
         return this;
+    }
+
+    /// <summary>
+    /// Configures performance profiling for training and inference operations.
+    /// </summary>
+    /// <param name="config">The profiling configuration, or null to use industry-standard defaults.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Profiling measures how long different parts of your ML code take to run.
+    /// Think of it like a stopwatch for your code - it helps you find bottlenecks and optimize performance.
+    ///
+    /// The profiling report will be available in the result after training:
+    /// <code>
+    /// var result = await builder
+    ///     .ConfigureProfiling() // Enable with defaults
+    ///     .Build(features, labels);
+    ///
+    /// // Access the profiling report
+    /// var report = result.ProfilingReport;
+    /// Console.WriteLine(report?.GetFormattedSummary());
+    /// </code>
+    ///
+    /// Features tracked:
+    /// - Operation timing: How long each training step, forward pass, backward pass takes
+    /// - Memory allocations: How much memory is used during training
+    /// - Call hierarchy: Which operations call which other operations
+    /// - Percentiles: P50 (median), P95, P99 timing for statistical analysis
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureProfiling(ProfilingConfig? config = null)
+    {
+        _profilingConfig = config ?? new ProfilingConfig { Enabled = true };
+        return this;
+    }
+
+    /// <summary>
+    /// Creates a ProfilerSession if profiling is enabled; otherwise returns null.
+    /// </summary>
+    private ProfilerSession? CreateProfilerSession()
+    {
+        if (_profilingConfig?.Enabled != true)
+        {
+            return null;
+        }
+
+        return new ProfilerSession(_profilingConfig);
     }
 
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null)

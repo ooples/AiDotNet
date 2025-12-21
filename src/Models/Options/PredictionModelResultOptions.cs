@@ -2,6 +2,7 @@ using AiDotNet.Agents;
 using AiDotNet.Configuration;
 using AiDotNet.Data.Structures;
 using AiDotNet.Deployment.Configuration;
+using AiDotNet.Diagnostics;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Models.Results;
@@ -578,4 +579,26 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public TokenizationConfig? TokenizationConfig { get; set; }
+
+    // ============================================================================
+    // Diagnostics Properties
+    // ============================================================================
+
+    /// <summary>
+    /// Gets or sets the profiling report from training and inference operations.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Contains comprehensive profiling data collected during model training including
+    /// operation timing, memory allocations, and performance statistics with percentiles.
+    /// </para>
+    /// <para><b>For Beginners:</b> This shows you how long different parts of training took.
+    /// It includes:
+    /// - How long each operation took (e.g., forward pass, backward pass)
+    /// - Memory usage during training
+    /// - Performance percentiles (P50, P95, P99) for statistical analysis
+    /// - Identification of performance bottlenecks
+    /// </para>
+    /// </remarks>
+    public ProfileReport? ProfilingReport { get; set; }
 }
