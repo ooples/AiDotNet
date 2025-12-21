@@ -51,7 +51,7 @@ namespace AiDotNet.AutoML.NAS
         {
             _ops = MathHelper.GetNumericOperations<T>();
             _nasSearchSpace = searchSpace;
-            _random = new Random(42);
+            _random = RandomHelper.CreateSeededRandom(42);
 
             // BigNAS supports larger search spaces than OFA
             _elasticDepths = elasticDepths ?? new List<int> { 2, 3, 4, 5, 6 };

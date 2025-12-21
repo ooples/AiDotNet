@@ -50,7 +50,7 @@ namespace AiDotNet.AutoML.NAS
         {
             _ops = MathHelper.GetNumericOperations<T>();
             _nasSearchSpace = searchSpace;
-            _random = new Random(42);
+            _random = RandomHelper.CreateSeededRandom(42);
 
             _elasticDepths = elasticDepths ?? new List<int> { 2, 3, 4, 5 };
             _elasticWidthMultipliers = elasticWidthMultipliers ?? new List<double> { 0.5, 0.75, 1.0, 1.25 };

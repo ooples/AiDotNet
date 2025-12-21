@@ -221,7 +221,7 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
 
         if (cvOptions.ShuffleData)
         {
-            var rng = cvOptions.RandomSeed.HasValue ? new Random(cvOptions.RandomSeed.Value) : Random;
+            var rng = cvOptions.RandomSeed.HasValue ? RandomHelper.CreateSeededRandom(cvOptions.RandomSeed.Value) : Random;
             for (int i = allIndices.Length - 1; i > 0; i--)
             {
                 int j = rng.Next(i + 1);

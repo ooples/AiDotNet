@@ -51,7 +51,7 @@ namespace AiDotNet.AutoML.NAS
         {
             _ops = MathHelper.GetNumericOperations<T>();
             _nasSearchSpace = searchSpace;
-            _random = new Random(42);
+            _random = RandomHelper.CreateSeededRandom(42);
 
             // Default elastic dimensions
             _elasticDepths = elasticDepths ?? new List<int> { 2, 3, 4 };
@@ -314,6 +314,18 @@ namespace AiDotNet.AutoML.NAS
             return _sharedWeights[layerKey];
         }
 
+        /// <summary>
+        /// Returns a sub-network sampled from the OFA supernet.
+        /// OFA's key insight is that the supernet is pre-trained with progressive shrinking,
+        /// so any sampled sub-network is already well-trained. This enables instant specialization
+        /// without requiring an expensive search phase.
+        /// </summary>
+        /// <remarks>
+        /// Unlike traditional NAS methods that search over architectures, OFA samples from
+        /// a trained supernet. The inputs/targets are not used because the supernet was trained
+        /// during the progressive shrinking phase. For hardware-specific optimization, use
+        /// <see cref="SpecializeForHardware"/> which finds the best sub-network for given constraints.
+        /// </remarks>
         protected override Architecture<T> SearchArchitecture(
             Tensor<T> inputs,
             Tensor<T> targets,
@@ -322,6 +334,7 @@ namespace AiDotNet.AutoML.NAS
             TimeSpan timeLimit,
             CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return ConfigToArchitecture(SampleSubNetwork());
         }
 

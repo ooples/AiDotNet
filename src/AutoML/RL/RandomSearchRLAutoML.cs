@@ -38,7 +38,7 @@ internal sealed class RandomSearchRLAutoML<T>
         _maxStepsPerEpisode = Math.Max(1, maxStepsPerEpisode);
 
         _numOps = MathHelper.GetNumericOperations<T>();
-        _random = seed.HasValue ? new Random(seed.Value) : RandomHelper.CreateSecureRandom();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     public (IRLAgent<T> BestAgent, AutoMLRunSummary Summary) Search()

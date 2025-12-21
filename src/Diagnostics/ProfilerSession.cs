@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using AiDotNet.Deployment.Configuration;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Diagnostics;
 
@@ -303,7 +304,7 @@ public class ProfilerSessionEntry : IProfilerEntry
         _name = name;
         _reservoirSize = reservoirSize;
         _reservoir = new double[reservoirSize];
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
     }
 
     internal void RecordSample(double milliseconds)

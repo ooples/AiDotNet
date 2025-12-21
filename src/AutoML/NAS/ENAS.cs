@@ -52,7 +52,7 @@ namespace AiDotNet.AutoML.NAS
             _nasSearchSpace = searchSpace;
             _numNodes = numNodes;
             _numOperations = searchSpace.Operations?.Count ?? 5;
-            _random = new Random(42);
+            _random = RandomHelper.CreateSeededRandom(42);
 
             _controllerHiddenSize = controllerHiddenSize;
             _controllerMaxChoices = Math.Max(_numNodes, _numOperations);
