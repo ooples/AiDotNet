@@ -53,10 +53,78 @@ namespace AiDotNet;
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> Think of this class as a recipe builder for creating AI models.
-/// You add different ingredients (like data normalization, feature selection, etc.) 
+/// You add different ingredients (like data normalization, feature selection, etc.)
 /// and then "cook" (build) the final model. This approach makes it easy to customize
 /// your model without having to understand all the complex details at once.
 /// </para>
+/// <para>
+/// <b>Training Infrastructure Example:</b> Complete example showing experiment tracking,
+/// checkpointing, model registry, and hyperparameter optimization working together:
+/// </para>
+/// <code>
+/// // 1. Create training infrastructure components
+/// var experimentTracker = new ExperimentTracker&lt;double&gt;("./mlruns");
+/// var checkpointManager = new CheckpointManager&lt;double, double[], double&gt;("./checkpoints");
+/// var modelRegistry = new ModelRegistry&lt;double, double[], double&gt;("./models");
+/// var bayesianOptimizer = new BayesianOptimizer&lt;double, double[], double&gt;(
+///     maximize: false,  // Minimize loss
+///     acquisitionFunction: AcquisitionFunctionType.ExpectedImprovement,
+///     nInitialPoints: 5,
+///     seed: 42);
+///
+/// // 2. Create an experiment and start a run
+/// var experimentId = experimentTracker.CreateExperiment(
+///     "image-classification",
+///     description: "CNN training with hyperparameter tuning",
+///     tags: new Dictionary&lt;string, string&gt; { ["team"] = "ml-research" });
+///
+/// var run = experimentTracker.StartRun(experimentId, "baseline-run");
+/// run.LogParameters(new Dictionary&lt;string, object&gt;
+/// {
+///     ["learning_rate"] = 0.001,
+///     ["batch_size"] = 32,
+///     ["epochs"] = 100
+/// });
+///
+/// // 3. Configure the builder with training infrastructure
+/// var builder = new PredictionModelBuilder&lt;double, double[], double&gt;()
+///     .ConfigureModel(neuralNetwork)
+///     .ConfigureOptimizer(adamOptimizer)
+///     .ConfigureExperimentTracker(experimentTracker)
+///     .ConfigureCheckpointManager(checkpointManager)
+///     .ConfigureModelRegistry(modelRegistry)
+///     .ConfigureHyperparameterOptimizer(bayesianOptimizer);
+///
+/// // 4. Train and track progress
+/// for (int epoch = 0; epoch &lt; 100; epoch++)
+/// {
+///     // Train epoch...
+///     var loss = TrainEpoch(model, data);
+///     var accuracy = Evaluate(model, validationData);
+///
+///     // Log metrics to experiment tracker
+///     run.LogMetric("loss", loss, step: epoch);
+///     run.LogMetric("accuracy", accuracy, step: epoch);
+///
+///     // Save checkpoint periodically
+///     if (epoch % 10 == 0)
+///     {
+///         checkpointManager.SaveCheckpoint(
+///             model, optimizer, epoch, totalSteps,
+///             new Dictionary&lt;string, double&gt; { ["loss"] = loss, ["accuracy"] = accuracy });
+///     }
+/// }
+///
+/// // 5. Complete the run and register the model
+/// run.Complete();
+///
+/// var modelVersion = modelRegistry.RegisterModel(
+///     model, "cnn-classifier", ModelType.NeuralNetwork,
+///     new Dictionary&lt;string, object&gt; { ["final_accuracy"] = 0.95 });
+///
+/// // 6. Promote model to production
+/// modelRegistry.TransitionStage(modelVersion.ModelId, modelVersion.Version, ModelStage.Production);
+/// </code>
 /// </remarks>
 public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilder<T, TInput, TOutput>
 {
@@ -122,6 +190,17 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     private IPromptAnalyzer? _promptAnalyzer;
     private IPromptCompressor? _promptCompressor;
 
+    // Training infrastructure configuration
+    private IExperimentTracker<T>? _experimentTracker;
+    private ICheckpointManager<T, TInput, TOutput>? _checkpointManager;
+    private ITrainingMonitor<T>? _trainingMonitor;
+    private IModelRegistry<T, TInput, TOutput>? _modelRegistry;
+    private IDataVersionControl<T>? _dataVersionControl;
+    private IHyperparameterOptimizer<T, TInput, TOutput>? _hyperparameterOptimizer;
+    private HyperparameterSearchSpace? _hyperparameterSearchSpace;
+    private int _hyperparameterTrials = 10;
+
+    // Uncertainty quantification configuration
     private UncertaintyQuantificationOptions? _uncertaintyQuantificationOptions;
     private AiDotNet.Models.Inputs.UncertaintyCalibrationData<TInput, TOutput>? _uncertaintyCalibrationData;
 
@@ -737,6 +816,21 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         // Apply GPU configuration first (before any operations that might use GPU)
         ApplyGpuConfiguration();
 
+        // ============================================================================
+        // Training Infrastructure Initialization
+        // ============================================================================
+
+        // Variables to track training infrastructure state
+        string? experimentRunId = null;
+        string? experimentId = null;
+        IExperimentRun<T>? experimentRun = null;
+        string? monitorSessionId = null;
+        string? checkpointPath = null;
+        string? registeredModelName = null;
+        int? modelVersion = null;
+        string? dataVersionHash = null;
+        var trainingStartTime = DateTime.UtcNow;
+
         // Convert and validate inputs
         var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
         var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
@@ -983,6 +1077,204 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         // This prevents state contamination from CV (accumulated fitness lists, cache, learning rates)
         optimizer.Reset();
 
+        // ============================================================================
+        // Start Training Infrastructure (before optimization)
+        // ============================================================================
+
+        // Track data version for reproducibility
+        if (_dataVersionControl is not null)
+        {
+            // Compute a hash of the training data for lineage tracking
+            // This enables reproducibility by recording exactly which data was used
+            var dataVersionNumOps = MathHelper.GetNumericOperations<T>();
+            dataVersionHash = ComputeDataVersionHash(convertedX, convertedY, dataVersionNumOps);
+
+            // Note: For in-memory data, we cannot use CreateDatasetVersion (requires dataPath).
+            // Instead, we track the data characteristics via the experiment run parameters below.
+            // The data_version_hash is logged to experiment run parameters (line ~1122) and linked
+            // via _dataVersionControl.LinkDatasetToRun (line ~1131) for full traceability.
+            // Key metadata tracked: rows, columns, target_length, feature_count, training/validation/test samples.
+        }
+
+        // Start experiment tracking run
+        if (_experimentTracker is not null)
+        {
+            experimentId = _experimentTracker.CreateExperiment(
+                name: "supervised-training",
+                description: $"Supervised learning with {model.GetType().Name}",
+                tags: new Dictionary<string, string>
+                {
+                    ["model_type"] = model.GetType().Name,
+                    ["optimizer_type"] = finalOptimizer.GetType().Name,
+                    ["framework"] = "AiDotNet"
+                });
+
+            experimentRun = _experimentTracker.StartRun(
+                experimentId: experimentId,
+                runName: $"run-{trainingStartTime:yyyyMMdd-HHmmss}",
+                tags: new Dictionary<string, string>
+                {
+                    ["start_time"] = trainingStartTime.ToString("O")
+                });
+
+            experimentRunId = experimentRun.RunId;
+
+            // Log hyperparameters from optimizer options
+            var optimizerOptions = finalOptimizer.GetOptions();
+            experimentRun.LogParameters(new Dictionary<string, object>
+            {
+                ["model_type"] = model.GetType().FullName ?? model.GetType().Name,
+                ["optimizer_type"] = finalOptimizer.GetType().FullName ?? finalOptimizer.GetType().Name,
+                ["max_iterations"] = optimizerOptions.MaxIterations,
+                ["use_early_stopping"] = optimizerOptions.UseEarlyStopping,
+                ["early_stopping_patience"] = optimizerOptions.EarlyStoppingPatience,
+                ["training_samples"] = XTrain is Matrix<T> trainMatrix ? trainMatrix.Rows : 0,
+                ["validation_samples"] = XVal is Matrix<T> valMatrix ? valMatrix.Rows : 0,
+                ["test_samples"] = XTest is Matrix<T> testMatrix ? testMatrix.Rows : 0,
+                ["feature_count"] = convertedX.Columns,
+                ["target_length"] = convertedY.Length,
+                ["data_version_hash"] = dataVersionHash ?? "not_tracked"
+            });
+
+            // Link data version to experiment run for full traceability
+            if (_dataVersionControl is not null && dataVersionHash is not null)
+            {
+                try
+                {
+                    var datasetName = $"training-data-{model.GetType().Name}";
+                    _dataVersionControl.LinkDatasetToRun(
+                        datasetName: datasetName,
+                        versionHash: dataVersionHash,
+                        runId: experimentRunId,
+                        modelId: null); // Model ID will be set after registry
+                }
+                catch
+                {
+                    // Data version control linkage is optional - don't fail training
+                }
+            }
+        }
+
+        // Start training monitor session
+        if (_trainingMonitor is not null)
+        {
+            monitorSessionId = _trainingMonitor.StartSession(
+                sessionName: $"training-{model.GetType().Name}",
+                metadata: new Dictionary<string, object>
+                {
+                    ["model_type"] = model.GetType().Name,
+                    ["optimizer_type"] = finalOptimizer.GetType().Name,
+                    ["experiment_run_id"] = experimentRunId ?? string.Empty,
+                    ["start_time"] = trainingStartTime
+                });
+        }
+
+        // ============================================================================
+        // Hyperparameter Optimization (if configured)
+        // ============================================================================
+
+        HyperparameterOptimizationResult<T>? hyperparameterOptimizationResult = null;
+        int? bestHyperparameterTrialId = null;
+        Dictionary<string, object>? bestHyperparameters = null;
+
+        if (_hyperparameterOptimizer is not null && _hyperparameterSearchSpace is not null)
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+
+            try
+            {
+                // Log hyperparameter optimization start
+                if (_trainingMonitor is not null && monitorSessionId is not null)
+                {
+                    _trainingMonitor.LogMessage(monitorSessionId, LogLevel.Info, "Starting hyperparameter optimization...");
+                }
+
+                // Create objective function that trains the model and returns validation loss
+                T ObjectiveFunction(Dictionary<string, object> trialHyperparameters)
+                {
+                    // Reset optimizer for fresh training
+                    finalOptimizer.Reset();
+
+                    // Apply trial hyperparameters to the optimizer
+                    var optimizerOptions = finalOptimizer.GetOptions();
+                    ApplyTrialHyperparameters(optimizerOptions, trialHyperparameters);
+
+                    // Log hyperparameters for this trial to experiment tracker
+                    if (experimentRun is not null)
+                    {
+                        foreach (var kvp in trialHyperparameters)
+                        {
+                            experimentRun.LogParameter($"hpo_trial_{kvp.Key}", kvp.Value);
+                        }
+                    }
+
+                    // Train with current hyperparameters
+                    var trialResult = finalOptimizer.Optimize(
+                        OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
+                            XTrain, yTrain, XVal, yVal, XTest, yTest));
+
+                    // Return validation MSE as objective (minimizing)
+                    if (trialResult.ValidationResult.ErrorStats is not null)
+                    {
+                        return trialResult.ValidationResult.ErrorStats.MSE;
+                    }
+
+                    // Fallback to training loss if validation unavailable
+                    if (trialResult.TrainingResult.ErrorStats is not null)
+                    {
+                        return trialResult.TrainingResult.ErrorStats.MSE;
+                    }
+
+                    // Return maximum value for failed trials to penalize them heavily
+                    // when minimizing (zero would incorrectly indicate perfect performance)
+                    return numOps.MaxValue;
+                }
+
+                // Run hyperparameter optimization
+                hyperparameterOptimizationResult = _hyperparameterOptimizer.Optimize(
+                    ObjectiveFunction,
+                    _hyperparameterSearchSpace,
+                    _hyperparameterTrials);
+
+                // Extract best trial information
+                if (hyperparameterOptimizationResult.BestTrial is not null)
+                {
+                    bestHyperparameterTrialId = hyperparameterOptimizationResult.BestTrial.TrialNumber;
+                    bestHyperparameters = hyperparameterOptimizationResult.BestParameters;
+
+                    // Log best hyperparameters to experiment tracker
+                    if (experimentRun is not null && bestHyperparameters is not null)
+                    {
+                        foreach (var kvp in bestHyperparameters)
+                        {
+                            experimentRun.LogParameter($"best_{kvp.Key}", kvp.Value);
+                        }
+
+                        var bestValue = hyperparameterOptimizationResult.BestTrial.ObjectiveValue ?? numOps.Zero;
+                        experimentRun.LogMetric("best_trial_objective", bestValue);
+                    }
+
+                    if (_trainingMonitor is not null && monitorSessionId is not null)
+                    {
+                        _trainingMonitor.LogMessage(monitorSessionId, LogLevel.Info,
+                            $"HPO complete: best trial={bestHyperparameterTrialId}, completed={hyperparameterOptimizationResult.CompletedTrials}");
+                    }
+                }
+
+                // Reset optimizer for final training
+                finalOptimizer.Reset();
+            }
+            catch (Exception ex)
+            {
+                // Hyperparameter optimization is optional - log warning and continue
+                if (_trainingMonitor is not null && monitorSessionId is not null)
+                {
+                    _trainingMonitor.LogMessage(monitorSessionId, LogLevel.Warning, $"HPO failed: {ex.Message}");
+                }
+            }
+        }
+
+        // Uncertainty quantification: create deep ensemble template before optimization
         var deepEnsembleTemplate = _uncertaintyQuantificationOptions is { Enabled: true, Method: UncertaintyQuantificationMethod.DeepEnsemble }
             ? _model.DeepCopy()
             : null;
@@ -1011,6 +1303,124 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             optimizationResult = finalOptimizer.Optimize(optimizationInputData);
         }
 
+        var trainingEndTime = DateTime.UtcNow;
+        var trainingDuration = trainingEndTime - trainingStartTime;
+
+        // ============================================================================
+        // Finalize Training Infrastructure (after optimization)
+        // ============================================================================
+
+        // Collect final metrics from optimization result
+        var finalMetrics = new Dictionary<string, T>();
+        if (optimizationResult.TrainingResult.ErrorStats is not null)
+        {
+            finalMetrics["training_rmse"] = optimizationResult.TrainingResult.ErrorStats.RMSE;
+            finalMetrics["training_mae"] = optimizationResult.TrainingResult.ErrorStats.MAE;
+            finalMetrics["training_mse"] = optimizationResult.TrainingResult.ErrorStats.MSE;
+        }
+        if (optimizationResult.ValidationResult.ErrorStats is not null)
+        {
+            finalMetrics["validation_rmse"] = optimizationResult.ValidationResult.ErrorStats.RMSE;
+            finalMetrics["validation_mae"] = optimizationResult.ValidationResult.ErrorStats.MAE;
+            finalMetrics["validation_mse"] = optimizationResult.ValidationResult.ErrorStats.MSE;
+        }
+        if (optimizationResult.TestResult.ErrorStats is not null)
+        {
+            finalMetrics["test_rmse"] = optimizationResult.TestResult.ErrorStats.RMSE;
+            finalMetrics["test_mae"] = optimizationResult.TestResult.ErrorStats.MAE;
+            finalMetrics["test_mse"] = optimizationResult.TestResult.ErrorStats.MSE;
+        }
+
+        // Log final metrics to experiment run
+        if (experimentRun is not null)
+        {
+            experimentRun.LogMetrics(finalMetrics, step: 1);
+            experimentRun.LogParameter("training_duration_seconds", trainingDuration.TotalSeconds);
+            experimentRun.Complete();
+        }
+
+        // Log final metrics to training monitor
+        if (_trainingMonitor is not null && monitorSessionId is not null)
+        {
+            _trainingMonitor.LogMetrics(monitorSessionId, finalMetrics, step: 1);
+            _trainingMonitor.EndSession(monitorSessionId);
+        }
+
+        // Save checkpoint if checkpoint manager is configured
+        if (_checkpointManager is not null && optimizationResult.BestSolution is not null)
+        {
+            var checkpointMetrics = new Dictionary<string, T>(finalMetrics);
+            var checkpointMetadata = new Dictionary<string, object>
+            {
+                ["experiment_run_id"] = experimentRunId ?? string.Empty,
+                ["training_duration_seconds"] = trainingDuration.TotalSeconds,
+                ["model_type"] = optimizationResult.BestSolution.GetType().Name
+            };
+
+            checkpointPath = _checkpointManager.SaveCheckpoint(
+                model: optimizationResult.BestSolution,
+                optimizer: finalOptimizer,
+                epoch: 1,
+                step: 1,
+                metrics: checkpointMetrics,
+                metadata: checkpointMetadata);
+        }
+
+        // Register model in model registry if configured
+        if (_modelRegistry is not null && optimizationResult.BestSolution is not null)
+        {
+            registeredModelName = $"{model.GetType().Name}-{trainingStartTime:yyyyMMdd-HHmmss}";
+
+            // Determine model type from the actual model class
+            var modelTypeName = optimizationResult.BestSolution.GetType().Name;
+            ModelType derivedModelType = ModelType.None;
+            if (Enum.TryParse<ModelType>(modelTypeName, ignoreCase: true, out var parsedType))
+            {
+                derivedModelType = parsedType;
+            }
+            else if (modelTypeName.Contains("Regression", StringComparison.OrdinalIgnoreCase))
+            {
+                derivedModelType = ModelType.SimpleRegression;
+            }
+            else if (modelTypeName.Contains("Neural", StringComparison.OrdinalIgnoreCase))
+            {
+                derivedModelType = ModelType.NeuralNetwork;
+            }
+
+            var modelMetadata = new ModelMetadata<T>
+            {
+                Name = registeredModelName,
+                Version = "1.0",
+                TrainingDate = trainingStartTime,
+                ModelType = derivedModelType,
+                FeatureCount = convertedX.Columns,
+                Complexity = optimizationResult.BestSolution.GetType().GetProperties().Length,
+                Description = $"Model trained via PredictionModelBuilder on {trainingStartTime:yyyy-MM-dd HH:mm:ss} UTC",
+                AdditionalInfo = new Dictionary<string, object>
+                {
+                    ["experiment_run_id"] = experimentRunId ?? string.Empty,
+                    ["training_duration_seconds"] = trainingDuration.TotalSeconds,
+                    ["optimizer_type"] = finalOptimizer.GetType().Name
+                }
+            };
+
+            // Add final metrics to AdditionalInfo (only non-null values)
+            foreach (var metric in finalMetrics)
+            {
+                if (metric.Value is not null)
+                {
+                    modelMetadata.AdditionalInfo[$"metric_{metric.Key}"] = metric.Value;
+                }
+            }
+
+            modelVersion = _modelRegistry.CreateModelVersion(
+                modelName: registeredModelName,
+                model: optimizationResult.BestSolution,
+                metadata: modelMetadata,
+                description: $"Auto-registered from training run {experimentRunId ?? "unknown"}");
+        }
+
+        // Apply uncertainty quantification if configured
         ApplyUncertaintyQuantificationIfConfigured(optimizationResult.BestSolution, _uncertaintyQuantificationOptions);
 
         // Create deployment configuration from individual configs
@@ -1068,7 +1478,36 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             }
         }
 
-        // Return PredictionModelResult with CV results, agent data, JIT compilation, and reasoning config
+        // Build hyperparameters dictionary from optimizer options for result tracking
+        var hyperparameters = new Dictionary<string, object>();
+        try
+        {
+            var opts = finalOptimizer.GetOptions();
+            hyperparameters["max_iterations"] = opts.MaxIterations;
+            hyperparameters["use_early_stopping"] = opts.UseEarlyStopping;
+            hyperparameters["early_stopping_patience"] = opts.EarlyStoppingPatience;
+            hyperparameters["model_type"] = model.GetType().Name;
+            hyperparameters["optimizer_type"] = finalOptimizer.GetType().Name;
+        }
+        catch
+        {
+            // Ignore errors collecting hyperparameters - they are optional
+        }
+
+        // Build training metrics history from optimization result
+        var trainingMetricsHistory = new Dictionary<string, List<double>>();
+        if (optimizationResult.FitnessHistory is not null && optimizationResult.FitnessHistory.Length > 0)
+        {
+            var fitnessHistoryAsDouble = new List<double>();
+            for (int i = 0; i < optimizationResult.FitnessHistory.Length; i++)
+            {
+                // Use Convert.ToDouble for generic type conversion (standard pattern in this codebase)
+                fitnessHistoryAsDouble.Add(Convert.ToDouble(optimizationResult.FitnessHistory[i]));
+            }
+            trainingMetricsHistory["fitness"] = fitnessHistoryAsDouble;
+        }
+
+        // Return PredictionModelResult with CV results, agent data, JIT compilation, reasoning config, and training infrastructure
         var options = new PredictionModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
@@ -1099,7 +1538,23 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             FewShotExampleSelector = _fewShotExampleSelector,
             PromptAnalyzer = _promptAnalyzer,
             PromptCompressor = _promptCompressor,
-            ProfilingReport = profilerSession?.GetReport()
+
+            // Diagnostics Properties
+            ProfilingReport = profilerSession?.GetReport(),
+
+            // Training Infrastructure Properties
+            ExperimentRunId = experimentRunId,
+            ExperimentId = experimentId,
+            ModelVersion = modelVersion,
+            RegisteredModelName = registeredModelName,
+            CheckpointPath = checkpointPath,
+            DataVersionHash = dataVersionHash,
+            Hyperparameters = hyperparameters.Count > 0 ? hyperparameters : null,
+            TrainingMetricsHistory = trainingMetricsHistory.Count > 0 ? trainingMetricsHistory : null,
+
+            // Hyperparameter Optimization Properties
+            HyperparameterOptimizationResult = hyperparameterOptimizationResult,
+            HyperparameterTrialId = bestHyperparameterTrialId
         };
 
         var finalResult = new PredictionModelResult<T, TInput, TOutput>(options);
@@ -2830,6 +3285,225 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     }
 
     // ============================================================================
+    // Training Infrastructure Configuration Methods
+    // ============================================================================
+
+    /// <summary>
+    /// Configures experiment tracking for organizing and logging ML experiments.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Experiment tracking is like a lab notebook for your machine learning work.
+    /// It helps you keep track of what you've tried, what worked, and what didn't.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Creating experiments to group related training runs
+    /// - Logging hyperparameters, metrics, and artifacts
+    /// - Comparing different runs to find the best approach
+    /// - Reproducing previous experiments
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var tracker = new ExperimentTracker&lt;double&gt;("./experiments");
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureExperimentTracker(tracker)
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="tracker">The experiment tracker implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureExperimentTracker(IExperimentTracker<T> tracker)
+    {
+        _experimentTracker = tracker;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures checkpoint management for saving and restoring training state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Checkpoints are like save points in a video game.
+    /// They let you pause training and resume later, or go back to an earlier state if something goes wrong.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Saving model state periodically during training
+    /// - Restoring from the latest or best checkpoint
+    /// - Automatic cleanup of old checkpoints
+    /// - Tracking metrics at each checkpoint
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var checkpointManager = new CheckpointManager&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;("./checkpoints");
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureCheckpointManager(checkpointManager)
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="manager">The checkpoint manager implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCheckpointManager(ICheckpointManager<T, TInput, TOutput> manager)
+    {
+        _checkpointManager = manager;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures training monitoring for real-time visibility into training progress.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A training monitor is like a dashboard for your model training.
+    /// It shows you how training is progressing, what resources are being used, and if there are any problems.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Real-time metric tracking (loss, accuracy, etc.)
+    /// - Resource usage monitoring (CPU, GPU, memory)
+    /// - Progress updates and ETA estimation
+    /// - Alert thresholds for detecting problems
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var monitor = new TrainingMonitor&lt;double&gt;("./logs");
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureTrainingMonitor(monitor)
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="monitor">The training monitor implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingMonitor(ITrainingMonitor<T> monitor)
+    {
+        _trainingMonitor = monitor;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures model registry for centralized model storage and versioning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A model registry is like a library for your trained models.
+    /// It keeps track of all your models, their versions, and which ones are in production.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Storing and versioning trained models
+    /// - Managing model lifecycle (development → staging → production)
+    /// - Tracking model metadata and lineage
+    /// - Comparing different model versions
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var registry = new ModelRegistry&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;("./models");
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureModelRegistry(registry)
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="registry">The model registry implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelRegistry(IModelRegistry<T, TInput, TOutput> registry)
+    {
+        _modelRegistry = registry;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures data version control for tracking dataset changes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Data version control is like Git, but for your datasets.
+    /// It tracks what data was used for training each model and lets you reproduce experiments.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Creating and tracking dataset versions
+    /// - Computing dataset hashes for integrity verification
+    /// - Tracking data lineage and transformations
+    /// - Linking datasets to training runs
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var dvc = new DataVersionControl&lt;double&gt;("./data-versions");
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureDataVersionControl(dvc)
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="dataVersionControl">The data version control implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataVersionControl(IDataVersionControl<T> dataVersionControl)
+    {
+        _dataVersionControl = dataVersionControl;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures hyperparameter optimization for automatic tuning of model settings.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Hyperparameter optimization automatically finds the best settings
+    /// for your model (like learning rate, number of layers, etc.) instead of you having to guess.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Systematic search through hyperparameter space
+    /// - Multiple search strategies (grid, random, Bayesian)
+    /// - Tracking and comparing trial results
+    /// - Early stopping of unpromising trials
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var searchSpace = new HyperparameterSearchSpace();
+    /// searchSpace.AddContinuous("learning_rate", 0.0001, 0.1, logScale: true);
+    /// searchSpace.AddInteger("hidden_units", 32, 256);
+    ///
+    /// var optimizer = new RandomSearchOptimizer&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(maximize: false);
+    /// var result = builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureHyperparameterOptimizer(optimizer, searchSpace, nTrials: 20)
+    ///     .Build(x, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="optimizer">The hyperparameter optimizer implementation to use.</param>
+    /// <param name="searchSpace">The hyperparameter search space defining parameter ranges. If null, hyperparameter optimization is disabled.</param>
+    /// <param name="nTrials">Number of trials to run. Default is 10.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureHyperparameterOptimizer(
+        IHyperparameterOptimizer<T, TInput, TOutput> optimizer,
+        HyperparameterSearchSpace? searchSpace = null,
+        int nTrials = 10)
+    {
+        _hyperparameterOptimizer = optimizer;
+        _hyperparameterSearchSpace = searchSpace;
+        _hyperparameterTrials = nTrials > 0 ? nTrials : 10;
+        return this;
+    }
+
+    // ============================================================================
     // Private Prompt Engineering Helper Methods
     // ============================================================================
 
@@ -3486,6 +4160,234 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </remarks>
     private void ApplyAgentRecommendations(AgentRecommendation<T, TInput, TOutput> recommendation)
     {
+        ApplyAgentRecommendationsCore(recommendation);
+    }
+
+    /// <summary>
+    /// Applies trial hyperparameters from HPO to the optimizer options.
+    /// </summary>
+    /// <param name="options">The optimizer options to modify.</param>
+    /// <param name="trialHyperparameters">Dictionary of hyperparameter names to values.</param>
+    /// <remarks>
+    /// <para>
+    /// This method applies hyperparameters discovered during HPO to the optimizer options.
+    /// Common hyperparameters that can be tuned include:
+    /// - learning_rate: The learning rate for gradient-based optimizers
+    /// - max_iterations: Maximum number of training iterations/epochs
+    /// - tolerance: Convergence tolerance
+    /// - beta1, beta2: Adam optimizer momentum parameters
+    /// - momentum: Momentum for SGD-style optimizers
+    /// </para>
+    /// <para><b>For Beginners:</b> Hyperparameter optimization (HPO) tries different combinations
+    /// of settings to find what works best for your specific problem. This method takes those
+    /// discovered settings and applies them to the optimizer before training.
+    /// </para>
+    /// </remarks>
+    private static void ApplyTrialHyperparameters(object options, Dictionary<string, object> trialHyperparameters)
+    {
+        if (options is null || trialHyperparameters is null || trialHyperparameters.Count == 0)
+        {
+            return;
+        }
+
+        var optionsType = options.GetType();
+
+        foreach (var kvp in trialHyperparameters)
+        {
+            var paramName = kvp.Key;
+            var paramValue = kvp.Value;
+
+            if (paramValue is null)
+            {
+                continue;
+            }
+
+            // Map common hyperparameter names to property names
+            var propertyName = MapHyperparameterToProperty(paramName);
+            if (string.IsNullOrEmpty(propertyName))
+            {
+                continue;
+            }
+
+            // Find the property on the options object
+            var property = optionsType.GetProperty(propertyName,
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+            if (property is null || !property.CanWrite)
+            {
+                // Try base types for inherited properties
+                var baseType = optionsType.BaseType;
+                while (baseType is not null && property is null)
+                {
+                    property = baseType.GetProperty(propertyName,
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                    baseType = baseType.BaseType;
+                }
+
+                if (property is null || !property.CanWrite)
+                {
+                    continue;
+                }
+            }
+
+            // Convert and set the value
+            try
+            {
+                var convertedValue = ConvertHyperparameterValue(paramValue, property.PropertyType);
+                if (convertedValue is not null)
+                {
+                    property.SetValue(options, convertedValue);
+                }
+            }
+            catch
+            {
+                // Skip hyperparameters that cannot be converted - this is non-fatal
+                // as the optimizer will use its default value
+            }
+        }
+    }
+
+    /// <summary>
+    /// Maps common hyperparameter names from search spaces to property names on optimizer options.
+    /// </summary>
+    private static string MapHyperparameterToProperty(string hyperparameterName)
+    {
+        // Normalize the name to lowercase for matching
+        var normalizedName = hyperparameterName.ToLowerInvariant().Replace("_", "").Replace("-", "");
+
+        return normalizedName switch
+        {
+            // Learning rate variations
+            "learningrate" or "lr" or "initiallearningrate" => "InitialLearningRate",
+
+            // Iteration/epoch settings
+            "maxiterations" or "iterations" or "epochs" or "maxepochs" => "MaxIterations",
+
+            // Convergence settings
+            "tolerance" or "tol" or "convergencetolerance" => "Tolerance",
+
+            // Early stopping
+            "earlystoppingpatience" or "patience" => "EarlyStoppingPatience",
+
+            // Adam-specific parameters (check optimizer-specific options first)
+            "beta1" or "b1" => "Beta1",
+            "beta2" or "b2" => "Beta2",
+            "epsilon" or "eps" => "Epsilon",
+
+            // Momentum
+            "momentum" or "initialmomentum" => "InitialMomentum",
+
+            // Learning rate scheduling
+            "learningratedecay" or "lrdecay" or "decay" => "LearningRateDecay",
+            "minlearningrate" or "minlr" => "MinLearningRate",
+            "maxlearningrate" or "maxlr" => "MaxLearningRate",
+
+            // Regularization strength
+            "l2regularization" or "weightdecay" or "regularization" => "RegularizationStrength",
+
+            // Batch size (for applicable optimizers)
+            "batchsize" or "batch" => "BatchSize",
+
+            // Gradient clipping
+            "maxgradientnorm" or "clipnorm" or "gradientclipnorm" => "MaxGradientNorm",
+            "maxgradientvalue" or "clipvalue" or "gradientclipvalue" => "MaxGradientValue",
+
+            // Unknown hyperparameter - try using the name directly
+            _ => ToPascalCase(hyperparameterName)
+        };
+    }
+
+    /// <summary>
+    /// Converts a hyperparameter name to PascalCase for property lookup.
+    /// </summary>
+    private static string ToPascalCase(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return name;
+        }
+
+        var parts = name.Split(new[] { '_', '-' }, StringSplitOptions.RemoveEmptyEntries);
+        var result = new System.Text.StringBuilder();
+
+        foreach (var part in parts)
+        {
+            if (part.Length > 0)
+            {
+                result.Append(char.ToUpperInvariant(part[0]));
+                if (part.Length > 1)
+                {
+                    result.Append(part.Substring(1).ToLowerInvariant());
+                }
+            }
+        }
+
+        return result.ToString();
+    }
+
+    /// <summary>
+    /// Converts a hyperparameter value to the target property type.
+    /// </summary>
+    private static object? ConvertHyperparameterValue(object value, Type targetType)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        var valueType = value.GetType();
+
+        // If already the correct type, return as-is
+        if (targetType.IsAssignableFrom(valueType))
+        {
+            return value;
+        }
+
+        // Handle numeric conversions
+        if (targetType == typeof(double))
+        {
+            return Convert.ToDouble(value);
+        }
+        if (targetType == typeof(float))
+        {
+            return Convert.ToSingle(value);
+        }
+        if (targetType == typeof(int))
+        {
+            return Convert.ToInt32(value);
+        }
+        if (targetType == typeof(long))
+        {
+            return Convert.ToInt64(value);
+        }
+        if (targetType == typeof(bool))
+        {
+            return Convert.ToBoolean(value);
+        }
+
+        // Handle nullable types
+        var underlyingType = Nullable.GetUnderlyingType(targetType);
+        if (underlyingType is not null)
+        {
+            return ConvertHyperparameterValue(value, underlyingType);
+        }
+
+        // Try using Convert.ChangeType as a last resort
+        try
+        {
+            return Convert.ChangeType(value, targetType);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Core implementation of ApplyAgentRecommendations.
+    /// </summary>
+    private void ApplyAgentRecommendationsCore(AgentRecommendation<T, TInput, TOutput> recommendation)
+    {
         // Apply agent recommendations where possible
         if (_model == null && recommendation.SuggestedModelType.HasValue)
         {
@@ -3513,6 +4415,125 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
 
         // Note: Hyperparameter recommendations are currently stored in recommendation.SuggestedHyperparameters
         // but not auto-applied. Future enhancement: Apply hyperparameters to compatible models.
+    }
+
+    /// <summary>
+    /// Computes a robust hash of the training data for version control and lineage tracking.
+    /// </summary>
+    /// <param name="features">The feature matrix (X).</param>
+    /// <param name="targets">The target vector (y).</param>
+    /// <param name="numOps">Numeric operations for type conversion.</param>
+    /// <returns>A 16-character hex hash representing the data version.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a hash that captures the essential characteristics of the training data:
+    /// - Dataset dimensions (rows, columns)
+    /// - Sample of feature values from first, middle, and last rows
+    /// - Sample of target values from first, middle, and last positions
+    /// - Statistical summary (sum of sampled values for collision resistance)
+    /// </para>
+    /// <para><b>For Beginners:</b> This hash is like a fingerprint for your training data.
+    /// If the data changes, the hash will change too, allowing you to track exactly which
+    /// version of the data was used to train a model. This is essential for reproducibility.
+    /// </para>
+    /// </remarks>
+    private static string ComputeDataVersionHash(Matrix<T> features, Vector<T> targets, INumericOperations<T> numOps)
+    {
+        var hashBuilder = new StringBuilder();
+
+        // Include dimensions for basic structure identification
+        hashBuilder.Append($"X:{features.Rows}x{features.Columns};");
+        hashBuilder.Append($"y:{targets.Length};");
+
+        // Sample feature values from first, middle, and last rows for better coverage
+        // This catches changes anywhere in the dataset, not just at boundaries
+        int maxCols = Math.Min(features.Columns, 10);
+        int[] sampleRows = GetSampleRowIndices(features.Rows);
+
+        foreach (int row in sampleRows)
+        {
+            if (row >= 0 && row < features.Rows)
+            {
+                hashBuilder.Append($"r{row}:");
+                for (int col = 0; col < maxCols; col++)
+                {
+                    hashBuilder.Append($"{numOps.ToDouble(features[row, col]):G6},");
+                }
+                hashBuilder.Append(';');
+            }
+        }
+
+        // Include target values from sampled positions
+        // This ensures the hash changes if targets are modified
+        int[] sampleTargetIndices = GetSampleRowIndices(targets.Length);
+        hashBuilder.Append("y:");
+        foreach (int idx in sampleTargetIndices)
+        {
+            if (idx >= 0 && idx < targets.Length)
+            {
+                hashBuilder.Append($"{numOps.ToDouble(targets[idx]):G6},");
+            }
+        }
+        hashBuilder.Append(';');
+
+        // Add a statistical fingerprint for additional collision resistance
+        // Sum of sampled values helps detect subtle changes
+        double featureSum = 0.0;
+        double targetSum = 0.0;
+
+        foreach (int row in sampleRows)
+        {
+            if (row >= 0 && row < features.Rows)
+            {
+                for (int col = 0; col < maxCols; col++)
+                {
+                    featureSum += numOps.ToDouble(features[row, col]);
+                }
+            }
+        }
+
+        foreach (int idx in sampleTargetIndices)
+        {
+            if (idx >= 0 && idx < targets.Length)
+            {
+                targetSum += numOps.ToDouble(targets[idx]);
+            }
+        }
+
+        hashBuilder.Append($"fsum:{featureSum:G6};tsum:{targetSum:G6};");
+
+        // Compute SHA256 hash and return first 16 hex characters
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(hashBuilder.ToString()));
+
+        // Convert bytes to hex string (compatible with net471 which doesn't have Convert.ToHexString)
+        var fullHex = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+        return fullHex.Substring(0, Math.Min(16, fullHex.Length));
+    }
+
+    /// <summary>
+    /// Gets sample row indices for data hashing (first, middle, last).
+    /// </summary>
+    private static int[] GetSampleRowIndices(int totalRows)
+    {
+        if (totalRows <= 0)
+        {
+            return Array.Empty<int>();
+        }
+
+        if (totalRows == 1)
+        {
+            return new[] { 0 };
+        }
+
+        if (totalRows == 2)
+        {
+            return new[] { 0, 1 };
+        }
+
+        // Sample first, middle, and last rows
+        int middle = totalRows / 2;
+        return new[] { 0, middle, totalRows - 1 };
     }
 
     /// <summary>

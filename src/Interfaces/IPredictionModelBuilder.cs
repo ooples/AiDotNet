@@ -1434,4 +1434,147 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <exception cref="InvalidOperationException">Thrown if no valid training path was configured.</exception>
     Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync();
 
+    // ============================================================================
+    // Training Infrastructure Configuration Methods
+    // ============================================================================
+
+    /// <summary>
+    /// Configures experiment tracking for organizing and logging ML experiments.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Experiment tracking is like a lab notebook for your machine learning work.
+    /// It helps you keep track of what you've tried, what worked, and what didn't.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Creating experiments to group related training runs
+    /// - Logging hyperparameters, metrics, and artifacts
+    /// - Comparing different runs to find the best approach
+    /// - Reproducing previous experiments
+    /// </para>
+    /// </remarks>
+    /// <param name="tracker">The experiment tracker implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureExperimentTracker(IExperimentTracker<T> tracker);
+
+    /// <summary>
+    /// Configures checkpoint management for saving and restoring training state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Checkpoints are like save points in a video game.
+    /// They let you pause training and resume later, or go back to an earlier state if something goes wrong.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Saving model state periodically during training
+    /// - Restoring from the latest or best checkpoint
+    /// - Automatic cleanup of old checkpoints
+    /// - Tracking metrics at each checkpoint
+    /// </para>
+    /// </remarks>
+    /// <param name="manager">The checkpoint manager implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureCheckpointManager(ICheckpointManager<T, TInput, TOutput> manager);
+
+    /// <summary>
+    /// Configures training monitoring for real-time visibility into training progress.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A training monitor is like a dashboard for your model training.
+    /// It shows you how training is progressing, what resources are being used, and if there are any problems.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Real-time metric tracking (loss, accuracy, etc.)
+    /// - Resource usage monitoring (CPU, GPU, memory)
+    /// - Progress updates and ETA estimation
+    /// - Alert thresholds for detecting problems
+    /// </para>
+    /// </remarks>
+    /// <param name="monitor">The training monitor implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingMonitor(ITrainingMonitor<T> monitor);
+
+    /// <summary>
+    /// Configures model registry for centralized model storage and versioning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A model registry is like a library for your trained models.
+    /// It keeps track of all your models, their versions, and which ones are in production.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Storing and versioning trained models
+    /// - Managing model lifecycle (development → staging → production)
+    /// - Tracking model metadata and lineage
+    /// - Comparing different model versions
+    /// </para>
+    /// </remarks>
+    /// <param name="registry">The model registry implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelRegistry(IModelRegistry<T, TInput, TOutput> registry);
+
+    /// <summary>
+    /// Configures data version control for tracking dataset changes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Data version control is like Git, but for your datasets.
+    /// It tracks what data was used for training each model and lets you reproduce experiments.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Creating and tracking dataset versions
+    /// - Computing dataset hashes for integrity verification
+    /// - Tracking data lineage and transformations
+    /// - Linking datasets to training runs
+    /// </para>
+    /// </remarks>
+    /// <param name="dataVersionControl">The data version control implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataVersionControl(IDataVersionControl<T> dataVersionControl);
+
+    /// <summary>
+    /// Configures hyperparameter optimization for automatic tuning of model settings.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Hyperparameter optimization automatically finds the best settings
+    /// for your model (like learning rate, number of layers, etc.) instead of you having to guess.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Systematic search through hyperparameter space
+    /// - Multiple search strategies (grid, random, Bayesian)
+    /// - Tracking and comparing trial results
+    /// - Early stopping of unpromising trials
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var searchSpace = new HyperparameterSearchSpace();
+    /// searchSpace.AddContinuous("learning_rate", 0.0001, 0.1, logScale: true);
+    /// searchSpace.AddInteger("hidden_units", 32, 256);
+    ///
+    /// var optimizer = new RandomSearchOptimizer&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(maximize: false);
+    /// var result = builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureHyperparameterOptimizer(optimizer, searchSpace, nTrials: 20)
+    ///     .Build(x, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="optimizer">The hyperparameter optimizer implementation to use.</param>
+    /// <param name="searchSpace">The hyperparameter search space defining parameter ranges. If null, hyperparameter optimization is disabled.</param>
+    /// <param name="nTrials">Number of trials to run. Default is 10.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureHyperparameterOptimizer(
+        IHyperparameterOptimizer<T, TInput, TOutput> optimizer,
+        HyperparameterSearchSpace? searchSpace = null,
+        int nTrials = 10);
+
 }

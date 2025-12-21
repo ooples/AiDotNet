@@ -34,6 +34,21 @@ public class ModelInfo
     /// Gets or sets the file path from which the model was loaded (if applicable).
     /// </summary>
     public string? SourcePath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the model version from the registry (if loaded from a registry).
+    /// </summary>
+    public int? RegistryVersion { get; set; }
+
+    /// <summary>
+    /// Gets or sets the registry model stage (if loaded from a registry).
+    /// </summary>
+    public string? RegistryStage { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this model was loaded from a model registry.
+    /// </summary>
+    public bool IsFromRegistry { get; set; }
 }
 
 /// <summary>
