@@ -92,33 +92,6 @@ public abstract class TensorBase<T>
     }
 
     /// <summary>
-    /// Gets or sets the value at the specified flat index (row-major order).
-    /// </summary>
-    /// <param name="flatIndex">The flat index of the element.</param>
-    /// <returns>The value at the specified index.</returns>
-    public virtual T this[int flatIndex]
-    {
-        get
-        {
-            if (flatIndex < 0 || flatIndex >= _data.Length)
-            {
-                throw new ArgumentOutOfRangeException(nameof(flatIndex), "Flat index is out of range.");
-            }
-
-            return _data[flatIndex];
-        }
-        set
-        {
-            if (flatIndex < 0 || flatIndex >= _data.Length)
-            {
-                throw new ArgumentOutOfRangeException(nameof(flatIndex), "Flat index is out of range.");
-            }
-
-            _data[flatIndex] = value;
-        }
-    }
-
-    /// <summary>
     /// Gets or sets the value at the specified indices.
     /// </summary>
     /// <param name="indices">The indices of the element.</param>
