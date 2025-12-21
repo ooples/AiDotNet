@@ -127,8 +127,15 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         var numOps = MathHelper.GetNumericOperations<T>();
 
         stats.UncertaintyStats = new UncertaintyStats<T>();
-        stats.UncertaintyStats.Metrics["predictive_entropy"] = MeanOf(uq.Metrics["predictive_entropy"], numOps);
-        stats.UncertaintyStats.Metrics["mutual_information"] = MeanOf(uq.Metrics["mutual_information"], numOps);
+        if (uq.Metrics.TryGetValue("predictive_entropy", out var predictiveEntropy))
+        {
+            stats.UncertaintyStats.Metrics["predictive_entropy"] = MeanOf(predictiveEntropy, numOps);
+        }
+
+        if (uq.Metrics.TryGetValue("mutual_information", out var mutualInformation))
+        {
+            stats.UncertaintyStats.Metrics["mutual_information"] = MeanOf(mutualInformation, numOps);
+        }
 
         if (predictionModelResult.HasExpectedCalibrationError)
         {
