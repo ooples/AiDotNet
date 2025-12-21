@@ -63,7 +63,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
         }
 
         [Fact]
-        public void HardwareCostModel_EstimateOperationCost_UnknownOperation_ReturnsDefaultCost()
+        public void HardwareCostModel_EstimateOperationCost_UnknownOperation_ReturnsConservativeEstimate()
         {
             // Arrange
             var model = new HardwareCostModel<double>();
@@ -73,12 +73,18 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 
             // Act
             var cost = model.EstimateOperationCost("unknown_operation", inputChannels, outputChannels, spatialSize);
+            var conv3x3Cost = model.EstimateOperationCost("conv3x3", inputChannels, outputChannels, spatialSize);
 
-            // Assert
+            // Assert - unknown operations use conservative conv3x3 estimate for safety
             Assert.NotNull(cost);
-            Assert.Equal(1.0, cost.Latency);
-            Assert.Equal(1.0, cost.Energy);
-            Assert.Equal(1.0, cost.Memory);
+            Assert.True(cost.Latency > 0.0, "Unknown operation should have positive latency");
+            Assert.True(cost.Energy > 0.0, "Unknown operation should have positive energy");
+            Assert.True(cost.Memory > 0.0, "Unknown operation should have positive memory");
+
+            // The conservative estimate should match conv3x3 (used as fallback for unknown ops)
+            Assert.Equal(conv3x3Cost.Latency, cost.Latency);
+            Assert.Equal(conv3x3Cost.Energy, cost.Energy);
+            Assert.Equal(conv3x3Cost.Memory, cost.Memory);
         }
 
         [Fact]

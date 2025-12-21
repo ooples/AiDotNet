@@ -115,6 +115,9 @@ namespace AiDotNet.AutoML.NAS
         public SubNetworkConfig SpecializeForHardware(HardwareConstraints<T> constraints,
             int inputChannels, int spatialSize, int populationSize = 100, int generations = 50)
         {
+            // Handle edge case: minimal population size
+            populationSize = Math.Max(2, populationSize);
+
             // Initialize population with random configurations
             var population = new List<(SubNetworkConfig config, T fitness)>();
 
@@ -131,14 +134,17 @@ namespace AiDotNet.AutoML.NAS
                 // Sort by fitness (higher is better)
                 population.Sort((a, b) => CompareDescending(a.fitness, b.fitness));
 
-                // Keep top 50%
-                population = population.Take(populationSize / 2).ToList();
+                // Keep top 50%, but always at least 1
+                int eliteCount = Math.Max(1, populationSize / 2);
+                population = population.Take(eliteCount).ToList();
 
                 // Generate offspring through crossover and mutation
                 while (population.Count < populationSize)
                 {
-                    int parent1Idx = _random.Next(population.Count / 2);
-                    int parent2Idx = _random.Next(population.Count / 2);
+                    // Ensure valid parent selection range (at least 1)
+                    int parentPoolSize = Math.Max(1, population.Count);
+                    int parent1Idx = _random.Next(parentPoolSize);
+                    int parent2Idx = _random.Next(parentPoolSize);
 
                     var offspring = Crossover(population[parent1Idx].config, population[parent2Idx].config);
                     offspring = Mutate(offspring);
