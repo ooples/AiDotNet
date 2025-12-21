@@ -27,6 +27,9 @@ global using AiDotNet.Regularization;
 global using AiDotNet.RetrievalAugmentedGeneration.Graph;
 global using AiDotNet.Tokenization.Configuration;
 global using AiDotNet.Tokenization.HuggingFace;
+global using AiDotNet.ContinualLearning.Interfaces;
+global using AiDotNet.ContinualLearning.Config;
+global using AiDotNet.ActiveLearning.Interfaces;
 global using AiDotNet.Tokenization.Interfaces;
 global using AiDotNet.Tools;
 
