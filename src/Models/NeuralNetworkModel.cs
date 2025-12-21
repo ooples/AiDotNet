@@ -638,9 +638,19 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
             
         // Read version number
         int version = reader.ReadInt32();
+        if (version != 1)
+        {
+            throw new InvalidOperationException($"Unsupported serialized model version: {version}. Expected version 1.");
+        }
             
         // Read architecture type
         string architectureType = reader.ReadString();
+        string expectedArchitectureType = Architecture.GetType().FullName ?? "Unknown";
+        if (!string.Equals(architectureType, expectedArchitectureType, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Serialized network architecture type doesn't match this model. Expected '{expectedArchitectureType}', got '{architectureType}'.");
+        }
             
         // Read architecture properties
         InputType inputType = (InputType)reader.ReadInt32();
@@ -655,8 +665,12 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         // Check if the architecture matches
         if (Architecture.InputType != inputType ||
             Architecture.TaskType != taskType ||
+            Architecture.Complexity != complexity ||
             Architecture.InputSize != inputSize ||
-            Architecture.OutputSize != outputSize)
+            Architecture.OutputSize != outputSize ||
+            Architecture.InputHeight != inputHeight ||
+            Architecture.InputWidth != inputWidth ||
+            Architecture.InputDepth != inputDepth)
         {
             throw new InvalidOperationException(
                 "Serialized network architecture doesn't match this model's architecture.");
