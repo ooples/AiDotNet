@@ -534,7 +534,7 @@ public class NeuralNetworkArchitecture<T>
     {
         if (Layers == null || Layers.Count <= 1)
         {
-            return [];
+            return Array.Empty<int>();
         }
 
         var hiddenLayerSizes = new List<int>();

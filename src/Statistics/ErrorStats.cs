@@ -211,7 +211,7 @@ public class ErrorStats<T>
     /// This lets you examine individual errors, create visualizations like histograms,
     /// or perform additional analyses beyond summary statistics.
     /// </remarks>
-    public List<T> ErrorList { get; private set; } = [];
+    public List<T> ErrorList { get; private set; } = new List<T>();
 
     /// <summary>
     /// Area Under the Precision-Recall Curve - Measures classification accuracy focusing on positive cases.
@@ -421,7 +421,7 @@ public class ErrorStats<T>
         Recall = _numOps.Zero;
         F1Score = _numOps.Zero;
 
-        ErrorList = [];
+        ErrorList = new List<T>();
 
         // Only calculate error stats if we have actual data
         if (inputs.Actual.Length > 0 && inputs.Predicted.Length > 0)
@@ -509,7 +509,7 @@ public class ErrorStats<T>
         (Precision, Recall, F1Score) = StatisticsHelper<T>.CalculatePrecisionRecallF1(actual, predicted, predictionType);
 
         // Populate error list
-        ErrorList = [.. StatisticsHelper<T>.CalculateResiduals(actual, predicted)];
+        ErrorList = new List<T>(StatisticsHelper<T>.CalculateResiduals(actual, predicted));
     }
 
     /// <summary>

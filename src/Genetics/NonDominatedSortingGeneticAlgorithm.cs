@@ -4,8 +4,8 @@ public class NSGAII<T, TInput, TOutput> :
     StandardGeneticAlgorithm<T, TInput, TOutput>
 {
     // Storage for non-dominated ranking and crowding distance
-    private readonly Dictionary<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>, int> _ranks = [];
-    private readonly Dictionary<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>, double> _crowdingDistances = [];
+    private readonly Dictionary<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>, int> _ranks = new Dictionary<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>, int>();
+    private readonly Dictionary<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>, double> _crowdingDistances = new Dictionary<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>, double>();
     private readonly List<IFitnessCalculator<T, TInput, TOutput>> _objectives;
 
     public NSGAII(

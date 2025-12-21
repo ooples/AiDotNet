@@ -15,7 +15,7 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 public class FusedAddLayerNormOp : IROp
 {
     /// <summary>Gets or sets the normalized shape.</summary>
-    public int[] NormalizedShape { get; set; } = [];
+    public int[] NormalizedShape { get; set; } = Array.Empty<int>();
 
     /// <summary>Gets or sets epsilon for numerical stability.</summary>
     public double Epsilon { get; set; } = 1e-5;

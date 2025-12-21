@@ -290,7 +290,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     public override ModelMetadata<T> GetModelMetadata()
     {
         // Count parameters by layer type
-        Dictionary<string, int> layerCounts = [];
+        Dictionary<string, int> layerCounts = new Dictionary<string, int>();
 
         foreach (var layer in Layers)
         {

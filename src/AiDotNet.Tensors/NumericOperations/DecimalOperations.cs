@@ -371,6 +371,8 @@ public class DecimalOperations : INumericOperations<decimal>
     /// </remarks>
     public bool Equals(decimal a, decimal b) => a == b;
 
+    public int Compare(decimal a, decimal b) => a.CompareTo(b);
+
     /// <summary>
     /// Raises a decimal value to the specified power.
     /// </summary>

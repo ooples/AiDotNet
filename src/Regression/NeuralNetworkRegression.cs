@@ -88,8 +88,8 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             Beta2 = 0.999,
             Epsilon = 1e-8
         });
-        _weights = [];
-        _biases = [];
+        _weights = new List<Matrix<T>>();
+        _biases = new List<Vector<T>>();
 
         InitializeNetwork();
     }
@@ -299,8 +299,8 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private T TrainOnBatch(Matrix<T> X, Vector<T> y)
     {
-        List<Matrix<T>> weightGradients = [];
-        List<Vector<T>> biasGradients = [];
+        List<Matrix<T>> weightGradients = new List<Matrix<T>>();
+        List<Vector<T>> biasGradients = new List<Vector<T>>();
 
         T batchLoss = NumOps.Zero;
 

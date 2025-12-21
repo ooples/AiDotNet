@@ -67,7 +67,7 @@ public class EvolutionStats<T, TInput, TOutput>
         WorstFitness = fitnessCalculator.IsHigherScoreBetter ? numOps.MaxValue : numOps.MinValue;
         AverageFitness = numOps.Zero;
         BestIndividual = new();
-        FitnessHistory = [];
+        FitnessHistory = new List<T>();
         Diversity = numOps.Zero;
         FitnessStandardDeviation = numOps.Zero;
     }

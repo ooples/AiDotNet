@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
 {
-    private readonly List<T> _generatorLosses = [];
+    private readonly List<T> _generatorLosses = new List<T>();
 
     /// <summary>
     /// The number of condition classes/categories.

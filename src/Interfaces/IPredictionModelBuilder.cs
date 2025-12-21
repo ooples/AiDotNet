@@ -1398,6 +1398,62 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureFewShotExampleSelector(IFewShotExampleSelector<T>? selector = null);
 
     /// <summary>
+    /// Configures curriculum learning for training models with progressively harder samples.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Curriculum learning trains models by presenting samples in order of difficulty, starting with
+    /// easy examples and gradually introducing harder ones. This approach often leads to faster
+    /// convergence and better final performance compared to random training order.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Think of this like how humans learn - we start with basic concepts
+    /// before tackling advanced material. Your model will:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>First learn from easy samples to build a foundation</description></item>
+    /// <item><description>Gradually be exposed to harder samples as it improves</description></item>
+    /// <item><description>Often converge faster and achieve better final accuracy</description></item>
+    /// </list>
+    /// <para>
+    /// <b>Example Usage:</b>
+    /// </para>
+    /// <code>
+    /// // Basic usage with default settings (Linear schedule, 5 phases)
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureCurriculumLearning()
+    ///     .Build(features, labels);
+    ///
+    /// // Self-paced learning where model determines its own pace
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureCurriculumLearning(new CurriculumLearningOptions&lt;double, TInput, TOutput&gt;
+    ///     {
+    ///         ScheduleType = CurriculumScheduleType.SelfPaced,
+    ///         NumPhases = 10,
+    ///         SelfPaced = new SelfPacedOptions { InitialLambda = 0.1 }
+    ///     })
+    ///     .Build(features, labels);
+    ///
+    /// // Competence-based learning that advances when mastery is achieved
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureCurriculumLearning(new CurriculumLearningOptions&lt;double, TInput, TOutput&gt;
+    ///     {
+    ///         ScheduleType = CurriculumScheduleType.CompetenceBased,
+    ///         CompetenceBased = new CompetenceBasedOptions { CompetenceThreshold = 0.85 }
+    ///     })
+    ///     .Build(features, labels);
+    /// </code>
+    /// </remarks>
+    /// <param name="options">Curriculum learning options (schedule type, phases, difficulty estimation).
+    /// If null, sensible defaults are used (Linear schedule, 5 phases, loss-based difficulty).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureCurriculumLearning(
+        CurriculumLearningOptions<T, TInput, TOutput>? options = null);
+
+    /// <summary>
     /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>

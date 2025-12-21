@@ -60,8 +60,8 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastHiddenState;
     private Tensor<T>? _lastCellState;
-    private Dictionary<string, object> _gradients = [];
-    private readonly Dictionary<string, Tensor<T>> _momentums = [];
+    private Dictionary<string, object> _gradients = new Dictionary<string, object>();
+    private readonly Dictionary<string, Tensor<T>> _momentums = new Dictionary<string, Tensor<T>>();
     private const double MomentumFactor = 0.9;
 
     private readonly SigmoidActivation<T> _sigmoidActivation = new();
@@ -274,7 +274,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     {
         int outputHeight = (inputShape[1] - kernelSize + 2 * padding) / strides + 1;
         int outputWidth = (inputShape[2] - kernelSize + 2 * padding) / strides + 1;
-        return [inputShape[0], outputHeight, outputWidth, filters];
+        return new int[] { inputShape[0], outputHeight, outputWidth, filters };
     }
 
     /// <summary>

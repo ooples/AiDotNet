@@ -131,7 +131,7 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
     : base(options, regularization)
     {
         _options = options ?? new SplineRegressionOptions();
-        _knots = [];
+        _knots = new List<Vector<T>>();
         _coefficients = new Vector<T>(0);
     }
 
@@ -165,7 +165,7 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // Generate knots for each feature
-        _knots = [];
+        _knots = new List<Vector<T>>();
         for (int i = 0; i < x.Columns; i++)
         {
             _knots.Add(GenerateKnots(x.GetColumn(i)));

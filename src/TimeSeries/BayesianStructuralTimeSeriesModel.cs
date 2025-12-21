@@ -160,7 +160,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         // Initialize model components
         _level = NumOps.FromDouble(_bayesianOptions.InitialLevelValue);
         _trend = _bayesianOptions.IncludeTrend ? NumOps.FromDouble(_bayesianOptions.InitialTrendValue) : NumOps.Zero;
-        _seasonalComponents = [];
+        _seasonalComponents = new List<Vector<T>>();
         foreach (int period in _bayesianOptions.SeasonalPeriods)
         {
             _seasonalComponents.Add(new Vector<T>(period));
@@ -1105,7 +1105,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     public override Dictionary<string, T> EvaluateModel(Matrix<T> xTest, Vector<T> yTest)
     {
         Vector<T> predictions = Predict(xTest);
-        Dictionary<string, T> metrics = [];
+        Dictionary<string, T> metrics = new Dictionary<string, T>();
 
         // Calculate Mean Squared Error (MSE)
         T mse = StatisticsHelper<T>.CalculateMeanSquaredError(yTest, predictions);

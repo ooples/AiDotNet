@@ -72,8 +72,8 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
 
     #region Training History
 
-    private readonly List<T> _generatorLosses = [];
-    private readonly List<T> _discriminatorLosses = [];
+    private readonly List<T> _generatorLosses = new List<T>();
+    private readonly List<T> _discriminatorLosses = new List<T>();
     private const int MaxLossHistorySize = 10000;
 
     #endregion

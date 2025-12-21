@@ -46,7 +46,7 @@ public abstract class ContextCompressorBase<T> : IContextCompressor<T>
 
         if (documents.Count == 0)
         {
-            return [];
+            return new List<Document<T>>();
         }
 
         return CompressCore(documents, query, options);

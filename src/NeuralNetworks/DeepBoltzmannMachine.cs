@@ -242,9 +242,9 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         _batchSize = batchSize;
         _cdSteps = cdSteps;
         _activationFunction = activationFunction ?? new SigmoidActivation<T>();
-        _layerBiases = [];
-        _layerWeights = [];
-        _layerSizes = [];
+        _layerBiases = new List<Tensor<T>>();
+        _layerWeights = new List<Tensor<T>>();
+        _layerSizes = new List<int>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();
@@ -281,9 +281,9 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         _batchSize = batchSize;
         _cdSteps = cdSteps;
         _vectorActivationFunction = vectorActivationFunction ?? new SigmoidActivation<T>();
-        _layerBiases = [];
-        _layerWeights = [];
-        _layerSizes = [];
+        _layerBiases = new List<Tensor<T>>();
+        _layerWeights = new List<Tensor<T>>();
+        _layerSizes = new List<int>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();
@@ -842,14 +842,14 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         }
 
         // Read layer weights
-        _layerWeights = [];
+        _layerWeights = new List<Tensor<T>>();
         for (int i = 0; i < layerCount - 1; i++)
         {
             _layerWeights.Add(SerializationHelper<T>.DeserializeTensor(reader));
         }
 
         // Read layer biases
-        _layerBiases = [];
+        _layerBiases = new List<Tensor<T>>();
         for (int i = 0; i < layerCount; i++)
         {
             _layerBiases.Add(SerializationHelper<T>.DeserializeTensor(reader));

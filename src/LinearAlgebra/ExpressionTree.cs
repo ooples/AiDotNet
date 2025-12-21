@@ -1277,7 +1277,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     {
         get
         {
-            List<T> coefficients = [];
+            List<T> coefficients = new List<T>();
 
             void CollectCoefficients(ExpressionTree<T, TInput, TOutput> node)
             {

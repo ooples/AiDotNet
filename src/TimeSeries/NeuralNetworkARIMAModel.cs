@@ -316,6 +316,32 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         Random rand = new();
         for (int i = 0; i < p; i++) _arParameters[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
         for (int i = 0; i < q; i++) _maParameters[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
+
+        SyncModelParametersFromState();
+    }
+
+    private void SyncModelParametersFromState()
+    {
+        var nnParameters = _neuralNetwork.GetParameters();
+        var combined = new Vector<T>(_arParameters.Length + _maParameters.Length + nnParameters.Length);
+
+        int index = 0;
+        for (int i = 0; i < _arParameters.Length; i++)
+        {
+            combined[index++] = _arParameters[i];
+        }
+
+        for (int i = 0; i < _maParameters.Length; i++)
+        {
+            combined[index++] = _maParameters[i];
+        }
+
+        for (int i = 0; i < nnParameters.Length; i++)
+        {
+            combined[index++] = nnParameters[i];
+        }
+
+        base.ApplyParameters(combined);
     }
 
     /// <summary>
@@ -373,6 +399,11 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void UpdateModelParameters(Vector<T> optimizedParameters)
     {
+        if (optimizedParameters.Length == 0)
+        {
+            return;
+        }
+
         int paramIndex = 0;
 
         // Update AR parameters
@@ -392,6 +423,8 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
 
         // Update neural network parameters
         _neuralNetwork.UpdateParameters(optimizedParameters.Slice(paramIndex, nnParamsLength));
+
+        SyncModelParametersFromState();
     }
 
     /// <summary>
@@ -707,8 +740,69 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         _y = y;
 
         InitializeParameters();
-        OptimizeParameters(x, _y);
+
+        if (_nnarimaOptions.OptimizeParameters)
+        {
+            try
+            {
+                OptimizeParameters(x, _y);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Parameter optimization failed: {ex.Message}");
+            }
+        }
+
         ComputeResiduals(x, _y);
+    }
+
+    protected override void ApplyParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
+        }
+
+        int p = _nnarimaOptions.AROrder;
+        int q = _nnarimaOptions.MAOrder;
+        int nnParamCount = _neuralNetwork.ParameterCount;
+        int expectedLength = p + q + nnParamCount;
+
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}.", nameof(parameters));
+        }
+
+        if (_arParameters.Length != p)
+        {
+            _arParameters = new Vector<T>(p);
+        }
+
+        if (_maParameters.Length != q)
+        {
+            _maParameters = new Vector<T>(q);
+        }
+
+        int paramIndex = 0;
+
+        for (int i = 0; i < p; i++)
+        {
+            _arParameters[i] = parameters[paramIndex++];
+        }
+
+        for (int i = 0; i < q; i++)
+        {
+            _maParameters[i] = parameters[paramIndex++];
+        }
+
+        _neuralNetwork.UpdateParameters(parameters.Slice(paramIndex, nnParamCount));
+
+        base.ApplyParameters(parameters);
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        ApplyParameters(parameters);
     }
 
     /// <summary>
