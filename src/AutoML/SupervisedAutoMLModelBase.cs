@@ -1,9 +1,11 @@
 using AiDotNet.Enums;
 using AiDotNet.Configuration;
+using AiDotNet.CrossValidators;
 using AiDotNet.Evaluation;
 using AiDotNet.Exceptions;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.AutoML.Policies;
 
 namespace AiDotNet.AutoML;
@@ -60,6 +62,20 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
     public AutoMLEnsembleOptions EnsembleOptions { get; set; } = new();
 
     /// <summary>
+    /// Gets or sets cross-validation options for trial evaluation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When set, each trial is evaluated using k-fold cross-validation instead of a single
+    /// train/validation split. This provides more robust performance estimates but increases
+    /// computation time by a factor of k (the number of folds).
+    /// </para>
+    /// <para><b>For Beginners:</b> Cross-validation trains the model k times, each on a different
+    /// portion of the data. The final score is the average, giving a more reliable estimate.</para>
+    /// </remarks>
+    public CrossValidationOptions? CrossValidationOptions { get; set; }
+
+    /// <summary>
     /// Gets or sets the compute budget preset used to choose sensible built-in defaults.
     /// </summary>
     /// <remarks>
@@ -75,6 +91,13 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
     /// <summary>
     /// Runs a single trial (create, train, evaluate, record history).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// If <see cref="CrossValidationOptions"/> is set, the trial is evaluated using k-fold
+    /// cross-validation for more robust performance estimates. Otherwise, a single train/validation
+    /// split is used.
+    /// </para>
+    /// </remarks>
     protected async Task<double> ExecuteTrialAsync(
         ModelType modelType,
         Dictionary<string, object> trialParameters,
@@ -90,13 +113,30 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var model = await CreateModelAsync(modelType, trialParameters);
+            double score;
+            IFullModel<T, TInput, TOutput> model;
 
-            cancellationToken.ThrowIfCancellationRequested();
-            model.Train(trainInputs, trainTargets);
+            // Use cross-validation if enabled
+            if (CrossValidationOptions != null)
+            {
+                (model, score) = await ExecuteTrialWithCrossValidationAsync(
+                    modelType,
+                    trialParameters,
+                    trainInputs,
+                    trainTargets,
+                    cancellationToken);
+            }
+            else
+            {
+                // Standard single train/validation split
+                model = await CreateModelAsync(modelType, trialParameters);
 
-            cancellationToken.ThrowIfCancellationRequested();
-            var score = await EvaluateModelAsync(model, validationInputs, validationTargets);
+                cancellationToken.ThrowIfCancellationRequested();
+                model.Train(trainInputs, trainTargets);
+
+                cancellationToken.ThrowIfCancellationRequested();
+                score = await EvaluateModelAsync(model, validationInputs, validationTargets);
+            }
 
             var duration = DateTime.UtcNow - trialStart;
             var previousBest = BestScore;
@@ -146,6 +186,181 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
             await ReportTrialFailureAsync(trialParameters, ex, duration);
             return _maximize ? double.NegativeInfinity : double.PositiveInfinity;
         }
+    }
+
+    /// <summary>
+    /// Executes a trial using k-fold cross-validation for more robust evaluation.
+    /// </summary>
+    /// <returns>A tuple containing the trained model and the average cross-validation score.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates k folds of the training data, trains the model on k-1 folds,
+    /// and evaluates on the remaining fold. The final score is the average across all folds.
+    /// </para>
+    /// <para>
+    /// After cross-validation, the model is retrained on the full training set so it can
+    /// be used for final predictions.
+    /// </para>
+    /// </remarks>
+    private async Task<(IFullModel<T, TInput, TOutput> Model, double Score)> ExecuteTrialWithCrossValidationAsync(
+        ModelType modelType,
+        Dictionary<string, object> trialParameters,
+        TInput trainInputs,
+        TOutput trainTargets,
+        CancellationToken cancellationToken)
+    {
+        var cvOptions = CrossValidationOptions!;
+        int numFolds = cvOptions.NumberOfFolds;
+        var foldScores = new List<double>();
+
+        // Get row count based on input type
+        int totalRows = GetRowCount(trainInputs);
+
+        // Create fold indices
+        var allIndices = Enumerable.Range(0, totalRows).ToArray();
+
+        if (cvOptions.ShuffleData)
+        {
+            var rng = cvOptions.RandomSeed.HasValue ? new Random(cvOptions.RandomSeed.Value) : Random;
+            for (int i = allIndices.Length - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (allIndices[i], allIndices[j]) = (allIndices[j], allIndices[i]);
+            }
+        }
+
+        // Calculate fold sizes
+        int baseFoldSize = totalRows / numFolds;
+        int remainder = totalRows % numFolds;
+
+        int startIdx = 0;
+        var folds = new List<int[]>();
+        for (int fold = 0; fold < numFolds; fold++)
+        {
+            int foldSize = baseFoldSize + (fold < remainder ? 1 : 0);
+            folds.Add(allIndices.Skip(startIdx).Take(foldSize).ToArray());
+            startIdx += foldSize;
+        }
+
+        // Execute cross-validation
+        for (int foldIdx = 0; foldIdx < numFolds; foldIdx++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Get validation indices for this fold
+            var valIndices = folds[foldIdx];
+
+            // Get training indices (all other folds)
+            var trainIndices = folds
+                .Where((_, idx) => idx != foldIdx)
+                .SelectMany(f => f)
+                .ToArray();
+
+            // Create subset data for this fold
+            var (foldTrainInputs, foldTrainTargets) = CreateSubset(trainInputs, trainTargets, trainIndices);
+            var (foldValInputs, foldValTargets) = CreateSubset(trainInputs, trainTargets, valIndices);
+
+            // Create and train model for this fold
+            var foldModel = await CreateModelAsync(modelType, trialParameters);
+            foldModel.Train(foldTrainInputs, foldTrainTargets);
+
+            // Evaluate on validation fold
+            var foldScore = await EvaluateModelAsync(foldModel, foldValInputs, foldValTargets);
+            foldScores.Add(foldScore);
+        }
+
+        // Calculate average score across folds
+        double avgScore = foldScores.Average();
+
+        // Retrain final model on full training data
+        var finalModel = await CreateModelAsync(modelType, trialParameters);
+        finalModel.Train(trainInputs, trainTargets);
+
+        return (finalModel, avgScore);
+    }
+
+    /// <summary>
+    /// Gets the row count from the input data.
+    /// </summary>
+    private static int GetRowCount(TInput inputs)
+    {
+        return inputs switch
+        {
+            Matrix<T> matrix => matrix.Rows,
+            Tensor<T> tensor => tensor.Shape[0],
+            double[][] jagged => jagged.Length,
+            float[][] floatJagged => floatJagged.Length,
+            _ => throw new NotSupportedException($"Cannot determine row count for input type {typeof(TInput).Name}")
+        };
+    }
+
+    /// <summary>
+    /// Creates a subset of the input/output data based on the given row indices.
+    /// </summary>
+    private static (TInput Inputs, TOutput Targets) CreateSubset(TInput inputs, TOutput targets, int[] indices)
+    {
+        TInput subInputs;
+        TOutput subTargets;
+
+        // Handle inputs
+        if (inputs is Matrix<T> inputMatrix)
+        {
+            var rows = new List<Vector<T>>();
+            foreach (int idx in indices)
+            {
+                rows.Add(inputMatrix.GetRow(idx));
+            }
+            subInputs = (TInput)(object)Matrix<T>.FromRowVectors(rows);
+        }
+        else if (inputs is Tensor<T> inputTensor)
+        {
+            // For tensors, extract along the first dimension
+            var slices = new List<Tensor<T>>();
+            foreach (int idx in indices)
+            {
+                slices.Add(inputTensor.GetSlice(idx));
+            }
+            subInputs = (TInput)(object)Tensor<T>.Stack(slices.ToArray());
+        }
+        else
+        {
+            throw new NotSupportedException($"CreateSubset not supported for input type {typeof(TInput).Name}");
+        }
+
+        // Handle targets
+        if (targets is Vector<T> targetVector)
+        {
+            var elements = new List<T>();
+            foreach (int idx in indices)
+            {
+                elements.Add(targetVector[idx]);
+            }
+            subTargets = (TOutput)(object)new Vector<T>(elements.ToArray());
+        }
+        else if (targets is Matrix<T> targetMatrix)
+        {
+            var rows = new List<Vector<T>>();
+            foreach (int idx in indices)
+            {
+                rows.Add(targetMatrix.GetRow(idx));
+            }
+            subTargets = (TOutput)(object)Matrix<T>.FromRowVectors(rows);
+        }
+        else if (targets is Tensor<T> targetTensor)
+        {
+            var slices = new List<Tensor<T>>();
+            foreach (int idx in indices)
+            {
+                slices.Add(targetTensor.GetSlice(idx));
+            }
+            subTargets = (TOutput)(object)Tensor<T>.Stack(slices.ToArray());
+        }
+        else
+        {
+            throw new NotSupportedException($"CreateSubset not supported for target type {typeof(TOutput).Name}");
+        }
+
+        return (subInputs, subTargets);
     }
 
     /// <summary>

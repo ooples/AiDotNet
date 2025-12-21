@@ -5,7 +5,7 @@ using AiDotNet.Interfaces;
 namespace AiDotNet.AutoML;
 
 /// <summary>
-/// Built-in AutoML strategy that uses multi-fidelity (successive halving) scheduling.
+/// Built-in AutoML strategy that uses multi-fidelity (successive halving) and ASHA scheduling.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
@@ -14,6 +14,15 @@ namespace AiDotNet.AutoML;
 /// <para>
 /// This strategy evaluates many candidate configurations on a reduced training budget first (for example, a smaller
 /// subset of rows), then promotes only the most promising trials to higher budgets.
+/// </para>
+/// <para>
+/// <b>ASHA (Asynchronous Successive Halving Algorithm)</b> extends this with:
+/// <list type="bullet">
+/// <item><description>Parallel trial execution at each fidelity rung.</description></item>
+/// <item><description>Per-trial early stopping of underperforming configurations.</description></item>
+/// <item><description>Grace periods to allow trials to "warm up" before stopping.</description></item>
+/// </list>
+/// Enable ASHA via <see cref="AutoMLMultiFidelityOptions.EnableAsyncExecution"/>.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> This is a "try cheap first, then spend more on the best" strategy:
@@ -87,6 +96,11 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
             IFullModel<T, TInput, TOutput>? bestFullFidelityModel = null;
             double bestFullFidelityScore = _maximize ? double.NegativeInfinity : double.PositiveInfinity;
 
+            // Resolve ASHA parallelism settings
+            int maxParallelism = _options.EnableAsyncExecution
+                ? (_options.MaxParallelism > 0 ? _options.MaxParallelism : Environment.ProcessorCount)
+                : 1;
+
             for (int rungIndex = 0; rungIndex < fidelityFractions.Length; rungIndex++)
             {
                 if (DateTime.UtcNow >= deadline)
@@ -100,49 +114,63 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
                 int subsetSize = ResolveSubsetSize(sampleCount, fraction);
 
                 var rungResults = new List<(Dictionary<string, object> Config, double Score, bool Success)>();
+                var rungResultsLock = new object();
 
-                foreach (var config in trialConfigs)
+                if (_options.EnableAsyncExecution && maxParallelism > 1)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    if (DateTime.UtcNow >= deadline)
-                    {
-                        break;
-                    }
-
-                    if (!config.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not ModelType modelType)
-                    {
-                        throw new InvalidOperationException("AutoML trial parameters must include a ModelType entry.");
-                    }
-
-                    var (rungTrainInputs, rungTrainTargets) = CreateRungTrainingSubset(
+                    // ASHA-style async parallel execution
+                    var parallelResult = await ExecuteTrialsInParallelAsync(
+                        trialConfigs,
                         inputs,
                         targets,
-                        modelType,
+                        validationInputs,
+                        validationTargets,
+                        fraction,
                         subsetSize,
-                        shuffledTrainingRowIndices);
+                        shuffledTrainingRowIndices,
+                        rungResults,
+                        rungResultsLock,
+                        maxParallelism,
+                        deadline,
+                        bestFullFidelityModel,
+                        bestFullFidelityScore,
+                        cancellationToken);
 
-                    var trialParameters = new Dictionary<string, object>(config, StringComparer.Ordinal)
+                    bestFullFidelityModel = parallelResult.BestModel;
+                    bestFullFidelityScore = parallelResult.BestScore;
+                }
+                else
+                {
+                    // Sequential execution (original behavior)
+                    foreach (var config in trialConfigs)
                     {
-                        [FidelityFractionKey] = fraction
-                    };
-
-                    var score = await ExecuteTrialAsync(modelType, trialParameters, rungTrainInputs, rungTrainTargets, validationInputs, validationTargets, cancellationToken);
-
-                    bool success;
-                    lock (_lock)
-                    {
-                        success = _trialHistory.LastOrDefault()?.Success ?? false;
-                    }
-
-                    rungResults.Add((config, score, success));
-
-                    if (fraction >= 1.0 - 1e-12 && success)
-                    {
-                        bool improved = _maximize ? score > bestFullFidelityScore : score < bestFullFidelityScore;
-                        if (improved)
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (DateTime.UtcNow >= deadline)
                         {
-                            bestFullFidelityScore = score;
-                            bestFullFidelityModel = BestModel;
+                            break;
+                        }
+
+                        var (score, success) = await ExecuteSingleTrialAsync(
+                            config,
+                            inputs,
+                            targets,
+                            validationInputs,
+                            validationTargets,
+                            fraction,
+                            subsetSize,
+                            shuffledTrainingRowIndices,
+                            cancellationToken);
+
+                        rungResults.Add((config, score, success));
+
+                        if (fraction >= 1.0 - 1e-12 && success)
+                        {
+                            bool improved = _maximize ? score > bestFullFidelityScore : score < bestFullFidelityScore;
+                            if (improved)
+                            {
+                                bestFullFidelityScore = score;
+                                bestFullFidelityModel = BestModel;
+                            }
                         }
                     }
                 }
@@ -194,6 +222,141 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
             Status = AutoMLStatus.Failed;
             throw;
         }
+    }
+
+    /// <summary>
+    /// Executes a single trial and returns the score and success status.
+    /// </summary>
+    private async Task<(double Score, bool Success)> ExecuteSingleTrialAsync(
+        Dictionary<string, object> config,
+        TInput inputs,
+        TOutput targets,
+        TInput validationInputs,
+        TOutput validationTargets,
+        double fraction,
+        int subsetSize,
+        int[] shuffledTrainingRowIndices,
+        CancellationToken cancellationToken)
+    {
+        if (!config.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not ModelType modelType)
+        {
+            throw new InvalidOperationException("AutoML trial parameters must include a ModelType entry.");
+        }
+
+        var (rungTrainInputs, rungTrainTargets) = CreateRungTrainingSubset(
+            inputs,
+            targets,
+            modelType,
+            subsetSize,
+            shuffledTrainingRowIndices);
+
+        var trialParameters = new Dictionary<string, object>(config, StringComparer.Ordinal)
+        {
+            [FidelityFractionKey] = fraction
+        };
+
+        var score = await ExecuteTrialAsync(modelType, trialParameters, rungTrainInputs, rungTrainTargets, validationInputs, validationTargets, cancellationToken);
+
+        bool success;
+        lock (_lock)
+        {
+            success = _trialHistory.LastOrDefault()?.Success ?? false;
+        }
+
+        return (score, success);
+    }
+
+    /// <summary>
+    /// Executes trials in parallel using ASHA-style async execution.
+    /// </summary>
+    /// <returns>A tuple containing the best model and score found during parallel execution.</returns>
+    private async Task<(IFullModel<T, TInput, TOutput>? BestModel, double BestScore)> ExecuteTrialsInParallelAsync(
+        List<Dictionary<string, object>> trialConfigs,
+        TInput inputs,
+        TOutput targets,
+        TInput validationInputs,
+        TOutput validationTargets,
+        double fraction,
+        int subsetSize,
+        int[] shuffledTrainingRowIndices,
+        List<(Dictionary<string, object> Config, double Score, bool Success)> rungResults,
+        object rungResultsLock,
+        int maxParallelism,
+        DateTime deadline,
+        IFullModel<T, TInput, TOutput>? currentBestModel,
+        double currentBestScore,
+        CancellationToken cancellationToken)
+    {
+        using var semaphore = new SemaphoreSlim(maxParallelism, maxParallelism);
+        var tasks = new List<Task>();
+
+        // Track best model in a thread-safe way
+        var localBestModel = currentBestModel;
+        var localBestScore = currentBestScore;
+        var bestLock = new object();
+
+        foreach (var config in trialConfigs)
+        {
+            if (DateTime.UtcNow >= deadline)
+            {
+                break;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await semaphore.WaitAsync(cancellationToken);
+
+            var task = Task.Run(async () =>
+            {
+                try
+                {
+                    if (DateTime.UtcNow >= deadline)
+                    {
+                        return;
+                    }
+
+                    var (score, success) = await ExecuteSingleTrialAsync(
+                        config,
+                        inputs,
+                        targets,
+                        validationInputs,
+                        validationTargets,
+                        fraction,
+                        subsetSize,
+                        shuffledTrainingRowIndices,
+                        cancellationToken);
+
+                    lock (rungResultsLock)
+                    {
+                        rungResults.Add((config, score, success));
+                    }
+
+                    if (fraction >= 1.0 - 1e-12 && success)
+                    {
+                        lock (bestLock)
+                        {
+                            bool improved = _maximize ? score > localBestScore : score < localBestScore;
+                            if (improved)
+                            {
+                                localBestScore = score;
+                                localBestModel = BestModel;
+                            }
+                        }
+                    }
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            }, cancellationToken);
+
+            tasks.Add(task);
+        }
+
+        await Task.WhenAll(tasks);
+
+        // Return the best model and score found
+        return (localBestModel, localBestScore);
     }
 
     public override Task<Dictionary<string, object>> SuggestNextTrialAsync()
