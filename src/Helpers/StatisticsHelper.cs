@@ -21,6 +21,19 @@ public static class StatisticsHelper<T>
     /// </summary>
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
+    private static T GetOrDefaultOptionalParameter(T? value, T defaultValue, bool treatDefaultAsMissing = true)
+    {
+        if (value is null)
+        {
+            return defaultValue;
+        }
+
+        // With unconstrained generics, optional parameters of type `T?` that are omitted at the callsite
+        // are passed as `default(T)` (e.g. 0 for numeric structs), not `null`. Treat `default(T)` as
+        // "not provided" so documented defaults are applied consistently.
+        return treatDefaultAsMissing && EqualityComparer<T>.Default.Equals(value, default!) ? defaultValue : value;
+    }
+
     /// <summary>
     /// Calculates the median value from a collection of numeric values.
     /// </summary>
@@ -297,7 +310,7 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static TTestResult<T> TTest(Vector<T> leftY, Vector<T> rightY, T? significanceLevel = default)
     {
-        significanceLevel ??= _numOps.FromDouble(0.05); // Default significance level
+        significanceLevel = GetOrDefaultOptionalParameter(significanceLevel, _numOps.FromDouble(0.05));
 
         T leftMean = CalculateMean(leftY);
         T rightMean = CalculateMean(rightY);
@@ -343,7 +356,7 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static MannWhitneyUTestResult<T> MannWhitneyUTest(Vector<T> leftY, Vector<T> rightY, T? significanceLevel = default)
     {
-        significanceLevel ??= _numOps.FromDouble(0.05); // Default significance level
+        significanceLevel = GetOrDefaultOptionalParameter(significanceLevel, _numOps.FromDouble(0.05));
 
         var allValues = leftY.Concat(rightY).ToList();
         var ranks = CalculateRanks(allValues);
@@ -400,7 +413,7 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static PermutationTestResult<T> PermutationTest(Vector<T> leftY, Vector<T> rightY, T? significanceLevel = default)
     {
-        significanceLevel ??= _numOps.FromDouble(0.05); // Default significance level
+        significanceLevel = GetOrDefaultOptionalParameter(significanceLevel, _numOps.FromDouble(0.05));
         int _permutations = 1000; // Number of permutations
         T _observedDifference = _numOps.Subtract(CalculateMean(leftY), CalculateMean(rightY));
         int _countExtremeValues = 0;
@@ -446,7 +459,7 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static ChiSquareTestResult<T> ChiSquareTest(Vector<T> leftY, Vector<T> rightY, T? significanceLevel = default)
     {
-        significanceLevel ??= _numOps.FromDouble(0.05); // Default significance level
+        significanceLevel = GetOrDefaultOptionalParameter(significanceLevel, _numOps.FromDouble(0.05));
 
         // Combine both vectors and get unique categories
         var _allValues = leftY.Concat(rightY).ToList();
@@ -627,7 +640,7 @@ public static class StatisticsHelper<T>
               _numOps.FromDouble(9.9843695780195716e-6),
               _numOps.FromDouble(1.5056327351493116e-7) };
 
-        if (_numOps.LessThanOrEquals(x, _numOps.FromDouble(0.5)))
+        if (_numOps.LessThan(x, _numOps.FromDouble(0.5)))
         {
             return _numOps.Divide(
                 MathHelper.Pi<T>(),
@@ -797,7 +810,7 @@ public static class StatisticsHelper<T>
     public static FTestResult<T> FTest(Vector<T> leftY, Vector<T> rightY, T? significanceLevel = default)
     {
         // Use default significance level if not provided
-        significanceLevel ??= _numOps.FromDouble(0.05);
+        significanceLevel = GetOrDefaultOptionalParameter(significanceLevel, _numOps.FromDouble(0.05));
 
         if (leftY == null || rightY == null)
             throw new ArgumentNullException("Input vectors cannot be null.");
@@ -3698,19 +3711,37 @@ public static class StatisticsHelper<T>
     /// </para>
     /// </remarks>
     public static T CalculateAccuracy(Vector<T> actual, Vector<T> predicted, PredictionType predictionType, T? tolerance = default)
+        => CalculateAccuracy(actual, predicted, predictionType, tolerance, treatDefaultAsMissing: true);
+
+    public static T CalculateAccuracy(Vector<T> actual, Vector<T> predicted, PredictionType predictionType, T? tolerance, bool treatDefaultAsMissing)
     {
         var correctPredictions = _numOps.Zero;
         var totalPredictions = _numOps.FromDouble(actual.Length);
-        tolerance ??= _numOps.FromDouble(0.05); // default of 5%
+        tolerance = GetOrDefaultOptionalParameter(tolerance, _numOps.FromDouble(0.05), treatDefaultAsMissing);
+        var classificationThreshold = _numOps.FromDouble(0.5);
 
         for (int i = 0; i < actual.Length; i++)
         {
             if (predictionType == PredictionType.Binary)
             {
-                if (_numOps.Equals(actual[i], predicted[i]))
-                {
+                var actualLabel = _numOps.GreaterThanOrEquals(actual[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
+                var predictedLabel = _numOps.GreaterThanOrEquals(predicted[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
+                if (_numOps.Equals(actualLabel, predictedLabel))
                     correctPredictions = _numOps.Add(correctPredictions, _numOps.One);
-                }
+            }
+            else if (predictionType == PredictionType.MultiClass)
+            {
+                int actualLabel = _numOps.ToInt32(actual[i]);
+                int predictedLabel = _numOps.ToInt32(predicted[i]);
+                if (actualLabel == predictedLabel)
+                    correctPredictions = _numOps.Add(correctPredictions, _numOps.One);
+            }
+            else if (predictionType == PredictionType.MultiLabel)
+            {
+                var actualLabel = _numOps.GreaterThanOrEquals(actual[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
+                var predictedLabel = _numOps.GreaterThanOrEquals(predicted[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
+                if (_numOps.Equals(actualLabel, predictedLabel))
+                    correctPredictions = _numOps.Add(correctPredictions, _numOps.One);
             }
             else // Regression
             {
@@ -3733,7 +3764,10 @@ public static class StatisticsHelper<T>
     /// <param name="actual">The actual values.</param>
     /// <param name="predicted">The predicted values.</param>
     /// <param name="predictionType">The type of prediction (Binary or Regression).</param>
-    /// <param name="threshold">For regression, the threshold for considering a prediction correct (default is 0.1 or 10%).</param>
+    /// <param name="threshold">
+    /// For regression, the absolute error threshold for considering a prediction "close enough" (default is 0.1).
+    /// For binary/multi-label classification, the probability threshold for converting scores to labels (default is 0.5).
+    /// </param>
     /// <returns>A tuple containing the precision, recall, and F1 score.</returns>
     /// <remarks>
     /// <para>
@@ -3748,29 +3782,64 @@ public static class StatisticsHelper<T>
     /// the classes are imbalanced or when false positives and false negatives have different costs.
     /// </para>
     /// </remarks>
-    public static (T Precision, T Recall, T F1Score) CalculatePrecisionRecallF1(Vector<T> actual, Vector<T> predicted, PredictionType predictionType, T? threshold = default)
+    public static (T Precision, T Recall, T F1Score) CalculatePrecisionRecallF1(
+        Vector<T> actual,
+        Vector<T> predicted,
+        PredictionType predictionType,
+        T? threshold = default)
+        => CalculatePrecisionRecallF1(actual, predicted, predictionType, threshold, treatDefaultAsMissing: true);
+
+    public static (T Precision, T Recall, T F1Score) CalculatePrecisionRecallF1(
+        Vector<T> actual,
+        Vector<T> predicted,
+        PredictionType predictionType,
+        T? threshold,
+        bool treatDefaultAsMissing)
     {
         var truePositives = _numOps.Zero;
         var falsePositives = _numOps.Zero;
         var falseNegatives = _numOps.Zero;
-        threshold ??= _numOps.FromDouble(0.1); // default of 10%
+        var defaultRegressionThreshold = _numOps.FromDouble(0.1); // default of 10%
+        var classificationThreshold = GetOrDefaultOptionalParameter(threshold, _numOps.FromDouble(0.5), treatDefaultAsMissing);
+        var regressionThreshold = GetOrDefaultOptionalParameter(threshold, defaultRegressionThreshold, treatDefaultAsMissing);
+
+        if (predictionType == PredictionType.MultiClass)
+        {
+            return CalculateMultiClassMacroPrecisionRecallF1(actual, predicted);
+        }
 
         for (int i = 0; i < actual.Length; i++)
         {
             if (predictionType == PredictionType.Binary)
             {
-                if (_numOps.Equals(predicted[i], _numOps.One))
+                var actualLabel = _numOps.GreaterThanOrEquals(actual[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
+                var predictedLabel = _numOps.GreaterThanOrEquals(predicted[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
+
+                if (_numOps.Equals(predictedLabel, _numOps.One))
                 {
-                    if (_numOps.Equals(actual[i], _numOps.One))
-                    {
+                    if (_numOps.Equals(actualLabel, _numOps.One))
                         truePositives = _numOps.Add(truePositives, _numOps.One);
-                    }
                     else
-                    {
                         falsePositives = _numOps.Add(falsePositives, _numOps.One);
-                    }
                 }
-                else if (_numOps.Equals(actual[i], _numOps.One))
+                else if (_numOps.Equals(actualLabel, _numOps.One))
+                {
+                    falseNegatives = _numOps.Add(falseNegatives, _numOps.One);
+                }
+            }
+            else if (predictionType == PredictionType.MultiLabel)
+            {
+                var actualLabel = _numOps.GreaterThanOrEquals(actual[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
+                var predictedLabel = _numOps.GreaterThanOrEquals(predicted[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
+
+                if (_numOps.Equals(predictedLabel, _numOps.One))
+                {
+                    if (_numOps.Equals(actualLabel, _numOps.One))
+                        truePositives = _numOps.Add(truePositives, _numOps.One);
+                    else
+                        falsePositives = _numOps.Add(falsePositives, _numOps.One);
+                }
+                else if (_numOps.Equals(actualLabel, _numOps.One))
                 {
                     falseNegatives = _numOps.Add(falseNegatives, _numOps.One);
                 }
@@ -3778,7 +3847,7 @@ public static class StatisticsHelper<T>
             else // Regression
             {
                 var difference = _numOps.Abs(_numOps.Subtract(actual[i], predicted[i]));
-                if (_numOps.LessThanOrEquals(difference, threshold))
+                if (_numOps.LessThanOrEquals(difference, regressionThreshold))
                 {
                     truePositives = _numOps.Add(truePositives, _numOps.One);
                 }
@@ -3798,6 +3867,71 @@ public static class StatisticsHelper<T>
         var f1Score = CalculateF1Score(precision, recall);
 
         return (precision, recall, f1Score);
+    }
+
+    private static (T Precision, T Recall, T F1Score) CalculateMultiClassMacroPrecisionRecallF1(Vector<T> actual, Vector<T> predicted)
+    {
+        var classIds = new HashSet<int>();
+
+        for (int i = 0; i < actual.Length; i++)
+        {
+            classIds.Add(_numOps.ToInt32(actual[i]));
+            classIds.Add(_numOps.ToInt32(predicted[i]));
+        }
+
+        if (classIds.Count == 0)
+        {
+            return (_numOps.Zero, _numOps.Zero, _numOps.Zero);
+        }
+
+        T macroPrecision = _numOps.Zero;
+        T macroRecall = _numOps.Zero;
+        T macroF1 = _numOps.Zero;
+        T classCount = _numOps.FromDouble(classIds.Count);
+
+        foreach (int classId in classIds)
+        {
+            var tp = _numOps.Zero;
+            var fp = _numOps.Zero;
+            var fn = _numOps.Zero;
+
+            for (int i = 0; i < actual.Length; i++)
+            {
+                int a = _numOps.ToInt32(actual[i]);
+                int p = _numOps.ToInt32(predicted[i]);
+
+                bool actualIsClass = a == classId;
+                bool predictedIsClass = p == classId;
+
+                if (predictedIsClass)
+                {
+                    if (actualIsClass)
+                        tp = _numOps.Add(tp, _numOps.One);
+                    else
+                        fp = _numOps.Add(fp, _numOps.One);
+                }
+                else if (actualIsClass)
+                {
+                    fn = _numOps.Add(fn, _numOps.One);
+                }
+            }
+
+            var precisionDen = _numOps.Add(tp, fp);
+            var recallDen = _numOps.Add(tp, fn);
+
+            var precision = _numOps.Equals(precisionDen, _numOps.Zero) ? _numOps.Zero : _numOps.Divide(tp, precisionDen);
+            var recall = _numOps.Equals(recallDen, _numOps.Zero) ? _numOps.Zero : _numOps.Divide(tp, recallDen);
+            var f1 = CalculateF1Score(precision, recall);
+
+            macroPrecision = _numOps.Add(macroPrecision, precision);
+            macroRecall = _numOps.Add(macroRecall, recall);
+            macroF1 = _numOps.Add(macroF1, f1);
+        }
+
+        return (
+            _numOps.Divide(macroPrecision, classCount),
+            _numOps.Divide(macroRecall, classCount),
+            _numOps.Divide(macroF1, classCount));
     }
 
     /// <summary>
@@ -4069,7 +4203,7 @@ public static class StatisticsHelper<T>
     /// </remarks>
     private static T CalculateConditionNumberPowerIteration(Matrix<T> matrix, int maxIterations = 100, T? tolerance = default)
     {
-        tolerance ??= _numOps.FromDouble(1e-10);
+        tolerance = GetOrDefaultOptionalParameter(tolerance, _numOps.FromDouble(1e-10));
 
         T largestEigenvalue = PowerIteration(matrix, maxIterations, tolerance);
         T smallestEigenvalue = PowerIteration(matrix.Inverse(), maxIterations, tolerance);

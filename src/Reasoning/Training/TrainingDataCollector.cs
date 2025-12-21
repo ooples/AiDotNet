@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Reasoning.Models;
+using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Reasoning.Training;
@@ -117,7 +118,9 @@ internal class TrainingDataCollector<T>
         _samples = new List<TrainingSample<T>>();
         _numOps = MathHelper.GetNumericOperations<T>();
         _categoryCount = new Dictionary<string, int>();
-        _random = randomSeed.HasValue ? new Random(randomSeed.Value) : new Random();
+        _random = randomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(randomSeed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -434,14 +437,44 @@ internal class TrainingSample<T>
 /// </summary>
 internal class DataStatistics<T>
 {
+    /// <summary>
+    /// Total number of samples collected.
+    /// </summary>
     public int TotalSamples { get; set; }
+
+    /// <summary>
+    /// Average reward across reasoning chains.
+    /// </summary>
     public T AverageChainReward { get; set; } = default!;
+
+    /// <summary>
+    /// Average reward for the final outcomes.
+    /// </summary>
     public T AverageOutcomeReward { get; set; } = default!;
+
+    /// <summary>
+    /// Number of samples considered correct.
+    /// </summary>
     public int CorrectCount { get; set; }
+
+    /// <summary>
+    /// Percentage of correct samples.
+    /// </summary>
     public double CorrectPercentage { get; set; }
+
+    /// <summary>
+    /// Distribution of samples by category.
+    /// </summary>
     public Dictionary<string, int> CategoryDistribution { get; set; } = new();
+
+    /// <summary>
+    /// Average number of steps per reasoning chain.
+    /// </summary>
     public double AverageStepsPerChain { get; set; }
 
+    /// <summary>
+    /// Returns a formatted, human-readable summary of the current statistics.
+    /// </summary>
     public override string ToString()
     {
         return $@"Training Data Statistics:

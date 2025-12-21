@@ -4490,7 +4490,7 @@ public class CpuEngine : IEngine
         const double eps = 1e-10;
 
         // Add Gumbel noise: -log(-log(U)) where U ~ Uniform(0, 1)
-        var random = new Random();
+        var random = RandomHelper.ThreadSafeRandom;
         var perturbedData = new T[inputData.Length];
         for (int i = 0; i < inputData.Length; i++)
         {
@@ -7273,7 +7273,7 @@ public class CpuEngine : IEngine
         if (shape == null) throw new ArgumentNullException(nameof(shape));
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        var random = new Random();
+        var random = RandomHelper.ThreadSafeRandom;
         var result = new Tensor<T>(shape);
         int totalElements = shape.Aggregate(1, (a, b) => a * b);
 

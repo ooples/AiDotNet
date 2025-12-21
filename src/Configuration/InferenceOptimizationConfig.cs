@@ -25,7 +25,7 @@ namespace AiDotNet.Configuration;
 /// var result = await new PredictionModelBuilder&lt;double, ...&gt;()
 ///     .ConfigureModel(myModel)
 ///     .ConfigureInferenceOptimizations(config)
-///     .BuildAsync(x, y);
+///     .BuildAsync();
 /// </code>
 /// </para>
 /// </remarks>

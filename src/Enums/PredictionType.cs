@@ -48,5 +48,33 @@ public enum PredictionType
     /// 
     /// Examples: Price prediction, weather forecasting, age estimation, stock market prediction
     /// </remarks>
-    Regression
+    Regression,
+
+    /// <summary>
+    /// Represents a multi-class classification task where the output is one of many possible classes.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Use this when your prediction can be one of several categories, like:
+    /// - Classifying an image as Cat, Dog, or Bird
+    /// - Categorizing a news article as Sports, Politics, or Technology
+    /// - Predicting a product type from a list of many product categories
+    ///
+    /// Multi-class predictions usually output either:
+    /// - A single class label (e.g., 0, 1, 2, ...)
+    /// - A set of probabilities, one per class (often handled via a separate API)
+    /// </remarks>
+    MultiClass,
+
+    /// <summary>
+    /// Represents a multi-label classification task where multiple labels can be true at the same time.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Use this when each sample can have multiple categories, like:
+    /// - An image that contains both a Dog AND a Person
+    /// - A document tagged with multiple topics (Finance, Legal, HR)
+    ///
+    /// Multi-label predictions are commonly represented as a vector of independent probabilities (one per label),
+    /// which are then thresholded (e.g., > 0.5) to decide which labels are present.
+    /// </remarks>
+    MultiLabel
 }

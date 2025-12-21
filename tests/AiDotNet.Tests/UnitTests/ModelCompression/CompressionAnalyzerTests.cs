@@ -318,7 +318,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         {
             // Arrange
             var analyzer = new CompressionAnalyzer<double>();
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             var weights = new double[10000];
             for (int i = 0; i < weights.Length; i++)
             {

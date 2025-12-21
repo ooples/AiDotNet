@@ -7,5 +7,5 @@ internal class PredictionStatsInputs<T>
     public int NumberOfParameters { get; set; }
     public double ConfidenceLevel { get; set; }
     public int LearningCurveSteps { get; set; }
-    public PredictionType PredictionType { get; set; }
+    public PredictionType PredictionType { get; set; } = PredictionType.Regression;
 }

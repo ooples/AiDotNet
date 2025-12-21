@@ -129,7 +129,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             var indexMultiProbe = new IVFIndex<double>(metric, numClusters: 5, numProbes: 3);
 
             // Add 20 vectors
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < 20; i++)
             {
                 var vector = new Vector<double>(Enumerable.Range(0, 10)
@@ -298,7 +298,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
             var index = new IVFIndex<double>(metric, numClusters: 5);
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
 
             // Add 50 high-dimensional vectors
             for (int i = 0; i < 50; i++)

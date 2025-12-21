@@ -29,10 +29,30 @@ namespace AiDotNet.AutoML
 
         protected MetricType _optimizationMetric = MetricType.Accuracy;
         protected bool _maximize = true;
+        protected bool _optimizationMetricExplicitlySet;
         protected int? _earlyStoppingPatience;
         protected double _earlyStoppingMinDelta = 0.001;
         protected int _trialsSinceImprovement = 0;
         protected IModelEvaluator<T, TInput, TOutput>? _modelEvaluator;
+
+        /// <summary>
+        /// Gets the optimization metric used to rank trials.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This is safe to expose and does not reveal proprietary hyperparameter values or model internals.
+        /// </para>
+        /// <para><b>For Beginners:</b> This is the score AutoML tries to make better (like Accuracy or RMSE).</para>
+        /// </remarks>
+        public MetricType OptimizationMetric => _optimizationMetric;
+
+        /// <summary>
+        /// Gets a value indicating whether higher metric values are better.
+        /// </summary>
+        /// <remarks>
+        /// <para><b>For Beginners:</b> For some metrics higher is better (Accuracy). For error metrics lower is better (RMSE).</para>
+        /// </remarks>
+        public bool MaximizeOptimizationMetric => _maximize;
 
         /// <summary>
         /// Gets the model type
@@ -109,6 +129,7 @@ namespace AiDotNet.AutoML
         {
             _optimizationMetric = metric;
             _maximize = maximize;
+            _optimizationMetricExplicitlySet = true;
 
             // Reset best score when metric changes
             BestScore = maximize ? double.NegativeInfinity : double.PositiveInfinity;
@@ -121,7 +142,7 @@ namespace AiDotNet.AutoML
         {
             lock (_lock)
             {
-                return _trialHistory.Select(t => t.Clone()).ToList();
+                return _trialHistory.Select(t => t.CloneRedacted()).ToList();
             }
         }
 
@@ -159,6 +180,7 @@ namespace AiDotNet.AutoML
                     var trial = new TrialResult
                     {
                         TrialId = _trialHistory.Count + 1,
+                        CandidateModelType = TryExtractCandidateModelType(parameters),
                         Parameters = new Dictionary<string, object>(parameters),
                         Score = score,
                         Duration = duration,
@@ -293,8 +315,14 @@ namespace AiDotNet.AutoML
                         Model = model,
                         InputData = new OptimizationInputData<T, TInput, TOutput>
                         {
+                            // Provide all three sets to evaluators to avoid failures on empty placeholders.
+                            // In AutoML we often only have a validation set for scoring, so we mirror it.
+                            XTrain = validationInputs,
+                            YTrain = validationTargets,
                             XValidation = validationInputs,
-                            YValidation = validationTargets
+                            YValidation = validationTargets,
+                            XTest = validationInputs,
+                            YTest = validationTargets
                         }
                     };
 
@@ -600,22 +628,87 @@ namespace AiDotNet.AutoML
         {
             var validationStats = evaluationData.ValidationSet;
 
-            return _optimizationMetric switch
+            var numOps = MathHelper.GetNumericOperations<T>();
+
+            if (evaluationData.ModelStats.HasMetric(_optimizationMetric))
             {
-                MetricType.Accuracy => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.Accuracy) : 0.0,
-                MetricType.MeanSquaredError => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.MeanSquaredError) : double.MaxValue,
-                MetricType.RootMeanSquaredError => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.RootMeanSquaredError) : double.MaxValue,
-                MetricType.MeanAbsoluteError => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.MeanAbsoluteError) : double.MaxValue,
-                MetricType.RSquared => validationStats.PredictionStats != null ? Convert.ToDouble(validationStats.PredictionStats.RSquared) : 0.0,
-                MetricType.F1Score => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.F1Score) : 0.0,
-                MetricType.Precision => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.Precision) : 0.0,
-                MetricType.Recall => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.Recall) : 0.0,
-                MetricType.AUC => validationStats.ErrorStats != null ? Convert.ToDouble(validationStats.ErrorStats.AUC) : 0.0,
-                _ => 0.0
-            };
+                return numOps.ToDouble(evaluationData.ModelStats.GetMetric(_optimizationMetric));
+            }
+
+            if (validationStats.ErrorStats.HasMetric(_optimizationMetric))
+            {
+                return numOps.ToDouble(validationStats.ErrorStats.GetMetric(_optimizationMetric));
+            }
+
+            if (validationStats.PredictionStats.HasMetric(_optimizationMetric))
+            {
+                return numOps.ToDouble(validationStats.PredictionStats.GetMetric(_optimizationMetric));
+            }
+
+            if (validationStats.ActualBasicStats.HasMetric(_optimizationMetric))
+            {
+                return numOps.ToDouble(validationStats.ActualBasicStats.GetMetric(_optimizationMetric));
+            }
+
+            if (validationStats.PredictedBasicStats.HasMetric(_optimizationMetric))
+            {
+                return numOps.ToDouble(validationStats.PredictedBasicStats.GetMetric(_optimizationMetric));
+            }
+
+            return _maximize ? double.NegativeInfinity : double.PositiveInfinity;
+        }
+
+        /// <summary>
+        /// Reports a failed trial result without terminating the full AutoML run.
+        /// </summary>
+        /// <param name="parameters">The parameters used in the trial.</param>
+        /// <param name="error">The exception that caused the trial to fail.</param>
+        /// <param name="duration">The duration of the failed trial.</param>
+        protected virtual async Task ReportTrialFailureAsync(Dictionary<string, object> parameters, Exception error, TimeSpan duration)
+        {
+            await Task.Run((Action)(() =>
+            {
+                lock (_lock)
+                {
+                    var trial = new TrialResult
+                    {
+                        TrialId = _trialHistory.Count + 1,
+                        CandidateModelType = TryExtractCandidateModelType(parameters),
+                        Parameters = new Dictionary<string, object>(parameters),
+                        Score = _maximize ? double.NegativeInfinity : double.PositiveInfinity,
+                        Duration = duration,
+                        Timestamp = DateTime.UtcNow,
+                        Success = false,
+                        ErrorMessage = error.Message
+                    };
+
+                    _trialHistory.Add(trial);
+                    _trialsSinceImprovement++;
+                }
+            }));
         }
 
         #region IAutoMLModel Additional Interface Members
+
+        private static ModelType? TryExtractCandidateModelType(IReadOnlyDictionary<string, object> parameters)
+        {
+            if (parameters is null || !parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is null)
+            {
+                return null;
+            }
+
+            if (modelTypeObj is ModelType modelType)
+            {
+                return modelType;
+            }
+
+            if (modelTypeObj is string text && Enum.TryParse<ModelType>(text, ignoreCase: true, out var parsed))
+            {
+                return parsed;
+            }
+
+            return null;
+        }
 
         /// <summary>
         /// Configures the search space for hyperparameter optimization

@@ -482,7 +482,7 @@ public class DDIMSchedulerTests
         scheduler.SetTimesteps(20);
 
         var sample = new Vector<double>(new double[64]);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < sample.Length; i++)
         {
             sample[i] = random.NextDouble() * 2 - 1;

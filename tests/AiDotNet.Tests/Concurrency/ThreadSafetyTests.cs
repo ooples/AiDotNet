@@ -442,7 +442,7 @@ public class ThreadSafetyTests
 
     private static Vector<float> CreateVector(int size, int seed)
     {
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         var vector = new Vector<float>(size);
         for (int i = 0; i < size; i++)
         {
@@ -453,7 +453,7 @@ public class ThreadSafetyTests
 
     private static Matrix<float> CreateMatrix(int rows, int cols, int seed)
     {
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         var matrix = new Matrix<float>(rows, cols);
         for (int i = 0; i < rows; i++)
         {
@@ -467,7 +467,7 @@ public class ThreadSafetyTests
 
     private static Tensor<float> CreateTensor(int[] shape, int seed)
     {
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         var tensor = new Tensor<float>(shape);
         for (int i = 0; i < tensor.Length; i++)
         {

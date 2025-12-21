@@ -1186,4 +1186,15 @@ public enum MetricType
     /// </para>
     /// </remarks>
     AdjustedRandIndex,
+
+    /// <summary>
+    /// The average total reward per episode (reinforcement learning).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In reinforcement learning, an "episode" is one full run in the environment.
+    /// This metric measures how much reward the agent earns on average per episode. Higher is better.
+    /// </para>
+    /// </remarks>
+    AverageEpisodeReward,
 }

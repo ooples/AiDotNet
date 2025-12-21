@@ -239,7 +239,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             var indexManyTables = new LSHIndex<double>(metric, numHashTables: 20, numHashFunctions: 6);
 
             // Add same vectors to both
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < 50; i++)
             {
                 var vector = new Vector<double>(Enumerable.Range(0, 10)
@@ -330,7 +330,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             // Arrange
             var metric = new CosineSimilarityMetric<double>();
             var index = new LSHIndex<double>(metric, numHashTables: 15, numHashFunctions: 8);
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
 
             // Add high-dimensional vectors
             for (int i = 0; i < 30; i++)

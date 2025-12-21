@@ -6,6 +6,7 @@ using AiDotNet.Data.Structures;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Graph;
 
@@ -1104,7 +1105,9 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
             throw new InvalidOperationException("No graphs loaded");
         }
 
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
         var shuffledGraphs = LoadedGraphs.OrderBy(_ => random.Next()).ToList();
 
         int trainSize = (int)(shuffledGraphs.Count * trainRatio);
