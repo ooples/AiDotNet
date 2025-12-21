@@ -28,6 +28,9 @@ using AiDotNet.Serialization;
 using AiDotNet.Tokenization.Configuration;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
+using AiDotNet.CheckpointManagement;
+using AiDotNet.ExperimentTracking;
+using AiDotNet.TrainingMonitoring;
 
 namespace AiDotNet.Models.Results;
 
@@ -719,6 +722,223 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
 
     #endregion
 
+    #region Training Infrastructure Properties
+
+    /// <summary>
+    /// Gets or sets the experiment run associated with this model.
+    /// </summary>
+    /// <value>The experiment run that produced this model, or null if experiment tracking was not used.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This provides direct access to the training run for additional logging.
+    ///
+    /// You can use this to:
+    /// - Log additional metrics after training (e.g., production performance)
+    /// - Add notes about the model's behavior in production
+    /// - Record artifacts like deployment logs or user feedback
+    ///
+    /// Example:
+    /// <code>
+    /// if (result.ExperimentRun != null)
+    /// {
+    ///     result.ExperimentRun.LogMetric("production_accuracy", 0.92);
+    ///     result.ExperimentRun.AddNote("Deployed to production on 2024-01-15");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal IExperimentRun<T>? ExperimentRun { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the experiment tracker used during training.
+    /// </summary>
+    /// <value>The experiment tracker for accessing other runs and experiments, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This gives you access to the experiment tracking system.
+    ///
+    /// You can use this to:
+    /// - Compare this model with other training runs
+    /// - Find the best-performing model from an experiment
+    /// - Start new training runs based on this one
+    ///
+    /// Example:
+    /// <code>
+    /// if (result.ExperimentTracker != null)
+    /// {
+    ///     var allRuns = result.ExperimentTracker.ListRuns(experimentId);
+    ///     var bestRun = allRuns.OrderByDescending(r => r.GetLatestMetric("accuracy")).First();
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal IExperimentTracker<T>? ExperimentTracker { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the checkpoint manager for model persistence operations.
+    /// </summary>
+    /// <value>The checkpoint manager for saving and loading model checkpoints, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This manages saved copies of your model.
+    ///
+    /// You can use this to:
+    /// - Save the model after making changes (like fine-tuning)
+    /// - List all saved checkpoints
+    /// - Load different versions of your model
+    /// - Clean up old checkpoints to save disk space
+    ///
+    /// Example:
+    /// <code>
+    /// if (result.CheckpointManager != null)
+    /// {
+    ///     // Save current state
+    ///     result.CheckpointManager.SaveCheckpoint("after_finetuning", model);
+    ///
+    ///     // List available checkpoints
+    ///     var checkpoints = result.CheckpointManager.ListCheckpoints();
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal ICheckpointManager<T, TInput, TOutput>? CheckpointManager { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the model registry for version and lifecycle management.
+    /// </summary>
+    /// <value>The model registry for managing model versions and stages, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is like a version control system for your models.
+    ///
+    /// You can use this to:
+    /// - Promote this model from "Staging" to "Production"
+    /// - Register fine-tuned versions as new model versions
+    /// - Archive old models that are no longer needed
+    /// - Compare performance across model versions
+    ///
+    /// Example:
+    /// <code>
+    /// if (result.ModelRegistry != null)
+    /// {
+    ///     // Promote to production
+    ///     result.ModelRegistry.TransitionModelStage("my-model", 1, ModelStage.Production);
+    ///
+    ///     // Get current production model
+    ///     var prodModel = result.ModelRegistry.GetProductionModel("my-model");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal IModelRegistry<T, TInput, TOutput>? ModelRegistry { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the training monitor for accessing training diagnostics.
+    /// </summary>
+    /// <value>The training monitor containing training history and diagnostics, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This gives you insights into how training went.
+    ///
+    /// You can use this to:
+    /// - View learning curves (loss over time)
+    /// - Check for signs of overfitting
+    /// - Analyze gradient flow during training
+    /// - Export training charts and reports
+    ///
+    /// Example:
+    /// <code>
+    /// if (result.TrainingMonitor != null)
+    /// {
+    ///     var history = result.TrainingMonitor.GetMetricsHistory();
+    ///     var finalLoss = history["loss"].Last();
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal ITrainingMonitor<T>? TrainingMonitor { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the hyperparameter optimization result.
+    /// </summary>
+    /// <value>Complete hyperparameter optimization results including all trials, or null if optimization was not used.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If an optimizer searched for the best settings,
+    /// this contains all the configurations it tried and how well each performed.
+    ///
+    /// You can use this to:
+    /// - See which hyperparameters were most important
+    /// - Find patterns in what made training successful
+    /// - Continue optimization from where it left off
+    ///
+    /// Example:
+    /// <code>
+    /// if (result.HyperparameterOptimizationResult != null)
+    /// {
+    ///     var bestParams = result.HyperparameterOptimizationResult.BestParameters;
+    ///     Console.WriteLine($"Best learning rate: {bestParams["learning_rate"]}");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    internal HyperparameterOptimizationResult<T>? HyperparameterOptimizationResult { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the experiment run ID from experiment tracking.
+    /// </summary>
+    /// <value>The unique identifier for the training run, or null if experiment tracking was not used.</value>
+    internal string? ExperimentRunId { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the experiment ID that this run belongs to.
+    /// </summary>
+    /// <value>The experiment ID grouping related training runs, or null if experiment tracking was not used.</value>
+    internal string? ExperimentId { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the model version from the model registry.
+    /// </summary>
+    /// <value>The version number assigned to this model, or null if registry was not used.</value>
+    internal int? ModelVersion { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the registered model name in the model registry.
+    /// </summary>
+    /// <value>The name under which this model is registered, or null if registry was not used.</value>
+    internal string? RegisteredModelName { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the checkpoint path where the model was saved during training.
+    /// </summary>
+    /// <value>The path to the best or latest checkpoint, or null if checkpointing was not used.</value>
+    internal string? CheckpointPath { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the data version hash for the training data.
+    /// </summary>
+    /// <value>A hash uniquely identifying the training data, or null if data versioning was not used.</value>
+    internal string? DataVersionHash { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the hyperparameter optimization trial ID.
+    /// </summary>
+    /// <value>The trial ID that produced this model, or null if optimization was not used.</value>
+    internal int? HyperparameterTrialId { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the hyperparameters used for training.
+    /// </summary>
+    /// <value>A dictionary of hyperparameter names to values, or null if not tracked.</value>
+    internal Dictionary<string, object>? Hyperparameters { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the training metrics history.
+    /// </summary>
+    /// <value>A history of metrics recorded during training, or null if not tracked.</value>
+    internal Dictionary<string, List<double>>? TrainingMetricsHistory { get; private set; }
+
+    #endregion
+
     /// <summary>
     /// Initializes a new instance of the PredictionModelResult class using an options object for clean configuration.
     /// </summary>
@@ -864,6 +1084,23 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         FewShotExampleSelector = options.FewShotExampleSelector;
         PromptAnalyzer = options.PromptAnalyzer;
         PromptCompressor = options.PromptCompressor;
+
+        // Training Infrastructure
+        ExperimentRun = options.ExperimentRun;
+        ExperimentTracker = options.ExperimentTracker;
+        CheckpointManager = options.CheckpointManager;
+        ModelRegistry = options.ModelRegistry;
+        TrainingMonitor = options.TrainingMonitor;
+        HyperparameterOptimizationResult = options.HyperparameterOptimizationResult;
+        ExperimentRunId = options.ExperimentRunId;
+        ExperimentId = options.ExperimentId;
+        ModelVersion = options.ModelVersion;
+        RegisteredModelName = options.RegisteredModelName;
+        CheckpointPath = options.CheckpointPath;
+        DataVersionHash = options.DataVersionHash;
+        HyperparameterTrialId = options.HyperparameterTrialId;
+        Hyperparameters = options.Hyperparameters;
+        TrainingMetricsHistory = options.TrainingMetricsHistory;
     }
 
     /// <summary>
@@ -1854,7 +2091,23 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
             PromptOptimizer = PromptOptimizer,
             FewShotExampleSelector = FewShotExampleSelector,
             PromptAnalyzer = PromptAnalyzer,
-            PromptCompressor = PromptCompressor
+            PromptCompressor = PromptCompressor,
+            // Training Infrastructure - shallow copy (shared references)
+            ExperimentRun = ExperimentRun,
+            ExperimentTracker = ExperimentTracker,
+            CheckpointManager = CheckpointManager,
+            ModelRegistry = ModelRegistry,
+            TrainingMonitor = TrainingMonitor,
+            HyperparameterOptimizationResult = HyperparameterOptimizationResult,
+            ExperimentRunId = ExperimentRunId,
+            ExperimentId = ExperimentId,
+            ModelVersion = ModelVersion,
+            RegisteredModelName = RegisteredModelName,
+            CheckpointPath = CheckpointPath,
+            DataVersionHash = DataVersionHash,
+            HyperparameterTrialId = HyperparameterTrialId,
+            Hyperparameters = Hyperparameters,
+            TrainingMetricsHistory = TrainingMetricsHistory
         };
 
         return new PredictionModelResult<T, TInput, TOutput>(options);
@@ -1922,6 +2175,260 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
 
         return Model.GetFeatureImportance();
     }
+
+    #region Training Infrastructure Public Accessors
+
+    /// <summary>
+    /// Gets the experiment run associated with this model, if experiment tracking was configured.
+    /// </summary>
+    /// <returns>The experiment run, or null if experiment tracking was not used.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This provides access to the training run for post-training logging.
+    ///
+    /// Example:
+    /// <code>
+    /// var run = result.GetExperimentRun();
+    /// if (run != null)
+    /// {
+    ///     run.LogMetric("production_accuracy", 0.92);
+    ///     run.AddNote("Deployed to production");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IExperimentRun<T>? GetExperimentRun() => ExperimentRun;
+
+    /// <summary>
+    /// Gets the experiment tracker used during training, if configured.
+    /// </summary>
+    /// <returns>The experiment tracker, or null if not configured.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this to compare training runs or start new experiments.
+    ///
+    /// Example:
+    /// <code>
+    /// var tracker = result.GetExperimentTracker();
+    /// if (tracker != null)
+    /// {
+    ///     var allRuns = tracker.ListRuns(experimentId);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IExperimentTracker<T>? GetExperimentTracker() => ExperimentTracker;
+
+    /// <summary>
+    /// Gets the checkpoint manager for model persistence operations.
+    /// </summary>
+    /// <returns>The checkpoint manager, or null if not configured.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this to save model states or load previous checkpoints.
+    ///
+    /// Example:
+    /// <code>
+    /// var manager = result.GetCheckpointManager();
+    /// if (manager != null)
+    /// {
+    ///     manager.SaveCheckpoint("after_finetuning", model, metrics);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public ICheckpointManager<T, TInput, TOutput>? GetCheckpointManager() => CheckpointManager;
+
+    /// <summary>
+    /// Gets the model registry for version and lifecycle management.
+    /// </summary>
+    /// <returns>The model registry, or null if not configured.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this to manage model versions and stage transitions.
+    ///
+    /// Example:
+    /// <code>
+    /// var registry = result.GetModelRegistry();
+    /// if (registry != null)
+    /// {
+    ///     registry.TransitionModelStage("my-model", 1, ModelStage.Production);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IModelRegistry<T, TInput, TOutput>? GetModelRegistry() => ModelRegistry;
+
+    /// <summary>
+    /// Gets the training monitor for accessing training diagnostics.
+    /// </summary>
+    /// <returns>The training monitor, or null if not configured.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this to analyze training history and diagnostics.
+    ///
+    /// Example:
+    /// <code>
+    /// var monitor = result.GetTrainingMonitor();
+    /// if (monitor != null)
+    /// {
+    ///     var history = monitor.GetMetricsHistory();
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public ITrainingMonitor<T>? GetTrainingMonitor() => TrainingMonitor;
+
+    /// <summary>
+    /// Gets the hyperparameter optimization result, if optimization was used.
+    /// </summary>
+    /// <returns>The optimization result containing all trials, or null if optimization was not used.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this to analyze which hyperparameters worked best.
+    ///
+    /// Example:
+    /// <code>
+    /// var hpoResult = result.GetHyperparameterOptimizationResult();
+    /// if (hpoResult != null)
+    /// {
+    ///     Console.WriteLine($"Best params: {hpoResult.BestParameters}");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public HyperparameterOptimizationResult<T>? GetHyperparameterOptimizationResult() => HyperparameterOptimizationResult;
+
+    /// <summary>
+    /// Gets training infrastructure metadata as a dictionary.
+    /// </summary>
+    /// <returns>A dictionary containing all training infrastructure metadata.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This provides a convenient way to access all training metadata at once.
+    ///
+    /// Includes:
+    /// - ExperimentRunId, ExperimentId - Experiment tracking IDs
+    /// - ModelVersion, RegisteredModelName - Model registry info
+    /// - CheckpointPath - Where the model was checkpointed
+    /// - DataVersionHash - Training data version
+    /// - HyperparameterTrialId - Which optimization trial produced this model
+    ///
+    /// Example:
+    /// <code>
+    /// var metadata = result.GetTrainingInfrastructureMetadata();
+    /// Console.WriteLine($"Run ID: {metadata["ExperimentRunId"]}");
+    /// Console.WriteLine($"Model Version: {metadata["ModelVersion"]}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, object?> GetTrainingInfrastructureMetadata()
+    {
+        return new Dictionary<string, object?>
+        {
+            ["ExperimentRunId"] = ExperimentRunId,
+            ["ExperimentId"] = ExperimentId,
+            ["ModelVersion"] = ModelVersion,
+            ["RegisteredModelName"] = RegisteredModelName,
+            ["CheckpointPath"] = CheckpointPath,
+            ["DataVersionHash"] = DataVersionHash,
+            ["HyperparameterTrialId"] = HyperparameterTrialId
+        };
+    }
+
+    /// <summary>
+    /// Gets the hyperparameters used for training.
+    /// </summary>
+    /// <returns>A dictionary of hyperparameter names to values, or null if not tracked.</returns>
+    public Dictionary<string, object>? GetHyperparameters() => Hyperparameters;
+
+    /// <summary>
+    /// Gets the training metrics history.
+    /// </summary>
+    /// <returns>A dictionary mapping metric names to their values over time, or null if not tracked.</returns>
+    public Dictionary<string, List<double>>? GetTrainingMetricsHistory() => TrainingMetricsHistory;
+
+    /// <summary>
+    /// Gets experiment tracking information as a structured object.
+    /// </summary>
+    /// <returns>An ExperimentInfo object containing experiment tracking data, or null if experiment tracking was not used.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This provides type-safe access to experiment tracking data.
+    ///
+    /// Example:
+    /// <code>
+    /// var expInfo = result.GetExperimentInfo();
+    /// if (expInfo != null)
+    /// {
+    ///     Console.WriteLine($"Experiment: {expInfo.ExperimentId}");
+    ///     Console.WriteLine($"Run: {expInfo.RunId}");
+    ///
+    ///     // Log additional metrics post-training
+    ///     if (expInfo.ExperimentRun != null)
+    ///     {
+    ///         expInfo.ExperimentRun.LogMetric("production_accuracy", 0.92);
+    ///     }
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public ExperimentInfo<T>? GetExperimentInfo()
+    {
+        // Return null if no experiment tracking was used
+        if (ExperimentRunId == null && ExperimentId == null && ExperimentRun == null && ExperimentTracker == null)
+        {
+            return null;
+        }
+
+        return new ExperimentInfo<T>(
+            ExperimentId,
+            ExperimentRunId,
+            ExperimentRun,
+            ExperimentTracker,
+            TrainingMetricsHistory,
+            Hyperparameters,
+            HyperparameterTrialId,
+            DataVersionHash
+        );
+    }
+
+    /// <summary>
+    /// Gets model registry information as a structured object.
+    /// </summary>
+    /// <returns>A ModelRegistryInfo object containing registry data, or null if model registry was not used.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This provides type-safe access to model versioning and registry data.
+    ///
+    /// Example:
+    /// <code>
+    /// var registryInfo = result.GetModelRegistryInfo();
+    /// if (registryInfo != null)
+    /// {
+    ///     Console.WriteLine($"Model: {registryInfo.RegisteredName} v{registryInfo.Version}");
+    ///
+    ///     // Promote to production
+    ///     if (registryInfo.Registry != null)
+    ///     {
+    ///         registryInfo.Registry.TransitionModelStage(
+    ///             registryInfo.RegisteredName,
+    ///             registryInfo.Version ?? 1,
+    ///             ModelStage.Production);
+    ///     }
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public ModelRegistryInfo<T, TInput, TOutput>? GetModelRegistryInfo()
+    {
+        // Return null if no model registry was used
+        if (ModelVersion == null && RegisteredModelName == null && ModelRegistry == null)
+        {
+            return null;
+        }
+
+        return new ModelRegistryInfo<T, TInput, TOutput>(
+            RegisteredModelName,
+            ModelVersion,
+            ModelRegistry,
+            CheckpointPath,
+            CheckpointManager
+        );
+    }
+
+    #endregion
 
     /// <summary>
     /// Creates a copy of this PredictionModelResult with deep-copied core model components.
@@ -2011,7 +2518,23 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
             PromptOptimizer = PromptOptimizer,
             FewShotExampleSelector = FewShotExampleSelector,
             PromptAnalyzer = PromptAnalyzer,
-            PromptCompressor = PromptCompressor
+            PromptCompressor = PromptCompressor,
+            // Training Infrastructure - shallow copy (shared references)
+            ExperimentRun = ExperimentRun,
+            ExperimentTracker = ExperimentTracker,
+            CheckpointManager = CheckpointManager,
+            ModelRegistry = ModelRegistry,
+            TrainingMonitor = TrainingMonitor,
+            HyperparameterOptimizationResult = HyperparameterOptimizationResult,
+            ExperimentRunId = ExperimentRunId,
+            ExperimentId = ExperimentId,
+            ModelVersion = ModelVersion,
+            RegisteredModelName = RegisteredModelName,
+            CheckpointPath = CheckpointPath,
+            DataVersionHash = DataVersionHash,
+            HyperparameterTrialId = HyperparameterTrialId,
+            Hyperparameters = Hyperparameters,
+            TrainingMetricsHistory = TrainingMetricsHistory
         };
 
         return new PredictionModelResult<T, TInput, TOutput>(options);
