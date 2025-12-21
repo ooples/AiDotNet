@@ -101,7 +101,10 @@ public partial class PredictionModelResult<T, TInput, TOutput>
     internal T ExpectedCalibrationError { get; private set; } = default!;
 
     internal void SetUncertaintyQuantificationOptions(UncertaintyQuantificationOptions? options)
-        => UncertaintyQuantificationOptions = options;
+    {
+        options?.Normalize();
+        UncertaintyQuantificationOptions = options;
+    }
 
     internal void SetUncertaintyCalibrationArtifacts(UncertaintyCalibrationArtifacts<T> artifacts)
     {

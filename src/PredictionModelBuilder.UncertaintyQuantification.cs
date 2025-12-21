@@ -50,6 +50,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
         UncertaintyCalibrationData<TInput, TOutput>? calibrationData = null)
     {
         _uncertaintyQuantificationOptions = options ?? new UncertaintyQuantificationOptions { Enabled = true };
+        _uncertaintyQuantificationOptions.Normalize();
         _uncertaintyCalibrationData = calibrationData;
         return this;
     }

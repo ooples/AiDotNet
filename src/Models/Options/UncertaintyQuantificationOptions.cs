@@ -95,9 +95,9 @@ public sealed class UncertaintyQuantificationOptions
     /// Gets or sets whether to fit and apply temperature scaling for classification-like outputs when calibration labels are provided.
     /// </summary>
     /// <remarks>
-     /// When enabled and calibration labels are provided via the builder, the system will calibrate predicted probabilities and return
-     /// calibrated probabilities as the prediction output from uncertainty APIs.
-     /// </remarks>
+    /// When enabled and calibration labels are provided via the builder, the system will calibrate predicted probabilities and return
+    /// calibrated probabilities as the prediction output from uncertainty APIs.
+    /// </remarks>
     public bool EnableTemperatureScaling { get; set; } = true;
 
     /// <summary>
@@ -158,4 +158,77 @@ public sealed class UncertaintyQuantificationOptions
     /// Gets or sets the learning rate used for SWAG posterior fitting on calibration data.
     /// </summary>
     public double SwagLearningRate { get; set; } = 0.001;
+
+    internal void Normalize()
+    {
+        if (NumSamples < 1)
+        {
+            NumSamples = 30;
+        }
+
+        if (MonteCarloDropoutRate <= 0.0 || MonteCarloDropoutRate >= 1.0)
+        {
+            MonteCarloDropoutRate = 0.1;
+        }
+
+        if (DeepEnsembleInitialNoiseStdDev < 0.0)
+        {
+            DeepEnsembleInitialNoiseStdDev = 0.01;
+        }
+
+        if (ConformalConfidenceLevel <= 0.0 || ConformalConfidenceLevel >= 1.0)
+        {
+            ConformalConfidenceLevel = 0.9;
+        }
+
+        if (CrossConformalFolds < 2)
+        {
+            CrossConformalFolds = 5;
+        }
+
+        if (AdaptiveConformalBins < 1)
+        {
+            AdaptiveConformalBins = 10;
+        }
+
+        if (DeepEnsembleSize < 1)
+        {
+            DeepEnsembleSize = 5;
+        }
+
+        if (PosteriorFitMaxSamples < 1)
+        {
+            PosteriorFitMaxSamples = 256;
+        }
+
+        if (LaplacePriorPrecision <= 0.0)
+        {
+            LaplacePriorPrecision = 1.0;
+        }
+
+        if (SwagNumSnapshots < 1)
+        {
+            SwagNumSnapshots = 20;
+        }
+
+        if (SwagNumSteps < 1)
+        {
+            SwagNumSteps = 60;
+        }
+
+        if (SwagBurnInSteps < 0)
+        {
+            SwagBurnInSteps = 10;
+        }
+
+        if (SwagBurnInSteps >= SwagNumSteps)
+        {
+            SwagBurnInSteps = SwagNumSteps > 1 ? SwagNumSteps - 1 : 0;
+        }
+
+        if (SwagLearningRate <= 0.0)
+        {
+            SwagLearningRate = 0.001;
+        }
+    }
 }
