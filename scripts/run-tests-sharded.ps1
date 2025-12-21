@@ -108,7 +108,7 @@ function Invoke-DotNetTest {
   }
 
   Write-Host "[$($Shard.Name)] dotnet $($args -join ' ')"
-  & dotnet @args
+  & dotnet @args 2>&1 | Out-Host
   return [pscustomobject]@{ Name = $Shard.Name; ExitCode = $LASTEXITCODE }
 }
 
@@ -128,8 +128,8 @@ try {
   $shards = New-Object System.Collections.Generic.List[object]
 
   # AiDotNet.Tests (large) - shard UnitTests by sub-areas for faster local runs.
-  $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 01 Core" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter @(
-    "$categoryFilter",
+  $unitCoreFilter = @(
+    $categoryFilter,
     "FullyQualifiedName~AiDotNet.Tests.UnitTests",
     "FullyQualifiedName!~AiDotNet.Tests.UnitTests.ActivationFunctions",
     "FullyQualifiedName!~AiDotNet.Tests.UnitTests.Attention",
@@ -166,7 +166,8 @@ try {
     "FullyQualifiedName!~AiDotNet.Tests.UnitTests.TimeSeries",
     "FullyQualifiedName!~AiDotNet.Tests.UnitTests.Tokenization",
     "FullyQualifiedName!~AiDotNet.Tests.UnitTests.TransferLearning"
-  ) -join "&")))
+  ) | Where-Object { $_ -and $_.Trim().Length -gt 0 } | ForEach-Object { $_.Trim() } | Join-String -Separator "&"
+  $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 01 Core" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter $unitCoreFilter))
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 02 Activation/Attention" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.ActivationFunctions|$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.Attention"))
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 03 Autodiff/AutoML/Data" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.Autodiff|$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.AutoML|$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.Data"))
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 04 Diagnostics/Diffusion/Encoding" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.Diagnostics|$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion|$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.Encoding"))
@@ -262,12 +263,12 @@ try {
       }
 
       Write-Host "[$($_.Name)] dotnet $($args -join ' ')"
-      & dotnet @args
+      & dotnet @args 2>&1 | Out-Host
       [pscustomobject]@{ Name = $_.Name; ExitCode = $LASTEXITCODE }
     } -ThrottleLimit $MaxParallel
   }
 
-  $ordered = @($results) | Sort-Object Name
+  $ordered = @($results) | Where-Object { $_ -is [psobject] -and $_.PSObject.Properties.Match('Name').Count -gt 0 -and $_.PSObject.Properties.Match('ExitCode').Count -gt 0 } | Sort-Object Name
   $failed = $ordered | Where-Object { $_.ExitCode -ne 0 }
 
   Write-Host ""
