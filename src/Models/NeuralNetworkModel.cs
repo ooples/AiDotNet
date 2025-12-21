@@ -336,7 +336,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         }
         
         // Ensure the network is in training mode
-        Network.SetTrainingMode(true);
+        SetTrainingMode(true);
         
         // Convert tensors to the format expected by the network
         Vector<T> inputVector = input.ToVector();
