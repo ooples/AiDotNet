@@ -302,9 +302,35 @@ public abstract class DataVersionControlBase<T> : IDataVersionControl<T>
         string? description = null);
 
     /// <summary>
-    /// Retrieves a dataset snapshot.
+    /// Retrieves a dataset snapshot, returning only the first dataset in the snapshot.
     /// </summary>
+    /// <remarks>
+    /// <b>Important:</b> This method is designed for single-dataset snapshots or when you only
+    /// need information about one dataset. For multi-dataset snapshots created with
+    /// <see cref="CreateDatasetSnapshot"/>, this method returns only the first dataset's information.
+    /// Use <see cref="GetAllDatasetsInSnapshot"/> to retrieve all datasets in a multi-dataset snapshot.
+    /// </remarks>
+    /// <param name="snapshotName">The name of the snapshot to retrieve.</param>
+    /// <returns>A DatasetSnapshot containing information about the first dataset in the snapshot.</returns>
     public abstract DatasetSnapshot GetDatasetSnapshot(string snapshotName);
+
+    /// <summary>
+    /// Retrieves all datasets in a multi-dataset snapshot.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> When you create a snapshot with multiple datasets using
+    /// <see cref="CreateDatasetSnapshot"/>, use this method to retrieve all of them.
+    /// Each entry in the returned dictionary maps a dataset name to its version hash.
+    /// </remarks>
+    /// <param name="snapshotName">The name of the snapshot to retrieve.</param>
+    /// <returns>
+    /// A tuple containing:
+    /// - SnapshotId: The unique identifier of the snapshot
+    /// - Datasets: A dictionary mapping dataset names to their version hashes
+    /// - Description: The optional description of the snapshot
+    /// - CreatedAt: When the snapshot was created
+    /// </returns>
+    public abstract (string SnapshotId, Dictionary<string, string> Datasets, string? Description, DateTime CreatedAt) GetAllDatasetsInSnapshot(string snapshotName);
 
     #region Protected Helper Methods
 

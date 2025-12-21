@@ -503,7 +503,8 @@ public class DataVersionControl<T> : DataVersionControlBase<T>
     }
 
     /// <summary>
-    /// Retrieves a dataset snapshot.
+    /// Retrieves a dataset snapshot, returning only the first dataset in the snapshot.
+    /// For multi-dataset snapshots, use <see cref="GetAllDatasetsInSnapshot"/> to get all datasets.
     /// </summary>
     public override DatasetSnapshot GetDatasetSnapshot(string snapshotName)
     {
@@ -516,6 +517,7 @@ public class DataVersionControl<T> : DataVersionControlBase<T>
                 throw new ArgumentException($"Snapshot '{snapshotName}' not found.", nameof(snapshotName));
 
             // Return as DatasetSnapshot (first dataset in the snapshot)
+            // For all datasets, use GetAllDatasetsInSnapshot instead
             var firstDataset = multiSnapshot.Datasets.First();
             var version = GetDatasetVersion(firstDataset.Key, firstDataset.Value);
 
@@ -529,6 +531,29 @@ public class DataVersionControl<T> : DataVersionControlBase<T>
                 StoragePath = version.StoragePath,
                 Hash = version.Hash
             };
+        }
+    }
+
+    /// <summary>
+    /// Retrieves all datasets in a multi-dataset snapshot.
+    /// </summary>
+    public override (string SnapshotId, Dictionary<string, string> Datasets, string? Description, DateTime CreatedAt) GetAllDatasetsInSnapshot(string snapshotName)
+    {
+        if (string.IsNullOrWhiteSpace(snapshotName))
+            throw new ArgumentException("Snapshot name cannot be null or empty.", nameof(snapshotName));
+
+        lock (SyncLock)
+        {
+            if (!_snapshots.TryGetValue(snapshotName, out var multiSnapshot))
+                throw new ArgumentException($"Snapshot '{snapshotName}' not found.", nameof(snapshotName));
+
+            // Return a copy of the datasets dictionary to prevent external modification
+            return (
+                multiSnapshot.SnapshotId,
+                new Dictionary<string, string>(multiSnapshot.Datasets),
+                multiSnapshot.Description,
+                multiSnapshot.CreatedAt
+            );
         }
     }
 
