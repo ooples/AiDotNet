@@ -2,7 +2,6 @@ using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.JitCompiler;
 using AiDotNet.Models.Options;
-using AiDotNet.Regularization;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -373,7 +372,7 @@ public class RegressionJitCompilationTests
 
     private static (Matrix<double> X, Vector<double> y) GenerateLinearTestData(int samples, int features)
     {
-        var random = RandomHelper.CreateSeededRandom(42);
+        var random = new Random(42);
         var X = new Matrix<double>(samples, features);
         var y = new Vector<double>(samples);
 
@@ -417,15 +416,8 @@ public class RegressionJitCompilationTests
         }
         else if (modelType == typeof(PolynomialRegression<double>))
         {
-            var (X, y) = GenerateLinearTestData(100, 5);
-            var regularization = new L2Regularization<double, Matrix<double>, Vector<double>>(
-                new AiDotNet.Models.RegularizationOptions
-            {
-                Type = RegularizationType.L2,
-                Strength = 1e-6,
-                L1Ratio = 0.0
-            });
-            var model = new PolynomialRegression<double>(regularization: regularization);
+            var (X, y) = GenerateLinearTestData(100, 1);
+            var model = new PolynomialRegression<double>();
             model.Train(X, y);
             return model;
         }
@@ -439,13 +431,4 @@ public class RegressionJitCompilationTests
 
         return null;
     }
-}
-
-/// <summary>
-/// Interface for regression models (for testing purposes).
-/// </summary>
-public interface IRegressionModel<T>
-{
-    bool SupportsJitCompilation { get; }
-    ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes);
 }

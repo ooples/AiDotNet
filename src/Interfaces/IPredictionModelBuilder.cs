@@ -639,17 +639,36 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <para>
     /// Example:
     /// <code>
-    /// var autoML = new BayesianOptimizationAutoML&lt;double, double[][], double[]&gt;();
+    /// // Advanced usage: plug in your own AutoML implementation.
+    /// // Most users should prefer the ConfigureAutoML(AutoMLOptions&lt;...&gt;) overload instead.
+    /// var autoML = new RandomSearchAutoML&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
     /// autoML.SetTimeLimit(TimeSpan.FromMinutes(30));
-    /// autoML.SetCandidateModels(new[] { ModelType.RandomForest, ModelType.GradientBoosting });
+    /// autoML.SetCandidateModels(new List&lt;ModelType&gt; { ModelType.RandomForest, ModelType.GradientBoosting });
     ///
-    /// var builder = new PredictionModelBuilder&lt;double, double[][], double[]&gt;()
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAutoML(autoML)
     ///     .Build(trainingData, trainingLabels);
     /// </code>
     /// </para>
     /// </remarks>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel);
+
+    /// <summary>
+    /// Configures AutoML using facade-style options (recommended for most users).
+    /// </summary>
+    /// <param name="options">AutoML options (budget, strategy, and optional overrides). If null, defaults are used.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This overload follows the AiDotNet facade pattern: you provide a small options object, and the library
+    /// chooses an appropriate built-in AutoML implementation and industry-standard defaults for you.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Use this overload if you want AutoML without having to manually instantiate
+    /// an AutoML implementation. Pick a budget preset (Fast/Standard/Thorough) and let AiDotNet handle the rest.
+    /// </para>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(AutoMLOptions<T, TInput, TOutput>? options = null);
 
     /// <summary>
     /// Configures reinforcement learning options for training an RL agent.

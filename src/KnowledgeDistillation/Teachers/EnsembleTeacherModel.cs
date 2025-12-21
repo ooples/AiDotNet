@@ -420,6 +420,8 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// </remarks>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
+        if (inputNodes == null) throw new ArgumentNullException(nameof(inputNodes));
+
         if (_aggregationMode != EnsembleAggregationMode.WeightedAverage)
         {
             return ThrowJitNotSupported(
@@ -434,15 +436,9 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
             {
                 return ThrowJitNotSupported(
                     nameof(EnsembleTeacherModel<T>),
-                    $"teacher at index {i} ({_teachers[i].GetType().Name}) does not support JIT compilation");
+                $"teacher at index {i} ({_teachers[i].GetType().Name}) does not support JIT compilation");
             }
         }
-
-        // Create shared input node
-        var inputShape = new int[] { OutputDimension };
-        var inputTensor = new Tensor<T>(inputShape);
-        var sharedInputNode = TensorOperations<T>.Variable(inputTensor, "ensemble_input", requiresGradient: false);
-        inputNodes.Add(sharedInputNode);
 
         // Combine teacher graphs with weighted sum
         ComputationNode<T>? resultNode = null;
@@ -454,9 +450,10 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
             // Get teacher's computation graph (teacher adds its own input nodes)
             var teacherInputNodes = new List<ComputationNode<T>>();
             var teacherOutput = jitTeacher.ExportComputationGraph(teacherInputNodes);
+            inputNodes.AddRange(teacherInputNodes);
 
             // Scale by weight
-            var weightTensor = new Tensor<T>(teacherOutput.Value.Shape);
+            var weightTensor = new Tensor<T>((int[])teacherOutput.Value.Shape.Clone());
             weightTensor.Fill(NumOps.FromDouble(_weights![i]));
             var weightNode = TensorOperations<T>.Constant(weightTensor, $"teacher_{i}_weight");
             var scaledOutput = TensorOperations<T>.ElementwiseMultiply(teacherOutput, weightNode);
@@ -474,30 +471,4 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 
         return resultNode!;
     }
-}
-
-/// <summary>
-/// Defines how ensemble predictions are aggregated.
-/// </summary>
-public enum EnsembleAggregationMode
-{
-    /// <summary>
-    /// Weighted average of teacher logits (most common).
-    /// </summary>
-    WeightedAverage,
-
-    /// <summary>
-    /// Geometric mean of teacher logits (for multiplicative ensembles).
-    /// </summary>
-    GeometricMean,
-
-    /// <summary>
-    /// Element-wise maximum (for pessimistic ensembles).
-    /// </summary>
-    Maximum,
-
-    /// <summary>
-    /// Element-wise median (robust to outliers).
-    /// </summary>
-    Median
 }

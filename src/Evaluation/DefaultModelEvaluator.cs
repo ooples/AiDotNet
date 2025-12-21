@@ -55,15 +55,56 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// </remarks>
     public ModelEvaluationData<T, TInput, TOutput> EvaluateModel(ModelEvaluationInput<T, TInput, TOutput> input)
     {
+        var inferredPredictionType = input.PredictionTypeOverride
+            ?? TryInferPredictionType(input.InputData.YTrain);
+
+        var trainingSet = CalculateDataSetStats(input.InputData.XTrain, input.InputData.YTrain, input.Model, inferredPredictionType);
+        var validationSet = CalculateDataSetStats(input.InputData.XValidation, input.InputData.YValidation, input.Model, inferredPredictionType);
+        var testSet = CalculateDataSetStats(input.InputData.XTest, input.InputData.YTest, input.Model, inferredPredictionType);
+
         var evaluationData = new ModelEvaluationData<T, TInput, TOutput>
         {
-            TrainingSet = CalculateDataSetStats(input.InputData.XTrain, input.InputData.YTrain, input.Model),
-            ValidationSet = CalculateDataSetStats(input.InputData.XValidation, input.InputData.YValidation, input.Model),
-            TestSet = CalculateDataSetStats(input.InputData.XTest, input.InputData.YTest, input.Model),
-            ModelStats = CalculateModelStats(input.Model, input.InputData.XTrain, input.NormInfo)
+            TrainingSet = trainingSet,
+            ValidationSet = validationSet,
+            TestSet = testSet,
+            ModelStats = TryCalculateModelStats(input.Model, validationSet.Features, validationSet.Actual, validationSet.Predicted, input.NormInfo)
         };
 
         return evaluationData;
+    }
+
+    private static PredictionType TryInferPredictionType(TOutput targets)
+    {
+        return PredictionTypeInference.InferFromTargets<T, TOutput>(targets);
+    }
+
+    private static ModelStats<T, TInput, TOutput> TryCalculateModelStats(
+        IFullModel<T, TInput, TOutput>? model,
+        TInput xForStatistics,
+        TOutput actual,
+        TOutput predicted,
+        NormalizationInfo<T, TInput, TOutput> normInfo)
+    {
+        try
+        {
+            return CalculateModelStats(model, xForStatistics, actual, predicted, normInfo);
+        }
+        catch (InvalidOperationException)
+        {
+            return ModelStats<T, TInput, TOutput>.Empty();
+        }
+        catch (ArgumentException)
+        {
+            return ModelStats<T, TInput, TOutput>.Empty();
+        }
+        catch (NotSupportedException)
+        {
+            return ModelStats<T, TInput, TOutput>.Empty();
+        }
+        catch (ArithmeticException)
+        {
+            return ModelStats<T, TInput, TOutput>.Empty();
+        }
     }
 
     /// <summary>
@@ -83,7 +124,11 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// 
     /// This gives you a complete picture of your model's performance on this dataset.
     /// </remarks>
-    private DataSetStats<T, TInput, TOutput> CalculateDataSetStats(TInput X, TOutput y, IFullModel<T, TInput, TOutput>? model)
+    private DataSetStats<T, TInput, TOutput> CalculateDataSetStats(
+        TInput X,
+        TOutput y,
+        IFullModel<T, TInput, TOutput>? model,
+        PredictionType predictionType)
     {
         if (model == null)
         {
@@ -91,17 +136,31 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         }
 
         var predictions = model.Predict(X);
-        var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(predictions);
         var inputSize = InputHelper<T, TInput>.GetInputSize(X);
-        var actual = ConversionsHelper.ConvertToVector<T, TOutput>(y);
-        var aligned = predicted.Length == actual.Length;
+
+        if (!TryGetAlignedVectors(y, predictions, predictionType, out var actual, out var predicted))
+        {
+            var emptyStats = new DataSetStats<T, TInput, TOutput>
+            {
+                ErrorStats = ErrorStats<T>.Empty(),
+                ActualBasicStats = BasicStats<T>.Empty(),
+                PredictedBasicStats = BasicStats<T>.Empty(),
+                PredictionStats = PredictionStats<T>.Empty(),
+                Predicted = predictions,
+                Features = X,
+                Actual = y
+            };
+
+            TryPopulateUncertaintyStats(emptyStats, X, model);
+            return emptyStats;
+        }
 
         var stats = new DataSetStats<T, TInput, TOutput>
         {
-            ErrorStats = aligned ? CalculateErrorStats(actual, predicted, inputSize) : ErrorStats<T>.Empty(),
+            ErrorStats = CalculateErrorStats(actual, predicted, inputSize, predictionType),
             ActualBasicStats = CalculateBasicStats(actual),
             PredictedBasicStats = CalculateBasicStats(predicted),
-            PredictionStats = aligned ? CalculatePredictionStats(actual, predicted, inputSize) : PredictionStats<T>.Empty(),
+            PredictionStats = CalculatePredictionStats(actual, predicted, inputSize, predictionType),
             Predicted = predictions,
             Features = X,
             Actual = y
@@ -159,6 +218,226 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         return numOps.Divide(sum, numOps.FromDouble(values.Length));
     }
 
+    private static bool TryGetAlignedVectors(
+        TOutput actualOutput,
+        TOutput predictedOutput,
+        PredictionType predictionType,
+        out Vector<T> actual,
+        out Vector<T> predicted)
+    {
+        actual = Vector<T>.Empty();
+        predicted = Vector<T>.Empty();
+
+        bool preferMultiClassMatrixPath = predictionType == PredictionType.MultiClass
+            && (LooksLikeMultiClassScores(actualOutput) || LooksLikeMultiClassScores(predictedOutput));
+
+        try
+        {
+            actual = ConversionsHelper.ConvertToVector<T, TOutput>(actualOutput);
+            predicted = ConversionsHelper.ConvertToVector<T, TOutput>(predictedOutput);
+
+            if (!preferMultiClassMatrixPath && actual.Length == predicted.Length)
+            {
+                return true;
+            }
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (ArgumentException)
+        {
+        }
+        catch (NotSupportedException)
+        {
+        }
+
+        if (predictionType == PredictionType.MultiClass)
+        {
+            if (TryGetMultiClassLabelVectors(actualOutput, predictedOutput, ref actual, ref predicted))
+            {
+                return true;
+            }
+        }
+
+        if (TryGetFlattenedMatrixVectors(actualOutput, predictedOutput, out actual, out predicted))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool LooksLikeMultiClassScores(TOutput output)
+    {
+        if (output is Matrix<T> matrix)
+        {
+            return matrix.Columns > 1;
+        }
+
+        if (output is Tensor<T> tensor)
+        {
+            return tensor.Rank == 2 && tensor.Shape.Length >= 2 && tensor.Shape[1] > 1;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetMultiClassLabelVectors(
+        TOutput actualOutput,
+        TOutput predictedOutput,
+        ref Vector<T> actual,
+        ref Vector<T> predicted)
+    {
+        try
+        {
+            var predictedMatrix = ConversionsHelper.ConvertToMatrix<T, TOutput>(predictedOutput);
+            if (predictedMatrix.Rows <= 0 || predictedMatrix.Columns <= 0)
+            {
+                return false;
+            }
+
+            Vector<T> actualLabels;
+            if (actual.Length > 0)
+            {
+                actualLabels = actual;
+            }
+            else
+            {
+                actualLabels = ConversionsHelper.ConvertToVector<T, TOutput>(actualOutput);
+            }
+
+            if (actualLabels.Length == predictedMatrix.Rows)
+            {
+                actual = actualLabels;
+                predicted = ArgMaxToLabelVector(predictedMatrix);
+                return true;
+            }
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (ArgumentException)
+        {
+        }
+        catch (NotSupportedException)
+        {
+        }
+
+        try
+        {
+            var actualMatrix = ConversionsHelper.ConvertToMatrix<T, TOutput>(actualOutput);
+            var predictedMatrix = ConversionsHelper.ConvertToMatrix<T, TOutput>(predictedOutput);
+
+            if (actualMatrix.Rows != predictedMatrix.Rows || actualMatrix.Columns != predictedMatrix.Columns)
+            {
+                return false;
+            }
+
+            if (actualMatrix.Rows <= 0 || actualMatrix.Columns <= 0)
+            {
+                return false;
+            }
+
+            actual = ArgMaxToLabelVector(actualMatrix);
+            predicted = ArgMaxToLabelVector(predictedMatrix);
+            return actual.Length == predicted.Length;
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (ArgumentException)
+        {
+        }
+        catch (NotSupportedException)
+        {
+        }
+
+        return false;
+    }
+
+    private static bool TryGetFlattenedMatrixVectors(
+        TOutput actualOutput,
+        TOutput predictedOutput,
+        out Vector<T> actual,
+        out Vector<T> predicted)
+    {
+        actual = Vector<T>.Empty();
+        predicted = Vector<T>.Empty();
+
+        try
+        {
+            var actualMatrix = ConversionsHelper.ConvertToMatrix<T, TOutput>(actualOutput);
+            var predictedMatrix = ConversionsHelper.ConvertToMatrix<T, TOutput>(predictedOutput);
+
+            if (actualMatrix.Rows != predictedMatrix.Rows || actualMatrix.Columns != predictedMatrix.Columns)
+            {
+                return false;
+            }
+
+            if (actualMatrix.Rows <= 0 || actualMatrix.Columns <= 0)
+            {
+                return false;
+            }
+
+            actual = FlattenToVector(actualMatrix);
+            predicted = FlattenToVector(predictedMatrix);
+            return actual.Length == predicted.Length;
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (ArgumentException)
+        {
+        }
+        catch (NotSupportedException)
+        {
+        }
+
+        return false;
+    }
+
+    private static Vector<T> ArgMaxToLabelVector(Matrix<T> scores)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var labels = new Vector<T>(scores.Rows);
+
+        for (int row = 0; row < scores.Rows; row++)
+        {
+            int bestIndex = 0;
+            T bestValue = scores[row, 0];
+
+            for (int col = 1; col < scores.Columns; col++)
+            {
+                var value = scores[row, col];
+                if (numOps.GreaterThan(value, bestValue))
+                {
+                    bestValue = value;
+                    bestIndex = col;
+                }
+            }
+
+            labels[row] = numOps.FromDouble(bestIndex);
+        }
+
+        return labels;
+    }
+
+    private static Vector<T> FlattenToVector(Matrix<T> matrix)
+    {
+        var flattened = new Vector<T>(matrix.Rows * matrix.Columns);
+        int index = 0;
+
+        for (int row = 0; row < matrix.Rows; row++)
+        {
+            for (int col = 0; col < matrix.Columns; col++)
+            {
+                flattened[index++] = matrix[row, col];
+            }
+        }
+
+        return flattened;
+    }
+
     /// <summary>
     /// Calculates error statistics by comparing actual values to predicted values.
     /// </summary>
@@ -175,9 +454,19 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// 
     /// Lower values for these metrics indicate better model performance.
     /// </remarks>
-    private static ErrorStats<T> CalculateErrorStats(Vector<T> actual, Vector<T> predicted, int featureCount)
+    private static ErrorStats<T> CalculateErrorStats(
+        Vector<T> actual,
+        Vector<T> predicted,
+        int featureCount,
+        PredictionType predictionType)
     {
-        return new ErrorStats<T>(new ErrorStatsInputs<T> { Actual = actual, Predicted = predicted, FeatureCount = featureCount });
+        return new ErrorStats<T>(new ErrorStatsInputs<T>
+        {
+            Actual = actual,
+            Predicted = predicted,
+            FeatureCount = featureCount,
+            PredictionType = predictionType
+        });
     }
 
     /// <summary>
@@ -215,7 +504,11 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// 
     /// These metrics help you understand not just how accurate your model is, but also how reliable and robust it is.
     /// </remarks>
-    private PredictionStats<T> CalculatePredictionStats(Vector<T> actual, Vector<T> predicted, int featureCount)
+    private PredictionStats<T> CalculatePredictionStats(
+        Vector<T> actual,
+        Vector<T> predicted,
+        int featureCount,
+        PredictionType predictionType)
     {
         return new PredictionStats<T>(new PredictionStatsInputs<T>
         {
@@ -223,7 +516,8 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
             Predicted = predicted,
             NumberOfParameters = featureCount,
             ConfidenceLevel = _predictionOptions.ConfidenceLevel,
-            LearningCurveSteps = _predictionOptions.LearningCurveSteps
+            LearningCurveSteps = _predictionOptions.LearningCurveSteps,
+            PredictionType = predictionType
         });
     }
 
@@ -231,7 +525,9 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// Calculates statistics about the model itself, independent of specific predictions.
     /// </summary>
     /// <param name="model">The model to analyze.</param>
-    /// <param name="xTrain">The training feature matrix used to train the model.</param>
+    /// <param name="xForStatistics">The feature matrix used for computing model statistics.</param>
+    /// <param name="actual">The actual targets corresponding to <paramref name="xForStatistics"/>.</param>
+    /// <param name="predicted">The predicted targets corresponding to <paramref name="xForStatistics"/>.</param>
     /// <param name="normInfo">Information about how the data was normalized.</param>
     /// <returns>Statistics about the model's structure and characteristics.</returns>
     /// <remarks>
@@ -243,29 +539,29 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// 
     /// This helps you understand what makes your model tick and which inputs matter most.
     /// </remarks>
-    private static ModelStats<T, TInput, TOutput> CalculateModelStats(IFullModel<T, TInput, TOutput>? model, TInput xTrain, NormalizationInfo<T, TInput, TOutput> normInfo)
+    private static ModelStats<T, TInput, TOutput> CalculateModelStats(
+        IFullModel<T, TInput, TOutput>? model,
+        TInput xForStatistics,
+        TOutput actual,
+        TOutput predicted,
+        NormalizationInfo<T, TInput, TOutput> normInfo)
     {
-        try
+        var optimizationResult = new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
+        var options = new PredictionModelResultOptions<T, TInput, TOutput>
         {
-            var optimizationResult = new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
-            var options = new PredictionModelResultOptions<T, TInput, TOutput>
-            {
-                OptimizationResult = optimizationResult,
-                NormalizationInfo = normInfo
-            };
-            var predictionModelResult = new PredictionModelResult<T, TInput, TOutput>(options);
+            OptimizationResult = optimizationResult,
+            NormalizationInfo = normInfo
+        };
+        var predictionModelResult = new PredictionModelResult<T, TInput, TOutput>(options);
 
-            return new ModelStats<T, TInput, TOutput>(new ModelStatsInputs<T, TInput, TOutput>
-            {
-                XMatrix = xTrain,
-                FeatureCount = InputHelper<T, TInput>.GetInputSize(xTrain),
-                Model = predictionModelResult?.Model
-            });
-        }
-        catch (Exception)
+        return new ModelStats<T, TInput, TOutput>(new ModelStatsInputs<T, TInput, TOutput>
         {
-            return ModelStats<T, TInput, TOutput>.Empty();
-        }
+            XMatrix = xForStatistics,
+            FeatureCount = InputHelper<T, TInput>.GetInputSize(xForStatistics),
+            Actual = actual,
+            Predicted = predicted,
+            Model = predictionModelResult?.Model
+        });
     }
 
     /// <summary>
