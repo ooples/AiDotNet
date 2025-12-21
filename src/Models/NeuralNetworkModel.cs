@@ -392,7 +392,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     public Tensor<T> Predict(Tensor<T> input)
     {
         // Set to prediction mode (not training)
-        Network.SetTrainingMode(false);
+        SetTrainingMode(false);
     
         // Forward pass through the network
         return Network.Predict(input);
