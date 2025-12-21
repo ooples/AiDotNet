@@ -36,6 +36,7 @@ using AiDotNet.Tokenization.Configuration;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
 using AiDotNet.TrainingMonitoring;
+using System.Runtime.CompilerServices;
 
 namespace AiDotNet.Models.Results;
 
