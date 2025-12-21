@@ -89,8 +89,22 @@ public abstract class TrainingMonitorBase<T> : ITrainingMonitor<T>
                     $"Deserialization of type '{typeName}' is not allowed for security reasons.");
             }
 
-            return Type.GetType(typeName) ?? throw new JsonSerializationException(
-                $"Could not resolve type '{typeName}'.");
+            // Try to resolve the type from the type name
+            var type = Type.GetType(typeName);
+            if (type != null)
+                return type;
+
+            // If Type.GetType fails, search through loaded assemblies
+            // This is needed for types in other assemblies (like test assemblies)
+            var baseTypeName = ExtractBaseTypeName(typeName);
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                type = assembly.GetType(baseTypeName);
+                if (type != null)
+                    return type;
+            }
+
+            throw new JsonSerializationException($"Could not resolve type '{typeName}'.");
         }
 
         private static bool IsTypeAllowed(string typeName)

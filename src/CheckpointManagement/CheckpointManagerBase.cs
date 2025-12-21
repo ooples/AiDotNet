@@ -93,8 +93,22 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
                     $"Deserialization of type '{typeName}' is not allowed for security reasons.");
             }
 
-            return Type.GetType(typeName) ?? throw new JsonSerializationException(
-                $"Could not resolve type '{typeName}'.");
+            // Try to resolve the type from the type name
+            var type = Type.GetType(typeName);
+            if (type != null)
+                return type;
+
+            // If Type.GetType fails, search through loaded assemblies
+            // This is needed for types in other assemblies (like test assemblies)
+            var baseTypeName = ExtractBaseTypeName(typeName);
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                type = assembly.GetType(baseTypeName);
+                if (type != null)
+                    return type;
+            }
+
+            throw new JsonSerializationException($"Could not resolve type '{typeName}'.");
         }
 
         private static bool IsTypeAllowed(string typeName)
@@ -159,11 +173,29 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
     /// </summary>
     /// <param name="checkpointDirectory">Directory to store checkpoints.</param>
     /// <param name="baseDirectory">Base directory for path validation. Defaults to current directory.</param>
+    /// <remarks>
+    /// When a custom checkpointDirectory is provided without a baseDirectory, the checkpoint directory
+    /// itself becomes the base for path validation. This allows users to store checkpoints in
+    /// any location they choose (like temp directories for tests) while still preventing
+    /// path traversal attacks within that chosen directory.
+    /// </remarks>
     protected CheckpointManagerBase(string? checkpointDirectory = null, string? baseDirectory = null)
     {
-        var baseDir = baseDirectory ?? Directory.GetCurrentDirectory();
-        var defaultStorage = Path.Combine(baseDir, "checkpoints");
-        CheckpointDirectory = GetSanitizedPath(checkpointDirectory ?? defaultStorage, baseDir);
+        if (checkpointDirectory != null)
+        {
+            // User provided a custom checkpoint directory
+            // Use the provided base directory, or default to the checkpoint directory itself
+            var fullCheckpointPath = Path.GetFullPath(checkpointDirectory);
+            var baseDir = baseDirectory != null ? Path.GetFullPath(baseDirectory) : fullCheckpointPath;
+            CheckpointDirectory = GetSanitizedPath(fullCheckpointPath, baseDir);
+        }
+        else
+        {
+            // Using default checkpoint directory - validate against base
+            var baseDir = baseDirectory ?? Directory.GetCurrentDirectory();
+            var defaultStorage = Path.Combine(baseDir, "checkpoints");
+            CheckpointDirectory = GetSanitizedPath(defaultStorage, baseDir);
+        }
 
         EnsureCheckpointDirectoryExists();
     }

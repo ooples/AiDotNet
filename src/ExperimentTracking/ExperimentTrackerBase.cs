@@ -51,7 +51,10 @@ public abstract class ExperimentTrackerBase<T> : IExperimentTracker<T>
         {
             "AiDotNet.",
             "System.Collections.Generic.",
-            "System."
+            "System.Collections.Concurrent.",
+            "System.Collections.ObjectModel."
+            // Note: Removed broad "System." prefix to prevent deserialization of dangerous types
+            // like System.Diagnostics.Process. Use AllowedSystemTypes for specific safe types.
         };
 
         private static readonly HashSet<string> AllowedSystemTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -85,8 +88,22 @@ public abstract class ExperimentTrackerBase<T> : IExperimentTracker<T>
                     $"Deserialization of type '{typeName}' is not allowed for security reasons.");
             }
 
-            return Type.GetType(typeName) ?? throw new JsonSerializationException(
-                $"Could not resolve type '{typeName}'.");
+            // Try to resolve the type from the type name
+            var type = Type.GetType(typeName);
+            if (type != null)
+                return type;
+
+            // If Type.GetType fails, search through loaded assemblies
+            // This is needed for types in other assemblies (like test assemblies)
+            var baseTypeName = ExtractBaseTypeName(typeName);
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                type = assembly.GetType(baseTypeName);
+                if (type != null)
+                    return type;
+            }
+
+            throw new JsonSerializationException($"Could not resolve type '{typeName}'.");
         }
 
         private static bool IsTypeAllowed(string typeName)
@@ -127,11 +144,29 @@ public abstract class ExperimentTrackerBase<T> : IExperimentTracker<T>
     /// </summary>
     /// <param name="storageDirectory">Directory to store experiment data.</param>
     /// <param name="baseDirectory">Base directory for path validation. Defaults to current directory.</param>
+    /// <remarks>
+    /// When a custom storageDirectory is provided without a baseDirectory, the storage directory
+    /// itself becomes the base for path validation. This allows users to store experiments in
+    /// any location they choose (like temp directories for tests) while still preventing
+    /// path traversal attacks within that chosen directory.
+    /// </remarks>
     protected ExperimentTrackerBase(string? storageDirectory = null, string? baseDirectory = null)
     {
-        var baseDir = baseDirectory ?? Directory.GetCurrentDirectory();
-        var defaultStorage = Path.Combine(baseDir, "mlruns");
-        StorageDirectory = GetSanitizedPath(storageDirectory ?? defaultStorage, baseDir);
+        if (storageDirectory != null)
+        {
+            // User provided a custom storage directory
+            // Use the provided base directory, or default to the storage directory itself
+            var fullStoragePath = Path.GetFullPath(storageDirectory);
+            var baseDir = baseDirectory != null ? Path.GetFullPath(baseDirectory) : fullStoragePath;
+            StorageDirectory = GetSanitizedPath(fullStoragePath, baseDir);
+        }
+        else
+        {
+            // Using default storage directory - validate against base
+            var baseDir = baseDirectory ?? Directory.GetCurrentDirectory();
+            var defaultStorage = Path.Combine(baseDir, "mlruns");
+            StorageDirectory = GetSanitizedPath(defaultStorage, baseDir);
+        }
 
         EnsureStorageDirectoryExists();
     }

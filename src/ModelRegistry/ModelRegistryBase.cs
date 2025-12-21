@@ -91,8 +91,22 @@ public abstract class ModelRegistryBase<T, TInput, TOutput> : IModelRegistry<T, 
                     $"Deserialization of type '{typeName}' is not allowed for security reasons.");
             }
 
-            return Type.GetType(typeName) ?? throw new JsonSerializationException(
-                $"Could not resolve type '{typeName}'.");
+            // Try to resolve the type from the type name
+            var type = Type.GetType(typeName);
+            if (type != null)
+                return type;
+
+            // If Type.GetType fails, search through loaded assemblies
+            // This is needed for types in other assemblies (like test assemblies)
+            var baseTypeName = ExtractBaseTypeName(typeName);
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                type = assembly.GetType(baseTypeName);
+                if (type != null)
+                    return type;
+            }
+
+            throw new JsonSerializationException($"Could not resolve type '{typeName}'.");
         }
 
         private static bool IsTypeAllowed(string typeName)
@@ -133,11 +147,29 @@ public abstract class ModelRegistryBase<T, TInput, TOutput> : IModelRegistry<T, 
     /// </summary>
     /// <param name="registryDirectory">Directory to store models.</param>
     /// <param name="baseDirectory">Base directory for path validation. Defaults to current directory.</param>
+    /// <remarks>
+    /// When a custom registryDirectory is provided without a baseDirectory, the registry directory
+    /// itself becomes the base for path validation. This allows users to store models in
+    /// any location they choose (like temp directories for tests) while still preventing
+    /// path traversal attacks within that chosen directory.
+    /// </remarks>
     protected ModelRegistryBase(string? registryDirectory = null, string? baseDirectory = null)
     {
-        var baseDir = baseDirectory ?? Directory.GetCurrentDirectory();
-        var defaultStorage = Path.Combine(baseDir, "model_registry");
-        RegistryDirectory = GetSanitizedPath(registryDirectory ?? defaultStorage, baseDir);
+        if (registryDirectory != null)
+        {
+            // User provided a custom registry directory
+            // Use the provided base directory, or default to the registry directory itself
+            var fullRegistryPath = Path.GetFullPath(registryDirectory);
+            var baseDir = baseDirectory != null ? Path.GetFullPath(baseDirectory) : fullRegistryPath;
+            RegistryDirectory = GetSanitizedPath(fullRegistryPath, baseDir);
+        }
+        else
+        {
+            // Using default registry directory - validate against base
+            var baseDir = baseDirectory ?? Directory.GetCurrentDirectory();
+            var defaultStorage = Path.Combine(baseDir, "model_registry");
+            RegistryDirectory = GetSanitizedPath(defaultStorage, baseDir);
+        }
 
         EnsureRegistryDirectoryExists();
     }
