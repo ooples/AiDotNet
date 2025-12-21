@@ -49,6 +49,14 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
     private const int DefaultBatchSize = 32;
     private const double DefaultLearningRate = 0.01;
 
+    /// <summary>
+    /// Default threshold for considering a prediction correct based on gradient norm.
+    /// Lower values are more strict (require smaller gradients to count as correct).
+    /// </summary>
+    public const double DefaultAccuracyThreshold = 0.1;
+
+    private readonly T _accuracyThreshold;
+
     /// <inheritdoc/>
     public IFullModel<T, TInput, TOutput> Model => _model;
 
@@ -62,23 +70,34 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
     public int TotalQueries => _totalQueries;
 
     /// <summary>
+    /// Gets the threshold used for accuracy calculation.
+    /// Predictions with gradient norm below this threshold are considered correct.
+    /// </summary>
+    public T AccuracyThreshold => _accuracyThreshold;
+
+    /// <summary>
     /// Initializes a new active learner.
     /// </summary>
     /// <param name="model">The model to train.</param>
     /// <param name="queryStrategy">The strategy for selecting examples.</param>
     /// <param name="lossFunction">The loss function for training.</param>
     /// <param name="initialLabeledData">Optional initial labeled dataset.</param>
+    /// <param name="accuracyThreshold">Optional threshold for accuracy calculation.
+    /// Predictions with gradient norm below this value are considered correct.
+    /// Lower values are more strict. Default is 0.1.</param>
     public ActiveLearner(
         IFullModel<T, TInput, TOutput> model,
         IQueryStrategy<T, TInput, TOutput> queryStrategy,
         ILossFunction<T> lossFunction,
-        IDataset<T, TInput, TOutput>? initialLabeledData = null)
+        IDataset<T, TInput, TOutput>? initialLabeledData = null,
+        double accuracyThreshold = DefaultAccuracyThreshold)
     {
         _model = model ?? throw new ArgumentNullException(nameof(model));
         _queryStrategy = queryStrategy ?? throw new ArgumentNullException(nameof(queryStrategy));
         _lossFunction = lossFunction ?? throw new ArgumentNullException(nameof(lossFunction));
         _labeledData = new List<(TInput, TOutput)>();
         _totalQueries = 0;
+        _accuracyThreshold = NumOps.FromDouble(accuracyThreshold);
 
         // Add initial labeled data if provided
         if (initialLabeledData != null)
@@ -270,6 +289,11 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
     /// <summary>
     /// Computes accuracy on the labeled training data.
     /// </summary>
+    /// <remarks>
+    /// Uses gradient norm as a proxy for correct predictions. Small gradients indicate
+    /// that the model's prediction is close to the target. The threshold is relative
+    /// to the gradient magnitude scale.
+    /// </remarks>
     private T ComputeAccuracy()
     {
         if (_labeledData.Count == 0)
@@ -285,7 +309,7 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
             var gradients = _model.ComputeGradients(input, target, _lossFunction);
             var gradientNorm = ComputeGradientNorm(gradients);
 
-            if (Convert.ToDouble(gradientNorm) < 0.1)
+            if (NumOps.LessThan(gradientNorm, _accuracyThreshold))
             {
                 correctCount++;
             }
@@ -327,7 +351,7 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
             totalLoss = NumOps.Add(totalLoss, sampleLoss);
 
             // Check if prediction is correct (small gradients = correct prediction)
-            if (Convert.ToDouble(sampleLoss) < 0.1)
+            if (NumOps.LessThan(sampleLoss, _accuracyThreshold))
             {
                 correctCount++;
             }
