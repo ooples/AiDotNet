@@ -86,4 +86,20 @@ public class CertifiedDefenseOptions<T>
     /// L2 norm is common for randomized smoothing.</para>
     /// </remarks>
     public string NormType { get; set; } = "L2";
+
+    /// <summary>
+    /// Gets or sets the random seed for reproducible certification.
+    /// </summary>
+    /// <value>The random seed, or null for non-deterministic random generation.</value>
+    /// <remarks>
+    /// <para>
+    /// When set to a specific value, the certification process produces reproducible results,
+    /// which is useful for testing and debugging. When null, each certification run uses
+    /// different random samples for proper statistical validity.
+    /// </para>
+    /// <para><b>For Beginners:</b> If you need reproducible results (e.g., for testing), set this
+    /// to a specific number. For actual robustness certification, leave it as null so each run
+    /// uses different random samples.</para>
+    /// </remarks>
+    public int? RandomSeed { get; set; } = null;
 }

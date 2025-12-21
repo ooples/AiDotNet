@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -37,10 +38,22 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
     /// Initializes a new instance of Randomized Smoothing.
     /// </summary>
     /// <param name="options">The certified defense configuration options.</param>
+    /// <remarks>
+    /// <para>
+    /// If <see cref="CertifiedDefenseOptions{T}.RandomSeed"/> is set, the random number generator
+    /// is initialized with that seed for reproducible results. Otherwise, a non-deterministic
+    /// random generator is used for proper statistical validity of the certification.
+    /// </para>
+    /// </remarks>
     public RandomizedSmoothing(CertifiedDefenseOptions<T> options)
     {
         this.options = options ?? throw new ArgumentNullException(nameof(options));
-        this.random = RandomHelper.CreateSeededRandom(42);
+
+        // Use the configured seed if provided, otherwise use non-deterministic random
+        // for proper statistical validity of the certification
+        this.random = options.RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(options.RandomSeed.Value)
+            : RandomHelper.CreateSeededRandom(Environment.TickCount);
     }
 
     /// <inheritdoc/>
@@ -199,7 +212,20 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
         {
             metrics.AverageCertifiedRadius = NumOps.FromDouble(certifiedRadii.Average());
             certifiedRadii.Sort();
-            metrics.MedianCertifiedRadius = NumOps.FromDouble(certifiedRadii[certifiedRadii.Count / 2]);
+
+            // Proper median calculation: for even-sized lists, average the two middle elements
+            var count = certifiedRadii.Count;
+            var mid = count / 2;
+            if (count % 2 == 0)
+            {
+                // Even count: average of middle two elements
+                metrics.MedianCertifiedRadius = NumOps.FromDouble((certifiedRadii[mid - 1] + certifiedRadii[mid]) / 2.0);
+            }
+            else
+            {
+                // Odd count: middle element
+                metrics.MedianCertifiedRadius = NumOps.FromDouble(certifiedRadii[mid]);
+            }
         }
 
         return metrics;
@@ -249,7 +275,9 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
         for (int i = 0; i < input.Length; i++)
         {
             // Box-Muller transform for Gaussian noise
-            var u1 = random.NextDouble();
+            // Use 1.0 - u1 to avoid Math.Log(0) when u1 = 0, since NextDouble() can return 0
+            // but never returns 1.0, so 1.0 - u1 is in range (0, 1]
+            var u1 = 1.0 - random.NextDouble();
             var u2 = random.NextDouble();
             var randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
             var noise = NumOps.Multiply(NumOps.FromDouble(randStdNormal), sigma);
@@ -277,28 +305,27 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
 
     private double InverseNormalCDF(double p)
     {
-        // Approximation of inverse normal CDF using the Beasley-Springer-Moro algorithm
-        // For simplicity, using a basic approximation
-        if (p <= 0 || p >= 1)
-        {
-            throw new ArgumentException("Probability must be between 0 and 1");
-        }
-
-        // Use approximation
-        var t = Math.Sqrt(-2.0 * Math.Log(1.0 - p));
-        return t - (2.515517 + 0.802853 * t + 0.010328 * t * t) /
-               (1.0 + 1.432788 * t + 0.189269 * t * t + 0.001308 * t * t * t);
+        // Delegate to the centralized StatisticsHelper implementation
+        // for consistency across the codebase
+        return NumOps.ToDouble(StatisticsHelper<T>.CalculateInverseNormalCDF(NumOps.FromDouble(p)));
     }
 
     private double ComputeLowerBound(double pA, int n, double confidence)
     {
-        // Clopper-Pearson confidence interval (simplified)
-        return Math.Max(0.0, pA - 1.96 * Math.Sqrt(pA * (1 - pA) / n));
+        // Use exact Clopper-Pearson confidence interval via Beta distribution
+        // This provides guaranteed coverage, unlike the normal approximation
+        int successes = (int)Math.Round(pA * n);
+        var interval = StatisticsHelper<T>.CalculateClopperPearsonInterval(successes, n, NumOps.FromDouble(confidence));
+        return NumOps.ToDouble(interval.Lower);
     }
 
     private double ComputeUpperBound(double pA, int n, double confidence)
     {
-        return Math.Min(1.0, pA + 1.96 * Math.Sqrt(pA * (1 - pA) / n));
+        // Use exact Clopper-Pearson confidence interval via Beta distribution
+        // This provides guaranteed coverage, unlike the normal approximation
+        int successes = (int)Math.Round(pA * n);
+        var interval = StatisticsHelper<T>.CalculateClopperPearsonInterval(successes, n, NumOps.FromDouble(confidence));
+        return NumOps.ToDouble(interval.Upper);
     }
 
     private static int ArgMax(Vector<T> vector)

@@ -1126,6 +1126,221 @@ public static class StatisticsHelper<T>
     }
 
     /// <summary>
+    /// Calculates the cumulative distribution function (CDF) of the Beta distribution.
+    /// </summary>
+    /// <param name="x">The value at which to evaluate the CDF, must be between 0 and 1.</param>
+    /// <param name="alpha">The first shape parameter (α), must be positive.</param>
+    /// <param name="beta">The second shape parameter (β), must be positive.</param>
+    /// <returns>The probability that a Beta(α, β) random variable is less than or equal to x.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when parameters are out of valid range.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The Beta distribution CDF gives the probability that a random value
+    /// from a Beta distribution falls below a certain point. This is essential for calculating
+    /// confidence intervals for proportions, such as in Clopper-Pearson intervals.
+    /// </para>
+    /// </remarks>
+    public static T CalculateBetaCDF(T x, T alpha, T beta)
+    {
+        if (_numOps.LessThanOrEquals(alpha, _numOps.Zero))
+            throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be positive");
+        if (_numOps.LessThanOrEquals(beta, _numOps.Zero))
+            throw new ArgumentOutOfRangeException(nameof(beta), "Beta must be positive");
+        if (_numOps.LessThan(x, _numOps.Zero) || _numOps.GreaterThan(x, _numOps.One))
+            throw new ArgumentOutOfRangeException(nameof(x), "x must be between 0 and 1");
+
+        // Handle boundary cases
+        if (_numOps.Equals(x, _numOps.Zero)) return _numOps.Zero;
+        if (_numOps.Equals(x, _numOps.One)) return _numOps.One;
+
+        return RegularizedIncompleteBetaFunction(x, alpha, beta);
+    }
+
+    /// <summary>
+    /// Calculates the inverse cumulative distribution function (quantile function) of the Beta distribution.
+    /// </summary>
+    /// <param name="probability">The probability for which to find the quantile, must be between 0 and 1.</param>
+    /// <param name="alpha">The first shape parameter (α), must be positive.</param>
+    /// <param name="beta">The second shape parameter (β), must be positive.</param>
+    /// <returns>The value x such that P(X ≤ x) = probability for X ~ Beta(α, β).</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when parameters are out of valid range.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This function finds the value below which a certain percentage of
+    /// the Beta distribution falls. For example, if probability = 0.95, it finds the value
+    /// below which 95% of the distribution lies. This is used in calculating exact confidence
+    /// intervals for proportions (Clopper-Pearson intervals).
+    /// </para>
+    /// <para>
+    /// The implementation uses Newton-Raphson iteration for numerical stability and accuracy.
+    /// </para>
+    /// </remarks>
+    public static T CalculateInverseBetaCDF(T probability, T alpha, T beta)
+    {
+        if (_numOps.LessThanOrEquals(alpha, _numOps.Zero))
+            throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be positive");
+        if (_numOps.LessThanOrEquals(beta, _numOps.Zero))
+            throw new ArgumentOutOfRangeException(nameof(beta), "Beta must be positive");
+        if (_numOps.LessThanOrEquals(probability, _numOps.Zero) || _numOps.GreaterThanOrEquals(probability, _numOps.One))
+            throw new ArgumentOutOfRangeException(nameof(probability), "Probability must be between 0 and 1 (exclusive)");
+
+        // Initial guess using approximation
+        T x = _numOps.FromDouble(0.5);
+
+        // Use a better initial guess based on the mean of the Beta distribution
+        T mean = _numOps.Divide(alpha, _numOps.Add(alpha, beta));
+        if (_numOps.LessThan(probability, _numOps.FromDouble(0.5)))
+        {
+            x = _numOps.Multiply(mean, _numOps.Multiply(_numOps.FromDouble(2), probability));
+        }
+        else
+        {
+            x = _numOps.Subtract(_numOps.One, _numOps.Multiply(_numOps.Subtract(_numOps.One, mean),
+                _numOps.Multiply(_numOps.FromDouble(2), _numOps.Subtract(_numOps.One, probability))));
+        }
+
+        // Clamp initial guess to valid range (0, 1)
+        T eps = _numOps.FromDouble(1e-10);
+        T upperBound = _numOps.Subtract(_numOps.One, eps);
+        x = MathHelper.Clamp(x, eps, upperBound);
+
+        // Newton-Raphson iteration
+        const int maxIterations = 100;
+        T tolerance = _numOps.FromDouble(1e-12);
+
+        for (int i = 0; i < maxIterations; i++)
+        {
+            T fx = _numOps.Subtract(RegularizedIncompleteBetaFunction(x, alpha, beta), probability);
+            T dfx = BetaPDF(x, alpha, beta);
+
+            // Avoid division by zero
+            if (_numOps.LessThan(_numOps.Abs(dfx), _numOps.FromDouble(1e-30)))
+            {
+                break;
+            }
+
+            T delta = _numOps.Divide(fx, dfx);
+            T newX = _numOps.Subtract(x, delta);
+
+            // Clamp to valid range (0, 1)
+            newX = MathHelper.Clamp(newX, eps, upperBound);
+
+            // Check for convergence
+            if (_numOps.LessThan(_numOps.Abs(delta), tolerance))
+            {
+                return newX;
+            }
+
+            x = newX;
+        }
+
+        return x;
+    }
+
+    /// <summary>
+    /// Calculates the Clopper-Pearson (exact) confidence interval for a binomial proportion.
+    /// </summary>
+    /// <param name="successes">The number of observed successes.</param>
+    /// <param name="trials">The total number of trials.</param>
+    /// <param name="confidence">The confidence level, between 0 and 1 (e.g., 0.95 for 95% confidence).</param>
+    /// <returns>A tuple containing the lower and upper bounds of the confidence interval.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when parameters are out of valid range.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The Clopper-Pearson interval provides exact confidence bounds for
+    /// the true probability of success in a binomial experiment. Unlike the normal approximation,
+    /// it guarantees the specified coverage probability, making it suitable for small samples
+    /// and extreme proportions.
+    /// </para>
+    /// <para>
+    /// This is the mathematically correct way to compute confidence intervals for proportions,
+    /// especially important in certified robustness where we need guaranteed coverage.
+    /// </para>
+    /// </remarks>
+    public static (T Lower, T Upper) CalculateClopperPearsonInterval(int successes, int trials, T confidence)
+    {
+        if (successes < 0)
+            throw new ArgumentOutOfRangeException(nameof(successes), "Successes must be non-negative");
+        if (trials <= 0)
+            throw new ArgumentOutOfRangeException(nameof(trials), "Trials must be positive");
+        if (successes > trials)
+            throw new ArgumentOutOfRangeException(nameof(successes), "Successes cannot exceed trials");
+        if (_numOps.LessThanOrEquals(confidence, _numOps.Zero) || _numOps.GreaterThanOrEquals(confidence, _numOps.One))
+            throw new ArgumentOutOfRangeException(nameof(confidence), "Confidence must be between 0 and 1");
+
+        T alpha = _numOps.Subtract(_numOps.One, confidence);
+        T alphaHalf = _numOps.Divide(alpha, _numOps.FromDouble(2));
+
+        T lower, upper;
+
+        // Lower bound: use Beta distribution with parameters (successes, trials - successes + 1)
+        if (successes == 0)
+        {
+            lower = _numOps.Zero;
+        }
+        else
+        {
+            // Lower bound is the alpha/2 quantile of Beta(successes, trials - successes + 1)
+            lower = CalculateInverseBetaCDF(alphaHalf,
+                _numOps.FromDouble(successes),
+                _numOps.FromDouble(trials - successes + 1));
+        }
+
+        // Upper bound: use Beta distribution with parameters (successes + 1, trials - successes)
+        if (successes == trials)
+        {
+            upper = _numOps.One;
+        }
+        else
+        {
+            // Upper bound is the (1 - alpha/2) quantile of Beta(successes + 1, trials - successes)
+            upper = CalculateInverseBetaCDF(_numOps.Subtract(_numOps.One, alphaHalf),
+                _numOps.FromDouble(successes + 1),
+                _numOps.FromDouble(trials - successes));
+        }
+
+        return (lower, upper);
+    }
+
+    /// <summary>
+    /// Calculates the Clopper-Pearson lower confidence bound for a binomial proportion.
+    /// </summary>
+    /// <param name="successes">The number of observed successes.</param>
+    /// <param name="trials">The total number of trials.</param>
+    /// <param name="confidence">The confidence level for a one-sided bound.</param>
+    /// <returns>The lower bound of the one-sided confidence interval.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is particularly useful for randomized smoothing certification where we need
+    /// a guaranteed lower bound on the top class probability.
+    /// </para>
+    /// </remarks>
+    public static T CalculateClopperPearsonLowerBound(int successes, int trials, T confidence)
+    {
+        if (successes < 0)
+            throw new ArgumentOutOfRangeException(nameof(successes), "Successes must be non-negative");
+        if (trials <= 0)
+            throw new ArgumentOutOfRangeException(nameof(trials), "Trials must be positive");
+        if (successes > trials)
+            throw new ArgumentOutOfRangeException(nameof(successes), "Successes cannot exceed trials");
+        if (_numOps.LessThanOrEquals(confidence, _numOps.Zero) || _numOps.GreaterThanOrEquals(confidence, _numOps.One))
+            throw new ArgumentOutOfRangeException(nameof(confidence), "Confidence must be between 0 and 1");
+
+        if (successes == 0)
+        {
+            return _numOps.Zero;
+        }
+
+        // For one-sided bound, alpha = 1 - confidence
+        T alpha = _numOps.Subtract(_numOps.One, confidence);
+
+        // Lower bound is the alpha quantile of Beta(successes, trials - successes + 1)
+        return CalculateInverseBetaCDF(alpha,
+            _numOps.FromDouble(successes),
+            _numOps.FromDouble(trials - successes + 1));
+    }
+
+    /// <summary>
     /// Calculates the p-value from a t-statistic and degrees of freedom using the t-distribution.
     /// </summary>
     /// <param name="tStatistic">The t-statistic value.</param>

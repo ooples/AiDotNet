@@ -115,17 +115,35 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
     /// <summary>
     /// Generates a random starting point within the epsilon-ball.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For L-infinity norm, each dimension is independently sampled from [-epsilon, epsilon].
+    /// For L2 norm, the perturbation is projected to the L2 ball to ensure the total
+    /// perturbation magnitude doesn't exceed epsilon.
+    /// </para>
+    /// </remarks>
     private Vector<T> RandomStartingPoint(Vector<T> input, T epsilon)
     {
         var randomStart = new Vector<T>(input.Length);
+        var perturbation = new Vector<T>(input.Length);
 
+        // Generate random perturbation for each dimension
         for (int i = 0; i < input.Length; i++)
         {
             // Generate random perturbation in [-epsilon, epsilon]
             var randomValue = NumOps.FromDouble(Random.NextDouble() * 2.0 - 1.0);
-            var perturbation = NumOps.Multiply(epsilon, randomValue);
+            perturbation[i] = NumOps.Multiply(epsilon, randomValue);
+        }
 
-            randomStart[i] = NumOps.Add(input[i], perturbation);
+        // Project to appropriate norm ball
+        perturbation = Options.NormType == "L2"
+            ? ProjectL2(perturbation, epsilon)
+            : ProjectLInfinity(perturbation, epsilon);
+
+        // Apply perturbation and clip to valid range
+        for (int i = 0; i < input.Length; i++)
+        {
+            randomStart[i] = NumOps.Add(input[i], perturbation[i]);
             randomStart[i] = MathHelper.Clamp(randomStart[i], NumOps.Zero, NumOps.One);
         }
 
@@ -280,6 +298,13 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
     /// <summary>
     /// Applies the softmax function.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Uses numerical stability trick of subtracting the maximum logit before exponentiation.
+    /// In the edge case where sum is zero or negative (which shouldn't occur with proper inputs),
+    /// returns a uniform distribution as a fallback.
+    /// </para>
+    /// </remarks>
     private Vector<T> Softmax(Vector<T> logits)
     {
         var probabilities = new Vector<T>(logits.Length);
@@ -299,8 +324,17 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
             sum += expVal;
         }
 
+        // Edge case: if sum is zero or negative (shouldn't happen with valid inputs),
+        // fall back to uniform distribution to avoid NaN/Infinity values
         if (sum <= 0.0)
+        {
+            var uniform = NumOps.FromDouble(1.0 / logits.Length);
+            for (int i = 0; i < probabilities.Length; i++)
+            {
+                probabilities[i] = uniform;
+            }
             return probabilities;
+        }
 
         for (int i = 0; i < probabilities.Length; i++)
         {
