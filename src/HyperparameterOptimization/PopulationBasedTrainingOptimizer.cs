@@ -360,7 +360,7 @@ public class PopulationBasedTrainingOptimizer<T, TInput, TOutput> : Hyperparamet
 
             return _population.Select(m => new PopulationMemberInfo(
                 m.MemberId,
-                m.Configuration,
+                new Dictionary<string, object>(m.Configuration),
                 m.LastScore != null ? _numOps.ToDouble(m.LastScore) : (double?)null,
                 m.StepCount,
                 m.Trials.Count
@@ -386,7 +386,7 @@ public class PopulationBasedTrainingOptimizer<T, TInput, TOutput> : Hyperparamet
 
             return new PopulationMemberInfo(
                 best.MemberId,
-                best.Configuration,
+                new Dictionary<string, object>(best.Configuration),
                 _numOps.ToDouble(best.LastScore!),
                 best.StepCount,
                 best.Trials.Count
