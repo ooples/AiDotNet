@@ -57,7 +57,10 @@ public abstract class DataVersionControlBase<T> : IDataVersionControl<T>
         {
             "AiDotNet.",
             "System.Collections.Generic.",
-            "System."
+            "System.Collections.Concurrent.",
+            "System.Collections.ObjectModel."
+            // Note: Removed broad "System." prefix to prevent deserialization of dangerous types
+            // like System.Diagnostics.Process. Use AllowedSystemTypes for specific safe types.
         };
 
         private static readonly HashSet<string> AllowedSystemTypes = new(StringComparer.OrdinalIgnoreCase)
