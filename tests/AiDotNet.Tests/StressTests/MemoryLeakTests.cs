@@ -79,7 +79,9 @@ public class MemoryLeakTests
             return; // GPU not available
         }
 
-        if (!engine.SupportsGpu)
+        using var disposableEngine = engine!;
+
+        if (!disposableEngine.SupportsGpu)
         {
             return; // GPU not available (CPU accelerator selected)
         }
@@ -92,7 +94,7 @@ public class MemoryLeakTests
         // Act - Sample memory every 500 iterations
         for (int i = 0; i < LeakDetectionIterations; i++)
         {
-            var result = (Matrix<float>)engine.MatrixMultiply(matrixA, matrixB);
+            var result = (Matrix<float>)disposableEngine.MatrixMultiply(matrixA, matrixB);
             Assert.NotNull(result);
 
             if (i % SamplingInterval == 0)
@@ -143,7 +145,9 @@ public class MemoryLeakTests
             return; // GPU not available
         }
 
-        if (!engine.SupportsGpu)
+        using var disposableEngine = engine!;
+
+        if (!disposableEngine.SupportsGpu)
         {
             return; // GPU not available (CPU accelerator selected)
         }
@@ -156,7 +160,7 @@ public class MemoryLeakTests
         // Act - Sample memory periodically
         for (int i = 0; i < LeakDetectionIterations; i++)
         {
-            var result = (Tensor<float>)engine.Conv2D(input, kernels, 1, 1, 1);
+            var result = (Tensor<float>)disposableEngine.Conv2D(input, kernels, 1, 1, 1);
             Assert.NotNull(result);
 
             if (i % SamplingInterval == 0)
@@ -198,7 +202,9 @@ public class MemoryLeakTests
             return; // GPU not available
         }
 
-        if (!engine.SupportsGpu)
+        using var disposableEngine = engine!;
+
+        if (!disposableEngine.SupportsGpu)
         {
             return; // GPU not available (CPU accelerator selected)
         }
@@ -213,7 +219,7 @@ public class MemoryLeakTests
         // Act - Run many operations
         for (int i = 0; i < LeakDetectionIterations; i++)
         {
-            var result = (Vector<float>)engine.MatrixVectorMultiply(matrix, vector);
+            var result = (Vector<float>)disposableEngine.MatrixVectorMultiply(matrix, vector);
             Assert.NotNull(result);
         }
 
@@ -300,7 +306,9 @@ public class MemoryLeakTests
             return; // GPU not available
         }
 
-        if (!engine.SupportsGpu)
+        using var disposableEngine = engine!;
+
+        if (!disposableEngine.SupportsGpu)
         {
             return; // GPU not available (CPU accelerator selected)
         }
@@ -315,27 +323,27 @@ public class MemoryLeakTests
             {
                 case 0:
                     var m1 = CreateRandomMatrix(64, 64);
-                    var r1 = (Matrix<float>)engine.MatrixMultiply(m1, m1);
+                    var r1 = (Matrix<float>)disposableEngine.MatrixMultiply(m1, m1);
                     Assert.NotNull(r1);
                     break;
 
                 case 1:
                     var v1 = CreateRandomVector(128);
                     var v2 = CreateRandomVector(128);
-                    var r2 = (Vector<float>)engine.Add(v1, v2);
+                    var r2 = (Vector<float>)disposableEngine.Add(v1, v2);
                     Assert.NotNull(r2);
                     break;
 
                 case 2:
                     var t1 = CreateRandomTensor(new[] { 2, 16, 14, 14 });
-                    var r3 = (Tensor<float>)engine.MaxPool2D(t1, 2, 2, 0);
+                    var r3 = (Tensor<float>)disposableEngine.MaxPool2D(t1, 2, 2, 0);
                     Assert.NotNull(r3);
                     break;
 
                 case 3:
                     var m2 = CreateRandomMatrix(128, 64);
                     var v3 = CreateRandomVector(64);
-                    var r4 = (Vector<float>)engine.MatrixVectorMultiply(m2, v3);
+                    var r4 = (Vector<float>)disposableEngine.MatrixVectorMultiply(m2, v3);
                     Assert.NotNull(r4);
                     break;
             }
