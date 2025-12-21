@@ -140,7 +140,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
 
         if (!TryGetAlignedVectors(y, predictions, predictionType, out var actual, out var predicted))
         {
-            return new DataSetStats<T, TInput, TOutput>
+            var emptyStats = new DataSetStats<T, TInput, TOutput>
             {
                 ErrorStats = ErrorStats<T>.Empty(),
                 ActualBasicStats = BasicStats<T>.Empty(),
@@ -150,9 +150,12 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
                 Features = X,
                 Actual = y
             };
+
+            TryPopulateUncertaintyStats(emptyStats, X, model);
+            return emptyStats;
         }
 
-        return new DataSetStats<T, TInput, TOutput>
+        var stats = new DataSetStats<T, TInput, TOutput>
         {
             ErrorStats = CalculateErrorStats(actual, predicted, inputSize, predictionType),
             ActualBasicStats = CalculateBasicStats(actual),
@@ -162,6 +165,57 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
             Features = X,
             Actual = y
         };
+
+        TryPopulateUncertaintyStats(stats, X, model);
+        return stats;
+    }
+
+    private static void TryPopulateUncertaintyStats(DataSetStats<T, TInput, TOutput> stats, TInput X, IFullModel<T, TInput, TOutput> model)
+    {
+        if (model is not AiDotNet.Models.Results.PredictionModelResult<T, TInput, TOutput> predictionModelResult)
+        {
+            return;
+        }
+
+        if (predictionModelResult.UncertaintyQuantificationOptions is not { Enabled: true })
+        {
+            return;
+        }
+
+        var uq = predictionModelResult.PredictWithUncertainty(X);
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        stats.UncertaintyStats = new UncertaintyStats<T>();
+        if (uq.Metrics.TryGetValue("predictive_entropy", out var predictiveEntropy))
+        {
+            stats.UncertaintyStats.Metrics["predictive_entropy"] = MeanOf(predictiveEntropy, numOps);
+        }
+
+        if (uq.Metrics.TryGetValue("mutual_information", out var mutualInformation))
+        {
+            stats.UncertaintyStats.Metrics["mutual_information"] = MeanOf(mutualInformation, numOps);
+        }
+
+        if (predictionModelResult.HasExpectedCalibrationError)
+        {
+            stats.UncertaintyStats.Metrics["expected_calibration_error"] = predictionModelResult.ExpectedCalibrationError;
+        }
+    }
+
+    private static T MeanOf(Tensor<T> values, INumericOperations<T> numOps)
+    {
+        if (values.Length == 0)
+        {
+            return numOps.Zero;
+        }
+
+        var sum = numOps.Zero;
+        for (int i = 0; i < values.Length; i++)
+        {
+            sum = numOps.Add(sum, values[i]);
+        }
+
+        return numOps.Divide(sum, numOps.FromDouble(values.Length));
     }
 
     private static bool TryGetAlignedVectors(
@@ -471,7 +525,9 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// Calculates statistics about the model itself, independent of specific predictions.
     /// </summary>
     /// <param name="model">The model to analyze.</param>
-    /// <param name="xTrain">The training feature matrix used to train the model.</param>
+    /// <param name="xForStatistics">The feature matrix used for computing model statistics.</param>
+    /// <param name="actual">The actual targets corresponding to <paramref name="xForStatistics"/>.</param>
+    /// <param name="predicted">The predicted targets corresponding to <paramref name="xForStatistics"/>.</param>
     /// <param name="normInfo">Information about how the data was normalized.</param>
     /// <returns>Statistics about the model's structure and characteristics.</returns>
     /// <remarks>

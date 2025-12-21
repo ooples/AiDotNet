@@ -114,7 +114,9 @@ internal class SpeculativeDecoder<T>
         _maxTreeDepth = Math.Max(1, _config.MaxTreeDepth);
         _currentDraftTokens = _maxDraftTokens;
         _currentMaxTreeDepth = _maxTreeDepth;
-        _random = _config.Seed.HasValue ? new Random(_config.Seed.Value) : new Random();
+        _random = _config.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_config.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

@@ -51,4 +51,21 @@ public interface IModelRepository
     /// <param name="name">The name of the model</param>
     /// <returns>True if the model exists, false otherwise</returns>
     bool ModelExists(string name);
+
+    /// <summary>
+    /// Loads a model with registry metadata.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used by the model.</typeparam>
+    /// <param name="name">The unique name for the model.</param>
+    /// <param name="model">The model instance.</param>
+    /// <param name="registryVersion">The version from the model registry.</param>
+    /// <param name="registryStage">The stage from the model registry (Development, Staging, Production).</param>
+    /// <param name="sourcePath">Optional source path where the model was loaded from.</param>
+    /// <returns>True if the model was loaded successfully, false if a model with that name already exists.</returns>
+    bool LoadModelFromRegistry<T>(
+        string name,
+        IServableModel<T> model,
+        int registryVersion,
+        string registryStage,
+        string? sourcePath = null);
 }

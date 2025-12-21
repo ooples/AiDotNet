@@ -37,7 +37,7 @@ namespace AiDotNet.Agents;
 ///     .ConfigureAgentAssistance(
 ///         options => options.EnableModelSelection(),
 ///         apiKey: "sk-test-key")
-///     .BuildAsync(data, labels);
+///     .BuildAsync();
 ///
 /// // Option 2: Global configuration (set once at startup)
 /// AgentGlobalConfiguration.Configure(config => config
@@ -48,7 +48,7 @@ namespace AiDotNet.Agents;
 /// // Then no code changes needed, just:
 /// var result = await builder
 ///     .ConfigureAgentAssistance(options => options.EnableModelSelection())
-///     .BuildAsync(data, labels);
+///     .BuildAsync();
 /// </code>
 ///
 /// The resolver automatically checks all these locations and uses the first key it finds, following the

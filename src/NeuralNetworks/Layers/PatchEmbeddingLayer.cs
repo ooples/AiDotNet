@@ -138,7 +138,10 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         int patchSize,
         int embeddingDim,
         IActivationFunction<T>? activationFunction = null)
-        : base([channels, imageHeight, imageWidth], [0, 0], activationFunction ?? new IdentityActivation<T>())
+        : base(
+            [channels, imageHeight, imageWidth],
+            [(imageHeight / patchSize) * (imageWidth / patchSize), embeddingDim],
+            activationFunction ?? new IdentityActivation<T>())
     {
         if (imageHeight % patchSize != 0)
         {
@@ -524,6 +527,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         _projectionBiasGradient = null;
     }
 
+    /// <inheritdoc/>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
         if (inputNodes == null)
@@ -547,5 +551,6 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         return TensorOperations<T>.Add(output, biasNode);
     }
 
+    /// <inheritdoc/>
     public override bool SupportsJitCompilation => _projectionWeights != null && _projectionBias != null;
 }

@@ -248,14 +248,14 @@ public class AgentGlobalConfigurationBuilder
     /// // Uses your default provider (Anthropic in the example above)
     /// var result = await builder
     ///     .ConfigureAgentAssistance(options => options.EnableModelSelection())
-    ///     .BuildAsync(data, labels);
+    ///     .BuildAsync();
     ///
     /// // Override to use a different provider for this specific model
     /// var result2 = await builder
     ///     .ConfigureAgentAssistance(
     ///         options => options.EnableModelSelection(),
     ///         provider: LLMProvider.OpenAI)  // Use OpenAI just for this one
-    ///     .BuildAsync(data, labels);
+    ///     .BuildAsync();
     /// </code>
     ///
     /// Choose whichever provider best fits your needs, budget, and compliance requirements.

@@ -1,17 +1,23 @@
 using AiDotNet.Agents;
+using AiDotNet.CheckpointManagement;
 using AiDotNet.Configuration;
 using AiDotNet.Data.Structures;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.Diagnostics;
+using AiDotNet.ExperimentTracking;
+using AiDotNet.HyperparameterOptimization;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Models.Results;
 using AiDotNet.PromptEngineering.Analysis;
 using AiDotNet.PromptEngineering.Compression;
 using AiDotNet.Reasoning;
+using AiDotNet.Reasoning.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using AiDotNet.Tokenization.Configuration;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.TrainingMonitoring;
+using AiDotNet.TrainingMonitoring.ExperimentTracking;
 
 namespace AiDotNet.Models.Options;
 
@@ -601,4 +607,242 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public ProfileReport? ProfilingReport { get; set; }
+
+    // ============================================================================
+    // Training Infrastructure Properties
+    // ============================================================================
+
+    /// <summary>
+    /// Gets or sets the experiment run ID from experiment tracking.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When experiment tracking is configured, this contains the unique identifier
+    /// for the training run, enabling reproducibility and comparison with other runs.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a unique ID for your training session.
+    /// You can use it to find and compare this training run with others later.
+    /// </para>
+    /// </remarks>
+    public string? ExperimentRunId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the experiment ID that this run belongs to.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The experiment ID groups related training runs together for organization
+    /// and comparison purposes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This groups training runs together.
+    /// For example, all runs testing different learning rates might belong to the same experiment.
+    /// </para>
+    /// </remarks>
+    public string? ExperimentId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the model version from the model registry.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When model registry is configured, this contains the version number
+    /// assigned to this model, enabling version tracking and rollback.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the version number of your model.
+    /// Like software versions (v1.0, v2.0), this helps track model improvements over time.
+    /// </para>
+    /// </remarks>
+    public int? ModelVersion { get; set; }
+
+    /// <summary>
+    /// Gets or sets the registered model name in the model registry.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The name under which this model is registered in the model registry,
+    /// used for retrieval and deployment.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the name of your model in the registry.
+    /// You can use this name to load the model later or deploy it to production.
+    /// </para>
+    /// </remarks>
+    public string? RegisteredModelName { get; set; }
+
+    /// <summary>
+    /// Gets or sets the checkpoint path where the model was saved during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When checkpoint management is configured, this contains the path to the
+    /// best or latest checkpoint, enabling training resumption or model loading.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is where your model was saved during training.
+    /// If training is interrupted, you can resume from this checkpoint.
+    /// </para>
+    /// </remarks>
+    public string? CheckpointPath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the data version hash for the training data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When data version control is configured, this contains a hash that uniquely
+    /// identifies the training data used, enabling reproducibility.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a fingerprint of your training data.
+    /// It ensures you can always know exactly what data was used to train this model.
+    /// </para>
+    /// </remarks>
+    public string? DataVersionHash { get; set; }
+
+    /// <summary>
+    /// Gets or sets the hyperparameter optimization trial ID.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When hyperparameter optimization is used, this identifies which trial
+    /// produced this model, linking back to the optimization history.
+    /// </para>
+    /// <para><b>For Beginners:</b> If an optimizer searched for the best settings,
+    /// this tells you which attempt (trial) produced this model.
+    /// </para>
+    /// </remarks>
+    public int? HyperparameterTrialId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the hyperparameters used for training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A dictionary of hyperparameter names to values that were used during training,
+    /// enabling reproducibility and comparison between runs.
+    /// </para>
+    /// <para><b>For Beginners:</b> These are the settings (like learning rate, batch size)
+    /// that were used to train your model. Saving them lets you reproduce the training.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, object>? Hyperparameters { get; set; }
+
+    /// <summary>
+    /// Gets or sets the training metrics history.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Contains the history of metrics (loss, accuracy, etc.) recorded during training,
+    /// enabling visualization and analysis of training progress.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a log of how your model improved during training.
+    /// You can use it to create charts showing loss going down over time.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, List<double>>? TrainingMetricsHistory { get; set; }
+
+    // ============================================================================
+    // Training Infrastructure Components
+    // ============================================================================
+
+    /// <summary>
+    /// Gets or sets the experiment run associated with this model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When experiment tracking was used during training, this provides direct access
+    /// to the run object for logging additional metrics, artifacts, or notes post-training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the training session record. You can use it to:
+    /// - Log additional metrics after training completes
+    /// - Add notes about model performance in production
+    /// - Record artifacts like deployment logs
+    /// </para>
+    /// </remarks>
+    public IExperimentRun<T>? ExperimentRun { get; set; }
+
+    /// <summary>
+    /// Gets or sets the experiment tracker used during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Provides access to the experiment tracking system for retrieving other runs,
+    /// creating comparison reports, or starting new related experiments.
+    /// </para>
+    /// <para><b>For Beginners:</b> This gives you access to the experiment tracking system.
+    /// You can use it to:
+    /// - Compare this model with other training runs
+    /// - Find the best-performing model from an experiment
+    /// - Start new training runs based on this one
+    /// </para>
+    /// </remarks>
+    public IExperimentTracker<T>? ExperimentTracker { get; set; }
+
+    /// <summary>
+    /// Gets or sets the checkpoint manager for model persistence operations.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Provides access to checkpoint operations including saving updated models,
+    /// listing available checkpoints, and managing checkpoint lifecycle.
+    /// </para>
+    /// <para><b>For Beginners:</b> This manages saved copies of your model. You can use it to:
+    /// - Save the model after making changes (like fine-tuning)
+    /// - List all saved checkpoints
+    /// - Load different versions of your model
+    /// - Clean up old checkpoints to save disk space
+    /// </para>
+    /// </remarks>
+    public ICheckpointManager<T, TInput, TOutput>? CheckpointManager { get; set; }
+
+    /// <summary>
+    /// Gets or sets the model registry for version and lifecycle management.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Provides access to the model registry for transitioning model stages,
+    /// registering new versions, and managing model lifecycle.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like a version control system for your models.
+    /// You can use it to:
+    /// - Promote this model from "Staging" to "Production"
+    /// - Register fine-tuned versions as new model versions
+    /// - Archive old models that are no longer needed
+    /// - Compare performance across model versions
+    /// </para>
+    /// </remarks>
+    public IModelRegistry<T, TInput, TOutput>? ModelRegistry { get; set; }
+
+    /// <summary>
+    /// Gets or sets the training monitor for accessing training diagnostics.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Provides access to training diagnostics including learning curves,
+    /// gradient statistics, and training progress information.
+    /// </para>
+    /// <para><b>For Beginners:</b> This gives you insights into how training went.
+    /// You can use it to:
+    /// - View learning curves (loss over time)
+    /// - Check for signs of overfitting
+    /// - Analyze gradient flow during training
+    /// - Export training charts and reports
+    /// </para>
+    /// </remarks>
+    public ITrainingMonitor<T>? TrainingMonitor { get; set; }
+
+    /// <summary>
+    /// Gets or sets the hyperparameter optimization result.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When hyperparameter optimization was used, this contains the complete results
+    /// including all tried configurations and their scores.
+    /// </para>
+    /// <para><b>For Beginners:</b> If an optimizer searched for the best settings,
+    /// this contains all the configurations it tried and how well each performed.
+    /// You can use it to:
+    /// - See which hyperparameters were most important
+    /// - Find patterns in what made training successful
+    /// - Continue optimization from where it left off
+    /// </para>
+    /// </remarks>
+    public HyperparameterOptimizationResult<T>? HyperparameterOptimizationResult { get; set; }
 }

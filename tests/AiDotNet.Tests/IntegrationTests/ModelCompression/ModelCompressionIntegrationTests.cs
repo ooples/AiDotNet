@@ -106,7 +106,7 @@ public class ModelCompressionIntegrationTests
         // Arrange - Create a 3D tensor (simulating conv filter) and flatten to vector
         var shape = new int[] { 2, 3, 4 };
         var tensor = new Tensor<double>(shape);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < shape[0]; i++)
             for (int j = 0; j < shape[1]; j++)
                 for (int k = 0; k < shape[2]; k++)
@@ -136,7 +136,7 @@ public class ModelCompressionIntegrationTests
     {
         // Arrange
         var weights = new Matrix<double>(5, 5);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 5; i++)
             for (int j = 0; j < 5; j++)
                 weights[i, j] = random.NextDouble();
@@ -178,7 +178,7 @@ public class ModelCompressionIntegrationTests
         // Arrange
         var weights = new Matrix<double>(4, 4);
         var gradients = new Matrix<double>(4, 4);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < 4; i++)
         {
@@ -246,7 +246,7 @@ public class ModelCompressionIntegrationTests
     {
         // Arrange
         var weights = new Vector<double>(100);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 100; i++)
             weights[i] = random.NextDouble();
 
@@ -282,7 +282,7 @@ public class ModelCompressionIntegrationTests
     {
         // Arrange
         var weights = new Vector<double>(50);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 50; i++)
             weights[i] = random.NextDouble();
 
@@ -375,7 +375,7 @@ public class ModelCompressionIntegrationTests
     {
         // Arrange
         var weights = new Vector<double>(64);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 64; i++)
             weights[i] = random.NextDouble();
 

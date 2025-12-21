@@ -330,14 +330,14 @@ public static class FeatureSelectorHelper<T, TInput>
     /// </remarks>
     public static TInput CreateFilteredData(TInput originalData, List<int> selectedFeatureIndices)
     {
-        if (originalData is Matrix<T> matrix)
-        {
-            var selectedColumns = selectedFeatureIndices
-                .Select(i => matrix.GetColumn(i))
-                .ToArray();
+            if (originalData is Matrix<T> matrix)
+            {
+                var selectedColumns = selectedFeatureIndices
+                    .Select(i => matrix.GetColumn(i))
+                    .ToArray();
 
-            return (TInput)(object)Matrix<T>.FromColumns(selectedColumns);
-        }
+                return (TInput)(object)Matrix<T>.FromColumns(selectedColumns);
+            }
         else if (originalData is Tensor<T> tensor)
         {
             // Create a new tensor with only the selected features

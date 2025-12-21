@@ -110,7 +110,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
                 embeddingDim: 32);
 
             var input = new Tensor<double>([1, 3, 16, 16]);
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < input.Length; i++)
             {
                 input[i] = random.NextDouble();
@@ -144,7 +144,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             var paramsBefore = layer.GetParameters();
 
             var input = new Tensor<double>([1, 3, 16, 16]);
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < input.Length; i++)
             {
                 input[i] = random.NextDouble();
@@ -278,7 +278,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
 
             int batchSize = 4;
             var input = new Tensor<double>([batchSize, 3, 16, 16]);
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < input.Length; i++)
             {
                 input[i] = random.NextDouble();

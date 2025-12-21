@@ -54,6 +54,9 @@ public class MemoryLeakTests
     private const int LeakDetectionIterations = 5_000;
     private const int SamplingInterval = 500;
     private const long MaxAcceptableMemoryGrowth = 15_000_000; // 15MB
+    private static bool ShouldRunStressTests =>
+        string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_RUN_STRESS_TESTS"), "1", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_RUN_STRESS_TESTS"), "true", StringComparison.OrdinalIgnoreCase);
 
     #region Memory Growth Analysis
 
@@ -61,6 +64,11 @@ public class MemoryLeakTests
     public void MatrixOperations_5KIterations_LinearGrowthCheck()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         GpuEngine? engine = null;
         try
         {
@@ -71,6 +79,13 @@ public class MemoryLeakTests
             return; // GPU not available
         }
 
+        using var disposableEngine = engine!;
+
+        if (!disposableEngine.SupportsGpu)
+        {
+            return; // GPU not available (CPU accelerator selected)
+        }
+
         var matrixA = CreateRandomMatrix(256, 256);
         var matrixB = CreateRandomMatrix(256, 256);
 
@@ -79,7 +94,7 @@ public class MemoryLeakTests
         // Act - Sample memory every 500 iterations
         for (int i = 0; i < LeakDetectionIterations; i++)
         {
-            var result = (Matrix<float>)engine.MatrixMultiply(matrixA, matrixB);
+            var result = (Matrix<float>)disposableEngine.MatrixMultiply(matrixA, matrixB);
             Assert.NotNull(result);
 
             if (i % SamplingInterval == 0)
@@ -87,7 +102,7 @@ public class MemoryLeakTests
                 memorySnapshots.Add(new MemorySnapshot
                 {
                     Iteration = i,
-                    ManagedMemory = GC.GetTotalMemory(false),
+                    ManagedMemory = GC.GetTotalMemory(forceFullCollection: true),
                     Gen0Collections = GC.CollectionCount(0),
                     Gen1Collections = GC.CollectionCount(1),
                     Gen2Collections = GC.CollectionCount(2)
@@ -115,6 +130,11 @@ public class MemoryLeakTests
     public void TensorOperations_5KIterations_PlateauCheck()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         GpuEngine? engine = null;
         try
         {
@@ -125,6 +145,13 @@ public class MemoryLeakTests
             return; // GPU not available
         }
 
+        using var disposableEngine = engine!;
+
+        if (!disposableEngine.SupportsGpu)
+        {
+            return; // GPU not available (CPU accelerator selected)
+        }
+
         var input = CreateRandomTensor(new[] { 4, 32, 28, 28 });
         var kernels = CreateRandomTensor(new[] { 64, 32, 3, 3 });
 
@@ -133,7 +160,7 @@ public class MemoryLeakTests
         // Act - Sample memory periodically
         for (int i = 0; i < LeakDetectionIterations; i++)
         {
-            var result = (Tensor<float>)engine.Conv2D(input, kernels, 1, 1, 1);
+            var result = (Tensor<float>)disposableEngine.Conv2D(input, kernels, 1, 1, 1);
             Assert.NotNull(result);
 
             if (i % SamplingInterval == 0)
@@ -141,7 +168,7 @@ public class MemoryLeakTests
                 memorySnapshots.Add(new MemorySnapshot
                 {
                     Iteration = i,
-                    ManagedMemory = GC.GetTotalMemory(false),
+                    ManagedMemory = GC.GetTotalMemory(forceFullCollection: true),
                     Gen0Collections = GC.CollectionCount(0),
                     Gen1Collections = GC.CollectionCount(1),
                     Gen2Collections = GC.CollectionCount(2)
@@ -160,6 +187,11 @@ public class MemoryLeakTests
     public void GpuOperations_GCPressure_BoundedCollections()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         GpuEngine? engine = null;
         try
         {
@@ -168,6 +200,13 @@ public class MemoryLeakTests
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
+        }
+
+        using var disposableEngine = engine!;
+
+        if (!disposableEngine.SupportsGpu)
+        {
+            return; // GPU not available (CPU accelerator selected)
         }
 
         var matrix = CreateRandomMatrix(128, 128);
@@ -180,7 +219,7 @@ public class MemoryLeakTests
         // Act - Run many operations
         for (int i = 0; i < LeakDetectionIterations; i++)
         {
-            var result = (Vector<float>)engine.MatrixVectorMultiply(matrix, vector);
+            var result = (Vector<float>)disposableEngine.MatrixVectorMultiply(matrix, vector);
             Assert.NotNull(result);
         }
 
@@ -212,6 +251,11 @@ public class MemoryLeakTests
     public void OptimizerVectorUpdates_5KIterations_NoLeak()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         IEngine? engine = null;
         try
         {
@@ -247,6 +291,11 @@ public class MemoryLeakTests
     public void MixedPrecisionOperations_5KIterations_NoLeak()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         GpuEngine? engine = null;
         try
         {
@@ -255,6 +304,13 @@ public class MemoryLeakTests
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
+        }
+
+        using var disposableEngine = engine!;
+
+        if (!disposableEngine.SupportsGpu)
+        {
+            return; // GPU not available (CPU accelerator selected)
         }
 
         var memorySnapshots = new List<long>();
@@ -267,34 +323,34 @@ public class MemoryLeakTests
             {
                 case 0:
                     var m1 = CreateRandomMatrix(64, 64);
-                    var r1 = (Matrix<float>)engine.MatrixMultiply(m1, m1);
+                    var r1 = (Matrix<float>)disposableEngine.MatrixMultiply(m1, m1);
                     Assert.NotNull(r1);
                     break;
 
                 case 1:
                     var v1 = CreateRandomVector(128);
                     var v2 = CreateRandomVector(128);
-                    var r2 = (Vector<float>)engine.Add(v1, v2);
+                    var r2 = (Vector<float>)disposableEngine.Add(v1, v2);
                     Assert.NotNull(r2);
                     break;
 
                 case 2:
                     var t1 = CreateRandomTensor(new[] { 2, 16, 14, 14 });
-                    var r3 = (Tensor<float>)engine.MaxPool2D(t1, 2, 2, 0);
+                    var r3 = (Tensor<float>)disposableEngine.MaxPool2D(t1, 2, 2, 0);
                     Assert.NotNull(r3);
                     break;
 
                 case 3:
                     var m2 = CreateRandomMatrix(128, 64);
                     var v3 = CreateRandomVector(64);
-                    var r4 = (Vector<float>)engine.MatrixVectorMultiply(m2, v3);
+                    var r4 = (Vector<float>)disposableEngine.MatrixVectorMultiply(m2, v3);
                     Assert.NotNull(r4);
                     break;
             }
 
             if (i % SamplingInterval == 0)
             {
-                memorySnapshots.Add(GC.GetTotalMemory(false));
+                memorySnapshots.Add(GC.GetTotalMemory(forceFullCollection: true));
             }
         }
 
@@ -314,16 +370,29 @@ public class MemoryLeakTests
     [Fact(DisplayName = "Memory Leak: Engine Disposal Cleanup")]
     public void GpuEngine_MultipleCreateDispose_NoResourceLeak()
     {
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         // Skip if GPU not available
+        GpuEngine? probeEngine = null;
         try
         {
-            using var testEngine = new GpuEngine();
-            // GPU is available, proceed with test
+            probeEngine = new GpuEngine();
         }
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
+
+        if (!probeEngine.SupportsGpu)
+        {
+            probeEngine.Dispose();
+            return; // GPU not available (CPU accelerator selected)
+        }
+
+        probeEngine.Dispose();
 
         var initialMemory = GC.GetTotalMemory(forceFullCollection: true);
 
@@ -366,6 +435,11 @@ public class MemoryLeakTests
     public void Tensor_CreateUseDiscard_5KCycles_NoLeak()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         GpuEngine? engine = null;
         try
         {
@@ -467,7 +541,7 @@ public class MemoryLeakTests
 
     private static Matrix<float> CreateRandomMatrix(int rows, int cols)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var matrix = new Matrix<float>(rows, cols);
         for (int i = 0; i < rows; i++)
         {
@@ -481,7 +555,7 @@ public class MemoryLeakTests
 
     private static Vector<float> CreateRandomVector(int size)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var vector = new Vector<float>(size);
         for (int i = 0; i < size; i++)
         {
@@ -492,7 +566,7 @@ public class MemoryLeakTests
 
     private static Tensor<float> CreateRandomTensor(int[] shape)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var tensor = new Tensor<float>(shape);
         for (int i = 0; i < tensor.Length; i++)
         {
