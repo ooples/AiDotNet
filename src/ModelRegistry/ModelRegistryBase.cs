@@ -35,119 +35,13 @@ public abstract class ModelRegistryBase<T, TInput, TOutput> : IModelRegistry<T, 
 
     /// <summary>
     /// JSON serialization settings for consistent serialization.
-    /// Uses a custom SerializationBinder for security against deserialization attacks.
+    /// Uses TypeNameHandling.None for security - no type metadata in JSON output.
     /// </summary>
     protected static readonly JsonSerializerSettings JsonSettings = new()
     {
         Formatting = Formatting.Indented,
-        TypeNameHandling = TypeNameHandling.Auto,
-        SerializationBinder = new SafeTypeSerializationBinder()
+        TypeNameHandling = TypeNameHandling.None
     };
-
-    /// <summary>
-    /// Custom serialization binder that restricts deserialization to safe types only.
-    /// Prevents remote code execution vulnerabilities from malicious JSON payloads.
-    /// </summary>
-    private sealed class SafeTypeSerializationBinder : Newtonsoft.Json.Serialization.ISerializationBinder
-    {
-        private static readonly HashSet<string> AllowedNamespacePrefixes = new(StringComparer.OrdinalIgnoreCase)
-        {
-            "AiDotNet.",
-            "System.Collections.Generic.",
-            "System.Collections.Concurrent.",
-            "System.Collections.ObjectModel."
-            // Note: Removed broad "System." prefix to prevent deserialization of dangerous types
-            // like System.Diagnostics.Process. Use AllowedSystemTypes for specific safe types.
-        };
-
-        private static readonly HashSet<string> AllowedSystemTypes = new(StringComparer.OrdinalIgnoreCase)
-        {
-            "System.String",
-            "System.Int32",
-            "System.Int64",
-            "System.Double",
-            "System.Single",
-            "System.Decimal",
-            "System.Boolean",
-            "System.DateTime",
-            "System.DateTimeOffset",
-            "System.Guid",
-            "System.TimeSpan",
-            "System.Object",
-            "System.Object[]"
-        };
-
-        public void BindToName(Type serializedType, out string? assemblyName, out string? typeName)
-        {
-            assemblyName = null;
-            typeName = serializedType.AssemblyQualifiedName;
-        }
-
-        public Type BindToType(string? assemblyName, string typeName)
-        {
-            if (!IsTypeAllowed(typeName))
-            {
-                throw new JsonSerializationException(
-                    $"Deserialization of type '{typeName}' is not allowed for security reasons.");
-            }
-
-            // Try to resolve the type from the type name
-            var type = Type.GetType(typeName);
-            if (type != null)
-                return type;
-
-            // If Type.GetType fails, search through loaded assemblies
-            // This is needed for types in other assemblies (like test assemblies)
-            var baseTypeName = ExtractBaseTypeName(typeName);
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                type = assembly.GetType(baseTypeName);
-                if (type != null)
-                    return type;
-            }
-
-            throw new JsonSerializationException($"Could not resolve type '{typeName}'.");
-        }
-
-        private static bool IsTypeAllowed(string typeName)
-        {
-            if (string.IsNullOrWhiteSpace(typeName))
-                return false;
-
-            var baseTypeName = ExtractBaseTypeName(typeName);
-
-            if (AllowedSystemTypes.Contains(baseTypeName))
-                return true;
-
-            foreach (var prefix in AllowedNamespacePrefixes)
-            {
-                if (baseTypeName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-
-            return false;
-        }
-
-        private static string ExtractBaseTypeName(string typeName)
-        {
-            var genericIndex = typeName.IndexOf('`');
-            if (genericIndex > 0)
-                return typeName.Substring(0, genericIndex);
-
-            var commaIndex = typeName.IndexOf(',');
-            if (commaIndex > 0)
-                typeName = typeName.Substring(0, commaIndex).Trim();
-
-            // Handle array types like "System.Int32[]" or "System.Double[][]"
-            // Strip array suffix to get base type for allowlist comparison
-            while (typeName.EndsWith("[]"))
-            {
-                typeName = typeName.Substring(0, typeName.Length - 2);
-            }
-
-            return typeName;
-        }
-    }
 
     /// <summary>
     /// Initializes a new instance of the ModelRegistryBase class.
