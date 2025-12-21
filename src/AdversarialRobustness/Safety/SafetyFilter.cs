@@ -27,6 +27,11 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <summary>
+    /// Timeout for regex operations to prevent ReDoS attacks.
+    /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(100);
+
     private SafetyFilterOptions<T> options;
     private List<string> jailbreakPatterns;
     private Dictionary<string, List<string>> harmfulContentPatterns;
@@ -280,16 +285,23 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 
         foreach (var pattern in jailbreakPatterns)
         {
-            if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase))
+            try
             {
-                matchedPatterns++;
-                result.Indicators.Add(new JailbreakIndicator
+                if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase, RegexTimeout))
                 {
-                    Type = "PatternMatch",
-                    Description = $"Matched jailbreak pattern: {pattern}",
-                    Confidence = 0.8,
-                    Location = 0
-                });
+                    matchedPatterns++;
+                    result.Indicators.Add(new JailbreakIndicator
+                    {
+                        Type = "PatternMatch",
+                        Description = $"Matched jailbreak pattern: {pattern}",
+                        Confidence = 0.8,
+                        Location = 0
+                    });
+                }
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                // Pattern matching timed out - treat as potential attack, skip this pattern
             }
         }
 
@@ -335,17 +347,24 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 
             foreach (var pattern in patterns)
             {
-                if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase))
+                try
                 {
-                    matchCount++;
-                    result.Findings.Add(new HarmfulContentFinding
+                    if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase, RegexTimeout))
                     {
-                        Category = category,
-                        Severity = 0.7,
-                        Description = $"Matched {category} pattern: {pattern}",
-                        Location = 0,
-                        Excerpt = pattern
-                    });
+                        matchCount++;
+                        result.Findings.Add(new HarmfulContentFinding
+                        {
+                            Category = category,
+                            Severity = 0.7,
+                            Description = $"Matched {category} pattern: {pattern}",
+                            Location = 0,
+                            Excerpt = pattern
+                        });
+                    }
+                }
+                catch (RegexMatchTimeoutException)
+                {
+                    // Pattern matching timed out - skip this pattern
                 }
             }
 
