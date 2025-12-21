@@ -53,6 +53,16 @@ public class DeploymentConfiguration
     public CompressionConfig? Compression { get; set; }
 
     /// <summary>
+    /// Gets or sets the profiling configuration (null = disabled).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When configured, profiling measures the performance of training
+    /// and inference operations. The profiling report will be available in PredictionModelResult.
+    /// </para>
+    /// </remarks>
+    public ProfilingConfig? Profiling { get; set; }
+
+    /// <summary>
     /// Creates a deployment configuration from individual config objects.
     /// </summary>
     public static DeploymentConfiguration Create(
@@ -63,7 +73,8 @@ public class DeploymentConfiguration
         TelemetryConfig? telemetry,
         ExportConfig? export,
         GpuAccelerationConfig? gpuAcceleration,
-        CompressionConfig? compression = null)
+        CompressionConfig? compression = null,
+        ProfilingConfig? profiling = null)
     {
         return new DeploymentConfiguration
         {
@@ -74,7 +85,8 @@ public class DeploymentConfiguration
             Telemetry = telemetry,
             Export = export,
             GpuAcceleration = gpuAcceleration,
-            Compression = compression
+            Compression = compression,
+            Profiling = profiling
         };
     }
 }

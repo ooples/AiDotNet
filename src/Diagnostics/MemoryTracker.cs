@@ -91,16 +91,25 @@ public static class MemoryTracker
             GC.Collect();
         }
 
-        var process = Process.GetCurrentProcess();
+        long workingSet;
+        long privateMemory;
+        long virtualMemory;
+
+        using (var process = Process.GetCurrentProcess())
+        {
+            workingSet = process.WorkingSet64;
+            privateMemory = process.PrivateMemorySize64;
+            virtualMemory = process.VirtualMemorySize64;
+        }
 
         var snapshot = new MemorySnapshot
         {
             Label = label ?? $"Snapshot_{_history.Count}",
             Timestamp = DateTime.UtcNow,
             TotalMemory = GC.GetTotalMemory(forceGC),
-            WorkingSet = process.WorkingSet64,
-            PrivateMemory = process.PrivateMemorySize64,
-            VirtualMemory = process.VirtualMemorySize64,
+            WorkingSet = workingSet,
+            PrivateMemory = privateMemory,
+            VirtualMemory = virtualMemory,
             Gen0Collections = GC.CollectionCount(0),
             Gen1Collections = GC.CollectionCount(1),
             Gen2Collections = GC.CollectionCount(2),
@@ -346,10 +355,17 @@ public readonly struct MemoryScope : IDisposable
 {
     private readonly string _label;
     private readonly MemorySnapshot _before;
+    private readonly ProfilerSession? _profilerSession;
 
-    public MemoryScope(string label)
+    /// <summary>
+    /// Creates a memory tracking scope.
+    /// </summary>
+    /// <param name="label">Label for this scope.</param>
+    /// <param name="profilerSession">Optional profiler session to record allocations to.</param>
+    public MemoryScope(string label, ProfilerSession? profilerSession = null)
     {
         _label = label;
+        _profilerSession = profilerSession;
         _before = MemoryTracker.Snapshot($"{label}_before");
     }
 
@@ -363,13 +379,10 @@ public readonly struct MemoryScope : IDisposable
         var after = MemoryTracker.Snapshot($"{_label}_after");
         var diff = after.CompareTo(_before);
 
-        // Record to profiler if enabled
-        if (Profiler.IsEnabled)
+        // Record to profiler session if provided and enabled
+        if (_profilerSession?.IsEnabled == true && diff.TotalMemoryDelta > 0)
         {
-            if (diff.TotalMemoryDelta > 0)
-            {
-                Profiler.RecordAllocation(_label, diff.TotalMemoryDelta);
-            }
+            _profilerSession.RecordAllocation(_label, diff.TotalMemoryDelta);
         }
     }
 }
