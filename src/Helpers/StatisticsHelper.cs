@@ -1007,35 +1007,34 @@ public static class StatisticsHelper<T>
     private static T LogGamma(T x)
     {
         // Lanczos approximation for log(Gamma(x))
-        T[] _coefficients = [
-            _numOps.FromDouble(76.18009172947146),
-        _numOps.FromDouble(-86.50532032941677),
-        _numOps.FromDouble(24.01409824083091),
-        _numOps.FromDouble(-1.231739572450155),
-        _numOps.FromDouble(0.1208650973866179e-2),
-        _numOps.FromDouble(-0.5395239384953e-5)
-        ];
-        T _sum = _numOps.FromDouble(1.000000000190015);
+        // Based on Numerical Recipes implementation with g=5
+        // For x > 0, Gamma(x) ≈ sqrt(2*pi) * (x + g + 0.5)^(x + 0.5) * exp(-(x + g + 0.5)) * Ag(x)
+        // where Ag(x) = c0 + c1/(x+1) + c2/(x+2) + ...
+
+        double[] coefficients = {
+            76.18009172947146,
+            -86.50532032941677,
+            24.01409824083091,
+            -1.231739572450155,
+            0.001208650973866179,
+            -0.000005395239384953
+        };
+
+        double xd = _numOps.ToDouble(x);
+
+        // Compute the series sum: c0 + c1/(x+1) + c2/(x+2) + ...
+        double sum = 1.000000000190015;
         for (int i = 0; i < 6; i++)
         {
-            _sum = _numOps.Add(_sum, _numOps.Divide(_coefficients[i], _numOps.Add(x, _numOps.FromDouble(i + 1))));
+            sum += coefficients[i] / (xd + i + 1);
         }
-        return _numOps.Add(
-            _numOps.Add(
-                _numOps.Multiply(
-                    _numOps.Subtract(
-                        _numOps.Multiply(
-                            _numOps.Subtract(x, _numOps.FromDouble(0.5)),
-                            _numOps.Log(_numOps.Add(x, _numOps.FromDouble(5.5)))
-                        ),
-                        _numOps.Add(x, _numOps.FromDouble(5.5))
-                    ),
-                    _numOps.FromDouble(0.5)
-                ),
-                _numOps.Log(_numOps.Multiply(_numOps.FromDouble(2.5066282746310005), _sum))
-            ),
-            _numOps.Log(x)
-        );
+
+        // log(Gamma(x)) = (x + 0.5) * log(x + 5.5) - (x + 5.5) + log(sqrt(2*pi) * sum / x)
+        // Note: The Lanczos approximation gives Gamma(x+1), so we divide by x to get Gamma(x)
+        double tmp = xd + 5.5;
+        double logGammaValue = (xd + 0.5) * Math.Log(tmp) - tmp + Math.Log(2.5066282746310005 * sum / xd);
+
+        return _numOps.FromDouble(logGammaValue);
     }
 
     /// <summary>
@@ -1055,74 +1054,107 @@ public static class StatisticsHelper<T>
     /// </remarks>
     private static T RegularizedIncompleteBetaFunction(T x, T a, T b)
     {
-        if (_numOps.LessThanOrEquals(x, _numOps.Zero) || _numOps.GreaterThanOrEquals(x, _numOps.FromDouble(1)))
-            return x;
+        // Handle boundary cases
+        if (_numOps.LessThanOrEquals(x, _numOps.Zero))
+            return _numOps.Zero;
+        if (_numOps.GreaterThanOrEquals(x, _numOps.One))
+            return _numOps.One;
 
-        // Compute the factor x^a * (1-x)^b / Beta(a,b)
-        T _factor = _numOps.Exp(
-            _numOps.Add(
-                _numOps.Add(
-                    _numOps.Multiply(a, _numOps.Log(x)),
-                    _numOps.Multiply(b, _numOps.Log(_numOps.Subtract(_numOps.FromDouble(1), x)))
-                ),
-                _numOps.Negate(LogBeta(a, b))
-            )
-        );
+        // Use the symmetry relation for faster convergence
+        // I_x(a,b) = 1 - I_{1-x}(b,a)
+        // Use the relation when x > (a+1)/(a+b+2) for better continued fraction convergence
+        double xVal = _numOps.ToDouble(x);
+        double aVal = _numOps.ToDouble(a);
+        double bVal = _numOps.ToDouble(b);
+        double switchPoint = (aVal + 1.0) / (aVal + bVal + 2.0);
 
-        // Use the continued fraction representation
-        bool _useComplementaryFunction = _numOps.GreaterThan(x, _numOps.Divide(_numOps.Add(a, _numOps.FromDouble(1)), _numOps.Add(_numOps.Add(a, b), _numOps.FromDouble(2))));
-        T _c = _useComplementaryFunction ? _numOps.Subtract(_numOps.FromDouble(1), x) : x;
-        T _a1 = _useComplementaryFunction ? b : a;
-        T _b1 = _useComplementaryFunction ? a : b;
-
-        const int _maxIterations = 200;
-        T _epsilon = _numOps.FromDouble(1e-15);
-        T _fpmin = _numOps.FromDouble(1e-30);
-
-        T _qab = _numOps.Add(a, b);
-        T _qap = _numOps.Add(a, _numOps.FromDouble(1));
-        T _qam = _numOps.Subtract(a, _numOps.FromDouble(1));
-        T _d = _numOps.FromDouble(1);
-        T _h = _factor;
-
-        for (int m = 1; m <= _maxIterations; m++)
+        if (xVal > switchPoint)
         {
-            T _m1 = _numOps.FromDouble(m);
-            T _m2 = _numOps.FromDouble(2 * m);
-            T _aa = _numOps.Multiply(_m1, _numOps.Subtract(_b1, _m1));
-            _aa = _numOps.Divide(_aa, _numOps.Multiply(_qap, _qam));
-
-            T _d1 = _numOps.Add(_numOps.Multiply(_m2, _c), _aa);
-            if (_numOps.LessThan(_numOps.Abs(_d1), _fpmin))
-                _d1 = _fpmin;
-
-            T _c1 = _numOps.Add(_numOps.FromDouble(1), _numOps.Divide(_aa, _m2));
-            if (_numOps.LessThan(_numOps.Abs(_c1), _fpmin))
-                _c1 = _fpmin;
-
-            _d = _numOps.Divide(_numOps.FromDouble(1), _numOps.Multiply(_d1, _d));
-            _h = _numOps.Multiply(_h, _numOps.Multiply(_d, _c1));
-
-            _aa = _numOps.Negate(_numOps.Multiply(_numOps.Add(_a1, _m1), _numOps.Add(_qab, _m1)));
-            _aa = _numOps.Divide(_aa, _numOps.Multiply(_qap, _numOps.Add(_qap, _numOps.FromDouble(1))));
-
-            _d1 = _numOps.Add(_numOps.Multiply(_m2, x), _aa);
-            if (_numOps.LessThan(_numOps.Abs(_d1), _fpmin))
-                _d1 = _fpmin;
-
-            _c1 = _numOps.Add(_numOps.FromDouble(1), _numOps.Divide(_aa, _m2));
-            if (_numOps.LessThan(_numOps.Abs(_c1), _fpmin))
-                _c1 = _fpmin;
-
-            _d = _numOps.Divide(_numOps.FromDouble(1), _numOps.Multiply(_d1, _d));
-            T _del = _numOps.Multiply(_d, _c1);
-            _h = _numOps.Multiply(_h, _del);
-
-            if (_numOps.LessThan(_numOps.Abs(_numOps.Subtract(_del, _numOps.FromDouble(1))), _epsilon))
-                break;
+            return _numOps.Subtract(_numOps.One,
+                RegularizedIncompleteBetaFunction(_numOps.Subtract(_numOps.One, x), b, a));
         }
 
-        return _useComplementaryFunction ? _numOps.Subtract(_numOps.FromDouble(1), _h) : _h;
+        // Use the continued fraction representation (Lentz's algorithm)
+        // I_x(a,b) = (x^a * (1-x)^b / (a * B(a,b))) * CF
+        return BetaIncompleteContinuedFraction(x, a, b);
+    }
+
+    /// <summary>
+    /// Computes the regularized incomplete beta function using continued fraction (Lentz's algorithm).
+    /// Based on DLMF 8.17.22 and Numerical Recipes implementation.
+    /// </summary>
+    private static T BetaIncompleteContinuedFraction(T x, T a, T b)
+    {
+        const int maxIterations = 200;
+        const double epsilon = 1e-14;
+        const double fpmin = 1e-30;
+
+        double xd = _numOps.ToDouble(x);
+        double ad = _numOps.ToDouble(a);
+        double bd = _numOps.ToDouble(b);
+        double ab = ad + bd;
+
+        // Compute the front factor: x^a * (1-x)^b / (a * B(a,b))
+        // = exp(a*ln(x) + b*ln(1-x) - ln(a) - lnBeta(a,b))
+        double logBeta = _numOps.ToDouble(LogBeta(a, b));
+        double frontFactor = Math.Exp(ad * Math.Log(xd) + bd * Math.Log(1.0 - xd) - Math.Log(ad) - logBeta);
+
+        // Modified Lentz's algorithm for the continued fraction
+        // CF = 1/(1 + d1/(1 + d2/(1 + ...)))
+        // where d_{2m+1} = -(a+m)(a+b+m)x / ((a+2m)(a+2m+1))
+        //       d_{2m}   = m(b-m)x / ((a+2m-1)(a+2m))
+
+        double c = 1.0;
+        double d = 1.0 - ab * xd / (ad + 1.0);
+        if (Math.Abs(d) < fpmin) d = fpmin;
+        d = 1.0 / d;
+        double h = d;
+
+        for (int m = 1; m <= maxIterations; m++)
+        {
+            int m2 = 2 * m;
+
+            // Even term coefficient: d_{2m} = m(b-m)x / ((a+2m-1)(a+2m))
+            double numEven = m * (bd - m) * xd;
+            double denEven = (ad + m2 - 1.0) * (ad + m2);
+            double aEven = numEven / denEven;
+
+            // Update using even term
+            d = 1.0 + aEven * d;
+            if (Math.Abs(d) < fpmin) d = fpmin;
+            c = 1.0 + aEven / c;
+            if (Math.Abs(c) < fpmin) c = fpmin;
+            d = 1.0 / d;
+            h *= d * c;
+
+            // Odd term coefficient: d_{2m+1} = -(a+m)(a+b+m)x / ((a+2m)(a+2m+1))
+            double numOdd = -(ad + m) * (ab + m) * xd;
+            double denOdd = (ad + m2) * (ad + m2 + 1.0);
+            double aOdd = numOdd / denOdd;
+
+            // Update using odd term
+            d = 1.0 + aOdd * d;
+            if (Math.Abs(d) < fpmin) d = fpmin;
+            c = 1.0 + aOdd / c;
+            if (Math.Abs(c) < fpmin) c = fpmin;
+            d = 1.0 / d;
+            double del = d * c;
+            h *= del;
+
+            // Check for convergence
+            if (Math.Abs(del - 1.0) < epsilon)
+            {
+                break;
+            }
+        }
+
+        double result = frontFactor * h;
+
+        // Clamp to valid range
+        if (result < 0.0) result = 0.0;
+        if (result > 1.0) result = 1.0;
+
+        return _numOps.FromDouble(result);
     }
 
     /// <summary>
@@ -1181,60 +1213,51 @@ public static class StatisticsHelper<T>
             throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be positive");
         if (_numOps.LessThanOrEquals(beta, _numOps.Zero))
             throw new ArgumentOutOfRangeException(nameof(beta), "Beta must be positive");
-        if (_numOps.LessThanOrEquals(probability, _numOps.Zero) || _numOps.GreaterThanOrEquals(probability, _numOps.One))
-            throw new ArgumentOutOfRangeException(nameof(probability), "Probability must be between 0 and 1 (exclusive)");
+        if (_numOps.LessThan(probability, _numOps.Zero) || _numOps.GreaterThan(probability, _numOps.One))
+            throw new ArgumentOutOfRangeException(nameof(probability), "Probability must be between 0 and 1");
 
-        // Initial guess using approximation
-        T x = _numOps.FromDouble(0.5);
+        // Handle boundary cases
+        if (_numOps.Equals(probability, _numOps.Zero)) return _numOps.Zero;
+        if (_numOps.Equals(probability, _numOps.One)) return _numOps.One;
 
-        // Use a better initial guess based on the mean of the Beta distribution
-        T mean = _numOps.Divide(alpha, _numOps.Add(alpha, beta));
-        if (_numOps.LessThan(probability, _numOps.FromDouble(0.5)))
-        {
-            x = _numOps.Multiply(mean, _numOps.Multiply(_numOps.FromDouble(2), probability));
-        }
-        else
-        {
-            x = _numOps.Subtract(_numOps.One, _numOps.Multiply(_numOps.Subtract(_numOps.One, mean),
-                _numOps.Multiply(_numOps.FromDouble(2), _numOps.Subtract(_numOps.One, probability))));
-        }
+        // Use bisection method for robustness
+        // Bisection is guaranteed to converge for monotonic functions like CDF
+        double p = _numOps.ToDouble(probability);
+        double a = _numOps.ToDouble(alpha);
+        double b = _numOps.ToDouble(beta);
 
-        // Clamp initial guess to valid range (0, 1)
-        T eps = _numOps.FromDouble(1e-10);
-        T upperBound = _numOps.Subtract(_numOps.One, eps);
-        x = MathHelper.Clamp(x, eps, upperBound);
-
-        // Newton-Raphson iteration
-        const int maxIterations = 100;
-        T tolerance = _numOps.FromDouble(1e-12);
+        double lo = 0.0;
+        double hi = 1.0;
+        double tolerance = 1e-14;
+        int maxIterations = 100;
 
         for (int i = 0; i < maxIterations; i++)
         {
-            T fx = _numOps.Subtract(RegularizedIncompleteBetaFunction(x, alpha, beta), probability);
-            T dfx = BetaPDF(x, alpha, beta);
+            double mid = (lo + hi) / 2.0;
+            double cdf = _numOps.ToDouble(CalculateBetaCDF(_numOps.FromDouble(mid), alpha, beta));
 
-            // Avoid division by zero
-            if (_numOps.LessThan(_numOps.Abs(dfx), _numOps.FromDouble(1e-30)))
+            if (Math.Abs(cdf - p) < tolerance)
             {
-                break;
+                return _numOps.FromDouble(mid);
             }
 
-            T delta = _numOps.Divide(fx, dfx);
-            T newX = _numOps.Subtract(x, delta);
-
-            // Clamp to valid range (0, 1)
-            newX = MathHelper.Clamp(newX, eps, upperBound);
-
-            // Check for convergence
-            if (_numOps.LessThan(_numOps.Abs(delta), tolerance))
+            if (cdf < p)
             {
-                return newX;
+                lo = mid;
+            }
+            else
+            {
+                hi = mid;
             }
 
-            x = newX;
+            // Check for convergence based on interval size
+            if (hi - lo < tolerance)
+            {
+                return _numOps.FromDouble((lo + hi) / 2.0);
+            }
         }
 
-        return x;
+        return _numOps.FromDouble((lo + hi) / 2.0);
     }
 
     /// <summary>

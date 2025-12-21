@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Serialization;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
@@ -435,7 +436,15 @@ public class SafetyFilter<T> : ISafetyFilter<T>
         }
 
         var json = Encoding.UTF8.GetString(data);
-        options = JsonConvert.DeserializeObject<SafetyFilterOptions<T>>(json) ?? new SafetyFilterOptions<T>();
+
+        // Use SafeSerializationBinder to prevent deserialization attacks
+        var settings = new JsonSerializerSettings
+        {
+            TypeNameHandling = TypeNameHandling.Auto,
+            SerializationBinder = new SafeSerializationBinder()
+        };
+
+        options = JsonConvert.DeserializeObject<SafetyFilterOptions<T>>(json, settings) ?? new SafetyFilterOptions<T>();
 
         // Reinitialize patterns based on new options
         InitializePatterns();
