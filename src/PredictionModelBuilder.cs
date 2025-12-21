@@ -38,7 +38,6 @@ global using AiDotNet.LinearAlgebra;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.Policies;
 using AiDotNet.AutoML.SearchSpace;
-using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet;
