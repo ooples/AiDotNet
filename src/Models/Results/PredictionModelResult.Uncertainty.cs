@@ -788,9 +788,17 @@ public partial class PredictionModelResult<T, TInput, TOutput>
         var probsTensor = ConversionsHelper.ConvertToTensor<T>(output!).Clone();
         var probsVector = probsTensor.ToVector();
         var (treatAsProbabilities, batch, classes) = InferProbabilityDistributionLayout(probsTensor, probsVector);
-        if (!treatAsProbabilities || classes <= 1)
+        if (classes <= 1)
         {
             return output;
+        }
+
+        if (!treatAsProbabilities)
+        {
+            probsTensor = SoftmaxTensor(probsTensor, batch, classes);
+            output = ConvertFromTensor(probsTensor);
+            probsVector = probsTensor.ToVector();
+            treatAsProbabilities = true;
         }
 
         if (method == ProbabilityCalibrationMethod.Auto)
@@ -919,6 +927,47 @@ public partial class PredictionModelResult<T, TInput, TOutput>
         }
 
         return spanY[spanY.Length - 1];
+    }
+
+    private static Tensor<T> SoftmaxTensor(Tensor<T> tensor, int batch, int classes)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (classes <= 1)
+        {
+            return tensor;
+        }
+
+        var flat = tensor.ToVector();
+        var output = new Vector<T>(batch * classes);
+
+        for (int b = 0; b < batch; b++)
+        {
+            var baseIndex = b * classes;
+            var max = flat[baseIndex];
+            for (int c = 1; c < classes; c++)
+            {
+                var v = flat[baseIndex + c];
+                if (numOps.GreaterThan(v, max))
+                {
+                    max = v;
+                }
+            }
+
+            var sumExp = numOps.Zero;
+            for (int c = 0; c < classes; c++)
+            {
+                var ex = numOps.Exp(numOps.Subtract(flat[baseIndex + c], max));
+                output[baseIndex + c] = ex;
+                sumExp = numOps.Add(sumExp, ex);
+            }
+
+            for (int c = 0; c < classes; c++)
+            {
+                output[baseIndex + c] = numOps.Divide(output[baseIndex + c], sumExp);
+            }
+        }
+
+        return new Tensor<T>([batch, classes], output).Reshape(tensor.Shape);
     }
 
     private Tensor<T> DenormalizeVarianceIfSupported(Tensor<T> normalizedVariance, NormalizationParameters<T> yParams)

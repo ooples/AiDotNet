@@ -226,6 +226,8 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
             return;
         }
 
+        probsTensor = EnsureProbabilityTensor(probsTensor, batch, numClasses);
+
         var numOps = MathHelper.GetNumericOperations<T>();
         var effectiveCalibration = ResolveCalibrationMethod(options, numClasses);
         var calibrated = probsTensor;
@@ -340,6 +342,76 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
         artifacts.HasConformalClassification = true;
         artifacts.ConformalClassificationThreshold = threshold;
         artifacts.ConformalClassificationNumClasses = numClasses;
+    }
+
+    private static Tensor<T> EnsureProbabilityTensor(Tensor<T> values, int batch, int classes)
+    {
+        if (classes <= 1 || batch <= 0)
+        {
+            return values;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var tolerance = 1e-3;
+        var flat = values.ToVector();
+
+        var looksLikeProbabilities = true;
+        for (int b = 0; b < batch && looksLikeProbabilities; b++)
+        {
+            var sum = 0.0;
+            var baseIndex = b * classes;
+            for (int c = 0; c < classes; c++)
+            {
+                var p = numOps.ToDouble(flat[baseIndex + c]);
+                if (p < 0.0 || p > 1.0)
+                {
+                    looksLikeProbabilities = false;
+                    break;
+                }
+                sum += p;
+            }
+
+            if (Math.Abs(sum - 1.0) > tolerance)
+            {
+                looksLikeProbabilities = false;
+            }
+        }
+
+        if (looksLikeProbabilities)
+        {
+            return values;
+        }
+
+        // Treat as logits and apply stable softmax per sample.
+        var output = new Vector<T>(batch * classes);
+        for (int b = 0; b < batch; b++)
+        {
+            var baseIndex = b * classes;
+            var max = flat[baseIndex];
+            for (int c = 1; c < classes; c++)
+            {
+                var v = flat[baseIndex + c];
+                if (numOps.GreaterThan(v, max))
+                {
+                    max = v;
+                }
+            }
+
+            var sumExp = numOps.Zero;
+            for (int c = 0; c < classes; c++)
+            {
+                var ex = numOps.Exp(numOps.Subtract(flat[baseIndex + c], max));
+                output[baseIndex + c] = ex;
+                sumExp = numOps.Add(sumExp, ex);
+            }
+
+            for (int c = 0; c < classes; c++)
+            {
+                output[baseIndex + c] = numOps.Divide(output[baseIndex + c], sumExp);
+            }
+        }
+
+        return new Tensor<T>([batch, classes], output).Reshape(values.Shape);
     }
 
     /// <summary>
@@ -798,12 +870,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
         UncertaintyQuantificationOptions options,
         UncertaintyCalibrationArtifacts<T> artifacts)
     {
-        if (!TryPreparePosteriorCalibrationTensorsForClassification(result, xCalibration, labels, options, out var xTensor, out var yOneHot))
-        {
-            return;
-        }
-
-        if (!TryCastTensorInputs(xTensor, yOneHot, out var input, out var target))
+        if (!TryPreparePosteriorCalibrationDataForClassification(result, xCalibration, labels, options, out var input, out var target))
         {
             return;
         }
@@ -858,12 +925,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
         UncertaintyQuantificationOptions options,
         UncertaintyCalibrationArtifacts<T> artifacts)
     {
-        if (!TryPreparePosteriorCalibrationTensorsForRegression(xCalibration, yCalibration, options, out var xTensor, out var yTensor))
-        {
-            return;
-        }
-
-        if (!TryCastTensorInputs(xTensor, yTensor, out var input, out var target))
+        if (!TryPreparePosteriorCalibrationDataForRegression(xCalibration, yCalibration, options, out var input, out var target))
         {
             return;
         }
@@ -918,12 +980,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
         UncertaintyQuantificationOptions options,
         UncertaintyCalibrationArtifacts<T> artifacts)
     {
-        if (!TryPreparePosteriorCalibrationTensorsForClassification(result, xCalibration, labels, options, out var xTensor, out var yOneHot))
-        {
-            return;
-        }
-
-        if (!TryCastTensorInputs(xTensor, yOneHot, out var input, out var target))
+        if (!TryPreparePosteriorCalibrationDataForClassification(result, xCalibration, labels, options, out var input, out var target))
         {
             return;
         }
@@ -1033,12 +1090,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
         UncertaintyQuantificationOptions options,
         UncertaintyCalibrationArtifacts<T> artifacts)
     {
-        if (!TryPreparePosteriorCalibrationTensorsForRegression(xCalibration, yCalibration, options, out var xTensor, out var yTensor))
-        {
-            return;
-        }
-
-        if (!TryCastTensorInputs(xTensor, yTensor, out var input, out var target))
+        if (!TryPreparePosteriorCalibrationDataForRegression(xCalibration, yCalibration, options, out var input, out var target))
         {
             return;
         }
@@ -1141,30 +1193,19 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
         artifacts.SwagPosteriorVarianceDiag = variance;
     }
 
-    private static bool TryPreparePosteriorCalibrationTensorsForClassification(
+    private static bool TryPreparePosteriorCalibrationDataForClassification(
         PredictionModelResult<T, TInput, TOutput> result,
         TInput xCalibration,
         Vector<int> labels,
         UncertaintyQuantificationOptions options,
-        out Tensor<T> xTensor,
-        out Tensor<T> yOneHot)
+        out TInput input,
+        out TOutput target)
     {
-        xTensor = null!;
-        yOneHot = null!;
+        input = default!;
+        target = default!;
 
-        if (labels.Length == 0)
+        if (labels.Length == 0 || result.Model == null)
         {
-            return false;
-        }
-
-        if (result.Model == null)
-        {
-            return false;
-        }
-
-        if (xCalibration is not Tensor<T> inputTensor)
-        {
-            System.Diagnostics.Debug.WriteLine("Warning: Laplace/SWAG posterior fitting currently requires TInput to be Tensor<T>.");
             return false;
         }
 
@@ -1185,66 +1226,182 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
         var take = Math.Min(batch, labels.Length);
         take = Math.Min(take, Math.Max(1, options.PosteriorFitMaxSamples));
 
-        xTensor = TakeFirstBatch(inputTensor, take);
-        yOneHot = CreateOneHotTargets(labels, take, classes);
-        return true;
-    }
-
-    private static bool TryPreparePosteriorCalibrationTensorsForRegression(
-        TInput xCalibration,
-        TOutput yCalibration,
-        UncertaintyQuantificationOptions options,
-        out Tensor<T> xTensor,
-        out Tensor<T> yTensor)
-    {
-        xTensor = null!;
-        yTensor = null!;
-
-        if (xCalibration is not Tensor<T> inputTensor || yCalibration is not Tensor<T> targetTensor)
+        if (!TrySliceFirstSamples(xCalibration, take, out input))
         {
-            System.Diagnostics.Debug.WriteLine("Warning: Laplace/SWAG posterior fitting currently requires TInput and TOutput to be Tensor<T>.");
+            System.Diagnostics.Debug.WriteLine($"Warning: Laplace/SWAG posterior fitting skipped because TInput '{typeof(TInput).Name}' could not be sliced.");
             return false;
         }
 
-        var batch = inputTensor.Rank == 1 ? inputTensor.Shape[0] : inputTensor.Shape[0];
-        var take = Math.Min(batch, Math.Max(1, options.PosteriorFitMaxSamples));
+        if (!TryCreateOneHotTarget(labels, take, classes, out target))
+        {
+            System.Diagnostics.Debug.WriteLine($"Warning: Laplace/SWAG posterior fitting skipped because TOutput '{typeof(TOutput).Name}' one-hot targets are not supported for batch size {take}.");
+            return false;
+        }
 
-        xTensor = TakeFirstBatch(inputTensor, take);
-        yTensor = TakeFirstBatch(targetTensor, take);
         return true;
     }
 
-    private static bool TryCastTensorInputs(Tensor<T> xTensor, Tensor<T> yTensor, out TInput input, out TOutput target)
+    private static bool TryPreparePosteriorCalibrationDataForRegression(
+        TInput xCalibration,
+        TOutput yCalibration,
+        UncertaintyQuantificationOptions options,
+        out TInput input,
+        out TOutput target)
     {
         input = default!;
         target = default!;
 
-        if (typeof(TInput) != typeof(Tensor<T>) || typeof(TOutput) != typeof(Tensor<T>))
+        var max = Math.Max(1, options.PosteriorFitMaxSamples);
+        var take = max;
+
+        if (xCalibration is Tensor<T> xTensor)
         {
-            System.Diagnostics.Debug.WriteLine("Warning: Laplace/SWAG posterior fitting requires builder generic types to be Tensor<T>.");
+            take = Math.Min(take, xTensor.Shape[0]);
+        }
+        else if (xCalibration is Matrix<T> xMatrix)
+        {
+            take = Math.Min(take, xMatrix.Rows);
+        }
+        else if (xCalibration is Vector<T>)
+        {
+            take = 1;
+        }
+
+        if (!TrySliceFirstSamples(xCalibration, take, out input))
+        {
+            System.Diagnostics.Debug.WriteLine($"Warning: Laplace/SWAG posterior fitting skipped because TInput '{typeof(TInput).Name}' could not be sliced.");
             return false;
         }
 
-        input = (TInput)(object)xTensor;
-        target = (TOutput)(object)yTensor;
+        if (!TrySliceFirstSamples(yCalibration, take, out target))
+        {
+            System.Diagnostics.Debug.WriteLine($"Warning: Laplace/SWAG posterior fitting skipped because TOutput '{typeof(TOutput).Name}' could not be sliced.");
+            return false;
+        }
+
         return true;
     }
 
-    private static Tensor<T> CreateOneHotTargets(Vector<int> labels, int batch, int classes)
+    private static bool TrySliceFirstSamples<TValue>(TValue value, int take, out TValue sliced)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var flat = new Vector<T>(batch * classes);
+        sliced = default!;
 
-        for (int i = 0; i < batch; i++)
+        if (take <= 0)
         {
-            var label = labels[i];
+            return false;
+        }
+
+        if (value is Tensor<T> tensor)
+        {
+            sliced = (TValue)(object)TakeFirstBatch(tensor, take);
+            return true;
+        }
+
+        if (value is Matrix<T> matrix)
+        {
+            sliced = (TValue)(object)TakeFirstRows(matrix, take);
+            return true;
+        }
+
+        if (value is Vector<T> vector)
+        {
+            var actual = Math.Min(take, vector.Length);
+            if (actual == vector.Length)
+            {
+                sliced = value;
+                return true;
+            }
+
+            var newVec = new Vector<T>(actual);
+            for (int i = 0; i < actual; i++)
+            {
+                newVec[i] = vector[i];
+            }
+
+            sliced = (TValue)(object)newVec;
+            return true;
+        }
+
+        if (take == 1)
+        {
+            sliced = value;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryCreateOneHotTarget(Vector<int> labels, int batch, int classes, out TOutput target)
+    {
+        target = default!;
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        if (typeof(TOutput) == typeof(Tensor<T>))
+        {
+            var flat = new Vector<T>(batch * classes);
+            for (int i = 0; i < batch; i++)
+            {
+                var label = labels[i];
+                if (label >= 0 && label < classes)
+                {
+                    flat[i * classes + label] = numOps.One;
+                }
+            }
+
+            target = (TOutput)(object)new Tensor<T>([batch, classes], flat);
+            return true;
+        }
+
+        if (typeof(TOutput) == typeof(Matrix<T>))
+        {
+            var mat = new Matrix<T>(batch, classes);
+            for (int i = 0; i < batch; i++)
+            {
+                var label = labels[i];
+                if (label >= 0 && label < classes)
+                {
+                    mat[i, label] = numOps.One;
+                }
+            }
+
+            target = (TOutput)(object)mat;
+            return true;
+        }
+
+        if (typeof(TOutput) == typeof(Vector<T>))
+        {
+            if (batch != 1)
+            {
+                return false;
+            }
+
+            var vec = new Vector<T>(classes);
+            var label = labels[0];
             if (label >= 0 && label < classes)
             {
-                flat[i * classes + label] = numOps.One;
+                vec[label] = numOps.One;
+            }
+
+            target = (TOutput)(object)vec;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static Matrix<T> TakeFirstRows(Matrix<T> matrix, int rows)
+    {
+        var take = Math.Min(rows, matrix.Rows);
+        var result = new Matrix<T>(take, matrix.Columns);
+        for (int r = 0; r < take; r++)
+        {
+            for (int c = 0; c < matrix.Columns; c++)
+            {
+                result[r, c] = matrix[r, c];
             }
         }
 
-        return new Tensor<T>([batch, classes], flat);
+        return result;
     }
 
     private static Tensor<T> TakeFirstBatch(Tensor<T> tensor, int batch)
