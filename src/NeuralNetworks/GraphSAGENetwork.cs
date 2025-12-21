@@ -410,7 +410,7 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
 
                 // Sample subgraph for this batch
                 var (sampledFeatures, sampledAdj, sampledLabels) = SampleSubgraph(
-                    nodeFeatures, adjacencyMatrix, labels, batchIndices, numSamples);
+                    nodeFeatures, adjacencyMatrix, labels, batchIndices, numSamples, random);
 
                 // Set all layers to training mode
                 foreach (var layer in Layers)
@@ -450,9 +450,9 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         Tensor<T> adjacencyMatrix,
         Tensor<T> labels,
         int[] targetIndices,
-        int numSamples)
+        int numSamples,
+        Random random)
     {
-        var random = RandomHelper.ThreadSafeRandom;
         int numFeatures = nodeFeatures.Shape[1];
         int numClasses = labels.Shape[1];
         int numNodes = nodeFeatures.Shape[0];
