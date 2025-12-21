@@ -2153,6 +2153,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
+            SafetyFilterConfiguration = _safetyFilterConfiguration,
             RagRetriever = _ragRetriever,
             RagReranker = _ragReranker,
             RagGenerator = _ragGenerator,

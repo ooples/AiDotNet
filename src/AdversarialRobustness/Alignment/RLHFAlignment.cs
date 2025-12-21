@@ -256,18 +256,56 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
 
         var json = Encoding.UTF8.GetString(data);
         options = JsonConvert.DeserializeObject<AlignmentMethodOptions<T>>(json) ?? new AlignmentMethodOptions<T>();
+
+        // Reset reward model - it cannot be serialized and must be retrained
+        // by calling AlignModel with new feedback data
+        rewardModel = null;
     }
+
+    /// <summary>
+    /// Gets whether the reward model has been trained.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// After deserialization, the reward model will be null because functions cannot
+    /// be serialized. Call <see cref="AlignModel"/> with feedback data to retrain it.
+    /// </para>
+    /// </remarks>
+    public bool IsRewardModelTrained => rewardModel != null;
 
     /// <inheritdoc/>
     public void SaveModel(string filePath)
     {
-        File.WriteAllBytes(filePath, Serialize());
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        var fullPath = Path.GetFullPath(filePath);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        File.WriteAllBytes(fullPath, Serialize());
     }
 
     /// <inheritdoc/>
     public void LoadModel(string filePath)
     {
-        Deserialize(File.ReadAllBytes(filePath));
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        var fullPath = Path.GetFullPath(filePath);
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException("Model file not found.", fullPath);
+        }
+
+        Deserialize(File.ReadAllBytes(fullPath));
     }
 
     private Func<Vector<T>, Vector<T>, double> TrainRewardModel(AlignmentFeedbackData<T> feedbackData)

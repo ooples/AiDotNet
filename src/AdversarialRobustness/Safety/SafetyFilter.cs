@@ -28,8 +28,8 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private SafetyFilterOptions<T> options;
-    private readonly List<string> jailbreakPatterns;
-    private readonly Dictionary<string, List<string>> harmfulContentPatterns;
+    private List<string> jailbreakPatterns;
+    private Dictionary<string, List<string>> harmfulContentPatterns;
 
     /// <summary>
     /// Initializes a new instance of the safety filter.
@@ -38,9 +38,19 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     public SafetyFilter(SafetyFilterOptions<T> options)
     {
         this.options = options ?? throw new ArgumentNullException(nameof(options));
+        jailbreakPatterns = new List<string>();
+        harmfulContentPatterns = new Dictionary<string, List<string>>();
+        InitializePatterns();
+    }
 
+    /// <summary>
+    /// Initializes the jailbreak and harmful content detection patterns from options.
+    /// </summary>
+    private void InitializePatterns()
+    {
         // Initialize jailbreak detection patterns
-        jailbreakPatterns = new List<string>
+        jailbreakPatterns.Clear();
+        jailbreakPatterns.AddRange(new[]
         {
             @"ignore (previous|all|your) (instructions?|rules?)",
             @"forget (everything|what|all)",
@@ -52,10 +62,10 @@ public class SafetyFilter<T> : ISafetyFilter<T>
             @"disregard",
             @"override",
             @"system prompt"
-        };
+        });
 
         // Initialize harmful content patterns by category
-        harmfulContentPatterns = new Dictionary<string, List<string>>();
+        harmfulContentPatterns.Clear();
 
         foreach (var category in options.HarmfulContentCategories)
         {
@@ -407,18 +417,44 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 
         var json = Encoding.UTF8.GetString(data);
         options = JsonConvert.DeserializeObject<SafetyFilterOptions<T>>(json) ?? new SafetyFilterOptions<T>();
+
+        // Reinitialize patterns based on new options
+        InitializePatterns();
     }
 
     /// <inheritdoc/>
     public void SaveModel(string filePath)
     {
-        File.WriteAllBytes(filePath, Serialize());
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        var fullPath = Path.GetFullPath(filePath);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        File.WriteAllBytes(fullPath, Serialize());
     }
 
     /// <inheritdoc/>
     public void LoadModel(string filePath)
     {
-        Deserialize(File.ReadAllBytes(filePath));
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        var fullPath = Path.GetFullPath(filePath);
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException("Model file not found.", fullPath);
+        }
+
+        Deserialize(File.ReadAllBytes(fullPath));
     }
 
     private static string ConvertToText(Vector<T> data)

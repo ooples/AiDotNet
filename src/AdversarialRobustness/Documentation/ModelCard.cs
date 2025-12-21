@@ -261,33 +261,63 @@ public class ModelCard
     /// Saves the Model Card to a markdown file.
     /// </summary>
     /// <param name="filePath">The path where the Model Card should be saved.</param>
+    /// <exception cref="ArgumentException">Thrown when file path is null or empty.</exception>
     public void SaveToFile(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        var fullPath = Path.GetFullPath(filePath);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         var content = Generate();
-        File.WriteAllText(filePath, content);
+        File.WriteAllText(fullPath, content);
     }
 
     /// <summary>
     /// Creates a Model Card from evaluation results.
     /// </summary>
+    /// <param name="modelName">The name of the model.</param>
+    /// <param name="modelType">The type of the model (e.g., "Classification", "Regression").</param>
+    /// <param name="performanceMetrics">Performance metrics for the model. Can be null.</param>
+    /// <param name="robustnessMetrics">Robustness metrics for the model. Can be null.</param>
+    /// <returns>A new ModelCard instance populated with the provided evaluation results.</returns>
+    /// <exception cref="ArgumentException">Thrown when modelName is null or empty.</exception>
     public static ModelCard CreateFromEvaluation(
         string modelName,
         string modelType,
-        Dictionary<string, double> performanceMetrics,
-        Dictionary<string, double> robustnessMetrics)
+        Dictionary<string, double>? performanceMetrics,
+        Dictionary<string, double>? robustnessMetrics)
     {
+        if (string.IsNullOrWhiteSpace(modelName))
+        {
+            throw new ArgumentException("Model name cannot be null or empty.", nameof(modelName));
+        }
+
         var card = new ModelCard
         {
             ModelName = modelName,
-            ModelType = modelType,
+            ModelType = modelType ?? string.Empty,
             Date = DateTime.UtcNow
         };
 
-        // Add performance metrics
-        card.PerformanceMetrics["Overall"] = performanceMetrics;
+        // Add performance metrics (defensive copy to prevent external mutation)
+        if (performanceMetrics != null && performanceMetrics.Count > 0)
+        {
+            card.PerformanceMetrics["Overall"] = new Dictionary<string, double>(performanceMetrics);
+        }
 
-        // Add robustness metrics
-        card.RobustnessMetrics = robustnessMetrics;
+        // Add robustness metrics (defensive copy to prevent external mutation)
+        if (robustnessMetrics != null && robustnessMetrics.Count > 0)
+        {
+            card.RobustnessMetrics = new Dictionary<string, double>(robustnessMetrics);
+        }
 
         // Add standard recommendations
         card.Recommendations.Add("Continuously monitor model performance in production");
