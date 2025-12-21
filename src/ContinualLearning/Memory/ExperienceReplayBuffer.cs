@@ -417,66 +417,196 @@ public class ExperienceReplayBuffer<T, TInput, TOutput>
     private List<DataPoint<T, TInput, TOutput>> HerdingSample(
         List<DataPoint<T, TInput, TOutput>> items, int k)
     {
-        // Simplified herding: select diverse examples using hash-based diversity
-        // Full herding would require feature extraction from TInput
-        var selected = new List<DataPoint<T, TInput, TOutput>>();
-        var hashSet = new HashSet<int>();
+        // iCaRL-style herding: select exemplars closest to class mean
+        // Groups samples by class and selects those closest to the class centroid
+        if (k >= items.Count)
+            return new List<DataPoint<T, TInput, TOutput>>(items);
 
-        foreach (var item in items.OrderBy(i => i.Input?.GetHashCode() ?? 0))
+        // Group by output (class)
+        var groups = items.GroupBy(p => p.Output?.GetHashCode() ?? 0).ToList();
+        int samplesPerClass = Math.Max(1, k / groups.Count);
+        var selected = new List<DataPoint<T, TInput, TOutput>>();
+
+        foreach (var group in groups)
         {
-            var hash = item.Input?.GetHashCode() ?? 0;
-            if (!hashSet.Contains(hash % 1000)) // Bucket hashing for diversity
+            var groupItems = group.ToList();
+            if (groupItems.Count == 0) continue;
+
+            int take = Math.Min(samplesPerClass, groupItems.Count);
+
+            // Try to extract features for proper herding
+            var features = groupItems.Select(p => ExtractFeatures(p.Input)).ToList();
+
+            if (features.All(f => f != null && f.Length > 0))
             {
-                selected.Add(item);
-                hashSet.Add(hash % 1000);
-                if (selected.Count >= k) break;
+                // Compute class mean
+                int featureDim = features[0]!.Length;
+                double[] classMean = new double[featureDim];
+                foreach (var f in features)
+                {
+                    for (int d = 0; d < featureDim; d++)
+                        classMean[d] += f![d];
+                }
+                for (int d = 0; d < featureDim; d++)
+                    classMean[d] /= features.Count;
+
+                // Greedy herding: select exemplars that minimize distance to class mean
+                var runningMean = new double[featureDim];
+                var selectedIndices = new HashSet<int>();
+
+                for (int i = 0; i < take; i++)
+                {
+                    int bestIdx = -1;
+                    double bestDist = double.MaxValue;
+
+                    for (int j = 0; j < groupItems.Count; j++)
+                    {
+                        if (selectedIndices.Contains(j)) continue;
+
+                        // Compute hypothetical running mean if we added this sample
+                        double[] hypotheticalMean = new double[featureDim];
+                        for (int d = 0; d < featureDim; d++)
+                        {
+                            hypotheticalMean[d] = (runningMean[d] * selectedIndices.Count + features[j]![d]) / (selectedIndices.Count + 1);
+                        }
+
+                        // Distance from class mean
+                        double dist = 0;
+                        for (int d = 0; d < featureDim; d++)
+                        {
+                            double diff = hypotheticalMean[d] - classMean[d];
+                            dist += diff * diff;
+                        }
+
+                        if (dist < bestDist)
+                        {
+                            bestDist = dist;
+                            bestIdx = j;
+                        }
+                    }
+
+                    if (bestIdx >= 0)
+                    {
+                        selectedIndices.Add(bestIdx);
+                        selected.Add(groupItems[bestIdx]);
+                        // Update running mean
+                        for (int d = 0; d < featureDim; d++)
+                        {
+                            runningMean[d] = (runningMean[d] * (selectedIndices.Count - 1) + features[bestIdx]![d]) / selectedIndices.Count;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // Fallback to random sampling if features can't be extracted
+                selected.AddRange(groupItems.OrderBy(_ => _random.Next()).Take(take));
             }
         }
 
-        // Fill remaining with random if needed
-        if (selected.Count < k)
+        // Fill remaining slots with random samples if needed
+        while (selected.Count < k && selected.Count < items.Count)
         {
-            var remaining = items.Except(selected).OrderBy(_ => _random.Next()).Take(k - selected.Count);
-            selected.AddRange(remaining);
+            var remaining = items.Except(selected).ToList();
+            if (remaining.Count == 0) break;
+            selected.Add(remaining[_random.Next(remaining.Count)]);
         }
 
-        return selected;
+        return selected.Take(k).ToList();
     }
 
     private List<DataPoint<T, TInput, TOutput>> KCenterSample(
         List<DataPoint<T, TInput, TOutput>> items, int k)
     {
-        // Simplified K-Center greedy: use hash-based distance approximation
+        // K-Center greedy algorithm: select points that maximize coverage
+        // Greedily selects the point farthest from all selected points
         if (k >= items.Count) return new List<DataPoint<T, TInput, TOutput>>(items);
 
-        var selected = new List<DataPoint<T, TInput, TOutput>> { items[_random.Next(items.Count)] };
-        var selectedHashes = new HashSet<int> { selected[0].Input?.GetHashCode() ?? 0 };
+        // Extract features for all items
+        var features = items.Select(p => ExtractFeatures(p.Input)).ToList();
 
-        while (selected.Count < k)
+        // Check if we can use feature-based distance
+        if (features.All(f => f != null && f.Length > 0))
         {
-            DataPoint<T, TInput, TOutput>? farthest = null;
-            int maxMinDist = int.MinValue;
+            var selected = new List<DataPoint<T, TInput, TOutput>>();
+            var selectedIndices = new HashSet<int>();
+            var selectedFeatures = new List<double[]>();
 
-            foreach (var item in items.Except(selected))
+            // Start with a random point
+            int firstIdx = _random.Next(items.Count);
+            selected.Add(items[firstIdx]);
+            selectedIndices.Add(firstIdx);
+            selectedFeatures.Add(features[firstIdx]!);
+
+            // Greedily add points that maximize minimum distance to selected set
+            while (selected.Count < k)
             {
-                int itemHash = item.Input?.GetHashCode() ?? 0;
-                int minDist = selectedHashes.Min(h => Math.Abs(itemHash - h));
-                if (minDist > maxMinDist)
+                int bestIdx = -1;
+                double maxMinDist = -1;
+
+                for (int i = 0; i < items.Count; i++)
                 {
-                    maxMinDist = minDist;
-                    farthest = item;
+                    if (selectedIndices.Contains(i)) continue;
+
+                    // Find minimum distance to any selected point
+                    double minDist = double.MaxValue;
+                    foreach (var sf in selectedFeatures)
+                    {
+                        double dist = ComputeSquaredDistance(features[i]!, sf);
+                        if (dist < minDist) minDist = dist;
+                    }
+
+                    // Track the point with maximum minimum distance
+                    if (minDist > maxMinDist)
+                    {
+                        maxMinDist = minDist;
+                        bestIdx = i;
+                    }
                 }
+
+                if (bestIdx >= 0)
+                {
+                    selected.Add(items[bestIdx]);
+                    selectedIndices.Add(bestIdx);
+                    selectedFeatures.Add(features[bestIdx]!);
+                }
+                else break;
             }
 
-            if (farthest != null)
-            {
-                selected.Add(farthest);
-                selectedHashes.Add(farthest.Input?.GetHashCode() ?? 0);
-            }
-            else break;
+            return selected;
         }
+        else
+        {
+            // Fallback: use hash-based diversity when features can't be extracted
+            var selected = new List<DataPoint<T, TInput, TOutput>> { items[_random.Next(items.Count)] };
+            var selectedHashes = new HashSet<int> { selected[0].Input?.GetHashCode() ?? 0 };
 
-        return selected;
+            while (selected.Count < k)
+            {
+                DataPoint<T, TInput, TOutput>? farthest = null;
+                int maxMinDist = int.MinValue;
+
+                foreach (var item in items.Except(selected))
+                {
+                    int itemHash = item.Input?.GetHashCode() ?? 0;
+                    int minDist = selectedHashes.Min(h => Math.Abs(itemHash - h));
+                    if (minDist > maxMinDist)
+                    {
+                        maxMinDist = minDist;
+                        farthest = item;
+                    }
+                }
+
+                if (farthest != null)
+                {
+                    selected.Add(farthest);
+                    selectedHashes.Add(farthest.Input?.GetHashCode() ?? 0);
+                }
+                else break;
+            }
+
+            return selected;
+        }
     }
 
     private List<DataPoint<T, TInput, TOutput>> BoundarySample(
@@ -646,6 +776,109 @@ public class ExperienceReplayBuffer<T, TInput, TOutput>
             size += 32;
 
         return size;
+    }
+
+    /// <summary>
+    /// Extracts feature values from an input for distance computation.
+    /// Handles various input types like Tensor, Vector, arrays, etc.
+    /// </summary>
+    /// <param name="input">The input to extract features from.</param>
+    /// <returns>Array of feature values, or null if extraction fails.</returns>
+    private double[]? ExtractFeatures(TInput input)
+    {
+        if (input == null) return null;
+
+        // Handle Tensor<T>
+        if (input is Tensor<T> tensor)
+        {
+            var data = tensor.Data;
+            var features = new double[data.Length];
+            for (int i = 0; i < data.Length; i++)
+            {
+                features[i] = Convert.ToDouble(data[i]);
+            }
+            return features;
+        }
+
+        // Handle Vector<T>
+        if (input is Vector<T> vector)
+        {
+            var features = new double[vector.Length];
+            for (int i = 0; i < vector.Length; i++)
+            {
+                features[i] = Convert.ToDouble(vector[i]);
+            }
+            return features;
+        }
+
+        // Handle double[]
+        if (input is double[] doubleArray)
+        {
+            return (double[])doubleArray.Clone();
+        }
+
+        // Handle float[]
+        if (input is float[] floatArray)
+        {
+            return floatArray.Select(f => (double)f).ToArray();
+        }
+
+        // Handle T[]
+        if (input is T[] tArray)
+        {
+            return tArray.Select(t => Convert.ToDouble(t)).ToArray();
+        }
+
+        // Handle double[][]  - flatten
+        if (input is double[][] double2DArray)
+        {
+            return double2DArray.SelectMany(row => row).ToArray();
+        }
+
+        // Handle float[][] - flatten
+        if (input is float[][] float2DArray)
+        {
+            return float2DArray.SelectMany(row => row.Select(f => (double)f)).ToArray();
+        }
+
+        // Handle generic array
+        if (input is Array array)
+        {
+            var features = new List<double>();
+            foreach (var item in array)
+            {
+                if (item is IConvertible convertible)
+                {
+                    features.Add(convertible.ToDouble(null));
+                }
+            }
+            return features.Count > 0 ? features.ToArray() : null;
+        }
+
+        // Handle single numeric value
+        if (input is IConvertible singleValue)
+        {
+            return new[] { singleValue.ToDouble(null) };
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Computes the squared Euclidean distance between two feature vectors.
+    /// </summary>
+    private double ComputeSquaredDistance(double[] a, double[] b)
+    {
+        if (a == null || b == null || a.Length != b.Length)
+            return double.MaxValue;
+
+        double dist = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            double diff = a[i] - b[i];
+            dist += diff * diff;
+        }
+        return dist;
     }
 
     #endregion
