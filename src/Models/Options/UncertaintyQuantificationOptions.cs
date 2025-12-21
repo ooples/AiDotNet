@@ -166,7 +166,7 @@ public sealed class UncertaintyQuantificationOptions
             NumSamples = 30;
         }
 
-        if (MonteCarloDropoutRate <= 0.0 || MonteCarloDropoutRate >= 1.0)
+        if (MonteCarloDropoutRate < 0.0 || MonteCarloDropoutRate >= 1.0)
         {
             MonteCarloDropoutRate = 0.1;
         }
