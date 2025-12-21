@@ -221,12 +221,19 @@ public class SafetyFilter<T> : ISafetyFilter<T>
                     // Sanitize for moderate violations
                     result.FilteredOutput = SanitizeOutput(output, harmfulResult);
                     result.WasModified = true;
+
+                    // Build description of what was sanitized from the findings
+                    var sanitizedDescription = harmfulResult.Findings.Count > 0
+                        ? string.Join("; ", harmfulResult.Findings.Select(f =>
+                            $"{f.Category} at location {f.Location}: {f.Excerpt}"))
+                        : $"Harmful content detected with score {harmfulResult.HarmScore:F3}";
+
                     result.Actions.Add(new FilterAction
                     {
                         ActionType = "Sanitize",
                         Reason = "Moderate harmful content detected and sanitized",
-                        Location = 0,
-                        OriginalContent = "Content sanitized"
+                        Location = harmfulResult.Findings.FirstOrDefault()?.Location ?? 0,
+                        OriginalContent = sanitizedDescription
                     });
                 }
             }
@@ -439,10 +446,45 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 
     private Vector<T> SanitizeOutput(Vector<T> output, HarmfulContentResult<T> harmfulResult)
     {
-        // Simple sanitization - in practice, would be more sophisticated
-        // For now, just return a safe default or masked version
-        _ = harmfulResult;
-        return CloneVector(output); // Placeholder
+        // Create a sanitized copy of the output
+        var sanitized = CloneVector(output);
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Zero out values at harmful locations identified in findings
+        if (harmfulResult.Findings != null && harmfulResult.Findings.Count > 0)
+        {
+            foreach (var finding in harmfulResult.Findings)
+            {
+                // Zero out the harmful region with a small buffer around the location
+                int location = finding.Location;
+                if (location >= 0 && location < sanitized.Length)
+                {
+                    // Zero out the specific location and nearby indices
+                    int startIdx = Math.Max(0, location - 1);
+                    int endIdx = Math.Min(sanitized.Length - 1, location + 1);
+
+                    for (int i = startIdx; i <= endIdx; i++)
+                    {
+                        sanitized[i] = numOps.Zero;
+                    }
+                }
+            }
+        }
+        else
+        {
+            // If no specific findings, but harmful content detected, apply global dampening
+            // Reduce all values toward zero based on harm score
+            if (harmfulResult.HarmfulContentDetected && harmfulResult.HarmScore > 0)
+            {
+                var dampingFactor = numOps.FromDouble(1.0 - harmfulResult.HarmScore);
+                for (int i = 0; i < sanitized.Length; i++)
+                {
+                    sanitized[i] = numOps.Multiply(sanitized[i], dampingFactor);
+                }
+            }
+        }
+
+        return sanitized;
     }
 
     private void LogFilteredContent(Vector<T> output, SafetyFilterResult<T> result)
