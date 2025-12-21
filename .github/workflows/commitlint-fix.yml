@@ -8,6 +8,11 @@ permissions:
   contents: write
   pull-requests: write
 
+# Prevent concurrent runs on the same PR to avoid race conditions
+concurrency:
+  group: commitlint-fix-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   check-and-fix-commits:
     name: Check and Fix Non-Compliant Commits
@@ -35,7 +40,8 @@ jobs:
 
           # Get all commits in PR
           COMMITS=$(git rev-list --reverse "origin/$BASE_BRANCH..HEAD")
-          COMMITS_COUNT=$(echo "$COMMITS" | grep -c .)
+          # Use wc -l with fallback to 0 for empty results (grep -c . returns non-zero if empty)
+          COMMITS_COUNT=$(echo "$COMMITS" | grep -c . || echo "0")
 
           echo "commits<<EOF" >> $GITHUB_OUTPUT
           echo "$COMMITS" >> $GITHUB_OUTPUT
@@ -43,6 +49,12 @@ jobs:
           echo "commit_count=$COMMITS_COUNT" >> $GITHUB_OUTPUT
 
           echo "Found $COMMITS_COUNT commits to check"
+
+          # Early exit if no commits to check
+          if [ "$COMMITS_COUNT" -eq 0 ]; then
+            echo "No commits to check, skipping"
+            exit 0
+          fi
 
       - name: Check each commit for compliance
         id: check-commits
@@ -66,11 +78,16 @@ jobs:
             # Check if commit follows conventional commits
             # Valid types: feat, fix, docs, refactor, perf, test, chore, ci, style, deps
             if [[ "$FIRST_LINE" =~ ^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)(\(.+\))?!?:\ .+ ]]; then
-              # Check if subject is lowercase (except for deps type which we allow)
-              if [[ "$FIRST_LINE" =~ ^deps: ]]; then
-                echo "✅ Valid deps commit: $FIRST_LINE"
-              elif [[ "$FIRST_LINE" =~ ^[a-z].*:[[:space:]].* ]]; then
+              # Extract description after the colon
+              DESCRIPTION=$(echo "$FIRST_LINE" | sed 's/^[^:]*:[[:space:]]*//')
+              FIRST_CHAR=$(echo "$DESCRIPTION" | cut -c1)
+
+              # Check if description starts with lowercase (required for all types including deps)
+              if [[ "$FIRST_CHAR" =~ ^[a-z] ]]; then
                 echo "✅ Valid commit: $FIRST_LINE"
+              elif [[ "$FIRST_LINE" =~ ^deps:.*[Bb]ump.* ]]; then
+                # Allow deps: with "Bump" from dependabot as a special case
+                echo "⚠️ Allowing deps commit with capital (likely dependabot): $FIRST_LINE"
               else
                 echo "❌ Invalid subject case: $FIRST_LINE"
                 NEEDS_FIX=true
@@ -143,28 +160,49 @@ jobs:
       - name: Apply fixes to commits
         if: steps.check-commits.outputs.needs_fix == 'true'
         run: |
-          COMMITS="${{ steps.get-commits.outputs.commits }}"
           BASE_BRANCH="${{ github.base_ref }}"
+          COMMIT_COUNT=${{ steps.get-commits.outputs.commit_count }}
 
-          # Reset to base branch keeping changes staged
-          git reset --soft "origin/$BASE_BRANCH"
+          # For single-commit PRs, amend the commit directly to preserve history
+          if [ "$COMMIT_COUNT" -eq 1 ]; then
+            echo "Single commit PR - amending commit message directly"
+            # The fix has already been calculated, just amend with a proper message
+            COMMITS="${{ steps.get-commits.outputs.commits }}"
+            COMMIT_SHA=$(echo "$COMMITS" | head -1)
+            COMMIT_MSG=$(git log -1 --format=%B "$COMMIT_SHA")
+            FIRST_LINE=$(echo "$COMMIT_MSG" | head -1)
 
-          # Create individual commits for each fix
-          # Note: This is a simplified approach - in practice, we might want to preserve the original commit structure
-          echo "All changes have been staged. Creating a single commit with fixes..."
+            # Extract and fix the message
+            TYPE=$(echo "$FIRST_LINE" | cut -d':' -f1)
+            DESCRIPTION=$(echo "$FIRST_LINE" | cut -d':' -f2- | sed 's/^ *//')
+            FIXED_DESCRIPTION=$(echo "$DESCRIPTION" | sed 's/./\L&/')
+            NEW_SUBJECT="$TYPE: $FIXED_DESCRIPTION"
 
-          git commit -m "chore: fix commit messages for conventional compliance
+            # Get the body
+            BODY=$(echo "$COMMIT_MSG" | tail -n +3)
 
-This commit fixes one or more commit messages that didn't follow
-conventional commits format. The original commits have been
-squashed and their messages updated to comply with the project's
-standards.
+            if [ -n "$BODY" ]; then
+              echo -e "$NEW_SUBJECT\n\n$BODY" | git commit --amend --file=-
+            else
+              git commit --amend -m "$NEW_SUBJECT"
+            fi
+          else
+            echo "Multi-commit PR - squashing to preserve code changes with fixed message"
+            # For multi-commit PRs, squash is the safest approach to avoid complex rebase conflicts
+            # This preserves all code changes while fixing the commit message
+            git reset --soft "origin/$BASE_BRANCH"
 
-Original issues fixed:
-- Subject line now follows lowercase convention
-- Type now uses valid conventional commit types
+            git commit -m "chore: fix commit messages for conventional compliance
+
+This commit consolidates changes from a PR where commit messages didn't
+follow conventional commits format. The code changes are preserved exactly
+as originally authored.
+
+Note: Original commit history was consolidated due to message format issues.
+Review the PR for the full change context.
 
 Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+          fi
 
       - name: Force push fixes
         if: steps.check-commits.outputs.needs_fix == 'true'
