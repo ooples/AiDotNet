@@ -68,13 +68,47 @@ public sealed class UncertaintyQuantificationOptions
     public double ConformalConfidenceLevel { get; set; } = 0.9;
 
     /// <summary>
+    /// Gets or sets the conformal calibration mode used when producing conformal intervals/sets.
+    /// </summary>
+    /// <remarks>
+    /// Split conformal is the standard baseline. Cross-conformal can improve stability on small calibration sets.
+    /// Adaptive conformal adjusts thresholds based on predicted confidence buckets.
+    /// </remarks>
+    public ConformalPredictionMode ConformalMode { get; set; } = ConformalPredictionMode.Split;
+
+    /// <summary>
+    /// Gets or sets the number of folds used when <see cref="ConformalMode"/> is <see cref="ConformalPredictionMode.CrossConformal"/>.
+    /// </summary>
+    public int CrossConformalFolds { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets the number of confidence bins used when <see cref="ConformalMode"/> is <see cref="ConformalPredictionMode.Adaptive"/>.
+    /// </summary>
+    public int AdaptiveConformalBins { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets the probability calibration method used when calibration labels are provided.
+    /// </summary>
+    public ProbabilityCalibrationMethod CalibrationMethod { get; set; } = ProbabilityCalibrationMethod.Auto;
+
+    /// <summary>
     /// Gets or sets whether to fit and apply temperature scaling for classification-like outputs when calibration labels are provided.
     /// </summary>
     /// <remarks>
-    /// When enabled and calibration labels are provided via the builder, the system will calibrate predicted probabilities and return
-    /// calibrated probabilities as the prediction output from uncertainty APIs.
-    /// </remarks>
+     /// When enabled and calibration labels are provided via the builder, the system will calibrate predicted probabilities and return
+     /// calibrated probabilities as the prediction output from uncertainty APIs.
+     /// </remarks>
     public bool EnableTemperatureScaling { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to fit and apply Platt scaling (binary calibration) when calibration labels are provided.
+    /// </summary>
+    public bool EnablePlattScaling { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to fit and apply isotonic regression calibration (binary calibration) when calibration labels are provided.
+    /// </summary>
+    public bool EnableIsotonicRegressionCalibration { get; set; } = false;
 
     /// <summary>
     /// Gets or sets the number of independently trained models used for deep ensemble uncertainty estimation.
@@ -91,4 +125,37 @@ public sealed class UncertaintyQuantificationOptions
     /// This helps ensure ensemble members do not collapse to identical solutions when created from a shared base model.
     /// </remarks>
     public double DeepEnsembleInitialNoiseStdDev { get; set; } = 0.01;
+
+    /// <summary>
+    /// Gets or sets the maximum number of samples used to fit Laplace/SWAG posteriors from calibration data.
+    /// </summary>
+    /// <remarks>
+    /// This is a safety/performance bound to prevent extremely large calibration datasets from causing very slow builds.
+    /// </remarks>
+    public int PosteriorFitMaxSamples { get; set; } = 256;
+
+    /// <summary>
+    /// Gets or sets the prior precision (inverse variance) used by diagonal Laplace approximation.
+    /// </summary>
+    public double LaplacePriorPrecision { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets the number of SWAG snapshots to collect when fitting a SWAG posterior.
+    /// </summary>
+    public int SwagNumSnapshots { get; set; } = 20;
+
+    /// <summary>
+    /// Gets or sets the number of SWAG update steps used to collect snapshots.
+    /// </summary>
+    public int SwagNumSteps { get; set; } = 60;
+
+    /// <summary>
+    /// Gets or sets the number of initial SWAG steps to skip before collecting snapshots.
+    /// </summary>
+    public int SwagBurnInSteps { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets the learning rate used for SWAG posterior fitting on calibration data.
+    /// </summary>
+    public double SwagLearningRate { get; set; } = 0.001;
 }

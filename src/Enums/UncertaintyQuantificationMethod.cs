@@ -33,6 +33,16 @@ public enum UncertaintyQuantificationMethod
     BayesianNeuralNetwork,
 
     /// <summary>
+    /// Uses a Laplace approximation (typically diagonal) over model parameters to sample predictions.
+    /// </summary>
+    LaplaceApproximation,
+
+    /// <summary>
+    /// Uses SWAG (Stochastic Weight Averaging-Gaussian) to sample model parameters and estimate uncertainty.
+    /// </summary>
+    Swag,
+
+    /// <summary>
     /// Uses conformal prediction to produce statistically valid intervals (regression) or prediction sets (classification).
     /// </summary>
     ConformalPrediction
