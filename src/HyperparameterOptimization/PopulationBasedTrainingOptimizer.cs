@@ -329,7 +329,10 @@ public class PopulationBasedTrainingOptimizer<T, TInput, TOutput> : Hyperparamet
         if (SearchSpace == null)
             throw new InvalidOperationException("Search space not initialized. Call Optimize() first.");
 
-        return SampleRandomConfiguration(SearchSpace);
+        lock (SyncLock)
+        {
+            return SampleRandomConfiguration(SearchSpace);
+        }
     }
 
     /// <summary>
