@@ -359,6 +359,18 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     public CrossValidationResult<T, TInput, TOutput>? CrossValidationResult { get; internal set; }
 
     /// <summary>
+    /// Gets the AutoML summary for this model, if AutoML was used during building.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property contains a redacted summary of the AutoML search (trial outcomes and scores),
+    /// and intentionally excludes hyperparameter values and other proprietary details.
+    /// </para>
+    /// <para><b>For Beginners:</b> If you enabled AutoML, this tells you how the automatic search went.</para>
+    /// </remarks>
+    public AutoMLRunSummary? AutoMLSummary { get; internal set; }
+
+    /// <summary>
     /// Gets or sets the LoRA configuration for parameter-efficient fine-tuning.
     /// </summary>
     /// <value>LoRA configuration for adaptation, or null if not configured.</value>
@@ -826,6 +838,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         // Cross-validation
         CrossValidationResult = options.CrossValidationResult;
+
+        // AutoML (redacted summary)
+        AutoMLSummary = options.AutoMLSummary;
 
         // Fine-tuning and adaptation
         LoRAConfiguration = options.LoRAConfiguration;
@@ -1792,6 +1807,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             QueryProcessors = QueryProcessors,
             LoRAConfiguration = LoRAConfiguration,
             CrossValidationResult = CrossValidationResult,
+            AutoMLSummary = AutoMLSummary,
             AgentConfig = AgentConfig,
             AgentRecommendation = AgentRecommendation,
             DeploymentConfiguration = DeploymentConfiguration,
@@ -1948,6 +1964,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             QueryProcessors = QueryProcessors,
             LoRAConfiguration = LoRAConfiguration,
             CrossValidationResult = CrossValidationResult,
+            AutoMLSummary = AutoMLSummary,
             AgentConfig = AgentConfig,
             AgentRecommendation = AgentRecommendation,
             DeploymentConfiguration = DeploymentConfiguration,
@@ -2113,6 +2130,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 QueryProcessors = deserializedObject.QueryProcessors;
                 LoRAConfiguration = deserializedObject.LoRAConfiguration;
                 CrossValidationResult = deserializedObject.CrossValidationResult;
+                AutoMLSummary = deserializedObject.AutoMLSummary;
                 AgentConfig = deserializedObject.AgentConfig;
                 AgentRecommendation = deserializedObject.AgentRecommendation;
                 DeploymentConfiguration = deserializedObject.DeploymentConfiguration;

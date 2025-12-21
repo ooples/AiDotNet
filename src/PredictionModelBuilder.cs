@@ -2,6 +2,7 @@ global using AiDotNet.Agents;
 global using AiDotNet.Configuration;
 global using AiDotNet.DataProcessor;
 global using AiDotNet.Deployment.Configuration;
+global using AiDotNet.Diagnostics;
 global using AiDotNet.DistributedTraining;
 global using AiDotNet.Enums;
 global using AiDotNet.FeatureSelectors;
@@ -28,6 +29,12 @@ global using AiDotNet.Tokenization.Configuration;
 global using AiDotNet.Tokenization.HuggingFace;
 global using AiDotNet.Tokenization.Interfaces;
 global using AiDotNet.Tools;
+
+using AiDotNet.AutoML.NAS;
+using AiDotNet.AutoML.Policies;
+using AiDotNet.AutoML.SearchSpace;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet;
 
@@ -85,6 +92,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig;
     private RLTrainingOptions<T>? _rlOptions;
     private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
+    private AutoMLOptions<T, TInput, TOutput>? _autoMLOptions;
 
     // Deployment configuration fields
     private QuantizationConfig? _quantizationConfig;
@@ -96,6 +104,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private ExportConfig? _exportConfig;
     private GpuAccelerationConfig? _gpuAccelerationConfig;
     private ReasoningConfig? _reasoningConfig;
+    private ProfilingConfig? _profilingConfig;
 
     // Tokenization configuration
     private ITokenizer? _tokenizer;
@@ -712,6 +721,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     {
         // SUPERVISED TRAINING PATH
 
+        // Create profiler session if profiling is enabled
+        var profilerSession = CreateProfilerSession();
+        using var _ = profilerSession?.Scope("BuildSupervisedInternalAsync");
+
         // Apply GPU configuration first (before any operations that might use GPU)
         ApplyGpuConfiguration();
 
@@ -742,16 +755,26 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
         // AUTOML SEARCH (if configured and no model explicitly set)
         // AutoML finds the best model type and hyperparameters automatically
+        AutoMLRunSummary? autoMLSummary = null;
         if (_autoMLModel != null && _model == null)
         {
             Console.WriteLine("AutoML configured - starting model search...");
+            var searchStartedUtc = DateTimeOffset.UtcNow;
 
             // Set up preprocessing for AutoML search
             var autoMLNormalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
             var autoMLFeatureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
             var autoMLOutlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
+
+            var autoMLDataProcessorOptions = new DataProcessorOptions();
+            if (_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
+                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection)
+            {
+                autoMLDataProcessorOptions.ShuffleBeforeSplit = false;
+            }
+
             var autoMLPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(
-                autoMLNormalizer, autoMLFeatureSelector, autoMLOutlierRemoval);
+                autoMLNormalizer, autoMLFeatureSelector, autoMLOutlierRemoval, autoMLDataProcessorOptions);
 
             // Preprocess and split data for AutoML search
             var (autoMLPreprocessedX, autoMLPreprocessedY, _) = autoMLPreprocessor.PreprocessData(x, y);
@@ -762,6 +785,22 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             if (_modelEvaluator != null)
             {
                 _autoMLModel.SetModelEvaluator(_modelEvaluator);
+            }
+
+            if (_autoMLOptions?.TaskFamilyOverride is AutoMLTaskFamily taskFamilyOverride)
+            {
+                int featureCount = InputHelper<T, TInput>.GetInputSize(autoMLXTrain);
+                var candidates = AutoMLDefaultCandidateModelsPolicy.GetDefaultCandidates(taskFamilyOverride, featureCount, _autoMLOptions.Budget.Preset);
+                if (candidates.Count > 0)
+                {
+                    _autoMLModel.SetCandidateModels(candidates.ToList());
+                }
+
+                if (!_autoMLOptions.OptimizationMetricOverride.HasValue)
+                {
+                    var (metric, maximize) = AutoMLDefaultMetricPolicy.GetDefault(taskFamilyOverride);
+                    _autoMLModel.SetOptimizationMetric(metric, maximize);
+                }
             }
 
             // Run AutoML search to find the best model
@@ -775,7 +814,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
             _model = bestModel;
 
-            Console.WriteLine($"AutoML search complete. Best model: {bestModel.GetType().Name}");
+            var searchEndedUtc = DateTimeOffset.UtcNow;
+            autoMLSummary = CreateAutoMLRunSummary(searchStartedUtc, searchEndedUtc);
+
+            Console.WriteLine("AutoML search complete.");
             Console.WriteLine($"Best score: {_autoMLModel.BestScore}");
             Console.WriteLine($"Trials completed: {_autoMLModel.GetTrialHistory().Count}");
         }
@@ -964,7 +1006,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _telemetryConfig,
             _exportConfig,
             _gpuAccelerationConfig,
-            _compressionConfig);
+            _compressionConfig,
+            _profilingConfig);
 
         // JIT COMPILATION (if configured and supported)
         Func<Tensor<T>[], Tensor<T>[]>? jitCompiledFunction = null;
@@ -1014,6 +1057,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = normInfo,
+            AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
             RagRetriever = _ragRetriever,
@@ -1038,12 +1082,64 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             PromptOptimizer = _promptOptimizer,
             FewShotExampleSelector = _fewShotExampleSelector,
             PromptAnalyzer = _promptAnalyzer,
-            PromptCompressor = _promptCompressor
+            PromptCompressor = _promptCompressor,
+            ProfilingReport = profilerSession?.GetReport()
         };
 
         var finalResult = new PredictionModelResult<T, TInput, TOutput>(options);
 
         return finalResult;
+    }
+
+    private AutoMLRunSummary CreateAutoMLRunSummary(DateTimeOffset startedUtc, DateTimeOffset endedUtc)
+    {
+        if (_autoMLModel is null)
+        {
+            throw new InvalidOperationException("AutoML summary requested but AutoML is not configured.");
+        }
+
+        MetricType metric = MetricType.Accuracy;
+        bool maximize = true;
+
+        if (_autoMLModel is AiDotNet.AutoML.AutoMLModelBase<T, TInput, TOutput> baseAutoML)
+        {
+            metric = baseAutoML.OptimizationMetric;
+            maximize = baseAutoML.MaximizeOptimizationMetric;
+        }
+        else if (_autoMLOptions?.OptimizationMetricOverride is MetricType overrideMetric)
+        {
+            metric = overrideMetric;
+            maximize = IsHigherBetter(metric);
+        }
+
+        var summary = new AutoMLRunSummary
+        {
+            SearchStrategy = _autoMLOptions?.SearchStrategy,
+            TimeLimit = _autoMLModel.TimeLimit,
+            TrialLimit = _autoMLModel.TrialLimit,
+            OptimizationMetric = metric,
+            MaximizeMetric = maximize,
+            BestScore = _autoMLModel.BestScore,
+            UsedEnsemble = _autoMLModel.BestModel is AiDotNet.AutoML.AutoMLEnsembleModel<T>,
+            EnsembleSize = _autoMLModel.BestModel is AiDotNet.AutoML.AutoMLEnsembleModel<T> ensemble ? ensemble.Members.Count : null,
+            SearchStartedUtc = startedUtc,
+            SearchEndedUtc = endedUtc
+        };
+
+        foreach (var trial in _autoMLModel.GetTrialHistory())
+        {
+            summary.Trials.Add(new AutoMLTrialSummary
+            {
+                TrialId = trial.TrialId,
+                Score = trial.Score,
+                Duration = trial.Duration,
+                CompletedUtc = trial.Timestamp,
+                Success = trial.Success,
+                ErrorMessage = trial.ErrorMessage
+            });
+        }
+
+        return summary;
     }
 
     /// <summary>
@@ -1054,6 +1150,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private PredictionModelResult<T, TInput, TOutput> BuildMetaLearningInternalAsync()
     {
         // META-LEARNING TRAINING PATH
+
+        // Create profiler session if profiling is enabled
+        var profilerSession = CreateProfilerSession();
+        using var _ = profilerSession?.Scope("BuildMetaLearningInternalAsync");
 
         // Validate meta-learner is configured (should be checked by caller, but defensive)
         if (_metaLearner is null)
@@ -1074,7 +1174,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _telemetryConfig,
             _exportConfig,
             _gpuAccelerationConfig,
-            _compressionConfig);
+            _compressionConfig,
+            _profilingConfig);
 
         // Create PredictionModelResult with meta-learning options
         var metaOptions = new PredictionModelResultOptions<T, TInput, TOutput>
@@ -1102,12 +1203,60 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             PromptOptimizer = _promptOptimizer,
             FewShotExampleSelector = _fewShotExampleSelector,
             PromptAnalyzer = _promptAnalyzer,
-            PromptCompressor = _promptCompressor
+            PromptCompressor = _promptCompressor,
+            ProfilingReport = profilerSession?.GetReport()
         };
 
         var result = new PredictionModelResult<T, TInput, TOutput>(metaOptions);
 
         return result;
+    }
+
+    private (IRLAgent<T> Agent, AutoMLRunSummary Summary) SelectRLAgentWithAutoML(RLTrainingOptions<T> rlTrainingOptions)
+    {
+        if (_autoMLOptions is null || _autoMLOptions.TaskFamilyOverride != AutoMLTaskFamily.ReinforcementLearning)
+        {
+            throw new InvalidOperationException("RL AutoML was requested but AutoML options are not configured for reinforcement learning.");
+        }
+
+        if (rlTrainingOptions.Environment is null)
+        {
+            throw new ArgumentException("RL training options must include a valid Environment.", nameof(rlTrainingOptions));
+        }
+
+        if (typeof(TInput) != typeof(AiDotNet.Tensors.LinearAlgebra.Vector<T>) || typeof(TOutput) != typeof(AiDotNet.Tensors.LinearAlgebra.Vector<T>))
+        {
+            throw new InvalidOperationException(
+                $"RL AutoML requires PredictionModelBuilder<T, Vector<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
+        }
+
+        if (_autoMLOptions.SearchStrategy != AutoMLSearchStrategy.RandomSearch)
+        {
+            throw new NotSupportedException(
+                $"RL AutoML currently supports only '{AutoMLSearchStrategy.RandomSearch}'. Received '{_autoMLOptions.SearchStrategy}'.");
+        }
+
+        var (defaultTimeLimit, defaultTrialLimit) = AiDotNet.AutoML.AutoMLBudgetDefaults.Resolve(_autoMLOptions.Budget.Preset);
+        var timeLimit = _autoMLOptions.Budget.TimeLimitOverride ?? defaultTimeLimit;
+        var trialLimit = _autoMLOptions.Budget.TrialLimitOverride ?? defaultTrialLimit;
+
+        var rlAutoOptions = _autoMLOptions.ReinforcementLearning ?? new RLAutoMLOptions<T>();
+        var maxSteps = rlAutoOptions.MaxStepsPerEpisodeOverride ?? rlTrainingOptions.MaxStepsPerEpisode;
+
+        if (rlTrainingOptions.Seed.HasValue)
+        {
+            rlTrainingOptions.Environment.Seed(rlTrainingOptions.Seed.Value);
+        }
+
+        var search = new AiDotNet.AutoML.RL.RandomSearchRLAutoML<T>(
+            rlTrainingOptions.Environment,
+            rlAutoOptions,
+            timeLimit,
+            trialLimit,
+            maxSteps,
+            rlTrainingOptions.Seed);
+
+        return search.Search();
     }
 
     /// <summary>
@@ -1122,6 +1271,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     {
         // RL TRAINING PATH
 
+        // Create profiler session if profiling is enabled
+        var profilerSession = CreateProfilerSession();
+        using var _ = profilerSession?.Scope("BuildRLInternalAsync");
+
         // Apply GPU configuration first (before any operations that might use GPU)
         ApplyGpuConfiguration();
 
@@ -1132,10 +1285,21 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 "BuildRLInternalAsync requires ConfigureReinforcementLearning() with a valid Environment.");
         }
 
-        // Validate model is set
+        AutoMLRunSummary? autoMLSummary = null;
+
+        // AutoML can optionally select an RL agent when TaskFamilyOverride is set to ReinforcementLearning.
         if (_model is null)
         {
-            throw new InvalidOperationException("Model (RL agent) must be specified using ConfigureModel().");
+            if (_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.ReinforcementLearning)
+            {
+                var (selectedAgent, summary) = SelectRLAgentWithAutoML(_rlOptions);
+                _model = (IFullModel<T, TInput, TOutput>)selectedAgent;
+                autoMLSummary = summary;
+            }
+            else
+            {
+                throw new InvalidOperationException("Model (RL agent) must be specified using ConfigureModel().");
+            }
         }
 
         if (_model is not IRLAgent<T> rlAgent)
@@ -1174,7 +1338,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             bool done = false;
 
             // Episode loop
-            while (!done)
+            while (!done && steps < _rlOptions.MaxStepsPerEpisode)
             {
                 // Select action
                 var action = rlAgent.SelectAction(state, explore: true);
@@ -1319,7 +1483,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _telemetryConfig,
             _exportConfig,
             _gpuAccelerationConfig,
-            _compressionConfig);
+            _compressionConfig,
+            _profilingConfig);
 
         // Return standard PredictionModelResult
         // Note: This Build() overload doesn't perform JIT compilation (only the main Build() does),
@@ -1328,6 +1493,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = normInfo,
+            AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
             RagRetriever = _ragRetriever,
@@ -1349,7 +1515,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             PromptOptimizer = _promptOptimizer,
             FewShotExampleSelector = _fewShotExampleSelector,
             PromptAnalyzer = _promptAnalyzer,
-            PromptCompressor = _promptCompressor
+            PromptCompressor = _promptCompressor,
+            ProfilingReport = profilerSession?.GetReport()
         };
 
         var result = new PredictionModelResult<T, TInput, TOutput>(rlOptions);
@@ -1670,11 +1837,13 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// <para>
     /// Example:
     /// <code>
-    /// var autoML = new BayesianOptimizationAutoML&lt;double, double[][], double[]&gt;();
+    /// // Advanced usage: plug in your own AutoML implementation.
+    /// // Most users should prefer the ConfigureAutoML(AutoMLOptions&lt;...&gt;) overload instead.
+    /// var autoML = new RandomSearchAutoML&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
     /// autoML.SetTimeLimit(TimeSpan.FromMinutes(30));
-    /// autoML.SetCandidateModels(new[] { ModelType.RandomForest, ModelType.GradientBoosting });
+    /// autoML.SetCandidateModels(new List&lt;ModelType&gt; { ModelType.RandomForest, ModelType.GradientBoosting });
     ///
-    /// var builder = new PredictionModelBuilder&lt;double, double[][], double[]&gt;()
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAutoML(autoML)
     ///     .Build(trainingData, trainingLabels);
     /// </code>
@@ -1683,7 +1852,233 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel)
     {
         _autoMLModel = autoMLModel;
+        _autoMLOptions = null;
         return this;
+    }
+
+    /// <summary>
+    /// Configures AutoML using facade-style options (recommended for most users).
+    /// </summary>
+    /// <param name="options">AutoML options (budget, strategy, and optional overrides). If null, defaults are used.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AutoML automatically tries different models/settings to find a strong result.
+    /// With this overload you only choose a budget (how much time to spend), and AiDotNet handles the rest.
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(AutoMLOptions<T, TInput, TOutput>? options = null)
+    {
+        _autoMLOptions = options ?? new AutoMLOptions<T, TInput, TOutput>();
+
+        var (defaultTimeLimit, defaultTrialLimit) = AiDotNet.AutoML.AutoMLBudgetDefaults.Resolve(_autoMLOptions.Budget.Preset);
+        var timeLimit = _autoMLOptions.Budget.TimeLimitOverride ?? defaultTimeLimit;
+        var trialLimit = _autoMLOptions.Budget.TrialLimitOverride ?? defaultTrialLimit;
+
+        if (_autoMLOptions.TaskFamilyOverride == AutoMLTaskFamily.ReinforcementLearning)
+        {
+            if (_autoMLOptions.SearchStrategy != AutoMLSearchStrategy.RandomSearch)
+            {
+                throw new NotSupportedException(
+                    $"RL AutoML currently supports only '{AutoMLSearchStrategy.RandomSearch}'. Received '{_autoMLOptions.SearchStrategy}'.");
+            }
+
+            // RL AutoML runs through the RL training path and selects an IRLAgent; it does not use the supervised IAutoMLModel pipeline.
+            _autoMLModel = null;
+            return this;
+        }
+
+        if (_autoMLOptions.TaskFamilyOverride is AutoMLTaskFamily taskFamilyOverride
+            && !IsBuiltInSupervisedTaskFamilySupported(taskFamilyOverride))
+        {
+            throw new NotSupportedException(
+                $"Facade AutoML options currently support only Regression/Binary/MultiClass/TimeSeriesForecasting/TimeSeriesAnomalyDetection/Ranking/Recommendation task families. " +
+                $"Received '{taskFamilyOverride}'. Use {nameof(ConfigureAutoML)}(IAutoMLModel<...>) to plug in a custom implementation.");
+        }
+
+        _autoMLModel = CreateBuiltInAutoMLModel(_autoMLOptions.SearchStrategy);
+        _autoMLModel.TimeLimit = timeLimit;
+        _autoMLModel.TrialLimit = trialLimit;
+
+        if (_autoMLModel is AiDotNet.AutoML.SupervisedAutoMLModelBase<T, TInput, TOutput> supervised)
+        {
+            supervised.EnsembleOptions = _autoMLOptions.Ensembling ?? ResolveDefaultEnsembling(_autoMLOptions.Budget.Preset);
+            supervised.BudgetPreset = _autoMLOptions.Budget.Preset;
+        }
+
+        if (_autoMLOptions.OptimizationMetricOverride.HasValue)
+        {
+            var metric = _autoMLOptions.OptimizationMetricOverride.Value;
+            _autoMLModel.SetOptimizationMetric(metric, maximize: IsHigherBetter(metric));
+        }
+        else if (_autoMLOptions.TaskFamilyOverride is AutoMLTaskFamily familyOverride)
+        {
+            var (metric, maximize) = AutoMLDefaultMetricPolicy.GetDefault(familyOverride);
+            _autoMLModel.SetOptimizationMetric(metric, maximize);
+        }
+
+        return this;
+    }
+
+    private static AutoMLEnsembleOptions ResolveDefaultEnsembling(AutoMLBudgetPreset preset)
+    {
+        return preset switch
+        {
+            AutoMLBudgetPreset.Standard => new AutoMLEnsembleOptions { Enabled = true, MaxModelCount = 3 },
+            AutoMLBudgetPreset.Thorough => new AutoMLEnsembleOptions { Enabled = true, MaxModelCount = 5 },
+            _ => new AutoMLEnsembleOptions { Enabled = false, MaxModelCount = 3 }
+        };
+    }
+
+    private static bool IsHigherBetter(MetricType metric)
+    {
+        return metric switch
+        {
+            MetricType.MeanSquaredError => false,
+            MetricType.RootMeanSquaredError => false,
+            MetricType.MeanAbsoluteError => false,
+            MetricType.MSE => false,
+            MetricType.RMSE => false,
+            MetricType.MAE => false,
+            MetricType.MAPE => false,
+            MetricType.SMAPE => false,
+            MetricType.MeanSquaredLogError => false,
+            MetricType.CrossEntropyLoss => false,
+            MetricType.AIC => false,
+            MetricType.BIC => false,
+            MetricType.AICAlt => false,
+            MetricType.Perplexity => false,
+            _ => true
+        };
+    }
+
+    private static bool IsBuiltInSupervisedTaskFamilySupported(AutoMLTaskFamily taskFamily)
+    {
+        return taskFamily == AutoMLTaskFamily.Regression
+               || taskFamily == AutoMLTaskFamily.BinaryClassification
+               || taskFamily == AutoMLTaskFamily.MultiClassClassification
+               || taskFamily == AutoMLTaskFamily.TimeSeriesForecasting
+               || taskFamily == AutoMLTaskFamily.TimeSeriesAnomalyDetection
+               || taskFamily == AutoMLTaskFamily.Ranking
+               || taskFamily == AutoMLTaskFamily.Recommendation;
+    }
+
+    private IAutoMLModel<T, TInput, TOutput> CreateBuiltInAutoMLModel(AutoMLSearchStrategy strategy)
+    {
+        return strategy switch
+        {
+            AutoMLSearchStrategy.RandomSearch => new AiDotNet.AutoML.RandomSearchAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom()),
+            AutoMLSearchStrategy.BayesianOptimization => new AiDotNet.AutoML.BayesianOptimizationAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom()),
+            AutoMLSearchStrategy.Evolutionary => new AiDotNet.AutoML.EvolutionaryAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom()),
+            AutoMLSearchStrategy.MultiFidelity => new AiDotNet.AutoML.MultiFidelityAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom(), _autoMLOptions?.MultiFidelity),
+            AutoMLSearchStrategy.NeuralArchitectureSearch or
+            AutoMLSearchStrategy.DARTS or
+            AutoMLSearchStrategy.GDAS or
+            AutoMLSearchStrategy.OnceForAll => CreateNasAutoMLModel(strategy),
+            _ => throw new NotSupportedException(
+                $"AutoML search strategy '{strategy}' is not available via the facade options overload. " +
+                $"Use {nameof(ConfigureAutoML)}(IAutoMLModel<...>) to plug in a custom implementation.")
+        };
+    }
+
+    /// <summary>
+    /// Creates a NAS-based AutoML model with the specified strategy.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// NAS strategies require TInput and TOutput to be <see cref="Tensor{T}"/> types.
+    /// If the types don't match, this method throws a helpful exception.
+    /// </para>
+    /// <para>
+    /// <b>Industry Defaults:</b> When NAS options are not specified, sensible defaults are used:
+    /// <list type="bullet">
+    /// <item><description>SearchSpace: <see cref="MobileNetSearchSpace{T}"/> (efficient for most use cases)</description></item>
+    /// <item><description>NumNodes: 4 (balanced complexity)</description></item>
+    /// <item><description>GDAS temperature: 5.0 initial, 0.1 final (proven values from research)</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    private IAutoMLModel<T, TInput, TOutput> CreateNasAutoMLModel(AutoMLSearchStrategy strategy)
+    {
+        // NAS models specifically work with Tensor<T> inputs/outputs.
+        // Validate type compatibility at runtime.
+        if (typeof(TInput) != typeof(Tensor<T>) || typeof(TOutput) != typeof(Tensor<T>))
+        {
+            throw new NotSupportedException(
+                $"Neural Architecture Search strategies ({strategy}) require TInput and TOutput to be Tensor<T>. " +
+                $"Current types are TInput={typeof(TInput).Name}, TOutput={typeof(TOutput).Name}. " +
+                $"Consider using PredictionModelBuilder<{typeof(T).Name}, Tensor<{typeof(T).Name}>, Tensor<{typeof(T).Name}>> for NAS.");
+        }
+
+        // Resolve NAS options with industry-standard defaults.
+        var nasOptions = _autoMLOptions?.NAS;
+        var searchSpace = nasOptions?.SearchSpace ?? new MobileNetSearchSpace<T>();
+        var numNodes = Math.Max(searchSpace.MaxNodes, 4);
+
+        // Create the appropriate NAS model based on strategy.
+        NasAutoMLModelBase<T> nasModel = strategy switch
+        {
+            AutoMLSearchStrategy.DARTS => new GDAS<T>(
+                searchSpace,
+                numNodes,
+                nasOptions?.ArchitectureLearningRate ?? 5.0,    // Initial temperature (GDAS uses temp, not LR)
+                0.1),                                            // Final temperature
+
+            AutoMLSearchStrategy.GDAS => new GDAS<T>(
+                searchSpace,
+                numNodes,
+                nasOptions?.ArchitectureLearningRate ?? 5.0,    // Initial temperature
+                0.1),                                            // Final temperature
+
+            AutoMLSearchStrategy.OnceForAll => new OnceForAll<T>(
+                searchSpace,
+                nasOptions?.ElasticDepths,
+                nasOptions?.ElasticWidths,
+                nasOptions?.ElasticKernelSizes,
+                nasOptions?.ElasticExpansionRatios),
+
+            AutoMLSearchStrategy.NeuralArchitectureSearch => SelectBestNasStrategy(searchSpace, numNodes, nasOptions),
+
+            _ => throw new NotSupportedException($"NAS strategy '{strategy}' is not implemented.")
+        };
+
+        // Configure NAS model with time/trial limits from parent options.
+        // The SearchAsync will receive proper limits when called.
+
+        // Cast via object to satisfy generic constraints (we validated types above).
+        return (IAutoMLModel<T, TInput, TOutput>)(object)nasModel;
+    }
+
+    /// <summary>
+    /// Auto-selects the best NAS strategy based on task characteristics.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Selection Heuristics:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Mobile/Edge platforms: OnceForAll (elastic deployment)</description></item>
+    /// <item><description>Quick search (&lt;2 hours): GDAS (fast gradient-based)</description></item>
+    /// <item><description>Default: GDAS (proven balance of speed and quality)</description></item>
+    /// </list>
+    /// </remarks>
+    private NasAutoMLModelBase<T> SelectBestNasStrategy(SearchSpaceBase<T> searchSpace, int numNodes, NASOptions<T>? nasOptions)
+    {
+        // If targeting mobile/edge, use OFA for elastic deployment.
+        if (nasOptions?.TargetPlatform is HardwarePlatform.Mobile or HardwarePlatform.EdgeTPU)
+        {
+            return new OnceForAll<T>(
+                searchSpace,
+                nasOptions?.ElasticDepths,
+                nasOptions?.ElasticWidths,
+                nasOptions?.ElasticKernelSizes,
+                nasOptions?.ElasticExpansionRatios);
+        }
+
+        // Default to GDAS - good balance of speed and architecture quality.
+        return new GDAS<T>(
+            searchSpace,
+            numNodes,
+            nasOptions?.ArchitectureLearningRate ?? 5.0,
+            0.1);
     }
 
     /// <summary>
@@ -1979,6 +2374,52 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     {
         _telemetryConfig = config;
         return this;
+    }
+
+    /// <summary>
+    /// Configures performance profiling for training and inference operations.
+    /// </summary>
+    /// <param name="config">The profiling configuration, or null to use industry-standard defaults.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Profiling measures how long different parts of your ML code take to run.
+    /// Think of it like a stopwatch for your code - it helps you find bottlenecks and optimize performance.
+    ///
+    /// The profiling report will be available in the result after training:
+    /// <code>
+    /// var result = await builder
+    ///     .ConfigureProfiling() // Enable with defaults
+    ///     .Build(features, labels);
+    ///
+    /// // Access the profiling report
+    /// var report = result.ProfilingReport;
+    /// Console.WriteLine(report?.GetFormattedSummary());
+    /// </code>
+    ///
+    /// Features tracked:
+    /// - Operation timing: How long each training step, forward pass, backward pass takes
+    /// - Memory allocations: How much memory is used during training
+    /// - Call hierarchy: Which operations call which other operations
+    /// - Percentiles: P50 (median), P95, P99 timing for statistical analysis
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureProfiling(ProfilingConfig? config = null)
+    {
+        _profilingConfig = config ?? new ProfilingConfig { Enabled = true };
+        return this;
+    }
+
+    /// <summary>
+    /// Creates a ProfilerSession if profiling is enabled; otherwise returns null.
+    /// </summary>
+    private ProfilerSession? CreateProfilerSession()
+    {
+        if (_profilingConfig?.Enabled != true)
+        {
+            return null;
+        }
+
+        return new ProfilerSession(_profilingConfig);
     }
 
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null)

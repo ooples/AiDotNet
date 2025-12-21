@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.AutoML;
+using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -22,7 +23,7 @@ namespace AiDotNet.NeuralNetworks
         /// Provides numeric operations for type T.
         /// </summary>
         protected readonly INumericOperations<T> NumOps;
-        private readonly SearchSpace<T> _searchSpace;
+        private readonly SearchSpaceBase<T> _searchSpace;
         private readonly int _numNodes;
         private readonly int _numOperations;
         private readonly Random _random; // Shared Random instance to avoid time-based seeding issues
@@ -74,7 +75,7 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="searchSpace">The search space defining available operations</param>
         /// <param name="numNodes">Number of nodes in the architecture</param>
         /// <param name="lossFunction">Optional loss function to use for training. If null, uses Mean Squared Error (MSE) for neural architecture search.</param>
-        public SuperNet(SearchSpace<T> searchSpace, int numNodes = 4, ILossFunction<T>? lossFunction = null)
+        public SuperNet(SearchSpaceBase<T> searchSpace, int numNodes = 4, ILossFunction<T>? lossFunction = null)
         {
             NumOps = MathHelper.GetNumericOperations<T>();
             _searchSpace = searchSpace;

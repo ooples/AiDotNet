@@ -148,10 +148,13 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
             int validationSize = (int)(totalSamples * _options.ValidationSplitPercentage);
             int testSize = totalSamples - trainSize - validationSize;
 
-            // Shuffle the data
-            var random = RandomHelper.CreateSeededRandom(_options.RandomSeed);
             var indices = Enumerable.Range(0, totalSamples).ToList();
-            indices = [.. indices.OrderBy(x => random.Next())];
+            if (_options.ShuffleBeforeSplit)
+            {
+                // Shuffle the data
+                var random = RandomHelper.CreateSeededRandom(_options.RandomSeed);
+                indices = [.. indices.OrderBy(x => random.Next())];
+            }
 
             // Create matrices and vectors for the split data
             var XTrain = new Matrix<T>(trainSize, xMatrix.Columns);
@@ -203,10 +206,13 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
             int validationSize = (int)(totalSamples * _options.ValidationSplitPercentage);
             int testSize = totalSamples - trainSize - validationSize;
 
-            // Shuffle the data
-            var random = RandomHelper.CreateSeededRandom(_options.RandomSeed);
             var indices = Enumerable.Range(0, totalSamples).ToList();
-            indices = [.. indices.OrderBy(x => random.Next())];
+            if (_options.ShuffleBeforeSplit)
+            {
+                // Shuffle the data
+                var random = RandomHelper.CreateSeededRandom(_options.RandomSeed);
+                indices = [.. indices.OrderBy(x => random.Next())];
+            }
 
             // Create new tensors for the split data
             // Clone the shape for X but change the first dimension (sample count)

@@ -2,8 +2,10 @@ using AiDotNet.Agents;
 using AiDotNet.Configuration;
 using AiDotNet.Data.Structures;
 using AiDotNet.Deployment.Configuration;
+using AiDotNet.Diagnostics;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
+using AiDotNet.Models.Results;
 using AiDotNet.PromptEngineering.Analysis;
 using AiDotNet.PromptEngineering.Compression;
 using AiDotNet.Reasoning;
@@ -115,6 +117,19 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public NormalizationInfo<T, TInput, TOutput>? NormalizationInfo { get; set; }
+
+    /// <summary>
+    /// Gets or sets an optional AutoML run summary for this trained model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is intended for facade outputs and should not contain hyperparameter values, weights, or other
+    /// sensitive implementation details. If AutoML was not used, this can be null.
+    /// </para>
+    /// <para><b>For Beginners:</b> If you used AutoML, this stores a short history of the AutoML search
+    /// (how many trials ran and what the scores looked like), without exposing internal tuning details.</para>
+    /// </remarks>
+    public AutoMLRunSummary? AutoMLSummary { get; set; }
 
     // ============================================================================
     // Ethical AI Properties
@@ -564,4 +579,26 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public TokenizationConfig? TokenizationConfig { get; set; }
+
+    // ============================================================================
+    // Diagnostics Properties
+    // ============================================================================
+
+    /// <summary>
+    /// Gets or sets the profiling report from training and inference operations.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Contains comprehensive profiling data collected during model training including
+    /// operation timing, memory allocations, and performance statistics with percentiles.
+    /// </para>
+    /// <para><b>For Beginners:</b> This shows you how long different parts of training took.
+    /// It includes:
+    /// - How long each operation took (e.g., forward pass, backward pass)
+    /// - Memory usage during training
+    /// - Performance percentiles (P50, P95, P99) for statistical analysis
+    /// - Identification of performance bottlenecks
+    /// </para>
+    /// </remarks>
+    public ProfileReport? ProfilingReport { get; set; }
 }

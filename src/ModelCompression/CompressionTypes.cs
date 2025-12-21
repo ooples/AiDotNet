@@ -120,7 +120,9 @@ public class SparseCompressionResult<T>
             long totalElements = 1;
             foreach (var dim in OriginalShape)
                 totalElements *= dim;
-            return 1.0 - ((double)NonZeroCount / totalElements);
+            return totalElements > 0
+                ? 1.0 - ((double)NonZeroCount / totalElements)
+                : 0.0;
         }
     }
 
