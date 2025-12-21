@@ -537,7 +537,9 @@ public class DataVersionControl<T> : DataVersionControlBase<T>
     private string GetVersionFilePath(string datasetName, int version)
     {
         var datasetDir = GetDatasetDirectoryPath(datasetName);
-        return Path.Combine(datasetDir, $"v{version}.json");
+        var filePath = Path.Combine(datasetDir, $"v{version}.json");
+        ValidatePathWithinDirectory(filePath, StorageDirectory);
+        return filePath;
     }
 
     private long GetDataSize(string dataPath)

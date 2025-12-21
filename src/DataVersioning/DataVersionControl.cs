@@ -536,16 +536,16 @@ public class DataVersionControl : IDataVersionControl
                                 _versions[dataset.DatasetId].Add(version);
                             }
                         }
-                        catch
+                        catch (Exception ex)
                         {
-                            // Skip invalid version files
+                            Console.WriteLine($"[DataVersionControl] Skipped invalid version file '{versionFile}': {ex.Message}");
                         }
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Skip invalid dataset directories
+                Console.WriteLine($"[DataVersionControl] Skipped invalid dataset directory '{datasetDir}': {ex.Message}");
             }
         }
 
@@ -564,9 +564,9 @@ public class DataVersionControl : IDataVersionControl
                         _lineage[key] = lineage;
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Skip invalid lineage files
+                    Console.WriteLine($"[DataVersionControl] Skipped invalid lineage file '{lineageFile}': {ex.Message}");
                 }
             }
         }
