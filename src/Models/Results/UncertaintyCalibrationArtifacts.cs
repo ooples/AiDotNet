@@ -1,3 +1,5 @@
+using AiDotNet.LinearAlgebra;
+
 namespace AiDotNet.Models.Results;
 
 /// <summary>
@@ -15,8 +17,28 @@ internal sealed class UncertaintyCalibrationArtifacts<T>
     internal T ConformalClassificationThreshold { get; set; } = default!;
     internal int ConformalClassificationNumClasses { get; set; }
 
+    internal bool HasAdaptiveConformalClassification { get; set; }
+    internal double[]? ConformalClassificationAdaptiveBinEdges { get; set; }
+    internal Vector<T>? ConformalClassificationAdaptiveThresholds { get; set; }
+
     internal bool HasTemperatureScaling { get; set; }
     internal T TemperatureScalingTemperature { get; set; } = default!;
+
+    internal bool HasPlattScaling { get; set; }
+    internal Vector<T>? PlattScalingA { get; set; }
+    internal Vector<T>? PlattScalingB { get; set; }
+
+    internal bool HasIsotonicRegressionCalibration { get; set; }
+    internal Vector<T>? IsotonicCalibrationX { get; set; }
+    internal Vector<T>? IsotonicCalibrationY { get; set; }
+
+    internal bool HasLaplacePosterior { get; set; }
+    internal Vector<T>? LaplacePosteriorMean { get; set; }
+    internal Vector<T>? LaplacePosteriorVarianceDiag { get; set; }
+
+    internal bool HasSwagPosterior { get; set; }
+    internal Vector<T>? SwagPosteriorMean { get; set; }
+    internal Vector<T>? SwagPosteriorVarianceDiag { get; set; }
 
     internal bool HasExpectedCalibrationError { get; set; }
     internal T ExpectedCalibrationError { get; set; } = default!;

@@ -323,6 +323,276 @@ public sealed class UncertaintyQuantificationFacadeTests
     }
 
     [Fact]
+    public async Task PredictWithUncertainty_WithAdaptiveConformalClassification_ReturnsPredictionSet()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 2,
+            outputSize: 3);
+        var model = new NeuralNetworkModel<double>(architecture);
+
+        var optimizer = new DeterministicNeuralNetworkParameterOptimizer<Tensor<double>, Tensor<double>>(model);
+
+        var xTrain = Tensor<double>.FromMatrix(new Matrix<double>(new double[,]
+        {
+            { 1.0, 0.0 },
+            { 0.0, 1.0 },
+            { 1.0, 1.0 },
+            { 0.0, 0.0 }
+        }));
+        var yTrain = Tensor<double>.FromVector(new Vector<double>(new[] { 0.0, 1.0, 2.0, 0.0 }));
+
+        var xCal = Tensor<double>.FromMatrix(new Matrix<double>(new double[,]
+        {
+            { 0.25, 0.75 },
+            { 0.75, 0.25 },
+            { 0.5, 0.5 }
+        }));
+        var labels = new Vector<int>(new[] { 1, 0, 2 });
+
+        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
+            .ConfigureModel(model)
+            .ConfigureOptimizer(optimizer)
+            .ConfigureUncertaintyQuantification(
+                new UncertaintyQuantificationOptions
+                {
+                    Method = UncertaintyQuantificationMethod.ConformalPrediction,
+                    ConformalConfidenceLevel = 0.9,
+                    ConformalMode = ConformalPredictionMode.Adaptive,
+                    AdaptiveConformalBins = 5
+                },
+                UncertaintyCalibrationData<Tensor<double>, Tensor<double>>.ForClassification(xCal, labels))
+            .BuildAsync();
+
+        var uq = result.PredictWithUncertainty(xCal);
+        Assert.NotNull(uq.ClassificationSet);
+        Assert.Equal(3, uq.ClassificationSet!.ClassIndices.Length);
+        Assert.All(uq.ClassificationSet.ClassIndices, set => Assert.NotEmpty(set));
+    }
+
+    [Fact]
+    public async Task PredictWithUncertainty_WithBinaryPlattScaling_ReturnsNormalizedProbabilities()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.BinaryClassification,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 2,
+            outputSize: 2);
+        var model = new NeuralNetworkModel<double>(architecture);
+
+        var optimizer = new DeterministicNeuralNetworkParameterOptimizer<Tensor<double>, Tensor<double>>(model);
+
+        var xTrain = Tensor<double>.FromMatrix(new Matrix<double>(new double[,]
+        {
+            { 0.0, 0.0 },
+            { 1.0, 0.0 },
+            { 0.0, 1.0 },
+            { 1.0, 1.0 }
+        }));
+        var yTrain = Tensor<double>.FromVector(new Vector<double>(new[] { 0.0, 1.0, 1.0, 0.0 }));
+
+        var xCal = xTrain;
+        var labels = new Vector<int>(new[] { 0, 1, 1, 0 });
+
+        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
+            .ConfigureModel(model)
+            .ConfigureOptimizer(optimizer)
+            .ConfigureUncertaintyQuantification(
+                new UncertaintyQuantificationOptions
+                {
+                    Method = UncertaintyQuantificationMethod.ConformalPrediction,
+                    ConformalConfidenceLevel = 0.9,
+                    CalibrationMethod = ProbabilityCalibrationMethod.PlattScaling,
+                    EnableTemperatureScaling = false,
+                    EnablePlattScaling = true
+                },
+                UncertaintyCalibrationData<Tensor<double>, Tensor<double>>.ForClassification(xCal, labels))
+            .BuildAsync();
+
+        var uq = result.PredictWithUncertainty(xCal);
+        var probs = ConversionsHelper.ConvertToTensor<double>(uq.Prediction).ToVector();
+
+        const int classes = 2;
+        for (int i = 0; i < labels.Length; i++)
+        {
+            var sum = 0.0;
+            for (int c = 0; c < classes; c++)
+            {
+                sum += probs[i * classes + c];
+            }
+            Assert.InRange(sum, 0.999, 1.001);
+        }
+    }
+
+    [Fact]
+    public async Task PredictWithUncertainty_WithLaplaceApproximation_ReturnsVariance()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 1,
+            outputSize: 1);
+        var model = new NeuralNetworkModel<double>(architecture);
+
+        var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
+
+        var xTrain = Tensor<double>.FromMatrix(new Matrix<double>(new double[,]
+        {
+            { 0.0 },
+            { 1.0 },
+            { 2.0 },
+            { 3.0 }
+        }));
+        var yTrain = Tensor<double>.FromVector(new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 }));
+
+        var xCal = Tensor<double>.FromMatrix(new Matrix<double>(new double[,]
+        {
+            { 4.0 },
+            { 5.0 },
+            { 6.0 }
+        }));
+        var yCal = Tensor<double>.FromVector(new Vector<double>(new[] { 4.0, 5.0, 6.0 }));
+
+        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
+            .ConfigureModel(model)
+            .ConfigureOptimizer(optimizer)
+            .ConfigureUncertaintyQuantification(
+                new UncertaintyQuantificationOptions
+                {
+                    Method = UncertaintyQuantificationMethod.LaplaceApproximation,
+                    NumSamples = 8,
+                    PosteriorFitMaxSamples = 3,
+                    RandomSeed = 123
+                },
+                UncertaintyCalibrationData<Tensor<double>, Tensor<double>>.ForRegression(xCal, yCal))
+            .BuildAsync();
+
+        var uq = result.PredictWithUncertainty(xCal);
+        Assert.Equal(UncertaintyQuantificationMethod.LaplaceApproximation, uq.MethodUsed);
+        Assert.NotNull(uq.Variance);
+        Assert.Equal(ConversionsHelper.ConvertToTensor<double>(uq.Prediction).Shape, ConversionsHelper.ConvertToTensor<double>(uq.Variance!).Shape);
+    }
+
+    [Fact]
+    public async Task PredictWithUncertainty_WithBinaryIsotonicCalibration_ReturnsNormalizedProbabilities()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.BinaryClassification,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 2,
+            outputSize: 2);
+        var model = new NeuralNetworkModel<double>(architecture);
+
+        var optimizer = new DeterministicNeuralNetworkParameterOptimizer<Tensor<double>, Tensor<double>>(model);
+
+        var xTrain = Tensor<double>.FromMatrix(new Matrix<double>(new double[,]
+        {
+            { 0.0, 0.0 },
+            { 1.0, 0.0 },
+            { 0.0, 1.0 },
+            { 1.0, 1.0 }
+        }));
+        var yTrain = Tensor<double>.FromVector(new Vector<double>(new[] { 0.0, 1.0, 1.0, 0.0 }));
+
+        var xCal = xTrain;
+        var labels = new Vector<int>(new[] { 0, 1, 1, 0 });
+
+        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
+            .ConfigureModel(model)
+            .ConfigureOptimizer(optimizer)
+            .ConfigureUncertaintyQuantification(
+                new UncertaintyQuantificationOptions
+                {
+                    Method = UncertaintyQuantificationMethod.ConformalPrediction,
+                    ConformalConfidenceLevel = 0.9,
+                    CalibrationMethod = ProbabilityCalibrationMethod.IsotonicRegression,
+                    EnableTemperatureScaling = false,
+                    EnableIsotonicRegressionCalibration = true,
+                    RandomSeed = 42
+                },
+                UncertaintyCalibrationData<Tensor<double>, Tensor<double>>.ForClassification(xCal, labels))
+            .BuildAsync();
+
+        var uq = result.PredictWithUncertainty(xCal);
+        var probs = ConversionsHelper.ConvertToTensor<double>(uq.Prediction).ToVector();
+
+        const int classes = 2;
+        for (int i = 0; i < labels.Length; i++)
+        {
+            var sum = 0.0;
+            for (int c = 0; c < classes; c++)
+            {
+                sum += probs[i * classes + c];
+            }
+            Assert.InRange(sum, 0.999, 1.001);
+        }
+    }
+
+    [Fact]
+    public async Task PredictWithUncertainty_WithSwag_ReturnsVariance()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 1,
+            outputSize: 1);
+        var model = new NeuralNetworkModel<double>(architecture);
+
+        var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
+
+        var xTrain = Tensor<double>.FromMatrix(new Matrix<double>(new double[,]
+        {
+            { 0.0 },
+            { 1.0 },
+            { 2.0 },
+            { 3.0 }
+        }));
+        var yTrain = Tensor<double>.FromVector(new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 }));
+
+        var xCal = Tensor<double>.FromMatrix(new Matrix<double>(new double[,]
+        {
+            { 4.0 },
+            { 5.0 },
+            { 6.0 }
+        }));
+        var yCal = Tensor<double>.FromVector(new Vector<double>(new[] { 4.0, 5.0, 6.0 }));
+
+        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
+            .ConfigureModel(model)
+            .ConfigureOptimizer(optimizer)
+            .ConfigureUncertaintyQuantification(
+                new UncertaintyQuantificationOptions
+                {
+                    Method = UncertaintyQuantificationMethod.Swag,
+                    NumSamples = 8,
+                    PosteriorFitMaxSamples = 3,
+                    SwagNumSteps = 6,
+                    SwagBurnInSteps = 1,
+                    SwagNumSnapshots = 2,
+                    SwagLearningRate = 0.001,
+                    RandomSeed = 123
+                },
+                UncertaintyCalibrationData<Tensor<double>, Tensor<double>>.ForRegression(xCal, yCal))
+            .BuildAsync();
+
+        var uq = result.PredictWithUncertainty(xCal);
+        Assert.Equal(UncertaintyQuantificationMethod.Swag, uq.MethodUsed);
+        Assert.NotNull(uq.Variance);
+        Assert.Equal(ConversionsHelper.ConvertToTensor<double>(uq.Prediction).Shape, ConversionsHelper.ConvertToTensor<double>(uq.Variance!).Shape);
+    }
+
+    [Fact]
     public async Task EvaluateModel_WithUqCalibration_PopulatesExpectedCalibrationError()
     {
         var architecture = new NeuralNetworkArchitecture<double>(

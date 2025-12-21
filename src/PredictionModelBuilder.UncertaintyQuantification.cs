@@ -6,6 +6,9 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors.Helpers;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace AiDotNet;
 
@@ -73,7 +76,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
 
         var effectiveMethod = _uncertaintyQuantificationOptions.Method;
         if (effectiveMethod != UncertaintyQuantificationMethod.Auto &&
-            effectiveMethod != UncertaintyQuantificationMethod.ConformalPrediction)
+            effectiveMethod != UncertaintyQuantificationMethod.ConformalPrediction &&
+            effectiveMethod != UncertaintyQuantificationMethod.LaplaceApproximation &&
+            effectiveMethod != UncertaintyQuantificationMethod.Swag)
         {
             return;
         }
@@ -83,13 +88,37 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
         if (calibrationData is { HasLabels: true } && calibrationData.Labels is { } labels)
         {
             TryComputeClassificationCalibrationArtifacts(result, calibrationData.X, labels, _uncertaintyQuantificationOptions, artifacts);
+
+            if (effectiveMethod == UncertaintyQuantificationMethod.LaplaceApproximation)
+            {
+                TryComputeLaplacePosteriorArtifacts(result, calibrationData.X, labels, _uncertaintyQuantificationOptions, artifacts);
+            }
+            else if (effectiveMethod == UncertaintyQuantificationMethod.Swag)
+            {
+                TryComputeSwagPosteriorArtifacts(result, calibrationData.X, labels, _uncertaintyQuantificationOptions, artifacts);
+            }
         }
         else if (calibrationData is { HasTargets: true })
         {
             TryComputeRegressionConformalArtifacts(result, calibrationData.X, calibrationData.Y, artifacts);
+
+            if (effectiveMethod == UncertaintyQuantificationMethod.LaplaceApproximation)
+            {
+                TryComputeLaplacePosteriorArtifacts(result, calibrationData.X, calibrationData.Y, _uncertaintyQuantificationOptions, artifacts);
+            }
+            else if (effectiveMethod == UncertaintyQuantificationMethod.Swag)
+            {
+                TryComputeSwagPosteriorArtifacts(result, calibrationData.X, calibrationData.Y, _uncertaintyQuantificationOptions, artifacts);
+            }
         }
 
-        if (artifacts.HasConformalRegression || artifacts.HasConformalClassification || artifacts.HasTemperatureScaling)
+        if (artifacts.HasConformalRegression ||
+            artifacts.HasConformalClassification ||
+            artifacts.HasTemperatureScaling ||
+            artifacts.HasPlattScaling ||
+            artifacts.HasIsotonicRegressionCalibration ||
+            artifacts.HasLaplacePosterior ||
+            artifacts.HasSwagPosterior)
         {
             result.SetUncertaintyCalibrationArtifacts(artifacts);
         }
@@ -198,19 +227,38 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
         }
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        var temperature = options.EnableTemperatureScaling
-            ? FitTemperatureFromProbabilities(probsTensor, labels, batch, numClasses)
-            : numOps.One;
+        var effectiveCalibration = ResolveCalibrationMethod(options, numClasses);
+        var calibrated = probsTensor;
 
-        if (options.EnableTemperatureScaling)
+        if (effectiveCalibration == ProbabilityCalibrationMethod.TemperatureScaling && options.EnableTemperatureScaling)
         {
+            var temperature = FitTemperatureFromProbabilities(probsTensor, labels, batch, numClasses);
             artifacts.HasTemperatureScaling = true;
             artifacts.TemperatureScalingTemperature = temperature;
+            calibrated = ApplyTemperatureScalingToProbabilities(probsTensor, temperature, batch, numClasses);
         }
-
-        var calibrated = options.EnableTemperatureScaling
-            ? ApplyTemperatureScalingToProbabilities(probsTensor, temperature, batch, numClasses)
-            : probsTensor;
+        else if (effectiveCalibration == ProbabilityCalibrationMethod.PlattScaling && options.EnablePlattScaling && numClasses == 2)
+        {
+            var (a, b) = FitPlattScalingBinary(probsTensor, labels, batch);
+            artifacts.HasPlattScaling = true;
+            var aVec = new Vector<T>(1);
+            aVec[0] = a;
+            artifacts.PlattScalingA = aVec;
+            var bVec = new Vector<T>(1);
+            bVec[0] = b;
+            artifacts.PlattScalingB = bVec;
+            calibrated = ApplyPlattScalingToProbabilitiesBinary(probsTensor, a, b, batch);
+        }
+        else if (effectiveCalibration == ProbabilityCalibrationMethod.IsotonicRegression &&
+                 options.EnableIsotonicRegressionCalibration &&
+                 numClasses == 2)
+        {
+            var (x, y) = FitIsotonicCalibrationBinary(probsTensor, labels, batch);
+            artifacts.HasIsotonicRegressionCalibration = true;
+            artifacts.IsotonicCalibrationX = x;
+            artifacts.IsotonicCalibrationY = y;
+            calibrated = ApplyIsotonicCalibrationToProbabilitiesBinary(probsTensor, x, y, batch);
+        }
 
         var flatCalibrated = calibrated.ToVector();
         var predictions = new Vector<int>(batch);
@@ -238,6 +286,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
         artifacts.ExpectedCalibrationError = ece.Compute(confidence, predictions, labels);
 
         var scores = new Vector<T>(batch);
+        var scoreConfidence = new Vector<T>(batch);
         var validCount = 0;
         for (int i = 0; i < batch; i++)
         {
@@ -250,6 +299,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
             }
 
             scores[validCount++] = flatCalibrated[i * numClasses + label];
+            scoreConfidence[validCount - 1] = confidence[i];
         }
 
         if (validCount == 0)
@@ -263,7 +313,29 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
             ? scores
             : scores.Subvector(0, validCount);
 
-        var threshold = ComputeConformalClassificationThreshold(validScores, result.UncertaintyQuantificationOptions?.ConformalConfidenceLevel ?? 0.9);
+        var confidenceLevel = result.UncertaintyQuantificationOptions?.ConformalConfidenceLevel ?? 0.9;
+        var threshold = ComputeConformalClassificationThreshold(validScores.Clone(), confidenceLevel);
+
+        if (options.ConformalMode == ConformalPredictionMode.CrossConformal)
+        {
+            threshold = ComputeCrossConformalClassificationThreshold(validScores, confidenceLevel, options.CrossConformalFolds, options.RandomSeed);
+        }
+        else if (options.ConformalMode == ConformalPredictionMode.Adaptive)
+        {
+            var validConf = validCount == scoreConfidence.Length
+                ? scoreConfidence
+                : scoreConfidence.Subvector(0, validCount);
+
+            var (edges, thresholds) = ComputeAdaptiveConformalClassificationThresholds(
+                validScores,
+                validConf,
+                confidenceLevel,
+                options.AdaptiveConformalBins);
+
+            artifacts.HasAdaptiveConformalClassification = true;
+            artifacts.ConformalClassificationAdaptiveBinEdges = edges;
+            artifacts.ConformalClassificationAdaptiveThresholds = thresholds;
+        }
 
         artifacts.HasConformalClassification = true;
         artifacts.ConformalClassificationThreshold = threshold;
@@ -387,6 +459,827 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
         }
 
         return new Tensor<T>([batch, classes], scaled).Reshape(probabilities.Shape);
+    }
+
+    private static ProbabilityCalibrationMethod ResolveCalibrationMethod(UncertaintyQuantificationOptions options, int numClasses)
+    {
+        if (options.CalibrationMethod != ProbabilityCalibrationMethod.Auto)
+        {
+            return options.CalibrationMethod;
+        }
+
+        if (numClasses == 2)
+        {
+            if (options.EnableIsotonicRegressionCalibration)
+            {
+                return ProbabilityCalibrationMethod.IsotonicRegression;
+            }
+
+            if (options.EnablePlattScaling)
+            {
+                return ProbabilityCalibrationMethod.PlattScaling;
+            }
+        }
+
+        return options.EnableTemperatureScaling
+            ? ProbabilityCalibrationMethod.TemperatureScaling
+            : ProbabilityCalibrationMethod.None;
+    }
+
+    private static (T a, T b) FitPlattScalingBinary(Tensor<T> probabilities, Vector<int> labels, int batch)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var eps = 1e-12;
+
+        double a = 1.0;
+        double b = 0.0;
+
+        var flat = probabilities.ToVector();
+
+        for (int iter = 0; iter < 50; iter++)
+        {
+            double gradA = 0.0;
+            double gradB = 0.0;
+            double hAA = 0.0;
+            double hAB = 0.0;
+            double hBB = 0.0;
+
+            for (int i = 0; i < batch; i++)
+            {
+                var p1 = numOps.ToDouble(flat[i * 2 + 1]);
+                if (p1 < eps) p1 = eps;
+                if (p1 > 1.0 - eps) p1 = 1.0 - eps;
+
+                var logit = Math.Log(p1 / (1.0 - p1));
+                var y = labels[i] == 1 ? 1.0 : 0.0;
+
+                var z = a * logit + b;
+                var p = 1.0 / (1.0 + Math.Exp(-z));
+
+                var diff = p - y;
+                gradA += diff * logit;
+                gradB += diff;
+
+                var w = p * (1.0 - p);
+                hAA += w * logit * logit;
+                hAB += w * logit;
+                hBB += w;
+            }
+
+            // Regularize to avoid singular Hessian
+            const double ridge = 1e-8;
+            hAA += ridge;
+            hBB += ridge;
+
+            var det = hAA * hBB - hAB * hAB;
+            if (Math.Abs(det) < 1e-18)
+            {
+                break;
+            }
+
+            var invAA = hBB / det;
+            var invAB = -hAB / det;
+            var invBB = hAA / det;
+
+            var stepA = invAA * gradA + invAB * gradB;
+            var stepB = invAB * gradA + invBB * gradB;
+
+            a -= stepA;
+            b -= stepB;
+
+            if (Math.Abs(stepA) + Math.Abs(stepB) < 1e-8)
+            {
+                break;
+            }
+        }
+
+        return (numOps.FromDouble(a), numOps.FromDouble(b));
+    }
+
+    private static Tensor<T> ApplyPlattScalingToProbabilitiesBinary(Tensor<T> probabilities, T a, T b, int batch)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var eps = 1e-12;
+        var flat = probabilities.ToVector();
+        var output = new Vector<T>(batch * 2);
+
+        for (int i = 0; i < batch; i++)
+        {
+            var p1 = numOps.ToDouble(flat[i * 2 + 1]);
+            if (p1 < eps) p1 = eps;
+            if (p1 > 1.0 - eps) p1 = 1.0 - eps;
+
+            var logit = Math.Log(p1 / (1.0 - p1));
+            var z = numOps.Add(numOps.Multiply(a, numOps.FromDouble(logit)), b);
+            var zDouble = numOps.ToDouble(z);
+            var p1Cal = 1.0 / (1.0 + Math.Exp(-zDouble));
+
+            var p1T = numOps.FromDouble(p1Cal);
+            output[i * 2 + 1] = p1T;
+            output[i * 2] = numOps.Subtract(numOps.One, p1T);
+        }
+
+        return new Tensor<T>([batch, 2], output).Reshape(probabilities.Shape);
+    }
+
+    private static (Vector<T> x, Vector<T> y) FitIsotonicCalibrationBinary(Tensor<T> probabilities, Vector<int> labels, int batch)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var eps = 1e-12;
+        var flat = probabilities.ToVector();
+
+        var pairs = new (double p, double y)[batch];
+        for (int i = 0; i < batch; i++)
+        {
+            var p1 = numOps.ToDouble(flat[i * 2 + 1]);
+            if (p1 < eps) p1 = eps;
+            if (p1 > 1.0 - eps) p1 = 1.0 - eps;
+            pairs[i] = (p1, labels[i] == 1 ? 1.0 : 0.0);
+        }
+
+        Array.Sort(pairs, (a, b) => a.p.CompareTo(b.p));
+
+        var sums = new List<double>();
+        var counts = new List<int>();
+        var maxX = new List<double>();
+
+        for (int i = 0; i < pairs.Length; i++)
+        {
+            sums.Add(pairs[i].y);
+            counts.Add(1);
+            maxX.Add(pairs[i].p);
+
+            while (sums.Count >= 2)
+            {
+                int last = sums.Count - 1;
+                int prev = last - 1;
+
+                var avgPrev = sums[prev] / counts[prev];
+                var avgLast = sums[last] / counts[last];
+                if (avgPrev <= avgLast)
+                {
+                    break;
+                }
+
+                sums[prev] += sums[last];
+                counts[prev] += counts[last];
+                maxX[prev] = maxX[last];
+
+                sums.RemoveAt(last);
+                counts.RemoveAt(last);
+                maxX.RemoveAt(last);
+            }
+        }
+
+        var x = new Vector<T>(sums.Count);
+        var y = new Vector<T>(sums.Count);
+        for (int i = 0; i < sums.Count; i++)
+        {
+            x[i] = numOps.FromDouble(maxX[i]);
+            y[i] = numOps.FromDouble(sums[i] / counts[i]);
+        }
+
+        return (x, y);
+    }
+
+    private static Tensor<T> ApplyIsotonicCalibrationToProbabilitiesBinary(Tensor<T> probabilities, Vector<T> x, Vector<T> y, int batch)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var eps = 1e-12;
+        var flat = probabilities.ToVector();
+        var output = new Vector<T>(batch * 2);
+
+        for (int i = 0; i < batch; i++)
+        {
+            var p1 = numOps.ToDouble(flat[i * 2 + 1]);
+            if (p1 < eps) p1 = eps;
+            if (p1 > 1.0 - eps) p1 = 1.0 - eps;
+
+            var p1T = numOps.FromDouble(p1);
+            var p1Cal = EvaluateIsotonic(p1T, x, y, numOps);
+            output[i * 2 + 1] = p1Cal;
+            output[i * 2] = numOps.Subtract(numOps.One, p1Cal);
+        }
+
+        return new Tensor<T>([batch, 2], output).Reshape(probabilities.Shape);
+    }
+
+    private static T EvaluateIsotonic(T p, Vector<T> x, Vector<T> y, INumericOperations<T> numOps)
+    {
+        if (x.Length == 0)
+        {
+            return p;
+        }
+
+        var spanX = x.AsSpan();
+        var spanY = y.AsSpan();
+        for (int i = 0; i < spanX.Length; i++)
+        {
+            if (numOps.LessThanOrEquals(p, spanX[i]))
+            {
+                return spanY[i];
+            }
+        }
+
+        return spanY[spanY.Length - 1];
+    }
+
+    private static T ComputeCrossConformalClassificationThreshold(Vector<T> scores, double confidenceLevel, int folds, int? seed)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var n = scores.Length;
+        if (n == 0)
+        {
+            return numOps.Zero;
+        }
+
+        folds = Math.Max(2, folds);
+        if (folds > n)
+        {
+            folds = n;
+        }
+
+        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSeededRandom(42);
+        var indices = Enumerable.Range(0, n).OrderBy(_ => rng.Next()).ToArray();
+
+        var thresholds = new Vector<T>(folds);
+        var thresholdCount = 0;
+
+        for (int f = 0; f < folds; f++)
+        {
+            int start = (int)Math.Floor(f * (double)n / folds);
+            int end = (int)Math.Floor((f + 1) * (double)n / folds);
+            int len = end - start;
+            if (len <= 0)
+            {
+                continue;
+            }
+
+            var foldScores = new Vector<T>(len);
+            for (int i = 0; i < len; i++)
+            {
+                foldScores[i] = scores[indices[start + i]];
+            }
+
+            thresholds[thresholdCount++] = ComputeConformalClassificationThreshold(foldScores, confidenceLevel);
+        }
+
+        if (thresholdCount == 0)
+        {
+            return ComputeConformalClassificationThreshold(scores.Clone(), confidenceLevel);
+        }
+
+        var usable = thresholdCount == thresholds.Length ? thresholds : thresholds.Subvector(0, thresholdCount);
+        var medianIndex = usable.Length / 2;
+        return SelectKthInPlace(usable, medianIndex);
+    }
+
+    private static (double[] edges, Vector<T> thresholds) ComputeAdaptiveConformalClassificationThresholds(
+        Vector<T> scores,
+        Vector<T> confidence,
+        double confidenceLevel,
+        int bins)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var n = scores.Length;
+        bins = Math.Max(1, bins);
+
+        var edges = new double[bins + 1];
+        for (int i = 0; i <= bins; i++)
+        {
+            edges[i] = i / (double)bins;
+        }
+
+        var globalThreshold = ComputeConformalClassificationThreshold(scores.Clone(), confidenceLevel);
+
+        var buckets = new List<T>[bins];
+        for (int i = 0; i < bins; i++)
+        {
+            buckets[i] = new List<T>();
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            var conf = numOps.ToDouble(confidence[i]);
+            if (conf < 0.0) conf = 0.0;
+            if (conf > 1.0) conf = 1.0;
+
+            var bin = (int)Math.Floor(conf * bins);
+            if (bin == bins) bin = bins - 1;
+
+            buckets[bin].Add(scores[i]);
+        }
+
+        var thresholds = new Vector<T>(bins);
+        for (int b = 0; b < bins; b++)
+        {
+            if (buckets[b].Count == 0)
+            {
+                thresholds[b] = globalThreshold;
+                continue;
+            }
+
+            var bucketScores = new Vector<T>(buckets[b].Count);
+            for (int i = 0; i < buckets[b].Count; i++)
+            {
+                bucketScores[i] = buckets[b][i];
+            }
+
+            thresholds[b] = ComputeConformalClassificationThreshold(bucketScores, confidenceLevel);
+        }
+
+        return (edges, thresholds);
+    }
+
+    private static void TryComputeLaplacePosteriorArtifacts(
+        PredictionModelResult<T, TInput, TOutput> result,
+        TInput xCalibration,
+        Vector<int> labels,
+        UncertaintyQuantificationOptions options,
+        UncertaintyCalibrationArtifacts<T> artifacts)
+    {
+        if (!TryPreparePosteriorCalibrationTensorsForClassification(result, xCalibration, labels, options, out var xTensor, out var yOneHot))
+        {
+            return;
+        }
+
+        if (!TryCastTensorInputs(xTensor, yOneHot, out var input, out var target))
+        {
+            return;
+        }
+
+        var model = result.Model;
+        if (model == null)
+        {
+            return;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var priorPrecision = numOps.FromDouble(options.LaplacePriorPrecision);
+
+        Vector<T> gradients;
+        try
+        {
+            gradients = model.ComputeGradients(input, target, lossFunction: null);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Warning: Laplace posterior fitting skipped because gradients could not be computed. Error: {ex.Message}");
+            return;
+        }
+
+        var hDiag = new Vector<T>(gradients.Length);
+        for (int i = 0; i < hDiag.Length; i++)
+        {
+            hDiag[i] = priorPrecision;
+        }
+
+        for (int i = 0; i < gradients.Length; i++)
+        {
+            var g2 = numOps.Multiply(gradients[i], gradients[i]);
+            hDiag[i] = numOps.Add(hDiag[i], g2);
+        }
+
+        var variance = new Vector<T>(hDiag.Length);
+        for (int i = 0; i < hDiag.Length; i++)
+        {
+            variance[i] = numOps.Divide(numOps.One, hDiag[i]);
+        }
+
+        artifacts.HasLaplacePosterior = true;
+        artifacts.LaplacePosteriorMean = model.GetParameters().Clone();
+        artifacts.LaplacePosteriorVarianceDiag = variance;
+    }
+
+    private static void TryComputeLaplacePosteriorArtifacts(
+        PredictionModelResult<T, TInput, TOutput> result,
+        TInput xCalibration,
+        TOutput yCalibration,
+        UncertaintyQuantificationOptions options,
+        UncertaintyCalibrationArtifacts<T> artifacts)
+    {
+        if (!TryPreparePosteriorCalibrationTensorsForRegression(xCalibration, yCalibration, options, out var xTensor, out var yTensor))
+        {
+            return;
+        }
+
+        if (!TryCastTensorInputs(xTensor, yTensor, out var input, out var target))
+        {
+            return;
+        }
+
+        var model = result.Model;
+        if (model == null)
+        {
+            return;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var priorPrecision = numOps.FromDouble(options.LaplacePriorPrecision);
+
+        Vector<T> gradients;
+        try
+        {
+            gradients = model.ComputeGradients(input, target, lossFunction: null);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Warning: Laplace posterior fitting skipped because gradients could not be computed. Error: {ex.Message}");
+            return;
+        }
+
+        var hDiag = new Vector<T>(gradients.Length);
+        for (int i = 0; i < hDiag.Length; i++)
+        {
+            hDiag[i] = priorPrecision;
+        }
+
+        for (int i = 0; i < gradients.Length; i++)
+        {
+            var g2 = numOps.Multiply(gradients[i], gradients[i]);
+            hDiag[i] = numOps.Add(hDiag[i], g2);
+        }
+
+        var variance = new Vector<T>(hDiag.Length);
+        for (int i = 0; i < hDiag.Length; i++)
+        {
+            variance[i] = numOps.Divide(numOps.One, hDiag[i]);
+        }
+
+        artifacts.HasLaplacePosterior = true;
+        artifacts.LaplacePosteriorMean = model.GetParameters().Clone();
+        artifacts.LaplacePosteriorVarianceDiag = variance;
+    }
+
+    private static void TryComputeSwagPosteriorArtifacts(
+        PredictionModelResult<T, TInput, TOutput> result,
+        TInput xCalibration,
+        Vector<int> labels,
+        UncertaintyQuantificationOptions options,
+        UncertaintyCalibrationArtifacts<T> artifacts)
+    {
+        if (!TryPreparePosteriorCalibrationTensorsForClassification(result, xCalibration, labels, options, out var xTensor, out var yOneHot))
+        {
+            return;
+        }
+
+        if (!TryCastTensorInputs(xTensor, yOneHot, out var input, out var target))
+        {
+            return;
+        }
+
+        var model = result.Model;
+        if (model == null)
+        {
+            return;
+        }
+
+        IFullModel<T, TInput, TOutput> swagModel;
+        try
+        {
+            swagModel = model.Clone();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Warning: SWAG posterior fitting skipped because model cloning failed. Error: {ex.Message}");
+            return;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var lr = numOps.FromDouble(options.SwagLearningRate);
+        var steps = Math.Max(0, options.SwagNumSteps);
+        var burnIn = Math.Max(0, options.SwagBurnInSteps);
+        var snapshotsTarget = Math.Max(1, options.SwagNumSnapshots);
+        var interval = Math.Max(1, (steps - burnIn) / snapshotsTarget);
+
+        var mean = (Vector<T>?)null;
+        var sqMean = (Vector<T>?)null;
+        var snapshotCount = 0;
+
+        for (int step = 0; step < steps; step++)
+        {
+            Vector<T> gradients;
+            try
+            {
+                gradients = swagModel.ComputeGradients(input, target, lossFunction: null);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Warning: SWAG posterior fitting skipped because gradients could not be computed. Error: {ex.Message}");
+                return;
+            }
+
+            swagModel.ApplyGradients(gradients, lr);
+
+            if (step < burnIn)
+            {
+                continue;
+            }
+
+            if (((step - burnIn) % interval) != 0)
+            {
+                continue;
+            }
+
+            var parameters = swagModel.GetParameters();
+            snapshotCount++;
+
+            if (mean == null)
+            {
+                mean = parameters.Clone();
+                sqMean = new Vector<T>(parameters.Length);
+                for (int i = 0; i < parameters.Length; i++)
+                {
+                    sqMean[i] = numOps.Multiply(parameters[i], parameters[i]);
+                }
+                continue;
+            }
+
+            var k = numOps.FromDouble(snapshotCount);
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                mean[i] = numOps.Add(mean[i], numOps.Divide(numOps.Subtract(parameters[i], mean[i]), k));
+                var p2 = numOps.Multiply(parameters[i], parameters[i]);
+                sqMean![i] = numOps.Add(sqMean[i], numOps.Divide(numOps.Subtract(p2, sqMean[i]), k));
+            }
+        }
+
+        if (mean == null || sqMean == null || snapshotCount == 0)
+        {
+            return;
+        }
+
+        var variance = new Vector<T>(mean.Length);
+        for (int i = 0; i < mean.Length; i++)
+        {
+            var m2 = numOps.Multiply(mean[i], mean[i]);
+            var v = numOps.Subtract(sqMean[i], m2);
+            if (numOps.LessThan(v, numOps.Zero))
+            {
+                v = numOps.Zero;
+            }
+            variance[i] = v;
+        }
+
+        artifacts.HasSwagPosterior = true;
+        artifacts.SwagPosteriorMean = mean;
+        artifacts.SwagPosteriorVarianceDiag = variance;
+    }
+
+    private static void TryComputeSwagPosteriorArtifacts(
+        PredictionModelResult<T, TInput, TOutput> result,
+        TInput xCalibration,
+        TOutput yCalibration,
+        UncertaintyQuantificationOptions options,
+        UncertaintyCalibrationArtifacts<T> artifacts)
+    {
+        if (!TryPreparePosteriorCalibrationTensorsForRegression(xCalibration, yCalibration, options, out var xTensor, out var yTensor))
+        {
+            return;
+        }
+
+        if (!TryCastTensorInputs(xTensor, yTensor, out var input, out var target))
+        {
+            return;
+        }
+
+        var model = result.Model;
+        if (model == null)
+        {
+            return;
+        }
+
+        IFullModel<T, TInput, TOutput> swagModel;
+        try
+        {
+            swagModel = model.Clone();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Warning: SWAG posterior fitting skipped because model cloning failed. Error: {ex.Message}");
+            return;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var lr = numOps.FromDouble(options.SwagLearningRate);
+        var steps = Math.Max(0, options.SwagNumSteps);
+        var burnIn = Math.Max(0, options.SwagBurnInSteps);
+        var snapshotsTarget = Math.Max(1, options.SwagNumSnapshots);
+        var interval = Math.Max(1, (steps - burnIn) / snapshotsTarget);
+
+        var mean = (Vector<T>?)null;
+        var sqMean = (Vector<T>?)null;
+        var snapshotCount = 0;
+
+        for (int step = 0; step < steps; step++)
+        {
+            Vector<T> gradients;
+            try
+            {
+                gradients = swagModel.ComputeGradients(input, target, lossFunction: null);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Warning: SWAG posterior fitting skipped because gradients could not be computed. Error: {ex.Message}");
+                return;
+            }
+
+            swagModel.ApplyGradients(gradients, lr);
+
+            if (step < burnIn)
+            {
+                continue;
+            }
+
+            if (((step - burnIn) % interval) != 0)
+            {
+                continue;
+            }
+
+            var parameters = swagModel.GetParameters();
+            snapshotCount++;
+
+            if (mean == null)
+            {
+                mean = parameters.Clone();
+                sqMean = new Vector<T>(parameters.Length);
+                for (int i = 0; i < parameters.Length; i++)
+                {
+                    sqMean[i] = numOps.Multiply(parameters[i], parameters[i]);
+                }
+                continue;
+            }
+
+            var k = numOps.FromDouble(snapshotCount);
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                mean[i] = numOps.Add(mean[i], numOps.Divide(numOps.Subtract(parameters[i], mean[i]), k));
+                var p2 = numOps.Multiply(parameters[i], parameters[i]);
+                sqMean![i] = numOps.Add(sqMean[i], numOps.Divide(numOps.Subtract(p2, sqMean[i]), k));
+            }
+        }
+
+        if (mean == null || sqMean == null || snapshotCount == 0)
+        {
+            return;
+        }
+
+        var variance = new Vector<T>(mean.Length);
+        for (int i = 0; i < mean.Length; i++)
+        {
+            var m2 = numOps.Multiply(mean[i], mean[i]);
+            var v = numOps.Subtract(sqMean[i], m2);
+            if (numOps.LessThan(v, numOps.Zero))
+            {
+                v = numOps.Zero;
+            }
+            variance[i] = v;
+        }
+
+        artifacts.HasSwagPosterior = true;
+        artifacts.SwagPosteriorMean = mean;
+        artifacts.SwagPosteriorVarianceDiag = variance;
+    }
+
+    private static bool TryPreparePosteriorCalibrationTensorsForClassification(
+        PredictionModelResult<T, TInput, TOutput> result,
+        TInput xCalibration,
+        Vector<int> labels,
+        UncertaintyQuantificationOptions options,
+        out Tensor<T> xTensor,
+        out Tensor<T> yOneHot)
+    {
+        xTensor = null!;
+        yOneHot = null!;
+
+        if (labels.Length == 0)
+        {
+            return false;
+        }
+
+        if (result.Model == null)
+        {
+            return false;
+        }
+
+        if (xCalibration is not Tensor<T> inputTensor)
+        {
+            System.Diagnostics.Debug.WriteLine("Warning: Laplace/SWAG posterior fitting currently requires TInput to be Tensor<T>.");
+            return false;
+        }
+
+        var predicted = result.Predict(xCalibration);
+        var probsTensor = ConversionsHelper.ConvertToTensor<T>(predicted!).Clone();
+        var classes = probsTensor.Shape[probsTensor.Shape.Length - 1];
+        if (classes <= 1)
+        {
+            return false;
+        }
+
+        var batch = probsTensor.Rank == 1 ? 1 : probsTensor.Length / classes;
+        if (batch <= 0)
+        {
+            return false;
+        }
+
+        var take = Math.Min(batch, labels.Length);
+        take = Math.Min(take, Math.Max(1, options.PosteriorFitMaxSamples));
+
+        xTensor = TakeFirstBatch(inputTensor, take);
+        yOneHot = CreateOneHotTargets(labels, take, classes);
+        return true;
+    }
+
+    private static bool TryPreparePosteriorCalibrationTensorsForRegression(
+        TInput xCalibration,
+        TOutput yCalibration,
+        UncertaintyQuantificationOptions options,
+        out Tensor<T> xTensor,
+        out Tensor<T> yTensor)
+    {
+        xTensor = null!;
+        yTensor = null!;
+
+        if (xCalibration is not Tensor<T> inputTensor || yCalibration is not Tensor<T> targetTensor)
+        {
+            System.Diagnostics.Debug.WriteLine("Warning: Laplace/SWAG posterior fitting currently requires TInput and TOutput to be Tensor<T>.");
+            return false;
+        }
+
+        var batch = inputTensor.Rank == 1 ? inputTensor.Shape[0] : inputTensor.Shape[0];
+        var take = Math.Min(batch, Math.Max(1, options.PosteriorFitMaxSamples));
+
+        xTensor = TakeFirstBatch(inputTensor, take);
+        yTensor = TakeFirstBatch(targetTensor, take);
+        return true;
+    }
+
+    private static bool TryCastTensorInputs(Tensor<T> xTensor, Tensor<T> yTensor, out TInput input, out TOutput target)
+    {
+        input = default!;
+        target = default!;
+
+        if (typeof(TInput) != typeof(Tensor<T>) || typeof(TOutput) != typeof(Tensor<T>))
+        {
+            System.Diagnostics.Debug.WriteLine("Warning: Laplace/SWAG posterior fitting requires builder generic types to be Tensor<T>.");
+            return false;
+        }
+
+        input = (TInput)(object)xTensor;
+        target = (TOutput)(object)yTensor;
+        return true;
+    }
+
+    private static Tensor<T> CreateOneHotTargets(Vector<int> labels, int batch, int classes)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var flat = new Vector<T>(batch * classes);
+
+        for (int i = 0; i < batch; i++)
+        {
+            var label = labels[i];
+            if (label >= 0 && label < classes)
+            {
+                flat[i * classes + label] = numOps.One;
+            }
+        }
+
+        return new Tensor<T>([batch, classes], flat);
+    }
+
+    private static Tensor<T> TakeFirstBatch(Tensor<T> tensor, int batch)
+    {
+        if (tensor.Rank == 1)
+        {
+            var take = Math.Min(batch, tensor.Shape[0]);
+            var vec = tensor.ToVector();
+            var sliced = new Vector<T>(take);
+            for (int i = 0; i < take; i++)
+            {
+                sliced[i] = vec[i];
+            }
+            return new Tensor<T>([take], sliced);
+        }
+
+        var totalBatch = tensor.Shape[0];
+        var takeBatch = Math.Min(batch, totalBatch);
+        var rowSize = tensor.Length / totalBatch;
+
+        var vecAll = tensor.ToVector();
+        var slicedVec = new Vector<T>(takeBatch * rowSize);
+        for (int i = 0; i < takeBatch * rowSize; i++)
+        {
+            slicedVec[i] = vecAll[i];
+        }
+
+        var newShape = new int[tensor.Shape.Length];
+        newShape[0] = takeBatch;
+        for (int d = 1; d < tensor.Shape.Length; d++)
+        {
+            newShape[d] = tensor.Shape[d];
+        }
+
+        return new Tensor<T>(newShape, slicedVec);
     }
 
     /// <summary>

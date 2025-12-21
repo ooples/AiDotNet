@@ -1,9 +1,12 @@
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 using AiDotNet.UncertaintyQuantification.Interfaces;
 using AiDotNet.UncertaintyQuantification.Layers;
 using Newtonsoft.Json;
@@ -17,6 +20,7 @@ public partial class PredictionModelResult<T, TInput, TOutput>
 
     private readonly INumericOperations<T> _uqNumOps = MathHelper.GetNumericOperations<T>();
     private readonly object _monteCarloDropoutLock = new();
+    private readonly object _parameterSamplingLock = new();
 
     [JsonProperty]
     private List<IFullModel<T, TInput, TOutput>>? _deepEnsembleModels;
@@ -40,10 +44,55 @@ public partial class PredictionModelResult<T, TInput, TOutput>
     internal int ConformalClassificationNumClasses { get; private set; }
 
     [JsonProperty]
+    internal bool HasAdaptiveConformalClassification { get; private set; }
+
+    [JsonProperty]
+    internal double[]? ConformalClassificationAdaptiveBinEdges { get; private set; }
+
+    [JsonProperty]
+    internal Vector<T>? ConformalClassificationAdaptiveThresholds { get; private set; }
+
+    [JsonProperty]
     internal bool HasTemperatureScaling { get; private set; }
 
     [JsonProperty]
     internal T TemperatureScalingTemperature { get; private set; } = default!;
+
+    [JsonProperty]
+    internal bool HasPlattScaling { get; private set; }
+
+    [JsonProperty]
+    internal Vector<T>? PlattScalingA { get; private set; }
+
+    [JsonProperty]
+    internal Vector<T>? PlattScalingB { get; private set; }
+
+    [JsonProperty]
+    internal bool HasIsotonicRegressionCalibration { get; private set; }
+
+    [JsonProperty]
+    internal Vector<T>? IsotonicCalibrationX { get; private set; }
+
+    [JsonProperty]
+    internal Vector<T>? IsotonicCalibrationY { get; private set; }
+
+    [JsonProperty]
+    internal bool HasLaplacePosterior { get; private set; }
+
+    [JsonProperty]
+    internal Vector<T>? LaplacePosteriorMean { get; private set; }
+
+    [JsonProperty]
+    internal Vector<T>? LaplacePosteriorVarianceDiag { get; private set; }
+
+    [JsonProperty]
+    internal bool HasSwagPosterior { get; private set; }
+
+    [JsonProperty]
+    internal Vector<T>? SwagPosteriorMean { get; private set; }
+
+    [JsonProperty]
+    internal Vector<T>? SwagPosteriorVarianceDiag { get; private set; }
 
     [JsonProperty]
     internal bool HasExpectedCalibrationError { get; private set; }
@@ -61,8 +110,23 @@ public partial class PredictionModelResult<T, TInput, TOutput>
         HasConformalClassification = artifacts.HasConformalClassification;
         ConformalClassificationThreshold = artifacts.ConformalClassificationThreshold;
         ConformalClassificationNumClasses = artifacts.ConformalClassificationNumClasses;
+        HasAdaptiveConformalClassification = artifacts.HasAdaptiveConformalClassification;
+        ConformalClassificationAdaptiveBinEdges = artifacts.ConformalClassificationAdaptiveBinEdges;
+        ConformalClassificationAdaptiveThresholds = artifacts.ConformalClassificationAdaptiveThresholds;
         HasTemperatureScaling = artifacts.HasTemperatureScaling;
         TemperatureScalingTemperature = artifacts.TemperatureScalingTemperature;
+        HasPlattScaling = artifacts.HasPlattScaling;
+        PlattScalingA = artifacts.PlattScalingA;
+        PlattScalingB = artifacts.PlattScalingB;
+        HasIsotonicRegressionCalibration = artifacts.HasIsotonicRegressionCalibration;
+        IsotonicCalibrationX = artifacts.IsotonicCalibrationX;
+        IsotonicCalibrationY = artifacts.IsotonicCalibrationY;
+        HasLaplacePosterior = artifacts.HasLaplacePosterior;
+        LaplacePosteriorMean = artifacts.LaplacePosteriorMean;
+        LaplacePosteriorVarianceDiag = artifacts.LaplacePosteriorVarianceDiag;
+        HasSwagPosterior = artifacts.HasSwagPosterior;
+        SwagPosteriorMean = artifacts.SwagPosteriorMean;
+        SwagPosteriorVarianceDiag = artifacts.SwagPosteriorVarianceDiag;
         HasExpectedCalibrationError = artifacts.HasExpectedCalibrationError;
         ExpectedCalibrationError = artifacts.ExpectedCalibrationError;
     }
@@ -105,6 +169,14 @@ public partial class PredictionModelResult<T, TInput, TOutput>
             {
                 method = UncertaintyQuantificationMethod.DeepEnsemble;
             }
+            else if (HasSwagPosterior && SwagPosteriorMean is { Length: > 0 } && SwagPosteriorVarianceDiag is { Length: > 0 })
+            {
+                method = UncertaintyQuantificationMethod.Swag;
+            }
+            else if (HasLaplacePosterior && LaplacePosteriorMean is { Length: > 0 } && LaplacePosteriorVarianceDiag is { Length: > 0 })
+            {
+                method = UncertaintyQuantificationMethod.LaplaceApproximation;
+            }
             else if (Model is IUncertaintyEstimator<T>)
             {
                 method = UncertaintyQuantificationMethod.BayesianNeuralNetwork;
@@ -123,6 +195,16 @@ public partial class PredictionModelResult<T, TInput, TOutput>
         if (method == UncertaintyQuantificationMethod.DeepEnsemble)
         {
             return PredictWithDeepEnsemble(newData, uq, method);
+        }
+
+        if (method == UncertaintyQuantificationMethod.LaplaceApproximation)
+        {
+            return PredictWithDiagonalGaussianPosterior(newData, uq, method, LaplacePosteriorMean, LaplacePosteriorVarianceDiag);
+        }
+
+        if (method == UncertaintyQuantificationMethod.Swag)
+        {
+            return PredictWithDiagonalGaussianPosterior(newData, uq, method, SwagPosteriorMean, SwagPosteriorVarianceDiag);
         }
 
         if (method == UncertaintyQuantificationMethod.BayesianNeuralNetwork)
@@ -163,6 +245,7 @@ public partial class PredictionModelResult<T, TInput, TOutput>
 
                 var meanOutput = ConvertFromTensor(meanTensor);
                 var denormalizedMean = NormalizationInfo.Normalizer.Denormalize(meanOutput, NormalizationInfo.YParams);
+                denormalizedMean = ApplyProbabilityCalibrationIfEnabled(denormalizedMean, uq);
 
                 if (uq.DenormalizeUncertainty)
                 {
@@ -193,11 +276,7 @@ public partial class PredictionModelResult<T, TInput, TOutput>
         UncertaintyQuantificationMethod method)
     {
         var deterministic = Predict(newData);
-
-        if (HasTemperatureScaling && HasConformalClassification)
-        {
-            deterministic = ApplyTemperatureScalingToOutputProbabilities(deterministic, TemperatureScalingTemperature);
-        }
+        deterministic = ApplyProbabilityCalibrationIfEnabled(deterministic, uq);
 
         var metrics = CreateDefaultUncertaintyMetrics(deterministic, mutualInformation: null);
 
@@ -218,8 +297,20 @@ public partial class PredictionModelResult<T, TInput, TOutput>
             if (batch > 0 && classes > 1)
             {
                 var probsFlat = probsTensor.ToVector();
-                classificationSet = new ClassificationConformalPredictionSet(
-                    BuildPredictionSets(probsFlat, batch, classes, ConformalClassificationThreshold));
+
+                if (HasAdaptiveConformalClassification &&
+                    ConformalClassificationAdaptiveBinEdges is { Length: > 1 } edges &&
+                    ConformalClassificationAdaptiveThresholds is { Length: > 0 } thresholds)
+                {
+                    var perSampleThresholds = ComputeAdaptiveThresholdsPerSample(probsFlat, batch, classes, edges, thresholds);
+                    classificationSet = new ClassificationConformalPredictionSet(
+                        BuildPredictionSets(probsFlat, batch, classes, perSampleThresholds));
+                }
+                else
+                {
+                    classificationSet = new ClassificationConformalPredictionSet(
+                        BuildPredictionSets(probsFlat, batch, classes, ConformalClassificationThreshold));
+                }
 
                 metrics[PredictiveEntropyMetricKey] = new Tensor<T>([batch], ComputePerSampleEntropy(probsFlat, batch, classes));
                 metrics[MutualInformationMetricKey] = CreateZeroVectorTensor(batch);
@@ -266,11 +357,13 @@ public partial class PredictionModelResult<T, TInput, TOutput>
         var firstVector = first.ToVector();
         var (treatAsProbabilities, batch, classes) = InferProbabilityDistributionLayout(first, firstVector);
 
-        if (treatAsProbabilities && classes > 1 && HasTemperatureScaling)
+        if (treatAsProbabilities && classes > 1)
         {
             for (int i = 0; i < samples.Count; i++)
             {
-                samples[i] = ApplyTemperatureScalingToProbabilityTensor(samples[i], TemperatureScalingTemperature, batch, classes);
+                var sampleOutput = ConvertFromTensor(samples[i]);
+                var calibratedOutput = ApplyProbabilityCalibrationIfEnabled(sampleOutput, uq);
+                samples[i] = ConversionsHelper.ConvertToTensor<T>(calibratedOutput!).Clone();
             }
         }
 
@@ -335,6 +428,139 @@ public partial class PredictionModelResult<T, TInput, TOutput>
             metrics: metrics);
     }
 
+    private UncertaintyPredictionResult<T, TOutput> PredictWithDiagonalGaussianPosterior(
+        TInput newData,
+        UncertaintyQuantificationOptions uq,
+        UncertaintyQuantificationMethod method,
+        Vector<T>? posteriorMean,
+        Vector<T>? posteriorVarianceDiag)
+    {
+        if (posteriorMean == null || posteriorVarianceDiag == null || posteriorMean.Length == 0 || posteriorMean.Length != posteriorVarianceDiag.Length)
+        {
+            var deterministic = Predict(newData);
+            var fallbackMetrics = CreateDefaultUncertaintyMetrics(deterministic, mutualInformation: null);
+            return new UncertaintyPredictionResult<T, TOutput>(
+                methodUsed: method,
+                prediction: deterministic,
+                variance: CreateZeroLikeOutput(deterministic),
+                metrics: fallbackMetrics);
+        }
+
+        var effectiveSamples = uq.NumSamples;
+        if (effectiveSamples < 1)
+        {
+            effectiveSamples = 1;
+        }
+
+        var (normalizedNewData, _) = NormalizationInfo.Normalizer!.NormalizeInput(newData);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var rng = uq.RandomSeed.HasValue ? RandomHelper.CreateSeededRandom(uq.RandomSeed.Value) : RandomHelper.CreateSecureRandom();
+
+        var samples = new List<Tensor<T>>(effectiveSamples);
+
+        lock (_parameterSamplingLock)
+        {
+            var originalParameters = Model!.GetParameters().Clone();
+            try
+            {
+                for (int s = 0; s < effectiveSamples; s++)
+                {
+                    var sampledParams = new Vector<T>(posteriorMean.Length);
+                    for (int i = 0; i < posteriorMean.Length; i++)
+                    {
+                        var std = numOps.Sqrt(posteriorVarianceDiag[i]);
+                        var z = rng.NextGaussian();
+                        var noise = numOps.Multiply(std, numOps.FromDouble(z));
+                        sampledParams[i] = numOps.Add(posteriorMean[i], noise);
+                    }
+
+                    Model.SetParameters(sampledParams);
+                    var normalizedPrediction = Model.Predict(normalizedNewData);
+                    samples.Add(ConversionsHelper.ConvertToTensor<T>(normalizedPrediction!).Clone());
+                }
+            }
+            finally
+            {
+                Model.SetParameters(originalParameters);
+            }
+        }
+
+        var first = samples[0];
+        var firstVector = first.ToVector();
+        var (treatAsProbabilities, batch, classes) = InferProbabilityDistributionLayout(first, firstVector);
+
+        if (treatAsProbabilities && classes > 1)
+        {
+            for (int i = 0; i < samples.Count; i++)
+            {
+                var sampleOutput = ConvertFromTensor(samples[i]);
+                var calibratedOutput = ApplyProbabilityCalibrationIfEnabled(sampleOutput, uq);
+                samples[i] = ConversionsHelper.ConvertToTensor<T>(calibratedOutput!).Clone();
+            }
+        }
+
+        var (meanTensor, varianceTensor) = ComputeMeanAndVariance(samples);
+
+        var meanOutput = ConvertFromTensor(meanTensor);
+        var denormalizedMean = NormalizationInfo.Normalizer!.Denormalize(meanOutput, NormalizationInfo.YParams);
+
+        if (uq.DenormalizeUncertainty)
+        {
+            varianceTensor = DenormalizeVarianceIfSupported(varianceTensor, NormalizationInfo.YParams);
+        }
+
+        var varianceOutput = ConvertFromTensor(varianceTensor);
+
+        var predictiveEntropy = CreateZeroVectorTensor(batch);
+        var mutualInformation = CreateZeroVectorTensor(batch);
+
+        var meanVector = meanTensor.ToVector();
+        var (treatMeanAsProbabilities, meanBatch, meanClasses) = InferProbabilityDistributionLayout(meanTensor, meanVector);
+        if (treatMeanAsProbabilities && meanClasses > 1)
+        {
+            var expectedEntropySum = new Vector<T>(meanBatch);
+            foreach (var sample in samples)
+            {
+                var sampleEntropy = ComputePerSampleEntropy(sample.ToVector(), meanBatch, meanClasses);
+                for (int b = 0; b < meanBatch; b++)
+                {
+                    expectedEntropySum[b] = numOps.Add(expectedEntropySum[b], sampleEntropy[b]);
+                }
+            }
+
+            var predictiveEntropyVec = ComputePerSampleEntropy(meanVector, meanBatch, meanClasses);
+            var expectedEntropyVec = new Vector<T>(meanBatch);
+            for (int b = 0; b < meanBatch; b++)
+            {
+                expectedEntropyVec[b] = numOps.Divide(expectedEntropySum[b], numOps.FromDouble(samples.Count));
+            }
+
+            var miVec = new Vector<T>(meanBatch);
+            for (int b = 0; b < meanBatch; b++)
+            {
+                var mi = numOps.Subtract(predictiveEntropyVec[b], expectedEntropyVec[b]);
+                if (numOps.LessThan(mi, numOps.Zero))
+                {
+                    mi = numOps.Zero;
+                }
+                miVec[b] = mi;
+            }
+
+            predictiveEntropy = new Tensor<T>([meanBatch], predictiveEntropyVec);
+            mutualInformation = new Tensor<T>([meanBatch], miVec);
+        }
+
+        var metrics = CreateDefaultUncertaintyMetrics(denormalizedMean, mutualInformation);
+        metrics[PredictiveEntropyMetricKey] = predictiveEntropy;
+        metrics[MutualInformationMetricKey] = mutualInformation;
+
+        return new UncertaintyPredictionResult<T, TOutput>(
+            methodUsed: method,
+            prediction: denormalizedMean,
+            variance: varianceOutput,
+            metrics: metrics);
+    }
+
     private UncertaintyPredictionResult<T, TOutput> PredictWithBayesianNeuralNetwork(
         TInput newData,
         UncertaintyQuantificationOptions uq,
@@ -359,6 +585,7 @@ public partial class PredictionModelResult<T, TInput, TOutput>
 
         var meanOutput = ConvertFromTensor(uqResult.Prediction);
         var denormalizedMean = NormalizationInfo.Normalizer!.Denormalize(meanOutput, NormalizationInfo.YParams);
+        denormalizedMean = ApplyProbabilityCalibrationIfEnabled(denormalizedMean, uq);
 
         var varianceTensor = uqResult.Variance != null
             ? uqResult.Variance.Clone()
@@ -443,6 +670,86 @@ public partial class PredictionModelResult<T, TInput, TOutput>
         return sets;
     }
 
+    private static int[][] BuildPredictionSets(Vector<T> probsFlat, int batch, int classes, Vector<T> thresholdsPerSample)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var sets = new int[batch][];
+
+        for (int b = 0; b < batch; b++)
+        {
+            var threshold = b < thresholdsPerSample.Length
+                ? thresholdsPerSample[b]
+                : thresholdsPerSample[thresholdsPerSample.Length - 1];
+
+            var indices = new List<int>();
+            var baseIndex = b * classes;
+            for (int c = 0; c < classes; c++)
+            {
+                if (numOps.GreaterThanOrEquals(probsFlat[baseIndex + c], threshold))
+                {
+                    indices.Add(c);
+                }
+            }
+
+            if (indices.Count == 0)
+            {
+                var best = 0;
+                var bestProb = probsFlat[baseIndex];
+                for (int c = 1; c < classes; c++)
+                {
+                    var p = probsFlat[baseIndex + c];
+                    if (numOps.GreaterThan(p, bestProb))
+                    {
+                        bestProb = p;
+                        best = c;
+                    }
+                }
+                indices.Add(best);
+            }
+
+            sets[b] = indices.ToArray();
+        }
+
+        return sets;
+    }
+
+    private static Vector<T> ComputeAdaptiveThresholdsPerSample(
+        Vector<T> probsFlat,
+        int batch,
+        int classes,
+        double[] edges,
+        Vector<T> thresholds)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var bins = Math.Max(1, Math.Min(thresholds.Length, Math.Max(1, edges.Length - 1)));
+        var perSample = new Vector<T>(batch);
+
+        for (int b = 0; b < batch; b++)
+        {
+            var baseIndex = b * classes;
+            var best = probsFlat[baseIndex];
+            for (int c = 1; c < classes; c++)
+            {
+                var p = probsFlat[baseIndex + c];
+                if (numOps.GreaterThan(p, best))
+                {
+                    best = p;
+                }
+            }
+
+            var conf = numOps.ToDouble(best);
+            if (conf < 0.0) conf = 0.0;
+            if (conf > 1.0) conf = 1.0;
+
+            var bin = (int)Math.Floor(conf * bins);
+            if (bin == bins) bin = bins - 1;
+
+            perSample[b] = thresholds[bin];
+        }
+
+        return perSample;
+    }
+
     private TOutput AddScalarToOutput(TOutput output, T scalar)
     {
         var tensor = ConversionsHelper.ConvertToTensor<T>(output!).Clone();
@@ -468,6 +775,150 @@ public partial class PredictionModelResult<T, TInput, TOutput>
 
         var scaledTensor = ApplyTemperatureScalingToProbabilityTensor(probsTensor, temperature, batch, classes);
         return ConvertFromTensor(scaledTensor);
+    }
+
+    private TOutput ApplyProbabilityCalibrationIfEnabled(TOutput output, UncertaintyQuantificationOptions uq)
+    {
+        var method = uq.CalibrationMethod;
+        if (method == ProbabilityCalibrationMethod.None)
+        {
+            return output;
+        }
+
+        var probsTensor = ConversionsHelper.ConvertToTensor<T>(output!).Clone();
+        var probsVector = probsTensor.ToVector();
+        var (treatAsProbabilities, batch, classes) = InferProbabilityDistributionLayout(probsTensor, probsVector);
+        if (!treatAsProbabilities || classes <= 1)
+        {
+            return output;
+        }
+
+        if (method == ProbabilityCalibrationMethod.Auto)
+        {
+            if (classes == 2 && HasIsotonicRegressionCalibration && uq.EnableIsotonicRegressionCalibration)
+            {
+                method = ProbabilityCalibrationMethod.IsotonicRegression;
+            }
+            else if (classes == 2 && HasPlattScaling && uq.EnablePlattScaling)
+            {
+                method = ProbabilityCalibrationMethod.PlattScaling;
+            }
+            else if (HasTemperatureScaling && uq.EnableTemperatureScaling)
+            {
+                method = ProbabilityCalibrationMethod.TemperatureScaling;
+            }
+            else
+            {
+                return output;
+            }
+        }
+
+        return method switch
+        {
+            ProbabilityCalibrationMethod.TemperatureScaling when HasTemperatureScaling && uq.EnableTemperatureScaling
+                => ApplyTemperatureScalingToOutputProbabilities(output, TemperatureScalingTemperature),
+            ProbabilityCalibrationMethod.PlattScaling when HasPlattScaling && uq.EnablePlattScaling
+                => ApplyPlattScalingToOutputProbabilities(output),
+            ProbabilityCalibrationMethod.IsotonicRegression when HasIsotonicRegressionCalibration && uq.EnableIsotonicRegressionCalibration
+                => ApplyIsotonicCalibrationToOutputProbabilities(output),
+            _ => output
+        };
+    }
+
+    private TOutput ApplyPlattScalingToOutputProbabilities(TOutput output)
+    {
+        if (PlattScalingA is not { Length: > 0 } aVec || PlattScalingB is not { Length: > 0 } bVec)
+        {
+            return output;
+        }
+
+        var probsTensor = ConversionsHelper.ConvertToTensor<T>(output!).Clone();
+        var probsVector = probsTensor.ToVector();
+        var (treatAsProbabilities, batch, classes) = InferProbabilityDistributionLayout(probsTensor, probsVector);
+        if (!treatAsProbabilities || classes != 2 || batch <= 0)
+        {
+            return output;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var eps = 1e-12;
+        var outVec = new Vector<T>(batch * 2);
+
+        var a = aVec[0];
+        var b = bVec[0];
+
+        for (int i = 0; i < batch; i++)
+        {
+            var p1 = numOps.ToDouble(probsVector[i * 2 + 1]);
+            if (p1 < eps) p1 = eps;
+            if (p1 > 1.0 - eps) p1 = 1.0 - eps;
+
+            var logit = Math.Log(p1 / (1.0 - p1));
+            var z = numOps.Add(numOps.Multiply(a, numOps.FromDouble(logit)), b);
+            var p1Cal = 1.0 / (1.0 + Math.Exp(-numOps.ToDouble(z)));
+
+            var p1T = numOps.FromDouble(p1Cal);
+            outVec[i * 2 + 1] = p1T;
+            outVec[i * 2] = numOps.Subtract(numOps.One, p1T);
+        }
+
+        var calibrated = new Tensor<T>([batch, 2], outVec).Reshape(probsTensor.Shape);
+        return ConvertFromTensor(calibrated);
+    }
+
+    private TOutput ApplyIsotonicCalibrationToOutputProbabilities(TOutput output)
+    {
+        if (IsotonicCalibrationX is not { Length: > 0 } x || IsotonicCalibrationY is not { Length: > 0 } y)
+        {
+            return output;
+        }
+
+        var probsTensor = ConversionsHelper.ConvertToTensor<T>(output!).Clone();
+        var probsVector = probsTensor.ToVector();
+        var (treatAsProbabilities, batch, classes) = InferProbabilityDistributionLayout(probsTensor, probsVector);
+        if (!treatAsProbabilities || classes != 2 || batch <= 0)
+        {
+            return output;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var eps = 1e-12;
+        var outVec = new Vector<T>(batch * 2);
+
+        for (int i = 0; i < batch; i++)
+        {
+            var p1 = numOps.ToDouble(probsVector[i * 2 + 1]);
+            if (p1 < eps) p1 = eps;
+            if (p1 > 1.0 - eps) p1 = 1.0 - eps;
+
+            var p1T = numOps.FromDouble(p1);
+            var p1Cal = EvaluateIsotonic(p1T, x, y, numOps);
+            outVec[i * 2 + 1] = p1Cal;
+            outVec[i * 2] = numOps.Subtract(numOps.One, p1Cal);
+        }
+
+        var calibrated = new Tensor<T>([batch, 2], outVec).Reshape(probsTensor.Shape);
+        return ConvertFromTensor(calibrated);
+    }
+
+    private static T EvaluateIsotonic(T p, Vector<T> x, Vector<T> y, INumericOperations<T> numOps)
+    {
+        if (x.Length == 0)
+        {
+            return p;
+        }
+
+        var spanX = x.AsSpan();
+        var spanY = y.AsSpan();
+        for (int i = 0; i < spanX.Length; i++)
+        {
+            if (numOps.LessThanOrEquals(p, spanX[i]))
+            {
+                return spanY[i];
+            }
+        }
+
+        return spanY[spanY.Length - 1];
     }
 
     private Tensor<T> DenormalizeVarianceIfSupported(Tensor<T> normalizedVariance, NormalizationParameters<T> yParams)
