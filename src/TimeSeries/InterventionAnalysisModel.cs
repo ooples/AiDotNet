@@ -224,7 +224,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     {
         _iaOptions = options ?? new InterventionAnalysisOptions<T, Matrix<T>, Vector<T>>();
         _optimizer = _iaOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>(this);
-        _interventionEffects = [];
+        _interventionEffects = new List<InterventionEffect<T>>();
         _arParameters = Vector<T>.Empty();
         _maParameters = Vector<T>.Empty();
         _residuals = Vector<T>.Empty();
@@ -690,7 +690,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     {
         _arParameters = Vector<T>.Empty();
         _maParameters = Vector<T>.Empty();
-        _interventionEffects = [];
+        _interventionEffects = new List<InterventionEffect<T>>();
         _residuals = Vector<T>.Empty();
         _fitted = Vector<T>.Empty();
         _y = Vector<T>.Empty();

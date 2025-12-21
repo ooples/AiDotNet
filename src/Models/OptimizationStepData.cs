@@ -70,7 +70,7 @@ public class OptimizationStepData<T, TInput, TOutput>
     /// like square footage and location, but might exclude less relevant features.
     /// </para>
     /// </remarks>
-    public List<Vector<T>> SelectedFeatures { get; set; } = [];
+    public List<Vector<T>> SelectedFeatures { get; set; } = new List<Vector<T>>();
 
     /// <summary>
     /// Gets or sets the subset of the training data used for this optimization step.

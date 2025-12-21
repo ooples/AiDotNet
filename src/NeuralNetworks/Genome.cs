@@ -171,7 +171,7 @@ public class Genome<T>
     /// </remarks>
     public Genome(int inputSize, int outputSize)
     {
-        Connections = [];
+        Connections = new List<Connection<T>>();
         InputSize = inputSize;
         OutputSize = outputSize;
         Fitness = NumOps.Zero;

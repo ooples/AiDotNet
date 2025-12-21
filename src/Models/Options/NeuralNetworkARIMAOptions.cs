@@ -39,6 +39,21 @@ namespace AiDotNet.Models.Options;
 public class NeuralNetworkARIMAOptions<T> : TimeSeriesRegressionOptions<T>
 {
     /// <summary>
+    /// Gets or sets a value indicating whether the model should attempt to optimize its parameters during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the model may use the configured <see cref="Optimizer"/> (or a default optimizer) to refine
+    /// AR/MA coefficients and neural network parameters beyond their initial estimates.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// Turning this on tells the model to spend extra time trying to find better parameter values. This can
+    /// improve accuracy, but it can also make training take longer.
+    /// </para>
+    /// </remarks>
+    public bool OptimizeParameters { get; set; } = false;
+
+    /// <summary>
     /// Gets or sets the AutoRegressive (AR) order, which determines how many previous time steps
     /// are used as inputs to predict the current value.
     /// </summary>

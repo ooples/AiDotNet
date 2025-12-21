@@ -90,11 +90,11 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     protected GeneticBase(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator, IModelEvaluator<T, TInput, TOutput> modelEvaluator)
     {
         FitnessCalculator = fitnessCalculator ?? throw new ArgumentNullException(nameof(fitnessCalculator));
-        Population = [];
+        Population = new List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>();
         GeneticParams = new GeneticParameters();
         Random = RandomHelper.CreateSecureRandom();
-        CrossoverOperators = [];
-        MutationOperators = [];
+        CrossoverOperators = new Dictionary<string, Func<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>, ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>, double, ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>>>();
+        MutationOperators = new Dictionary<string, Func<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>, double, ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>>();
         EvolutionStopwatch = new Stopwatch();
         CurrentStats = new EvolutionStats<T, TInput, TOutput>(fitnessCalculator);
         ModelEvaluator = modelEvaluator ?? throw new ArgumentNullException(nameof(modelEvaluator));
@@ -843,7 +843,7 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// <returns>The selected individuals.</returns>
     protected virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> UniformSelection(int selectionSize)
     {
-        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> selected = [];
+        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> selected = new List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>();
 
         for (int i = 0; i < selectionSize; i++)
         {
@@ -872,10 +872,10 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// <returns>The selected individuals.</returns>
     protected virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> StochasticUniversalSamplingSelection(int selectionSize)
     {
-        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> selected = [];
+        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> selected = new List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>();
 
         // Calculate selection probabilities
-        List<double> fitnessValues = [];
+        List<double> fitnessValues = new List<double>();
 
         // Adjust for minimization problems
         foreach (var individual in Population)
@@ -908,14 +908,14 @@ public abstract class GeneticBase<T, TInput, TOutput> :
         double start = Random.NextDouble() * distance;
 
         // Create equally spaced pointers
-        List<double> pointers = [];
+        List<double> pointers = new List<double>();
         for (int i = 0; i < selectionSize; i++)
         {
             pointers.Add(start + i * distance);
         }
 
         // Calculate cumulative fitness
-        List<double> cumulativeFitness = [];
+        List<double> cumulativeFitness = new List<double>();
         double sum = 0;
 
         foreach (double fitness in fitnessValues)
@@ -962,7 +962,7 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// <returns>The selected individuals.</returns>
     protected virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> TournamentSelection(int selectionSize)
     {
-        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> selected = [];
+        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> selected = new List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>();
 
         for (int i = 0; i < selectionSize; i++)
         {
@@ -1012,10 +1012,10 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// <returns>The selected individuals.</returns>
     protected virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> RouletteWheelSelection(int selectionSize)
     {
-        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> selected = [];
+        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> selected = new List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>();
 
         // Calculate selection probabilities
-        List<double> fitnessValues = [];
+        List<double> fitnessValues = new List<double>();
 
         // Adjust for minimization problems
         foreach (var individual in Population)
@@ -1056,7 +1056,7 @@ public abstract class GeneticBase<T, TInput, TOutput> :
         }
 
         // Calculate cumulative probabilities
-        List<double> cumulativeProbabilities = [];
+        List<double> cumulativeProbabilities = new List<double>();
         double cumulativeProbability = 0;
 
         for (int i = 0; i < Population.Count; i++)
@@ -1101,7 +1101,7 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// <returns>The selected individuals.</returns>
     protected virtual ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> RankSelection(int selectionSize)
     {
-        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> selected = [];
+        List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> selected = new List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>();
 
         // Sort population by fitness
         var sortedPopulation = Population
@@ -1110,7 +1110,7 @@ public abstract class GeneticBase<T, TInput, TOutput> :
 
         // Calculate rank-based probabilities
         double totalRank = Population.Count * (Population.Count + 1) / 2.0;
-        List<double> cumulativeProbabilities = [];
+        List<double> cumulativeProbabilities = new List<double>();
         double cumulativeProbability = 0;
 
         for (int i = 0; i < sortedPopulation.Count; i++)

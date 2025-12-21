@@ -188,6 +188,6 @@ public class DistributionFitResult<T>
     {
         _ops = ops ?? MathHelper.GetNumericOperations<T>();
         GoodnessOfFit = _ops.Zero;
-        Parameters = [];
+        Parameters = new Dictionary<string, T>();
     }
 }

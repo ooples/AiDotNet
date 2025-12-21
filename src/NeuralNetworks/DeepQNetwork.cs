@@ -74,7 +74,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// and learn from random past experiences, which helps it learn more efficiently and stably.
     /// </para>
     /// </remarks>
-    private readonly List<Experience<T, Tensor<T>, int>> _replayBuffer = [];
+    private readonly List<Experience<T, Tensor<T>, int>> _replayBuffer = new List<Experience<T, Tensor<T>, int>>();
 
     /// <summary>
     /// Gets the target network, a copy of the main network used to generate target Q-values during training.

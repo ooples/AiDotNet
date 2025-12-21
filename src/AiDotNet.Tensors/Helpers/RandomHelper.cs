@@ -41,6 +41,11 @@ public static class RandomHelper
     public static Random ThreadSafeRandom => _threadLocalRandom.Value ?? new Random(GenerateCryptographicSeed());
 
     /// <summary>
+    /// Gets a shared thread-safe random instance. Alias for ThreadSafeRandom.
+    /// </summary>
+    public static Random Shared => ThreadSafeRandom;
+
+    /// <summary>
     /// Generates a cryptographically secure seed for Random initialization.
     /// Uses RandomNumberGenerator to avoid birthday paradox collisions from GetHashCode().
     /// </summary>
@@ -104,5 +109,60 @@ public static class RandomHelper
     public static Random CreateSeededRandom(int seed)
     {
         return new Random(seed);
+    }
+
+    /// <summary>
+    /// Generates a cryptographically secure random integer within the specified range.
+    /// </summary>
+    /// <param name="minValue">The inclusive lower bound.</param>
+    /// <param name="maxValue">The exclusive upper bound.</param>
+    /// <returns>A random integer between minValue (inclusive) and maxValue (exclusive).</returns>
+    public static int GetSecureRandomInt(int minValue, int maxValue)
+    {
+        if (minValue >= maxValue)
+            return minValue;
+
+        using var rng = RandomNumberGenerator.Create();
+        byte[] bytes = new byte[4];
+        rng.GetBytes(bytes);
+        int value = BitConverter.ToInt32(bytes, 0) & int.MaxValue;
+        return minValue + (value % (maxValue - minValue));
+    }
+
+    /// <summary>
+    /// Shuffles the elements of a list in place using the Fisher-Yates algorithm.
+    /// </summary>
+    /// <typeparam name="T">The type of elements in the list.</typeparam>
+    /// <param name="list">The list to shuffle.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Shuffling randomizes the order of elements in a list.
+    /// This is commonly used to:
+    /// - Randomize training data order in machine learning
+    /// - Create random splits of data
+    /// - Implement random sampling
+    /// </para>
+    /// </remarks>
+    public static void Shuffle<T>(IList<T> list)
+    {
+        Shuffle(list, ThreadSafeRandom);
+    }
+
+    /// <summary>
+    /// Shuffles the elements of a list in place using the Fisher-Yates algorithm with a specified random instance.
+    /// </summary>
+    /// <typeparam name="T">The type of elements in the list.</typeparam>
+    /// <param name="list">The list to shuffle.</param>
+    /// <param name="random">The random number generator to use.</param>
+    public static void Shuffle<T>(IList<T> list, Random random)
+    {
+        int n = list.Count;
+        while (n > 1)
+        {
+            n--;
+            int k = random.Next(n + 1);
+            T value = list[k];
+            list[k] = list[n];
+            list[n] = value;
+        }
     }
 }

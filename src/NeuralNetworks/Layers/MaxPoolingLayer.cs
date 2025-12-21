@@ -332,7 +332,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     public override IEnumerable<ActivationFunction> GetActivationTypes()
     {
         // Max pooling doesn't have an activation function
-        return [];
+        return Array.Empty<ActivationFunction>();
     }
 
     /// <summary>

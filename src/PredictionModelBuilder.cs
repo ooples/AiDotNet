@@ -33,6 +33,7 @@ global using AiDotNet.Tools;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.Policies;
 using AiDotNet.AutoML.SearchSpace;
+using AiDotNet.CurriculumLearning;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -93,6 +94,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private RLTrainingOptions<T>? _rlOptions;
     private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
     private AutoMLOptions<T, TInput, TOutput>? _autoMLOptions;
+    private CurriculumLearningOptions<T, TInput, TOutput>? _curriculumLearningOptions;
 
     // Deployment configuration fields
     private QuantizationConfig? _quantizationConfig;
@@ -2731,6 +2733,57 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFewShotExampleSelector(IFewShotExampleSelector<T>? selector = null)
     {
         _fewShotExampleSelector = selector;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures curriculum learning for training models with progressively harder samples.
+    /// </summary>
+    /// <param name="options">Curriculum learning options (schedule type, phases, difficulty estimation).
+    /// If null, sensible defaults are used (Linear schedule, 5 phases, loss-based difficulty).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Curriculum Learning is a training strategy inspired by how humans learn -
+    /// starting with easy examples and progressively moving to harder ones. This often leads to faster
+    /// convergence and better model performance compared to random training order.</para>
+    ///
+    /// <para><b>Key Concepts:</b></para>
+    /// <list type="bullet">
+    /// <item><description><b>Difficulty Estimation:</b> Determines which samples are easy vs hard (e.g., by model loss)</description></item>
+    /// <item><description><b>Schedule:</b> How quickly to progress from easy to hard (Linear, Exponential, SelfPaced, etc.)</description></item>
+    /// <item><description><b>Phases:</b> Training is divided into phases, each including more difficult samples</description></item>
+    /// </list>
+    ///
+    /// <para><b>Example - Basic Usage:</b></para>
+    /// <code>
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureCurriculumLearning()  // Use defaults
+    ///     .ConfigureModel(model);
+    /// </code>
+    ///
+    /// <para><b>Example - Custom Configuration:</b></para>
+    /// <code>
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureCurriculumLearning(new CurriculumLearningOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;
+    ///     {
+    ///         ScheduleType = CurriculumScheduleType.Exponential,
+    ///         NumPhases = 10,
+    ///         InitialDataFraction = 0.1,  // Start with 10% easiest samples
+    ///         DifficultyEstimator = DifficultyEstimatorType.LossBased
+    ///     })
+    ///     .ConfigureModel(model);
+    /// </code>
+    ///
+    /// <para><b>References:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Bengio et al. "Curriculum Learning" (ICML 2009)</description></item>
+    /// <item><description>Kumar et al. "Self-Paced Learning" (NeurIPS 2010)</description></item>
+    /// </list>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCurriculumLearning(
+        CurriculumLearningOptions<T, TInput, TOutput>? options = null)
+    {
+        _curriculumLearningOptions = options ?? new CurriculumLearningOptions<T, TInput, TOutput>();
         return this;
     }
 

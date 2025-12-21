@@ -389,8 +389,8 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
 
         // Initialize empty dictionaries for storing layer inputs/outputs
         // during future forward passes
-        _layerInputs = [];
-        _layerOutputs = [];
+        _layerInputs = new Dictionary<int, Tensor<T>>();
+        _layerOutputs = new Dictionary<int, Tensor<T>>();
     }
 
     /// <summary>

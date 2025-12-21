@@ -170,7 +170,7 @@ public class FitDetectorResult<T>
     /// the specific variance inflation factors for each feature.
     /// </para>
     /// </remarks>
-    public Dictionary<string, object> AdditionalInfo { get; set; } = [];
+    public Dictionary<string, object> AdditionalInfo { get; set; } = new Dictionary<string, object>();
 
 
     /// <summary>
@@ -202,7 +202,7 @@ public class FitDetectorResult<T>
     /// </remarks>
     public FitDetectorResult()
     {
-        Recommendations = [];
+        Recommendations = new List<string>();
     }
 
     /// <summary>
@@ -239,6 +239,6 @@ public class FitDetectorResult<T>
     {
         FitType = fitType;
         ConfidenceLevel = confidenceLevel;
-        Recommendations = [];
+        Recommendations = new List<string>();
     }
 }

@@ -390,6 +390,8 @@ public class Int32Operations : INumericOperations<int>
     /// </remarks>
     public bool Equals(int a, int b) => a == b;
 
+    public int Compare(int a, int b) => a.CompareTo(b);
+
     /// <summary>
     /// Raises an integer to the specified power.
     /// </summary>

@@ -184,9 +184,9 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
         GateActivation = gateActivation ?? new SigmoidActivation<T>();
         OutputActivation = outputActivation ?? NeuralNetworkHelper<T>.GetDefaultActivationFunction(architecture.TaskType);
 
-        _memories = [];
-        _readWeights = [];
-        _writeWeights = [];
+        _memories = new List<Matrix<T>>();
+        _readWeights = new List<Vector<T>>();
+        _writeWeights = new List<Vector<T>>();
 
         // Initialize with default memory and weights
         InitializeDefaultMemoryAndWeights();
@@ -239,9 +239,9 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
         GateVectorActivation = gateActivation ?? new SigmoidActivation<T>();
         OutputVectorActivation = outputActivation ?? NeuralNetworkHelper<T>.GetDefaultVectorActivationFunction(architecture.TaskType);
 
-        _memories = [];
-        _readWeights = [];
-        _writeWeights = [];
+        _memories = new List<Matrix<T>>();
+        _readWeights = new List<Vector<T>>();
+        _writeWeights = new List<Vector<T>>();
 
         // Initialize with default memory and weights
         InitializeDefaultMemoryAndWeights();

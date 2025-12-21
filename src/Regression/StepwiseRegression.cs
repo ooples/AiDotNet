@@ -168,7 +168,7 @@ public class StepwiseRegression<T> : RegressionBase<T>
     {
         _options = options ?? new StepwiseRegressionOptions<T>();
         _fitnessCalculator = fitnessCalculator ?? new AdjustedRSquaredFitnessCalculator<T, Matrix<T>, Vector<T>>();
-        _selectedFeatures = [];
+        _selectedFeatures = new List<int>();
         _modelEvaluator = modelEvaluator ?? new DefaultModelEvaluator<T, Matrix<T>, Vector<T>>();
     }
 

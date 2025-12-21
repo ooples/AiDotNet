@@ -5,7 +5,7 @@ namespace AiDotNet.Genetics;
 /// </summary>
 public class PermutationIndividual : IEvolvable<PermutationGene, double>
 {
-    private List<PermutationGene> _genes = [];
+    private List<PermutationGene> _genes = new List<PermutationGene>();
     private double _fitness;
 
     /// <summary>
