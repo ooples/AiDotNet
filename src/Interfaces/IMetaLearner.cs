@@ -1,19 +1,23 @@
 using AiDotNet.Data.Structures;
+using AiDotNet.MetaLearning;
+using AiDotNet.MetaLearning.Data;
+using AiDotNet.Models;
 using AiDotNet.Models.Results;
 
 namespace AiDotNet.Interfaces;
 
 /// <summary>
-/// Defines the contract for meta-learning algorithms that train models to quickly adapt to new tasks.
+/// Unified interface for meta-learning algorithms that train models to quickly adapt to new tasks.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
 /// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
 /// <typeparam name="TOutput">The type of output data (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
 /// <remarks>
 /// <para>
-/// Meta-learning, or "learning to learn," trains models across multiple tasks to develop
-/// rapid adaptation capabilities. This enables few-shot learning where models can learn
-/// new tasks from just a handful of examples.
+/// This is the unified interface for all meta-learning algorithms in the framework.
+/// It combines both training infrastructure and algorithm capabilities, enabling
+/// seamless integration with PredictionModelBuilder while supporting all 17 meta-learning
+/// algorithms (MAML, Reptile, ProtoNets, LEO, MetaOptNet, etc.).
 /// </para>
 /// <para><b>For Beginners:</b> Meta-learning is like teaching someone how to learn, not just what to learn.
 ///
@@ -64,64 +68,44 @@ namespace AiDotNet.Interfaces;
 ///     queryShots: 15    // 15 query examples per class
 /// );
 ///
-/// // 2. Configure: Setup meta-learner with ALL training parameters (Reptile example)
-/// var config = new ReptileTrainerConfig&lt;double&gt;(
-///     innerLearningRate: 0.01,      // Task adaptation rate
-///     metaLearningRate: 0.001,      // Meta-optimization rate
-///     innerSteps: 5,                // Gradient steps per task
-///     metaBatchSize: 4,             // Tasks per meta-update
-///     numMetaIterations: 1000       // Total meta-training iterations
-/// );
+/// // 2. Configure: Setup meta-learner with options
+/// var options = MetaLearnerOptionsBase&lt;double&gt;.CreateBuilder()
+///     .WithInnerLearningRate(0.01)
+///     .WithOuterLearningRate(0.001)
+///     .WithAdaptationSteps(5)
+///     .WithMetaBatchSize(4)
+///     .WithNumMetaIterations(1000)
+///     .Build();
 ///
-/// var metaLearner = new ReptileTrainer&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(
+/// var metaLearner = new MAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(
 ///     metaModel: neuralNetwork,
 ///     lossFunction: new CrossEntropyLoss&lt;double&gt;(),
-///     dataLoader: dataLoader,        // Episodic data configured at construction
-///     config: config                 // All training parameters configured upfront
+///     dataLoader: dataLoader,
+///     options: options
 /// );
 ///
-/// // 3. Meta-Training: Simply call Train() - all parameters are in config
+/// // 3. Meta-Training: Simply call Train()
 /// var trainingResult = metaLearner.Train();
 ///
-/// Console.WriteLine($"Training complete!");
-/// Console.WriteLine($"Final Loss: {trainingResult.FinalLoss:F4}");
-/// Console.WriteLine($"Total Time: {trainingResult.TrainingTime.TotalMinutes:F1} minutes");
-///
-/// // Or use manual loop for more control:
-/// int numIterations = 1000;
-/// int batchSize = 4;
-/// for (int iter = 0; iter &lt; numIterations; iter++)
-/// {
-///     var stepResult = metaLearner.MetaTrainStep(batchSize);
-///
-///     if (iter % 100 == 0)
-///     {
-///         var evalResult = metaLearner.Evaluate(numTasks: 100);
-///         Console.WriteLine($"Iter {iter}: Eval Accuracy = {evalResult.AccuracyStats.Mean:P2}");
-///     }
-/// }
-///
-/// // 4. Save meta-trained model
-/// metaLearner.Save("meta_model.bin");
-///
-/// // 5. Deployment: Adapt to new task with 5 examples
-/// var newTask = dataLoader.GetNextTask();  // Unseen task
+/// // 4. Deployment: Adapt to new task with 5 examples
+/// var newTask = dataLoader.GetNextTask();
 /// var adaptResult = metaLearner.AdaptAndEvaluate(newTask);
 /// Console.WriteLine($"New Task Accuracy: {adaptResult.QueryAccuracy:P2}");
-/// // Expected: High accuracy (>70%) from just 5 examples per class!
 /// </code>
 /// </example>
 public interface IMetaLearner<T, TInput, TOutput>
 {
+    #region Properties
+
     /// <summary>
     /// Gets the base model being meta-trained.
     /// </summary>
     IFullModel<T, TInput, TOutput> BaseModel { get; }
 
     /// <summary>
-    /// Gets the meta-learner configuration.
+    /// Gets the meta-learner options (configuration).
     /// </summary>
-    IMetaLearnerConfig<T> Config { get; }
+    IMetaLearnerOptions<T> Options { get; }
 
     /// <summary>
     /// Gets the current meta-training iteration count.
@@ -129,7 +113,77 @@ public interface IMetaLearner<T, TInput, TOutput>
     int CurrentIteration { get; }
 
     /// <summary>
-    /// Performs one meta-training step (outer loop update) on a batch of tasks.
+    /// Gets the type of meta-learning algorithm.
+    /// </summary>
+    MetaLearningAlgorithmType AlgorithmType { get; }
+
+    /// <summary>
+    /// Gets the number of adaptation steps to perform during task adaptation (inner loop).
+    /// </summary>
+    int AdaptationSteps { get; }
+
+    /// <summary>
+    /// Gets the learning rate used for task adaptation (inner loop).
+    /// </summary>
+    double InnerLearningRate { get; }
+
+    /// <summary>
+    /// Gets the learning rate used for meta-learning (outer loop).
+    /// </summary>
+    double OuterLearningRate { get; }
+
+    #endregion
+
+    #region Core Meta-Learning Methods
+
+    /// <summary>
+    /// Performs one meta-training step on a batch of tasks.
+    /// </summary>
+    /// <param name="taskBatch">The batch of tasks to train on.</param>
+    /// <returns>The meta-training loss for this batch.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method updates the model by training on multiple tasks at once.
+    /// Each task teaches the model something about how to learn quickly. The returned loss value
+    /// indicates how well the model is doing - lower is better.
+    /// </para>
+    /// </remarks>
+    T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch);
+
+    /// <summary>
+    /// Adapts the model to a new task using its support set.
+    /// </summary>
+    /// <param name="task">The task to adapt to.</param>
+    /// <returns>A new model instance adapted to the task.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is where the "quick learning" happens. Given a new task
+    /// with just a few examples (the support set), this method creates a new model that's
+    /// specialized for that specific task.
+    /// </para>
+    /// </remarks>
+    IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task);
+
+    /// <summary>
+    /// Evaluates the meta-learning algorithm on a batch of tasks.
+    /// </summary>
+    /// <param name="taskBatch">The batch of tasks to evaluate on.</param>
+    /// <returns>The average evaluation loss across all tasks.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This checks how well the meta-learning algorithm performs.
+    /// For each task, it adapts using the support set and then tests on the query set.
+    /// The returned value is the average loss across all tasks - lower means better performance.
+    /// </para>
+    /// </remarks>
+    T Evaluate(TaskBatch<T, TInput, TOutput> taskBatch);
+
+    #endregion
+
+    #region Training Infrastructure
+
+    /// <summary>
+    /// Performs one meta-training step (outer loop update) using the episodic data loader.
     /// </summary>
     /// <remarks>
     /// Uses the episodic data loader configured during construction to sample tasks for this meta-update.
@@ -145,17 +199,12 @@ public interface IMetaLearner<T, TInput, TOutput>
     /// <para>
     /// This method performs the complete outer-loop meta-training process, repeatedly calling
     /// MetaTrainStep and collecting metrics across all iterations. All training parameters
-    /// (number of iterations, batch size, learning rates) are specified in the IMetaLearnerConfig
-    /// provided during construction, keeping complexity hidden behind clean architecture.
+    /// are specified in the IMetaLearnerOptions provided during construction.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This is the main training method for meta-learning. Unlike traditional
     /// training where you train once on a dataset, this trains your model across many different tasks
     /// so it learns how to quickly adapt to new tasks.
-    ///
-    /// All the settings (how many iterations, batch size, learning rates) were configured when you
-    /// created the meta-learner, so you just call Train() and it does everything automatically.
-    /// This is the same pattern as our supervised learning where Build() handles everything internally.
     /// </para>
     /// </remarks>
     /// <returns>Complete training history with loss/accuracy progression and timing information.</returns>
@@ -178,6 +227,29 @@ public interface IMetaLearner<T, TInput, TOutput>
     /// <returns>Detailed metrics about adaptation performance and timing.</returns>
     MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T, TInput, TOutput> task);
 
+    #endregion
+
+    #region Model Management
+
+    /// <summary>
+    /// Gets the current meta-model.
+    /// </summary>
+    /// <returns>The current meta-model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This returns the "meta-learned" model that has been trained
+    /// on many tasks. This model itself may not be very good at any specific task, but it's
+    /// excellent as a starting point for quickly adapting to new tasks.
+    /// </para>
+    /// </remarks>
+    IFullModel<T, TInput, TOutput> GetMetaModel();
+
+    /// <summary>
+    /// Sets the base model for this meta-learning algorithm.
+    /// </summary>
+    /// <param name="model">The model to use as the base.</param>
+    void SetMetaModel(IFullModel<T, TInput, TOutput> model);
+
     /// <summary>
     /// Saves the meta-trained model to disk for later deployment.
     /// </summary>
@@ -194,4 +266,6 @@ public interface IMetaLearner<T, TInput, TOutput>
     /// Resets the meta-learner to initial untrained state.
     /// </summary>
     void Reset();
+
+    #endregion
 }

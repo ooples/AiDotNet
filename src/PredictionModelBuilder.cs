@@ -11,7 +11,7 @@ global using AiDotNet.Helpers;
 global using AiDotNet.KnowledgeDistillation;
 global using AiDotNet.LanguageModels;
 global using AiDotNet.LossFunctions;
-global using AiDotNet.MetaLearning.Trainers;
+global using AiDotNet.MetaLearning;
 global using AiDotNet.MixedPrecision;
 global using AiDotNet.Models;
 global using AiDotNet.Models.Inputs;

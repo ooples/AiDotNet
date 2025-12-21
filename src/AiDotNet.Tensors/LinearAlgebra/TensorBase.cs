@@ -138,6 +138,22 @@ public abstract class TensorBase<T>
     }
 
     /// <summary>
+    /// Gets or sets the value at the specified flat index.
+    /// </summary>
+    /// <param name="flatIndex">The flat (linear) index of the element.</param>
+    /// <returns>The value at the specified flat index.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This indexer allows accessing tensor elements using a single
+    /// index that treats the tensor as a 1D array. The flat index corresponds to
+    /// row-major ordering where the last dimension varies fastest.</para>
+    /// </remarks>
+    public virtual T this[int flatIndex]
+    {
+        get => GetFlat(flatIndex);
+        set => SetFlat(flatIndex, value);
+    }
+
+    /// <summary>
     /// Validates the provided indices against the tensor's shape.
     /// </summary>
     /// <param name="indices">The indices to validate.</param>
