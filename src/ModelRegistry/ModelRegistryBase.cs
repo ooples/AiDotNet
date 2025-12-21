@@ -293,6 +293,13 @@ public abstract class ModelRegistryBase<T, TInput, TOutput> : IModelRegistry<T, 
         var fullPath = Path.GetFullPath(path);
         var fullDir = Path.GetFullPath(directory);
 
+        // Normalize directory path with trailing separator to prevent sibling-prefix bypasses
+        // (e.g., "C:\app\model_registrymalicious" should not match "C:\app\model_registry")
+        if (!fullDir.EndsWith(Path.DirectorySeparatorChar.ToString()))
+        {
+            fullDir += Path.DirectorySeparatorChar;
+        }
+
         if (!fullPath.StartsWith(fullDir, StringComparison.OrdinalIgnoreCase))
         {
             throw new UnauthorizedAccessException($"Access to path '{path}' is denied. Path must be within '{directory}'.");

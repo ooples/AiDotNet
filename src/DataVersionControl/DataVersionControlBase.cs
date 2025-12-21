@@ -378,6 +378,13 @@ public abstract class DataVersionControlBase<T> : IDataVersionControl<T>
         var fullPath = Path.GetFullPath(path);
         var fullDir = Path.GetFullPath(directory);
 
+        // Normalize directory path with trailing separator to prevent sibling-prefix bypasses
+        // (e.g., "C:\app\datamalicious" should not match "C:\app\data")
+        if (!fullDir.EndsWith(Path.DirectorySeparatorChar.ToString()))
+        {
+            fullDir += Path.DirectorySeparatorChar;
+        }
+
         if (!fullPath.StartsWith(fullDir, StringComparison.OrdinalIgnoreCase))
         {
             throw new UnauthorizedAccessException($"Access to path '{path}' is denied. Path must be within '{directory}'.");

@@ -412,6 +412,13 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
         var fullPath = Path.GetFullPath(path);
         var fullDir = Path.GetFullPath(directory);
 
+        // Normalize directory path with trailing separator to prevent sibling-prefix bypasses
+        // (e.g., "C:\app\checkpointsmalicious" should not match "C:\app\checkpoints")
+        if (!fullDir.EndsWith(Path.DirectorySeparatorChar.ToString()))
+        {
+            fullDir += Path.DirectorySeparatorChar;
+        }
+
         if (!fullPath.StartsWith(fullDir, StringComparison.OrdinalIgnoreCase))
         {
             throw new UnauthorizedAccessException($"Access to path '{path}' is denied. Path must be within '{directory}'.");
