@@ -136,7 +136,14 @@ public abstract class ModelRegistryBase<T, TInput, TOutput> : IModelRegistry<T, 
 
             var commaIndex = typeName.IndexOf(',');
             if (commaIndex > 0)
-                return typeName.Substring(0, commaIndex).Trim();
+                typeName = typeName.Substring(0, commaIndex).Trim();
+
+            // Handle array types like "System.Int32[]" or "System.Double[][]"
+            // Strip array suffix to get base type for allowlist comparison
+            while (typeName.EndsWith("[]"))
+            {
+                typeName = typeName.Substring(0, typeName.Length - 2);
+            }
 
             return typeName;
         }
