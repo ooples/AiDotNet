@@ -452,7 +452,7 @@ public partial class PredictionModelResult<T, TInput, TOutput>
         var effectiveSamples = uq.NumSamples;
         if (effectiveSamples < 1)
         {
-            effectiveSamples = 1;
+            throw new ArgumentOutOfRangeException(nameof(uq.NumSamples), "Number of samples must be at least 1.");
         }
 
         var (normalizedNewData, _) = NormalizationInfo.Normalizer!.NormalizeInput(newData);
