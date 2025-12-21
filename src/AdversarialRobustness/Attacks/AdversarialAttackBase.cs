@@ -23,7 +23,7 @@ public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
     /// <summary>
     /// Random number generator for stochastic operations.
     /// </summary>
-    protected readonly Random Random;
+    protected Random Random;
 
     /// <summary>
     /// Initializes a new instance of the adversarial attack.
@@ -122,19 +122,58 @@ public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
 
         var json = Encoding.UTF8.GetString(data);
         Options = JsonConvert.DeserializeObject<AdversarialAttackOptions<T>>(json) ?? new AdversarialAttackOptions<T>();
+
+        // Re-initialize Random with the deserialized seed to ensure consistent behavior
+        Random = RandomHelper.CreateSeededRandom(Options.RandomSeed);
     }
 
     /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        // Validate path doesn't contain directory traversal attempts
+        var fullPath = Path.GetFullPath(filePath);
+        if (fullPath.Contains(".."))
+        {
+            throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(filePath));
+        }
+
+        // Ensure parent directory exists
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         var data = Serialize();
-        File.WriteAllBytes(filePath, data);
+        File.WriteAllBytes(fullPath, data);
     }
 
     /// <inheritdoc/>
     public virtual void LoadModel(string filePath)
     {
-        var data = File.ReadAllBytes(filePath);
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        // Validate path doesn't contain directory traversal attempts
+        var fullPath = Path.GetFullPath(filePath);
+        if (fullPath.Contains(".."))
+        {
+            throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(filePath));
+        }
+
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException("Model file not found.", fullPath);
+        }
+
+        var data = File.ReadAllBytes(fullPath);
         Deserialize(data);
     }
 
