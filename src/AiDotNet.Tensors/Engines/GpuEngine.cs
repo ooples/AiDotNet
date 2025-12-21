@@ -15989,6 +15989,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Exp(ReadOnlySpan<float> x, Span<float> destination)
     {
         if (x.Length < _thresholds.VectorSqrt)
@@ -16007,6 +16008,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Exp(ReadOnlySpan<double> x, Span<double> destination)
     {
         if (x.Length < _thresholds.VectorSqrt)
@@ -16025,6 +16027,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Log(ReadOnlySpan<float> x, Span<float> destination)
     {
         if (x.Length < _thresholds.VectorSqrt)
@@ -16043,6 +16046,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Log(ReadOnlySpan<double> x, Span<double> destination)
     {
         if (x.Length < _thresholds.VectorSqrt)
@@ -17938,7 +17942,7 @@ public class GpuEngine : IEngine, IDisposable
 
             // Generate Gumbel noise on CPU (random number generation not well-suited for GPU)
             var gumbelNoise = new float[input.Length];
-            var random = new Random();
+            var random = RandomHelper.ThreadSafeRandom;
             const float eps = 1e-10f;
             for (int i = 0; i < gumbelNoise.Length; i++)
             {
@@ -18030,7 +18034,7 @@ public class GpuEngine : IEngine, IDisposable
             int numWorkItems = outerSize * innerSize;
 
             var gumbelNoise = new double[input.Length];
-            var random = new Random();
+            var random = RandomHelper.ThreadSafeRandom;
             const double eps = 1e-10;
             for (int i = 0; i < gumbelNoise.Length; i++)
             {
@@ -21556,6 +21560,7 @@ public class GpuEngine : IEngine, IDisposable
 
     #region IDisposable
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (_disposed) return;
@@ -23979,13 +23984,13 @@ public class GpuEngine : IEngine, IDisposable
         {
             int totalSize = 1; foreach (var d in shape) totalSize *= d;
             var result = new float[totalSize];
-            var random = new Random();
+            var baseSeed = RandomHelper.GenerateCryptographicSeed();
 
             // Generate random numbers in parallel batches
             int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
             System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
             {
-                var localRandom = new Random(random.Next() + batchIdx);
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
                 int start = batchIdx * batchSize;
                 int end = Math.Min(start + batchSize, totalSize);
                 for (int i = start; i < end; i++)
@@ -24008,12 +24013,12 @@ public class GpuEngine : IEngine, IDisposable
         {
             int totalSize = 1; foreach (var d in shape) totalSize *= d;
             var result = new double[totalSize];
-            var random = new Random();
+            var baseSeed = RandomHelper.GenerateCryptographicSeed();
 
             int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
             System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
             {
-                var localRandom = new Random(random.Next() + batchIdx);
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
                 int start = batchIdx * batchSize;
                 int end = Math.Min(start + batchSize, totalSize);
                 for (int i = start; i < end; i++)
@@ -24058,12 +24063,12 @@ public class GpuEngine : IEngine, IDisposable
         {
             int totalSize = 1; foreach (var d in shape) totalSize *= d;
             var result = new float[totalSize];
-            var random = new Random();
+            var baseSeed = RandomHelper.GenerateCryptographicSeed();
 
             int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
             System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
             {
-                var localRandom = new Random(random.Next() + batchIdx);
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
                 int start = batchIdx * batchSize;
                 int end = Math.Min(start + batchSize, totalSize);
                 for (int i = start; i < end; i++)
@@ -24090,12 +24095,12 @@ public class GpuEngine : IEngine, IDisposable
         {
             int totalSize = 1; foreach (var d in shape) totalSize *= d;
             var result = new double[totalSize];
-            var random = new Random();
+            var baseSeed = RandomHelper.GenerateCryptographicSeed();
 
             int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
             System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
             {
-                var localRandom = new Random(random.Next() + batchIdx);
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
                 int start = batchIdx * batchSize;
                 int end = Math.Min(start + batchSize, totalSize);
                 for (int i = start; i < end; i++)

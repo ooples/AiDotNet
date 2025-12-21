@@ -794,7 +794,7 @@ public class PagedAttentionKernelTests
         int hiddenDim = kernelFloat.Config.NumHeads * kernelFloat.Config.HeadDimension;
         int projDim = hiddenDim;
 
-        var rnd = new Random(42);
+        var rnd = RandomHelper.CreateSeededRandom(42);
         var hidden = new float[hiddenDim];
         for (int i = 0; i < hidden.Length; i++)
         {

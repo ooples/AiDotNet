@@ -15,6 +15,8 @@ global using AiDotNet.LossFunctions;
 global using AiDotNet.MetaLearning;
 global using AiDotNet.MixedPrecision;
 global using AiDotNet.Models;
+global using AiDotNet.Models.Inputs;
+global using AiDotNet.Models.Options;
 global using AiDotNet.Normalizers;
 global using AiDotNet.Optimizers;
 global using AiDotNet.OutlierRemoval;
@@ -29,11 +31,13 @@ global using AiDotNet.Tokenization.Configuration;
 global using AiDotNet.Tokenization.HuggingFace;
 global using AiDotNet.Tokenization.Interfaces;
 global using AiDotNet.Tools;
+global using AiDotNet.Tensors.Helpers;
+global using AiDotNet.UncertaintyQuantification.Layers;
+global using AiDotNet.LinearAlgebra;
 
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.Policies;
 using AiDotNet.AutoML.SearchSpace;
-using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet;
@@ -54,7 +58,7 @@ namespace AiDotNet;
 /// your model without having to understand all the complex details at once.
 /// </para>
 /// </remarks>
-public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilder<T, TInput, TOutput>
+public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilder<T, TInput, TOutput>
 {
     private IFeatureSelector<T, TInput>? _featureSelector;
     private INormalizer<T, TInput, TOutput>? _normalizer;
@@ -117,6 +121,9 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IFewShotExampleSelector<T>? _fewShotExampleSelector;
     private IPromptAnalyzer? _promptAnalyzer;
     private IPromptCompressor? _promptCompressor;
+
+    private UncertaintyQuantificationOptions? _uncertaintyQuantificationOptions;
+    private AiDotNet.Models.Inputs.UncertaintyCalibrationData<TInput, TOutput>? _uncertaintyCalibrationData;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -298,7 +305,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///     .ConfigureModel(network)
     ///     .ConfigureOptimizer(optimizer)
     ///     .ConfigureMixedPrecision()  // Enable mixed-precision
-    ///     .BuildAsync(trainingData, labels);
+    ///     .BuildAsync();
     ///
     /// // Or with custom configuration
     /// builder.ConfigureMixedPrecision(MixedPrecisionConfig.Conservative());
@@ -342,7 +349,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(agentConfig)
     ///     .ConfigureReasoning()
-    ///     .BuildAsync(data, labels);
+    ///     .BuildAsync();
     ///
     /// // Use reasoning on the trained model
     /// var reasoningResult = await result.ReasonAsync(
@@ -409,7 +416,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///         },
     ///         ThrowOnFailure = false  // Graceful fallback if JIT not supported
     ///     })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     ///
     /// // Predictions now use JIT-compiled code (5-10x faster!)
     /// var prediction = result.Predict(newData);
@@ -420,7 +427,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// var result = await new PredictionModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
     ///     .ConfigureModel(myModel)
     ///     .ConfigureJitCompilation()  // Enables JIT with default settings
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </para>
     /// </remarks>
@@ -449,7 +456,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// var result = await new PredictionModelBuilder&lt;double, ...&gt;()
     ///     .ConfigureModel(myModel)
     ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     ///
     /// // Or with custom settings:
     /// var config = new InferenceOptimizationConfig
@@ -461,7 +468,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// 
     /// var result = await builder
     ///     .ConfigureInferenceOptimizations(config)
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </para>
     /// </remarks>
@@ -470,6 +477,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         _inferenceOptimizationConfig = config ?? AiDotNet.Configuration.InferenceOptimizationConfig.Default;
         return this;
     }
+
+    // Uncertainty quantification configuration lives in PredictionModelBuilder.UncertaintyQuantification.cs to keep this file focused.
 
     /// <summary>
     /// Enables GPU acceleration for training and inference with optional configuration.
@@ -538,7 +547,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///     .ConfigureModel(network)
     ///     .ConfigureOptimizer(optimizer)
     ///     .ConfigureGpuAcceleration()  // Enable GPU acceleration with sensible defaults
-    ///     .BuildAsync(trainingData, labels);
+    ///     .BuildAsync();
     ///
     /// // Or with custom configuration for high-end GPUs
     /// builder.ConfigureGpuAcceleration(new GpuAccelerationConfig
@@ -707,7 +716,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             "- ConfigureReinforcementLearning() for RL training\n" +
             "- ConfigureDataLoader() for supervised learning\n" +
             "- ConfigureMetaLearning() for meta-learning\n" +
-            "For explicit data training, use BuildAsync(x, y) with your input and output data.");
+            "For supervised learning, configure a data loader via ConfigureDataLoader() and then call BuildAsync().");
     }
 
     /// <summary>
@@ -974,7 +983,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // This prevents state contamination from CV (accumulated fitness lists, cache, learning rates)
         optimizer.Reset();
 
+        var deepEnsembleTemplate = _uncertaintyQuantificationOptions is { Enabled: true, Method: UncertaintyQuantificationMethod.DeepEnsemble }
+            ? _model.DeepCopy()
+            : null;
+
         OptimizationResult<T, TInput, TOutput> optimizationResult;
+        var optimizationInputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest);
 
         // Check if knowledge distillation is configured
         if (_knowledgeDistillationOptions != null)
@@ -994,8 +1008,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         {
             // REGULAR TRAINING PATH
             // Optimize the final model on the full training set (using distributed optimizer if configured)
-            optimizationResult = finalOptimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
+            optimizationResult = finalOptimizer.Optimize(optimizationInputData);
         }
+
+        ApplyUncertaintyQuantificationIfConfigured(optimizationResult.BestSolution, _uncertaintyQuantificationOptions);
 
         // Create deployment configuration from individual configs
         var deploymentConfig = DeploymentConfiguration.Create(
@@ -1087,6 +1103,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         };
 
         var finalResult = new PredictionModelResult<T, TInput, TOutput>(options);
+
+        finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
+        TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);
+        TryComputeAndAttachUncertaintyCalibrationArtifacts(finalResult);
 
         return finalResult;
     }
@@ -2159,7 +2179,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(agentConfig)
-    ///     .BuildAsync(data, labels);
+    ///     .BuildAsync();
     /// </code>
     ///
     /// Example with customization:
@@ -2177,7 +2197,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(agentConfig)
-    ///     .BuildAsync(data, labels);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(AgentConfiguration<T> configuration)
@@ -2300,7 +2320,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureModel(studentModel)
     ///     .ConfigureKnowledgeDistillation(distillationOptions)
-    ///     .BuildAsync(trainInputs, trainLabels);
+    ///     .BuildAsync();
     /// </code>
     /// </para>
     ///
@@ -3728,6 +3748,398 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             Console.WriteLine("[AiDotNet] To use GPU acceleration, target net8.0 or higher");
         }
 #endif
+    }
+
+    /// <summary>
+    /// Computes deep ensemble members and attaches them to the result when deep ensemble uncertainty quantification is enabled.
+    /// </summary>
+    /// <param name="result">The prediction model result to update.</param>
+    /// <param name="deepEnsembleTemplate">A template model used to create additional ensemble members.</param>
+    /// <param name="optimizationInputData">Optimization/training data for the ensemble members.</param>
+    /// <param name="templateOptimizer">The optimizer used for the main model, used as a template for ensemble member optimizers.</param>
+    /// <param name="options">Uncertainty quantification configuration.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A deep ensemble trains multiple similar models and combines their predictions. If the models disagree,
+    /// it usually means the prediction is less certain.</para>
+    /// <para>
+    /// This method reuses the best solution from the primary optimization run (if available) and then trains additional members using:
+    /// - Optional bootstrapping (sampling training rows with replacement)
+    /// - Optional parameter perturbation (small Gaussian noise)
+    /// </para>
+    /// </remarks>
+    private static void TryComputeAndAttachDeepEnsembleModels(
+        PredictionModelResult<T, TInput, TOutput> result,
+        IFullModel<T, TInput, TOutput>? deepEnsembleTemplate,
+        OptimizationInputData<T, TInput, TOutput> optimizationInputData,
+        IOptimizer<T, TInput, TOutput> templateOptimizer,
+        UncertaintyQuantificationOptions? options)
+    {
+        if (options is not { Enabled: true, Method: UncertaintyQuantificationMethod.DeepEnsemble })
+        {
+            return;
+        }
+
+        if (deepEnsembleTemplate == null)
+        {
+            return;
+        }
+
+        var ensembleSize = Math.Max(2, options.DeepEnsembleSize);
+        var members = new List<IFullModel<T, TInput, TOutput>>(capacity: ensembleSize);
+
+        if (result.OptimizationResult.BestSolution != null)
+        {
+            members.Add(result.OptimizationResult.BestSolution);
+        }
+
+        var baseSeed = options.RandomSeed ?? Environment.TickCount;
+
+        for (int memberIndex = members.Count; memberIndex < ensembleSize; memberIndex++)
+        {
+            var memberModel = deepEnsembleTemplate is Models.NeuralNetworkModel<T> nnTemplate
+                ? (IFullModel<T, TInput, TOutput>)(object)new Models.NeuralNetworkModel<T>(nnTemplate.Architecture)
+                : deepEnsembleTemplate.DeepCopy();
+
+            PerturbInitialParametersIfSupported(memberModel, baseSeed, memberIndex, options.DeepEnsembleInitialNoiseStdDev);
+
+            var memberOptimizer = CreateOptimizerForEnsembleMember(memberModel, templateOptimizer);
+            memberOptimizer.Reset();
+
+            var memberInputData = CreateDeepEnsembleMemberOptimizationInputData(optimizationInputData, baseSeed, memberIndex);
+            var memberResult = memberOptimizer.Optimize(memberInputData);
+            if (memberResult.BestSolution != null)
+            {
+                members.Add(memberResult.BestSolution);
+            }
+        }
+
+        if (members.Count > 0)
+        {
+            result.SetDeepEnsembleModels(members);
+        }
+    }
+
+    /// <summary>
+    /// Creates per-member optimization input data for deep ensembles.
+    /// </summary>
+    /// <param name="baseInputData">The baseline input data.</param>
+    /// <param name="baseSeed">Seed used to deterministically vary members.</param>
+    /// <param name="memberIndex">The ensemble member index.</param>
+    /// <returns>Optimization input data for the ensemble member.</returns>
+    /// <remarks>
+    /// <para>
+    /// This optionally bootstraps training data to encourage diversity across members while keeping validation/test stable.
+    /// </para>
+    /// </remarks>
+    private static OptimizationInputData<T, TInput, TOutput> CreateDeepEnsembleMemberOptimizationInputData(
+        OptimizationInputData<T, TInput, TOutput> baseInputData,
+        int baseSeed,
+        int memberIndex)
+    {
+        var rng = RandomHelper.CreateSeededRandom(unchecked(baseSeed + (memberIndex + 1) * 10007));
+
+        if (TryBootstrapTrainingData(baseInputData.XTrain, baseInputData.YTrain, rng, out var bootstrappedXTrain, out var bootstrappedYTrain))
+        {
+            return new OptimizationInputData<T, TInput, TOutput>
+            {
+                XTrain = bootstrappedXTrain,
+                YTrain = bootstrappedYTrain,
+                XValidation = baseInputData.XValidation,
+                YValidation = baseInputData.YValidation,
+                XTest = baseInputData.XTest,
+                YTest = baseInputData.YTest
+            };
+        }
+
+        return new OptimizationInputData<T, TInput, TOutput>
+        {
+            XTrain = baseInputData.XTrain,
+            YTrain = baseInputData.YTrain,
+            XValidation = baseInputData.XValidation,
+            YValidation = baseInputData.YValidation,
+            XTest = baseInputData.XTest,
+            YTest = baseInputData.YTest
+        };
+    }
+
+    /// <summary>
+    /// Attempts to bootstrap the training data (sample with replacement) for deep-ensemble diversity.
+    /// </summary>
+    /// <param name="xTrain">Training inputs.</param>
+    /// <param name="yTrain">Training targets.</param>
+    /// <param name="rng">Random number generator.</param>
+    /// <param name="bootstrappedXTrain">Bootstrapped inputs if supported.</param>
+    /// <param name="bootstrappedYTrain">Bootstrapped targets if supported.</param>
+    /// <returns>True if bootstrapping was applied; otherwise false.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method is best-effort and only supports common vector/matrix/tensor training data representations.
+    /// </para>
+    /// </remarks>
+    private static bool TryBootstrapTrainingData(
+        TInput xTrain,
+        TOutput yTrain,
+        Random rng,
+        out TInput bootstrappedXTrain,
+        out TOutput bootstrappedYTrain)
+    {
+        if (xTrain is Matrix<T> xTrainMatrix)
+        {
+            var sampleCount = xTrainMatrix.Rows;
+            if (sampleCount <= 0)
+            {
+                bootstrappedXTrain = xTrain;
+                bootstrappedYTrain = yTrain;
+                return false;
+            }
+
+            var indices = new int[sampleCount];
+            for (int i = 0; i < sampleCount; i++)
+            {
+                indices[i] = rng.Next(sampleCount);
+            }
+
+            var xBoot = xTrainMatrix.GetRows(indices);
+
+            if (yTrain is Vector<T> yTrainVector && yTrainVector.Length == sampleCount)
+            {
+                var yBoot = yTrainVector.GetElements(indices);
+                bootstrappedXTrain = (TInput)(object)xBoot;
+                bootstrappedYTrain = (TOutput)(object)yBoot;
+                return true;
+            }
+
+            if (yTrain is Matrix<T> yTrainMatrix && yTrainMatrix.Rows == sampleCount)
+            {
+                var yBoot = yTrainMatrix.GetRows(indices);
+                bootstrappedXTrain = (TInput)(object)xBoot;
+                bootstrappedYTrain = (TOutput)(object)yBoot;
+                return true;
+            }
+        }
+
+        if (xTrain is Tensor<T> xTrainTensor && xTrainTensor.Rank >= 2)
+        {
+            var sampleCount = xTrainTensor.Shape[0];
+            if (sampleCount <= 0)
+            {
+                bootstrappedXTrain = xTrain;
+                bootstrappedYTrain = yTrain;
+                return false;
+            }
+
+            var indices = new int[sampleCount];
+            for (int i = 0; i < sampleCount; i++)
+            {
+                indices[i] = rng.Next(sampleCount);
+            }
+
+            var xSlices = indices.Select(i => xTrainTensor.GetSlice(i)).ToArray();
+            var xBoot = Tensor<T>.Stack(xSlices, axis: 0);
+
+            if (yTrain is Tensor<T> yTrainTensor &&
+                yTrainTensor.Rank >= 2 &&
+                yTrainTensor.Shape[0] == sampleCount)
+            {
+                var ySlices = indices.Select(i => yTrainTensor.GetSlice(i)).ToArray();
+                var yBoot = Tensor<T>.Stack(ySlices, axis: 0);
+                bootstrappedXTrain = (TInput)(object)xBoot;
+                bootstrappedYTrain = (TOutput)(object)yBoot;
+                return true;
+            }
+        }
+
+        bootstrappedXTrain = xTrain;
+        bootstrappedYTrain = yTrain;
+        return false;
+    }
+
+    /// <summary>
+    /// Perturbs initial model parameters to avoid ensemble member collapse to identical solutions.
+    /// </summary>
+    /// <param name="model">The model to perturb.</param>
+    /// <param name="baseSeed">Base seed for deterministic perturbation.</param>
+    /// <param name="memberIndex">Ensemble member index.</param>
+    /// <param name="noiseStdDev">Standard deviation of Gaussian noise to add.</param>
+    /// <remarks>
+    /// <para>
+    /// The perturbation is only applied when the model supports parameter get/set via <see cref="IParameterizable{T,TInput,TOutput}"/>.
+    /// </para>
+    /// </remarks>
+    private static void PerturbInitialParametersIfSupported(
+        IFullModel<T, TInput, TOutput> model,
+        int baseSeed,
+        int memberIndex,
+        double noiseStdDev)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (model is not IParameterizable<T, TInput, TOutput> parameterizable)
+        {
+            return;
+        }
+
+        if (noiseStdDev <= 0)
+        {
+            return;
+        }
+
+        var parameters = parameterizable.GetParameters();
+        if (parameters.Length == 0)
+        {
+            return;
+        }
+
+        var rng = RandomHelper.CreateSeededRandom(unchecked(baseSeed + (memberIndex + 1) * 10007));
+        var perturbed = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var noise = NextGaussian(rng, mean: 0.0, stdDev: noiseStdDev);
+            perturbed[i] = numOps.Add(parameters[i], numOps.FromDouble(noise));
+        }
+
+        parameterizable.SetParameters(perturbed);
+    }
+
+    /// <summary>
+    /// Generates a Gaussian random value using the Box-Muller transform.
+    /// </summary>
+    /// <param name="rng">Random source.</param>
+    /// <param name="mean">Gaussian mean.</param>
+    /// <param name="stdDev">Gaussian standard deviation.</param>
+    /// <returns>A normally distributed random value.</returns>
+    private static double NextGaussian(Random rng, double mean, double stdDev)
+    {
+        var u1 = 1.0 - rng.NextDouble();
+        var u2 = 1.0 - rng.NextDouble();
+        var randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+        return mean + stdDev * randStdNormal;
+    }
+
+    /// <summary>
+    /// Creates an optimizer instance for an ensemble member based on the template optimizer type and options.
+    /// </summary>
+    /// <param name="model">The ensemble member model.</param>
+    /// <param name="templateOptimizer">The optimizer used as a template.</param>
+    /// <returns>An optimizer instance that targets <paramref name="model"/>.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is best-effort and supports common optimizer constructors (model + options, or model only).
+    /// </para>
+    /// </remarks>
+    private static IOptimizer<T, TInput, TOutput> CreateOptimizerForEnsembleMember(
+        IFullModel<T, TInput, TOutput> model,
+        IOptimizer<T, TInput, TOutput> templateOptimizer)
+    {
+        var optimizerType = templateOptimizer.GetType();
+        var options = templateOptimizer.GetOptions();
+
+        foreach (var ctor in optimizerType.GetConstructors())
+        {
+            var parameters = ctor.GetParameters();
+            if (parameters.Length == 2 &&
+                parameters[0].ParameterType.IsInstanceOfType(model) &&
+                parameters[1].ParameterType.IsInstanceOfType(options))
+            {
+                return (IOptimizer<T, TInput, TOutput>)ctor.Invoke([model, options]);
+            }
+
+            if (parameters.Length == 1 &&
+                parameters[0].ParameterType.IsInstanceOfType(model))
+            {
+                return (IOptimizer<T, TInput, TOutput>)ctor.Invoke([model]);
+            }
+        }
+
+        if (templateOptimizer is NormalOptimizer<T, TInput, TOutput>)
+        {
+            return new NormalOptimizer<T, TInput, TOutput>(model);
+        }
+
+        throw new InvalidOperationException(
+            $"Unable to construct a deep ensemble optimizer of type '{optimizerType.FullName}'. " +
+            $"Expected a constructor with signature ({typeof(IFullModel<T, TInput, TOutput>).Name}, {options?.GetType().Name ?? "null"}) or ({typeof(IFullModel<T, TInput, TOutput>).Name}).");
+    }
+
+    private static void ApplyUncertaintyQuantificationIfConfigured(
+        IFullModel<T, TInput, TOutput>? model,
+        UncertaintyQuantificationOptions? options)
+    {
+        if (model == null)
+        {
+            return;
+        }
+
+        if (options is not { Enabled: true })
+        {
+            return;
+        }
+
+        var method = options.Method == UncertaintyQuantificationMethod.Auto
+            ? UncertaintyQuantificationMethod.MonteCarloDropout
+            : options.Method;
+
+        if (method != UncertaintyQuantificationMethod.MonteCarloDropout)
+        {
+            return;
+        }
+
+        if (model is not Models.NeuralNetworkModel<T> neuralNetworkModel)
+        {
+            throw new InvalidOperationException(
+                "Uncertainty quantification is currently supported for neural network models only. " +
+                "ConfigureModel(new NeuralNetworkModel<T>(...)) to enable Monte Carlo Dropout uncertainty estimation.");
+        }
+
+        var injectedCount = TryInjectMonteCarloDropoutLayers(neuralNetworkModel, options);
+        if (injectedCount == 0)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                "Warning: Monte Carlo Dropout was enabled but no dropout layers were injected automatically. " +
+                "This can happen if the network has no suitable activation layers or uses a non-standard architecture. " +
+                "Consider inserting MCDropoutLayer explicitly in your network definition.");
+        }
+    }
+
+    private static int TryInjectMonteCarloDropoutLayers(
+        Models.NeuralNetworkModel<T> neuralNetworkModel,
+        UncertaintyQuantificationOptions options)
+    {
+        var layers = neuralNetworkModel.Network.LayersReadOnly;
+        if (layers.OfType<MCDropoutLayer<T>>().Any())
+        {
+            return -1;
+        }
+
+        if (options.MonteCarloDropoutRate <= 0 || options.MonteCarloDropoutRate >= 1)
+        {
+            throw new ArgumentException("MonteCarloDropoutRate must be between 0 and 1.", nameof(options));
+        }
+
+        var injectedCount = 0;
+        for (int i = 0; i < layers.Count - 1; i++)
+        {
+            if (layers[i] is not ActivationLayer<T>)
+            {
+                continue;
+            }
+
+            if (i >= layers.Count - 2)
+            {
+                continue;
+            }
+
+            if (layers[i + 1] is DropoutLayer<T> || layers[i + 1] is MCDropoutLayer<T>)
+            {
+                continue;
+            }
+
+            int? seed = options.RandomSeed.HasValue ? options.RandomSeed.Value + i : (int?)null;
+            neuralNetworkModel.Network.InsertLayerIntoCollection(i + 1, new MCDropoutLayer<T>(options.MonteCarloDropoutRate, mcMode: false, randomSeed: seed));
+            injectedCount++;
+            i++;
+        }
+
+        return injectedCount;
     }
 
     private IChatModel<T> CreateChatModel(AgentConfiguration<T> config)

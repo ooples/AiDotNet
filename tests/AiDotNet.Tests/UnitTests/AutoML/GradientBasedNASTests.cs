@@ -184,7 +184,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             var valLabels = new Tensor<double>(new[] { 5, 10 });
 
             // Initialize with random data
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < 10; i++)
                 for (int j = 0; j < 10; j++)
                     trainData[i, j] = random.NextDouble();
@@ -222,7 +222,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             var valLabels = new Tensor<double>(new[] { 5, 10 });
 
             // Initialize with random data
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < 10; i++)
                 for (int j = 0; j < 10; j++)
                     trainData[i, j] = random.NextDouble();

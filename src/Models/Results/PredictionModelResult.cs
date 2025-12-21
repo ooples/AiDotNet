@@ -66,7 +66,7 @@ namespace AiDotNet.Models.Results;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [Serializable]
-public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
+public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the underlying model used for making predictions.
@@ -1143,6 +1143,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             return new InferenceSequence(_result, _config, multiLoRATask);
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             _disposed = true;
@@ -1190,6 +1191,21 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         private string? _multiLoRATask;
 
+        /// <summary>
+        /// Runs a prediction for the given input within this sequence.
+        /// </summary>
+        /// <param name="newData">The input to predict on.</param>
+        /// <returns>The predicted output.</returns>
+        /// <remarks>
+        /// <para>
+        /// When inference optimizations are configured, this method may keep and reuse sequence-local state
+        /// (such as a KV-cache) across calls for improved throughput and latency.
+        /// </para>
+        /// <para>
+        /// <b>For Beginners:</b> This is like predicting with "memory". Each call can reuse what was computed
+        /// previously for the same sequence so the next call can be faster.
+        /// </para>
+        /// </remarks>
         public TOutput Predict(TInput newData)
         {
             ThrowIfDisposed();
@@ -1227,6 +1243,17 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             return _result.NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, _result.NormalizationInfo.YParams);
         }
 
+        /// <summary>
+        /// Resets sequence-local inference state.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This clears any cached state for the current sequence so the next prediction starts fresh.
+        /// </para>
+        /// <para>
+        /// <b>For Beginners:</b> Call this when you want to start a new conversation/stream using the same sequence object.
+        /// </para>
+        /// </remarks>
         public void Reset()
         {
             ThrowIfDisposed();
@@ -1262,6 +1289,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             }
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             if (_disposed)
@@ -3396,7 +3424,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CPU })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// model.ExportToOnnx("model.onnx");
     /// </code>
     /// </para>
@@ -3438,7 +3466,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TensorRT, Quantization = QuantizationMode.Float16 })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// model.ExportToTensorRT("model.trt");
     /// </code>
     /// </para>
@@ -3479,7 +3507,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CoreML, Quantization = QuantizationMode.Float16 })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// model.ExportToCoreML("model.mlmodel");
     /// </code>
     /// </para>
@@ -3521,7 +3549,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TFLite, Quantization = QuantizationMode.Int8 })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// model.ExportToTFLite("model.tflite");
     /// </code>
     /// </para>

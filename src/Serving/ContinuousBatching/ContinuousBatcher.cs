@@ -720,7 +720,7 @@ internal class ContinuousBatcher<T> : IDisposable
         }
 
         // Sample from distribution
-        var random = new Random();
+        var random = RandomHelper.ThreadSafeRandom;
         float r = (float)random.NextDouble();
         float cumSum = 0;
         for (int i = 0; i < vocabSize; i++)

@@ -13,7 +13,7 @@ namespace AiDotNet.Statistics;
 /// <para>
 /// For Beginners:
 /// When you build a predictive model (like a machine learning model), you often want to:
-/// 1. Measure how well your model performs (using metrics like R², accuracy, etc.)
+/// 1. Measure how well your model performs (using metrics like R-squared (R2), accuracy, etc.)
 /// 2. Understand how confident you can be in your predictions (using various intervals)
 /// 3. Understand the relationship between actual and predicted values (using correlations)
 /// 
@@ -241,11 +241,15 @@ public class PredictionStats<T>
     /// </summary>
     /// <remarks>
     /// For Beginners:
+    /// R-squared (R2) is perhaps the most common metric for regression models. It ranges from 0 to 1:
     /// R² (R-squared) is perhaps the most common metric for regression models. It ranges from 0 to 1:
     /// - 1 means your model perfectly predicts all values
     /// - 0 means your model does no better than simply predicting the average for every case
     /// - Values in between indicate the percentage of variance your model explains
     ///
+    /// For example, an R2 of 0.75 means your model explains 75% of the variability in the target variable.
+    ///
+    /// Be careful: a high R2 doesn't necessarily mean your model is good - it could be overfitting!
     /// For example, an R² of 0.75 means your model explains 75% of the variability in the target variable.
     ///
     /// Be careful: a high R² doesn't necessarily mean your model is good - it could be overfitting!
@@ -264,6 +268,13 @@ public class PredictionStats<T>
     public T RSquared => R2;
 
     /// <summary>
+    /// R-squared (R2) adjusted for the number of predictors in the model.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners:
+    /// AdjustedR2 is a modified version of R2 that accounts for the number of features in your model.
+    /// 
+    /// Regular R2 always increases when you add more features, even if they don't actually improve predictions.
     /// R² adjusted for the number of predictors in the model.
     /// </summary>
     /// <remarks>
@@ -275,6 +286,7 @@ public class PredictionStats<T>
     /// actually improves the model more than would be expected by chance.
     /// 
     /// This makes it more useful when comparing models with different numbers of features.
+    /// Like R2, values closer to 1 are better.
     /// Like R², values closer to 1 are better.
     /// </remarks>
     public T AdjustedR2 { get; private set; }
@@ -284,6 +296,7 @@ public class PredictionStats<T>
     /// </summary>
     /// <remarks>
     /// For Beginners:
+    /// ExplainedVarianceScore is similar to R2, but it doesn't penalize the model for systematic bias.
     /// ExplainedVarianceScore is similar to R², but it doesn't penalize the model for systematic bias.
     /// 
     /// It ranges from 0 to 1, with higher values being better:
@@ -291,6 +304,7 @@ public class PredictionStats<T>
     /// - 0 means your model doesn't explain any variance
     /// 
     /// If your model's predictions are all shifted by a constant amount from the actual values,
+    /// R2 would be lower, but ExplainedVarianceScore would still be high.
     /// R² would be lower, but ExplainedVarianceScore would still be high.
     /// </remarks>
     public T ExplainedVarianceScore { get; private set; }
@@ -522,6 +536,11 @@ public class PredictionStats<T>
         // Only calculate prediction stats if we have actual data
         if (inputs.Actual.Length > 0 && inputs.Predicted.Length > 0)
         {
+            if (inputs.Actual.Length != inputs.Predicted.Length)
+            {
+                throw new ArgumentException("Actual and predicted vectors must have the same length.", nameof(inputs));
+            }
+
             CalculatePredictionStats(inputs.Actual, inputs.Predicted, inputs.NumberOfParameters, _numOps.FromDouble(inputs.ConfidenceLevel), inputs.LearningCurveSteps,
                 inputs.PredictionType);
         }

@@ -2138,6 +2138,15 @@ public static class LayerHelper<T>
                 break;
         }
 
+        IActivationFunction<T>? outputActivation = architecture.TaskType switch
+        {
+            NeuralNetworkTaskType.BinaryClassification => new SigmoidActivation<T>(),
+            NeuralNetworkTaskType.MultiClassClassification => new SoftmaxActivation<T>(),
+            NeuralNetworkTaskType.SequenceClassification => new SoftmaxActivation<T>(),
+            NeuralNetworkTaskType.MultiLabelClassification => new SigmoidActivation<T>(),
+            _ => null // Regression and other task types default to linear outputs
+        };
+
         // Create input layer to first hidden layer
         int firstHiddenLayerSize = hiddenLayerSizes.Count > 0 ? hiddenLayerSizes[0] : outputSize;
         yield return new DenseLayer<T>(inputSize, firstHiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
@@ -2157,15 +2166,90 @@ public static class LayerHelper<T>
         if (hiddenLayerSizes.Count > 0)
         {
             int lastHiddenLayerSize = hiddenLayerSizes[hiddenLayerSizes.Count - 1];
-            yield return new DenseLayer<T>(lastHiddenLayerSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(lastHiddenLayerSize, outputSize, (IActivationFunction<T>)new IdentityActivation<T>());
         }
         else
         {
             // If no hidden layers, connect input directly to output
-            yield return new DenseLayer<T>(inputSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(inputSize, outputSize, (IActivationFunction<T>)new IdentityActivation<T>());
         }
 
-        // Final activation layer for output
+        if (outputActivation != null)
+        {
+            yield return new ActivationLayer<T>(new[] { outputSize }, outputActivation);
+        }
+    }
+
+    /// <summary>
+    /// Creates a default configuration of layers for a Bayesian neural network (Bayes-by-Backprop style).
+    /// </summary>
+    /// <remarks>
+    /// This mirrors the library's default dense+activation patterns, but uses Bayesian dense layers so the network can
+    /// express epistemic uncertainty through weight distributions.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultBayesianNeuralNetworkLayers(NeuralNetworkArchitecture<T> architecture)
+    {
+        if (architecture == null)
+        {
+            throw new ArgumentNullException(nameof(architecture));
+        }
+
+        int inputSize = architecture.GetInputShape()[0];
+        int outputSize = architecture.OutputSize;
+
+        if (inputSize <= 0)
+        {
+            throw new InvalidOperationException("Input size must be greater than zero.");
+        }
+
+        if (outputSize <= 0)
+        {
+            throw new InvalidOperationException("Output size must be greater than zero.");
+        }
+
+        List<int> hiddenLayerSizes = new List<int>();
+        switch (architecture.Complexity)
+        {
+            case NetworkComplexity.Simple:
+                hiddenLayerSizes.Add((inputSize + outputSize) / 2);
+                break;
+            case NetworkComplexity.Medium:
+                hiddenLayerSizes.Add(inputSize * 2);
+                hiddenLayerSizes.Add(inputSize);
+                break;
+            case NetworkComplexity.Deep:
+                hiddenLayerSizes.Add(inputSize * 2);
+                hiddenLayerSizes.Add(inputSize * 2);
+                hiddenLayerSizes.Add(inputSize);
+                break;
+            default:
+                hiddenLayerSizes.Add(inputSize);
+                break;
+        }
+
+        int firstHiddenLayerSize = hiddenLayerSizes.Count > 0 ? hiddenLayerSizes[0] : outputSize;
+        yield return new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(inputSize, firstHiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ActivationLayer<T>([firstHiddenLayerSize], new ReLUActivation<T>() as IActivationFunction<T>);
+
+        for (int i = 0; i < hiddenLayerSizes.Count - 1; i++)
+        {
+            int currentLayerSize = hiddenLayerSizes[i];
+            int nextLayerSize = hiddenLayerSizes[i + 1];
+
+            yield return new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(currentLayerSize, nextLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ActivationLayer<T>([nextLayerSize], new ReLUActivation<T>() as IActivationFunction<T>);
+        }
+
+        if (hiddenLayerSizes.Count > 0)
+        {
+            int lastHiddenLayerSize = hiddenLayerSizes[hiddenLayerSizes.Count - 1];
+            yield return new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(lastHiddenLayerSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+        }
+        else
+        {
+            yield return new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(inputSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+        }
+
         yield return new ActivationLayer<T>(new[] { outputSize }, new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 

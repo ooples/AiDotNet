@@ -9,6 +9,7 @@ using AiDotNet.Models.Results;
 using AiDotNet.PromptEngineering.Analysis;
 using AiDotNet.PromptEngineering.Compression;
 using AiDotNet.Reasoning;
+using AiDotNet.Reasoning.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using AiDotNet.Tokenization.Configuration;
 using AiDotNet.Tokenization.Interfaces;

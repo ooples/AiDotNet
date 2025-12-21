@@ -2,7 +2,11 @@ using AiDotNet.Configuration;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.MixedPrecision;
 using AiDotNet.Models;
+using AiDotNet.Models.Inputs;
+using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.PromptEngineering.FewShot;
 using AiDotNet.Reasoning.Models;
@@ -344,6 +348,30 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="loraConfiguration">The LoRA configuration implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration);
+
+    /// <summary>
+    /// Configures uncertainty quantification (UQ) for inference-time uncertainty estimates.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Uncertainty quantification augments point predictions with uncertainty signals (for example: variance and predictive entropy).
+    /// This can be used to detect low-confidence outputs and make safer decisions.
+    /// </para>
+    /// <para>
+    /// Some uncertainty features optionally use a separate calibration dataset (held out from training) to compute
+    /// calibration artifacts (for example: conformal thresholds or temperature scaling).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This enables a "confidence signal" alongside predictions. If you're not sure what to choose,
+    /// call this method with no parameters to enable industry-standard defaults.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">Optional options; when null, defaults are used and UQ is enabled.</param>
+    /// <param name="calibrationData">Optional calibration data for conformal/prediction calibration features.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureUncertaintyQuantification(
+        UncertaintyQuantificationOptions? options = null,
+        UncertaintyCalibrationData<TInput, TOutput>? calibrationData = null);
 
     /// <summary>
     /// Configures the retrieval-augmented generation (RAG) components for use during model inference.
@@ -741,7 +769,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureQuantization(new QuantizationConfig { Mode = QuantizationMode.Float16 })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     /// <param name="config">The quantization configuration (optional, uses no quantization if null).</param>
@@ -771,7 +799,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureCompression()  // Uses industry-standard defaults
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     ///
     /// // Model is now configured to compress on save
     /// builder.SaveModel(result, "model.bin");  // Compressed automatically
@@ -785,7 +813,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///         Type = CompressionType.HybridHuffmanClustering,
     ///         NumClusters = 256
     ///     })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     /// <param name="config">The compression configuration (optional, uses automatic mode if null).</param>
@@ -810,7 +838,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureCaching()
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     /// <param name="config">The caching configuration (optional, uses default cache settings if null).</param>
@@ -834,7 +862,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureVersioning()
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     /// <param name="config">The versioning configuration (optional, uses "latest" version if null).</param>
@@ -866,7 +894,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureABTesting(abConfig)
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     /// <param name="config">The A/B testing configuration (optional, disables A/B testing if null).</param>
@@ -896,7 +924,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureTelemetry()
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     /// <param name="config">The telemetry configuration (optional, uses default telemetry settings if null).</param>
@@ -929,7 +957,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureExport(exportConfig)
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     ///
     /// // After training, export the model
     /// result.ExportToTensorRT("model.trt");
@@ -959,7 +987,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
     ///     .ConfigureTokenizer(tokenizer)
     ///     .ConfigureModel(new TransformerModel())
-    ///     .BuildAsync(trainingData, labels);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     /// <param name="tokenizer">The tokenizer to use for text processing. If null, no tokenizer is configured.</param>
@@ -979,7 +1007,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
     ///     .ConfigureTokenizerFromPretrained()  // Uses BertBaseUncased by default
     ///     .ConfigureModel(new BertModel())
-    ///     .BuildAsync(trainingData, labels);
+    ///     .BuildAsync();
     /// </code>
     ///
     /// Or specify a model using the enum:
@@ -1085,7 +1113,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureGpuAcceleration()
-    ///     .BuildAsync(data, labels);
+    ///     .BuildAsync();
     ///
     /// // Or with aggressive settings for high-end GPUs
     /// builder.ConfigureGpuAcceleration(GpuAccelerationConfig.Aggressive());
@@ -1127,7 +1155,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureJitCompilation()
-    ///     .BuildAsync(data, labels);
+    ///     .BuildAsync();
     ///
     /// // Or with custom settings
     /// builder.ConfigureJitCompilation(new JitCompilationConfig
@@ -1165,7 +1193,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await new PredictionModelBuilder&lt;double, ...&gt;()
     ///     .ConfigureModel(myModel)
     ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     ///
     /// // Or with custom settings:
     /// var config = new InferenceOptimizationConfig
@@ -1177,7 +1205,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///
     /// var result = await builder
     ///     .ConfigureInferenceOptimizations(config)
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </para>
     /// </remarks>
@@ -1209,7 +1237,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///     .ConfigureModel(network)
     ///     .ConfigureOptimizer(optimizer)
     ///     .ConfigureMixedPrecision()  // Enable mixed-precision
-    ///     .BuildAsync(trainingData, labels);
+    ///     .BuildAsync();
     ///
     /// // Or with custom configuration
     /// builder.ConfigureMixedPrecision(MixedPrecisionConfig.Conservative());
@@ -1250,7 +1278,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(agentConfig)
     ///     .ConfigureReasoning()
-    ///     .BuildAsync(data, labels);
+    ///     .BuildAsync();
     ///
     /// // Use reasoning on the trained model
     /// var reasoningResult = await result.ReasonAsync(
@@ -1403,7 +1431,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if neither ConfigureDataLoader nor ConfigureMetaLearning has been called.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if no valid training path was configured.</exception>
     Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync();
 
 }

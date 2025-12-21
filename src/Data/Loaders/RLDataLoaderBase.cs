@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Loaders;
 
@@ -72,7 +73,9 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
         _maxStepsPerEpisode = maxStepsPerEpisode;
         _minExperiencesBeforeTraining = minExperiencesBeforeTraining;
         _verbose = verbose;
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         if (seed.HasValue)
         {
@@ -263,7 +266,7 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
     /// <inheritdoc/>
     public void SetSeed(int seed)
     {
-        _random = new Random(seed);
+        _random = RandomHelper.CreateSeededRandom(seed);
         _environment.Seed(seed);
     }
 

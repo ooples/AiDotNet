@@ -412,122 +412,71 @@ namespace AiDotNetTests.UnitTests.Optimizers
         public void UpdateParameters_Vector_DifferentBeta1Values_ProducesDifferentResults()
         {
             // Arrange
-            var options1 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
+            var optionsLowBeta1 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.1,
-                Beta1 = 0.1,  // Low beta1 - more weight on current gradient
-                Beta2 = 0.99
+                Beta1 = 0.1,
+                Beta2 = 0.99,
+                WeightDecay = 0.0
             };
-            var options2 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
+            var optionsHighBeta1 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.1,
-                Beta1 = 0.9,  // High beta1 - more weight on momentum
-                Beta2 = 0.99
+                Beta1 = 0.9,
+                Beta2 = 0.99,
+                WeightDecay = 0.0
             };
 
-            var optimizer1 = new LionOptimizer<double, Vector<double>, Vector<double>>(null, options1);
-            var optimizer2 = new LionOptimizer<double, Vector<double>, Vector<double>>(null, options2);
+            var optimizerLowBeta1 = new LionOptimizer<double, Vector<double>, Vector<double>>(null, optionsLowBeta1);
+            var optimizerHighBeta1 = new LionOptimizer<double, Vector<double>, Vector<double>>(null, optionsHighBeta1);
 
             var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
-            // Use gradients that will build strong positive momentum, then a small negative gradient
-            var gradient1 = new Vector<double>(new double[] { 10.0, 10.0, 10.0 });
-            var gradient2 = new Vector<double>(new double[] { -1.0, -1.0, -1.0 });
+            var gradientPos = new Vector<double>(new double[] { 1.0, 1.0, 1.0 });
+            var gradientNeg = new Vector<double>(new double[] { -0.02, -0.02, -0.02 });
 
-            // Act - Build momentum with large positive gradient, then update with small negative gradient
-            // After first update: m ≈ 0.1 (with beta2=0.99)
-            // Low beta1 (0.1): c = 0.1 * 0.1 + 0.9 * (-1.0) = 0.01 - 0.9 = -0.89 → sign = -1
-            // High beta1 (0.9): c = 0.9 * 0.1 + 0.1 * (-1.0) = 0.09 - 0.1 = -0.01 → sign = -1
-            // Still both negative! Need even more extreme difference or multiple iterations
+            // Act
+            var updatedLow = optimizerLowBeta1.UpdateParameters(optimizerLowBeta1.UpdateParameters(parameters, gradientPos), gradientNeg);
+            var updatedHigh = optimizerHighBeta1.UpdateParameters(optimizerHighBeta1.UpdateParameters(parameters, gradientPos), gradientNeg);
 
-            // Let's do multiple updates to build stronger momentum
-            optimizer1.UpdateParameters(parameters, gradient1);
-            optimizer1.UpdateParameters(parameters, gradient1);
-            var updated1 = optimizer1.UpdateParameters(parameters, gradient2);
-
-            optimizer2.UpdateParameters(parameters, gradient1);
-            optimizer2.UpdateParameters(parameters, gradient1);
-            var updated2 = optimizer2.UpdateParameters(parameters, gradient2);
-
-            // Assert - Different beta1 values should produce different interpolations
-            // With low beta1, interpolation is closer to negative gradient (may be negative)
-            // With high beta1, interpolation is closer to positive momentum (likely positive)
-            // This can produce different signs and thus different results
-            Assert.NotNull(updated1);
-            Assert.NotNull(updated2);
-
-            // Verify that at least one parameter value is different
-            bool anyDifferent = false;
-            for (int i = 0; i < updated1.Length; i++)
-            {
-                if (Math.Abs(updated1[i] - updated2[i]) > 1e-9)
-                {
-                    anyDifferent = true;
-                    break;
-                }
-            }
-            Assert.True(anyDifferent, "Different beta1 values should produce different results");
+            // Assert
+            Assert.NotEqual(updatedLow, updatedHigh);
+            Assert.True(updatedLow[0] > updatedHigh[0]);
         }
 
         [Fact]
         public void UpdateParameters_Vector_DifferentBeta2Values_ProducesDifferentMomentum()
         {
             // Arrange
-            var options1 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
+            var optionsLowBeta2 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.1,
-                Beta1 = 0.5,  // Moderate beta1 so momentum differences show through interpolation
-                Beta2 = 0.1   // Low beta2 - momentum changes quickly
+                Beta1 = 0.9,
+                Beta2 = 0.1,
+                WeightDecay = 0.0
             };
-            var options2 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
+            var optionsHighBeta2 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.1,
-                Beta1 = 0.5,  // Same beta1
-                Beta2 = 0.9   // High beta2 - momentum changes slowly
+                Beta1 = 0.9,
+                Beta2 = 0.9,
+                WeightDecay = 0.0
             };
 
-            var optimizer1 = new LionOptimizer<double, Vector<double>, Vector<double>>(null, options1);
-            var optimizer2 = new LionOptimizer<double, Vector<double>, Vector<double>>(null, options2);
+            var optimizerLowBeta2 = new LionOptimizer<double, Vector<double>, Vector<double>>(null, optionsLowBeta2);
+            var optimizerHighBeta2 = new LionOptimizer<double, Vector<double>, Vector<double>>(null, optionsHighBeta2);
 
             var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
-            // Use varying gradients to make momentum differences more visible
-            var gradient1 = new Vector<double>(new double[] { 1.0, 1.0, 1.0 });
-            var gradient2 = new Vector<double>(new double[] { -0.5, -0.5, -0.5 });
+            var gradientPos = new Vector<double>(new double[] { 1.0, 1.0, 1.0 });
+            var gradientNeg = new Vector<double>(new double[] { -1.0, -1.0, -1.0 });
 
-            // Act - Multiple updates with alternating gradients to build different momentum profiles
-            var params1 = new Vector<double>(parameters);
-            var params2 = new Vector<double>(parameters);
+            // Act
+            var updatedLow = optimizerLowBeta2.UpdateParameters(optimizerLowBeta2.UpdateParameters(parameters, gradientPos), gradientNeg);
+            var updatedHigh = optimizerHighBeta2.UpdateParameters(optimizerHighBeta2.UpdateParameters(parameters, gradientPos), gradientNeg);
 
-            // First update with positive gradient
-            params1 = optimizer1.UpdateParameters(params1, gradient1);
-            params2 = optimizer2.UpdateParameters(params2, gradient1);
-
-            // Second update with negative gradient - low beta2 adapts faster
-            params1 = optimizer1.UpdateParameters(params1, gradient2);
-            params2 = optimizer2.UpdateParameters(params2, gradient2);
-
-            // Third update with positive gradient - momentum differences should be visible
-            params1 = optimizer1.UpdateParameters(params1, gradient1);
-            params2 = optimizer2.UpdateParameters(params2, gradient1);
-
-            // Assert - Both should update, but momentum behavior differs
-            Assert.NotEqual(parameters, params1);
-            Assert.NotEqual(parameters, params2);
-
-            // Verify that different Beta2 values produce different momentum behavior
-            // With beta1=0.5, the interpolation gives equal weight to momentum and gradient
-            // So different momentum (from different beta2) should produce different signs
-            bool anyDifferent = false;
-            for (int i = 0; i < params1.Length; i++)
-            {
-                if (Math.Abs(params1[i] - params2[i]) > 1e-9)
-                {
-                    anyDifferent = true;
-                    break;
-                }
-            }
-            Assert.True(anyDifferent, "Different beta2 values should produce different momentum behavior");
+            // Assert
+            Assert.NotEqual(updatedLow, updatedHigh);
+            Assert.True(updatedLow[0] < updatedHigh[0]);
         }
-
         [Fact]
         public void GetOptions_ReturnsCurrentOptions()
         {

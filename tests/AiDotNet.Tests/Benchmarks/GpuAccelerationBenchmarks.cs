@@ -68,7 +68,7 @@ public class GpuAccelerationBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         // Initialize engines
         _cpuEngine = new CpuEngine();
