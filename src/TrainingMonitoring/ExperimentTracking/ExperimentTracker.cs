@@ -3,6 +3,7 @@
 #endif
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Newtonsoft.Json;
 #if !NET6_0_OR_GREATER
 using AiDotNet.TrainingMonitoring;
@@ -89,6 +90,20 @@ public class ExperimentTracker : IExperimentTracker
 
     /// <inheritdoc />
     public string? ActiveRunId => _activeRunId;
+
+    /// <summary>
+    /// Gets or sets the path to the git executable.
+    /// </summary>
+    /// <remarks>
+    /// <b>Security Note:</b> For enhanced security, specify the full path to git
+    /// rather than relying on PATH resolution. Common locations:
+    /// - Windows: <c>C:\Program Files\Git\bin\git.exe</c>
+    /// - Linux/macOS: <c>/usr/bin/git</c>
+    ///
+    /// If left as default ("git"), the executable is resolved via the system PATH.
+    /// Ensure your PATH only contains trusted directories if using the default.
+    /// </remarks>
+    public static string GitPath { get; set; } = GetDefaultGitPath();
 
     private string ExperimentsPath => Path.Combine(TrackingUri, "experiments");
 
@@ -748,7 +763,7 @@ public class ExperimentTracker : IExperimentTracker
             // Try to get git info
             var startInfo = new ProcessStartInfo
             {
-                FileName = "git",
+                FileName = GitPath,
                 Arguments = "rev-parse HEAD",
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
@@ -887,5 +902,39 @@ public class ExperimentTracker : IExperimentTracker
         {
             EndRun(RunStatus.Completed);
         }
+    }
+
+    /// <summary>
+    /// Gets the default path for git based on the current platform.
+    /// </summary>
+    private static string GetDefaultGitPath()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            // Try common Git installation paths on Windows
+            var windowsPaths = new[]
+            {
+                @"C:\Program Files\Git\bin\git.exe",
+                @"C:\Program Files (x86)\Git\bin\git.exe"
+            };
+            foreach (var path in windowsPaths)
+            {
+                if (File.Exists(path))
+                    return path;
+            }
+        }
+        else
+        {
+            // Try standard Unix paths
+            var unixPaths = new[] { "/usr/bin/git", "/usr/local/bin/git" };
+            foreach (var path in unixPaths)
+            {
+                if (File.Exists(path))
+                    return path;
+            }
+        }
+
+        // Fall back to PATH resolution
+        return "git";
     }
 }

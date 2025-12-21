@@ -66,18 +66,38 @@ public class LiveDashboard : ITrainingDashboard
     public int RefreshIntervalMs { get; set; } = 2000;
 
     /// <summary>
+    /// Gets or sets whether to allow external connections.
+    /// </summary>
+    /// <remarks>
+    /// When false (default), only connections from localhost are accepted.
+    /// Set to true to allow connections from other machines on the network.
+    /// Note: Binding to all interfaces may require administrator privileges.
+    /// </remarks>
+    public bool AllowExternalConnections { get; set; }
+
+    /// <summary>
     /// Creates a new live dashboard.
     /// </summary>
     /// <param name="logDirectory">Directory to save logs.</param>
     /// <param name="name">Name of this training run.</param>
     /// <param name="port">Port to listen on (default: 6006, same as TensorBoard).</param>
-    public LiveDashboard(string? logDirectory = null, string? name = null, int port = 6006)
+    /// <param name="allowExternalConnections">Whether to allow connections from other machines (default: false for security).</param>
+    /// <remarks>
+    /// <b>Security Note:</b> This dashboard uses HTTP (not HTTPS) for simplicity in local development.
+    /// By default, it only accepts connections from localhost. If you enable external connections,
+    /// be aware that data is transmitted unencrypted. For production use or sensitive data,
+    /// consider running behind a reverse proxy with TLS.
+    /// </remarks>
+    public LiveDashboard(string? logDirectory = null, string? name = null, int port = 6006, bool allowExternalConnections = false)
     {
         Port = port;
+        AllowExternalConnections = allowExternalConnections;
         _htmlDashboard = new HtmlDashboard(logDirectory ?? "./logs", name);
         _cts = new CancellationTokenSource();
         _listener = new HttpListener();
-        _listener.Prefixes.Add($"http://+:{port}/");
+        // Default to localhost-only for security; use + for all interfaces only when explicitly requested
+        var prefix = allowExternalConnections ? $"http://+:{port}/" : $"http://localhost:{port}/";
+        _listener.Prefixes.Add(prefix);
     }
 
     /// <inheritdoc />
@@ -91,10 +111,18 @@ public class LiveDashboard : ITrainingDashboard
         }
         catch (HttpListenerException)
         {
-            // Try localhost only if wildcard fails (requires admin)
-            _listener.Prefixes.Clear();
-            _listener.Prefixes.Add($"http://localhost:{Port}/");
-            _listener.Start();
+            // Fall back to localhost-only if external binding fails (requires admin on Windows)
+            if (AllowExternalConnections)
+            {
+                _listener.Prefixes.Clear();
+                _listener.Prefixes.Add($"http://localhost:{Port}/");
+                _listener.Start();
+                Console.WriteLine($"[LiveDashboard] Note: External connections unavailable, bound to localhost only");
+            }
+            else
+            {
+                throw; // Re-throw if localhost-only binding fails
+            }
         }
 
         IsRunning = true;

@@ -59,6 +59,20 @@ public class ResourceMonitor : IDisposable
     public bool MonitorGpu { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets the path to nvidia-smi executable.
+    /// </summary>
+    /// <remarks>
+    /// <b>Security Note:</b> For enhanced security, specify the full path to nvidia-smi
+    /// rather than relying on PATH resolution. Common locations:
+    /// - Windows: <c>C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe</c>
+    /// - Linux: <c>/usr/bin/nvidia-smi</c>
+    ///
+    /// If left as default ("nvidia-smi"), the executable is resolved via the system PATH.
+    /// Ensure your PATH only contains trusted directories if using the default.
+    /// </remarks>
+    public string NvidiaSmiPath { get; set; } = GetDefaultNvidiaSmiPath();
+
+    /// <summary>
     /// Gets or sets the resource warning thresholds.
     /// </summary>
     public ResourceThresholds Thresholds { get; set; } = new();
@@ -413,7 +427,7 @@ public class ResourceMonitor : IDisposable
         {
             var startInfo = new ProcessStartInfo
             {
-                FileName = "nvidia-smi",
+                FileName = NvidiaSmiPath,
                 Arguments = "--query-gpu=utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -462,6 +476,33 @@ public class ResourceMonitor : IDisposable
         Stop();
 
         _currentProcess.Dispose();
+    }
+
+    /// <summary>
+    /// Gets the default path for nvidia-smi based on the current platform.
+    /// </summary>
+    private static string GetDefaultNvidiaSmiPath()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            // Try the standard NVIDIA installation path on Windows
+            var standardPath = @"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe";
+            if (System.IO.File.Exists(standardPath))
+                return standardPath;
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            // Try standard Linux paths
+            var linuxPaths = new[] { "/usr/bin/nvidia-smi", "/usr/local/bin/nvidia-smi" };
+            foreach (var path in linuxPaths)
+            {
+                if (System.IO.File.Exists(path))
+                    return path;
+            }
+        }
+
+        // Fall back to PATH resolution
+        return "nvidia-smi";
     }
 }
 
