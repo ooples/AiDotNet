@@ -372,10 +372,19 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
 
             versions.Remove(model);
 
-            // Delete file
+            // Delete file - validate path is within registry directory before deletion
             if (model.StoragePath != null && File.Exists(model.StoragePath))
             {
-                File.Delete(model.StoragePath);
+                try
+                {
+                    ValidatePathWithinDirectory(model.StoragePath, RegistryDirectory);
+                    File.Delete(model.StoragePath);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // StoragePath points outside the registry directory, skip deletion for security
+                    // This could happen if the serialized data was tampered with
+                }
             }
 
             // If no versions left, remove the model entirely

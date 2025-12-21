@@ -73,6 +73,13 @@ public class ProgressBar : IDisposable
         if (total < 0)
             throw new ArgumentException("Total must be non-negative.", nameof(total));
 
+        // Clamp barWidth to a reasonable range (1-200)
+        // Negative or zero would cause rendering issues, very large values waste console space
+        if (barWidth < 1)
+            barWidth = 1;
+        else if (barWidth > 200)
+            barWidth = 200;
+
         _total = total;
         _description = description;
         _barWidth = barWidth;

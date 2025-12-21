@@ -350,16 +350,19 @@ public class PopulationBasedTrainingOptimizer<T, TInput, TOutput> : Hyperparamet
     /// </summary>
     public List<PopulationMemberInfo> GetPopulationState()
     {
-        if (_population == null)
-            return new List<PopulationMemberInfo>();
+        lock (SyncLock)
+        {
+            if (_population == null)
+                return new List<PopulationMemberInfo>();
 
-        return _population.Select(m => new PopulationMemberInfo(
-            m.MemberId,
-            m.Configuration,
-            m.LastScore != null ? _numOps.ToDouble(m.LastScore) : (double?)null,
-            m.StepCount,
-            m.Trials.Count
-        )).ToList();
+            return _population.Select(m => new PopulationMemberInfo(
+                m.MemberId,
+                m.Configuration,
+                m.LastScore != null ? _numOps.ToDouble(m.LastScore) : (double?)null,
+                m.StepCount,
+                m.Trials.Count
+            )).ToList();
+        }
     }
 
     /// <summary>
@@ -367,22 +370,25 @@ public class PopulationBasedTrainingOptimizer<T, TInput, TOutput> : Hyperparamet
     /// </summary>
     public PopulationMemberInfo? GetBestMember()
     {
-        if (_population == null) return null;
+        lock (SyncLock)
+        {
+            if (_population == null) return null;
 
-        var scoredMembers = _population.Where(m => m.LastScore != null).ToList();
-        if (scoredMembers.Count == 0) return null;
+            var scoredMembers = _population.Where(m => m.LastScore != null).ToList();
+            if (scoredMembers.Count == 0) return null;
 
-        var best = Maximize
-            ? scoredMembers.OrderByDescending(m => _numOps.ToDouble(m.LastScore!)).First()
-            : scoredMembers.OrderBy(m => _numOps.ToDouble(m.LastScore!)).First();
+            var best = Maximize
+                ? scoredMembers.OrderByDescending(m => _numOps.ToDouble(m.LastScore!)).First()
+                : scoredMembers.OrderBy(m => _numOps.ToDouble(m.LastScore!)).First();
 
-        return new PopulationMemberInfo(
-            best.MemberId,
-            best.Configuration,
-            _numOps.ToDouble(best.LastScore!),
-            best.StepCount,
-            best.Trials.Count
-        );
+            return new PopulationMemberInfo(
+                best.MemberId,
+                best.Configuration,
+                _numOps.ToDouble(best.LastScore!),
+                best.StepCount,
+                best.Trials.Count
+            );
+        }
     }
 
     #region Helper Classes

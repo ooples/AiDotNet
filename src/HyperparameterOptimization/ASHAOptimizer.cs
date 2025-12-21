@@ -209,19 +209,21 @@ public class ASHAOptimizer<T, TInput, TOutput> : HyperparameterOptimizerBase<T, 
         }
 
         // Check if this configuration is in the top 1/eta
-        var sortedValues = rungEntries
-            .Select(e => _numOps.ToDouble(e.ObjectiveValue))
-            .OrderByDescending(v => Maximize ? v : -v)
-            .ToList();
-
+        // Count how many configurations are strictly better than the current one
         double currentValue = _numOps.ToDouble(objectiveValue);
-        int rank = sortedValues.FindIndex(v => Math.Abs(v - currentValue) < 1e-10);
+        int betterCount = 0;
 
-        if (rank < 0)
+        foreach (var entry in rungEntries)
         {
-            rank = sortedValues.Count; // Not found, assume worst
+            double entryValue = _numOps.ToDouble(entry.ObjectiveValue);
+            bool isBetter = Maximize
+                ? entryValue > currentValue
+                : entryValue < currentValue;
+            if (isBetter) betterCount++;
         }
 
+        // Rank is the number of configurations strictly better (0 = best)
+        int rank = betterCount;
         int promotionCutoff = Math.Max(1, rungEntries.Count / _reductionFactor);
         return rank < promotionCutoff;
     }
@@ -258,28 +260,31 @@ public class ASHAOptimizer<T, TInput, TOutput> : HyperparameterOptimizerBase<T, 
     /// </summary>
     public Dictionary<int, RungStatistics> GetRungStatistics()
     {
-        var stats = new Dictionary<int, RungStatistics>();
-
-        foreach (var rung in Rungs)
+        lock (SyncLock)
         {
-            var entries = _rungs[rung];
-            if (entries.Count == 0)
+            var stats = new Dictionary<int, RungStatistics>();
+
+            foreach (var rung in Rungs)
             {
-                stats[rung] = new RungStatistics(rung, 0, 0, 0, 0);
-                continue;
+                var entries = _rungs[rung];
+                if (entries.Count == 0)
+                {
+                    stats[rung] = new RungStatistics(rung, 0, 0, 0, 0);
+                    continue;
+                }
+
+                var values = entries.Select(e => _numOps.ToDouble(e.ObjectiveValue)).ToList();
+                stats[rung] = new RungStatistics(
+                    rung,
+                    entries.Count,
+                    values.Average(),
+                    values.Min(),
+                    values.Max()
+                );
             }
 
-            var values = entries.Select(e => _numOps.ToDouble(e.ObjectiveValue)).ToList();
-            stats[rung] = new RungStatistics(
-                rung,
-                entries.Count,
-                values.Average(),
-                values.Min(),
-                values.Max()
-            );
+            return stats;
         }
-
-        return stats;
     }
 
     /// <summary>
@@ -287,21 +292,24 @@ public class ASHAOptimizer<T, TInput, TOutput> : HyperparameterOptimizerBase<T, 
     /// </summary>
     public (Dictionary<string, object>? Config, T? Score) GetBestConfiguration()
     {
-        // Find the highest rung with entries
-        for (int i = Rungs.Count - 1; i >= 0; i--)
+        lock (SyncLock)
         {
-            var entries = _rungs[Rungs[i]];
-            if (entries.Count > 0)
+            // Find the highest rung with entries
+            for (int i = Rungs.Count - 1; i >= 0; i--)
             {
-                var best = Maximize
-                    ? entries.OrderByDescending(e => _numOps.ToDouble(e.ObjectiveValue)).First()
-                    : entries.OrderBy(e => _numOps.ToDouble(e.ObjectiveValue)).First();
+                var entries = _rungs[Rungs[i]];
+                if (entries.Count > 0)
+                {
+                    var best = Maximize
+                        ? entries.OrderByDescending(e => _numOps.ToDouble(e.ObjectiveValue)).First()
+                        : entries.OrderBy(e => _numOps.ToDouble(e.ObjectiveValue)).First();
 
-                return (best.Configuration, best.ObjectiveValue);
+                    return (best.Configuration, best.ObjectiveValue);
+                }
             }
-        }
 
-        return (null, default);
+            return (null, default);
+        }
     }
 
     #region Helper Classes

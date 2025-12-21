@@ -518,10 +518,17 @@ public class BayesianOptimizer<T, TInput, TOutput> : HyperparameterOptimizerBase
 
     private double NormalizeContinuous(double value, ContinuousDistribution dist)
     {
+        // Handle degenerate case where min == max to prevent division by zero
+        if (Math.Abs(dist.Max - dist.Min) < double.Epsilon)
+            return 0.5; // Return middle of normalized range
+
         if (dist.LogScale)
         {
             double logMin = Math.Log(dist.Min);
             double logMax = Math.Log(dist.Max);
+            // Handle degenerate log case
+            if (Math.Abs(logMax - logMin) < double.Epsilon)
+                return 0.5;
             double logValue = Math.Log(value);
             return (logValue - logMin) / (logMax - logMin);
         }
@@ -543,6 +550,9 @@ public class BayesianOptimizer<T, TInput, TOutput> : HyperparameterOptimizerBase
 
     private double NormalizeInteger(int value, IntegerDistribution dist)
     {
+        // Handle degenerate case where min == max to prevent division by zero
+        if (dist.Max == dist.Min)
+            return 0.5; // Return middle of normalized range
         return (double)(value - dist.Min) / (dist.Max - dist.Min);
     }
 

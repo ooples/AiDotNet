@@ -244,7 +244,9 @@ public class MetricsExporter : IDisposable
                 foreach (var entry in kvp.Value)
                 {
                     var escapedTag = EscapeCsvField(entry.Tag);
-                    lines.Add($"{escapedTag},{entry.Step},{entry.Value},{entry.WallTime:o}");
+                    // Use InvariantCulture to ensure consistent decimal separator (.) across all locales
+                    var valueStr = entry.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    lines.Add($"{escapedTag},{entry.Step},{valueStr},{entry.WallTime:o}");
                 }
             }
 
