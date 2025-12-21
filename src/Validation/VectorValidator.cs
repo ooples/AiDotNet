@@ -17,7 +17,7 @@ public static class VectorValidator
     public static void ValidateLength<T>(Vector<T> vector, int expectedLength, string component = "", string operation = "")
     {
         var (resolvedComponent, resolvedOperation) = ValidationHelper<T>.ResolveCallerInfo(component, operation);
-        
+
         if (vector.Length != expectedLength)
         {
             throw new VectorLengthMismatchException(expectedLength, vector.Length, resolvedComponent, resolvedOperation);
@@ -37,7 +37,7 @@ public static class VectorValidator
     {
         var (resolvedComponent, resolvedOperation) = ValidationHelper<T>.ResolveCallerInfo(component, operation);
         int expectedLength = expectedShape.Aggregate(1, (a, b) => a * b);
-        
+
         if (vector.Length != expectedLength)
         {
             throw new VectorLengthMismatchException(expectedLength, vector.Length, resolvedComponent, resolvedOperation);

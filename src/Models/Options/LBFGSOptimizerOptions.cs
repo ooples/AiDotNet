@@ -185,7 +185,7 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// </remarks>
 
     public double LearningRateIncreaseFactor { get; set; } = 1.05;
-        /// <summary>
+    /// <summary>
     /// Gets or sets the factor by which the learning rate is decreased when the algorithm encounters
     /// difficulties or needs to take more careful steps.
     /// </summary>

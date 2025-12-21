@@ -64,10 +64,10 @@ public class L1Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
         if (gradient is Vector<T> gradientVector && coefficients is Vector<T> coefficientVector)
         {
             var regularizationStrength = NumOps.FromDouble(Options.Strength);
-            var result = gradientVector.Add(coefficientVector.Transform(c => 
+            var result = gradientVector.Add(coefficientVector.Transform(c =>
                 NumOps.Multiply(regularizationStrength, NumOps.SignOrZero(c))
             ));
-            
+
             return (TOutput)(object)result;
         }
         else if (gradient is Tensor<T> gradientTensor && coefficients is Tensor<T> coefficientTensor)
@@ -75,21 +75,21 @@ public class L1Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
             var regularizationStrength = NumOps.FromDouble(Options.Strength);
             var gradientFlattenedVector = gradientTensor.ToVector();
             var coefficientFlattenedVector = coefficientTensor.ToVector();
-            
-            var result = gradientFlattenedVector.Add(coefficientFlattenedVector.Transform(c => 
+
+            var result = gradientFlattenedVector.Add(coefficientFlattenedVector.Transform(c =>
                 NumOps.Multiply(regularizationStrength, NumOps.SignOrZero(c))
             ));
-            
+
             // Convert back to tensor with the same shape as the gradient tensor
             var resultTensor = Tensor<T>.FromVector(result);
             if (gradientTensor.Shape.Length > 1)
             {
                 resultTensor = resultTensor.Reshape(gradientTensor.Shape);
             }
-            
+
             return (TOutput)(object)resultTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported output types {typeof(TOutput).Name} for L1 regularization gradient. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -111,7 +111,7 @@ public class L1Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     {
         var regularizationStrength = NumOps.FromDouble(Options.Strength);
         var result = new Matrix<T>(data.Rows, data.Columns);
-    
+
         for (int i = 0; i < data.Rows; i++)
         {
             for (int j = 0; j < data.Columns; j++)
@@ -124,7 +124,7 @@ public class L1Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
                 );
             }
         }
-    
+
         return result;
     }
 
@@ -144,7 +144,7 @@ public class L1Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     {
         var regularizationStrength = NumOps.FromDouble(Options.Strength);
         var result = new Vector<T>(data.Length);
-    
+
         for (int i = 0; i < data.Length; i++)
         {
             var value = data[i];
@@ -154,7 +154,7 @@ public class L1Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
                 NumOps.GreaterThan(sub, NumOps.Zero) ? sub : NumOps.Zero
             );
         }
-    
+
         return result;
     }
 }

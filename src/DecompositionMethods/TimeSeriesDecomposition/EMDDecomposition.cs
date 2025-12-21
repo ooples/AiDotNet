@@ -216,7 +216,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
         while (!IsMultivariateResidual(residual) && allImfs[0].Count < _maxImf)
         {
             List<Vector<T>> imfs = ExtractMultivariateIMF(residual, numDirections);
-    
+
             for (int i = 0; i < channels; i++)
             {
                 allImfs[i].Add(imfs[i]);
@@ -647,7 +647,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> ComputeEnvelope(Vector<T> signal, EnvelopeType envelopeType)
     {
         List<int> extremaIndices = FindExtrema(signal, envelopeType);
-        
+
         if (extremaIndices.Count < 2)
         {
             // Not enough extrema to compute envelope, return original signal

@@ -73,7 +73,7 @@ public class TimeSeriesCrossValidationFitDetectorOptions
     /// </para>
     /// </remarks>
     public double OverfitThreshold { get; set; } = 1.2;
-    
+
     /// <summary>
     /// Gets or sets the threshold for detecting underfitting.
     /// </summary>
@@ -115,7 +115,7 @@ public class TimeSeriesCrossValidationFitDetectorOptions
     /// </para>
     /// </remarks>
     public double UnderfitThreshold { get; set; } = 0.5;
-    
+
     /// <summary>
     /// Gets or sets the threshold for detecting high variance.
     /// </summary>
@@ -157,7 +157,7 @@ public class TimeSeriesCrossValidationFitDetectorOptions
     /// </para>
     /// </remarks>
     public double HighVarianceThreshold { get; set; } = 1.1;
-    
+
     /// <summary>
     /// Gets or sets the threshold for determining a good fit.
     /// </summary>

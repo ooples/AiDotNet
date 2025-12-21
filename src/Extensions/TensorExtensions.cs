@@ -58,19 +58,19 @@ public static class TensorExtensions
     {
         if (tensor == null)
             throw new ArgumentNullException(nameof(tensor));
-            
+
         if (flattenedValues == null)
             throw new ArgumentNullException(nameof(flattenedValues));
-            
+
         // Calculate the total size of the tensor
         int totalSize = tensor.Shape.Aggregate(1, (acc, dim) => acc * dim);
-            
+
         if (flattenedValues.Length != totalSize)
             throw new ArgumentException($"The size of the flattened vector ({flattenedValues.Length}) does not match the tensor shape total size ({totalSize})");
-            
+
         // Create a new tensor with the same shape
         var result = new Tensor<T>(tensor.Shape);
-            
+
         // Copy the values from the flattened vector to the tensor
         int index = 0;
         result.ForEachPosition((position, _) =>
@@ -78,7 +78,7 @@ public static class TensorExtensions
             result[position] = flattenedValues[index++];
             return true;
         });
-            
+
         return result;
     }
 
@@ -102,13 +102,13 @@ public static class TensorExtensions
     {
         if (tensor == null)
             throw new ArgumentNullException(nameof(tensor));
-        
+
         if (action == null)
             throw new ArgumentNullException(nameof(action));
-        
+
         // Create an array to hold the current position
         int[] position = new int[tensor.Shape.Length];
-    
+
         // Start recursive iteration
         ForEachPositionRecursive(tensor, position, 0, action);
     }

@@ -1,10 +1,11 @@
-using AiDotNet.Tensors.LinearAlgebra;
+using System;
+using System.Threading.Tasks;
 using AiDotNet.AutoML;
+using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
-using System;
-using System.Threading.Tasks;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.AutoML
@@ -15,7 +16,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
         public void SuperNet_Constructor_Initializes_Correctly()
         {
             // Arrange & Act
-            var searchSpace = new SearchSpace<double>();
+            var searchSpace = new SearchSpaceBase<double>();
             var supernet = new SuperNet<double>(searchSpace, numNodes: 4);
 
             // Assert
@@ -28,7 +29,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
         public void SuperNet_Implements_IFullModel_Interface()
         {
             // Arrange
-            var searchSpace = new SearchSpace<double>();
+            var searchSpace = new SearchSpaceBase<double>();
             var supernet = new SuperNet<double>(searchSpace);
 
             // Act
@@ -49,7 +50,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
         public void SuperNet_Predict_Returns_Valid_Output()
         {
             // Arrange
-            var searchSpace = new SearchSpace<double>();
+            var searchSpace = new SearchSpaceBase<double>();
             var supernet = new SuperNet<double>(searchSpace, numNodes: 3);
             var input = new Tensor<double>(new[] { 1, 10 });
             for (int i = 0; i < input.Shape[1]; i++)
@@ -67,7 +68,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
         public void SuperNet_GetArchitectureParameters_Returns_Valid_Alphas()
         {
             // Arrange
-            var searchSpace = new SearchSpace<double>();
+            var searchSpace = new SearchSpaceBase<double>();
             var supernet = new SuperNet<double>(searchSpace, numNodes: 4);
 
             // Act
@@ -86,7 +87,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
         public void SuperNet_DeriveArchitecture_Returns_Valid_Architecture()
         {
             // Arrange
-            var searchSpace = new SearchSpace<double>();
+            var searchSpace = new SearchSpaceBase<double>();
             var supernet = new SuperNet<double>(searchSpace, numNodes: 3);
 
             // Act
@@ -104,7 +105,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
         public void SuperNet_ComputeValidationLoss_Returns_Numeric_Value()
         {
             // Arrange
-            var searchSpace = new SearchSpace<double>();
+            var searchSpace = new SearchSpaceBase<double>();
             var supernet = new SuperNet<double>(searchSpace, numNodes: 2);
             var data = new Tensor<double>(new[] { 1, 10 });
             var labels = new Tensor<double>(new[] { 1, 10 });
@@ -125,7 +126,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
         public void SuperNet_BackwardArchitecture_Updates_Gradients()
         {
             // Arrange
-            var searchSpace = new SearchSpace<double>();
+            var searchSpace = new SearchSpaceBase<double>();
             var supernet = new SuperNet<double>(searchSpace, numNodes: 2);
             var data = new Tensor<double>(new[] { 1, 5 });
             var labels = new Tensor<double>(new[] { 1, 5 });
@@ -148,7 +149,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
         public void SuperNet_BackwardWeights_Updates_Weight_Gradients()
         {
             // Arrange
-            var searchSpace = new SearchSpace<double>();
+            var searchSpace = new SearchSpaceBase<double>();
             var supernet = new SuperNet<double>(searchSpace, numNodes: 2);
             var data = new Tensor<double>(new[] { 1, 5 });
             var labels = new Tensor<double>(new[] { 1, 5 });
@@ -183,7 +184,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             var valLabels = new Tensor<double>(new[] { 5, 10 });
 
             // Initialize with random data
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < 10; i++)
                 for (int j = 0; j < 10; j++)
                     trainData[i, j] = random.NextDouble();
@@ -221,7 +222,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             var valLabels = new Tensor<double>(new[] { 5, 10 });
 
             // Initialize with random data
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < 10; i++)
                 for (int j = 0; j < 10; j++)
                     trainData[i, j] = random.NextDouble();
@@ -247,7 +248,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
         public void SearchSpace_Has_Valid_Default_Operations()
         {
             // Arrange & Act
-            var searchSpace = new SearchSpace<double>();
+            var searchSpace = new SearchSpaceBase<double>();
 
             // Assert
             Assert.NotNull(searchSpace.Operations);
@@ -294,7 +295,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
         public void SuperNet_SetParameters_And_GetParameters_Roundtrip()
         {
             // Arrange
-            var searchSpace = new SearchSpace<double>();
+            var searchSpace = new SearchSpaceBase<double>();
             var supernet = new SuperNet<double>(searchSpace, numNodes: 2);
             var originalParams = supernet.GetParameters();
 
@@ -318,7 +319,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
         public void SuperNet_WithParameters_Creates_New_Instance()
         {
             // Arrange
-            var searchSpace = new SearchSpace<double>();
+            var searchSpace = new SearchSpaceBase<double>();
             var supernet = new SuperNet<double>(searchSpace, numNodes: 2);
             var newParams = new Vector<double>(supernet.GetParameters().Length);
 
@@ -334,7 +335,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
         public void SuperNet_Clone_Creates_Independent_Copy()
         {
             // Arrange
-            var searchSpace = new SearchSpace<double>();
+            var searchSpace = new SearchSpaceBase<double>();
             var supernet = new SuperNet<double>(searchSpace, numNodes: 2);
 
             // Act

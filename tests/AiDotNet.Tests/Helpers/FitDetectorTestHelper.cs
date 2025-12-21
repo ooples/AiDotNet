@@ -140,7 +140,7 @@ public static class FitDetectorTestHelper
 
         var actual = new double[length];
         var predicted = new double[length];
-        var random = new Random(42); // Fixed seed for reproducibility
+        var random = RandomHelper.CreateSeededRandom(42); // Fixed seed for reproducibility
         // For uniform distribution on [-a, a], variance = a²/3
         // Since error = (random - 0.5) * errorScale * 2 ranges from -errorScale to +errorScale
         // The actual variance = errorScale² / 3
@@ -190,7 +190,7 @@ public static class FitDetectorTestHelper
         // Use different seeds for each column to ensure truly uncorrelated features
         for (int j = 0; j < columns; j++)
         {
-            var random = new Random(42 + j * 1000); // Different seed per column
+            var random = RandomHelper.CreateSeededRandom(42 + j * 1000); // Different seed per column
             for (int i = 0; i < rows; i++)
             {
                 // Use purely random values in different ranges per column

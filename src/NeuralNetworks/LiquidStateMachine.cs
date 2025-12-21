@@ -333,7 +333,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         ResetState();
 
         Tensor<T> current = input;
-        
+
         // Process the input through each layer sequentially
         for (int i = 0; i < Layers.Count; i++)
         {
@@ -350,7 +350,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
                 _layerOutputs[i] = current;
             }
         }
-        
+
         return current;
     }
 
@@ -380,13 +380,13 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         // Clear stored layer activations
         _layerInputs.Clear();
         _layerOutputs.Clear();
-        
+
         // Reset all layers, especially important for reservoir layers
         foreach (var layer in Layers)
         {
             layer.ResetState();
         }
-        
+
         // Initialize empty dictionaries for storing layer inputs/outputs
         // during future forward passes
         _layerInputs = [];
@@ -530,7 +530,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         writer.Write(_spectralRadius);
         writer.Write(_inputScaling);
         writer.Write(_leakingRate);
-        
+
         // Write whether we're in training mode
         writer.Write(IsTrainingMode);
     }
@@ -564,11 +564,11 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         _spectralRadius = reader.ReadDouble();
         _inputScaling = reader.ReadDouble();
         _leakingRate = reader.ReadDouble();
-        
+
         // Read training mode
         IsTrainingMode = reader.ReadBoolean();
     }
-    
+
     /// <summary>
     /// Sets the training mode for the Liquid State Machine.
     /// </summary>
@@ -597,13 +597,13 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     public override void SetTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
-        
+
         // Also set training mode for all layers
         foreach (var layer in Layers)
         {
             layer.SetTrainingMode(isTraining);
         }
-        
+
         // Clear stored states when switching modes
         if (IsTrainingMode != isTraining)
         {
@@ -611,7 +611,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
             _layerOutputs.Clear();
         }
     }
-    
+
     /// <summary>
     /// Simulates the LSM with time-series data, allowing the reservoir state to evolve over time.
     /// </summary>
@@ -639,22 +639,22 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     public List<Tensor<T>> SimulateTimeSeries(List<Tensor<T>> timeSeriesInput)
     {
         var outputs = new List<Tensor<T>>();
-        
+
         // Reset state before starting the simulation
         ResetState();
-        
+
         // Process each time step
         foreach (var input in timeSeriesInput)
         {
             var output = Predict(input);
             outputs.Add(output);
-            
+
             // Note: We don't reset state between time steps to maintain temporal dynamics
         }
-        
+
         return outputs;
     }
-    
+
     /// <summary>
     /// Performs online learning for time-series data, updating the network after each time step.
     /// </summary>
@@ -686,17 +686,17 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentException("Input and expected output sequences must have the same length");
         }
-        
+
         // Reset state before starting the training
         ResetState();
         SetTrainingMode(true);
-        
+
         // Process each time step
         for (int i = 0; i < timeSeriesInput.Count; i++)
         {
             // Forward pass and train on this time step
             Train(timeSeriesInput[i], timeSeriesExpectedOutput[i]);
-            
+
             // Note: We don't reset state between time steps to maintain temporal dynamics
         }
     }

@@ -27,7 +27,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class TreeSpeculativeDecoder<T>
+internal class TreeSpeculativeDecoder<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -68,7 +68,9 @@ public class TreeSpeculativeDecoder<T>
         _draftModel = draftModel ?? throw new ArgumentNullException(nameof(draftModel));
         _batchTargetForward = batchTargetForward ?? throw new ArgumentNullException(nameof(batchTargetForward));
         _config = config ?? new TreeSpeculativeConfig();
-        _random = _config.Seed.HasValue ? new Random(_config.Seed.Value) : new Random();
+        _random = _config.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_config.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -206,7 +208,7 @@ public class TreeSpeculativeDecoder<T>
             });
         }
 
-        done:
+    done:
         _totalTokensGenerated += generated;
 
         var resultTokens = new Vector<int>(tokens.ToArray());

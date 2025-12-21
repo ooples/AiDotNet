@@ -112,6 +112,41 @@ public class FlashAttentionTests
     }
 
     [Fact]
+    public void FlashAttention_WithCausalMask_RespectsQueryOffsetForCachedDecoding()
+    {
+        // Arrange
+        int batchSize = 1;
+        int seqLenKV = 6;
+        int seqLenQ = 2;
+        int headDim = 8;
+
+        var query = CreateRandomTensor(batchSize, seqLenQ, headDim, seed: 42);
+        var key = CreateRandomTensor(batchSize, seqLenKV, headDim, seed: 43);
+        var value = CreateRandomTensor(batchSize, seqLenKV, headDim, seed: 44);
+
+        int queryOffset = seqLenKV - seqLenQ;
+        var config = new FlashAttentionConfig { UseCausalMask = true, ReturnAttentionWeights = true };
+
+        // Act
+        var (_, attnWeights) = FlashAttention<float>.Forward(query, key, value, config, queryOffset: queryOffset);
+
+        // Assert - For each query row, positions beyond (queryOffset + qIdx) must be masked
+        Assert.NotNull(attnWeights);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int q = 0; q < seqLenQ; q++)
+            {
+                int maxAllowedK = queryOffset + q;
+                for (int k = maxAllowedK + 1; k < seqLenKV; k++)
+                {
+                    float weight = attnWeights[new[] { b, q, k }];
+                    Assert.True(weight < 1e-6f, $"Position (q={q}, k={k}) should be masked but has weight {weight}");
+                }
+            }
+        }
+    }
+
+    [Fact]
     public void FlashAttention_AttentionWeightsRowSumToOne()
     {
         // Arrange
@@ -344,7 +379,9 @@ public class FlashAttentionTests
 
     private static Tensor<float> CreateRandomTensor(int[] shape, int? seed)
     {
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
         var tensor = new Tensor<float>(shape);
 
         int totalElements = 1;

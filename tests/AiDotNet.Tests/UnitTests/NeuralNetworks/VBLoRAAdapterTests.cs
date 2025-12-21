@@ -1,8 +1,9 @@
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LoRA.Adapters;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.NeuralNetworks
@@ -25,10 +26,25 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         }
 
         [Fact]
+        public void DenseLayerForward_WithNonZeroInput_ProducesNonZeroOutput()
+        {
+            var layer = new DenseLayer<double>(10, 5, (IActivationFunction<double>)new IdentityActivation<double>());
+            var input = new Tensor<double>(new[] { 1, 10 });
+            for (int i = 0; i < 10; i++)
+            {
+                input[i] = i * 0.1;
+            }
+
+            var output = layer.Forward(input);
+            var outputVector = output.ToVector();
+            Assert.Contains(outputVector, v => v != 0.0);
+        }
+
+        [Fact]
         public void Constructor_WithValidParameters_InitializesCorrectly()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
+            var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>)new IdentityActivation<double>());
 
             // Act
             var adapter = new VBLoRAAdapter<double>(
@@ -51,7 +67,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public void Constructor_CreatesSharedBanks()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
+            var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>)new IdentityActivation<double>());
 
             // Act
             var adapter = new VBLoRAAdapter<double>(
@@ -76,8 +92,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public void Constructor_WithSameBankKey_SharesBanks()
         {
             // Arrange
-            var baseLayer1 = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var baseLayer2 = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
+            var baseLayer1 = new DenseLayer<double>(10, 5, (IActivationFunction<double>)new IdentityActivation<double>());
+            var baseLayer2 = new DenseLayer<double>(10, 5, (IActivationFunction<double>)new IdentityActivation<double>());
 
             // Act
             var adapter1 = new VBLoRAAdapter<double>(
@@ -342,7 +358,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public void MergedLayer_ProducesSameOutputAsAdapter()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
+            var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>)new IdentityActivation<double>());
+            Assert.IsType<IdentityActivation<double>>(baseLayer.ScalarActivation);
             var adapter = new VBLoRAAdapter<double>(
                 baseLayer,
                 rank: 3,
@@ -358,6 +375,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             // Act
             var adapterOutput = adapter.Forward(input);
             var mergedLayer = adapter.MergeToOriginalLayer();
+            var mergedDense = Assert.IsType<DenseLayer<double>>(mergedLayer);
+            Assert.IsType<IdentityActivation<double>>(mergedDense.ScalarActivation);
             var mergedOutput = mergedLayer.Forward(input);
 
             // Assert - Merged layer should produce same output as adapter

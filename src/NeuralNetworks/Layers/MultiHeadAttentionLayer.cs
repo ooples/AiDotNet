@@ -118,7 +118,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastQueryInput;
     private Tensor<T>? _lastKeyInput;
     private Tensor<T>? _lastValueInput;
-    
+
     /// <summary>
     /// Cached output from the forward pass for use in the backward pass.
     /// </summary>
@@ -172,7 +172,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// that will analyze the same input data.
     /// </remarks>
     private readonly int _headCount;
-    
+
     /// <summary>
     /// The size of each attention head.
     /// </summary>
@@ -347,20 +347,20 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // We want to maximize entropy (minimize -H), so we minimize Σ(p * log(p))
         // Use GPU-accelerated tensor operations
         T epsilon = NumOps.FromDouble(1e-10);
-        
+
         // Clamp values to avoid log(0)
         var clamped = Engine.TensorMax(_lastAttentionScores, epsilon);
         var logP = Engine.TensorLog(clamped);
         var pLogP = Engine.TensorMultiply(clamped, logP);
-        
+
         // Sum over all elements (Batch, Head, Seq, Seq)
         T sumPLogP = Engine.TensorSum(pLogP);
-        
+
         // Entropy = -sumPLogP. We want to maximize Entropy, so minimize -Entropy = sumPLogP.
         // Wait, original code minimized -H.
         // H = -sum(p log p). -H = sum(p log p).
         // So we minimize sum(p log p).
-        
+
         // Actually, higher entropy = more uniform.
         // If we want to prevent collapse (too peaked), we want high entropy.
         // Loss = -Entropy = sum(p log p).
@@ -368,10 +368,10 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Entropy is positive.
         // -Entropy is negative.
         // Minimizing a negative number -> making it more negative -> increasing magnitude of entropy -> increasing entropy.
-        
+
         // Original code calculated totalNegativeEntropy = -H. And returned weighted loss.
         // So returning sumPLogP is correct.
-        
+
         T totalNegativeEntropy = sumPLogP; // This is -Entropy
 
         _lastEntropyLoss = totalNegativeEntropy;
@@ -477,6 +477,14 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         };
     }
 
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        return new Dictionary<string, string>
+        {
+            ["HeadCount"] = _headCount.ToString()
+        };
+    }
+
     /// <summary>
     /// Gets diagnostic information about this component's state and behavior.
     /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
@@ -546,7 +554,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var q2D = query.Reshape(batchSize * seqLengthQ, embeddingDimension);
         var k2D = key.Reshape(batchSize * seqLengthKV, embeddingDimension);
         var v2D = value.Reshape(batchSize * seqLengthKV, embeddingDimension);
-        
+
         var Q_flat = Engine.TensorMatMul(q2D, _queryWeights);
         var K_flat = Engine.TensorMatMul(k2D, _keyWeights);
         var V_flat = Engine.TensorMatMul(v2D, _valueWeights);
@@ -562,7 +570,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var Q_3D = queries.Reshape(batchSize * _headCount, seqLengthQ, _headDimension);
         var K_3D = keys.Reshape(batchSize * _headCount, seqLengthKV, _headDimension);
         var KT_3D = K_3D.Transpose(new[] { 0, 2, 1 });
-        
+
         var attentionScores = Engine.BatchMatMul(Q_3D, KT_3D);
 
         // Scale
@@ -595,7 +603,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         var output_flat = Engine.TensorMatMul(context_flat, _outputWeights);
         var output_reshaped = output_flat.Reshape(batchSize, seqLengthQ, embeddingDimension);
-        
+
         var biasBroadcast = _outputBias.Reshape(1, 1, embeddingDimension);
         var output = Engine.TensorBroadcastAdd(output_reshaped, biasBroadcast);
         _lastOutput = ApplyActivation(output);
@@ -702,7 +710,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var qInputNode = Autodiff.TensorOperations<T>.Variable(_lastQueryInput, "query", requiresGradient: true);
         var kInputNode = Autodiff.TensorOperations<T>.Variable(_lastKeyInput, "key", requiresGradient: true);
         var vInputNode = Autodiff.TensorOperations<T>.Variable(_lastValueInput, "value", requiresGradient: true);
-        
+
         var qWeightsNode = Autodiff.TensorOperations<T>.Variable(_queryWeights, "QWeights", requiresGradient: true);
         var kWeightsNode = Autodiff.TensorOperations<T>.Variable(_keyWeights, "KWeights", requiresGradient: true);
         var vWeightsNode = Autodiff.TensorOperations<T>.Variable(_valueWeights, "VWeights", requiresGradient: true);
@@ -719,7 +727,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var qInput2D = Autodiff.TensorOperations<T>.Reshape(qInputNode, batchSize * seqLengthQ, embeddingDimension);
         var kInput2D = Autodiff.TensorOperations<T>.Reshape(kInputNode, batchSize * seqLengthKV, embeddingDimension);
         var vInput2D = Autodiff.TensorOperations<T>.Reshape(vInputNode, batchSize * seqLengthKV, embeddingDimension);
-        
+
         var qFlat = Autodiff.TensorOperations<T>.MatrixMultiply(qInput2D, qWeightsNode);
         var kFlat = Autodiff.TensorOperations<T>.MatrixMultiply(kInput2D, kWeightsNode);
         var vFlat = Autodiff.TensorOperations<T>.MatrixMultiply(vInput2D, vWeightsNode);
@@ -737,7 +745,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 3. Attention Scores: Q @ K.T
         // Permute K to [B, H, D, S] for multiplication
         var kHeadsT = Autodiff.TensorOperations<T>.Permute(kHeads, 0, 1, 3, 2);
-        
+
         // [B, H, Sq, D] @ [B, H, D, Sk] -> [B, H, Sq, Sk]
         var scores = Autodiff.TensorOperations<T>.MatrixMultiply(qHeads, kHeadsT);
 
@@ -747,7 +755,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var scaleTensor = new Tensor<T>(new int[] { 1 });
         scaleTensor[0] = scaleValue;
         var scaleNode = Autodiff.TensorOperations<T>.Constant(scaleTensor, "scale");
-        
+
         var scaledScores = Autodiff.TensorOperations<T>.ElementwiseMultiply(scores, scaleNode);
 
         // Softmax
@@ -760,13 +768,13 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 5. Merge Heads
         // Permute to [B, Sq, H, D]
         var contextPermuted = Autodiff.TensorOperations<T>.Permute(attentionOutput, 0, 2, 1, 3);
-        
+
         // Reshape to [B*Sq, E]
         var contextFlat = Autodiff.TensorOperations<T>.Reshape(contextPermuted, batchSize * seqLengthQ, embeddingDimension);
 
         // 6. Output Projection
         var outputFlat = Autodiff.TensorOperations<T>.MatrixMultiply(contextFlat, oWeightsNode);
-        
+
         // Reshape to [B, Sq, E]
         var outputReshaped = Autodiff.TensorOperations<T>.Reshape(outputFlat, batchSize, seqLengthQ, embeddingDimension);
 

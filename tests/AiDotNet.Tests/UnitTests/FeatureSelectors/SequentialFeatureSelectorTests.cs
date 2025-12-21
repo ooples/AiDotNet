@@ -1,10 +1,10 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.FeatureSelectors;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
-using AiDotNet.Autodiff;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.FeatureSelectors

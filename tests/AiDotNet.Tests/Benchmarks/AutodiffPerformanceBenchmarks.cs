@@ -1,7 +1,7 @@
-using AiDotNet.LinearAlgebra;
-using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.NeuralNetworks.Layers;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
 
@@ -39,7 +39,7 @@ public class AutodiffPerformanceBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         // Setup DenseLayer
         _denseLayer = new DenseLayer<float>(InputSize, OutputSize, (IActivationFunction<float>)new ReLUActivation<float>());

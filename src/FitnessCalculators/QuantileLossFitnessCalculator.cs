@@ -92,7 +92,7 @@ public class QuantileLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculat
     ///   (e.g., when overestimating revenue could lead to poor business decisions)
     /// </para>
     /// </remarks>
-    public QuantileLossFitnessCalculator(T? quantile = default, DataSetType dataSetType = DataSetType.Validation) 
+    public QuantileLossFitnessCalculator(T? quantile = default, DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
         _quantile = quantile ?? _numOps.FromDouble(0.5);

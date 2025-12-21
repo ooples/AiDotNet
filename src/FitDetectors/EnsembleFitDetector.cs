@@ -25,7 +25,7 @@ public class EnsembleFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// the ensemble's assessment. Each detector may use different techniques to evaluate model fit.
     /// </remarks>
     private readonly List<IFitDetector<T, TInput, TOutput>> _detectors;
-    
+
     /// <summary>
     /// Configuration options for the ensemble fit detector.
     /// </summary>

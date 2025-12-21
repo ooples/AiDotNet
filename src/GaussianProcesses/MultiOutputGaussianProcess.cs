@@ -32,32 +32,32 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// </para>
     /// </remarks>
     private IKernelFunction<T> _kernel;
-    
+
     /// <summary>
     /// The input training data matrix.
     /// </summary>
     private Matrix<T> _X;
-    
+
     /// <summary>
     /// The output training data matrix (multiple outputs).
     /// </summary>
     private Matrix<T> _Y;
-    
+
     /// <summary>
     /// The kernel matrix calculated from the training data.
     /// </summary>
     private Matrix<T> _K;
-    
+
     /// <summary>
     /// The Cholesky decomposition of the kernel matrix, used for efficient calculations.
     /// </summary>
     private Matrix<T> _L;
-    
+
     /// <summary>
     /// The alpha matrix used for making predictions.
     /// </summary>
     private Matrix<T> _alpha;
-    
+
     /// <summary>
     /// Operations for the numeric type T.
     /// </summary>
@@ -135,10 +135,10 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     {
         _X = X;
         _Y = Y;
-        
+
         // Calculate the kernel matrix
         _K = CalculateKernelMatrix(X, X);
-        
+
         // Add a small value to the diagonal for numerical stability
         for (int i = 0; i < _K.Rows; i++)
         {

@@ -39,8 +39,8 @@ public static class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultLayers(
-        NeuralNetworkArchitecture<T> architecture, 
-        int hiddenLayerCount = 1, 
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenLayerCount = 1,
         int hiddenLayerSize = 64,
         int outputSize = 1)
     {
@@ -455,11 +455,11 @@ public static class LayerHelper<T>
             );
         }
 
-       yield return new ResidualLayer<T>(
-            inputShape: [outputDepth, height, width],
-            innerLayer: innerLayer,
-            activation: new IdentityActivation<T>()
-        );
+        yield return new ResidualLayer<T>(
+             inputShape: [outputDepth, height, width],
+             innerLayer: innerLayer,
+             activation: new IdentityActivation<T>()
+         );
 
         yield return new ConvolutionalLayer<T>(
             inputDepth: inputDepth,
@@ -563,7 +563,7 @@ public static class LayerHelper<T>
         {
             int outputSize = layerSizes[i + 1];
             yield return new DenseLayer<T>(inputSize, outputSize, new ReLUActivation<T>() as IActivationFunction<T>);
-        
+
             if (i < middleIndex - 1)
             {
                 yield return new ActivationLayer<T>([outputSize], new ReLUActivation<T>() as IActivationFunction<T>);
@@ -777,8 +777,8 @@ public static class LayerHelper<T>
         }
 
         int inputSize = inputShape[0];
-        int outputSize = architecture.OutputSize > 0 
-            ? architecture.OutputSize 
+        int outputSize = architecture.OutputSize > 0
+            ? architecture.OutputSize
             : throw new InvalidOperationException("Output size must be specified and greater than 0 for DNC.");
 
         // Controller (Feed-forward network)
@@ -891,7 +891,7 @@ public static class LayerHelper<T>
         // Decoder layers
         yield return new DenseLayer<T>(latentSize, pooledSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         yield return new DenseLayer<T>(pooledSize / 2, pooledSize, new LeakyReLUActivation<T>() as IActivationFunction<T>);
-    
+
         // Add an Upsampling layer to match the pooling in the encoder
         yield return new UpsamplingLayer<T>([pooledDepth, pooledHeight, pooledWidth], 2);
 
@@ -943,19 +943,19 @@ public static class LayerHelper<T>
         {
             yield return new EmbeddingLayer<T>(vocabularySize, modelDimension);
         }
-    
+
         // Add positional encoding if specified
         if (usePositionalEncoding)
         {
             yield return new PositionalEncodingLayer<T>(maxSequenceLength, modelDimension);
         }
-    
+
         // Add dropout layer after embedding
         if (dropoutRate > 0)
         {
             yield return new DropoutLayer<T>(dropoutRate);
         }
-    
+
         // Add encoder layers
         for (int i = 0; i < numEncoderLayers; i++)
         {
@@ -965,30 +965,30 @@ public static class LayerHelper<T>
                 embeddingDimension: modelDimension,
                 headCount: numHeads,
                 activationFunction: new IdentityActivation<T>());
-            
+
             // Add normalization
             yield return new LayerNormalizationLayer<T>(modelDimension);
-        
+
             // Add dropout if specified
             if (dropoutRate > 0)
             {
                 yield return new DropoutLayer<T>(dropoutRate);
             }
-        
+
             // Feed-forward network
             yield return new DenseLayer<T>(modelDimension, feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>);
             yield return new DenseLayer<T>(feedForwardDimension, modelDimension, new IdentityActivation<T>() as IActivationFunction<T>);
-        
+
             // Add normalization
             yield return new LayerNormalizationLayer<T>(modelDimension);
-        
+
             // Add dropout if specified
             if (dropoutRate > 0)
             {
                 yield return new DropoutLayer<T>(dropoutRate);
             }
         }
-    
+
         // Add decoder layers if needed
         if (numDecoderLayers > 0)
         {
@@ -1000,39 +1000,39 @@ public static class LayerHelper<T>
                     embeddingDimension: modelDimension,
                     headCount: numHeads,
                     activationFunction: new IdentityActivation<T>());
-                
+
                 // Add normalization
                 yield return new LayerNormalizationLayer<T>(modelDimension);
-            
+
                 // Add dropout if specified
                 if (dropoutRate > 0)
                 {
                     yield return new DropoutLayer<T>(dropoutRate);
                 }
-            
+
                 // Cross-attention block
                 yield return new MultiHeadAttentionLayer<T>(
                     sequenceLength: maxSequenceLength,
                     embeddingDimension: modelDimension,
                     headCount: numHeads,
                     activationFunction: new IdentityActivation<T>());
-                
+
                 // Add normalization
                 yield return new LayerNormalizationLayer<T>(modelDimension);
-            
+
                 // Add dropout if specified
                 if (dropoutRate > 0)
                 {
                     yield return new DropoutLayer<T>(dropoutRate);
                 }
-            
+
                 // Feed-forward network
                 yield return new DenseLayer<T>(modelDimension, feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>);
                 yield return new DenseLayer<T>(feedForwardDimension, modelDimension, new IdentityActivation<T>() as IActivationFunction<T>);
-            
+
                 // Add normalization
                 yield return new LayerNormalizationLayer<T>(modelDimension);
-            
+
                 // Add dropout if specified
                 if (dropoutRate > 0)
                 {
@@ -1040,10 +1040,10 @@ public static class LayerHelper<T>
                 }
             }
         }
-    
+
         // Add the final projection layer
         yield return new DenseLayer<T>(modelDimension, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
-    
+
         // Add the final activation layer based on task type
         switch (taskType)
         {
@@ -1054,16 +1054,16 @@ public static class LayerHelper<T>
             case NeuralNetworkTaskType.ImageClassification:
                 yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
                 break;
-            
+
             case NeuralNetworkTaskType.Regression:
                 yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IActivationFunction<T>);
                 break;
-            
+
             case NeuralNetworkTaskType.TextGeneration:
                 if (temperature != 1.0)
                 {
                     yield return new LambdaLayer<T>(
-                        [outputSize], 
+                        [outputSize],
                         [outputSize],
                         input => input.Scale(NumOps.FromDouble(1.0 / temperature)),
                         (input, gradient) => gradient.Scale(NumOps.FromDouble(temperature)),
@@ -1072,11 +1072,11 @@ public static class LayerHelper<T>
 
                 yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
                 break;
-            
+
             case NeuralNetworkTaskType.Translation:
                 yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
                 break;
-            
+
             default:
                 yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
                 break;
@@ -1124,8 +1124,8 @@ public static class LayerHelper<T>
 
         // Determine layer sizes based on architecture
         int inputSize = architecture.CalculatedInputSize;
-        int outputSize = architecture.OutputSize > 0 
-            ? architecture.OutputSize 
+        int outputSize = architecture.OutputSize > 0
+            ? architecture.OutputSize
             : throw new InvalidOperationException("Output size must be specified and greater than 0 for Spiking Neural Network.");
 
         // Default layer configuration if no custom layers are provided
@@ -1150,7 +1150,7 @@ public static class LayerHelper<T>
         {
             int currentSize = layerSizes[i];
             int nextSize = layerSizes[i + 1];
-    
+
             // Add spiking layer
             yield return new SpikingLayer<T>(
                 inputSize: currentSize,
@@ -1159,7 +1159,7 @@ public static class LayerHelper<T>
                 tau: tau,
                 refractoryPeriod: refractoryPeriod
             );
-    
+
             // Add normalization layer to stabilize spiking activity
             if (useLayerNormalization)
             {
@@ -1171,11 +1171,11 @@ public static class LayerHelper<T>
         if (useOutputConversion)
         {
             yield return new DenseLayer<T>(
-                layerSizes[layerSizes.Count - 1], 
-                outputSize, 
+                layerSizes[layerSizes.Count - 1],
+                outputSize,
                 new IdentityActivation<T>() as IActivationFunction<T>
             );
-    
+
             // Add appropriate activation based on task type
             if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
             {
@@ -1216,8 +1216,8 @@ public static class LayerHelper<T>
     {
         // Determine layer sizes based on architecture
         int inputSize = architecture.CalculatedInputSize;
-        int outputSize = architecture.OutputSize > 0 
-            ? architecture.OutputSize 
+        int outputSize = architecture.OutputSize > 0
+            ? architecture.OutputSize
             : throw new InvalidOperationException("Output size must be specified and greater than 0 for Extreme Learning Machines.");
 
         // Random projection layer (input to hidden)
@@ -1519,20 +1519,20 @@ public static class LayerHelper<T>
         // Define network structure with sensible defaults
         int inputSize = architecture.CalculatedInputSize;
         int outputSize = architecture.OutputSize;
-    
+
         // Define default GRU architecture
         // For sequence modeling, a common approach is to use 1-2 GRU layers followed by a dense output layer
         int hiddenSize = Math.Max(64, inputSize); // Reasonable hidden size for most sequence tasks
-    
+
         // Determine if we need bidirectional GRU based on task type
-        bool useBidirectional = architecture.TaskType == NeuralNetworkTaskType.SequenceClassification || 
+        bool useBidirectional = architecture.TaskType == NeuralNetworkTaskType.SequenceClassification ||
                                architecture.TaskType == NeuralNetworkTaskType.SequenceToSequence;
-    
+
         // Determine if we should return sequences based on task type
         bool returnSequences = architecture.TaskType == NeuralNetworkTaskType.SequenceToSequence ||
-                              (architecture.Complexity == NetworkComplexity.Deep && 
+                              (architecture.Complexity == NetworkComplexity.Deep &&
                                architecture.TaskType == NeuralNetworkTaskType.SequenceClassification);
-    
+
         // Create the GRU layer with recommended activations
         if (useBidirectional && architecture.Complexity != NetworkComplexity.Simple)
         {
@@ -1558,16 +1558,16 @@ public static class LayerHelper<T>
                 new SigmoidActivation<T>()  // Scalar activation for gates
             );
         }
-    
+
         // Add dropout for regularization (common in RNNs to prevent overfitting)
         yield return new DropoutLayer<T>(0.2);
-    
+
         // For deeper networks, add another GRU layer if needed
         if (architecture.Complexity == NetworkComplexity.Deep)
         {
             int secondHiddenSize = hiddenSize / 2; // Typically decreasing size
             bool finalReturnSequences = architecture.TaskType == NeuralNetworkTaskType.SequenceToSequence;
-        
+
             yield return new GRULayer<T>(
                 hiddenSize,
                 secondHiddenSize,
@@ -1575,19 +1575,19 @@ public static class LayerHelper<T>
                 new TanhActivation<T>(),
                 new SigmoidActivation<T>() as IActivationFunction<T>
             );
-        
+
             yield return new DropoutLayer<T>(0.2);
-        
+
             // Update hidden size for the output layer
             hiddenSize = secondHiddenSize;
         }
-    
+
         // For sequence-to-sequence tasks, we might need a time-distributed dense layer
         if (architecture.TaskType == NeuralNetworkTaskType.SequenceToSequence)
         {
             // Choose appropriate activation based on task subtype
             IActivationFunction<T> timeDistributedActivation;
-        
+
             // Determine the appropriate activation function based on the specific task
             if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
             {
@@ -1602,11 +1602,11 @@ public static class LayerHelper<T>
                 // For regression or other sequence tasks, use linear activation
                 timeDistributedActivation = new IdentityActivation<T>();
             }
-        
+
             yield return new TimeDistributedLayer<T>(
                 new DenseLayer<T>(
-                    hiddenSize, 
-                    outputSize, 
+                    hiddenSize,
+                    outputSize,
                     new IdentityActivation<T>() as IActivationFunction<T>
                 ), timeDistributedActivation
             );
@@ -1615,12 +1615,12 @@ public static class LayerHelper<T>
         {
             // Standard dense output layer for other tasks
             yield return new DenseLayer<T>(
-                hiddenSize, 
-                outputSize, 
+                hiddenSize,
+                outputSize,
                 new IdentityActivation<T>() as IActivationFunction<T>
             );
         }
-    
+
         // Add final activation based on task type
         if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
         {
@@ -1681,8 +1681,8 @@ public static class LayerHelper<T>
         }
 
         int inputSize = inputShape[0];
-        int outputSize = architecture.OutputSize > 0 
-            ? architecture.OutputSize 
+        int outputSize = architecture.OutputSize > 0
+            ? architecture.OutputSize
             : throw new InvalidOperationException("Output size must be specified and greater than 0 for HTM network.");
 
         // Spatial Pooler Layer
@@ -1717,22 +1717,22 @@ public static class LayerHelper<T>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when the architecture has invalid input or output dimensions.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultMemoryNetworkLayers(
-            NeuralNetworkArchitecture<T> architecture, 
-            int memorySize, 
+            NeuralNetworkArchitecture<T> architecture,
+            int memorySize,
             int embeddingSize)
     {
         var inputShape = architecture.GetInputShape();
-    
+
         if (inputShape == null || inputShape.Length == 0)
         {
             throw new InvalidOperationException("Input shape must be specified for Memory Network.");
         }
 
         int inputSize = inputShape[0];
-        int outputSize = architecture.OutputSize > 0 
-            ? architecture.OutputSize 
+        int outputSize = architecture.OutputSize > 0
+            ? architecture.OutputSize
             : throw new InvalidOperationException("Output size must be specified and greater than 0 for Memory Network.");
-    
+
         // Calculate hidden layer size based on architecture complexity
         int hiddenSize;
         switch (architecture.Complexity)
@@ -1768,7 +1768,7 @@ public static class LayerHelper<T>
             outputSize: hiddenSize,
             activationFunction: new ReLUActivation<T>()
         );
-    
+
         // Memory Write Layer
         yield return new MemoryWriteLayer<T>(
             inputDimension: hiddenSize,
@@ -1778,7 +1778,7 @@ public static class LayerHelper<T>
 
         // Add the final Dense Layer
         yield return new DenseLayer<T>(
-            inputSize: hiddenSize, 
+            inputSize: hiddenSize,
             outputSize: outputSize,
             activationFunction: new IdentityActivation<T>()
         );
@@ -1810,25 +1810,25 @@ public static class LayerHelper<T>
         var inputShape = architecture.GetInputShape();
         int inputSize = inputShape[0];
         int outputSize = architecture.OutputSize;
-    
+
         // Default hidden layer size
         int hiddenSize = Math.Max(64, Math.Max(inputSize, outputSize));
-    
+
         // Default number of recurrent layers
         int recurrentLayerCount = 2;
-    
+
         // Input layer
         yield return new InputLayer<T>(inputSize);
-    
+
         // First RNN Layer
         yield return new RecurrentLayer<T>(
             inputSize: inputSize,
             hiddenSize: hiddenSize,
             activationFunction: new TanhActivation<T>()
         );
-    
+
         yield return new ActivationLayer<T>([hiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
-    
+
         // Additional RNN layers if needed
         for (int i = 1; i < recurrentLayerCount; i++)
         {
@@ -1837,17 +1837,17 @@ public static class LayerHelper<T>
                 hiddenSize: hiddenSize,
                 activationFunction: new TanhActivation<T>()
             );
-        
+
             yield return new ActivationLayer<T>([hiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
         }
-    
+
         // Add the final Dense Layer to map to output size
         yield return new DenseLayer<T>(
-            inputSize: hiddenSize, 
+            inputSize: hiddenSize,
             outputSize: outputSize,
             activationFunction: null
         );
-    
+
         // Add the final Activation Layer (typically Softmax for classification tasks)
         yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
@@ -1882,25 +1882,25 @@ public static class LayerHelper<T>
         var inputShape = architecture.GetInputShape();
         int inputSize = inputShape[0];
         int outputSize = architecture.OutputSize;
-    
+
         // If hiddenSize is not specified, use a reasonable default
         if (hiddenSize <= 0)
         {
             hiddenSize = Math.Max(10, (inputSize + outputSize) / 2);
         }
-    
+
         // Use default Gaussian RBF if not provided
         IRadialBasisFunction<T> rbf = rbfFunction ?? new GaussianRBF<T>();
-    
+
         // Input layer (just a placeholder, doesn't do any computation)
         yield return new InputLayer<T>(inputSize);
-    
+
         // RBF Layer
         yield return new RBFLayer<T>(inputSize, hiddenSize, rbf);
-    
+
         // Output Layer (Dense)
         yield return new DenseLayer<T>(hiddenSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
-    
+
         // Add the final Activation Layer based on task type
         if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
         {
@@ -1935,47 +1935,47 @@ public static class LayerHelper<T>
     /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
     /// <exception cref="ArgumentException">Thrown when numQubits is not positive.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultQuantumNetworkLayers(
-            NeuralNetworkArchitecture<T> architecture, 
+            NeuralNetworkArchitecture<T> architecture,
             int numQubits = 4)
     {
         if (architecture == null)
             throw new ArgumentNullException(nameof(architecture));
-    
+
         if (numQubits <= 0)
             throw new ArgumentException("Number of qubits must be positive", nameof(numQubits));
-    
+
         var inputShape = architecture.GetInputShape();
         int inputSize = inputShape[0];
         int outputSize = architecture.OutputSize;
-    
+
         // Define recommended default sizes for quantum networks
         int hiddenSize = Math.Max(32, Math.Max(inputSize, outputSize));
-    
+
         // Input layer
         yield return new InputLayer<T>(inputSize);
-    
+
         // First quantum layer with measurement
         yield return new QuantumLayer<T>(inputSize, hiddenSize, numQubits);
         yield return new MeasurementLayer<T>(hiddenSize);
-    
+
         // Add a dense layer after measurement
         yield return new DenseLayer<T>(
-            inputSize: hiddenSize, 
+            inputSize: hiddenSize,
             outputSize: hiddenSize,
             activationFunction: new ReLUActivation<T>()
         );
-    
+
         // Second quantum layer with measurement
         yield return new QuantumLayer<T>(hiddenSize, hiddenSize, numQubits);
         yield return new MeasurementLayer<T>(hiddenSize);
-    
+
         // Final dense layer to map to output size
         yield return new DenseLayer<T>(
-            inputSize: hiddenSize, 
+            inputSize: hiddenSize,
             outputSize: outputSize,
             activationFunction: null
         );
-    
+
         // Final activation based on task type
         if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
         {
@@ -2021,41 +2021,41 @@ public static class LayerHelper<T>
     {
         if (architecture == null)
             throw new ArgumentNullException(nameof(architecture));
-    
+
         if (memorySize <= 0)
             throw new ArgumentException("Memory size must be positive", nameof(memorySize));
-    
+
         if (memoryVectorSize <= 0)
             throw new ArgumentException("Memory vector size must be positive", nameof(memoryVectorSize));
-    
+
         if (controllerSize <= 0)
             throw new ArgumentException("Controller size must be positive", nameof(controllerSize));
-    
+
         var inputShape = architecture.GetInputShape();
         int inputSize = inputShape[0];
         int outputSize = architecture.OutputSize;
-    
+
         // Input layer
         yield return new InputLayer<T>(inputSize);
-    
+
         // Controller (Feed-forward network)
         yield return new DenseLayer<T>(inputSize, controllerSize, new TanhActivation<T>() as IActivationFunction<T>);
-        
+
         // Read heads - typically use content-based addressing with cosine similarity
-        yield return new MemoryReadLayer<T>(controllerSize, memoryVectorSize, memoryVectorSize, 
+        yield return new MemoryReadLayer<T>(controllerSize, memoryVectorSize, memoryVectorSize,
             new SigmoidActivation<T>() as IActivationFunction<T>);
-    
+
         // Write heads - typically use gated mechanism with sigmoid for gates
         yield return new MemoryWriteLayer<T>(
-            controllerSize, 
+            controllerSize,
             memoryVectorSize,
             new TanhActivation<T>() as IActivationFunction<T>
         );
-    
+
         // Output layer - linear projection before final task-specific activation
-        yield return new DenseLayer<T>(controllerSize + memoryVectorSize, outputSize, 
+        yield return new DenseLayer<T>(controllerSize + memoryVectorSize, outputSize,
             new IdentityActivation<T>() as IActivationFunction<T>);
-    
+
         // Final activation based on task type
         if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
         {
@@ -2111,32 +2111,41 @@ public static class LayerHelper<T>
 
         // Determine hidden layer sizes based on network complexity
         List<int> hiddenLayerSizes = new List<int>();
-    
+
         switch (architecture.Complexity)
         {
             case NetworkComplexity.Simple:
                 // One hidden layer with size between input and output
                 hiddenLayerSizes.Add((inputSize + outputSize) / 2);
                 break;
-        
+
             case NetworkComplexity.Medium:
                 // Two hidden layers
                 hiddenLayerSizes.Add(inputSize * 2);
                 hiddenLayerSizes.Add(inputSize);
                 break;
-        
+
             case NetworkComplexity.Deep:
                 // Three hidden layers
                 hiddenLayerSizes.Add(inputSize * 2);
                 hiddenLayerSizes.Add(inputSize * 2);
                 hiddenLayerSizes.Add(inputSize);
                 break;
-        
+
             default:
                 // Default to one hidden layer
                 hiddenLayerSizes.Add(inputSize);
                 break;
         }
+
+        IActivationFunction<T>? outputActivation = architecture.TaskType switch
+        {
+            NeuralNetworkTaskType.BinaryClassification => new SigmoidActivation<T>(),
+            NeuralNetworkTaskType.MultiClassClassification => new SoftmaxActivation<T>(),
+            NeuralNetworkTaskType.SequenceClassification => new SoftmaxActivation<T>(),
+            NeuralNetworkTaskType.MultiLabelClassification => new SigmoidActivation<T>(),
+            _ => null // Regression and other task types default to linear outputs
+        };
 
         // Create input layer to first hidden layer
         int firstHiddenLayerSize = hiddenLayerSizes.Count > 0 ? hiddenLayerSizes[0] : outputSize;
@@ -2148,7 +2157,7 @@ public static class LayerHelper<T>
         {
             int currentLayerSize = hiddenLayerSizes[i];
             int nextLayerSize = hiddenLayerSizes[i + 1];
-    
+
             yield return new DenseLayer<T>(currentLayerSize, nextLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
             yield return new ActivationLayer<T>([nextLayerSize], new ReLUActivation<T>() as IActivationFunction<T>);
         }
@@ -2157,15 +2166,90 @@ public static class LayerHelper<T>
         if (hiddenLayerSizes.Count > 0)
         {
             int lastHiddenLayerSize = hiddenLayerSizes[hiddenLayerSizes.Count - 1];
-            yield return new DenseLayer<T>(lastHiddenLayerSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(lastHiddenLayerSize, outputSize, (IActivationFunction<T>)new IdentityActivation<T>());
         }
         else
         {
             // If no hidden layers, connect input directly to output
-            yield return new DenseLayer<T>(inputSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(inputSize, outputSize, (IActivationFunction<T>)new IdentityActivation<T>());
         }
 
-        // Final activation layer for output
+        if (outputActivation != null)
+        {
+            yield return new ActivationLayer<T>(new[] { outputSize }, outputActivation);
+        }
+    }
+
+    /// <summary>
+    /// Creates a default configuration of layers for a Bayesian neural network (Bayes-by-Backprop style).
+    /// </summary>
+    /// <remarks>
+    /// This mirrors the library's default dense+activation patterns, but uses Bayesian dense layers so the network can
+    /// express epistemic uncertainty through weight distributions.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultBayesianNeuralNetworkLayers(NeuralNetworkArchitecture<T> architecture)
+    {
+        if (architecture == null)
+        {
+            throw new ArgumentNullException(nameof(architecture));
+        }
+
+        int inputSize = architecture.GetInputShape()[0];
+        int outputSize = architecture.OutputSize;
+
+        if (inputSize <= 0)
+        {
+            throw new InvalidOperationException("Input size must be greater than zero.");
+        }
+
+        if (outputSize <= 0)
+        {
+            throw new InvalidOperationException("Output size must be greater than zero.");
+        }
+
+        List<int> hiddenLayerSizes = new List<int>();
+        switch (architecture.Complexity)
+        {
+            case NetworkComplexity.Simple:
+                hiddenLayerSizes.Add((inputSize + outputSize) / 2);
+                break;
+            case NetworkComplexity.Medium:
+                hiddenLayerSizes.Add(inputSize * 2);
+                hiddenLayerSizes.Add(inputSize);
+                break;
+            case NetworkComplexity.Deep:
+                hiddenLayerSizes.Add(inputSize * 2);
+                hiddenLayerSizes.Add(inputSize * 2);
+                hiddenLayerSizes.Add(inputSize);
+                break;
+            default:
+                hiddenLayerSizes.Add(inputSize);
+                break;
+        }
+
+        int firstHiddenLayerSize = hiddenLayerSizes.Count > 0 ? hiddenLayerSizes[0] : outputSize;
+        yield return new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(inputSize, firstHiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ActivationLayer<T>([firstHiddenLayerSize], new ReLUActivation<T>() as IActivationFunction<T>);
+
+        for (int i = 0; i < hiddenLayerSizes.Count - 1; i++)
+        {
+            int currentLayerSize = hiddenLayerSizes[i];
+            int nextLayerSize = hiddenLayerSizes[i + 1];
+
+            yield return new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(currentLayerSize, nextLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ActivationLayer<T>([nextLayerSize], new ReLUActivation<T>() as IActivationFunction<T>);
+        }
+
+        if (hiddenLayerSizes.Count > 0)
+        {
+            int lastHiddenLayerSize = hiddenLayerSizes[hiddenLayerSizes.Count - 1];
+            yield return new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(lastHiddenLayerSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+        }
+        else
+        {
+            yield return new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(inputSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+        }
+
         yield return new ActivationLayer<T>(new[] { outputSize }, new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
@@ -2321,15 +2405,15 @@ public static class LayerHelper<T>
 
         // Get input shape and output size
         var inputShape = architecture.GetInputShape();
-    
+
         if (inputShape == null || inputShape.Length == 0)
         {
             throw new InvalidOperationException("Input shape must be specified for LSTM network.");
         }
-    
+
         int inputSize = inputShape[0];
         int outputSize = architecture.OutputSize;
-    
+
         if (inputSize <= 0)
         {
             throw new InvalidOperationException("Input size must be greater than zero.");
@@ -2343,7 +2427,7 @@ public static class LayerHelper<T>
         // Calculate hidden layer sizes based on network complexity
         int _hiddenSize;  // Size of hidden state in LSTM cells
         int _numLayers;   // Number of stacked LSTM layers
-    
+
         switch (architecture.Complexity)
         {
             case NetworkComplexity.Simple:
@@ -2366,17 +2450,17 @@ public static class LayerHelper<T>
 
         // Input layer - receives the raw input data
         yield return new InputLayer<T>(inputSize);
-    
+
         // LSTM layers - process sequential information with memory capabilities
         int _currentInputSize = inputSize;
-    
+
         for (int i = 0; i < _numLayers; i++)
         {
             // For deeper networks, gradually decrease the hidden size
-            int _layerHiddenSize = i == _numLayers - 1 ? 
-                Math.Max(outputSize, _hiddenSize / 2) : 
+            int _layerHiddenSize = i == _numLayers - 1 ?
+                Math.Max(outputSize, _hiddenSize / 2) :
                 _hiddenSize;
-        
+
             // Add LSTM Layer
             yield return new LSTMLayer<T>(
                 inputSize: _currentInputSize,
@@ -2385,16 +2469,16 @@ public static class LayerHelper<T>
                 activation: new TanhActivation<T>(),
                 recurrentActivation: new SigmoidActivation<T>() as IActivationFunction<T>
             );
-    
+
             // Add Activation Layer after LSTM
             yield return new ActivationLayer<T>([_layerHiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
-    
+
             _currentInputSize = _layerHiddenSize;
         }
 
         // Add the final Dense Layer - transforms LSTM output to desired output size
         yield return new DenseLayer<T>(
-            inputSize: _currentInputSize, 
+            inputSize: _currentInputSize,
             outputSize: outputSize,
             activationFunction: new IdentityActivation<T>()
         );

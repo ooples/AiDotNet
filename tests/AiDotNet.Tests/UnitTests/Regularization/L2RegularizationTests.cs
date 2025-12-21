@@ -1,9 +1,9 @@
-using AiDotNet.Tensors.LinearAlgebra;
 using System;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Regularization;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.Regularization

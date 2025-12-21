@@ -25,7 +25,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     BinaryClassification,
-    
+
     /// <summary>
     /// Multi-class classification task (more than two classes)
     /// </summary>
@@ -38,7 +38,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     MultiClassClassification,
-    
+
     /// <summary>
     /// Multi-label classification task (multiple labels can be assigned)
     /// </summary>
@@ -51,7 +51,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     MultiLabelClassification,
-    
+
     /// <summary>
     /// Regression task (predicting continuous values)
     /// </summary>
@@ -63,7 +63,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     Regression,
-    
+
     /// <summary>
     /// Sequence-to-sequence task (e.g., machine translation)
     /// </summary>
@@ -88,7 +88,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     SequenceClassification,
-    
+
     /// <summary>
     /// Time series forecasting task
     /// </summary>
@@ -101,7 +101,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     TimeSeriesForecasting,
-    
+
     /// <summary>
     /// Image classification task
     /// </summary>
@@ -114,7 +114,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     ImageClassification,
-    
+
     /// <summary>
     /// Object detection task
     /// </summary>
@@ -127,7 +127,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     ObjectDetection,
-    
+
     /// <summary>
     /// Image segmentation task
     /// </summary>
@@ -140,7 +140,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     ImageSegmentation,
-    
+
     /// <summary>
     /// Natural language processing task
     /// </summary>
@@ -152,7 +152,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     NaturalLanguageProcessing,
-    
+
     /// <summary>
     /// Text generation task
     /// </summary>
@@ -165,7 +165,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     TextGeneration,
-    
+
     /// <summary>
     /// Reinforcement learning task
     /// </summary>
@@ -178,7 +178,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     ReinforcementLearning,
-    
+
     /// <summary>
     /// Anomaly detection task
     /// </summary>
@@ -191,7 +191,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     AnomalyDetection,
-    
+
     /// <summary>
     /// Recommendation system task
     /// </summary>
@@ -203,7 +203,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     Recommendation,
-    
+
     /// <summary>
     /// Clustering task
     /// </summary>
@@ -216,7 +216,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     Clustering,
-    
+
     /// <summary>
     /// Dimensionality reduction task
     /// </summary>
@@ -229,7 +229,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     DimensionalityReduction,
-    
+
     /// <summary>
     /// Generative task (e.g., GANs, VAEs)
     /// </summary>
@@ -242,7 +242,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     Generative,
-    
+
     /// <summary>
     /// Speech recognition task
     /// </summary>
@@ -254,7 +254,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     SpeechRecognition,
-    
+
     /// <summary>
     /// Audio processing task
     /// </summary>
@@ -280,7 +280,7 @@ public enum NeuralNetworkTaskType
     /// </para>
     /// </remarks>
     Translation,
-    
+
     /// <summary>
     /// Custom task type
     /// </summary>

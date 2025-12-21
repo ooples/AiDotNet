@@ -137,13 +137,13 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
 
             // Calculate the norm (length) of the resulting vector
             R[j, j] = v.Norm();
-            
+
             // Normalize the vector and store it as a column in Q using Engine division
 
-            
+
             var normalized = (Vector<T>)Engine.Divide(v, R[j, j]);
 
-            
+
             Q.SetColumn(j, normalized);
         }
 
@@ -197,13 +197,13 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
 
             // Calculate the norm (length) of the resulting vector
             R[i, i] = v.Norm();
-            
+
             // Normalize the vector and store it as a column in Q using Engine division
 
-            
+
             var normalizedI = (Vector<T>)Engine.Divide(v, R[i, i]);
 
-            
+
             Q.SetColumn(i, normalizedI);
         }
 

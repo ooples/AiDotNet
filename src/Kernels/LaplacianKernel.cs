@@ -50,7 +50,7 @@ public class LaplacianKernel<T> : IKernelFunction<T>
     /// adjust it based on your specific needs.
     /// </remarks>
     private readonly T _sigma;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

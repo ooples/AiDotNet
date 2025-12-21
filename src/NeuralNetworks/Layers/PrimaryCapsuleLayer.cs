@@ -65,7 +65,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// during the parameter update step.
     /// </remarks>
     private Tensor<T>? _convBiasGradient;
-    
+
     /// <summary>
     /// The input tensor from the most recent forward pass.
     /// </summary>
@@ -74,7 +74,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// during the backward pass for gradient calculation.
     /// </remarks>
     private Tensor<T>? _lastInput;
-    
+
     /// <summary>
     /// The output tensor from the most recent forward pass.
     /// </summary>
@@ -91,7 +91,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// This field stores the number of channels in the input tensor.
     /// </remarks>
     private readonly int _inputChannels;
-    
+
     /// <summary>
     /// The number of capsule channels.
     /// </summary>
@@ -99,7 +99,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// This field stores the number of different types of capsules that the layer will produce.
     /// </remarks>
     private readonly int _capsuleChannels;
-    
+
     /// <summary>
     /// The dimension of each capsule.
     /// </summary>
@@ -107,7 +107,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// This field stores the dimension of the vector that each capsule outputs.
     /// </remarks>
     private readonly int _capsuleDimension;
-    
+
     /// <summary>
     /// The size of the convolutional kernel.
     /// </summary>
@@ -115,7 +115,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// This field stores the size of the square kernel used for convolution operations.
     /// </remarks>
     private readonly int _kernelSize;
-    
+
     /// <summary>
     /// The stride of the convolution operation.
     /// </summary>
@@ -499,15 +499,15 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         // _convWeights is [OutputChannels, InputChannels * KernelSize * KernelSize]
         // We need [OutputChannels, InputChannels, KernelSize, KernelSize]
         int totalOutputChannels = _capsuleChannels * _capsuleDimension;
-        var weights4DNode = Autodiff.TensorOperations<T>.Reshape(weightsNode, 
+        var weights4DNode = Autodiff.TensorOperations<T>.Reshape(weightsNode,
             new int[] { totalOutputChannels, _inputChannels, _kernelSize, _kernelSize });
 
         // 3. Conv2D Operation
         var convOutput = Autodiff.TensorOperations<T>.Conv2D(
-            inputNode, 
-            weights4DNode, 
-            biasNode, 
-            new int[] { _stride, _stride }, 
+            inputNode,
+            weights4DNode,
+            biasNode,
+            new int[] { _stride, _stride },
             new int[] { 0, 0 } // Padding is handled via output size calculation usually, check Forward
         );
         // Note: Forward uses manual padding logic? 

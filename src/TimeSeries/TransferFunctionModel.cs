@@ -34,42 +34,42 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// Configuration options specific to the Transfer Function Model.
     /// </summary>
     private readonly TransferFunctionOptions<T, Matrix<T>, Vector<T>> _tfOptions;
-    
+
     /// <summary>
     /// Autoregressive (AR) parameters that capture the dependency on past values of the output series.
     /// </summary>
     private Vector<T> _arParameters;
-    
+
     /// <summary>
     /// Moving Average (MA) parameters that capture the dependency on past error terms.
     /// </summary>
     private Vector<T> _maParameters;
-    
+
     /// <summary>
     /// Parameters that capture the effect of input variables at different lags.
     /// </summary>
     private Vector<T> _inputLags;
-    
+
     /// <summary>
     /// Parameters that capture the effect of output variables at different lags.
     /// </summary>
     private Vector<T> _outputLags;
-    
+
     /// <summary>
     /// Residuals (errors) from the model fit.
     /// </summary>
     private Vector<T> _residuals;
-    
+
     /// <summary>
     /// Fitted values from the model.
     /// </summary>
     private Vector<T> _fitted;
-    
+
     /// <summary>
     /// The original output time series data.
     /// </summary>
     private Vector<T> _y;
-    
+
     /// <summary>
     /// The optimization algorithm used to estimate model parameters.
     /// </summary>
@@ -326,7 +326,7 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private T PredictSingle(Matrix<T> x, Vector<T> predictions, int index)
     {
-                T prediction = NumOps.Zero;
+        T prediction = NumOps.Zero;
 
         // Add AR terms
         for (int i = 0; i < _arParameters.Length; i++)
@@ -539,10 +539,10 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
 
         // Initialize model parameters
         InitializeParameters();
-    
+
         // Optimize parameters to best fit the data
         OptimizeParameters(x, y);
-    
+
         // Compute residuals to assess model fit
         ComputeResiduals(x, y);
     }
@@ -577,25 +577,25 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     public override T PredictSingle(Vector<T> input)
     {
         // Check if the model has been trained
-        if (_arParameters.Length == 0 && _maParameters.Length == 0 && 
+        if (_arParameters.Length == 0 && _maParameters.Length == 0 &&
             _inputLags.Length == 0 && _outputLags.Length == 0)
         {
             throw new InvalidOperationException("The model must be trained before making predictions.");
         }
-    
+
         // Create a matrix with a single row from the input vector
         Matrix<T> inputMatrix = new Matrix<T>(1, input.Length);
         for (int i = 0; i < input.Length; i++)
         {
             inputMatrix[0, i] = input[i];
         }
-    
+
         // Create an empty vector to store the single prediction
         Vector<T> predictions = new Vector<T>(1);
-    
+
         // Generate the prediction
         predictions[0] = PredictSingle(inputMatrix, predictions, 0);
-    
+
         return predictions[0];
     }
 
@@ -651,7 +651,7 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
             },
             ModelData = this.Serialize()
         };
-    
+
         return metadata;
     }
 

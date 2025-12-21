@@ -1,6 +1,6 @@
-using AiDotNet.LinearAlgebra;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation;
 

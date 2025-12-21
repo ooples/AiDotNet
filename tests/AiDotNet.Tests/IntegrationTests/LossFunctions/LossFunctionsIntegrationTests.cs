@@ -1,6 +1,6 @@
 using AiDotNet.Interfaces;
-using AiDotNet.LossFunctions;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.LossFunctions;

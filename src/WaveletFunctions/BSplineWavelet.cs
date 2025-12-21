@@ -341,7 +341,7 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// <param name="input">The input signal vector.</param>
     /// <param name="filter">The filter vector.</param>
     /// <returns>The convolved signal vector.</returns>
-        /// <remarks>
+    /// <remarks>
     /// <para>
     /// <b>For Beginners:</b>
     /// Convolution is a mathematical operation that combines two functions to produce a third function.

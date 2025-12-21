@@ -24,7 +24,7 @@ public enum ModificationType
     /// </para>
     /// </remarks>
     AddNode,
-    
+
     /// <summary>
     /// Removes an existing node from the model structure.
     /// </summary>
@@ -37,7 +37,7 @@ public enum ModificationType
     /// </para>
     /// </remarks>
     RemoveNode,
-    
+
     /// <summary>
     /// Changes the type or function of an existing node.
     /// </summary>

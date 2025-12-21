@@ -37,12 +37,12 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// Collection of decision trees that make up the ensemble.
     /// </summary>
     private List<DecisionTreeRegression<T>> _trees;
-    
+
     /// <summary>
     /// The initial prediction value, typically the mean of the target values.
     /// </summary>
     private T _initialPrediction;
-    
+
     /// <summary>
     /// Configuration options for the Gradient Boosting algorithm.
     /// </summary>

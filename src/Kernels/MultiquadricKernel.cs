@@ -49,7 +49,7 @@ public class MultiquadricKernel<T> : IKernelFunction<T>
     /// problem you're trying to solve.
     /// </remarks>
     private readonly T _c;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

@@ -1,7 +1,7 @@
 
 using AiDotNet.Interfaces;
-using AiDotNet.TransferLearning.FeatureMapping;
 using AiDotNet.TransferLearning.DomainAdaptation;
+using AiDotNet.TransferLearning.FeatureMapping;
 
 namespace AiDotNet.TransferLearning.Algorithms;
 

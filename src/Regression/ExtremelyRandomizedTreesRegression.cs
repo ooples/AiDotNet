@@ -33,12 +33,12 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     /// The configuration options for the Extremely Randomized Trees algorithm.
     /// </summary>
     private readonly ExtremelyRandomizedTreesRegressionOptions _options;
-    
+
     /// <summary>
     /// Collection of individual decision trees that make up the ensemble.
     /// </summary>
     private List<DecisionTreeRegression<T>> _trees;
-    
+
     /// <summary>
     /// Random number generator used for bootstrapping and feature selection.
     /// </summary>

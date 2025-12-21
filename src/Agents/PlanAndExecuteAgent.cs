@@ -1,7 +1,7 @@
+using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System.Text.RegularExpressions;
 
 namespace AiDotNet.Agents;
 

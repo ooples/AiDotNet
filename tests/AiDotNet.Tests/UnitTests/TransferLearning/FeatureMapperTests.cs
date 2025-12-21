@@ -1,6 +1,6 @@
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TransferLearning.FeatureMapping;
-using AiDotNet.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.TransferLearning;

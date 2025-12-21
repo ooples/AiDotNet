@@ -39,7 +39,7 @@ public class PaddingLayer<T> : LayerBase<T>
     /// the number of zeros to add on both sides of the corresponding dimension.
     /// </remarks>
     private readonly int[] _padding;
-    
+
     /// <summary>
     /// The input tensor from the most recent forward pass.
     /// </summary>
@@ -48,7 +48,7 @@ public class PaddingLayer<T> : LayerBase<T>
     /// during the backward pass for gradient calculation.
     /// </remarks>
     private Tensor<T>? _lastInput;
-    
+
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
@@ -73,7 +73,7 @@ public class PaddingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PaddingLayer{T}"/> class with the specified input shape,
     /// padding, and a scalar activation function.
@@ -103,7 +103,7 @@ public class PaddingLayer<T> : LayerBase<T>
     {
         _padding = padding;
     }
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PaddingLayer{T}"/> class with the specified input shape,
     /// padding, and a vector activation function.
@@ -134,7 +134,7 @@ public class PaddingLayer<T> : LayerBase<T>
     {
         _padding = padding;
     }
-    
+
     /// <summary>
     /// Calculates the output shape of the padding layer based on the input shape and padding amounts.
     /// </summary>
@@ -171,7 +171,7 @@ public class PaddingLayer<T> : LayerBase<T>
         }
         return outputShape;
     }
-    
+
     /// <summary>
     /// Performs the forward pass of the padding layer.
     /// </summary>
@@ -210,7 +210,7 @@ public class PaddingLayer<T> : LayerBase<T>
         var paddedOutput = Engine.Pad(input, _padding[1], _padding[1], _padding[2], _padding[2], NumOps.Zero);
         return ApplyActivation(paddedOutput);
     }
-    
+
     /// <summary>
     /// Performs the backward pass of the padding layer.
     /// </summary>
@@ -287,7 +287,7 @@ public class PaddingLayer<T> : LayerBase<T>
         var inputGradient = Engine.PadBackward(outputGradient, _padding[1], _padding[2], _lastInput.Shape);
         return ApplyActivationDerivative(_lastInput, inputGradient);
     }
-    
+
     /// <summary>
     /// Updates the parameters of the padding layer using the calculated gradients.
     /// </summary>
@@ -310,7 +310,7 @@ public class PaddingLayer<T> : LayerBase<T>
     {
         // No parameters to update in a padding layer
     }
-    
+
     /// <summary>
     /// Gets all trainable parameters from the padding layer as a single vector.
     /// </summary>
@@ -335,7 +335,7 @@ public class PaddingLayer<T> : LayerBase<T>
         // PaddingLayer has no trainable parameters
         return Vector<T>.Empty();
     }
-    
+
     /// <summary>
     /// Resets the internal state of the padding layer.
     /// </summary>

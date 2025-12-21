@@ -34,7 +34,7 @@ public class MarginLoss<T> : LossFunctionBase<T>
     private readonly T _mPlus;
     private readonly T _mMinus;
     private readonly T _lambda;
-    
+
     /// <summary>
     /// Initializes a new instance of the MarginLoss class with the specified parameters.
     /// </summary>
@@ -47,7 +47,7 @@ public class MarginLoss<T> : LossFunctionBase<T>
         _mMinus = NumOps.FromDouble(mMinus);
         _lambda = NumOps.FromDouble(lambda);
     }
-    
+
     /// <summary>
     /// Calculates the Margin loss between predicted and actual values.
     /// </summary>
@@ -57,7 +57,7 @@ public class MarginLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T loss = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -72,10 +72,10 @@ public class MarginLoss<T> : LossFunctionBase<T>
 
             loss = NumOps.Add(loss, NumOps.Add(term1, NumOps.Multiply(_lambda, term2)));
         }
-        
+
         return NumOps.Divide(loss, NumOps.FromDouble(predicted.Length));
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Margin loss function.
     /// </summary>
@@ -85,7 +85,7 @@ public class MarginLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -108,7 +108,7 @@ public class MarginLoss<T> : LossFunctionBase<T>
                 derivative[i] = NumOps.Zero;
             }
         }
-        
+
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
 }

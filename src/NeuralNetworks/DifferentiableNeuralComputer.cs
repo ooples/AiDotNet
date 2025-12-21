@@ -375,13 +375,13 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </para>
     /// </remarks>
     public DifferentiableNeuralComputer(
-        NeuralNetworkArchitecture<T> architecture, 
-        int memorySize, 
-        int memoryWordSize, 
-        int controllerSize, 
+        NeuralNetworkArchitecture<T> architecture,
+        int memorySize,
+        int memoryWordSize,
+        int controllerSize,
         int readHeads,
         ILossFunction<T>? lossFunction = null,
-        IActivationFunction<T>? activationFunction = null) 
+        IActivationFunction<T>? activationFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
@@ -401,7 +401,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Calculate combinedSize (controller output + read vectors)
         int outputSize = architecture.OutputSize;
         int combinedSize = controllerSize + (_readHeads * _memoryWordSize);
-            
+
         // Determine appropriate activation function based on task type
         _activationFunction = activationFunction ?? NeuralNetworkHelper<T>.GetDefaultActivationFunction(architecture.TaskType);
 
@@ -449,13 +449,13 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </para>
     /// </remarks>
     public DifferentiableNeuralComputer(
-        NeuralNetworkArchitecture<T> architecture, 
-        int memorySize, 
-        int memoryWordSize, 
-        int controllerSize, 
+        NeuralNetworkArchitecture<T> architecture,
+        int memorySize,
+        int memoryWordSize,
+        int controllerSize,
         int readHeads,
         ILossFunction<T>? lossFunction = null,
-        IVectorActivationFunction<T>? vectorActivationFunction = null) 
+        IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
@@ -475,7 +475,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Calculate combinedSize (controller output + read vectors)
         int outputSize = architecture.OutputSize;
         int combinedSize = controllerSize + (_readHeads * _memoryWordSize);
-            
+
         // Determine appropriate vector activation function based on task type
         _vectorActivationFunction = vectorActivationFunction ?? NeuralNetworkHelper<T>.GetDefaultVectorActivationFunction(architecture.TaskType);
 
@@ -846,7 +846,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         // Process the input through the network
         Tensor<T> output = ProcessInput(input, true);
-        
+
         // Calculate error/loss
         var flattenedPredictions = output.ToVector();
         var flattenedExpected = expectedOutput.ToVector();
@@ -860,26 +860,26 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Backpropagate the error through the network
         Tensor<T> inputGradientsTensor = Backpropagate(Tensor<T>.FromVector(outputGradients));
         Vector<T> inputGradients = inputGradientsTensor.ToVector();
-        
+
         // Get parameter gradients
         Vector<T> parameterGradients = GetParameterGradients();
-        
+
         // Apply gradient clipping to prevent exploding gradients
         parameterGradients = ClipGradient(parameterGradients);
-        
+
         // Create optimizer (here we use a simple gradient descent optimizer)
         var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
-        
+
         // Update parameters using the optimizer
         Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
-        
+
         // Apply updated parameters
         UpdateParameters(updatedParameters);
     }
-    
+
     /// <summary>
     /// Processes an input through the DNC, updating memory state and producing an output.
     /// </summary>
@@ -911,31 +911,31 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         {
             layer.SetTrainingMode(isTraining);
         }
-        
+
         // Previous read vectors are concatenated with the input to provide context
         Tensor<T> controllerInput = PrepareControllerInput(input);
-        
+
         // Process the input through the controller network
         Tensor<T> controllerOutput = ProcessThroughController(controllerInput);
-        
+
         // Parse the controller output to get memory interface signals
         var interfaceOutput = ParseControllerOutput(controllerOutput);
-        
+
         // Update memory based on interface signals
         UpdateMemory(interfaceOutput);
-        
+
         // Read from memory based on interface signals
         List<Vector<T>> newReadVectors = ReadFromMemory(interfaceOutput);
-        
+
         // Update read vectors for the next time step
         _readVectors = newReadVectors;
-        
+
         // Combine controller output with read vectors to produce final output
         Tensor<T> finalOutput = CombineControllerOutputWithReadVectors(controllerOutput, newReadVectors);
-        
+
         return finalOutput;
     }
-    
+
     /// <summary>
     /// Prepares the input for the controller by concatenating it with previous read vectors.
     /// </summary>
@@ -972,23 +972,23 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 }
             }
         }
-        
+
         // Flatten input tensor
         Vector<T> flattenedInput = input.ToVector();
-        
+
         // Calculate the total size of the controller input
         int inputSize = flattenedInput.Length;
         int totalSize = inputSize + (_readHeads * _memoryWordSize);
-        
+
         // Create a new vector for the combined input
         Vector<T> combinedInput = new Vector<T>(totalSize);
-        
+
         // Copy the input
         for (int i = 0; i < inputSize; i++)
         {
             combinedInput[i] = flattenedInput[i];
         }
-        
+
         // Copy the read vectors
         int offset = inputSize;
         for (int i = 0; i < _readHeads; i++)
@@ -998,11 +998,11 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 combinedInput[offset++] = _readVectors[i][j];
             }
         }
-        
+
         // Convert to tensor with appropriate shape for the controller
         return Tensor<T>.FromVector(combinedInput).Reshape(1, totalSize);
     }
-    
+
     /// <summary>
     /// Processes the prepared input through the controller network.
     /// </summary>
@@ -1031,21 +1031,21 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         // Process through all layers except the last one, which is typically an output layer
         Tensor<T> currentOutput = controllerInput;
-        
+
         for (int i = 0; i < Layers.Count; i++)
         {
             currentOutput = Layers[i].Forward(currentOutput);
-            
+
             // Store input/output for each layer if in training mode
             if (IsTrainingMode)
             {
                 _layerInputs[i] = currentOutput;
             }
         }
-        
+
         return currentOutput;
     }
-    
+
     /// <summary>
     /// Parses the controller output to extract memory interface signals.
     /// </summary>
@@ -1075,7 +1075,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         // For simplicity, we'll assume controllerOutput is a 2D tensor with shape [1, interfaceSize]
         Vector<T> interfaceVector = controllerOutput.ToVector();
-        
+
         // Parse the interface vector into its components
         MemoryInterfaceSignals signals = new MemoryInterfaceSignals
         {
@@ -1089,7 +1089,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             WriteGate = SigmoidActivation(interfaceVector[3 * _memoryWordSize + 2]),
             ReadModes = []
         };
-        
+
         // Extract read keys and strengths
         int offset = 3 * _memoryWordSize + 3;
         for (int i = 0; i < _readHeads; i++)
@@ -1098,7 +1098,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             offset += _memoryWordSize;
             signals.ReadStrengths.Add(interfaceVector[offset++]);
         }
-        
+
         // Extract read modes (backward, content, forward)
         for (int i = 0; i < _readHeads; i++)
         {
@@ -1115,10 +1115,10 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             }
             signals.ReadModes.Add(readMode);
         }
-        
+
         return signals;
     }
-    
+
     /// <summary>
     /// Extracts a vector from a larger vector at a specified offset.
     /// </summary>
@@ -1135,7 +1135,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         }
         return result;
     }
-    
+
     /// <summary>
     /// Applies the sigmoid activation function to a scalar value.
     /// </summary>
@@ -1148,7 +1148,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         double sigmoid = 1.0 / (1.0 + Math.Exp(-doubleValue));
         return NumOps.FromDouble(sigmoid);
     }
-    
+
     /// <summary>
     /// Updates the memory matrix based on the interface signals.
     /// </summary>
@@ -1176,29 +1176,29 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Calculate write weighting based on content addressing and allocation
         Vector<T> contentWeighting = ContentAddressing(_memory, signals.WriteKey, signals.WriteStrength);
         Vector<T> allocationWeighting = Allocate(_usageFree, _precedenceWeighting);
-        
+
         // Combine content and allocation weightings
         _writeWeighting = CombineWeightings(contentWeighting, allocationWeighting, signals.AllocationGate);
-        
+
         // Apply the write gate
         for (int i = 0; i < _memorySize; i++)
         {
             _writeWeighting[i] = NumOps.Multiply(_writeWeighting[i], signals.WriteGate);
         }
-        
+
         // Write to memory
         WriteToMemory(signals.WriteVector, signals.EraseVector);
-        
+
         // Update usage vector
         UpdateUsage();
-        
+
         // Update precedence weighting
         UpdatePrecedence();
-        
+
         // Update temporal link matrix
         UpdateTemporalLinks();
     }
-    
+
     /// <summary>
     /// Reads from memory based on the interface signals.
     /// </summary>
@@ -1225,19 +1225,19 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     private List<Vector<T>> ReadFromMemory(MemoryInterfaceSignals signals)
     {
         List<Vector<T>> readVectors = [];
-        
+
         // Calculate read weightings for each read head
         for (int i = 0; i < _readHeads; i++)
         {
             // Calculate content-based addressing
             Vector<T> contentWeighting = ContentAddressing(_memory, signals.ReadKeys[i], signals.ReadStrengths[i]);
-            
+
             // Calculate backward weighting (temporal links)
             Vector<T> backwardWeighting = _temporalLinkMatrix.Multiply(_readWeightings[i]);
-            
+
             // Calculate forward weighting (temporal links)
             Vector<T> forwardWeighting = _temporalLinkMatrix.Transpose().Multiply(_readWeightings[i]);
-            
+
             // Combine weightings based on read modes
             _readWeightings[i] = new Vector<T>(_memorySize);
             for (int j = 0; j < _memorySize; j++)
@@ -1250,7 +1250,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                     NumOps.Multiply(forwardWeighting[j], signals.ReadModes[i][2])
                 );
             }
-            
+
             // Read from memory using the calculated weighting
             Vector<T> readVector = new Vector<T>(_memoryWordSize);
             for (int j = 0; j < _memoryWordSize; j++)
@@ -1264,13 +1264,13 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                     );
                 }
             }
-            
+
             readVectors.Add(readVector);
         }
-        
+
         return readVectors;
     }
-    
+
     /// <summary>
     /// Combines the controller output with read vectors to produce the final output.
     /// </summary>
@@ -1365,24 +1365,24 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     private Vector<T> ContentAddressing(Matrix<T> memory, Vector<T> key, T strength)
     {
         Vector<T> similarityScores = new Vector<T>(_memorySize);
-        
+
         // Calculate cosine similarity between key and each memory row
         for (int i = 0; i < _memorySize; i++)
         {
             Vector<T> memoryRow = memory.GetRow(i);
             similarityScores[i] = CosineSimilarity(key, memoryRow);
         }
-        
+
         // Apply strength (temperature) to similarities
         for (int i = 0; i < _memorySize; i++)
         {
             similarityScores[i] = NumOps.Multiply(similarityScores[i], strength);
         }
-        
+
         // Apply softmax to get weights
         return Softmax(similarityScores);
     }
-    
+
     /// <summary>
     /// Calculates the cosine similarity between two vectors.
     /// </summary>
@@ -1397,7 +1397,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         {
             dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(a[i], b[i]));
         }
-        
+
         // Calculate magnitudes
         T magnitudeA = NumOps.Zero;
         T magnitudeB = NumOps.Zero;
@@ -1408,17 +1408,17 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         }
         magnitudeA = NumOps.Sqrt(magnitudeA);
         magnitudeB = NumOps.Sqrt(magnitudeB);
-        
+
         // Avoid division by zero
         if (MathHelper.AlmostEqual(magnitudeA, NumOps.Zero) || MathHelper.AlmostEqual(magnitudeB, NumOps.Zero))
         {
             return NumOps.Zero;
         }
-        
+
         // Calculate cosine similarity
         return NumOps.Divide(dotProduct, NumOps.Multiply(magnitudeA, magnitudeB));
     }
-    
+
     /// <summary>
     /// Applies the softmax function to a vector.
     /// </summary>
@@ -1435,7 +1435,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 maxVal = vector[i];
             }
         }
-        
+
         // Calculate exp of each element (shifted by max)
         Vector<T> expVector = new Vector<T>(vector.Length);
         for (int i = 0; i < vector.Length; i++)
@@ -1443,20 +1443,20 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             double expVal = Math.Exp(Convert.ToDouble(NumOps.Subtract(vector[i], maxVal)));
             expVector[i] = NumOps.FromDouble(expVal);
         }
-        
+
         // Calculate sum of exp values
         T sum = NumOps.Zero;
         for (int i = 0; i < expVector.Length; i++)
         {
             sum = NumOps.Add(sum, expVector[i]);
         }
-        
+
         // Normalize by sum
         for (int i = 0; i < expVector.Length; i++)
         {
             expVector[i] = NumOps.Divide(expVector[i], sum);
         }
-        
+
         return expVector;
     }
 
@@ -1602,17 +1602,17 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     private Vector<T> CombineWeightings(Vector<T> contentWeighting, Vector<T> allocationWeighting, T allocationGate)
     {
         Vector<T> combinedWeighting = new Vector<T>(_memorySize);
-        
+
         for (int i = 0; i < _memorySize; i++)
         {
             T contentComponent = NumOps.Multiply(contentWeighting[i], NumOps.Subtract(NumOps.One, allocationGate));
             T allocationComponent = NumOps.Multiply(allocationWeighting[i], allocationGate);
             combinedWeighting[i] = NumOps.Add(contentComponent, allocationComponent);
         }
-        
+
         return combinedWeighting;
     }
-    
+
     /// <summary>
     /// Writes information to memory based on the write weighting, write vector, and erase vector.
     /// </summary>
@@ -1645,12 +1645,12 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             {
                 // Calculate erase amount
                 T eraseAmount = NumOps.Multiply(_writeWeighting[i], eraseVector[j]);
-                
+
                 // Erase from memory
                 _memory[i, j] = NumOps.Multiply(_memory[i, j], NumOps.Subtract(NumOps.One, eraseAmount));
             }
         }
-        
+
         // Then, write to memory based on write vector and write weighting
         for (int i = 0; i < _memorySize; i++)
         {
@@ -1658,13 +1658,13 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             {
                 // Calculate write amount
                 T writeAmount = NumOps.Multiply(_writeWeighting[i], writeVector[j]);
-                
+
                 // Add to memory
                 _memory[i, j] = NumOps.Add(_memory[i, j], writeAmount);
             }
         }
     }
-    
+
     /// <summary>
     /// Updates the usage free vector based on the write weighting.
     /// </summary>
@@ -1692,14 +1692,14 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         {
             // Reduce free usage based on write weighting
             _usageFree[i] = NumOps.Multiply(_usageFree[i], NumOps.Subtract(NumOps.One, _writeWeighting[i]));
-            
+
             // Optionally include a small decay factor to gradually free up memory over time
             T decayFactor = NumOps.FromDouble(0.99); // Slight decay
-            _usageFree[i] = NumOps.Add(_usageFree[i], NumOps.Multiply(NumOps.Subtract(NumOps.One, _usageFree[i]), 
+            _usageFree[i] = NumOps.Add(_usageFree[i], NumOps.Multiply(NumOps.Subtract(NumOps.One, _usageFree[i]),
                 NumOps.Subtract(NumOps.One, decayFactor)));
         }
     }
-    
+
     /// <summary>
     /// Updates the precedence weighting based on the write weighting.
     /// </summary>
@@ -1729,15 +1729,15 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         {
             _precedenceWeighting[i] = NumOps.Multiply(_precedenceWeighting[i], decay);
         }
-        
+
         // Increase precedence for locations currently being written to
         for (int i = 0; i < _memorySize; i++)
         {
-            _precedenceWeighting[i] = NumOps.Add(_precedenceWeighting[i], 
+            _precedenceWeighting[i] = NumOps.Add(_precedenceWeighting[i],
                 NumOps.Multiply(_writeWeighting[i], NumOps.Subtract(NumOps.One, decay)));
         }
     }
-    
+
     /// <summary>
     /// Updates the temporal link matrix based on the write weighting and precedence weighting.
     /// </summary>
@@ -1769,10 +1769,10 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 if (i != j) // No self-links
                 {
                     T link = NumOps.Add(
-                        NumOps.Multiply(_temporalLinkMatrix[i, j], 
-                            NumOps.Subtract(NumOps.One, _writeWeighting[i])), 
+                        NumOps.Multiply(_temporalLinkMatrix[i, j],
+                            NumOps.Subtract(NumOps.One, _writeWeighting[i])),
                         NumOps.Multiply(_precedenceWeighting[j], _writeWeighting[i]));
-                    
+
                     _temporalLinkMatrix[i, j] = link;
                 }
                 else
@@ -1856,7 +1856,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         writer.Write(_controllerSize);
         writer.Write(_readHeads);
         writer.Write(IsTrainingMode);
-        
+
         // Write memory matrix
         for (int i = 0; i < _memorySize; i++)
         {
@@ -1865,19 +1865,19 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 writer.Write(Convert.ToDouble(_memory[i, j]));
             }
         }
-        
+
         // Write usage free vector
         for (int i = 0; i < _memorySize; i++)
         {
             writer.Write(Convert.ToDouble(_usageFree[i]));
         }
-        
+
         // Write write weighting
         for (int i = 0; i < _memorySize; i++)
         {
             writer.Write(Convert.ToDouble(_writeWeighting[i]));
         }
-        
+
         // Write read weightings
         writer.Write(_readWeightings.Count);
         foreach (var readWeighting in _readWeightings)
@@ -1887,13 +1887,13 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 writer.Write(Convert.ToDouble(readWeighting[i]));
             }
         }
-        
+
         // Write precedence weighting
         for (int i = 0; i < _memorySize; i++)
         {
             writer.Write(Convert.ToDouble(_precedenceWeighting[i]));
         }
-        
+
         // Write temporal link matrix
         for (int i = 0; i < _memorySize; i++)
         {
@@ -1902,7 +1902,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 writer.Write(Convert.ToDouble(_temporalLinkMatrix[i, j]));
             }
         }
-        
+
         // Write read vectors
         writer.Write(_readVectors.Count);
         foreach (var readVector in _readVectors)
@@ -1943,17 +1943,17 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         int memoryWordSize = reader.ReadInt32();
         int controllerSize = reader.ReadInt32();
         int readHeads = reader.ReadInt32();
-        
+
         // Check if configuration matches
-        if (memorySize != _memorySize || memoryWordSize != _memoryWordSize || 
+        if (memorySize != _memorySize || memoryWordSize != _memoryWordSize ||
             controllerSize != _controllerSize || readHeads != _readHeads)
         {
             Console.WriteLine("Warning: Loaded DNC has different configuration than the current instance.");
         }
-        
+
         // Read training mode
         IsTrainingMode = reader.ReadBoolean();
-        
+
         // Read memory matrix
         for (int i = 0; i < _memorySize; i++)
         {
@@ -1962,19 +1962,19 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 _memory[i, j] = NumOps.FromDouble(reader.ReadDouble());
             }
         }
-        
+
         // Read usage free vector
         for (int i = 0; i < _memorySize; i++)
         {
             _usageFree[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        
+
         // Read write weighting
         for (int i = 0; i < _memorySize; i++)
         {
             _writeWeighting[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        
+
         // Read read weightings
         int readWeightingsCount = reader.ReadInt32();
         _readWeightings.Clear();
@@ -1987,13 +1987,13 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             }
             _readWeightings.Add(readWeighting);
         }
-        
+
         // Read precedence weighting
         for (int i = 0; i < _memorySize; i++)
         {
             _precedenceWeighting[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        
+
         // Read temporal link matrix
         for (int i = 0; i < _memorySize; i++)
         {
@@ -2002,7 +2002,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 _temporalLinkMatrix[i, j] = NumOps.FromDouble(reader.ReadDouble());
             }
         }
-        
+
         // Read read vectors
         int readVectorsCount = reader.ReadInt32();
         _readVectors.Clear();
@@ -2016,7 +2016,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             _readVectors.Add(readVector);
         }
     }
-    
+
     /// <summary>
     /// Helper class for storing memory interface signals parsed from controller output.
     /// </summary>
@@ -2066,27 +2066,27 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         /// The vector to write to memory.
         /// </summary>
         public Vector<T> WriteVector { get; set; } = new Vector<T>(0);
-    
+
         /// <summary>
         /// The vector indicating what to erase from memory.
         /// </summary>
         public Vector<T> EraseVector { get; set; } = new Vector<T>(0);
-    
+
         /// <summary>
         /// The list of keys for content-based reading from memory.
         /// </summary>
         public List<Vector<T>> ReadKeys { get; set; } = new List<Vector<T>>();
-    
+
         /// <summary>
         /// The list of strengths for content-based reading.
         /// </summary>
         public List<T> ReadStrengths { get; set; } = new List<T>();
-    
+
         /// <summary>
         /// The key for content-based writing to memory.
         /// </summary>
         public Vector<T> WriteKey { get; set; } = new Vector<T>(0);
-    
+
         /// <summary>
         /// The strength for content-based writing.
         /// </summary>
@@ -2101,13 +2101,13 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         /// The write gate controlling the overall intensity of writing.
         /// </summary>
         public T WriteGate { get; set; }
-    
+
         /// <summary>
         /// The list of mode vectors for each read head, controlling whether to read based on content,
         /// based on backward temporal links, or based on forward temporal links.
         /// </summary>
         public List<Vector<T>> ReadModes { get; set; } = new List<Vector<T>>();
-    
+
         /// <summary>
         /// Initializes a new instance of the MemoryInterfaceSignals class with default values.
         /// </summary>
@@ -2118,7 +2118,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             AllocationGate = NumOps.Zero;
             WriteGate = NumOps.Zero;
         }
-    
+
         /// <summary>
         /// Initializes a new instance of the MemoryInterfaceSignals class with specified memory word size.
         /// </summary>
@@ -2143,7 +2143,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             }
         }
     }
-    
+
     /// <summary>
     /// Resets the state of the Differentiable Neural Computer.
     /// </summary>
@@ -2179,19 +2179,19 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 _memory[i, j] = NumOps.FromDouble(Random.NextDouble() * 0.1);
             }
         }
-        
+
         // Reset usage free vector
         for (int i = 0; i < _memorySize; i++)
         {
             _usageFree[i] = NumOps.FromDouble(1.0);
         }
-        
+
         // Reset write weighting
         for (int i = 0; i < _memorySize; i++)
         {
             _writeWeighting[i] = NumOps.Zero;
         }
-        
+
         // Reset read weightings
         _readWeightings.Clear();
         for (int i = 0; i < _readHeads; i++)
@@ -2203,13 +2203,13 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             }
             _readWeightings.Add(readWeighting);
         }
-        
+
         // Reset precedence weighting
         for (int i = 0; i < _memorySize; i++)
         {
             _precedenceWeighting[i] = NumOps.Zero;
         }
-        
+
         // Reset temporal link matrix
         for (int i = 0; i < _memorySize; i++)
         {
@@ -2218,11 +2218,11 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 _temporalLinkMatrix[i, j] = NumOps.Zero;
             }
         }
-        
+
         // Reset read vectors
         _readVectors.Clear();
     }
-    
+
     /// <summary>
     /// Processes a sequence of inputs through the DNC.
     /// </summary>
@@ -2254,15 +2254,15 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         {
             ResetMemoryState();
         }
-        
+
         List<Tensor<T>> outputs = [];
-        
+
         foreach (var input in inputs)
         {
             var output = Predict(input);
             outputs.Add(output);
         }
-        
+
         return outputs;
     }
 

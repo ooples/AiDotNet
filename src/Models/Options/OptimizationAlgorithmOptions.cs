@@ -140,7 +140,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     /// which could cause the algorithm to make wild guesses instead of learning properly.</para>
     /// </remarks>
     public double MaxLearningRate { get; set; } = 1.0;
-    
+
     /// <summary>
     /// Gets or sets whether to automatically adjust the momentum during training.
     /// </summary>
@@ -498,7 +498,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.UseAdaptiveLearningRate = true;
                 options.LearningRateDecay = 0.99;
                 break;
-    
+
             case OptimizerType.StochasticGradientDescent:
                 // Set SGD specific defaults
                 options.InitialLearningRate = 0.05;
@@ -506,7 +506,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.LearningRateDecay = 0.95;
                 options.UseAdaptiveMomentum = true;
                 break;
-    
+
             case OptimizerType.AdaptiveGradient:
                 // Set adaptive gradient specific defaults
                 options.InitialLearningRate = 0.1;
@@ -514,7 +514,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.MinLearningRate = 1e-4;
                 options.UseAdaptiveMomentum = false;
                 break;
-    
+
             case OptimizerType.EvolutionaryAlgorithm:
                 // Set evolutionary algorithm specific defaults
                 options.ExplorationRate = 0.7;
@@ -522,7 +522,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.UseEarlyStopping = true;
                 options.EarlyStoppingPatience = 20;
                 break;
-    
+
             case OptimizerType.ParticleSwarm:
                 // Set particle swarm specific defaults
                 options.ExplorationRate = 0.6;
@@ -530,7 +530,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.MaxIterations = 300;
                 options.UseEarlyStopping = true;
                 break;
-    
+
             case OptimizerType.DifferentialEvolution:
                 // Set differential evolution specific defaults
                 options.ExplorationRate = 0.8;
@@ -538,21 +538,21 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.UseEarlyStopping = true;
                 options.EarlyStoppingPatience = 25;
                 break;
-    
+
             case OptimizerType.BayesianOptimization:
                 // Set Bayesian optimization specific defaults
                 options.ExplorationRate = 0.3;
                 options.Tolerance = 1e-5;
                 options.MaxIterations = 100;
                 break;
-    
+
             case OptimizerType.NelderMead:
                 // Set Nelder-Mead specific defaults
                 options.Tolerance = 1e-7;
                 options.MaxIterations = 200;
                 options.UseEarlyStopping = true;
                 break;
-    
+
             case OptimizerType.LBFGS:
                 // Set L-BFGS specific defaults
                 options.UseAdaptiveLearningRate = false;
@@ -560,7 +560,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.MaxIterations = 150;
                 options.Tolerance = 1e-6;
                 break;
-    
+
             case OptimizerType.CoordinateDescent:
                 // Set coordinate descent specific defaults
                 options.UseAdaptiveLearningRate = true;
@@ -568,7 +568,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.MaxIterations = 250;
                 options.Tolerance = 1e-6;
                 break;
-    
+
             case OptimizerType.SimulatedAnnealing:
                 // Set simulated annealing specific defaults
                 options.ExplorationRate = 0.9;
@@ -576,7 +576,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.UseEarlyStopping = true;
                 options.EarlyStoppingPatience = 30;
                 break;
-    
+
             case OptimizerType.AdamOptimizer:
                 // Set Adam optimizer specific defaults
                 options.InitialLearningRate = 0.001;
@@ -584,7 +584,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.UseAdaptiveMomentum = true;
                 options.MaxIterations = 200;
                 break;
-    
+
             case OptimizerType.RMSProp:
                 // Set RMSProp specific defaults
                 options.InitialLearningRate = 0.001;
@@ -592,7 +592,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.LearningRateDecay = 0.9;
                 options.MaxIterations = 200;
                 break;
-    
+
             case OptimizerType.GeneticAlgorithm:
                 // Set genetic algorithm specific defaults
                 options.ExplorationRate = 0.7;
@@ -600,14 +600,14 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.UseEarlyStopping = true;
                 options.EarlyStoppingPatience = 25;
                 break;
-    
+
             case OptimizerType.TrustRegion:
                 // Set trust region specific defaults
                 options.Tolerance = 1e-8;
                 options.MaxIterations = 150;
                 options.UseAdaptiveLearningRate = false;
                 break;
-    
+
             case OptimizerType.NormalOptimizer:
                 // Set normal optimizer specific defaults
                 options.InitialLearningRate = 0.01;
@@ -615,21 +615,21 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.MaxIterations = 100;
                 options.Tolerance = 1e-6;
                 break;
-    
+
             case OptimizerType.QuasiNewton:
                 // Set quasi-Newton specific defaults
                 options.Tolerance = 1e-7;
                 options.MaxIterations = 150;
                 options.UseAdaptiveLearningRate = false;
                 break;
-    
+
             case OptimizerType.ConjugateGradient:
                 // Set conjugate gradient specific defaults
                 options.Tolerance = 1e-7;
                 options.MaxIterations = 200;
                 options.UseAdaptiveLearningRate = false;
                 break;
-    
+
             case OptimizerType.AdaGrad:
                 // Set AdaGrad specific defaults
                 options.InitialLearningRate = 0.01;
@@ -637,14 +637,14 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.UseAdaptiveMomentum = false;
                 options.MaxIterations = 200;
                 break;
-    
+
             case OptimizerType.AdaDelta:
                 // Set AdaDelta specific defaults
                 options.UseAdaptiveLearningRate = true;
                 options.UseAdaptiveMomentum = false;
                 options.MaxIterations = 200;
                 break;
-    
+
             case OptimizerType.Momentum:
                 // Set momentum specific defaults
                 options.InitialLearningRate = 0.01;
@@ -652,7 +652,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.UseAdaptiveMomentum = true;
                 options.MaxIterations = 150;
                 break;
-    
+
             case OptimizerType.Nadam:
                 // Set Nadam specific defaults
                 options.InitialLearningRate = 0.002;
@@ -660,7 +660,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.UseAdaptiveMomentum = true;
                 options.MaxIterations = 200;
                 break;
-    
+
             case OptimizerType.AMSGrad:
                 // Set AMSGrad specific defaults
                 options.InitialLearningRate = 0.001;
@@ -668,28 +668,28 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 options.UseAdaptiveMomentum = true;
                 options.MaxIterations = 200;
                 break;
-    
+
             case OptimizerType.HillClimbing:
                 // Set hill climbing specific defaults
                 options.ExplorationRate = 0.5;
                 options.MaxIterations = 300;
                 options.UseEarlyStopping = true;
                 break;
-    
+
             case OptimizerType.CrossEntropy:
                 // Set cross-entropy specific defaults
                 options.ExplorationRate = 0.6;
                 options.MaxIterations = 250;
                 options.UseEarlyStopping = true;
                 break;
-    
+
             case OptimizerType.PowellMethod:
                 // Set Powell's method specific defaults
                 options.Tolerance = 1e-7;
                 options.MaxIterations = 200;
                 options.UseEarlyStopping = true;
                 break;
-    
+
             default:
                 // Default optimizer with standard settings
                 options.InitialLearningRate = 0.01;

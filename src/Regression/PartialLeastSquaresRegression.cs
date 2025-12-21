@@ -467,48 +467,48 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     {
         // Create a new instance with the same options and regularization
         var newModel = new PartialLeastSquaresRegression<T>(_options, Regularization);
-        
+
         // Copy coefficients and intercept from base class
         if (Coefficients != null)
         {
             newModel.Coefficients = Coefficients.Clone();
         }
         newModel.Intercept = Intercept;
-        
+
         // Copy PLS-specific components
         if (_loadings != null)
         {
             newModel._loadings = _loadings.Clone();
         }
-        
+
         if (_scores != null)
         {
             newModel._scores = _scores.Clone();
         }
-        
+
         if (_weights != null)
         {
             newModel._weights = _weights.Clone();
         }
-        
+
         // Copy means and standard deviations used for scaling
         if (_yMean != null)
         {
             newModel._yMean = _yMean.Clone();
         }
-        
+
         if (_xMean != null)
         {
             newModel._xMean = _xMean.Clone();
         }
-        
+
         newModel._yStd = _yStd;
-        
+
         if (_xStd != null)
         {
             newModel._xStd = _xStd.Clone();
         }
-        
+
         return newModel;
     }
 }

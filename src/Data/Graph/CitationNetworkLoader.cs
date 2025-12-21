@@ -1,10 +1,11 @@
+using System.IO.Compression;
+using System.Net.Http;
 using AiDotNet.Data.Loaders;
 using AiDotNet.Data.Structures;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using System.IO.Compression;
-using System.Net.Http;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Graph;
 
@@ -617,7 +618,9 @@ public class CitationNetworkLoader<T> : GraphDataLoaderBase<T>
         }
 
         var graph = LoadedGraphData;
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Get all edges from edge index
         var allEdges = new List<(int src, int dst)>();

@@ -443,24 +443,24 @@ public class BidirectionalLayer<T> : LayerBase<T>
         // Combine parameters from both forward and backward layers
         var forwardParams = _forwardLayer.GetParameters();
         var backwardParams = _backwardLayer.GetParameters();
-        
+
         var combinedParams = new Vector<T>(forwardParams.Length + backwardParams.Length);
-        
+
         // Copy forward parameters
         for (int i = 0; i < forwardParams.Length; i++)
         {
             combinedParams[i] = forwardParams[i];
         }
-        
+
         // Copy backward parameters
         for (int i = 0; i < backwardParams.Length; i++)
         {
             combinedParams[i + forwardParams.Length] = backwardParams[i];
         }
-        
+
         return combinedParams;
     }
-    
+
     /// <summary>
     /// Sets the trainable parameters for both the forward and backward layers.
     /// </summary>
@@ -491,28 +491,28 @@ public class BidirectionalLayer<T> : LayerBase<T>
     {
         var forwardParams = _forwardLayer.GetParameters();
         var backwardParams = _backwardLayer.GetParameters();
-        
+
         if (parameters.Length != forwardParams.Length + backwardParams.Length)
             throw new ArgumentException($"Expected {forwardParams.Length + backwardParams.Length} parameters, but got {parameters.Length}");
-        
+
         // Extract and set forward parameters
         var newForwardParams = new Vector<T>(forwardParams.Length);
         for (int i = 0; i < forwardParams.Length; i++)
         {
             newForwardParams[i] = parameters[i];
         }
-        
+
         // Extract and set backward parameters
         var newBackwardParams = new Vector<T>(backwardParams.Length);
         for (int i = 0; i < backwardParams.Length; i++)
         {
             newBackwardParams[i] = parameters[i + forwardParams.Length];
         }
-        
+
         _forwardLayer.SetParameters(newForwardParams);
         _backwardLayer.SetParameters(newBackwardParams);
     }
-    
+
     /// <summary>
     /// Resets the internal state of the bidirectional layer and its inner layers.
     /// </summary>
@@ -543,7 +543,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastForwardOutput = null;
         _lastBackwardOutput = null;
-        
+
         _forwardLayer.ResetState();
         _backwardLayer.ResetState();
     }

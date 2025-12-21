@@ -1,31 +1,36 @@
 global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
-using AiDotNet.Data.Structures;
-using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Graph;
-using AiDotNet.Interpretability;
-using AiDotNet.Serialization;
 using AiDotNet.Agents;
-using AiDotNet.Models;
+using AiDotNet.Data.Structures;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.Deployment.Export;
 using AiDotNet.Deployment.Export.Onnx;
-using AiDotNet.Deployment.TensorRT;
 using AiDotNet.Deployment.Mobile.CoreML;
 using AiDotNet.Deployment.Mobile.TensorFlowLite;
 using AiDotNet.Deployment.Runtime;
-using AiDotNet.Reasoning;
-using AiDotNet.Reasoning.Models;
-using AiDotNet.LanguageModels;
+using AiDotNet.Deployment.TensorRT;
 using AiDotNet.Enums;
-using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.Tokenization.Configuration;
-using AiDotNet.Tokenization.Models;
 using AiDotNet.Helpers;
+using AiDotNet.Inference;
+using AiDotNet.Interfaces;
+using AiDotNet.Interpretability;
+using AiDotNet.LanguageModels;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.PromptEngineering;
 using AiDotNet.PromptEngineering.Analysis;
 using AiDotNet.PromptEngineering.Compression;
+using AiDotNet.Reasoning;
+using AiDotNet.Reasoning.Models;
+using AiDotNet.RetrievalAugmentedGeneration.Graph;
+using AiDotNet.Serialization;
+using AiDotNet.Tokenization.Configuration;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Tokenization.Models;
+using AiDotNet.CheckpointManagement;
+using AiDotNet.ExperimentTracking;
+using AiDotNet.TrainingMonitoring;
 
 namespace AiDotNet.Models.Results;
 
@@ -64,7 +69,7 @@ namespace AiDotNet.Models.Results;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [Serializable]
-public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
+public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the underlying model used for making predictions.
@@ -357,6 +362,18 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     public CrossValidationResult<T, TInput, TOutput>? CrossValidationResult { get; internal set; }
 
     /// <summary>
+    /// Gets the AutoML summary for this model, if AutoML was used during building.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property contains a redacted summary of the AutoML search (trial outcomes and scores),
+    /// and intentionally excludes hyperparameter values and other proprietary details.
+    /// </para>
+    /// <para><b>For Beginners:</b> If you enabled AutoML, this tells you how the automatic search went.</para>
+    /// </remarks>
+    public AutoMLRunSummary? AutoMLSummary { get; internal set; }
+
+    /// <summary>
     /// Gets or sets the LoRA configuration for parameter-efficient fine-tuning.
     /// </summary>
     /// <value>LoRA configuration for adaptation, or null if not configured.</value>
@@ -455,7 +472,25 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     [JsonIgnore]  // Don't serialize - will need to be recompiled after deserialization
     private Func<Tensor<T>[], Tensor<T>[]>? JitCompiledFunction { get; set; }
+
+    [JsonProperty]
     private AiDotNet.Configuration.InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
+
+    [JsonIgnore]
+    private readonly object _inferenceOptimizationLock = new();
+
+    [JsonIgnore]
+    private InferenceOptimizer<T>? _inferenceOptimizer;
+
+    [JsonIgnore]
+    private NeuralNetworkBase<T>? _inferenceOptimizedNeuralModel;
+
+    [JsonIgnore]
+    private bool _inferenceOptimizationsInitialized;
+
+    // Serving assembly uses InternalsVisibleTo; keep this internal to avoid expanding user-facing API surface.
+    internal AiDotNet.Configuration.InferenceOptimizationConfig? GetInferenceOptimizationConfigForServing()
+        => InferenceOptimizationConfig;
 
     /// <summary>
     /// Gets the reasoning configuration for advanced Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency reasoning.
@@ -687,6 +722,223 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
     #endregion
 
+    #region Training Infrastructure Properties
+
+    /// <summary>
+    /// Gets or sets the experiment run associated with this model.
+    /// </summary>
+    /// <value>The experiment run that produced this model, or null if experiment tracking was not used.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This provides direct access to the training run for additional logging.
+    ///
+    /// You can use this to:
+    /// - Log additional metrics after training (e.g., production performance)
+    /// - Add notes about the model's behavior in production
+    /// - Record artifacts like deployment logs or user feedback
+    ///
+    /// Example:
+    /// <code>
+    /// if (result.ExperimentRun != null)
+    /// {
+    ///     result.ExperimentRun.LogMetric("production_accuracy", 0.92);
+    ///     result.ExperimentRun.AddNote("Deployed to production on 2024-01-15");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal IExperimentRun<T>? ExperimentRun { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the experiment tracker used during training.
+    /// </summary>
+    /// <value>The experiment tracker for accessing other runs and experiments, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This gives you access to the experiment tracking system.
+    ///
+    /// You can use this to:
+    /// - Compare this model with other training runs
+    /// - Find the best-performing model from an experiment
+    /// - Start new training runs based on this one
+    ///
+    /// Example:
+    /// <code>
+    /// if (result.ExperimentTracker != null)
+    /// {
+    ///     var allRuns = result.ExperimentTracker.ListRuns(experimentId);
+    ///     var bestRun = allRuns.OrderByDescending(r => r.GetLatestMetric("accuracy")).First();
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal IExperimentTracker<T>? ExperimentTracker { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the checkpoint manager for model persistence operations.
+    /// </summary>
+    /// <value>The checkpoint manager for saving and loading model checkpoints, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This manages saved copies of your model.
+    ///
+    /// You can use this to:
+    /// - Save the model after making changes (like fine-tuning)
+    /// - List all saved checkpoints
+    /// - Load different versions of your model
+    /// - Clean up old checkpoints to save disk space
+    ///
+    /// Example:
+    /// <code>
+    /// if (result.CheckpointManager != null)
+    /// {
+    ///     // Save current state
+    ///     result.CheckpointManager.SaveCheckpoint("after_finetuning", model);
+    ///
+    ///     // List available checkpoints
+    ///     var checkpoints = result.CheckpointManager.ListCheckpoints();
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal ICheckpointManager<T, TInput, TOutput>? CheckpointManager { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the model registry for version and lifecycle management.
+    /// </summary>
+    /// <value>The model registry for managing model versions and stages, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is like a version control system for your models.
+    ///
+    /// You can use this to:
+    /// - Promote this model from "Staging" to "Production"
+    /// - Register fine-tuned versions as new model versions
+    /// - Archive old models that are no longer needed
+    /// - Compare performance across model versions
+    ///
+    /// Example:
+    /// <code>
+    /// if (result.ModelRegistry != null)
+    /// {
+    ///     // Promote to production
+    ///     result.ModelRegistry.TransitionModelStage("my-model", 1, ModelStage.Production);
+    ///
+    ///     // Get current production model
+    ///     var prodModel = result.ModelRegistry.GetProductionModel("my-model");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal IModelRegistry<T, TInput, TOutput>? ModelRegistry { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the training monitor for accessing training diagnostics.
+    /// </summary>
+    /// <value>The training monitor containing training history and diagnostics, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This gives you insights into how training went.
+    ///
+    /// You can use this to:
+    /// - View learning curves (loss over time)
+    /// - Check for signs of overfitting
+    /// - Analyze gradient flow during training
+    /// - Export training charts and reports
+    ///
+    /// Example:
+    /// <code>
+    /// if (result.TrainingMonitor != null)
+    /// {
+    ///     var history = result.TrainingMonitor.GetMetricsHistory();
+    ///     var finalLoss = history["loss"].Last();
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal ITrainingMonitor<T>? TrainingMonitor { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the hyperparameter optimization result.
+    /// </summary>
+    /// <value>Complete hyperparameter optimization results including all trials, or null if optimization was not used.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If an optimizer searched for the best settings,
+    /// this contains all the configurations it tried and how well each performed.
+    ///
+    /// You can use this to:
+    /// - See which hyperparameters were most important
+    /// - Find patterns in what made training successful
+    /// - Continue optimization from where it left off
+    ///
+    /// Example:
+    /// <code>
+    /// if (result.HyperparameterOptimizationResult != null)
+    /// {
+    ///     var bestParams = result.HyperparameterOptimizationResult.BestParameters;
+    ///     Console.WriteLine($"Best learning rate: {bestParams["learning_rate"]}");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    internal HyperparameterOptimizationResult<T>? HyperparameterOptimizationResult { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the experiment run ID from experiment tracking.
+    /// </summary>
+    /// <value>The unique identifier for the training run, or null if experiment tracking was not used.</value>
+    internal string? ExperimentRunId { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the experiment ID that this run belongs to.
+    /// </summary>
+    /// <value>The experiment ID grouping related training runs, or null if experiment tracking was not used.</value>
+    internal string? ExperimentId { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the model version from the model registry.
+    /// </summary>
+    /// <value>The version number assigned to this model, or null if registry was not used.</value>
+    internal int? ModelVersion { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the registered model name in the model registry.
+    /// </summary>
+    /// <value>The name under which this model is registered, or null if registry was not used.</value>
+    internal string? RegisteredModelName { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the checkpoint path where the model was saved during training.
+    /// </summary>
+    /// <value>The path to the best or latest checkpoint, or null if checkpointing was not used.</value>
+    internal string? CheckpointPath { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the data version hash for the training data.
+    /// </summary>
+    /// <value>A hash uniquely identifying the training data, or null if data versioning was not used.</value>
+    internal string? DataVersionHash { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the hyperparameter optimization trial ID.
+    /// </summary>
+    /// <value>The trial ID that produced this model, or null if optimization was not used.</value>
+    internal int? HyperparameterTrialId { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the hyperparameters used for training.
+    /// </summary>
+    /// <value>A dictionary of hyperparameter names to values, or null if not tracked.</value>
+    internal Dictionary<string, object>? Hyperparameters { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the training metrics history.
+    /// </summary>
+    /// <value>A history of metrics recorded during training, or null if not tracked.</value>
+    internal Dictionary<string, List<double>>? TrainingMetricsHistory { get; private set; }
+
+    #endregion
+
     /// <summary>
     /// Initializes a new instance of the PredictionModelResult class using an options object for clean configuration.
     /// </summary>
@@ -807,6 +1059,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Cross-validation
         CrossValidationResult = options.CrossValidationResult;
 
+        // AutoML (redacted summary)
+        AutoMLSummary = options.AutoMLSummary;
+
         // Fine-tuning and adaptation
         LoRAConfiguration = options.LoRAConfiguration;
 
@@ -829,6 +1084,23 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         FewShotExampleSelector = options.FewShotExampleSelector;
         PromptAnalyzer = options.PromptAnalyzer;
         PromptCompressor = options.PromptCompressor;
+
+        // Training Infrastructure
+        ExperimentRun = options.ExperimentRun;
+        ExperimentTracker = options.ExperimentTracker;
+        CheckpointManager = options.CheckpointManager;
+        ModelRegistry = options.ModelRegistry;
+        TrainingMonitor = options.TrainingMonitor;
+        HyperparameterOptimizationResult = options.HyperparameterOptimizationResult;
+        ExperimentRunId = options.ExperimentRunId;
+        ExperimentId = options.ExperimentId;
+        ModelVersion = options.ModelVersion;
+        RegisteredModelName = options.RegisteredModelName;
+        CheckpointPath = options.CheckpointPath;
+        DataVersionHash = options.DataVersionHash;
+        HyperparameterTrialId = options.HyperparameterTrialId;
+        Hyperparameters = options.Hyperparameters;
+        TrainingMetricsHistory = options.TrainingMetricsHistory;
     }
 
     /// <summary>
@@ -939,10 +1211,34 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         // Use JIT-compiled function if available for 5-10x faster predictions
         TOutput normalizedPredictions;
-        if (JitCompiledFunction != null && normalizedNewData is Tensor<T> inputTensor)
+
+        // INFERENCE OPTIMIZATION PATH: apply configured inference optimizations for neural network models
+        if (InferenceOptimizationConfig != null &&
+            Model is NeuralNetworkBase<T> neuralModel &&
+            normalizedNewData is Tensor<T> inputTensor)
+        {
+            var optimizedNeuralModel = EnsureStatelessInferenceOptimizationsInitialized(neuralModel);
+            if (optimizedNeuralModel != null)
+            {
+                var optimizedOutput = optimizedNeuralModel.Predict(inputTensor);
+                if ((object)optimizedOutput is TOutput output)
+                {
+                    normalizedPredictions = output;
+                }
+                else
+                {
+                    // Fallback to the wrapped model if type mismatch occurs
+                    normalizedPredictions = Model.Predict(normalizedNewData);
+                }
+
+                return NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, NormalizationInfo.YParams);
+            }
+        }
+
+        if (JitCompiledFunction != null && normalizedNewData is Tensor<T> inputTensor2)
         {
             // JIT PATH: Use compiled function for accelerated inference
-            var jitResult = JitCompiledFunction(new[] { inputTensor });
+            var jitResult = JitCompiledFunction(new[] { inputTensor2 });
             if (jitResult != null && jitResult.Length > 0 && jitResult[0] is TOutput output)
             {
                 normalizedPredictions = output;
@@ -963,9 +1259,417 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
+    /// Begins an inference session for stateful inference features (e.g., KV-cache).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Sessions are intended for serving-style workloads where you run many sequential inference steps.
+    /// A session can create multiple independent sequences, each maintaining its own state (like KV-cache).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Use a session when you are doing "token-by-token" inference.
+    ///
+    /// - Use <see cref="Predict(TInput)"/> for one-off, stateless predictions.
+    /// - Use <see cref="BeginInferenceSession"/> when you need the model to remember prior calls in the same sequence.
+    /// </para>
+    /// </remarks>
+    public InferenceSession BeginInferenceSession()
+    {
+        return new InferenceSession(this, InferenceOptimizationConfig);
+    }
+
+    private NeuralNetworkBase<T>? EnsureStatelessInferenceOptimizationsInitialized(NeuralNetworkBase<T> model)
+    {
+        if (_inferenceOptimizationsInitialized)
+        {
+            return _inferenceOptimizedNeuralModel;
+        }
+
+        lock (_inferenceOptimizationLock)
+        {
+            if (_inferenceOptimizationsInitialized)
+            {
+                return _inferenceOptimizedNeuralModel;
+            }
+
+            try
+            {
+                if (InferenceOptimizationConfig != null)
+                {
+                    // Stateless-only optimizations for plain Predict(): avoid stateful features that can leak across calls.
+                    var statelessConfig = CreateStatelessInferenceConfig(InferenceOptimizationConfig);
+                    var optimizer = new InferenceOptimizer<T>(statelessConfig);
+                    var (optimizedModel, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: true);
+
+                    _inferenceOptimizer = optimizer;
+                    _inferenceOptimizedNeuralModel = anyApplied ? optimizedModel : null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Warning: inference optimizations failed: {ex.Message}");
+                _inferenceOptimizer = null;
+                _inferenceOptimizedNeuralModel = null;
+            }
+            finally
+            {
+                _inferenceOptimizationsInitialized = true;
+            }
+
+            return _inferenceOptimizedNeuralModel;
+        }
+    }
+
+    private static AiDotNet.Configuration.InferenceOptimizationConfig CreateStatelessInferenceConfig(
+        AiDotNet.Configuration.InferenceOptimizationConfig config)
+    {
+        return new AiDotNet.Configuration.InferenceOptimizationConfig
+        {
+            EnableFlashAttention = config.EnableFlashAttention,
+            AttentionMasking = config.AttentionMasking,
+
+            // Disable stateful/session-centric features for plain Predict().
+            EnableKVCache = false,
+            EnablePagedKVCache = false,
+            EnableBatching = false,
+            EnableSpeculativeDecoding = false
+        };
+    }
+
+    /// <summary>
+    /// Facade-friendly inference session that owns stateful inference internals.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This type intentionally keeps inference internals behind the facade. Users create sequences via
+    /// <see cref="CreateSequence"/> and run inference via <see cref="InferenceSequence.Predict(TInput)"/>.
+    /// </para>
+    /// </remarks>
+    public sealed class InferenceSession : IDisposable
+    {
+        private readonly PredictionModelResult<T, TInput, TOutput> _result;
+        private readonly AiDotNet.Configuration.InferenceOptimizationConfig? _config;
+        private bool _disposed;
+
+        internal InferenceSession(
+            PredictionModelResult<T, TInput, TOutput> result,
+            AiDotNet.Configuration.InferenceOptimizationConfig? config)
+        {
+            _result = result ?? throw new ArgumentNullException(nameof(result));
+            _config = config;
+        }
+
+        /// <summary>
+        /// Creates an independent sequence within this session.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Each sequence represents an independent stream (e.g., one chat) and owns its own state.
+        /// </para>
+        /// </remarks>
+        public InferenceSequence CreateSequence()
+        {
+            ThrowIfDisposed();
+            return new InferenceSequence(_result, _config, multiLoRATask: null);
+        }
+
+        // Internal (serving/tests): allow selecting a Multi-LoRA task per sequence without expanding public API surface.
+        internal InferenceSequence CreateSequence(string? multiLoRATask)
+        {
+            ThrowIfDisposed();
+            return new InferenceSequence(_result, _config, multiLoRATask);
+        }
+
+        /// <inheritdoc/>
+        public void Dispose()
+        {
+            _disposed = true;
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(InferenceSession));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Represents one independent, stateful inference sequence (e.g., one chat/generation stream).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A sequence may keep internal state across calls when inference optimizations are enabled (e.g., KV-cache).
+    /// Call <see cref="Reset"/> to start a new logical sequence on the same object.
+    /// </para>
+    /// </remarks>
+    public sealed class InferenceSequence : IDisposable
+    {
+        private readonly PredictionModelResult<T, TInput, TOutput> _result;
+        private readonly AiDotNet.Configuration.InferenceOptimizationConfig? _config;
+        private bool _disposed;
+
+        // Session-local inference state (populated lazily when used).
+        private InferenceOptimizer<T>? _sequenceOptimizer;
+        private NeuralNetworkBase<T>? _sequenceOptimizedNeuralModel;
+        private bool _sequenceInitialized;
+        private readonly object _sequenceLock = new();
+
+        internal InferenceSequence(
+            PredictionModelResult<T, TInput, TOutput> result,
+            AiDotNet.Configuration.InferenceOptimizationConfig? config,
+            string? multiLoRATask)
+        {
+            _result = result ?? throw new ArgumentNullException(nameof(result));
+            _config = config;
+            _multiLoRATask = multiLoRATask;
+        }
+
+        private string? _multiLoRATask;
+
+        /// <summary>
+        /// Runs a prediction for the given input within this sequence.
+        /// </summary>
+        /// <param name="newData">The input to predict on.</param>
+        /// <returns>The predicted output.</returns>
+        /// <remarks>
+        /// <para>
+        /// When inference optimizations are configured, this method may keep and reuse sequence-local state
+        /// (such as a KV-cache) across calls for improved throughput and latency.
+        /// </para>
+        /// <para>
+        /// <b>For Beginners:</b> This is like predicting with "memory". Each call can reuse what was computed
+        /// previously for the same sequence so the next call can be faster.
+        /// </para>
+        /// </remarks>
+        public TOutput Predict(TInput newData)
+        {
+            ThrowIfDisposed();
+
+            if (_result.Model == null)
+            {
+                throw new InvalidOperationException("Model is not initialized.");
+            }
+
+            if (_result.NormalizationInfo.Normalizer == null)
+            {
+                throw new InvalidOperationException("Normalizer is not initialized.");
+            }
+
+            var (normalizedNewData, _) = _result.NormalizationInfo.Normalizer.NormalizeInput(newData);
+
+            // Session inference: use configured inference optimizations, including stateful ones, if applicable.
+            if (_config != null &&
+                _result.Model is NeuralNetworkBase<T> neuralModel &&
+                normalizedNewData is Tensor<T> inputTensor)
+            {
+                var optimized = EnsureSequenceOptimizationsInitialized(neuralModel);
+                if (optimized != null)
+                {
+                    var optimizedOutput = optimized.Predict(inputTensor);
+                    if ((object)optimizedOutput is TOutput output)
+                    {
+                        return _result.NormalizationInfo.Normalizer.Denormalize(output, _result.NormalizationInfo.YParams);
+                    }
+                }
+            }
+
+            // Fallback: normal predict path (no JIT inside a session to keep behavior consistent).
+            var normalizedPredictions = _result.Model.Predict(normalizedNewData);
+            return _result.NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, _result.NormalizationInfo.YParams);
+        }
+
+        /// <summary>
+        /// Resets sequence-local inference state.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This clears any cached state for the current sequence so the next prediction starts fresh.
+        /// </para>
+        /// <para>
+        /// <b>For Beginners:</b> Call this when you want to start a new conversation/stream using the same sequence object.
+        /// </para>
+        /// </remarks>
+        public void Reset()
+        {
+            ThrowIfDisposed();
+            lock (_sequenceLock)
+            {
+                _sequenceOptimizer?.ClearCache();
+            }
+        }
+
+        // Internal: switch Multi-LoRA task for this sequence, resetting state to avoid cache leakage.
+        internal void SetMultiLoRATask(string? taskName)
+        {
+            ThrowIfDisposed();
+            lock (_sequenceLock)
+            {
+                if (string.Equals(_multiLoRATask, taskName, StringComparison.Ordinal))
+                    return;
+
+                _multiLoRATask = taskName;
+
+                try
+                {
+                    _sequenceOptimizer?.ClearCache();
+                }
+                catch
+                {
+                    // Best-effort.
+                }
+
+                _sequenceOptimizer = null;
+                _sequenceOptimizedNeuralModel = null;
+                _sequenceInitialized = false;
+            }
+        }
+
+        /// <inheritdoc/>
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            try
+            {
+                _sequenceOptimizer?.ClearCache();
+            }
+            catch
+            {
+                // Best-effort cleanup; disposal must not throw.
+            }
+
+            _disposed = true;
+        }
+
+        // Exposed to AiDotNetTests via InternalsVisibleTo for integration verification without expanding the public API surface.
+        internal Dictionary<string, object> GetInferenceStatistics()
+        {
+            ThrowIfDisposed();
+            lock (_sequenceLock)
+            {
+                return _sequenceOptimizer?.GetStatistics() ?? new Dictionary<string, object>();
+            }
+        }
+
+        private NeuralNetworkBase<T>? EnsureSequenceOptimizationsInitialized(NeuralNetworkBase<T> model)
+        {
+            if (_sequenceInitialized)
+            {
+                return _sequenceOptimizedNeuralModel;
+            }
+
+            lock (_sequenceLock)
+            {
+                if (_sequenceInitialized)
+                {
+                    return _sequenceOptimizedNeuralModel;
+                }
+
+                try
+                {
+                    if (_config != null)
+                    {
+                        // If Multi-LoRA is in use, isolate per-sequence task selection by cloning and selecting task
+                        // before applying any further inference optimizations.
+                        NeuralNetworkBase<T> modelForSequence = model;
+                        bool hasMultiLoRATask = !string.IsNullOrWhiteSpace(_multiLoRATask);
+                        if (hasMultiLoRATask)
+                        {
+                            try
+                            {
+                                modelForSequence = (NeuralNetworkBase<T>)model.Clone();
+
+                                int appliedCount = 0;
+                                foreach (var layer in modelForSequence.Layers)
+                                {
+                                    if (layer is AiDotNet.LoRA.Adapters.MultiLoRAAdapter<T> multi)
+                                    {
+                                        multi.SetCurrentTask(_multiLoRATask!);
+                                        appliedCount++;
+                                    }
+                                }
+
+                                InferenceDiagnostics.RecordDecision(
+                                    area: "InferenceSession",
+                                    feature: "MultiLoRA",
+                                    enabled: appliedCount > 0,
+                                    reason: appliedCount > 0 ? $"Task={_multiLoRATask}" : $"NoMultiLoRAAdapters(Task={_multiLoRATask})");
+                            }
+                            catch (Exception ex)
+                            {
+                                InferenceDiagnostics.RecordException("InferenceSession", "MultiLoRA", ex, $"Task={_multiLoRATask};FallbackToBaseModel");
+                                modelForSequence = model;
+                            }
+                        }
+
+                        // In a session, prefer causal masking defaults when user left it as Auto.
+                        var sessionConfig = _config.AttentionMasking == AiDotNet.Configuration.AttentionMaskingMode.Auto
+                            ? new AiDotNet.Configuration.InferenceOptimizationConfig
+                            {
+                                EnableFlashAttention = _config.EnableFlashAttention,
+                                EnableKVCache = _config.EnableKVCache,
+                                EnablePagedKVCache = _config.EnablePagedKVCache,
+                                PagedKVCacheBlockSize = _config.PagedKVCacheBlockSize,
+                                MaxBatchSize = _config.MaxBatchSize,
+                                KVCacheMaxSizeMB = _config.KVCacheMaxSizeMB,
+                                KVCachePrecision = _config.KVCachePrecision,
+                                KVCacheQuantization = _config.KVCacheQuantization,
+                                UseSlidingWindowKVCache = _config.UseSlidingWindowKVCache,
+                                KVCacheWindowSize = _config.KVCacheWindowSize,
+                                EnableBatching = _config.EnableBatching,
+                                EnableSpeculativeDecoding = _config.EnableSpeculativeDecoding,
+                                SpeculationPolicy = _config.SpeculationPolicy,
+                                SpeculativeMethod = _config.SpeculativeMethod,
+                                DraftModelType = _config.DraftModelType,
+                                SpeculationDepth = _config.SpeculationDepth,
+                                UseTreeSpeculation = _config.UseTreeSpeculation,
+                                EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization,
+                                AttentionMasking = AiDotNet.Configuration.AttentionMaskingMode.Causal
+                            }
+                            : _config;
+
+                        var optimizer = new InferenceOptimizer<T>(sessionConfig);
+                        var (optimizedModel, anyApplied) = optimizer.OptimizeForInference(modelForSequence, cloneModel: ReferenceEquals(modelForSequence, model));
+
+                        _sequenceOptimizer = optimizer;
+                        // If Multi-LoRA was requested, keep the per-sequence model even when no other optimizations apply.
+                        _sequenceOptimizedNeuralModel = anyApplied || !ReferenceEquals(modelForSequence, model) ? optimizedModel : null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Warning: inference session optimizations failed: {ex.Message}");
+                    _sequenceOptimizer = null;
+                    _sequenceOptimizedNeuralModel = null;
+                }
+                finally
+                {
+                    _sequenceInitialized = true;
+                }
+
+                return _sequenceOptimizedNeuralModel;
+            }
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(InferenceSequence));
+            }
+        }
+    }
+
+    /// <summary>
     /// Gets the default loss function used by this model for gradient computation.
     /// </summary>
     /// <exception cref="InvalidOperationException">If Model is not initialized.</exception>
+    [JsonIgnore]
     public ILossFunction<T> DefaultLossFunction
     {
         get
@@ -1368,6 +2072,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             QueryProcessors = QueryProcessors,
             LoRAConfiguration = LoRAConfiguration,
             CrossValidationResult = CrossValidationResult,
+            AutoMLSummary = AutoMLSummary,
             AgentConfig = AgentConfig,
             AgentRecommendation = AgentRecommendation,
             DeploymentConfiguration = DeploymentConfiguration,
@@ -1386,7 +2091,23 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             PromptOptimizer = PromptOptimizer,
             FewShotExampleSelector = FewShotExampleSelector,
             PromptAnalyzer = PromptAnalyzer,
-            PromptCompressor = PromptCompressor
+            PromptCompressor = PromptCompressor,
+            // Training Infrastructure - shallow copy (shared references)
+            ExperimentRun = ExperimentRun,
+            ExperimentTracker = ExperimentTracker,
+            CheckpointManager = CheckpointManager,
+            ModelRegistry = ModelRegistry,
+            TrainingMonitor = TrainingMonitor,
+            HyperparameterOptimizationResult = HyperparameterOptimizationResult,
+            ExperimentRunId = ExperimentRunId,
+            ExperimentId = ExperimentId,
+            ModelVersion = ModelVersion,
+            RegisteredModelName = RegisteredModelName,
+            CheckpointPath = CheckpointPath,
+            DataVersionHash = DataVersionHash,
+            HyperparameterTrialId = HyperparameterTrialId,
+            Hyperparameters = Hyperparameters,
+            TrainingMetricsHistory = TrainingMetricsHistory
         };
 
         return new PredictionModelResult<T, TInput, TOutput>(options);
@@ -1454,6 +2175,260 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         return Model.GetFeatureImportance();
     }
+
+    #region Training Infrastructure Public Accessors
+
+    /// <summary>
+    /// Gets the experiment run associated with this model, if experiment tracking was configured.
+    /// </summary>
+    /// <returns>The experiment run, or null if experiment tracking was not used.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This provides access to the training run for post-training logging.
+    ///
+    /// Example:
+    /// <code>
+    /// var run = result.GetExperimentRun();
+    /// if (run != null)
+    /// {
+    ///     run.LogMetric("production_accuracy", 0.92);
+    ///     run.AddNote("Deployed to production");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IExperimentRun<T>? GetExperimentRun() => ExperimentRun;
+
+    /// <summary>
+    /// Gets the experiment tracker used during training, if configured.
+    /// </summary>
+    /// <returns>The experiment tracker, or null if not configured.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this to compare training runs or start new experiments.
+    ///
+    /// Example:
+    /// <code>
+    /// var tracker = result.GetExperimentTracker();
+    /// if (tracker != null)
+    /// {
+    ///     var allRuns = tracker.ListRuns(experimentId);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IExperimentTracker<T>? GetExperimentTracker() => ExperimentTracker;
+
+    /// <summary>
+    /// Gets the checkpoint manager for model persistence operations.
+    /// </summary>
+    /// <returns>The checkpoint manager, or null if not configured.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this to save model states or load previous checkpoints.
+    ///
+    /// Example:
+    /// <code>
+    /// var manager = result.GetCheckpointManager();
+    /// if (manager != null)
+    /// {
+    ///     manager.SaveCheckpoint("after_finetuning", model, metrics);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public ICheckpointManager<T, TInput, TOutput>? GetCheckpointManager() => CheckpointManager;
+
+    /// <summary>
+    /// Gets the model registry for version and lifecycle management.
+    /// </summary>
+    /// <returns>The model registry, or null if not configured.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this to manage model versions and stage transitions.
+    ///
+    /// Example:
+    /// <code>
+    /// var registry = result.GetModelRegistry();
+    /// if (registry != null)
+    /// {
+    ///     registry.TransitionModelStage("my-model", 1, ModelStage.Production);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IModelRegistry<T, TInput, TOutput>? GetModelRegistry() => ModelRegistry;
+
+    /// <summary>
+    /// Gets the training monitor for accessing training diagnostics.
+    /// </summary>
+    /// <returns>The training monitor, or null if not configured.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this to analyze training history and diagnostics.
+    ///
+    /// Example:
+    /// <code>
+    /// var monitor = result.GetTrainingMonitor();
+    /// if (monitor != null)
+    /// {
+    ///     var history = monitor.GetMetricsHistory();
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public ITrainingMonitor<T>? GetTrainingMonitor() => TrainingMonitor;
+
+    /// <summary>
+    /// Gets the hyperparameter optimization result, if optimization was used.
+    /// </summary>
+    /// <returns>The optimization result containing all trials, or null if optimization was not used.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this to analyze which hyperparameters worked best.
+    ///
+    /// Example:
+    /// <code>
+    /// var hpoResult = result.GetHyperparameterOptimizationResult();
+    /// if (hpoResult != null)
+    /// {
+    ///     Console.WriteLine($"Best params: {hpoResult.BestParameters}");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public HyperparameterOptimizationResult<T>? GetHyperparameterOptimizationResult() => HyperparameterOptimizationResult;
+
+    /// <summary>
+    /// Gets training infrastructure metadata as a dictionary.
+    /// </summary>
+    /// <returns>A dictionary containing all training infrastructure metadata.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This provides a convenient way to access all training metadata at once.
+    ///
+    /// Includes:
+    /// - ExperimentRunId, ExperimentId - Experiment tracking IDs
+    /// - ModelVersion, RegisteredModelName - Model registry info
+    /// - CheckpointPath - Where the model was checkpointed
+    /// - DataVersionHash - Training data version
+    /// - HyperparameterTrialId - Which optimization trial produced this model
+    ///
+    /// Example:
+    /// <code>
+    /// var metadata = result.GetTrainingInfrastructureMetadata();
+    /// Console.WriteLine($"Run ID: {metadata["ExperimentRunId"]}");
+    /// Console.WriteLine($"Model Version: {metadata["ModelVersion"]}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, object?> GetTrainingInfrastructureMetadata()
+    {
+        return new Dictionary<string, object?>
+        {
+            ["ExperimentRunId"] = ExperimentRunId,
+            ["ExperimentId"] = ExperimentId,
+            ["ModelVersion"] = ModelVersion,
+            ["RegisteredModelName"] = RegisteredModelName,
+            ["CheckpointPath"] = CheckpointPath,
+            ["DataVersionHash"] = DataVersionHash,
+            ["HyperparameterTrialId"] = HyperparameterTrialId
+        };
+    }
+
+    /// <summary>
+    /// Gets the hyperparameters used for training.
+    /// </summary>
+    /// <returns>A dictionary of hyperparameter names to values, or null if not tracked.</returns>
+    public Dictionary<string, object>? GetHyperparameters() => Hyperparameters;
+
+    /// <summary>
+    /// Gets the training metrics history.
+    /// </summary>
+    /// <returns>A dictionary mapping metric names to their values over time, or null if not tracked.</returns>
+    public Dictionary<string, List<double>>? GetTrainingMetricsHistory() => TrainingMetricsHistory;
+
+    /// <summary>
+    /// Gets experiment tracking information as a structured object.
+    /// </summary>
+    /// <returns>An ExperimentInfo object containing experiment tracking data, or null if experiment tracking was not used.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This provides type-safe access to experiment tracking data.
+    ///
+    /// Example:
+    /// <code>
+    /// var expInfo = result.GetExperimentInfo();
+    /// if (expInfo != null)
+    /// {
+    ///     Console.WriteLine($"Experiment: {expInfo.ExperimentId}");
+    ///     Console.WriteLine($"Run: {expInfo.RunId}");
+    ///
+    ///     // Log additional metrics post-training
+    ///     if (expInfo.ExperimentRun != null)
+    ///     {
+    ///         expInfo.ExperimentRun.LogMetric("production_accuracy", 0.92);
+    ///     }
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public ExperimentInfo<T>? GetExperimentInfo()
+    {
+        // Return null if no experiment tracking was used
+        if (ExperimentRunId == null && ExperimentId == null && ExperimentRun == null && ExperimentTracker == null)
+        {
+            return null;
+        }
+
+        return new ExperimentInfo<T>(
+            ExperimentId,
+            ExperimentRunId,
+            ExperimentRun,
+            ExperimentTracker,
+            TrainingMetricsHistory,
+            Hyperparameters,
+            HyperparameterTrialId,
+            DataVersionHash
+        );
+    }
+
+    /// <summary>
+    /// Gets model registry information as a structured object.
+    /// </summary>
+    /// <returns>A ModelRegistryInfo object containing registry data, or null if model registry was not used.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This provides type-safe access to model versioning and registry data.
+    ///
+    /// Example:
+    /// <code>
+    /// var registryInfo = result.GetModelRegistryInfo();
+    /// if (registryInfo != null)
+    /// {
+    ///     Console.WriteLine($"Model: {registryInfo.RegisteredName} v{registryInfo.Version}");
+    ///
+    ///     // Promote to production
+    ///     if (registryInfo.Registry != null)
+    ///     {
+    ///         registryInfo.Registry.TransitionModelStage(
+    ///             registryInfo.RegisteredName,
+    ///             registryInfo.Version ?? 1,
+    ///             ModelStage.Production);
+    ///     }
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public ModelRegistryInfo<T, TInput, TOutput>? GetModelRegistryInfo()
+    {
+        // Return null if no model registry was used
+        if (ModelVersion == null && RegisteredModelName == null && ModelRegistry == null)
+        {
+            return null;
+        }
+
+        return new ModelRegistryInfo<T, TInput, TOutput>(
+            RegisteredModelName,
+            ModelVersion,
+            ModelRegistry,
+            CheckpointPath,
+            CheckpointManager
+        );
+    }
+
+    #endregion
 
     /// <summary>
     /// Creates a copy of this PredictionModelResult with deep-copied core model components.
@@ -1524,6 +2499,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             QueryProcessors = QueryProcessors,
             LoRAConfiguration = LoRAConfiguration,
             CrossValidationResult = CrossValidationResult,
+            AutoMLSummary = AutoMLSummary,
             AgentConfig = AgentConfig,
             AgentRecommendation = AgentRecommendation,
             DeploymentConfiguration = DeploymentConfiguration,
@@ -1542,7 +2518,23 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             PromptOptimizer = PromptOptimizer,
             FewShotExampleSelector = FewShotExampleSelector,
             PromptAnalyzer = PromptAnalyzer,
-            PromptCompressor = PromptCompressor
+            PromptCompressor = PromptCompressor,
+            // Training Infrastructure - shallow copy (shared references)
+            ExperimentRun = ExperimentRun,
+            ExperimentTracker = ExperimentTracker,
+            CheckpointManager = CheckpointManager,
+            ModelRegistry = ModelRegistry,
+            TrainingMonitor = TrainingMonitor,
+            HyperparameterOptimizationResult = HyperparameterOptimizationResult,
+            ExperimentRunId = ExperimentRunId,
+            ExperimentId = ExperimentId,
+            ModelVersion = ModelVersion,
+            RegisteredModelName = RegisteredModelName,
+            CheckpointPath = CheckpointPath,
+            DataVersionHash = DataVersionHash,
+            HyperparameterTrialId = HyperparameterTrialId,
+            Hyperparameters = Hyperparameters,
+            TrainingMetricsHistory = TrainingMetricsHistory
         };
 
         return new PredictionModelResult<T, TInput, TOutput>(options);
@@ -1680,6 +2672,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 ModelMetaData = deserializedObject.ModelMetaData;
                 BiasDetector = deserializedObject.BiasDetector;
                 FairnessEvaluator = deserializedObject.FairnessEvaluator;
+                InferenceOptimizationConfig = deserializedObject.InferenceOptimizationConfig;
 
                 // Preserve RAG components and all configuration properties
                 RagRetriever = deserializedObject.RagRetriever;
@@ -1688,9 +2681,16 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 QueryProcessors = deserializedObject.QueryProcessors;
                 LoRAConfiguration = deserializedObject.LoRAConfiguration;
                 CrossValidationResult = deserializedObject.CrossValidationResult;
+                AutoMLSummary = deserializedObject.AutoMLSummary;
                 AgentConfig = deserializedObject.AgentConfig;
                 AgentRecommendation = deserializedObject.AgentRecommendation;
                 DeploymentConfiguration = deserializedObject.DeploymentConfiguration;
+
+                // Reset transient runtime state (will be reinitialized lazily)
+                JitCompiledFunction = null;
+                _inferenceOptimizer = null;
+                _inferenceOptimizedNeuralModel = null;
+                _inferenceOptimizationsInitialized = false;
             }
             else
             {
@@ -1911,7 +2911,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         var rerankedDocs = RagReranker.Rerank(processedQuery, retrievedList);
-        
+
         if (topKAfterRerank.HasValue)
         {
             rerankedDocs = rerankedDocs.Take(topKAfterRerank.Value);
@@ -2947,7 +3947,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CPU })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// model.ExportToOnnx("model.onnx");
     /// </code>
     /// </para>
@@ -2989,7 +3989,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TensorRT, Quantization = QuantizationMode.Float16 })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// model.ExportToTensorRT("model.trt");
     /// </code>
     /// </para>
@@ -3030,7 +4030,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CoreML, Quantization = QuantizationMode.Float16 })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// model.ExportToCoreML("model.mlmodel");
     /// </code>
     /// </para>
@@ -3072,7 +4072,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TFLite, Quantization = QuantizationMode.Int8 })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// model.ExportToTFLite("model.tflite");
     /// </code>
     /// </para>

@@ -20,17 +20,17 @@ public class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// The x-coordinates of the known data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the known data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The z-values (heights) of the known data points.
     /// </summary>
     private readonly Vector<T> _z;
-    
+
     /// <summary>
     /// The shape parameter that controls the smoothness of the interpolation.
     /// </summary>
@@ -41,12 +41,12 @@ public class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// for your specific data.
     /// </remarks>
     private readonly T _epsilon;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// Optional matrix decomposition method for solving the interpolation system.
     /// </summary>
@@ -55,7 +55,7 @@ public class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// are solved internally. Most users can leave this as the default (null).
     /// </remarks>
     private readonly IMatrixDecomposition<T>? _decomposition;
-    
+
     /// <summary>
     /// The calculated coefficients for the radial basis functions.
     /// </summary>

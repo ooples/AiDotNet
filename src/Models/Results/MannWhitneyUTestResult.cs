@@ -69,7 +69,7 @@ public class MannWhitneyUTestResult<T>
     /// </para>
     /// </remarks>
     public T UStatistic { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the Z-score associated with the U statistic.
     /// </summary>
@@ -101,7 +101,7 @@ public class MannWhitneyUTestResult<T>
     /// </para>
     /// </remarks>
     public T ZScore { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the p-value associated with the Mann-Whitney U test.
     /// </summary>
@@ -134,7 +134,7 @@ public class MannWhitneyUTestResult<T>
     /// </para>
     /// </remarks>
     public T PValue { get; set; }
-    
+
     /// <summary>
     /// Gets or sets a value indicating whether the Mann-Whitney U test result is statistically significant.
     /// </summary>
@@ -164,7 +164,7 @@ public class MannWhitneyUTestResult<T>
     /// </para>
     /// </remarks>
     public bool IsSignificant { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the significance level used for the test.
     /// </summary>

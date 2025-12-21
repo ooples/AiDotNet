@@ -1,13 +1,13 @@
+using System.IO;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
-using AiDotNet.Enums;
-using AiDotNet.LossFunctions;
-using System.IO;
 
 namespace AiDotNet.ReinforcementLearning.Agents.IQL;
 
@@ -57,13 +57,13 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     private int _updateCount;
 
     public IQLAgent(IQLOptions<T> options) : base(new ReinforcementLearningOptions<T>
-        {
-            LearningRate = options.PolicyLearningRate,
-            DiscountFactor = options.DiscountFactor,
-            LossFunction = new MeanSquaredErrorLoss<T>(),
-            Seed = options.Seed,
-            BatchSize = options.BatchSize
-        })
+    {
+        LearningRate = options.PolicyLearningRate,
+        DiscountFactor = options.DiscountFactor,
+        LossFunction = new MeanSquaredErrorLoss<T>(),
+        Seed = options.Seed,
+        BatchSize = options.BatchSize
+    })
     {
         _options = options;
         _options.Validate();

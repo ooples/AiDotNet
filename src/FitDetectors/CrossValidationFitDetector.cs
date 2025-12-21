@@ -36,7 +36,7 @@ public class CrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// performance before a model is considered to be overfitting.
     /// </remarks>
     private readonly T _overfitThreshold;
-    
+
     /// <summary>
     /// Threshold for determining if a model is underfitting.
     /// </summary>
@@ -45,7 +45,7 @@ public class CrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// a model is considered to be underfitting.
     /// </remarks>
     private readonly T _underfitThreshold;
-    
+
     /// <summary>
     /// Threshold for determining if a model has a good fit.
     /// </summary>

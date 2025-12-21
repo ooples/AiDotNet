@@ -77,7 +77,7 @@ public class UnobservedComponentsOptions<T, TInput, TOutput> : TimeSeriesRegress
     /// </para>
     /// </remarks>
     public int MaxIterations { get; set; } = 100;
-    
+
     /// <summary>
     /// Gets or sets a value indicating whether to optimize the model parameters.
     /// </summary>
@@ -117,7 +117,7 @@ public class UnobservedComponentsOptions<T, TInput, TOutput> : TimeSeriesRegress
     /// </para>
     /// </remarks>
     public bool OptimizeParameters { get; set; } = true;
-    
+
     /// <summary>
     /// Gets or sets the optimizer used for parameter estimation.
     /// </summary>
@@ -159,7 +159,7 @@ public class UnobservedComponentsOptions<T, TInput, TOutput> : TimeSeriesRegress
     /// </para>
     /// </remarks>
     public IOptimizer<T, Matrix<T>, Vector<T>>? Optimizer { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the seasonal period for the model.
     /// </summary>
@@ -201,7 +201,7 @@ public class UnobservedComponentsOptions<T, TInput, TOutput> : TimeSeriesRegress
     /// </para>
     /// </remarks>
     public new int SeasonalPeriod { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets a value indicating whether to include a cycle component in the model.
     /// </summary>
@@ -241,7 +241,7 @@ public class UnobservedComponentsOptions<T, TInput, TOutput> : TimeSeriesRegress
     /// </para>
     /// </remarks>
     public bool IncludeCycle { get; set; } = false;
-    
+
     /// <summary>
     /// Gets or sets the smoothing parameter for the cycle component.
     /// </summary>
@@ -282,7 +282,7 @@ public class UnobservedComponentsOptions<T, TInput, TOutput> : TimeSeriesRegress
     /// </para>
     /// </remarks>
     public double CycleLambda { get; set; } = 1600;
-    
+
     /// <summary>
     /// Gets or sets the minimum period for the cycle component.
     /// </summary>

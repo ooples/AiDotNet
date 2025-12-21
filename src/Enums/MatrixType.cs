@@ -15,8 +15,8 @@ public enum MatrixType
     /// <summary>
     /// Matrix type has not been determined or specified.
     /// </summary>
-    Unknown = 0, 
-    
+    Unknown = 0,
+
     /// <summary>
     /// A matrix with the same number of rows and columns.
     /// </summary>
@@ -26,8 +26,8 @@ public enum MatrixType
     /// Example: A 3×3 matrix has 3 rows and 3 columns.
     /// </para>
     /// </remarks>
-    Square = 1, 
-    
+    Square = 1,
+
     /// <summary>
     /// A matrix where all non-diagonal elements are zero.
     /// </summary>
@@ -42,8 +42,8 @@ public enum MatrixType
     /// [0 0 2]
     /// </para>
     /// </remarks>
-    Diagonal = 2, 
-    
+    Diagonal = 2,
+
     /// <summary>
     /// A diagonal matrix where all diagonal elements are 1.
     /// </summary>
@@ -59,8 +59,8 @@ public enum MatrixType
     /// [0 0 1]
     /// </para>
     /// </remarks>
-    Identity = 3, 
-    
+    Identity = 3,
+
     /// <summary>
     /// A square matrix that is equal to its transpose (mirror image across the diagonal).
     /// </summary>
@@ -75,8 +75,8 @@ public enum MatrixType
     /// [2 9 5]
     /// </para>
     /// </remarks>
-    Symmetric = 4, 
-    
+    Symmetric = 4,
+
     /// <summary>
     /// A square matrix whose transpose equals its negative.
     /// </summary>
@@ -92,8 +92,8 @@ public enum MatrixType
     /// [ 1 -4  0]
     /// </para>
     /// </remarks>
-    SkewSymmetric = 5, 
-    
+    SkewSymmetric = 5,
+
     /// <summary>
     /// A matrix where all elements below the main diagonal are zero.
     /// </summary>
@@ -108,8 +108,8 @@ public enum MatrixType
     /// [0 0 5]
     /// </para>
     /// </remarks>
-    UpperTriangular = 6, 
-    
+    UpperTriangular = 6,
+
     /// <summary>
     /// A matrix where all elements above the main diagonal are zero.
     /// </summary>
@@ -124,8 +124,8 @@ public enum MatrixType
     /// [1 3 5]
     /// </para>
     /// </remarks>
-    LowerTriangular = 7, 
-    
+    LowerTriangular = 7,
+
     /// <summary>
     /// A matrix with a different number of rows and columns.
     /// </summary>
@@ -135,8 +135,8 @@ public enum MatrixType
     /// Example: A 2×3 matrix has 2 rows and 3 columns.
     /// </para>
     /// </remarks>
-    Rectangular = 8, 
-    
+    Rectangular = 8,
+
     /// <summary>
     /// A matrix where all elements are zero.
     /// </summary>
@@ -149,8 +149,8 @@ public enum MatrixType
     /// [0 0 0]
     /// </para>
     /// </remarks>
-    Zero = 9, 
-    
+    Zero = 9,
+
     /// <summary>
     /// A diagonal matrix where all diagonal elements are the same value.
     /// </summary>
@@ -164,8 +164,8 @@ public enum MatrixType
     /// [0 0 5]
     /// </para>
     /// </remarks>
-    Scalar = 10, 
-    
+    Scalar = 10,
+
     /// <summary>
     /// A matrix with non-zero elements only on the main diagonal and the diagonal above it.
     /// </summary>
@@ -180,8 +180,8 @@ public enum MatrixType
     /// [0 0 9]
     /// </para>
     /// </remarks>
-    UpperBidiagonal = 11, 
-    
+    UpperBidiagonal = 11,
+
     /// <summary>
     /// A matrix with non-zero elements only on the main diagonal and the diagonal below it.
     /// </summary>
@@ -196,8 +196,8 @@ public enum MatrixType
     /// [0 5 9]
     /// </para>
     /// </remarks>
-    LowerBidiagonal = 12, 
-    
+    LowerBidiagonal = 12,
+
     /// <summary>
     /// A matrix with non-zero elements only on the main diagonal and the diagonals immediately above and below it.
     /// </summary>
@@ -212,8 +212,8 @@ public enum MatrixType
     /// [0 3 9]
     /// </para>
     /// </remarks>
-    Tridiagonal = 13, 
-    
+    Tridiagonal = 13,
+
     /// <summary>
     /// A matrix with non-zero elements only on a band centered on the main diagonal.
     /// </summary>
@@ -230,8 +230,8 @@ public enum MatrixType
     /// [0 0 0 4 9]
     /// </para>
     /// </remarks>
-    Band = 14, 
-    
+    Band = 14,
+
     /// <summary>
     /// A complex square matrix that equals its own conjugate transpose.
     /// </summary>
@@ -245,8 +245,8 @@ public enum MatrixType
     /// If position (row 1, column 2) has value 3+4i, then position (row 2, column 1) has value 3-4i.
     /// </para>
     /// </remarks>
-    Hermitian = 15, 
-    
+    Hermitian = 15,
+
     /// <summary>
     /// A complex square matrix whose conjugate transpose equals its negative.
     /// </summary>
@@ -259,8 +259,8 @@ public enum MatrixType
     /// If position (row 1, column 2) has value 3+4i, then position (row 2, column 1) has value -3+4i.
     /// </para>
     /// </remarks>
-    SkewHermitian = 16, 
-    
+    SkewHermitian = 16,
+
     /// <summary>
     /// A real square matrix whose transpose equals its inverse.
     /// </summary>
@@ -273,8 +273,8 @@ public enum MatrixType
     /// A key property: multiplying an orthogonal matrix by its transpose gives the identity matrix.
     /// </para>
     /// </remarks>
-    Orthogonal = 17, 
-    
+    Orthogonal = 17,
+
     /// <summary>
     /// A complex square matrix whose conjugate transpose equals its inverse.
     /// </summary>
@@ -287,8 +287,8 @@ public enum MatrixType
     /// A key property: multiplying a unitary matrix by its conjugate transpose gives the identity matrix.
     /// </para>
     /// </remarks>
-    Unitary = 18, 
-    
+    Unitary = 18,
+
     /// <summary>
     /// A square matrix that doesn't have an inverse.
     /// </summary>
@@ -301,7 +301,7 @@ public enum MatrixType
     /// in the process, making it impossible to reverse the transformation completely.
     /// </para>
     /// </remarks>
-    Singular = 19, 
+    Singular = 19,
 
     /// <summary>
     /// A square matrix that has an inverse.
@@ -313,8 +313,8 @@ public enum MatrixType
     /// a journey. Non-singular matrices have non-zero determinants.
     /// </para>
     /// </remarks>
-    NonSingular = 20, 
-    
+    NonSingular = 20,
+
     /// <summary>
     /// A symmetric matrix where all eigenvalues are positive.
     /// </summary>
@@ -325,8 +325,8 @@ public enum MatrixType
     /// the result is always positive. These matrices represent "bowl-shaped" surfaces that have a clear minimum point.
     /// </para>
     /// </remarks>
-    PositiveDefinite = 21, 
-    
+    PositiveDefinite = 21,
+
     /// <summary>
     /// A symmetric matrix where all eigenvalues are non-negative (zero or positive).
     /// </summary>
@@ -337,8 +337,8 @@ public enum MatrixType
     /// These matrices are common in statistics and machine learning, especially in covariance matrices.
     /// </para>
     /// </remarks>
-    PositiveSemiDefinite = 22, 
-    
+    PositiveSemiDefinite = 22,
+
     /// <summary>
     /// A square matrix that represents a projection onto a subspace.
     /// </summary>
@@ -350,8 +350,8 @@ public enum MatrixType
     /// while preserving important information.
     /// </para>
     /// </remarks>
-    OrthogonalProjection = 23, 
-    
+    OrthogonalProjection = 23,
+
     /// <summary>
     /// A matrix that, when multiplied by itself, gives the same matrix.
     /// </summary>
@@ -362,8 +362,8 @@ public enum MatrixType
     /// Projection matrices are examples of idempotent matrices.
     /// </para>
     /// </remarks>
-    Idempotent = 24, 
-    
+    Idempotent = 24,
+
     /// <summary>
     /// A matrix that, when multiplied by itself, gives the identity matrix.
     /// </summary>
@@ -374,8 +374,8 @@ public enum MatrixType
     /// to where you started. Reflection matrices are common examples.
     /// </para>
     /// </remarks>
-    Involutory = 25, 
-    
+    Involutory = 25,
+
     /// <summary>
     /// A matrix where all elements are non-negative and each row sums to 1.
     /// </summary>
@@ -386,8 +386,8 @@ public enum MatrixType
     /// where each row shows the probability of moving from one state to others.
     /// </para>
     /// </remarks>
-    Stochastic = 26, 
-    
+    Stochastic = 26,
+
     /// <summary>
     /// A matrix where all elements are non-negative and both rows and columns sum to 1.
     /// </summary>
@@ -397,8 +397,8 @@ public enum MatrixType
     /// sum to 1. These matrices are used in assignment problems and represent balanced distributions.
     /// </para>
     /// </remarks>
-    DoublyStochastic = 27, 
-    
+    DoublyStochastic = 27,
+
     /// <summary>
     /// A matrix that has exactly one 1 in each row and each column, with all other elements being 0.
     /// </summary>
@@ -408,8 +408,8 @@ public enum MatrixType
     /// It's like shuffling a deck of cards in a specific way. Each row and column has exactly one 1, with the rest being 0s.
     /// </para>
     /// </remarks>
-    Permutation = 28, 
-    
+    Permutation = 28,
+
     /// <summary>
     /// A matrix that represents connections in a graph or network.
     /// </summary>
@@ -420,8 +420,8 @@ public enum MatrixType
     /// transportation systems, and computer networks to show how elements are connected.
     /// </para>
     /// </remarks>
-    Adjacency = 29, 
-    
+    Adjacency = 29,
+
     /// <summary>
     /// A matrix that shows relationships between two types of objects in a graph.
     /// </summary>
@@ -432,8 +432,8 @@ public enum MatrixType
     /// For example, if row i has a 1 in column j, it means vertex i is connected to edge j.
     /// </para>
     /// </remarks>
-    Incidence = 30, 
-    
+    Incidence = 30,
+
     /// <summary>
     /// A matrix that represents a graph's connectivity and is used in spectral graph theory.
     /// </summary>
@@ -445,8 +445,8 @@ public enum MatrixType
     /// and network analysis.
     /// </para>
     /// </remarks>
-    Laplacian = 31, 
-    
+    Laplacian = 31,
+
     /// <summary>
     /// A matrix where each descending diagonal from left to right has constant values.
     /// </summary>
@@ -463,8 +463,8 @@ public enum MatrixType
     /// [g f e a]
     /// </para>
     /// </remarks>
-    Toeplitz = 32, 
-    
+    Toeplitz = 32,
+
     /// <summary>
     /// A matrix where each anti-diagonal (running from bottom-left to top-right) has constant values.
     /// </summary>
@@ -480,8 +480,8 @@ public enum MatrixType
     /// [d e f g]
     /// </para>
     /// </remarks>
-    Hankel = 33, 
-    
+    Hankel = 33,
+
     /// <summary>
     /// A special Toeplitz matrix where each row is a cyclic shift of the row above it.
     /// </summary>
@@ -498,8 +498,8 @@ public enum MatrixType
     /// [b c d a]
     /// </para>
     /// </remarks>
-    Circulant = 34, 
-    
+    Circulant = 34,
+
     /// <summary>
     /// A matrix divided into submatrices (blocks) that are treated as single elements.
     /// </summary>
@@ -512,7 +512,7 @@ public enum MatrixType
     /// </para>
     /// </remarks>
     Block = 35,
-    
+
     /// <summary>
     /// A matrix where most elements are zero.
     /// </summary>
@@ -523,8 +523,8 @@ public enum MatrixType
     /// Sparse matrices are common in large-scale problems like social networks, web links, or 3D simulations.
     /// </para>
     /// </remarks>
-    Sparse = 36, 
-    
+    Sparse = 36,
+
     /// <summary>
     /// A matrix where most elements are non-zero.
     /// </summary>
@@ -535,8 +535,8 @@ public enum MatrixType
     /// need to be stored anyway. These matrices typically represent fully connected systems or relationships.
     /// </para>
     /// </remarks>
-    Dense = 37, 
-    
+    Dense = 37,
+
     /// <summary>
     /// A matrix that has been divided into sections for specific mathematical operations.
     /// </summary>
@@ -548,8 +548,8 @@ public enum MatrixType
     /// decomposition methods.
     /// </para>
     /// </remarks>
-    Partitioned = 38, 
-    
+    Partitioned = 38,
+
     /// <summary>
     /// A special matrix used in polynomial calculations and control theory.
     /// </summary>
@@ -565,9 +565,9 @@ public enum MatrixType
     /// [0 1 -4]
     /// </para>
     /// </remarks>
-    Companion = 39, 
+    Companion = 39,
 
-        /// <summary>
+    /// <summary>
     /// A matrix where each row consists of consecutive powers of a value.
     /// </summary>
     /// <remarks>
@@ -581,8 +581,8 @@ public enum MatrixType
     /// and in coding theory for error correction.
     /// </para>
     /// </remarks>
-    Vandermonde = 40, 
-    
+    Vandermonde = 40,
+
     /// <summary>
     /// A special matrix where each element is 1 divided by the sum of its row and column indices.
     /// </summary>
@@ -597,8 +597,8 @@ public enum MatrixType
     /// changes in output, making them challenging for numerical calculations.
     /// </para>
     /// </remarks>
-    Hilbert = 41, 
-    
+    Hilbert = 41,
+
     /// <summary>
     /// A matrix where each element is 1 divided by the sum of two values from separate arrays.
     /// </summary>

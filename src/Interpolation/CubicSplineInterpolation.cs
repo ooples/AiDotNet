@@ -21,32 +21,32 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the data points (independent variable).
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the data points (dependent variable).
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The constant coefficients of the cubic polynomials (equal to the y values).
     /// </summary>
     private readonly Vector<T> _a;
-    
+
     /// <summary>
     /// The coefficients of the linear terms in the cubic polynomials.
     /// </summary>
     private readonly Vector<T> _b;
-    
+
     /// <summary>
     /// The coefficients of the quadratic terms in the cubic polynomials.
     /// </summary>
     private readonly Vector<T> _c;
-    
+
     /// <summary>
     /// The coefficients of the cubic terms in the cubic polynomials.
     /// </summary>
     private readonly Vector<T> _d;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
@@ -99,7 +99,7 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
     {
         // Find which interval contains the x-value
         int i = FindInterval(x);
-        
+
         // Calculate the distance from the left endpoint of the interval
         T dx = _numOps.Subtract(x, _x[i]);
 
@@ -132,7 +132,7 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
     private void CalculateCoefficients()
     {
         int n = _x.Length - 1;
-        
+
         // Calculate the width of each interval
         Vector<T> h = new Vector<T>(n);
         for (int i = 0; i < n; i++)
@@ -186,7 +186,7 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
         for (int j = n - 1; j >= 0; j--)
         {
             _c[j] = _numOps.Subtract(z[j], _numOps.Multiply(mu[j], _c[j + 1]));
-            
+
             // Calculate b and d coefficients from c coefficients
             _b[j] = _numOps.Divide(
                 _numOps.Subtract(_numOps.Subtract(_y[j + 1], _y[j]), _numOps.Multiply(h[j], _numOps.Add(_c[j + 1], _numOps.Multiply(_numOps.FromDouble(2), _c[j])))),

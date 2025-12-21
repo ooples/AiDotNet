@@ -146,13 +146,13 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
     /// Then it initializes the layers of the network accordingly.
     /// </para>
     /// </remarks>
-    public RadialBasisFunctionNetwork(NeuralNetworkArchitecture<T> architecture, IRadialBasisFunction<T>? radialBasisFunction = null, ILossFunction<T>? lossFunction = null) : 
+    public RadialBasisFunctionNetwork(NeuralNetworkArchitecture<T> architecture, IRadialBasisFunction<T>? radialBasisFunction = null, ILossFunction<T>? lossFunction = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         // Get the input shape and output size from the architecture
         var inputShape = architecture.GetInputShape();
         int outputSize = architecture.OutputSize;
-    
+
         // For RBF networks, we need to determine the hidden layer size
         // If the architecture has custom layers defined, we can extract it from there
         // Otherwise, we'll use a default or specified value
@@ -166,21 +166,21 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
         {
             hiddenSize = 64; // Default to 64 if not specified
         }
-    
+
         // Validate the network structure
         if (inputShape == null || inputShape.Length == 0 || outputSize <= 0)
         {
             throw new ArgumentException("RBFN requires valid input shape and output size specifications.");
         }
-    
+
         // Set the properties
         _inputSize = inputShape[0];
         _hiddenSize = hiddenSize;
         _outputSize = outputSize;
-    
+
         // Default to Gaussian RBF if not specified
         _radialBasisFunction = radialBasisFunction ?? new GaussianRBF<T>();
-    
+
         InitializeLayers();
     }
 
@@ -453,7 +453,7 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
         writer.Write(_inputSize);
         writer.Write(_hiddenSize);
         writer.Write(_outputSize);
-    
+
         SerializationHelper<T>.SerializeInterface(writer, _radialBasisFunction);
     }
 
@@ -483,7 +483,7 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
         _inputSize = reader.ReadInt32();
         _hiddenSize = reader.ReadInt32();
         _outputSize = reader.ReadInt32();
-    
+
         // Read and set the radial basis function if a custom one was used
         _radialBasisFunction = DeserializationHelper.DeserializeInterface<IRadialBasisFunction<T>>(reader) ?? new GaussianRBF<T>();
     }

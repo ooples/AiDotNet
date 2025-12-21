@@ -87,7 +87,7 @@ public class HuberLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorB
     /// lower values indicate better performance (0 would be a perfect model).
     /// </para>
     /// </remarks>
-    public HuberLossFitnessCalculator(T? delta = default, DataSetType dataSetType = DataSetType.Validation) 
+    public HuberLossFitnessCalculator(T? delta = default, DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
         _delta = delta ?? _numOps.FromDouble(1.0);
@@ -120,7 +120,7 @@ public class HuberLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorB
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return new HuberLoss<T>(Convert.ToDouble(_delta)).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+        return new HuberLoss<T>(Convert.ToDouble(_delta)).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

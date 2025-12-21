@@ -67,13 +67,13 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
     /// Gets or sets the EMA decay rate (default 0.99). Higher values give more weight to history.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not between 0 and 1.</exception>
-    public double EMADecay 
-    { 
+    public double EMADecay
+    {
         get => _emaDecay;
         set
         {
             if (value <= 0 || value >= 1)
-                throw new ArgumentOutOfRangeException(nameof(value), 
+                throw new ArgumentOutOfRangeException(nameof(value),
                     "EMADecay must be between 0 and 1 (exclusive). Typical values are 0.9-0.999.");
             _emaDecay = value;
         }

@@ -47,7 +47,7 @@ public class CrossEntropyLossFitnessCalculator<T, TInput, TOutput> : FitnessCalc
     /// better performance (0 would be a perfect model). This tells the system that smaller numbers are better.
     /// </para>
     /// </remarks>
-    public CrossEntropyLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) 
+    public CrossEntropyLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
     }
@@ -78,7 +78,7 @@ public class CrossEntropyLossFitnessCalculator<T, TInput, TOutput> : FitnessCalc
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return new CrossEntropyLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+        return new CrossEntropyLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

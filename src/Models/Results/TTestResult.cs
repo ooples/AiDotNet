@@ -65,7 +65,7 @@ public class TTestResult<T>
     /// </para>
     /// </remarks>
     public T TStatistic { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the degrees of freedom for the t-test.
     /// </summary>
@@ -97,7 +97,7 @@ public class TTestResult<T>
     /// </para>
     /// </remarks>
     public int DegreesOfFreedom { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the p-value associated with the t-test.
     /// </summary>
@@ -129,7 +129,7 @@ public class TTestResult<T>
     /// </para>
     /// </remarks>
     public T PValue { get; set; }
-    
+
     /// <summary>
     /// Gets or sets a value indicating whether the t-test result is statistically significant.
     /// </summary>
@@ -158,7 +158,7 @@ public class TTestResult<T>
     /// </para>
     /// </remarks>
     public bool IsSignificant { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the significance level used for the test.
     /// </summary>

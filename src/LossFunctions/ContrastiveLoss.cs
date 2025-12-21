@@ -32,7 +32,7 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
     /// The margin that enforces separation between dissimilar pairs.
     /// </summary>
     private readonly T _margin;
-    
+
     /// <summary>
     /// Initializes a new instance of the ContrastiveLoss class.
     /// </summary>
@@ -41,7 +41,7 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
     {
         _margin = NumOps.FromDouble(margin);
     }
-    
+
     /// <summary>
     /// Calculates the Contrastive Loss between two output vectors based on their similarity.
     /// </summary>
@@ -53,13 +53,13 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
     {
         // Calculate the Euclidean distance between the vectors
         T distance = EuclideanDistance(output1, output2);
-        
+
         // Calculate the loss for similar pairs: y * distance²
         T similarTerm = NumOps.Multiply(
-            similarityLabel, 
+            similarityLabel,
             NumOps.Power(distance, NumOps.FromDouble(2))
         );
-        
+
         // Calculate the loss for dissimilar pairs: (1-y) * max(0, margin - distance)²
         T dissimilarTerm = NumOps.Multiply(
             NumOps.Subtract(NumOps.One, similarityLabel),
@@ -68,11 +68,11 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
                 NumOps.FromDouble(2)
             )
         );
-        
+
         // Total loss is the sum of both terms
         return NumOps.Add(similarTerm, dissimilarTerm);
     }
-    
+
     /// <summary>
     /// Calculates the gradients of the Contrastive Loss function for both output vectors.
     /// </summary>
@@ -85,11 +85,11 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
         T distance = EuclideanDistance(output1, output2);
         Vector<T> grad1 = new Vector<T>(output1.Length);
         Vector<T> grad2 = new Vector<T>(output2.Length);
-        
+
         for (int i = 0; i < output1.Length; i++)
         {
             T diff = NumOps.Subtract(output1[i], output2[i]);
-            
+
             if (NumOps.Equals(similarityLabel, NumOps.One))
             {
                 // Gradient for similar pairs: 2 * (output1 - output2)
@@ -109,7 +109,7 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
                             distance
                         )
                     );
-                    
+
                     grad1[i] = NumOps.Multiply(scaleFactor, diff);
                     grad2[i] = NumOps.Multiply(NumOps.Negate(scaleFactor), diff);
                 }
@@ -121,10 +121,10 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
                 }
             }
         }
-        
+
         return (grad1, grad2);
     }
-    
+
     /// <summary>
     /// This method is not used for Contrastive Loss as it requires two input vectors and a similarity label.
     /// </summary>
@@ -139,7 +139,7 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
             "Use the Calculate(Vector<T>, Vector<T>, T) method instead."
         );
     }
-    
+
     /// <summary>
     /// This method is not used for Contrastive Loss as it requires two input vectors and a similarity label.
     /// </summary>
@@ -154,7 +154,7 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
             "Use the CalculateDerivative(Vector<T>, Vector<T>, T) method instead."
         );
     }
-    
+
     /// <summary>
     /// Calculates the Euclidean distance between two vectors.
     /// </summary>
@@ -169,7 +169,7 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
             T diff = NumOps.Subtract(v1[i], v2[i]);
             sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
         }
-        
+
         return NumOps.Sqrt(sum);
     }
 }

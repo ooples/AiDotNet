@@ -32,12 +32,12 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// The firing threshold for neurons. Inputs equal to or greater than this value will cause the neuron to fire.
     /// </summary>
     private readonly T _threshold;
-    
+
     /// <summary>
     /// The slope of the approximated derivative curve used during training.
     /// </summary>
     private readonly T _derivativeSlope;
-    
+
     /// <summary>
     /// The width of the region around the threshold where the derivative is non-zero.
     /// </summary>
@@ -169,14 +169,14 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
         // Binary spiking function has a discontinuous derivative (Dirac delta)
         // We approximate it with a triangular function centered at the threshold
         T distance = NumOps.Abs(NumOps.Subtract(x, _threshold));
-        
+
         if (NumOps.LessThan(distance, _derivativeWidth))
         {
             // Create a triangular pulse around the threshold
             T normalizedDistance = NumOps.Divide(distance, _derivativeWidth);
             return NumOps.Multiply(_derivativeSlope, NumOps.Subtract(NumOps.One, normalizedDistance));
         }
-        
+
         return NumOps.Zero;
     }
 
@@ -202,18 +202,18 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     {
         // For element-wise functions, the Jacobian is diagonal
         Matrix<T> jacobian = new Matrix<T>(input.Length, input.Length);
-        
+
         for (int i = 0; i < input.Length; i++)
         {
             // Set the diagonal elements to the derivative values
             jacobian[i, i] = Derivative(input[i]);
-            
+
             // Off-diagonal elements remain zero as there's no cross-dependency
         }
-        
+
         return jacobian;
     }
-    
+
     /// <summary>
     /// Applies the Binary Spiking activation function to a tensor input.
     /// </summary>
@@ -234,16 +234,16 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     public override Tensor<T> Activate(Tensor<T> input)
     {
         Tensor<T> output = new Tensor<T>(input.Shape);
-        
+
         // Apply the activation to each element in the tensor
         for (int i = 0; i < input.Length; i++)
         {
             output.SetFlatIndex(i, Activate(input.GetFlatIndexValue(i)));
         }
-        
+
         return output;
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Binary Spiking function for a tensor input.
     /// </summary>
@@ -264,16 +264,16 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
         Tensor<T> derivatives = new Tensor<T>(input.Shape);
-        
+
         // Calculate the derivative for each element in the tensor
         for (int i = 0; i < input.Length; i++)
         {
             derivatives.SetFlatIndex(i, Derivative(input.GetFlatIndexValue(i)));
         }
-        
+
         return derivatives;
     }
-    
+
     /// <summary>
     /// Gets the firing threshold value used by this activation function.
     /// </summary>
@@ -293,7 +293,7 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     {
         return _threshold;
     }
-    
+
     /// <summary>
     /// Creates a new instance of the Binary Spiking activation with a different threshold.
     /// </summary>

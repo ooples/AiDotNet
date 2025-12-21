@@ -156,8 +156,8 @@ public class LambdaLayer<T> : LayerBase<T>
     /// you would use inputShape=[10] and outputShape=[5], and provide a function that performs this transformation.
     /// </para>
     /// </remarks>
-    public LambdaLayer(int[] inputShape, int[] outputShape, 
-                       Func<Tensor<T>, Tensor<T>> forwardFunction, 
+    public LambdaLayer(int[] inputShape, int[] outputShape,
+                       Func<Tensor<T>, Tensor<T>> forwardFunction,
                        Func<Tensor<T>, Tensor<T>, Tensor<T>>? backwardFunction = null,
                        IActivationFunction<T>? activationFunction = null)
         : base(inputShape, outputShape, activationFunction ?? new ReLUActivation<T>())
@@ -274,7 +274,7 @@ public class LambdaLayer<T> : LayerBase<T>
     {
         _lastInput = input;
         var output = _forwardFunction(input);
-    
+
         output = ApplyActivation(output);
 
         _lastOutput = output;

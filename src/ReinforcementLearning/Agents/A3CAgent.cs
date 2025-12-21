@@ -1,13 +1,12 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ActivationFunctions;
-
-using AiDotNet.Enums;
-using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.ReinforcementLearning.Agents.A3C;
@@ -357,7 +356,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Implement A3C gradient computation
         // Policy gradient: ∇θ log π(a|s) * advantage
         // Value gradient: ∇φ (V(s) - return)^2
-        
+
         for (int i = 0; i < trajectory.Count; i++)
         {
             var exp = trajectory[i];
@@ -401,7 +400,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Discrete action space: softmax policy
             var softmax = ComputeSoftmax(policyOutput);
             var selectedAction = GetDiscreteAction(action);
-            
+
             var gradient = new Vector<T>(policyOutput.Length);
             for (int i = 0; i < policyOutput.Length; i++)
             {
@@ -416,7 +415,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Continuous action space: Gaussian policy
             int actionDim = policyOutput.Length / 2;
             var gradient = new Vector<T>(policyOutput.Length);
-            
+
             for (int i = 0; i < actionDim; i++)
             {
                 var mean = policyOutput[i];
@@ -424,11 +423,11 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
                 var std = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logStd)));
                 var actionDiff = NumOps.Subtract(action[i], mean);
                 var stdSquared = NumOps.Multiply(std, std);
-                
+
                 // ∇mean = -(a - μ) / σ² * advantage
                 gradient[i] = NumOps.Negate(
                     NumOps.Multiply(advantage, NumOps.Divide(actionDiff, stdSquared)));
-                
+
                 // ∇log_std = -((a - μ)² / σ² - 1) * advantage
                 var stdGrad = NumOps.Subtract(
                     NumOps.Divide(NumOps.Multiply(actionDiff, actionDiff), stdSquared),
@@ -438,14 +437,14 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             return gradient;
         }
     }
-    
+
     private Vector<T> ComputeSoftmax(Vector<T> logits)
     {
         var max = logits[0];
         for (int i = 1; i < logits.Length; i++)
             if (NumOps.ToDouble(logits[i]) > NumOps.ToDouble(max))
                 max = logits[i];
-        
+
         var expSum = NumOps.Zero;
         var exps = new Vector<T>(logits.Length);
         for (int i = 0; i < logits.Length; i++)
@@ -453,14 +452,14 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             exps[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(logits[i], max))));
             expSum = NumOps.Add(expSum, exps[i]);
         }
-        
+
         var softmax = new Vector<T>(logits.Length);
         for (int i = 0; i < logits.Length; i++)
             softmax[i] = NumOps.Divide(exps[i], expSum);
-        
+
         return softmax;
     }
-    
+
     private int GetDiscreteAction(Vector<T> actionVector)
     {
         // Action vector for discrete actions is one-hot encoded
@@ -476,7 +475,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
         return maxIdx;
     }
-    
+
     private void UpdateNetworkParameters(INeuralNetwork<T> globalNetwork, INeuralNetwork<T> localNetwork, T learningRate)
     {
         var globalParams = globalNetwork.GetParameters();

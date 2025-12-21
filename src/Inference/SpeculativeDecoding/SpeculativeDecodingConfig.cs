@@ -6,7 +6,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// Configuration for speculative decoding.
 /// </summary>
 /// <typeparam name="T">The numeric type for threshold values.</typeparam>
-public class SpeculativeDecodingConfig<T>
+internal class SpeculativeDecodingConfig<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

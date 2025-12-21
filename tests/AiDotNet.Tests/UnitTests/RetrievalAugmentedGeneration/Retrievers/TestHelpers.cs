@@ -1,9 +1,9 @@
-using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 {
@@ -205,7 +205,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
             // Create deterministic embedding based on text hash
             var hash = text.GetHashCode();
-            var random = new Random(hash);
+            var random = RandomHelper.CreateSeededRandom(hash);
             var values = new T[EmbeddingDimension];
 
             for (int i = 0; i < EmbeddingDimension; i++)

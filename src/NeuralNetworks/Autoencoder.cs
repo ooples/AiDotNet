@@ -187,7 +187,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// These parameters balance learning speed against stability and accuracy.
     /// </para>
     /// </remarks>
-    public Autoencoder(NeuralNetworkArchitecture<T> architecture, T learningRate, int epochs = 1, int batchSize = 32, ILossFunction<T>? lossFunction = null) 
+    public Autoencoder(NeuralNetworkArchitecture<T> architecture, T learningRate, int epochs = 1, int batchSize = 32, ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         EncodedSize = 0;
@@ -411,7 +411,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Flatten the tensors to vectors for the loss function
         Vector<T> predictedVector = predicted.ToVector();
         Vector<T> expectedVector = expected.ToVector();
-        
+
         // Calculate loss using the specified loss function
         return _lossFunction.CalculateLoss(predictedVector, expectedVector);
     }
@@ -443,10 +443,10 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Flatten the tensors to vectors for the loss function
         Vector<T> predictedVector = predicted.ToVector();
         Vector<T> expectedVector = expected.ToVector();
-        
+
         // Calculate the derivative of the loss function
         Vector<T> gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        
+
         // Reshape the gradient back to the original tensor shape
         return new Tensor<T>(predicted.Shape, gradientVector);
     }
@@ -820,7 +820,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Create a random normal distribution in the latent space
         var random = RandomHelper.CreateSecureRandom();
         var latentSamples = new Matrix<T>(count, EncodedSize);
-    
+
         // Generate random points in the latent space
         for (int i = 0; i < count; i++)
         {
@@ -830,16 +830,16 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 double u1 = 1.0 - random.NextDouble();
                 double u2 = 1.0 - random.NextDouble();
                 double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            
+
                 // Apply mean and standard deviation
                 double value = mean + z * stdDev;
                 latentSamples[i, j] = NumOps.FromDouble(value);
             }
         }
-    
+
         // Convert to tensor
         var latentTensor = new Tensor<T>([count, EncodedSize], latentSamples);
-    
+
         // Decode the latent samples
         return Decode(latentTensor);
     }

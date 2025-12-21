@@ -110,7 +110,7 @@ public class SplineKernel<T> : IKernelFunction<T>
     /// which is particularly useful for regression tasks and function approximation.
     /// </para>
     /// </remarks>
-   public T Calculate(Vector<T> x1, Vector<T> x2)
+    public T Calculate(Vector<T> x1, Vector<T> x2)
     {
         T result = _numOps.One;
         for (int i = 0; i < x1.Length; i++)
@@ -120,10 +120,10 @@ public class SplineKernel<T> : IKernelFunction<T>
             T minProduct = _numOps.Multiply(min, product);
             T minCubed = _numOps.Power(min, _numOps.FromDouble(3));
             T halfMinCubed = _numOps.Multiply(_numOps.FromDouble(0.5), minCubed);
-        
+
             T innerSum = _numOps.Add(_numOps.One, minProduct);
             innerSum = _numOps.Add(innerSum, halfMinCubed);
-        
+
             result = _numOps.Multiply(result, innerSum);
         }
 

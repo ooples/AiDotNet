@@ -23,7 +23,7 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     {
         NumOps = MathHelper.GetNumericOperations<T>();
     }
-    
+
     /// <summary>
     /// Calculates the loss between predicted and actual values.
     /// </summary>
@@ -31,7 +31,7 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     /// <param name="actual">The actual (target) values.</param>
     /// <returns>The loss value.</returns>
     public abstract T CalculateLoss(Vector<T> predicted, Vector<T> actual);
-    
+
     /// <summary>
     /// Calculates the derivative (gradient) of the loss function.
     /// </summary>
@@ -39,7 +39,7 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     /// <param name="actual">The actual (target) values.</param>
     /// <returns>A vector containing the derivatives of the loss with respect to each prediction.</returns>
     public abstract Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual);
-    
+
     /// <summary>
     /// Validates that the predicted and actual vectors have the same length.
     /// </summary>

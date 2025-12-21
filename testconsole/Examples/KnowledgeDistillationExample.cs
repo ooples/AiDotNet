@@ -4,10 +4,11 @@ using AiDotNet.Data.Loaders;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace TestConsole.Examples;
 
@@ -179,7 +180,7 @@ public static class KnowledgeDistillationExample
         int numFeatures,
         int numClasses)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         // Generate training data
         var trainData = new Matrix<double>(numSamples, numFeatures);
@@ -311,7 +312,7 @@ public static class KnowledgeDistillationExample
             _inputDim = inputDim;
             _outputDim = outputDim;
             _isLarge = isLarge;
-            _random = new Random(isLarge ? 42 : 123);
+            _random = RandomHelper.CreateSeededRandom(isLarge ? 42 : 123);
             _defaultLossFunction = new CrossEntropyLoss<double>();
         }
 

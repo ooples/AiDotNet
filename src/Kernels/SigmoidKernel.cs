@@ -57,7 +57,7 @@ public class SigmoidKernel<T> : IKernelFunction<T>
     /// The default value is 1.0, which provides a balanced sensitivity for many applications.
     /// </remarks>
     private readonly T _alpha;
-    
+
     /// <summary>
     /// The shifting parameter that moves the sigmoid curve horizontally.
     /// </summary>
@@ -72,7 +72,7 @@ public class SigmoidKernel<T> : IKernelFunction<T>
     /// Adjusting this parameter can help when your data has a natural bias or offset.
     /// </remarks>
     private readonly T _c;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

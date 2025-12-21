@@ -86,7 +86,7 @@ public class StepwiseRegressionOptions<T> : RegressionOptions<T>
     /// </para>
     /// </remarks>
     public StepwiseMethod Method { get; set; } = StepwiseMethod.Forward;
-    
+
     /// <summary>
     /// Gets or sets the maximum number of features to include in the final model.
     /// </summary>
@@ -128,7 +128,7 @@ public class StepwiseRegressionOptions<T> : RegressionOptions<T>
     /// </para>
     /// </remarks>
     public int MaxFeatures { get; set; } = int.MaxValue;
-    
+
     /// <summary>
     /// Gets or sets the minimum number of features to include in the final model.
     /// </summary>
@@ -171,7 +171,7 @@ public class StepwiseRegressionOptions<T> : RegressionOptions<T>
     /// </para>
     /// </remarks>
     public int MinFeatures { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the minimum improvement in the model's fit statistic required to add or remove a feature.
     /// </summary>

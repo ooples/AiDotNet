@@ -57,7 +57,7 @@ public class OptimizationIterationInfo<T>
     /// </para>
     /// </remarks>
     public int Iteration { get; set; }
-    
+
     /// <summary>
     /// The backing field for the Fitness property.
     /// </summary>
@@ -65,7 +65,7 @@ public class OptimizationIterationInfo<T>
     /// This private field stores the fitness value and is accessed through the Fitness property.
     /// </remarks>
     private T _fitness;
-    
+
     /// <summary>
     /// Gets or sets the fitness value at this iteration.
     /// </summary>

@@ -137,7 +137,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public int Padding { get; private set; }
-    
+
     /// <summary>
     /// Gets a value indicating whether this layer supports training through backpropagation.
     /// </summary>
@@ -440,7 +440,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// This makes your code cleaner and easier to read.
     /// </para>
     /// </remarks>
-    public static ConvolutionalLayer<T> Configure(int[] inputShape, int kernelSize, int numberOfFilters, int stride = 1, int padding = 0, 
+    public static ConvolutionalLayer<T> Configure(int[] inputShape, int kernelSize, int numberOfFilters, int stride = 1, int padding = 0,
         IActivationFunction<T>? activation = null)
     {
         if (inputShape.Length != 3)
@@ -492,7 +492,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// applied to groups of values rather than individual numbers.
     /// </para>
     /// </remarks>
-    public static ConvolutionalLayer<T> Configure(int[] inputShape, int kernelSize, int numberOfFilters, int stride = 1, int padding = 0, 
+    public static ConvolutionalLayer<T> Configure(int[] inputShape, int kernelSize, int numberOfFilters, int stride = 1, int padding = 0,
         IVectorActivationFunction<T>? vectorActivation = null)
     {
         if (inputShape.Length != 3)
@@ -549,7 +549,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         writer.Write(KernelSize);
         writer.Write(Stride);
         writer.Write(Padding);
-    
+
         // Serialize _kernels
         for (int i = 0; i < _kernels.Shape[0]; i++)
         {
@@ -698,7 +698,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     private void InitializeWeights()
     {
         T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputDepth * KernelSize * KernelSize + OutputDepth)));
-    
+
         for (int i = 0; i < OutputDepth; i++)
         {
             for (int j = 0; j < InputDepth; j++)
@@ -706,7 +706,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
                 for (int k = 0; k < KernelSize; k++)
                 {
                     for (int l = 0; l < KernelSize; l++)
-                        {
+                    {
                         _kernels[i, j, k, l] = NumOps.Multiply(scale, NumOps.FromDouble(_random.NextDouble() * 2 - 1));
                     }
                 }
@@ -1032,9 +1032,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         // Calculate total number of parameters
         int totalParams = _kernels.Length + _biases.Shape[0];
         var parameters = new Vector<T>(totalParams);
-    
+
         int index = 0;
-    
+
         // Copy kernel parameters
         for (int o = 0; o < OutputDepth; o++)
         {
@@ -1049,13 +1049,13 @@ public class ConvolutionalLayer<T> : LayerBase<T>
                 }
             }
         }
-    
+
         // Copy bias parameters
         for (int o = 0; o < OutputDepth; o++)
         {
             parameters[index++] = _biases[o];
         }
-    
+
         return parameters;
     }
 
@@ -1089,9 +1089,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         {
             throw new ArgumentException($"Expected {_kernels.Length + _biases.Shape[0]} parameters, but got {parameters.Length}");
         }
-    
+
         int index = 0;
-    
+
         // Set kernel parameters
         for (int o = 0; o < OutputDepth; o++)
         {
@@ -1106,7 +1106,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
                 }
             }
         }
-    
+
         // Set bias parameters
         for (int o = 0; o < OutputDepth; o++)
         {

@@ -38,12 +38,12 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// Configuration options for the Generalized Additive Model.
     /// </summary>
     private readonly GeneralizedAdditiveModelOptions<T> _options;
-    
+
     /// <summary>
     /// Matrix of basis functions applied to the input features.
     /// </summary>
     private Matrix<T> _basisFunctions;
-    
+
     /// <summary>
     /// Vector of model coefficients for the basis functions.
     /// </summary>

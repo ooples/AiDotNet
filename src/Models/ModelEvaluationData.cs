@@ -61,7 +61,7 @@ namespace AiDotNet.Models
         /// </para>
         /// </remarks>
         public DataSetStats<T, TInput, TOutput> TrainingSet { get; set; } = new();
-        
+
         /// <summary>
         /// Gets or sets the statistics for the validation dataset.
         /// </summary>
@@ -92,7 +92,7 @@ namespace AiDotNet.Models
         /// </para>
         /// </remarks>
         public DataSetStats<T, TInput, TOutput> ValidationSet { get; set; } = new();
-        
+
         /// <summary>
         /// Gets or sets the statistics for the test dataset.
         /// </summary>
@@ -122,7 +122,7 @@ namespace AiDotNet.Models
         /// </para>
         /// </remarks>
         public DataSetStats<T, TInput, TOutput> TestSet { get; set; } = new();
-        
+
         /// <summary>
         /// Gets or sets the overall statistics for the model.
         /// </summary>

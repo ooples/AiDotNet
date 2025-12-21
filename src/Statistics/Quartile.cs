@@ -49,7 +49,7 @@ public class Quartile<T>
     /// </para>
     /// </remarks>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    
+
     /// <summary>
     /// The sorted vector of data values.
     /// </summary>

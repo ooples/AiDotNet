@@ -605,7 +605,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// for the specified neuron type, with appropriate default values.
     /// </para>
     /// </remarks>
-    public SpikingLayer(int inputSize, int outputSize, SpikingNeuronType neuronType = SpikingNeuronType.LeakyIntegrateAndFire, 
+    public SpikingLayer(int inputSize, int outputSize, SpikingNeuronType neuronType = SpikingNeuronType.LeakyIntegrateAndFire,
         double tau = 10.0, double refractoryPeriod = 2.0)
         : base([inputSize], [outputSize])
     {
@@ -631,7 +631,7 @@ public class SpikingLayer<T> : LayerBase<T>
         _weightGradients.Fill(NumOps.Zero);
         _biasGradients = new Tensor<T>([outputSize]);
         _biasGradients.Fill(NumOps.Zero);
-    
+
         // Initialize neuron state variables as Tensor<T>
         _membranePotential = new Tensor<T>([outputSize]);
         _membranePotential.Fill(NumOps.Zero);
@@ -775,7 +775,7 @@ public class SpikingLayer<T> : LayerBase<T>
             _ => throw new ArgumentOutOfRangeException("neuronType", _neuronType, $"Neuron type {_neuronType} is not supported."),
         };
     }
-    
+
     /// <summary>
     /// Updates the state of Leaky Integrate-and-Fire neurons.
     /// </summary>
@@ -806,7 +806,7 @@ public class SpikingLayer<T> : LayerBase<T>
     private Tensor<T> UpdateLeakyIntegrateAndFire(Tensor<T> current)
     {
         // Decay membrane potential using Engine operations
-        T decayFactor = NumOps.FromDouble(1.0 - 1.0/_tau);
+        T decayFactor = NumOps.FromDouble(1.0 - 1.0 / _tau);
         _membranePotential = Engine.TensorMultiplyScalar(_membranePotential, decayFactor);
 
         // Create threshold tensor for comparison
@@ -847,7 +847,7 @@ public class SpikingLayer<T> : LayerBase<T>
 
         return _spikes;
     }
-    
+
     /// <summary>
     /// Updates the state of Integrate-and-Fire neurons.
     /// </summary>
@@ -907,7 +907,7 @@ public class SpikingLayer<T> : LayerBase<T>
 
         return _spikes;
     }
-    
+
     /// <summary>
     /// Updates the state of Izhikevich neurons.
     /// </summary>
@@ -974,7 +974,7 @@ public class SpikingLayer<T> : LayerBase<T>
 
         return _spikes;
     }
-    
+
     /// <summary>
     /// Updates the state of Adaptive Exponential Integrate-and-Fire neurons.
     /// </summary>
@@ -1176,7 +1176,7 @@ public class SpikingLayer<T> : LayerBase<T>
         _weights = new Tensor<T>([inputSize, outputSize], parameters.Slice(0, weightCount));
         _bias = new Tensor<T>([_bias.Shape[0]], parameters.Slice(weightCount, _bias.Shape[0]));
     }
-    
+
     /// <summary>
     /// Gets all trainable parameters of the layer as a single vector.
     /// </summary>
@@ -1283,7 +1283,7 @@ public class SpikingLayer<T> : LayerBase<T>
         _biasGradients = new Tensor<T>([_bias.Shape[0]]);
         _biasGradients.Fill(NumOps.Zero);
     }
-    
+
     /// <summary>
     /// Serializes the layer's parameters and state to a binary stream.
     /// </summary>
@@ -1328,7 +1328,7 @@ public class SpikingLayer<T> : LayerBase<T>
         {
             writer.Write(Convert.ToDouble(_bias[i]));
         }
-        
+
         // Write model-specific parameters
         if (_neuronType == SpikingNeuronType.Izhikevich)
         {
@@ -1346,7 +1346,7 @@ public class SpikingLayer<T> : LayerBase<T>
             writer.Write(_b_adex);
         }
     }
-    
+
     /// <summary>
     /// Deserializes the layer's parameters and state from a binary stream.
     /// </summary>
@@ -1390,7 +1390,7 @@ public class SpikingLayer<T> : LayerBase<T>
         {
             _bias[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        
+
         // Read model-specific parameters
         if (_neuronType == SpikingNeuronType.Izhikevich)
         {

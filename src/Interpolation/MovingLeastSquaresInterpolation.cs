@@ -22,17 +22,17 @@ public class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
     /// The x-coordinates of the known data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the known data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The z-values (heights) of the known data points.
     /// </summary>
     private readonly Vector<T> _z;
-    
+
     /// <summary>
     /// Controls how far the influence of each data point extends.
     /// </summary>
@@ -43,7 +43,7 @@ public class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
     /// data points but might be less smooth overall.
     /// </remarks>
     private readonly T _smoothingLength;
-    
+
     /// <summary>
     /// The degree of the polynomial used for local approximation.
     /// </summary>
@@ -58,12 +58,12 @@ public class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
     /// Degree 3 = cubic (can form more complex shapes)
     /// </remarks>
     private readonly int _polynomialDegree;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// Optional matrix decomposition method for solving the least squares system.
     /// </summary>
@@ -170,7 +170,7 @@ public class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
         {
             for (int q = 0; q <= p; q++)
             {
-                result = _numOps.Add(result, _numOps.Multiply(coefficients[coeffIndex], 
+                result = _numOps.Add(result, _numOps.Multiply(coefficients[coeffIndex],
                     _numOps.Multiply(_numOps.Power(x, _numOps.FromDouble(p - q)), _numOps.Power(y, _numOps.FromDouble(q)))));
                 coeffIndex++;
             }

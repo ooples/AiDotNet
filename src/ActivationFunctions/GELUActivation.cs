@@ -99,12 +99,12 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
         //                (0.0535161 * x^3 + 0.398942 * x) * sech^2(0.0356774 * x^3 + 0.797885 * x) + 0.5
         T x2 = NumOps.Multiply(input, input);
         T x3 = NumOps.Multiply(x2, input);
-        
+
         T term1 = NumOps.Add(
             NumOps.Multiply(NumOps.FromDouble(0.0356774), x3),
             NumOps.Multiply(NumOps.FromDouble(0.797885), input)
         );
-        
+
         T term2 = NumOps.Add(
             NumOps.Multiply(NumOps.FromDouble(0.0535161), x3),
             NumOps.Multiply(NumOps.FromDouble(0.398942), input)

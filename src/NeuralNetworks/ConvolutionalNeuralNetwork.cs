@@ -133,7 +133,7 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        TensorValidator.ValidateShape(input, Architecture.GetInputShape(), 
+        TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
             nameof(ConvolutionalNeuralNetwork<T>), "forward pass");
 
         Tensor<T> output = input;

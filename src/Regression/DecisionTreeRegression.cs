@@ -32,17 +32,17 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// The configuration options for the decision tree algorithm.
     /// </summary>
     private readonly DecisionTreeOptions _options;
-    
+
     /// <summary>
     /// Random number generator used for feature selection and other randomized operations.
     /// </summary>
     private readonly Random _random;
-    
+
     /// <summary>
     /// Vector storing the importance scores for each feature in the model.
     /// </summary>
     private Vector<T> _featureImportances;
-    
+
     /// <summary>
     /// The regularization strategy applied to the model to prevent overfitting.
     /// </summary>
@@ -839,7 +839,7 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     private void NormalizeFeatureImportances()
     {
         T sum = _featureImportances.Aggregate(NumOps.Zero, (acc, x) => NumOps.Add(acc, x));
-    
+
         if (NumOps.Equals(sum, NumOps.Zero))
         {
             return;

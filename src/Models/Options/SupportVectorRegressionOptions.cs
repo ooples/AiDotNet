@@ -80,7 +80,7 @@ public class SupportVectorRegressionOptions : NonLinearRegressionOptions
     /// </para>
     /// </remarks>
     public double Epsilon { get; set; } = 0.1;
-    
+
     /// <summary>
     /// Gets or sets the regularization parameter.
     /// </summary>

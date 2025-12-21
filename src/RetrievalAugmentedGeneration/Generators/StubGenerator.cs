@@ -62,7 +62,7 @@ public class StubGenerator<T> : IGenerator<T>
     {
         if (maxContextTokens <= 0)
             throw new ArgumentException("MaxContextTokens must be greater than zero", nameof(maxContextTokens));
-        
+
         if (maxGenerationTokens <= 0)
             throw new ArgumentException("MaxGenerationTokens must be greater than zero", nameof(maxGenerationTokens));
 
@@ -121,7 +121,7 @@ public class StubGenerator<T> : IGenerator<T>
             throw new ArgumentException("Query cannot be empty after trimming whitespace", nameof(query));
 
         var contextList = context?.ToList() ?? new List<Document<T>>();
-        
+
         if (contextList.Count == 0)
         {
             return new GroundedAnswer<T>
@@ -144,12 +144,12 @@ public class StubGenerator<T> : IGenerator<T>
         {
             var doc = contextList[i];
             var citationNum = i + 1;
-            
+
             // Add a snippet of the document with citation
-            var snippet = doc.Content.Length > 200 
-                ? doc.Content.Substring(0, 200) + "..." 
+            var snippet = doc.Content.Length > 200
+                ? doc.Content.Substring(0, 200) + "..."
                 : doc.Content;
-            
+
             answerBuilder.AppendLine($"{snippet} [{citationNum}]");
             answerBuilder.AppendLine();
 

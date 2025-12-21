@@ -20,12 +20,12 @@ public class LanczosInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the known data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates (values) of the known data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The 'a' parameter that controls the size of the Lanczos window.
     /// </summary>
@@ -35,7 +35,7 @@ public class LanczosInterpolation<T> : IInterpolation<T>
     /// more detail but might create less smooth transitions.
     /// </remarks>
     private readonly int _a;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

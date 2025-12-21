@@ -42,7 +42,7 @@ public enum MetricType
     /// </para>
     /// </remarks>
     AdjustedR2,
-    
+
     /// <summary>
     /// Measures the proportion of variance in the dependent variable explained by the model.
     /// </summary>
@@ -55,7 +55,7 @@ public enum MetricType
     /// </para>
     /// </remarks>
     ExplainedVarianceScore,
-    
+
     /// <summary>
     /// The average difference between predicted values and actual values.
     /// </summary>
@@ -68,7 +68,7 @@ public enum MetricType
     /// </para>
     /// </remarks>
     MeanPredictionError,
-    
+
     /// <summary>
     /// The middle value of all differences between predicted values and actual values.
     /// </summary>
@@ -80,7 +80,7 @@ public enum MetricType
     /// </para>
     /// </remarks>
     MedianPredictionError,
-    
+
     /// <summary>
     /// The proportion of correct predictions among all predictions made.
     /// </summary>
@@ -92,7 +92,7 @@ public enum MetricType
     /// </para>
     /// </remarks>
     Accuracy,
-    
+
     /// <summary>
     /// The proportion of true positive predictions among all positive predictions.
     /// </summary>
@@ -104,7 +104,7 @@ public enum MetricType
     /// </para>
     /// </remarks>
     Precision,
-    
+
     /// <summary>
     /// The proportion of true positive predictions among all actual positives.
     /// </summary>
@@ -116,7 +116,7 @@ public enum MetricType
     /// </para>
     /// </remarks>
     Recall,
-    
+
     /// <summary>
     /// The harmonic mean of precision and recall, providing a balance between the two metrics.
     /// </summary>
@@ -129,7 +129,7 @@ public enum MetricType
     /// </para>
     /// </remarks>
     F1Score,
-    
+
     /// <summary>
     /// The percentage of actual values that fall within the model's prediction intervals.
     /// </summary>
@@ -142,7 +142,7 @@ public enum MetricType
     /// </para>
     /// </remarks>
     PredictionIntervalCoverage,
-    
+
     /// <summary>
     /// Measures the linear correlation between predicted and actual values.
     /// </summary>
@@ -157,7 +157,7 @@ public enum MetricType
     /// </para>
     /// </remarks>
     PearsonCorrelation,
-    
+
     /// <summary>
     /// Measures the monotonic relationship between predicted and actual values.
     /// </summary>
@@ -171,7 +171,7 @@ public enum MetricType
     /// </para>
     /// </remarks>
     SpearmanCorrelation,
-    
+
     /// <summary>
     /// Measures the ordinal association between predicted and actual values.
     /// </summary>
@@ -1186,4 +1186,15 @@ public enum MetricType
     /// </para>
     /// </remarks>
     AdjustedRandIndex,
+
+    /// <summary>
+    /// The average total reward per episode (reinforcement learning).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In reinforcement learning, an "episode" is one full run in the environment.
+    /// This metric measures how much reward the agent earns on average per episode. Higher is better.
+    /// </para>
+    /// </remarks>
+    AverageEpisodeReward,
 }

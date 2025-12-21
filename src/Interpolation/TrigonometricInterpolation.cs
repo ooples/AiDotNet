@@ -24,27 +24,27 @@ public class TrigonometricInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates (values) of the data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The coefficients for the cosine terms in the Fourier series.
     /// </summary>
     private readonly Vector<T> _a;
-    
+
     /// <summary>
     /// The coefficients for the sine terms in the Fourier series.
     /// </summary>
     private readonly Vector<T> _b;
-    
+
     /// <summary>
     /// The period of the data (the interval after which the pattern repeats).
     /// </summary>
     private readonly T _period;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
@@ -138,7 +138,7 @@ public class TrigonometricInterpolation<T> : IInterpolation<T>
         {
             T angle = _numOps.Multiply(_numOps.Divide(_numOps.FromDouble(2 * k * Math.PI), _period), x);
             result = _numOps.Add(result, _numOps.Multiply(_a[k], MathHelper.Cos(angle)));
-            
+
             if (k < n)
             {
                 result = _numOps.Add(result, _numOps.Multiply(_b[k - 1], MathHelper.Sin(angle)));

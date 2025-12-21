@@ -78,7 +78,7 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
     {
         // Split text into sentences with their positions
         var sentencesWithPos = SplitIntoSentencesWithPositions(text);
-        
+
         if (sentencesWithPos.Count == 0)
             yield break;
 
@@ -98,7 +98,7 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
                 var chunkEnd = currentSentences[currentSentences.Count - 1].Item3;
                 var chunkText = text.Substring(chunkStart, chunkEnd - chunkStart);
                 yield return (chunkText, chunkStart, chunkEnd);
-                
+
                 // Keep the last N sentences for overlap (include separator lengths)
                 var overlapStart = Math.Max(0, currentSentences.Count - _overlapSentences);
                 currentSentences = currentSentences.GetRange(overlapStart, currentSentences.Count - overlapStart);
@@ -106,7 +106,7 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
                     ? currentSentences[currentSentences.Count - 1].Item3 - currentSentences[0].Item2
                     : 0;
             }
-            
+
             // Handle sentences that exceed maxChunkSize on their own
             if (sentenceLength > _maxChunkSize)
             {
@@ -120,7 +120,7 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
                     currentSentences.Clear();
                     currentLength = 0;
                 }
-                
+
                 // Split the oversized sentence into smaller pieces
                 for (int pos = 0; pos < sentence.Length; pos += _maxChunkSize)
                 {
@@ -130,7 +130,7 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
                     var pieceText = text.Substring(pieceStart, pieceLength);
                     yield return (pieceText, pieceStart, pieceEnd);
                 }
-                
+
                 continue;
             }
 
@@ -144,7 +144,7 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
                 var chunkEnd = currentSentences[currentSentences.Count - 1].Item3;
                 var chunkText = text.Substring(chunkStart, chunkEnd - chunkStart);
                 yield return (chunkText, chunkStart, chunkEnd);
-                
+
                 // Keep the last N sentences for overlap
                 var overlapStart = Math.Max(0, currentSentences.Count - _overlapSentences);
                 currentSentences = currentSentences.GetRange(overlapStart, currentSentences.Count - overlapStart);
@@ -172,25 +172,25 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
         var results = new List<(string, int, int)>();
         var currentStart = 0;
         var currentLength = 0;
-        
+
         for (int i = 0; i < text.Length; i++)
         {
             currentLength++;
             var ch = text[i];
-            
+
             // Check for sentence endings
             var isSentenceEnd = (ch == '.' || ch == '!' || ch == '?');
-            
+
             if (isSentenceEnd)
             {
                 // Look ahead to see if this is really a sentence end
                 var nextIdx = i + 1;
                 while (nextIdx < text.Length && char.IsWhiteSpace(text[nextIdx]))
                     nextIdx++;
-                
+
                 // If next character is uppercase or we're at end, it's a sentence boundary
                 var isRealEnd = nextIdx >= text.Length || char.IsUpper(text[nextIdx]);
-                
+
                 if (isRealEnd || i == text.Length - 1)
                 {
                     var sentence = text.Substring(currentStart, currentLength).Trim();
@@ -200,20 +200,20 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
                         var trimmedStart = currentStart;
                         while (trimmedStart < text.Length && char.IsWhiteSpace(text[trimmedStart]))
                             trimmedStart++;
-                        
+
                         var trimmedEnd = currentStart + currentLength;
                         while (trimmedEnd > trimmedStart && char.IsWhiteSpace(text[trimmedEnd - 1]))
                             trimmedEnd--;
-                        
+
                         results.Add((sentence, trimmedStart, trimmedEnd));
                     }
-                    
+
                     currentStart = i + 1;
                     currentLength = 0;
                 }
             }
         }
-        
+
         // Handle any remaining text as final sentence
         if (currentLength > 0)
         {
@@ -223,15 +223,15 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
                 var trimmedStart = currentStart;
                 while (trimmedStart < text.Length && char.IsWhiteSpace(text[trimmedStart]))
                     trimmedStart++;
-                
+
                 var trimmedEnd = currentStart + currentLength;
                 while (trimmedEnd > trimmedStart && char.IsWhiteSpace(text[trimmedEnd - 1]))
                     trimmedEnd--;
-                
+
                 results.Add((sentence, trimmedStart, trimmedEnd));
             }
         }
-        
+
         return results;
     }
     private List<string> SplitIntoSentences(string text)

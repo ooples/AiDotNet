@@ -1,54 +1,57 @@
-using AiDotNet.Data.Loaders;
+using AiDotNet.Data.Structures;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LossFunctions;
-using AiDotNet.MetaLearning.Config;
-using AiDotNet.MetaLearning.Trainers;
-using AiDotNet.Models.Results;
+using AiDotNet.MetaLearning;
+using AiDotNet.MetaLearning.Algorithms;
+using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning;
 
-// Type alias for cleaner test code
-using ReptileTrainerDouble = ReptileTrainer<double, Tensor<double>, Tensor<double>>;
-using SimpleMockModelDouble = SimpleMockModel;
-
 /// <summary>
-/// Unit tests for the ReptileTrainer class.
+/// Unit tests for the ReptileAlgorithm class.
 /// </summary>
 public class ReptileTrainerTests
 {
-    #region Test Helper Methods
+    private SimpleMockModel CreateMockModel() => new SimpleMockModel(50);
 
-    /// <summary>
-    /// Creates a synthetic dataset for testing.
-    /// </summary>
-    private (Matrix<double> X, Vector<double> Y) CreateTestDataset(int numClasses, int examplesPerClass, int numFeatures)
+    private ReptileOptions<double, Tensor<double>, Tensor<double>> CreateDefaultOptions()
     {
-        int totalExamples = numClasses * examplesPerClass;
-        var X = new Matrix<double>(totalExamples, numFeatures);
-        var Y = new Vector<double>(totalExamples);
-
-        for (int classIdx = 0; classIdx < numClasses; classIdx++)
+        var mockModel = CreateMockModel();
+        return new ReptileOptions<double, Tensor<double>, Tensor<double>>(mockModel)
         {
-            for (int exampleIdx = 0; exampleIdx < examplesPerClass; exampleIdx++)
-            {
-                int rowIdx = classIdx * examplesPerClass + exampleIdx;
-
-                for (int featureIdx = 0; featureIdx < numFeatures; featureIdx++)
-                {
-                    X[rowIdx, featureIdx] = (double)classIdx + (double)exampleIdx * 0.1 + (double)featureIdx * 0.01;
-                }
-
-                Y[rowIdx] = classIdx;
-            }
-        }
-
-        return (X, Y);
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 1.0,
+            AdaptationSteps = 5
+        };
     }
 
-    #endregion
+    /// <summary>
+    /// Creates a mock task for testing purposes.
+    /// </summary>
+    private IMetaLearningTask<double, Tensor<double>, Tensor<double>> CreateMockTask()
+    {
+        var supportInput = new Tensor<double>(new int[] { 5, 10 });
+        var supportOutput = new Tensor<double>(new int[] { 5 });
+        var queryInput = new Tensor<double>(new int[] { 15, 10 });
+        var queryOutput = new Tensor<double>(new int[] { 15 });
+
+        return new MetaLearningTask<double, Tensor<double>, Tensor<double>>
+        {
+            SupportSetX = supportInput,
+            SupportSetY = supportOutput,
+            QuerySetX = queryInput,
+            QuerySetY = queryOutput,
+            NumWays = 5,
+            NumShots = 1,
+            NumQueryPerClass = 3,
+            Name = "test-task"
+        };
+    }
 
     #region Constructor Tests
 
@@ -56,350 +59,175 @@ public class ReptileTrainerTests
     public void Constructor_ValidInputs_InitializesSuccessfully()
     {
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-        var config = new ReptileTrainerConfig<double>(
-            innerLearningRate: 0.01,
-            metaLearningRate: 0.001,
-            innerSteps: 5);
+        var options = CreateDefaultOptions();
 
         // Act
-        var trainer = new ReptileTrainerDouble(
-            metaModel: model,
-            lossFunction: lossFunction,
-            dataLoader: dataLoader,
-            config: config);
+        var algorithm = new ReptileAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
         // Assert
-        Assert.NotNull(trainer);
+        Assert.NotNull(algorithm);
+        Assert.Equal(MetaLearningAlgorithmType.Reptile, algorithm.AlgorithmType);
     }
 
     [Fact]
-    public void Constructor_NullModel_ThrowsArgumentNullException()
+    public void Constructor_NullOptions_ThrowsArgumentNullException()
     {
-        // Arrange
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-
         // Act & Assert
-        var exception = Assert.Throws<ArgumentNullException>(() =>
-            new ReptileTrainerDouble(
-                metaModel: null!,
-                lossFunction: lossFunction,
-                dataLoader: dataLoader));
-
-        Assert.Contains("metaModel", exception.Message);
-    }
-
-    [Fact]
-    public void Constructor_NullLossFunction_ThrowsArgumentNullException()
-    {
-        // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentNullException>(() =>
-            new ReptileTrainerDouble(
-                metaModel: model,
-                lossFunction: null!,
-                dataLoader: dataLoader));
-
-        Assert.Contains("lossFunction", exception.Message);
-    }
-
-    [Fact]
-    public void Constructor_NullDataLoader_ThrowsArgumentNullException()
-    {
-        // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentNullException>(() =>
-            new ReptileTrainerDouble(
-                metaModel: model,
-                lossFunction: lossFunction,
-                dataLoader: null!));
-
-        Assert.Contains("dataLoader", exception.Message);
-    }
-
-    [Fact]
-    public void Constructor_InvalidInnerSteps_ThrowsArgumentException()
-    {
-        // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-        var config = new ReptileTrainerConfig<double>(
-            innerLearningRate: 0.01,
-            metaLearningRate: 0.001,
-            innerSteps: 0); // Invalid
-
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            new ReptileTrainerDouble(
-                metaModel: model,
-                lossFunction: lossFunction,
-                dataLoader: dataLoader,
-                config: config));
-
-        Assert.Equal("config", exception.ParamName);
-    }
-
-    [Fact]
-    public void Constructor_InvalidInnerLearningRate_ThrowsArgumentException()
-    {
-        // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-        var config = new ReptileTrainerConfig<double>(
-            innerLearningRate: 0.0, // Invalid
-            metaLearningRate: 0.001,
-            innerSteps: 5);
-
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            new ReptileTrainerDouble(
-                metaModel: model,
-                lossFunction: lossFunction,
-                dataLoader: dataLoader,
-                config: config));
-
-        Assert.Equal("config", exception.ParamName);
-    }
-
-    [Fact]
-    public void Constructor_InvalidMetaLearningRate_ThrowsArgumentException()
-    {
-        // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-        var config = new ReptileTrainerConfig<double>(
-            innerLearningRate: 0.01,
-            metaLearningRate: -0.001, // Invalid
-            innerSteps: 5);
-
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            new ReptileTrainerDouble(
-                metaModel: model,
-                lossFunction: lossFunction,
-                dataLoader: dataLoader,
-                config: config));
-
-        Assert.Equal("config", exception.ParamName);
+        Assert.Throws<ArgumentNullException>(() =>
+            new ReptileAlgorithm<double, Tensor<double>, Tensor<double>>(null!));
     }
 
     #endregion
 
-    #region Train Method Tests
+    #region MetaTrain Tests
 
     [Fact]
-    public void Train_InvalidNumMetaIterations_ThrowsArgumentException()
+    public void MetaTrain_WithValidTaskBatch_ReturnsNonNegativeLoss()
     {
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-        var trainer = new ReptileTrainerDouble(model, lossFunction, dataLoader);
+        var options = CreateDefaultOptions();
+        var algorithm = new ReptileAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+        var task = CreateMockTask();
+        var taskBatch = new TaskBatch<double, Tensor<double>, Tensor<double>>(new[] { task });
+
+        // Act
+        var loss = algorithm.MetaTrain(taskBatch);
+
+        // Assert
+        Assert.True(loss >= 0, "Loss should be non-negative");
+    }
+
+    [Fact]
+    public void MetaTrain_WithMultipleTasks_ReturnsValidLoss()
+    {
+        // Arrange
+        var options = CreateDefaultOptions();
+        var algorithm = new ReptileAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+        var tasks = Enumerable.Range(0, 4).Select(_ => CreateMockTask()).ToArray();
+        var taskBatch = new TaskBatch<double, Tensor<double>, Tensor<double>>(tasks);
+
+        // Act
+        var loss = algorithm.MetaTrain(taskBatch);
+
+        // Assert
+        Assert.True(loss >= 0, "Loss should be non-negative");
+        Assert.False(double.IsNaN(loss), "Loss should not be NaN");
+    }
+
+    [Fact]
+    public void MetaTrain_NullTaskBatch_ThrowsArgumentException()
+    {
+        // Arrange
+        var options = CreateDefaultOptions();
+        var algorithm = new ReptileAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
         // Act & Assert
-        var invalidConfig = new ReptileTrainerConfig<double>(
-            innerLearningRate: 0.01,
-            metaLearningRate: 0.001,
-            innerSteps: 5,
-            metaBatchSize: 1,
-            numMetaIterations: 0); // Invalid
-
-        var exception = Assert.Throws<ArgumentException>(() =>
-            new ReptileTrainerDouble(model, lossFunction, dataLoader, invalidConfig));
-
-        Assert.Contains("configuration validation failed", exception.Message.ToLower());
-        Assert.Equal("config", exception.ParamName);
+        Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(null!));
     }
 
     [Fact]
-    public void Train_UpdatesModelParameters()
+    public void MetaTrain_EmptyTaskBatch_ThrowsArgumentException()
     {
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: 42);
-        var config = new ReptileTrainerConfig<double>(
-            innerLearningRate: 0.01,
-            metaLearningRate: 0.001,
-            innerSteps: 3,
-            metaBatchSize: 1,
-            numMetaIterations: 5);
-        var trainer = new ReptileTrainerDouble(model, lossFunction, dataLoader, config);
+        var emptyTasks = Array.Empty<IMetaLearningTask<double, Tensor<double>, Tensor<double>>>();
 
-        var initialParameters = model.GetParameters();
-
-        // Act
-        trainer.Train();
-
-        var finalParameters = model.GetParameters();
-
-        // Assert - Parameters should have changed
-        bool parametersChanged = false;
-        for (int i = 0; i < initialParameters.Length; i++)
-        {
-            if (Math.Abs(initialParameters[i] - finalParameters[i]) > 1e-10)
-            {
-                parametersChanged = true;
-                break;
-            }
-        }
-
-        Assert.True(parametersChanged, "Model parameters should be updated after training");
-    }
-
-    [Fact]
-    public void Train_CallsModelTrainMultipleTimes()
-    {
-        // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        int innerSteps = 3;
-        int numMetaIterations = 5;
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-        var config = new ReptileTrainerConfig<double>(
-            innerLearningRate: 0.01,
-            metaLearningRate: 0.001,
-            innerSteps: innerSteps,
-            metaBatchSize: 1,
-            numMetaIterations: numMetaIterations);
-        var trainer = new ReptileTrainerDouble(model, lossFunction, dataLoader, config);
-
-        int initialTrainCount = model.TrainCallCount;
-
-        // Act
-        trainer.Train();
-
-        // Assert - Should call Train() innerSteps times per meta-iteration
-        int expectedCalls = innerSteps * numMetaIterations;
-        int actualCalls = model.TrainCallCount - initialTrainCount;
-
-        Assert.Equal(expectedCalls, actualCalls);
-    }
-
-    [Fact]
-    public void Train_ReturnsValidMetadata()
-    {
-        // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-        var trainer = new ReptileTrainerDouble(model, lossFunction, dataLoader);
-
-        int numIterations = 10;
-        var config = new ReptileTrainerConfig<double>(
-            innerLearningRate: 0.01,
-            metaLearningRate: 0.001,
-            innerSteps: 5,
-            metaBatchSize: 1,
-            numMetaIterations: numIterations);
-        var trainer2 = new ReptileTrainerDouble(model, lossFunction, dataLoader, config);
-
-        // Act
-        var result = trainer2.Train();
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Equal(numIterations, result.TotalIterations);
-        Assert.NotNull(result.LossHistory);
-        Assert.Equal(numIterations, result.LossHistory.Length);
-        Assert.True(result.TrainingTime.TotalMilliseconds > 0);
-    }
-
-    [Fact]
-    public void Train_WithDefaultParameters_ExecutesSuccessfully()
-    {
-        // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y); // Use defaults here too
-        var config = new ReptileTrainerConfig<double>(
-            innerLearningRate: 0.01,
-            metaLearningRate: 0.001,
-            innerSteps: 5,
-            metaBatchSize: 1,
-            numMetaIterations: 5);
-        var trainer = new ReptileTrainerDouble(model, lossFunction, dataLoader, config);
-
-        // Act
-        var result = trainer.Train();
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Equal(5, result.TotalIterations);
+        // Act & Assert
+        // TaskBatch constructor validates that tasks are not empty (fail fast)
+        Assert.Throws<ArgumentException>(() =>
+            new TaskBatch<double, Tensor<double>, Tensor<double>>(emptyTasks));
     }
 
     #endregion
 
-    #region Reptile Algorithm Tests
+    #region Adapt Tests
 
     [Fact]
-    public void Train_ParametersConvergeTowardAdaptedParameters()
+    public void Adapt_ValidTask_ReturnsAdaptedModel()
     {
         // Arrange
-        var model = new SimpleMockModelDouble(5);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: 42);
-        var config = new ReptileTrainerConfig<double>(
-            innerLearningRate: 0.01,
-            metaLearningRate: 0.1, // Higher rate to see effect clearly
-            innerSteps: 3,
-            metaBatchSize: 1,
-            numMetaIterations: 1); // Default 1 for this test
-        var trainer = new ReptileTrainerDouble(model, lossFunction, dataLoader, config);
+        var options = CreateDefaultOptions();
+        var algorithm = new ReptileAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+        var task = CreateMockTask();
 
-        var initialParameters = model.GetParameters();
+        // Act
+        var adaptedModel = algorithm.Adapt(task);
 
-        // Create config with 1 iteration
-        var configSingle = new ReptileTrainerConfig<double>(
-            innerLearningRate: 0.01,
-            metaLearningRate: 0.1,
-            innerSteps: 3,
-            metaBatchSize: 1,
-            numMetaIterations: 1);
-        var trainer2 = new ReptileTrainerDouble(model, lossFunction, dataLoader, configSingle);
+        // Assert
+        Assert.NotNull(adaptedModel);
+    }
 
-        // Act - Run one meta-iteration
-        trainer2.Train();
+    [Fact]
+    public void Adapt_NullTask_ThrowsArgumentNullException()
+    {
+        // Arrange
+        var options = CreateDefaultOptions();
+        var algorithm = new ReptileAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
-        var finalParameters = model.GetParameters();
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(null!));
+    }
 
-        // Assert - Parameters should have moved (Reptile update)
-        // The change should be in the direction of adapted parameters
-        bool parametersUpdated = false;
-        for (int i = 0; i < initialParameters.Length; i++)
+    #endregion
+
+    #region Options Tests
+
+    [Fact]
+    public void Options_IsValid_ReturnsTrueForValidOptions()
+    {
+        // Arrange
+        var options = CreateDefaultOptions();
+
+        // Act
+        var isValid = options.IsValid();
+
+        // Assert
+        Assert.True(isValid);
+    }
+
+    [Fact]
+    public void Options_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        var options = CreateDefaultOptions();
+
+        // Act
+        var clonedOptions = options.Clone() as ReptileOptions<double, Tensor<double>, Tensor<double>>;
+
+        // Assert
+        Assert.NotNull(clonedOptions);
+        Assert.Equal(options.InnerLearningRate, clonedOptions.InnerLearningRate);
+        Assert.Equal(options.OuterLearningRate, clonedOptions.OuterLearningRate);
+        Assert.Equal(options.AdaptationSteps, clonedOptions.AdaptationSteps);
+    }
+
+    #endregion
+
+    #region Parameterized Tests
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    [InlineData(10)]
+    public void MetaTrain_WithDifferentAdaptationSteps_ReturnsValidLoss(int adaptationSteps)
+    {
+        // Arrange
+        var mockModel = CreateMockModel();
+        var options = new ReptileOptions<double, Tensor<double>, Tensor<double>>(mockModel)
         {
-            if (Math.Abs(finalParameters[i] - initialParameters[i]) > 1e-6)
-            {
-                parametersUpdated = true;
-                break;
-            }
-        }
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 1.0,
+            AdaptationSteps = adaptationSteps
+        };
+        var algorithm = new ReptileAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+        var task = CreateMockTask();
+        var taskBatch = new TaskBatch<double, Tensor<double>, Tensor<double>>(new[] { task });
 
-        Assert.True(parametersUpdated, "Reptile meta-update should change parameters");
+        // Act
+        var loss = algorithm.MetaTrain(taskBatch);
+
+        // Assert
+        Assert.True(loss >= 0, $"Loss should be non-negative for adaptation steps={adaptationSteps}");
     }
 
     #endregion

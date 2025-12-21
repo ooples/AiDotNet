@@ -1,6 +1,6 @@
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.KnowledgeDistillation;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;

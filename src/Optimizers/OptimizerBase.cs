@@ -1,7 +1,7 @@
-global using AiDotNet.Models.Inputs;
-global using AiDotNet.Evaluation;
 global using AiDotNet.Caching;
 global using AiDotNet.Enums;
+global using AiDotNet.Evaluation;
+global using AiDotNet.Models.Inputs;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -449,7 +449,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <param name="inputData">The input data for evaluation.</param>
     /// <returns>The calculated loss value.</returns>
     protected virtual T CalculateLoss(
-        IFullModel<T, TInput, TOutput> solution, 
+        IFullModel<T, TInput, TOutput> solution,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
         var stepData = EvaluateSolution(solution, inputData);
@@ -775,7 +775,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 IterationsWithoutImprovement = 0;
             }
 
-            CurrentLearningRate = MathHelper.Max(NumOps.FromDouble(Options.MinLearningRate), 
+            CurrentLearningRate = MathHelper.Max(NumOps.FromDouble(Options.MinLearningRate),
                 MathHelper.Min(NumOps.FromDouble(Options.MaxLearningRate), CurrentLearningRate));
         }
 
@@ -790,7 +790,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 CurrentMomentum = NumOps.Multiply(CurrentMomentum, NumOps.FromDouble(Options.MomentumDecreaseFactor));
             }
 
-            CurrentMomentum = MathHelper.Max(NumOps.FromDouble(Options.MinMomentum), 
+            CurrentMomentum = MathHelper.Max(NumOps.FromDouble(Options.MinMomentum),
                 MathHelper.Min(NumOps.FromDouble(Options.MaxMomentum), CurrentMomentum));
         }
     }
@@ -985,10 +985,15 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
         // Deserialize options
         string optionsJson = reader.ReadString();
-        var options = JsonConvert.DeserializeObject<OptimizationAlgorithmOptions<T, TInput, TOutput>>(optionsJson);
+        Type optionsType = Options?.GetType() ?? typeof(OptimizationAlgorithmOptions<T, TInput, TOutput>);
+        object? deserializedOptions = JsonConvert.DeserializeObject(optionsJson, optionsType);
+        var options = deserializedOptions as OptimizationAlgorithmOptions<T, TInput, TOutput>;
 
         // Update the options
-        UpdateOptions(options ?? new());
+        if (options != null)
+        {
+            UpdateOptions(options);
+        }
 
         // Allow derived classes to deserialize additional data
         DeserializeAdditionalData(reader);

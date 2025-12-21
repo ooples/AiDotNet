@@ -49,7 +49,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private readonly double _anomalyThreshold;
-    
+
     /// <summary>
     /// The history of recent anomaly scores for adaptive thresholding.
     /// </summary>
@@ -70,7 +70,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Queue<double> _anomalyHistory;
-    
+
     /// <summary>
     /// The maximum number of anomaly scores to keep in history.
     /// </summary>
@@ -91,7 +91,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private readonly int _historyCapacity;
-    
+
     /// <summary>
     /// The smoothing factor for exponential moving average of anomaly scores.
     /// </summary>
@@ -112,7 +112,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private readonly double _smoothingFactor;
-    
+
     /// <summary>
     /// The current smoothed anomaly score.
     /// </summary>
@@ -227,7 +227,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         int halfSize = input.Shape[0] / 2;
-        
+
         // Get actual and predicted values
         // The first half of the input is assumed to be the actual state
         // The second half is assumed to be the predicted state
@@ -235,20 +235,20 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         // Slice tensors directly (no conversions)
         var actual = Engine.TensorSlice(input, new[] { 0 }, new[] { halfSize });
         var predicted = Engine.TensorSlice(input, new[] { halfSize }, new[] { halfSize });
-        
+
         // Calculate the anomaly score
         double anomalyScore = CalculateAnomalyScore(actual, predicted);
-        
+
         // Update the smoothed anomaly score
         _smoothedAnomalyScore = (_smoothingFactor * anomalyScore) + ((1 - _smoothingFactor) * _smoothedAnomalyScore);
-        
+
         // Add to history
         UpdateAnomalyHistory(anomalyScore);
-        
+
         // Return anomaly score as tensor
         return Tensor<T>.FromScalar(NumOps.FromDouble(anomalyScore));
     }
-    
+
     /// <summary>
     /// Calculates the anomaly score based on the difference between actual and predicted states.
     /// </summary>
@@ -303,7 +303,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         // Calculate the anomaly score
         return mismatchCount / totalCount;
     }
-    
+
     /// <summary>
     /// Updates the history of anomaly scores.
     /// </summary>
@@ -327,14 +327,14 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     private void UpdateAnomalyHistory(double anomalyScore)
     {
         _anomalyHistory.Enqueue(anomalyScore);
-        
+
         // Remove oldest score if we exceed capacity
         while (_anomalyHistory.Count > _historyCapacity)
         {
             _anomalyHistory.Dequeue();
         }
     }
-    
+
     /// <summary>
     /// Determines if the current input is anomalous based on the anomaly score.
     /// </summary>
@@ -359,7 +359,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     {
         return _smoothedAnomalyScore > _anomalyThreshold;
     }
-    
+
     /// <summary>
     /// Gets the current anomaly score.
     /// </summary>
@@ -384,7 +384,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     {
         return _smoothedAnomalyScore;
     }
-    
+
     /// <summary>
     /// Gets the statistical properties of recent anomaly scores.
     /// </summary>
@@ -420,21 +420,21 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
                 { "isAnomaly", IsAnomaly() ? 1.0 : 0.0 }
             };
         }
-        
+
         // Calculate statistics
         double sum = 0.0;
         double min = double.MaxValue;
         double max = double.MinValue;
-        
+
         foreach (var score in _anomalyHistory)
         {
             sum += score;
             min = Math.Min(min, score);
             max = Math.Max(max, score);
         }
-        
+
         double mean = sum / _anomalyHistory.Count;
-        
+
         // Calculate standard deviation
         double sumSquaredDiff = 0.0;
         foreach (var score in _anomalyHistory)
@@ -442,10 +442,10 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
             double diff = score - mean;
             sumSquaredDiff += diff * diff;
         }
-        
+
         double variance = sumSquaredDiff / _anomalyHistory.Count;
         double stdDev = Math.Sqrt(variance);
-        
+
         return new Dictionary<string, double>
         {
             { "mean", mean },
@@ -589,7 +589,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     {
         // Clear anomaly history
         _anomalyHistory.Clear();
-        
+
         // Reset smoothed anomaly score
         _smoothedAnomalyScore = 0.0;
     }

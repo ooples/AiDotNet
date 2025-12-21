@@ -37,7 +37,7 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     public CategoricalCrossEntropyLoss()
     {
     }
-    
+
     /// <summary>
     /// Calculates the Categorical Cross Entropy loss between predicted and actual values.
     /// </summary>
@@ -47,17 +47,17 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T sum = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
             // -Σ(actual * log(predicted))
             sum = NumOps.Add(sum, NumOps.Multiply(actual[i], NumericalStabilityHelper.SafeLog(predicted[i], NumericalStabilityHelper.SmallEpsilon)));
         }
-        
+
         return NumOps.Negate(sum);
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Categorical Cross Entropy loss function.
     /// </summary>
@@ -67,7 +67,7 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         // When used with softmax, the derivative simplifies to (predicted - actual)
         return predicted.Subtract(actual).Divide(NumOps.FromDouble(predicted.Length));
     }

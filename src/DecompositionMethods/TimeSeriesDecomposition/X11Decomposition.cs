@@ -25,7 +25,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// For quarterly data, it's 4. For daily data with weekly patterns, it's 7.
     /// </remarks>
     private readonly int _seasonalPeriod;
-    
+
     /// <summary>
     /// The window size used for the moving average calculation of the trend component.
     /// </summary>
@@ -34,7 +34,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// Larger values create smoother trends by averaging over more data points.
     /// </remarks>
     private readonly int _trendCycleMovingAverageWindow;
-    
+
     /// <summary>
     /// The type of X-11 algorithm to use for decomposition.
     /// </summary>
@@ -54,7 +54,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// - trendCycleMovingAverageWindow: Controls how smooth the trend line will be
     /// - algorithmType: Different methods for breaking down your data
     /// </remarks>
-    public X11Decomposition(Vector<T> timeSeries, int seasonalPeriod = 12, int trendCycleMovingAverageWindow = 13, X11AlgorithmType algorithmType = X11AlgorithmType.Standard) 
+    public X11Decomposition(Vector<T> timeSeries, int seasonalPeriod = 12, int trendCycleMovingAverageWindow = 13, X11AlgorithmType algorithmType = X11AlgorithmType.Standard)
         : base(timeSeries)
     {
         if (seasonalPeriod <= 0)
@@ -285,14 +285,14 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
         {
             T t = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(m + 1.0));
             T tSquared = NumOps.Multiply(t, t);
-    
+
             T factor1 = NumOps.Subtract(NumOps.One, tSquared);
             T factor2 = NumOps.Subtract(NumOps.One, NumOps.Multiply(NumOps.FromDouble(5), tSquared));
             T factor3 = NumOps.Subtract(NumOps.One, NumOps.Multiply(NumOps.FromDouble(7), tSquared));
             T factor4 = NumOps.Subtract(NumOps.One, NumOps.Multiply(NumOps.FromDouble(9), tSquared));
             T factor5 = NumOps.Subtract(NumOps.One, NumOps.Multiply(NumOps.FromDouble(11), tSquared));
 
-            T numerator = NumOps.Multiply(NumOps.FromDouble(315), 
+            T numerator = NumOps.Multiply(NumOps.FromDouble(315),
                 NumOps.Multiply(factor1, NumOps.Multiply(factor2, NumOps.Multiply(factor3, NumOps.Multiply(factor4, factor5)))));
 
             weights[i + m] = NumOps.Divide(numerator, NumOps.FromDouble(320.0));

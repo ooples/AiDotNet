@@ -79,7 +79,7 @@ public class SimulatedAnnealingOptions<T, TInput, TOutput> : OptimizationAlgorit
     /// </para>
     /// </remarks>
     public double InitialTemperature { get; set; } = 100.0;
-    
+
     /// <summary>
     /// Gets or sets the cooling rate for the temperature reduction schedule.
     /// </summary>
@@ -120,7 +120,7 @@ public class SimulatedAnnealingOptions<T, TInput, TOutput> : OptimizationAlgorit
     /// </para>
     /// </remarks>
     public double CoolingRate { get; set; } = 0.995;
-    
+
     /// <summary>
     /// Gets or sets the minimum temperature at which the annealing process stops.
     /// </summary>
@@ -159,7 +159,7 @@ public class SimulatedAnnealingOptions<T, TInput, TOutput> : OptimizationAlgorit
     /// </para>
     /// </remarks>
     public double MinTemperature { get; set; } = 1e-8;
-    
+
     /// <summary>
     /// Gets or sets the maximum temperature allowed during the annealing process.
     /// </summary>
@@ -195,7 +195,7 @@ public class SimulatedAnnealingOptions<T, TInput, TOutput> : OptimizationAlgorit
     /// </para>
     /// </remarks>
     public double MaxTemperature { get; set; } = 1000.0;
-    
+
     /// <summary>
     /// Gets or sets the maximum number of iterations for the annealing process.
     /// </summary>
@@ -234,7 +234,7 @@ public class SimulatedAnnealingOptions<T, TInput, TOutput> : OptimizationAlgorit
     /// </para>
     /// </remarks>
     public new int MaxIterations { get; set; } = 10000;
-    
+
     /// <summary>
     /// Gets or sets the maximum number of consecutive iterations without improvement before early stopping.
     /// </summary>
@@ -272,7 +272,7 @@ public class SimulatedAnnealingOptions<T, TInput, TOutput> : OptimizationAlgorit
     /// </para>
     /// </remarks>
     public int MaxIterationsWithoutImprovement { get; set; } = 1000;
-    
+
     /// <summary>
     /// Gets or sets the initial range for generating neighboring solutions.
     /// </summary>

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.AutoML;
+using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -22,7 +23,7 @@ namespace AiDotNet.NeuralNetworks
         /// Provides numeric operations for type T.
         /// </summary>
         protected readonly INumericOperations<T> NumOps;
-        private readonly SearchSpace<T> _searchSpace;
+        private readonly SearchSpaceBase<T> _searchSpace;
         private readonly int _numNodes;
         private readonly int _numOperations;
         private readonly Random _random; // Shared Random instance to avoid time-based seeding issues
@@ -74,7 +75,7 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="searchSpace">The search space defining available operations</param>
         /// <param name="numNodes">Number of nodes in the architecture</param>
         /// <param name="lossFunction">Optional loss function to use for training. If null, uses Mean Squared Error (MSE) for neural architecture search.</param>
-        public SuperNet(SearchSpace<T> searchSpace, int numNodes = 4, ILossFunction<T>? lossFunction = null)
+        public SuperNet(SearchSpaceBase<T> searchSpace, int numNodes = 4, ILossFunction<T>? lossFunction = null)
         {
             NumOps = MathHelper.GetNumericOperations<T>();
             _searchSpace = searchSpace;
@@ -587,38 +588,38 @@ namespace AiDotNet.NeuralNetworks
                     break;
 
                 case 1: // 3x3 Conv (simplified as weighted pass)
+                {
+                    for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
                     {
-                        for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
+                        for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
                         {
-                            for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
+                            if (featureIdx < weight.Length)
                             {
-                                if (featureIdx < weight.Length)
-                                {
-                                    output[batchIdx, featureIdx] = NumOps.Multiply(
-                                        input[batchIdx, featureIdx],
-                                        NumOps.Add(NumOps.One, weight[featureIdx]));
-                                }
+                                output[batchIdx, featureIdx] = NumOps.Multiply(
+                                    input[batchIdx, featureIdx],
+                                    NumOps.Add(NumOps.One, weight[featureIdx]));
                             }
                         }
                     }
-                    break;
+                }
+                break;
 
                 case 2: // 5x5 Conv (simplified)
+                {
+                    for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
                     {
-                        for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
+                        for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
                         {
-                            for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
+                            if (featureIdx < weight.Length)
                             {
-                                if (featureIdx < weight.Length)
-                                {
-                                    output[batchIdx, featureIdx] = NumOps.Multiply(
-                                        input[batchIdx, featureIdx],
-                                        NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(1.5), weight[featureIdx])));
-                                }
+                                output[batchIdx, featureIdx] = NumOps.Multiply(
+                                    input[batchIdx, featureIdx],
+                                    NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(1.5), weight[featureIdx])));
                             }
                         }
                     }
-                    break;
+                }
+                break;
 
                 case 3: // MaxPool (simplified)
                     for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
@@ -1458,194 +1459,194 @@ namespace AiDotNet.NeuralNetworks
             }
         }
 
-    #region IJitCompilable Implementation
+        #region IJitCompilable Implementation
 
-    /// <summary>
-    /// Gets whether this SuperNet supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> after at least one forward pass has been performed to initialize weights.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// SuperNet implements Differentiable Architecture Search (DARTS), which is specifically
-    /// designed to be differentiable. The softmax-weighted operation mixing that defines DARTS
-    /// is a fully differentiable computation that can be exported as a computation graph.
-    /// </para>
-    /// <para><b>Key Insight:</b> While the architecture parameters (alpha) are learned during
-    /// training, at inference time they are fixed values. The computation graph includes:
-    /// </para>
-    /// <list type="bullet">
-    /// <item><description>Softmax over architecture parameters for each node</description></item>
-    /// <item><description>All operation outputs computed in parallel</description></item>
-    /// <item><description>Weighted sum of operation outputs using softmax weights</description></item>
-    /// </list>
-    /// <para>
-    /// This is exactly what makes DARTS "differentiable" - the entire forward pass can be
-    /// expressed as continuous, differentiable operations that are JIT-compilable.
-    /// </para>
-    /// <para><b>For Beginners:</b> DARTS uses a clever trick called "continuous relaxation":
-    ///
-    /// Instead of choosing ONE operation at each step (which would be discrete and non-differentiable),
-    /// DARTS computes ALL operations and combines them with softmax weights. This weighted
-    /// combination IS differentiable and CAN be JIT compiled.
-    ///
-    /// The JIT-compiled SuperNet will:
-    /// - Use the current architecture parameters (alpha values)
-    /// - Compute softmax weights over operations
-    /// - Evaluate all operations
-    /// - Combine outputs using the computed weights
-    ///
-    /// After architecture search is complete, you can also call DeriveArchitecture() to create
-    /// a simpler, discrete architecture that uses only the best operations.
-    /// </para>
-    /// </remarks>
-    public bool SupportsJitCompilation => _weights.Count > 0;
+        /// <summary>
+        /// Gets whether this SuperNet supports JIT compilation.
+        /// </summary>
+        /// <value>
+        /// <c>true</c> after at least one forward pass has been performed to initialize weights.
+        /// </value>
+        /// <remarks>
+        /// <para>
+        /// SuperNet implements Differentiable Architecture Search (DARTS), which is specifically
+        /// designed to be differentiable. The softmax-weighted operation mixing that defines DARTS
+        /// is a fully differentiable computation that can be exported as a computation graph.
+        /// </para>
+        /// <para><b>Key Insight:</b> While the architecture parameters (alpha) are learned during
+        /// training, at inference time they are fixed values. The computation graph includes:
+        /// </para>
+        /// <list type="bullet">
+        /// <item><description>Softmax over architecture parameters for each node</description></item>
+        /// <item><description>All operation outputs computed in parallel</description></item>
+        /// <item><description>Weighted sum of operation outputs using softmax weights</description></item>
+        /// </list>
+        /// <para>
+        /// This is exactly what makes DARTS "differentiable" - the entire forward pass can be
+        /// expressed as continuous, differentiable operations that are JIT-compilable.
+        /// </para>
+        /// <para><b>For Beginners:</b> DARTS uses a clever trick called "continuous relaxation":
+        ///
+        /// Instead of choosing ONE operation at each step (which would be discrete and non-differentiable),
+        /// DARTS computes ALL operations and combines them with softmax weights. This weighted
+        /// combination IS differentiable and CAN be JIT compiled.
+        ///
+        /// The JIT-compiled SuperNet will:
+        /// - Use the current architecture parameters (alpha values)
+        /// - Compute softmax weights over operations
+        /// - Evaluate all operations
+        /// - Combine outputs using the computed weights
+        ///
+        /// After architecture search is complete, you can also call DeriveArchitecture() to create
+        /// a simpler, discrete architecture that uses only the best operations.
+        /// </para>
+        /// </remarks>
+        public bool SupportsJitCompilation => _weights.Count > 0;
 
-    /// <summary>
-    /// Exports the model's computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes (parameters).</param>
-    /// <returns>The output computation node representing the SuperNet forward pass.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown if called before any forward pass has initialized the weights.
-    /// </exception>
-    /// <remarks>
-    /// <para>
-    /// Exports the DARTS continuous relaxation as a computation graph. The graph includes:
-    /// </para>
-    /// <list type="bullet">
-    /// <item><description>Input tensor variable</description></item>
-    /// <item><description>Architecture parameters embedded as constants</description></item>
-    /// <item><description>Softmax computation over architecture parameters</description></item>
-    /// <item><description>All operation outputs</description></item>
-    /// <item><description>Weighted sum using softmax weights</description></item>
-    /// </list>
-    /// <para><b>For Beginners:</b> This exports the current state of the SuperNet as a
-    /// JIT-compilable graph. The architecture parameters (alpha values) are baked into
-    /// the graph as constants, so the exported graph represents the current "snapshot"
-    /// of the architecture search.
-    ///
-    /// You can export at different points during training to capture the evolving architecture,
-    /// or export after search completes to get the final continuous relaxation.
-    /// </para>
-    /// </remarks>
-    public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (_weights.Count == 0)
+        /// <summary>
+        /// Exports the model's computation graph for JIT compilation.
+        /// </summary>
+        /// <param name="inputNodes">List to populate with input computation nodes (parameters).</param>
+        /// <returns>The output computation node representing the SuperNet forward pass.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown if called before any forward pass has initialized the weights.
+        /// </exception>
+        /// <remarks>
+        /// <para>
+        /// Exports the DARTS continuous relaxation as a computation graph. The graph includes:
+        /// </para>
+        /// <list type="bullet">
+        /// <item><description>Input tensor variable</description></item>
+        /// <item><description>Architecture parameters embedded as constants</description></item>
+        /// <item><description>Softmax computation over architecture parameters</description></item>
+        /// <item><description>All operation outputs</description></item>
+        /// <item><description>Weighted sum using softmax weights</description></item>
+        /// </list>
+        /// <para><b>For Beginners:</b> This exports the current state of the SuperNet as a
+        /// JIT-compilable graph. The architecture parameters (alpha values) are baked into
+        /// the graph as constants, so the exported graph represents the current "snapshot"
+        /// of the architecture search.
+        ///
+        /// You can export at different points during training to capture the evolving architecture,
+        /// or export after search completes to get the final continuous relaxation.
+        /// </para>
+        /// </remarks>
+        public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
         {
-            throw new InvalidOperationException(
-                "SuperNet must be initialized with at least one forward pass before exporting computation graph. " +
-                "Call Predict() first to initialize the network weights.");
-        }
-
-        // Create input node for the data tensor
-        // We assume 2D input: [batch, features]
-        var inputShape = new[] { 1, _inputSize > 0 ? _inputSize : 1 };
-        var inputTensor = new Tensor<T>(inputShape);
-        var input = TensorOperations<T>.Variable(inputTensor, "input");
-        inputNodes.Add(input);
-
-        // Build the computation graph for DARTS forward pass
-        // Store intermediate node outputs as computation nodes
-        var nodeOutputs = new List<ComputationNode<T>> { input };
-
-        // Process each node in the architecture
-        for (int nodeIdx = 0; nodeIdx < _numNodes; nodeIdx++)
-        {
-            var alpha = _architectureParams[nodeIdx];
-
-            // Compute softmax weights for this node's architecture parameters
-            // Create a constant tensor from the softmax weights
-            var softmaxWeights = ApplySoftmax(alpha);
-
-            // Initialize accumulated output for this node
-            ComputationNode<T>? nodeOutput = null;
-
-            // Mix operations from all previous nodes
-            for (int prevNodeIdx = 0; prevNodeIdx <= nodeIdx; prevNodeIdx++)
+            if (_weights.Count == 0)
             {
-                var prevOutput = nodeOutputs[prevNodeIdx];
-
-                // Apply each operation and mix with softmax weights
-                for (int opIdx = 0; opIdx < _numOperations; opIdx++)
-                {
-                    var weightKey = $"node{nodeIdx}_from{prevNodeIdx}_op{opIdx}";
-                    var weight = softmaxWeights[prevNodeIdx, opIdx];
-
-                    // Create computation for this operation's output
-                    var opOutput = ExportOperationGraph(prevOutput, opIdx, weightKey);
-
-                    // Scale by softmax weight (create constant for the weight)
-                    var weightTensor = new Tensor<T>(new[] { 1 });
-                    weightTensor[0] = weight;
-                    var weightNode = TensorOperations<T>.Constant(weightTensor, $"weight_{nodeIdx}_{prevNodeIdx}_{opIdx}");
-
-                    var scaledOutput = TensorOperations<T>.ElementwiseMultiply(opOutput, weightNode);
-
-                    // Accumulate
-                    if (nodeOutput == null)
-                    {
-                        nodeOutput = scaledOutput;
-                    }
-                    else
-                    {
-                        nodeOutput = TensorOperations<T>.Add(nodeOutput, scaledOutput);
-                    }
-                }
+                throw new InvalidOperationException(
+                    "SuperNet must be initialized with at least one forward pass before exporting computation graph. " +
+                    "Call Predict() first to initialize the network weights.");
             }
 
-            nodeOutputs.Add(nodeOutput ?? input);
+            // Create input node for the data tensor
+            // We assume 2D input: [batch, features]
+            var inputShape = new[] { 1, _inputSize > 0 ? _inputSize : 1 };
+            var inputTensor = new Tensor<T>(inputShape);
+            var input = TensorOperations<T>.Variable(inputTensor, "input");
+            inputNodes.Add(input);
+
+            // Build the computation graph for DARTS forward pass
+            // Store intermediate node outputs as computation nodes
+            var nodeOutputs = new List<ComputationNode<T>> { input };
+
+            // Process each node in the architecture
+            for (int nodeIdx = 0; nodeIdx < _numNodes; nodeIdx++)
+            {
+                var alpha = _architectureParams[nodeIdx];
+
+                // Compute softmax weights for this node's architecture parameters
+                // Create a constant tensor from the softmax weights
+                var softmaxWeights = ApplySoftmax(alpha);
+
+                // Initialize accumulated output for this node
+                ComputationNode<T>? nodeOutput = null;
+
+                // Mix operations from all previous nodes
+                for (int prevNodeIdx = 0; prevNodeIdx <= nodeIdx; prevNodeIdx++)
+                {
+                    var prevOutput = nodeOutputs[prevNodeIdx];
+
+                    // Apply each operation and mix with softmax weights
+                    for (int opIdx = 0; opIdx < _numOperations; opIdx++)
+                    {
+                        var weightKey = $"node{nodeIdx}_from{prevNodeIdx}_op{opIdx}";
+                        var weight = softmaxWeights[prevNodeIdx, opIdx];
+
+                        // Create computation for this operation's output
+                        var opOutput = ExportOperationGraph(prevOutput, opIdx, weightKey);
+
+                        // Scale by softmax weight (create constant for the weight)
+                        var weightTensor = new Tensor<T>(new[] { 1 });
+                        weightTensor[0] = weight;
+                        var weightNode = TensorOperations<T>.Constant(weightTensor, $"weight_{nodeIdx}_{prevNodeIdx}_{opIdx}");
+
+                        var scaledOutput = TensorOperations<T>.ElementwiseMultiply(opOutput, weightNode);
+
+                        // Accumulate
+                        if (nodeOutput == null)
+                        {
+                            nodeOutput = scaledOutput;
+                        }
+                        else
+                        {
+                            nodeOutput = TensorOperations<T>.Add(nodeOutput, scaledOutput);
+                        }
+                    }
+                }
+
+                nodeOutputs.Add(nodeOutput ?? input);
+            }
+
+            // Return the output of the final node
+            return nodeOutputs[nodeOutputs.Count - 1];
         }
 
-        // Return the output of the final node
-        return nodeOutputs[nodeOutputs.Count - 1];
-    }
-
-    /// <summary>
-    /// Exports a single operation as a computation graph.
-    /// </summary>
-    private ComputationNode<T> ExportOperationGraph(ComputationNode<T> input, int opIdx, string weightKey)
-    {
-        // Get or create weight constants
-        Vector<T>? weight = null;
-        if (_weights.TryGetValue(weightKey, out var w))
+        /// <summary>
+        /// Exports a single operation as a computation graph.
+        /// </summary>
+        private ComputationNode<T> ExportOperationGraph(ComputationNode<T> input, int opIdx, string weightKey)
         {
-            weight = w;
-        }
+            // Get or create weight constants
+            Vector<T>? weight = null;
+            if (_weights.TryGetValue(weightKey, out var w))
+            {
+                weight = w;
+            }
 
-        switch (opIdx)
-        {
-            case 0: // Identity
-                return input;
+            switch (opIdx)
+            {
+                case 0: // Identity
+                    return input;
 
-            case 1: // 3x3 Conv (simplified as weighted pass)
-                if (weight != null)
-                {
-                    var weightTensor = new Tensor<T>(new[] { weight.Length });
-                    for (int i = 0; i < weight.Length; i++)
+                case 1: // 3x3 Conv (simplified as weighted pass)
+                    if (weight != null)
                     {
-                        weightTensor[i] = NumOps.Add(NumOps.One, weight[i]);
+                        var weightTensor = new Tensor<T>(new[] { weight.Length });
+                        for (int i = 0; i < weight.Length; i++)
+                        {
+                            weightTensor[i] = NumOps.Add(NumOps.One, weight[i]);
+                        }
+                        var weightNode = TensorOperations<T>.Constant(weightTensor, $"weights_{weightKey}");
+                        return TensorOperations<T>.ElementwiseMultiply(input, weightNode);
                     }
-                    var weightNode = TensorOperations<T>.Constant(weightTensor, $"weights_{weightKey}");
-                    return TensorOperations<T>.ElementwiseMultiply(input, weightNode);
-                }
-                return input;
+                    return input;
 
-            case 2: // 5x5 Conv (simplified)
-                if (weight != null)
-                {
-                    var weightTensor = new Tensor<T>(new[] { weight.Length });
-                    for (int i = 0; i < weight.Length; i++)
+                case 2: // 5x5 Conv (simplified)
+                    if (weight != null)
                     {
-                        weightTensor[i] = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(1.5), weight[i]));
+                        var weightTensor = new Tensor<T>(new[] { weight.Length });
+                        for (int i = 0; i < weight.Length; i++)
+                        {
+                            weightTensor[i] = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(1.5), weight[i]));
+                        }
+                        var weightNode = TensorOperations<T>.Constant(weightTensor, $"weights_{weightKey}");
+                        return TensorOperations<T>.ElementwiseMultiply(input, weightNode);
                     }
-                    var weightNode = TensorOperations<T>.Constant(weightTensor, $"weights_{weightKey}");
-                    return TensorOperations<T>.ElementwiseMultiply(input, weightNode);
-                }
-                return input;
+                    return input;
 
-            case 3: // MaxPool (simplified as scaling)
+                case 3: // MaxPool (simplified as scaling)
                 {
                     var scaleTensor = new Tensor<T>(new[] { 1 });
                     scaleTensor[0] = NumOps.FromDouble(0.9);
@@ -1653,7 +1654,7 @@ namespace AiDotNet.NeuralNetworks
                     return TensorOperations<T>.ElementwiseMultiply(input, scaleNode);
                 }
 
-            case 4: // AvgPool (simplified as scaling)
+                case 4: // AvgPool (simplified as scaling)
                 {
                     var scaleTensor = new Tensor<T>(new[] { 1 });
                     scaleTensor[0] = NumOps.FromDouble(0.8);
@@ -1661,21 +1662,21 @@ namespace AiDotNet.NeuralNetworks
                     return TensorOperations<T>.ElementwiseMultiply(input, scaleNode);
                 }
 
-            default:
-                return input;
+                default:
+                    return input;
+            }
         }
-    }
 
-    /// <summary>
-    /// Performs forward pass through the model (required by IJitCompilable).
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <returns>The output tensor.</returns>
-    public Tensor<T> Forward(Tensor<T> input)
-    {
-        return Predict(input);
-    }
+        /// <summary>
+        /// Performs forward pass through the model (required by IJitCompilable).
+        /// </summary>
+        /// <param name="input">The input tensor.</param>
+        /// <returns>The output tensor.</returns>
+        public Tensor<T> Forward(Tensor<T> input)
+        {
+            return Predict(input);
+        }
 
-    #endregion
+        #endregion
     }
 }

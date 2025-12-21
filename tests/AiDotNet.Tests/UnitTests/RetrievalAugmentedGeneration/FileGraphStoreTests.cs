@@ -547,7 +547,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 // Add some edges
                 for (int i = 0; i < nodeCount - 1; i += 2)
                 {
-                    store.AddEdge(CreateTestEdge($"node_{i:D4}", "KNOWS", $"node_{(i+1):D4}"));
+                    store.AddEdge(CreateTestEdge($"node_{i:D4}", "KNOWS", $"node_{(i + 1):D4}"));
                 }
 
                 Assert.Equal(nodeCount, store.NodeCount);

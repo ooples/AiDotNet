@@ -1,8 +1,8 @@
 using System;
 using AiDotNet.Enums;
 using AiDotNet.FitnessCalculators;
-using AiDotNet.Models;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
 using AiDotNet.Tensors;
 using Xunit;
 

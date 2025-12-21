@@ -4,8 +4,8 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Operators;
 using ILGPU;
-using ILGPU.Runtime;
 using ILGPU.Algorithms;
+using ILGPU.Runtime;
 
 namespace AiDotNet.Tensors.Engines;
 
@@ -1048,8 +1048,8 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            // Create ILGPU context
-            _context = Context.CreateDefault();
+            // Create ILGPU context with Algorithms extension enabled for RoundToEven support
+            _context = Context.Create(builder => builder.Default().EnableAlgorithms());
 
             // Try to get preferred device (GPU over CPU)
             var device = _context.GetPreferredDevice(preferCPU: false);
@@ -1133,7 +1133,8 @@ public class GpuEngine : IEngine, IDisposable
 
                 _geluKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
-                    (index, input, result) => {
+                    (index, input, result) =>
+                    {
                         float x = input[index];
                         float sqrt2OverPi = 0.7978845608028654f;
                         float x_cubed = x * x * x;
@@ -1145,7 +1146,8 @@ public class GpuEngine : IEngine, IDisposable
 
                 _mishKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
-                    (index, input, result) => {
+                    (index, input, result) =>
+                    {
                         float x = input[index];
                         float softplus = XMath.Log(1.0f + XMath.Exp(x));
                         result[index] = x * XMath.Tanh(softplus);
@@ -1153,14 +1155,16 @@ public class GpuEngine : IEngine, IDisposable
 
                 _swishKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
-                    (index, input, result) => {
+                    (index, input, result) =>
+                    {
                         float x = input[index];
                         result[index] = x / (1.0f + XMath.Exp(-x));
                     });
 
                 _eluKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, float, ArrayView<float>>(
-                    (index, input, alpha, result) => {
+                    (index, input, alpha, result) =>
+                    {
                         float x = input[index];
                         result[index] = x > 0.0f ? x : alpha * (XMath.Exp(x) - 1.0f);
                     });
@@ -1201,27 +1205,31 @@ public class GpuEngine : IEngine, IDisposable
                 // Double activation function kernels
                 _sigmoidKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
-                    (index, input, result) => {
+                    (index, input, result) =>
+                    {
                         double x = input[index];
                         result[index] = 1.0 / (1.0 + XMath.Exp(-x));
                     });
 
                 _reluKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
-                    (index, input, result) => {
+                    (index, input, result) =>
+                    {
                         result[index] = XMath.Max(0.0, input[index]);
                     });
 
                 _geluKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
-                    (index, input, result) => {
+                    (index, input, result) =>
+                    {
                         double x = input[index];
                         result[index] = 0.5 * x * (1.0 + XMath.Tanh(0.7978845608028654 * (x + 0.044715 * x * x * x)));
                     });
 
                 _mishKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
-                    (index, input, result) => {
+                    (index, input, result) =>
+                    {
                         double x = input[index];
                         double softplus = XMath.Log(1.0 + XMath.Exp(x));
                         result[index] = x * XMath.Tanh(softplus);
@@ -1229,14 +1237,16 @@ public class GpuEngine : IEngine, IDisposable
 
                 _swishKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
-                    (index, input, result) => {
+                    (index, input, result) =>
+                    {
                         double x = input[index];
                         result[index] = x / (1.0 + XMath.Exp(-x));
                     });
 
                 _eluKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, double, ArrayView<double>>(
-                    (index, input, alpha, result) => {
+                    (index, input, alpha, result) =>
+                    {
                         double x = input[index];
                         result[index] = x > 0.0 ? x : alpha * (XMath.Exp(x) - 1.0);
                     });
@@ -1399,7 +1409,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Swap rows kernel (Phase B: Matrix operations)
                 _swapRowsKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
-                    (index, row1, row2) => {
+                    (index, row1, row2) =>
+                    {
                         float temp = row1[index];
                         row1[index] = row2[index];
                         row2[index] = temp;
@@ -1408,7 +1419,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Swap columns kernel (Phase B: Matrix operations)
                 _swapColumnsKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, int, int>(
-                    (index, matrix, tempCol, col1, col2) => {
+                    (index, matrix, tempCol, col1, col2) =>
+                    {
                         // Each thread handles one row
                         float temp = matrix[index, col1];
                         matrix[index, col1] = matrix[index, col2];
@@ -1418,21 +1430,24 @@ public class GpuEngine : IEngine, IDisposable
                 // Get column kernel (Phase B: Matrix operations)
                 _getColumnKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, int, int>(
-                    (index, matrix, result, col, rows) => {
+                    (index, matrix, result, col, rows) =>
+                    {
                         result[index] = matrix[index, col];
                     });
 
                 // Set column kernel (Phase B: Matrix operations)
                 _setColumnKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, int, int>(
-                    (index, matrix, values, col, rows) => {
+                    (index, matrix, values, col, rows) =>
+                    {
                         matrix[index, col] = values[index];
                     });
 
                 // Outer product kernel (Phase B: Matrix operations)
                 _outerProductKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView<float>, ArrayView<float>, ArrayView2D<float, Stride2D.DenseX>, int, int>(
-                    (index, a, b, result, aLen, bLen) => {
+                    (index, a, b, result, aLen, bLen) =>
+                    {
                         result[index] = a[index.X] * b[index.Y];
                     });
                 Console.WriteLine("[GpuEngine] Float matrix kernels pre-compiled");
@@ -1473,7 +1488,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Swap rows kernel (Phase B: Matrix operations)
                 _swapRowsKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
-                    (index, row1, row2) => {
+                    (index, row1, row2) =>
+                    {
                         double temp = row1[index];
                         row1[index] = row2[index];
                         row2[index] = temp;
@@ -1482,7 +1498,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Swap columns kernel (Phase B: Matrix operations)
                 _swapColumnsKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, int, int>(
-                    (index, matrix, tempCol, col1, col2) => {
+                    (index, matrix, tempCol, col1, col2) =>
+                    {
                         // Each thread handles one row
                         double temp = matrix[index, col1];
                         matrix[index, col1] = matrix[index, col2];
@@ -1492,21 +1509,24 @@ public class GpuEngine : IEngine, IDisposable
                 // Get column kernel (Phase B: Matrix operations)
                 _getColumnKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, int, int>(
-                    (index, matrix, result, col, rows) => {
+                    (index, matrix, result, col, rows) =>
+                    {
                         result[index] = matrix[index, col];
                     });
 
                 // Set column kernel (Phase B: Matrix operations)
                 _setColumnKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, int, int>(
-                    (index, matrix, values, col, rows) => {
+                    (index, matrix, values, col, rows) =>
+                    {
                         matrix[index, col] = values[index];
                     });
 
                 // Outer product kernel (Phase B: Matrix operations)
                 _outerProductKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView<double>, ArrayView<double>, ArrayView2D<double, Stride2D.DenseX>, int, int>(
-                    (index, a, b, result, aLen, bLen) => {
+                    (index, a, b, result, aLen, bLen) =>
+                    {
                         result[index] = a[index.X] * b[index.Y];
                     });
                 Console.WriteLine("[GpuEngine] Double matrix kernels pre-compiled");
@@ -1849,28 +1869,32 @@ public class GpuEngine : IEngine, IDisposable
                     (index, input, result) => result[index] = 1.0 / XMath.Sqrt(input[index]));
                 _minMagnitudeKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
-                    (index, a, b, result) => {
+                    (index, a, b, result) =>
+                    {
                         float absA = XMath.Abs(a[index]);
                         float absB = XMath.Abs(b[index]);
                         result[index] = absA <= absB ? a[index] : b[index];
                     });
                 _minMagnitudeKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
-                    (index, a, b, result) => {
+                    (index, a, b, result) =>
+                    {
                         double absA = XMath.Abs(a[index]);
                         double absB = XMath.Abs(b[index]);
                         result[index] = absA <= absB ? a[index] : b[index];
                     });
                 _maxMagnitudeKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
-                    (index, a, b, result) => {
+                    (index, a, b, result) =>
+                    {
                         float absA = XMath.Abs(a[index]);
                         float absB = XMath.Abs(b[index]);
                         result[index] = absA >= absB ? a[index] : b[index];
                     });
                 _maxMagnitudeKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
-                    (index, a, b, result) => {
+                    (index, a, b, result) =>
+                    {
                         double absA = XMath.Abs(a[index]);
                         double absB = XMath.Abs(b[index]);
                         result[index] = absA >= absB ? a[index] : b[index];
@@ -1917,7 +1941,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Each thread computes partial sum for a chunk of elements
                 _partialSumKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int>(
-                    (blockIdx, input, partialSums, length) => {
+                    (blockIdx, input, partialSums, length) =>
+                    {
                         int startIdx = (int)blockIdx * ReductionBlockSize;
                         float sum = 0.0f;
                         for (int i = 0; i < ReductionBlockSize && startIdx + i < length; i++)
@@ -1926,7 +1951,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _partialSumKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int>(
-                    (blockIdx, input, partialSums, length) => {
+                    (blockIdx, input, partialSums, length) =>
+                    {
                         int startIdx = (int)blockIdx * ReductionBlockSize;
                         double sum = 0.0;
                         for (int i = 0; i < ReductionBlockSize && startIdx + i < length; i++)
@@ -1935,7 +1961,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _partialDotProductKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int>(
-                    (blockIdx, a, b, partialSums, length) => {
+                    (blockIdx, a, b, partialSums, length) =>
+                    {
                         int startIdx = (int)blockIdx * ReductionBlockSize;
                         float sum = 0.0f;
                         for (int i = 0; i < ReductionBlockSize && startIdx + i < length; i++)
@@ -1944,7 +1971,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _partialDotProductKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int>(
-                    (blockIdx, a, b, partialSums, length) => {
+                    (blockIdx, a, b, partialSums, length) =>
+                    {
                         int startIdx = (int)blockIdx * ReductionBlockSize;
                         double sum = 0.0;
                         for (int i = 0; i < ReductionBlockSize && startIdx + i < length; i++)
@@ -1958,7 +1986,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Each thread computes one output element by summing along reduceSize
                 _reduceSumAxisKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int>(
-                    (outputIdx, input, output, outerSize, reduceSize, innerSize) => {
+                    (outputIdx, input, output, outerSize, reduceSize, innerSize) =>
+                    {
                         int outer = (int)outputIdx / innerSize;
                         int inner = (int)outputIdx % innerSize;
                         float sum = 0.0f;
@@ -1969,7 +1998,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _reduceSumAxisKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int>(
-                    (outputIdx, input, output, outerSize, reduceSize, innerSize) => {
+                    (outputIdx, input, output, outerSize, reduceSize, innerSize) =>
+                    {
                         int outer = (int)outputIdx / innerSize;
                         int inner = (int)outputIdx % innerSize;
                         double sum = 0.0;
@@ -1982,7 +2012,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Partial max reduction kernels - each block computes max of ReductionBlockSize elements
                 _partialMaxKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int>(
-                    (blockIdx, input, partialMaxes, length) => {
+                    (blockIdx, input, partialMaxes, length) =>
+                    {
                         int startIdx = (int)blockIdx * ReductionBlockSize;
                         if (startIdx >= length) return;
                         float maxVal = input[startIdx];
@@ -1995,7 +2026,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _partialMaxKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int>(
-                    (blockIdx, input, partialMaxes, length) => {
+                    (blockIdx, input, partialMaxes, length) =>
+                    {
                         int startIdx = (int)blockIdx * ReductionBlockSize;
                         if (startIdx >= length) return;
                         double maxVal = input[startIdx];
@@ -2010,7 +2042,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Partial min reduction kernels
                 _partialMinKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int>(
-                    (blockIdx, input, partialMins, length) => {
+                    (blockIdx, input, partialMins, length) =>
+                    {
                         int startIdx = (int)blockIdx * ReductionBlockSize;
                         if (startIdx >= length) return;
                         float minVal = input[startIdx];
@@ -2023,7 +2056,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _partialMinKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int>(
-                    (blockIdx, input, partialMins, length) => {
+                    (blockIdx, input, partialMins, length) =>
+                    {
                         int startIdx = (int)blockIdx * ReductionBlockSize;
                         if (startIdx >= length) return;
                         double minVal = input[startIdx];
@@ -2040,12 +2074,14 @@ public class GpuEngine : IEngine, IDisposable
                 // Softmax kernel takes pre-computed max and sum for numerical stability
                 _softmaxKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, float, float>(
-                    (index, input, result, maxVal, expSum) => {
+                    (index, input, result, maxVal, expSum) =>
+                    {
                         result[index] = XMath.Exp(input[index] - maxVal) / expSum;
                     });
                 _softmaxKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, double, double>(
-                    (index, input, result, maxVal, expSum) => {
+                    (index, input, result, maxVal, expSum) =>
+                    {
                         result[index] = XMath.Exp(input[index] - maxVal) / expSum;
                     });
                 Console.WriteLine("[GpuEngine] Softmax kernels pre-compiled");
@@ -2054,7 +2090,8 @@ public class GpuEngine : IEngine, IDisposable
                 // TensorMatMul - 2D tensor matrix multiplication (reuses matrix multiply logic)
                 _tensorMatMulKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int>(
-                    (index, a, b, result, k) => {
+                    (index, a, b, result, k) =>
+                    {
                         int m = index.X;
                         int n = index.Y;
                         float sum = 0;
@@ -2064,7 +2101,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _tensorMatMulKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int>(
-                    (index, a, b, result, k) => {
+                    (index, a, b, result, k) =>
+                    {
                         int m = index.X;
                         int n = index.Y;
                         double sum = 0;
@@ -2077,13 +2115,15 @@ public class GpuEngine : IEngine, IDisposable
                 // TensorTranspose - 2D tensor transposition
                 _tensorTransposeKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView<float>, ArrayView<float>, int, int>(
-                    (index, input, output, rows, cols) => {
+                    (index, input, output, rows, cols) =>
+                    {
                         // input[row, col] -> output[col, row]
                         output[index.Y * rows + index.X] = input[index.X * cols + index.Y];
                     });
                 _tensorTransposeKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView<double>, ArrayView<double>, int, int>(
-                    (index, input, output, rows, cols) => {
+                    (index, input, output, rows, cols) =>
+                    {
                         output[index.Y * rows + index.X] = input[index.X * cols + index.Y];
                     });
                 Console.WriteLine("[GpuEngine] TensorTranspose kernels pre-compiled");
@@ -2091,7 +2131,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Upsample (nearest neighbor) - for spatial upsampling in neural networks
                 _upsampleKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int>(
-                    (flatIdx, input, output, batch, channels, height, width, scaleH, scaleW) => {
+                    (flatIdx, input, output, batch, channels, height, width, scaleH, scaleW) =>
+                    {
                         int newHeight = height * scaleH;
                         int newWidth = width * scaleW;
                         int ow = (int)flatIdx % newWidth;
@@ -2107,7 +2148,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _upsampleKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int>(
-                    (flatIdx, input, output, batch, channels, height, width, scaleH, scaleW) => {
+                    (flatIdx, input, output, batch, channels, height, width, scaleH, scaleW) =>
+                    {
                         int newHeight = height * scaleH;
                         int newWidth = width * scaleW;
                         int ow = (int)flatIdx % newWidth;
@@ -2126,7 +2168,8 @@ public class GpuEngine : IEngine, IDisposable
                 // PixelShuffle (depth-to-space) - for super-resolution networks
                 _pixelShuffleKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int>(
-                    (flatIdx, input, output, batch, channels, height, width, upscaleFactor) => {
+                    (flatIdx, input, output, batch, channels, height, width, upscaleFactor) =>
+                    {
                         int r = upscaleFactor;
                         int newChannels = channels / (r * r);
                         int newHeight = height * r;
@@ -2148,7 +2191,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _pixelShuffleKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int>(
-                    (flatIdx, input, output, batch, channels, height, width, upscaleFactor) => {
+                    (flatIdx, input, output, batch, channels, height, width, upscaleFactor) =>
+                    {
                         int r = upscaleFactor;
                         int newChannels = channels / (r * r);
                         int newHeight = height * r;
@@ -2174,7 +2218,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Each thread handles one (outer, inner) pair and computes softmax across axis
                 _tensorSoftmaxKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int>(
-                    (flatIdx, input, output, outerSize, axisSize, innerSize) => {
+                    (flatIdx, input, output, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2206,7 +2251,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _tensorSoftmaxKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int>(
-                    (flatIdx, input, output, outerSize, axisSize, innerSize) => {
+                    (flatIdx, input, output, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2239,7 +2285,8 @@ public class GpuEngine : IEngine, IDisposable
                 // input: logits, gumbelNoise: pre-generated Gumbel noise, output: result
                 _gumbelSoftmaxKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, int, int, int>(
-                    (flatIdx, input, gumbelNoise, output, temperature, outerSize, axisSize, innerSize) => {
+                    (flatIdx, input, gumbelNoise, output, temperature, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2273,7 +2320,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _gumbelSoftmaxKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, double, int, int, int>(
-                    (flatIdx, input, gumbelNoise, output, temperature, outerSize, axisSize, innerSize) => {
+                    (flatIdx, input, gumbelNoise, output, temperature, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2307,7 +2355,8 @@ public class GpuEngine : IEngine, IDisposable
                 // GumbelSoftmax backward kernel - gradient flows through softmax scaled by 1/temperature
                 _gumbelSoftmaxBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, int, int, int>(
-                    (flatIdx, gradOutput, output, gradInput, temperature, outerSize, axisSize, innerSize) => {
+                    (flatIdx, gradOutput, output, gradInput, temperature, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2330,7 +2379,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _gumbelSoftmaxBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, double, int, int, int>(
-                    (flatIdx, gradOutput, output, gradInput, temperature, outerSize, axisSize, innerSize) => {
+                    (flatIdx, gradOutput, output, gradInput, temperature, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2354,7 +2404,8 @@ public class GpuEngine : IEngine, IDisposable
                 // TaylorSoftmax forward kernel - uses Taylor series approximation of exp
                 _taylorSoftmaxKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int>(
-                    (flatIdx, input, output, order, outerSize, axisSize, innerSize) => {
+                    (flatIdx, input, output, order, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2401,7 +2452,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _taylorSoftmaxKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int>(
-                    (flatIdx, input, output, order, outerSize, axisSize, innerSize) => {
+                    (flatIdx, input, output, order, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2446,7 +2498,8 @@ public class GpuEngine : IEngine, IDisposable
                 // TaylorSoftmax backward kernel
                 _taylorSoftmaxBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>(
-                    (flatIdx, gradOutput, input, output, gradInput, order, outerSize, axisSize, innerSize) => {
+                    (flatIdx, gradOutput, input, output, gradInput, order, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2501,7 +2554,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _taylorSoftmaxBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>(
-                    (flatIdx, gradOutput, input, output, gradInput, order, outerSize, axisSize, innerSize) => {
+                    (flatIdx, gradOutput, input, output, gradInput, order, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2554,7 +2608,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Sparsemax forward kernel
                 _sparsemaxKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int>(
-                    (flatIdx, input, output, outerSize, axisSize, innerSize) => {
+                    (flatIdx, input, output, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2607,7 +2662,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _sparsemaxKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int>(
-                    (flatIdx, input, output, outerSize, axisSize, innerSize) => {
+                    (flatIdx, input, output, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2657,7 +2713,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Sparsemax backward kernel
                 _sparsemaxBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int>(
-                    (flatIdx, gradOutput, output, gradInput, outerSize, axisSize, innerSize) => {
+                    (flatIdx, gradOutput, output, gradInput, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2688,7 +2745,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _sparsemaxBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int>(
-                    (flatIdx, gradOutput, output, gradInput, outerSize, axisSize, innerSize) => {
+                    (flatIdx, gradOutput, output, gradInput, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2721,7 +2779,8 @@ public class GpuEngine : IEngine, IDisposable
                 // SphericalSoftmax forward kernel - L2 normalize then softmax
                 _sphericalSoftmaxKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int>(
-                    (flatIdx, input, output, outerSize, axisSize, innerSize) => {
+                    (flatIdx, input, output, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2764,7 +2823,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _sphericalSoftmaxKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int>(
-                    (flatIdx, input, output, outerSize, axisSize, innerSize) => {
+                    (flatIdx, input, output, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2807,7 +2867,8 @@ public class GpuEngine : IEngine, IDisposable
                 // SphericalSoftmax backward kernel
                 _sphericalSoftmaxBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int>(
-                    (flatIdx, gradOutput, input, output, gradInput, outerSize, axisSize, innerSize) => {
+                    (flatIdx, gradOutput, input, output, gradInput, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2850,7 +2911,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _sphericalSoftmaxBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int>(
-                    (flatIdx, gradOutput, input, output, gradInput, outerSize, axisSize, innerSize) => {
+                    (flatIdx, gradOutput, input, output, gradInput, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -2893,7 +2955,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Each block computes sum of squares for ReductionBlockSize elements
                 _partialSumOfSquaresKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int>(
-                    (blockIdx, input, partialSums, length) => {
+                    (blockIdx, input, partialSums, length) =>
+                    {
                         int startIdx = (int)blockIdx * ReductionBlockSize;
                         float sum = 0.0f;
                         for (int i = 0; i < ReductionBlockSize && startIdx + i < length; i++)
@@ -2905,7 +2968,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _partialSumOfSquaresKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int>(
-                    (blockIdx, input, partialSums, length) => {
+                    (blockIdx, input, partialSums, length) =>
+                    {
                         int startIdx = (int)blockIdx * ReductionBlockSize;
                         double sum = 0.0;
                         for (int i = 0; i < ReductionBlockSize && startIdx + i < length; i++)
@@ -2922,7 +2986,8 @@ public class GpuEngine : IEngine, IDisposable
                 // flatIdx iterates over (numIndices * embeddingDim)
                 _embeddingLookupKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>, int>(
-                    (flatIdx, embeddings, indices, output, embeddingDim) => {
+                    (flatIdx, embeddings, indices, output, embeddingDim) =>
+                    {
                         int idx = (int)flatIdx / embeddingDim;
                         int d = (int)flatIdx % embeddingDim;
                         int tokenIdx = indices[idx];
@@ -2930,7 +2995,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _embeddingLookupKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<int>, ArrayView<double>, int>(
-                    (flatIdx, embeddings, indices, output, embeddingDim) => {
+                    (flatIdx, embeddings, indices, output, embeddingDim) =>
+                    {
                         int idx = (int)flatIdx / embeddingDim;
                         int d = (int)flatIdx % embeddingDim;
                         int tokenIdx = indices[idx];
@@ -2943,7 +3009,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Each thread adds one gradient element: gradEmbeddings[indices[i] * embDim + d] += gradOutput[i * embDim + d]
                 _embeddingLookupBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>, int, int>(
-                    (flatIdx, gradOutput, indices, gradEmbeddings, embeddingDim, numIndices) => {
+                    (flatIdx, gradOutput, indices, gradEmbeddings, embeddingDim, numIndices) =>
+                    {
                         int idx = (int)flatIdx / embeddingDim;
                         int d = (int)flatIdx % embeddingDim;
                         if (idx >= numIndices) return;
@@ -2953,7 +3020,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _embeddingLookupBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<int>, ArrayView<double>, int, int>(
-                    (flatIdx, gradOutput, indices, gradEmbeddings, embeddingDim, numIndices) => {
+                    (flatIdx, gradOutput, indices, gradEmbeddings, embeddingDim, numIndices) =>
+                    {
                         int idx = (int)flatIdx / embeddingDim;
                         int d = (int)flatIdx % embeddingDim;
                         if (idx >= numIndices) return;
@@ -2969,7 +3037,8 @@ public class GpuEngine : IEngine, IDisposable
                 _batchNormKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>,
                     ArrayView<float>, ArrayView<float>, float, int, int>(
-                    (flatIdx, input, output, gamma, beta, mean, variance, epsilon, batch, features) => {
+                    (flatIdx, input, output, gamma, beta, mean, variance, epsilon, batch, features) =>
+                    {
                         int b = (int)flatIdx / features;
                         int f = (int)flatIdx % features;
                         if (b >= batch) return;
@@ -2980,7 +3049,8 @@ public class GpuEngine : IEngine, IDisposable
                 _batchNormKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>,
                     ArrayView<double>, ArrayView<double>, double, int, int>(
-                    (flatIdx, input, output, gamma, beta, mean, variance, epsilon, batch, features) => {
+                    (flatIdx, input, output, gamma, beta, mean, variance, epsilon, batch, features) =>
+                    {
                         int b = (int)flatIdx / features;
                         int f = (int)flatIdx % features;
                         if (b >= batch) return;
@@ -2997,7 +3067,8 @@ public class GpuEngine : IEngine, IDisposable
                 _layerNormKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>,
                     ArrayView<float>, ArrayView<float>, float, int, int>(
-                    (flatIdx, input, output, gamma, beta, mean, variance, epsilon, batch, features) => {
+                    (flatIdx, input, output, gamma, beta, mean, variance, epsilon, batch, features) =>
+                    {
                         int b = (int)flatIdx / features;
                         int f = (int)flatIdx % features;
                         if (b >= batch) return;
@@ -3009,7 +3080,8 @@ public class GpuEngine : IEngine, IDisposable
                 _layerNormKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>,
                     ArrayView<double>, ArrayView<double>, double, int, int>(
-                    (flatIdx, input, output, gamma, beta, mean, variance, epsilon, batch, features) => {
+                    (flatIdx, input, output, gamma, beta, mean, variance, epsilon, batch, features) =>
+                    {
                         int b = (int)flatIdx / features;
                         int f = (int)flatIdx % features;
                         if (b >= batch) return;
@@ -3022,7 +3094,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Conv2D backward input gradient kernel
                 _conv2DBackwardInputKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, Conv2DParams>(
-                    (flatIdx, gradOutput, kernel, gradInput, p) => {
+                    (flatIdx, gradOutput, kernel, gradInput, p) =>
+                    {
                         // flatIdx indexes into gradInput: [batch, inChannels, height, width]
                         int iw = (int)flatIdx % p.Width;
                         int temp = (int)flatIdx / p.Width;
@@ -3059,7 +3132,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _conv2DBackwardInputKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, Conv2DParams>(
-                    (flatIdx, gradOutput, kernel, gradInput, p) => {
+                    (flatIdx, gradOutput, kernel, gradInput, p) =>
+                    {
                         int iw = (int)flatIdx % p.Width;
                         int temp = (int)flatIdx / p.Width;
                         int ih = temp % p.Height;
@@ -3097,7 +3171,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Conv2D backward kernel gradient
                 _conv2DBackwardKernelKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, Conv2DParams>(
-                    (flatIdx, gradOutput, input, gradKernel, p) => {
+                    (flatIdx, gradOutput, input, gradKernel, p) =>
+                    {
                         // flatIdx indexes into gradKernel: [outChannels, inChannels, kernelHeight, kernelWidth]
                         int kw = (int)flatIdx % p.KernelWidth;
                         int temp = (int)flatIdx / p.KernelWidth;
@@ -3128,7 +3203,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _conv2DBackwardKernelKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, Conv2DParams>(
-                    (flatIdx, gradOutput, input, gradKernel, p) => {
+                    (flatIdx, gradOutput, input, gradKernel, p) =>
+                    {
                         int kw = (int)flatIdx % p.KernelWidth;
                         int temp = (int)flatIdx / p.KernelWidth;
                         int kh = temp % p.KernelHeight;
@@ -3161,7 +3237,8 @@ public class GpuEngine : IEngine, IDisposable
                 // MaxPool2D backward kernel
                 _maxPool2DBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>, int, int, int, int, int, int>(
-                    (flatIdx, gradOutput, maxIndices, gradInput, batch, channels, inH, inW, outH, outW) => {
+                    (flatIdx, gradOutput, maxIndices, gradInput, batch, channels, inH, inW, outH, outW) =>
+                    {
                         // Each thread processes one output gradient element and scatters to input
                         int ow = (int)flatIdx % outW;
                         int temp = (int)flatIdx / outW;
@@ -3178,7 +3255,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _maxPool2DBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<int>, ArrayView<double>, int, int, int, int, int, int>(
-                    (flatIdx, gradOutput, maxIndices, gradInput, batch, channels, inH, inW, outH, outW) => {
+                    (flatIdx, gradOutput, maxIndices, gradInput, batch, channels, inH, inW, outH, outW) =>
+                    {
                         int ow = (int)flatIdx % outW;
                         int temp = (int)flatIdx / outW;
                         int oh = temp % outH;
@@ -3194,7 +3272,8 @@ public class GpuEngine : IEngine, IDisposable
                 // MaxPool2D with indices kernel
                 _maxPool2DWithIndicesKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<int>, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, input, output, maxIndices, batch, channels, inH, inW, outH, outW, poolH, poolW, stride) => {
+                    (flatIdx, input, output, maxIndices, batch, channels, inH, inW, outH, outW, poolH, poolW, stride) =>
+                    {
                         // Each thread processes one output element
                         int ow = (int)flatIdx % outW;
                         int temp = (int)flatIdx / outW;
@@ -3231,7 +3310,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _maxPool2DWithIndicesKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<int>, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, input, output, maxIndices, batch, channels, inH, inW, outH, outW, poolH, poolW, stride) => {
+                    (flatIdx, input, output, maxIndices, batch, channels, inH, inW, outH, outW, poolH, poolW, stride) =>
+                    {
                         int ow = (int)flatIdx % outW;
                         int temp = (int)flatIdx / outW;
                         int oh = temp % outH;
@@ -3270,7 +3350,8 @@ public class GpuEngine : IEngine, IDisposable
                 // AvgPool2D backward kernel
                 _avgPool2DBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, gradOutput, gradInput, batch, channels, inH, inW, outH, outW, poolH, poolW, stride) => {
+                    (flatIdx, gradOutput, gradInput, batch, channels, inH, inW, outH, outW, poolH, poolW, stride) =>
+                    {
                         // Each thread processes one input gradient element
                         int iw = (int)flatIdx % inW;
                         int temp = (int)flatIdx / inW;
@@ -3299,7 +3380,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _avgPool2DBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, gradOutput, gradInput, batch, channels, inH, inW, outH, outW, poolH, poolW, stride) => {
+                    (flatIdx, gradOutput, gradInput, batch, channels, inH, inW, outH, outW, poolH, poolW, stride) =>
+                    {
                         int iw = (int)flatIdx % inW;
                         int temp = (int)flatIdx / inW;
                         int ih = temp % inH;
@@ -3329,7 +3411,8 @@ public class GpuEngine : IEngine, IDisposable
                 // DepthwiseConv2D kernel
                 _depthwiseConv2DKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, input, kernel, output, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) => {
+                    (flatIdx, input, kernel, output, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) =>
+                    {
                         int ow = (int)flatIdx % outW;
                         int temp = (int)flatIdx / outW;
                         int oh = temp % outH;
@@ -3356,7 +3439,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _depthwiseConv2DKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, input, kernel, output, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) => {
+                    (flatIdx, input, kernel, output, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) =>
+                    {
                         int ow = (int)flatIdx % outW;
                         int temp = (int)flatIdx / outW;
                         int oh = temp % outH;
@@ -3386,7 +3470,8 @@ public class GpuEngine : IEngine, IDisposable
                 // DepthwiseConv2D backward input kernel
                 _depthwiseConv2DBackwardInputKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, gradOutput, kernel, gradInput, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) => {
+                    (flatIdx, gradOutput, kernel, gradInput, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) =>
+                    {
                         int iw = (int)flatIdx % inW;
                         int temp = (int)flatIdx / inW;
                         int ih = temp % inH;
@@ -3418,7 +3503,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _depthwiseConv2DBackwardInputKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, gradOutput, kernel, gradInput, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) => {
+                    (flatIdx, gradOutput, kernel, gradInput, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) =>
+                    {
                         int iw = (int)flatIdx % inW;
                         int temp = (int)flatIdx / inW;
                         int ih = temp % inH;
@@ -3453,7 +3539,8 @@ public class GpuEngine : IEngine, IDisposable
                 // DepthwiseConv2D backward kernel kernel
                 _depthwiseConv2DBackwardKernelKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, gradOutput, input, gradKernel, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) => {
+                    (flatIdx, gradOutput, input, gradKernel, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) =>
+                    {
                         int kw = (int)flatIdx % kW;
                         int temp = (int)flatIdx / kW;
                         int kh = temp % kH;
@@ -3481,7 +3568,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _depthwiseConv2DBackwardKernelKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, gradOutput, input, gradKernel, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) => {
+                    (flatIdx, gradOutput, input, gradKernel, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) =>
+                    {
                         int kw = (int)flatIdx % kW;
                         int temp = (int)flatIdx / kW;
                         int kh = temp % kH;
@@ -3512,7 +3600,8 @@ public class GpuEngine : IEngine, IDisposable
                 // ConvTranspose2D kernel
                 _convTranspose2DKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, input, kernel, output, batch, channels, inH, inW, outH, outW, outChannels, kH, kW, stride, padding) => {
+                    (flatIdx, input, kernel, output, batch, channels, inH, inW, outH, outW, outChannels, kH, kW, stride, padding) =>
+                    {
                         int ow = (int)flatIdx % outW;
                         int temp = (int)flatIdx / outW;
                         int oh = temp % outH;
@@ -3547,7 +3636,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _convTranspose2DKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, input, kernel, output, batch, channels, inH, inW, outH, outW, outChannels, kH, kW, stride, padding) => {
+                    (flatIdx, input, kernel, output, batch, channels, inH, inW, outH, outW, outChannels, kH, kW, stride, padding) =>
+                    {
                         int ow = (int)flatIdx % outW;
                         int temp = (int)flatIdx / outW;
                         int oh = temp % outH;
@@ -3585,7 +3675,8 @@ public class GpuEngine : IEngine, IDisposable
                 // ConvTranspose2D backward input kernel (essentially a regular Conv2D)
                 _convTranspose2DBackwardInputKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, gradOutput, kernel, gradInput, batch, channels, inH, inW, outH, outW, outChannels, kH, kW, stride) => {
+                    (flatIdx, gradOutput, kernel, gradInput, batch, channels, inH, inW, outH, outW, outChannels, kH, kW, stride) =>
+                    {
                         int iw = (int)flatIdx % inW;
                         int temp = (int)flatIdx / inW;
                         int ih = temp % inH;
@@ -3615,7 +3706,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _convTranspose2DBackwardInputKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, gradOutput, kernel, gradInput, batch, channels, inH, inW, outH, outW, outChannels, kH, kW, stride) => {
+                    (flatIdx, gradOutput, kernel, gradInput, batch, channels, inH, inW, outH, outW, outChannels, kH, kW, stride) =>
+                    {
                         int iw = (int)flatIdx % inW;
                         int temp = (int)flatIdx / inW;
                         int ih = temp % inH;
@@ -3648,7 +3740,8 @@ public class GpuEngine : IEngine, IDisposable
                 // ConvTranspose2D backward kernel kernel
                 _convTranspose2DBackwardKernelKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, gradOutput, input, gradKernel, batch, channels, inH, inW, outH, outW, outChannels, kH, kW, stride) => {
+                    (flatIdx, gradOutput, input, gradKernel, batch, channels, inH, inW, outH, outW, outChannels, kH, kW, stride) =>
+                    {
                         int kw = (int)flatIdx % kW;
                         int temp = (int)flatIdx / kW;
                         int kh = temp % kH;
@@ -3678,7 +3771,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _convTranspose2DBackwardKernelKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int>(
-                    (flatIdx, gradOutput, input, gradKernel, batch, channels, inH, inW, outH, outW, outChannels, kH, kW, stride) => {
+                    (flatIdx, gradOutput, input, gradKernel, batch, channels, inH, inW, outH, outW, outChannels, kH, kW, stride) =>
+                    {
                         int kw = (int)flatIdx % kW;
                         int temp = (int)flatIdx / kW;
                         int kh = temp % kH;
@@ -3711,7 +3805,8 @@ public class GpuEngine : IEngine, IDisposable
                 // BatchNorm backward kernel - computes gradInput, gradGamma, gradBeta
                 _batchNormBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, int, int>(
-                    (flatIdx, gradOutput, input, gamma, mean, variance, gradInput, gradGamma, gradBeta, epsilon, batchSize, featureSize) => {
+                    (flatIdx, gradOutput, input, gamma, mean, variance, gradInput, gradGamma, gradBeta, epsilon, batchSize, featureSize) =>
+                    {
                         int f = (int)flatIdx % featureSize;
                         int b = (int)flatIdx / featureSize;
                         if (b >= batchSize) return;
@@ -3735,7 +3830,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _batchNormBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, double, int, int>(
-                    (flatIdx, gradOutput, input, gamma, mean, variance, gradInput, gradGamma, gradBeta, epsilon, batchSize, featureSize) => {
+                    (flatIdx, gradOutput, input, gamma, mean, variance, gradInput, gradGamma, gradBeta, epsilon, batchSize, featureSize) =>
+                    {
                         int f = (int)flatIdx % featureSize;
                         int b = (int)flatIdx / featureSize;
                         if (b >= batchSize) return;
@@ -3758,7 +3854,8 @@ public class GpuEngine : IEngine, IDisposable
                 // LayerNorm backward kernel
                 _layerNormBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, int, int>(
-                    (flatIdx, gradOutput, input, gamma, mean, variance, gradInput, gradGamma, gradBeta, epsilon, batchSize, featureSize) => {
+                    (flatIdx, gradOutput, input, gamma, mean, variance, gradInput, gradGamma, gradBeta, epsilon, batchSize, featureSize) =>
+                    {
                         int f = (int)flatIdx % featureSize;
                         int b = (int)flatIdx / featureSize;
                         if (b >= batchSize) return;
@@ -3778,7 +3875,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _layerNormBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, double, int, int>(
-                    (flatIdx, gradOutput, input, gamma, mean, variance, gradInput, gradGamma, gradBeta, epsilon, batchSize, featureSize) => {
+                    (flatIdx, gradOutput, input, gamma, mean, variance, gradInput, gradGamma, gradBeta, epsilon, batchSize, featureSize) =>
+                    {
                         int f = (int)flatIdx % featureSize;
                         int b = (int)flatIdx / featureSize;
                         if (b >= batchSize) return;
@@ -3801,7 +3899,8 @@ public class GpuEngine : IEngine, IDisposable
                 // ReduceMax kernel - finds max along reduction axis
                 _reduceMaxKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<int>, int, int, int>(
-                    (flatIdx, input, output, indices, outerSize, reduceSize, innerSize) => {
+                    (flatIdx, input, output, indices, outerSize, reduceSize, innerSize) =>
+                    {
                         int inner = (int)flatIdx % innerSize;
                         int outer = (int)flatIdx / innerSize;
                         if (outer >= outerSize) return;
@@ -3823,7 +3922,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _reduceMaxKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<int>, int, int, int>(
-                    (flatIdx, input, output, indices, outerSize, reduceSize, innerSize) => {
+                    (flatIdx, input, output, indices, outerSize, reduceSize, innerSize) =>
+                    {
                         int inner = (int)flatIdx % innerSize;
                         int outer = (int)flatIdx / innerSize;
                         if (outer >= outerSize) return;
@@ -3848,7 +3948,8 @@ public class GpuEngine : IEngine, IDisposable
                 // ReduceMaxBackward kernel
                 _reduceMaxBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>, int, int, int>(
-                    (flatIdx, gradOutput, indices, gradInput, outerSize, reduceSize, innerSize) => {
+                    (flatIdx, gradOutput, indices, gradInput, outerSize, reduceSize, innerSize) =>
+                    {
                         int r = (int)flatIdx % reduceSize;
                         int temp = (int)flatIdx / reduceSize;
                         int inner = temp % innerSize;
@@ -3861,7 +3962,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _reduceMaxBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<int>, ArrayView<double>, int, int, int>(
-                    (flatIdx, gradOutput, indices, gradInput, outerSize, reduceSize, innerSize) => {
+                    (flatIdx, gradOutput, indices, gradInput, outerSize, reduceSize, innerSize) =>
+                    {
                         int r = (int)flatIdx % reduceSize;
                         int temp = (int)flatIdx / reduceSize;
                         int inner = temp % innerSize;
@@ -3877,7 +3979,8 @@ public class GpuEngine : IEngine, IDisposable
                 // ReduceMean kernel
                 _reduceMeanKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int>(
-                    (flatIdx, input, output, outerSize, reduceSize, innerSize) => {
+                    (flatIdx, input, output, outerSize, reduceSize, innerSize) =>
+                    {
                         int inner = (int)flatIdx % innerSize;
                         int outer = (int)flatIdx / innerSize;
                         if (outer >= outerSize) return;
@@ -3892,7 +3995,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _reduceMeanKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int>(
-                    (flatIdx, input, output, outerSize, reduceSize, innerSize) => {
+                    (flatIdx, input, output, outerSize, reduceSize, innerSize) =>
+                    {
                         int inner = (int)flatIdx % innerSize;
                         int outer = (int)flatIdx / innerSize;
                         if (outer >= outerSize) return;
@@ -3910,7 +4014,8 @@ public class GpuEngine : IEngine, IDisposable
                 // ReduceMeanBackward kernel
                 _reduceMeanBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int>(
-                    (flatIdx, gradOutput, gradInput, outerSize, reduceSize, innerSize) => {
+                    (flatIdx, gradOutput, gradInput, outerSize, reduceSize, innerSize) =>
+                    {
                         int r = (int)flatIdx % reduceSize;
                         int temp = (int)flatIdx / reduceSize;
                         int inner = temp % innerSize;
@@ -3922,7 +4027,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _reduceMeanBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int>(
-                    (flatIdx, gradOutput, gradInput, outerSize, reduceSize, innerSize) => {
+                    (flatIdx, gradOutput, gradInput, outerSize, reduceSize, innerSize) =>
+                    {
                         int r = (int)flatIdx % reduceSize;
                         int temp = (int)flatIdx / reduceSize;
                         int inner = temp % innerSize;
@@ -3937,7 +4043,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Softmax backward kernel
                 _softmaxBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int>(
-                    (flatIdx, gradOutput, output, gradInput, outerSize, axisSize, innerSize) => {
+                    (flatIdx, gradOutput, output, gradInput, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -3959,7 +4066,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _softmaxBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int>(
-                    (flatIdx, gradOutput, output, gradInput, outerSize, axisSize, innerSize) => {
+                    (flatIdx, gradOutput, output, gradInput, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -3982,7 +4090,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Upsample backward kernel (nearest neighbor)
                 _upsampleBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int>(
-                    (flatIdx, gradOutput, gradInput, batch, channels, inH, inW, scaleH, scaleW) => {
+                    (flatIdx, gradOutput, gradInput, batch, channels, inH, inW, scaleH, scaleW) =>
+                    {
                         // Each input gradient element receives sum of corresponding output gradients
                         int iw = (int)flatIdx % inW;
                         int temp = (int)flatIdx / inW;
@@ -4008,7 +4117,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _upsampleBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int>(
-                    (flatIdx, gradOutput, gradInput, batch, channels, inH, inW, scaleH, scaleW) => {
+                    (flatIdx, gradOutput, gradInput, batch, channels, inH, inW, scaleH, scaleW) =>
+                    {
                         int iw = (int)flatIdx % inW;
                         int temp = (int)flatIdx / inW;
                         int ih = temp % inH;
@@ -4036,7 +4146,8 @@ public class GpuEngine : IEngine, IDisposable
                 // PixelShuffle backward kernel (space-to-depth)
                 _pixelShuffleBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int>(
-                    (flatIdx, gradOutput, gradInput, batch, channels, height, width, upscaleFactor) => {
+                    (flatIdx, gradOutput, gradInput, batch, channels, height, width, upscaleFactor) =>
+                    {
                         int r = upscaleFactor;
                         int newChannels = channels / (r * r);
                         int newHeight = height * r;
@@ -4060,7 +4171,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _pixelShuffleBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int>(
-                    (flatIdx, gradOutput, gradInput, batch, channels, height, width, upscaleFactor) => {
+                    (flatIdx, gradOutput, gradInput, batch, channels, height, width, upscaleFactor) =>
+                    {
                         int r = upscaleFactor;
                         int newChannels = channels / (r * r);
                         int newHeight = height * r;
@@ -4086,7 +4198,8 @@ public class GpuEngine : IEngine, IDisposable
                 // ReduceSum kernel
                 _reduceSumKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int>(
-                    (flatIdx, input, output, outerSize, axisSize, innerSize) => {
+                    (flatIdx, input, output, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -4101,7 +4214,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _reduceSumKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int>(
-                    (flatIdx, input, output, outerSize, axisSize, innerSize) => {
+                    (flatIdx, input, output, outerSize, axisSize, innerSize) =>
+                    {
                         int outer = (int)flatIdx / innerSize;
                         int inner = (int)flatIdx % innerSize;
                         if (outer >= outerSize) return;
@@ -4119,7 +4233,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Crop kernel
                 _cropKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>(
-                    (flatIdx, input, output, batch, channels, inH, inW, top, left, cropH, cropW) => {
+                    (flatIdx, input, output, batch, channels, inH, inW, top, left, cropH, cropW) =>
+                    {
                         int ow = (int)flatIdx % cropW;
                         int temp = (int)flatIdx / cropW;
                         int oh = temp % cropH;
@@ -4134,7 +4249,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _cropKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>(
-                    (flatIdx, input, output, batch, channels, inH, inW, top, left, cropH, cropW) => {
+                    (flatIdx, input, output, batch, channels, inH, inW, top, left, cropH, cropW) =>
+                    {
                         int ow = (int)flatIdx % cropW;
                         int temp = (int)flatIdx / cropW;
                         int oh = temp % cropH;
@@ -4152,7 +4268,8 @@ public class GpuEngine : IEngine, IDisposable
                 // Pad kernel
                 _padKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, float>(
-                    (flatIdx, input, output, batch, channels, inH, inW, padTop, padBottom, padLeft, padRight, padValue) => {
+                    (flatIdx, input, output, batch, channels, inH, inW, padTop, padBottom, padLeft, padRight, padValue) =>
+                    {
                         int outH = inH + padTop + padBottom;
                         int outW = inW + padLeft + padRight;
                         int ow = (int)flatIdx % outW;
@@ -4176,7 +4293,8 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 _padKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, double>(
-                    (flatIdx, input, output, batch, channels, inH, inW, padTop, padBottom, padLeft, padRight, padValue) => {
+                    (flatIdx, input, output, batch, channels, inH, inW, padTop, padBottom, padLeft, padRight, padValue) =>
+                    {
                         int outH = inH + padTop + padBottom;
                         int outW = inW + padLeft + padRight;
                         int ow = (int)flatIdx % outW;
@@ -4226,13 +4344,15 @@ public class GpuEngine : IEngine, IDisposable
                 // asinh(x) = ln(x + sqrt(x^2 + 1))
                 _asinhKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
-                    (index, input, output) => {
+                    (index, input, output) =>
+                    {
                         var x = input[index];
                         output[index] = XMath.Log(x + XMath.Sqrt(x * x + 1.0f));
                     });
                 _asinhKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
-                    (index, input, output) => {
+                    (index, input, output) =>
+                    {
                         var x = input[index];
                         output[index] = XMath.Log(x + XMath.Sqrt(x * x + 1.0));
                     });
@@ -4240,13 +4360,15 @@ public class GpuEngine : IEngine, IDisposable
                 // acosh(x) = ln(x + sqrt(x^2 - 1))
                 _acoshKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
-                    (index, input, output) => {
+                    (index, input, output) =>
+                    {
                         var x = input[index];
                         output[index] = XMath.Log(x + XMath.Sqrt(x * x - 1.0f));
                     });
                 _acoshKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
-                    (index, input, output) => {
+                    (index, input, output) =>
+                    {
                         var x = input[index];
                         output[index] = XMath.Log(x + XMath.Sqrt(x * x - 1.0));
                     });
@@ -4254,13 +4376,15 @@ public class GpuEngine : IEngine, IDisposable
                 // atanh(x) = 0.5 * ln((1 + x) / (1 - x))
                 _atanhKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
-                    (index, input, output) => {
+                    (index, input, output) =>
+                    {
                         var x = input[index];
                         output[index] = 0.5f * XMath.Log((1.0f + x) / (1.0f - x));
                     });
                 _atanhKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
-                    (index, input, output) => {
+                    (index, input, output) =>
+                    {
                         var x = input[index];
                         output[index] = 0.5 * XMath.Log((1.0 + x) / (1.0 - x));
                     });
@@ -10341,19 +10465,19 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             int rows = matrix.Rows, cols = matrix.Columns;
-            
+
             // Rent GPU memory for the matrix
             var gpuMatrix = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(rows * cols);
             var gpuTemp = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(rows);
-            
+
             try
             {
                 // Copy matrix to GPU
                 gpuMatrix.View.BaseView.CopyFromCPU(matrix.AsSpan());
-                
+
                 // Create 2D view
                 var view2D = gpuMatrix.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
-                
+
                 // Execute swap columns kernel
                 lock (_gpuLock)
                 {
@@ -10361,7 +10485,7 @@ public class GpuEngine : IEngine, IDisposable
                         ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, rows, view2D, gpuTemp.View, col1, col2);
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
-                
+
                 // Copy result back
                 gpuMatrix.View.BaseView.CopyToCPU(matrix.AsWritableSpan());
             }
@@ -10400,19 +10524,19 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             int rows = matrix.Rows, cols = matrix.Columns;
-            
+
             // Rent GPU memory for the matrix
             var gpuMatrix = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(rows * cols);
             var gpuTemp = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(rows);
-            
+
             try
             {
                 // Copy matrix to GPU
                 gpuMatrix.View.BaseView.CopyFromCPU(matrix.AsSpan());
-                
+
                 // Create 2D view
                 var view2D = gpuMatrix.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
-                
+
                 // Execute swap columns kernel
                 lock (_gpuLock)
                 {
@@ -10420,7 +10544,7 @@ public class GpuEngine : IEngine, IDisposable
                         ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, rows, view2D, gpuTemp.View, col1, col2);
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
-                
+
                 // Copy result back
                 gpuMatrix.View.BaseView.CopyToCPU(matrix.AsWritableSpan());
             }
@@ -10484,17 +10608,17 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             int cols = matrix.Columns;
-            
+
             // Rent GPU memory for the two rows
             var gpuRow1 = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(cols);
             var gpuRow2 = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(cols);
-            
+
             try
             {
                 // Copy rows to GPU
                 gpuRow1.View.BaseView.CopyFromCPU(matrix.GetRowSpan(row1));
                 gpuRow2.View.BaseView.CopyFromCPU(matrix.GetRowSpan(row2));
-                
+
                 // Execute swap kernel
                 lock (_gpuLock)
                 {
@@ -10502,7 +10626,7 @@ public class GpuEngine : IEngine, IDisposable
                         ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, cols, gpuRow1.View, gpuRow2.View);
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
-                
+
                 // Copy swapped rows back (row1 gets gpuRow2, row2 gets gpuRow1)
                 gpuRow2.View.BaseView.CopyToCPU(matrix.GetRowSpan(row1));
                 gpuRow1.View.BaseView.CopyToCPU(matrix.GetRowSpan(row2));
@@ -10542,17 +10666,17 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             int cols = matrix.Columns;
-            
+
             // Rent GPU memory for the two rows
             var gpuRow1 = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(cols);
             var gpuRow2 = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(cols);
-            
+
             try
             {
                 // Copy rows to GPU
                 gpuRow1.View.BaseView.CopyFromCPU(matrix.GetRowSpan(row1));
                 gpuRow2.View.BaseView.CopyFromCPU(matrix.GetRowSpan(row2));
-                
+
                 // Execute swap kernel
                 lock (_gpuLock)
                 {
@@ -10560,7 +10684,7 @@ public class GpuEngine : IEngine, IDisposable
                         ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, cols, gpuRow1.View, gpuRow2.View);
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
-                
+
                 // Copy swapped rows back (row1 gets gpuRow2, row2 gets gpuRow1)
                 gpuRow2.View.BaseView.CopyToCPU(matrix.GetRowSpan(row1));
                 gpuRow1.View.BaseView.CopyToCPU(matrix.GetRowSpan(row2));
@@ -10626,21 +10750,21 @@ public class GpuEngine : IEngine, IDisposable
         {
             var result = new Matrix<float>(a.Length, b.Length);
             int m = a.Length, n = b.Length;
-            
+
             // Rent GPU memory
             var gpuA = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m);
             var gpuB = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(n);
             var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
-            
+
             try
             {
                 // Copy vectors to GPU
                 gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
                 gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
-                
+
                 // Create 2D view for result
                 var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
-                
+
                 // Execute outer product kernel
                 lock (_gpuLock)
                 {
@@ -10648,7 +10772,7 @@ public class GpuEngine : IEngine, IDisposable
                         ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(m, n), gpuA.View, gpuB.View, viewResult, m, n);
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
-                
+
                 // Copy result back
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
                 return result;
@@ -10678,21 +10802,21 @@ public class GpuEngine : IEngine, IDisposable
         {
             var result = new Matrix<double>(a.Length, b.Length);
             int m = a.Length, n = b.Length;
-            
+
             // Rent GPU memory
             var gpuA = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m);
             var gpuB = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(n);
             var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
-            
+
             try
             {
                 // Copy vectors to GPU
                 gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
                 gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
-                
+
                 // Create 2D view for result
                 var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
-                
+
                 // Execute outer product kernel
                 lock (_gpuLock)
                 {
@@ -10700,7 +10824,7 @@ public class GpuEngine : IEngine, IDisposable
                         ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(m, n), gpuA.View, gpuB.View, viewResult, m, n);
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
-                
+
                 // Copy result back
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
                 return result;
@@ -15865,6 +15989,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Exp(ReadOnlySpan<float> x, Span<float> destination)
     {
         if (x.Length < _thresholds.VectorSqrt)
@@ -15883,6 +16008,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Exp(ReadOnlySpan<double> x, Span<double> destination)
     {
         if (x.Length < _thresholds.VectorSqrt)
@@ -15901,6 +16027,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Log(ReadOnlySpan<float> x, Span<float> destination)
     {
         if (x.Length < _thresholds.VectorSqrt)
@@ -15919,6 +16046,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Log(ReadOnlySpan<double> x, Span<double> destination)
     {
         if (x.Length < _thresholds.VectorSqrt)
@@ -17814,7 +17942,7 @@ public class GpuEngine : IEngine, IDisposable
 
             // Generate Gumbel noise on CPU (random number generation not well-suited for GPU)
             var gumbelNoise = new float[input.Length];
-            var random = new Random();
+            var random = RandomHelper.ThreadSafeRandom;
             const float eps = 1e-10f;
             for (int i = 0; i < gumbelNoise.Length; i++)
             {
@@ -17906,7 +18034,7 @@ public class GpuEngine : IEngine, IDisposable
             int numWorkItems = outerSize * innerSize;
 
             var gumbelNoise = new double[input.Length];
-            var random = new Random();
+            var random = RandomHelper.ThreadSafeRandom;
             const double eps = 1e-10;
             for (int i = 0; i < gumbelNoise.Length; i++)
             {
@@ -21432,6 +21560,7 @@ public class GpuEngine : IEngine, IDisposable
 
     #region IDisposable
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (_disposed) return;
@@ -23855,13 +23984,13 @@ public class GpuEngine : IEngine, IDisposable
         {
             int totalSize = 1; foreach (var d in shape) totalSize *= d;
             var result = new float[totalSize];
-            var random = new Random();
+            var baseSeed = RandomHelper.GenerateCryptographicSeed();
 
             // Generate random numbers in parallel batches
             int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
             System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
             {
-                var localRandom = new Random(random.Next() + batchIdx);
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
                 int start = batchIdx * batchSize;
                 int end = Math.Min(start + batchSize, totalSize);
                 for (int i = start; i < end; i++)
@@ -23884,12 +24013,12 @@ public class GpuEngine : IEngine, IDisposable
         {
             int totalSize = 1; foreach (var d in shape) totalSize *= d;
             var result = new double[totalSize];
-            var random = new Random();
+            var baseSeed = RandomHelper.GenerateCryptographicSeed();
 
             int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
             System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
             {
-                var localRandom = new Random(random.Next() + batchIdx);
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
                 int start = batchIdx * batchSize;
                 int end = Math.Min(start + batchSize, totalSize);
                 for (int i = start; i < end; i++)
@@ -23934,12 +24063,12 @@ public class GpuEngine : IEngine, IDisposable
         {
             int totalSize = 1; foreach (var d in shape) totalSize *= d;
             var result = new float[totalSize];
-            var random = new Random();
+            var baseSeed = RandomHelper.GenerateCryptographicSeed();
 
             int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
             System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
             {
-                var localRandom = new Random(random.Next() + batchIdx);
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
                 int start = batchIdx * batchSize;
                 int end = Math.Min(start + batchSize, totalSize);
                 for (int i = start; i < end; i++)
@@ -23966,12 +24095,12 @@ public class GpuEngine : IEngine, IDisposable
         {
             int totalSize = 1; foreach (var d in shape) totalSize *= d;
             var result = new double[totalSize];
-            var random = new Random();
+            var baseSeed = RandomHelper.GenerateCryptographicSeed();
 
             int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
             System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
             {
-                var localRandom = new Random(random.Next() + batchIdx);
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
                 int start = batchIdx * batchSize;
                 int end = Math.Min(start + batchSize, totalSize);
                 for (int i = start; i < end; i++)

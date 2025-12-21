@@ -551,4 +551,3 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
         return new Vector<T>([.. coeffs.Select(c => NumOps.FromDouble(c / normFactor))]);
     }
 }
-    

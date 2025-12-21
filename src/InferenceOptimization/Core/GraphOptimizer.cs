@@ -1,5 +1,5 @@
-using AiDotNet.InferenceOptimization.Passes;
 using System.Diagnostics;
+using AiDotNet.InferenceOptimization.Passes;
 
 namespace AiDotNet.InferenceOptimization.Core;
 

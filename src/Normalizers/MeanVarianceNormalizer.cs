@@ -124,24 +124,24 @@ public class MeanVarianceNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInp
         {
             // Flatten tensor to apply mean-variance normalization
             var flattenedTensor = tensor.ToVector();
-            
+
             T mean = StatisticsHelper<T>.CalculateMean(flattenedTensor);
             T variance = StatisticsHelper<T>.CalculateVariance(flattenedTensor, mean);
             T stdDev = NumOps.Sqrt(variance);
-            
+
             var normalizedVector = flattenedTensor.Transform(x => NumOps.Divide(NumOps.Subtract(x, mean), stdDev));
-            
+
             // Convert back to tensor with the same shape
             var normalizedTensor = Tensor<T>.FromVector(normalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 normalizedTensor = normalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             var parameters = new NormalizationParameters<T> { Mean = mean, StdDev = stdDev, Method = NormalizationMethod.MeanVariance };
             return ((TOutput)(object)normalizedTensor, parameters);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -183,7 +183,7 @@ public class MeanVarianceNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInp
         {
             var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
             var parametersList = new List<NormalizationParameters<T>>();
-            
+
             for (int i = 0; i < matrix.Columns; i++)
             {
                 var column = matrix.GetColumn(i);
@@ -201,7 +201,7 @@ public class MeanVarianceNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInp
                         $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
                 }
             }
-            
+
             return ((TInput)(object)normalizedMatrix, parametersList);
         }
         else if (data is Tensor<T> tensor && tensor.Shape.Length == 2)
@@ -210,7 +210,7 @@ public class MeanVarianceNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInp
             var rows = tensor.Shape[0];
             var cols = tensor.Shape[1];
             var newMatrix = new Matrix<T>(rows, cols);
-            
+
             for (int i = 0; i < rows; i++)
             {
                 for (int j = 0; j < cols; j++)
@@ -218,11 +218,11 @@ public class MeanVarianceNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInp
                     newMatrix[i, j] = tensor[i, j];
                 }
             }
-            
+
             // Normalize each column separately
             var normalizedColumns = new List<Vector<T>>();
             var parametersList = new List<NormalizationParameters<T>>();
-            
+
             for (int i = 0; i < cols; i++)
             {
                 var column = newMatrix.GetColumn(i);
@@ -240,14 +240,14 @@ public class MeanVarianceNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInp
                         $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
                 }
             }
-            
+
             // Convert back to tensor
             var normalizedMatrix = Matrix<T>.FromColumnVectors(normalizedColumns);
             var normalizedTensor = new Tensor<T>(new[] { normalizedMatrix.Rows, normalizedMatrix.Columns }, normalizedMatrix);
-            
+
             return ((TInput)(object)normalizedTensor, parametersList);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TInput).Name}. " +
             $"Supported types are Matrix<{typeof(T).Name}> and 2D Tensor<{typeof(T).Name}>.");
@@ -290,19 +290,19 @@ public class MeanVarianceNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInp
         {
             // Flatten tensor for denormalization
             var flattenedTensor = tensor.ToVector();
-            
+
             var denormalizedVector = flattenedTensor.Multiply(parameters.StdDev).Add(parameters.Mean);
-            
+
             // Convert back to tensor with the same shape
             var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             return (TOutput)(object)denormalizedTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -348,29 +348,29 @@ public class MeanVarianceNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInp
     {
         if (coefficients is Vector<T> vector)
         {
-            var denormalizedCoefficients = vector.PointwiseMultiply(Vector<T>.FromArray(xParams.Select(p => 
+            var denormalizedCoefficients = vector.PointwiseMultiply(Vector<T>.FromArray(xParams.Select(p =>
                 NumOps.Divide(yParams.StdDev, p.StdDev)).ToArray()));
-                
+
             return (TOutput)(object)denormalizedCoefficients;
         }
         else if (coefficients is Tensor<T> tensor)
         {
             // Flatten tensor for denormalization
             var flattenedTensor = tensor.ToVector();
-            
-            var denormalizedVector = flattenedTensor.PointwiseMultiply(Vector<T>.FromArray(xParams.Select(p => 
+
+            var denormalizedVector = flattenedTensor.PointwiseMultiply(Vector<T>.FromArray(xParams.Select(p =>
                 NumOps.Divide(yParams.StdDev, p.StdDev)).ToArray()));
-            
+
             // Convert back to tensor with the same shape
             var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             return (TOutput)(object)denormalizedTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported coefficients type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -409,7 +409,7 @@ public class MeanVarianceNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInp
     /// This makes the model properly calibrated for use with the original, unstandardized data.
     /// </para>
     /// </remarks>
-    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, 
+    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients,
         List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
         // Extract vector from coefficients
@@ -428,7 +428,7 @@ public class MeanVarianceNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInp
                 $"Unsupported coefficients type {typeof(TOutput).Name}. " +
                 $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
         }
-        
+
         // Calculate denormalized intercept
         T denormalizedIntercept = yParams.Mean;
         for (int i = 0; i < coefficientsVector.Length; i++)

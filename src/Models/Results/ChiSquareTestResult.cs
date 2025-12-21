@@ -64,7 +64,7 @@ public class ChiSquareTestResult<T>
     /// </para>
     /// </remarks>
     public T ChiSquareStatistic { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the p-value associated with the Chi-Square test.
     /// </summary>
@@ -97,7 +97,7 @@ public class ChiSquareTestResult<T>
     /// </para>
     /// </remarks>
     public T PValue { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the degrees of freedom for the Chi-Square test.
     /// </summary>
@@ -130,7 +130,7 @@ public class ChiSquareTestResult<T>
     /// </para>
     /// </remarks>
     public int DegreesOfFreedom { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the observed frequencies for the left variable or category.
     /// </summary>
@@ -155,7 +155,7 @@ public class ChiSquareTestResult<T>
     /// </para>
     /// </remarks>
     public Vector<T> LeftObserved { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the observed frequencies for the right variable or category.
     /// </summary>
@@ -179,7 +179,7 @@ public class ChiSquareTestResult<T>
     /// </para>
     /// </remarks>
     public Vector<T> RightObserved { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the expected frequencies for the left variable or category.
     /// </summary>
@@ -204,7 +204,7 @@ public class ChiSquareTestResult<T>
     /// </para>
     /// </remarks>
     public Vector<T> LeftExpected { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the expected frequencies for the right variable or category.
     /// </summary>
@@ -229,7 +229,7 @@ public class ChiSquareTestResult<T>
     /// </para>
     /// </remarks>
     public Vector<T> RightExpected { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the critical value for the Chi-Square test at the specified significance level.
     /// </summary>
@@ -261,7 +261,7 @@ public class ChiSquareTestResult<T>
     /// </para>
     /// </remarks>
     public T CriticalValue { get; set; }
-    
+
     /// <summary>
     /// Gets or sets a value indicating whether the Chi-Square test result is statistically significant.
     /// </summary>

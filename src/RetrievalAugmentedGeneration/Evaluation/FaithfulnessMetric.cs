@@ -69,7 +69,7 @@ public class FaithfulnessMetric<T> : RAGMetricBase<T>
         var sourceWords = GetWords(sourceText);
 
         var supportedWords = answerWords.Intersect(sourceWords).Count();
-        
+
         return NumOps.Divide(NumOps.FromDouble(supportedWords), NumOps.FromDouble(answerWords.Count));
     }
 }

@@ -56,7 +56,7 @@ public class FTestResult<T>
     /// </para>
     /// </remarks>
     public T FStatistic { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the p-value associated with the F-test.
     /// </summary>
@@ -88,7 +88,7 @@ public class FTestResult<T>
     /// </para>
     /// </remarks>
     public T PValue { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the degrees of freedom for the numerator.
     /// </summary>
@@ -111,7 +111,7 @@ public class FTestResult<T>
     /// </para>
     /// </remarks>
     public int NumeratorDegreesOfFreedom { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the degrees of freedom for the denominator.
     /// </summary>
@@ -134,7 +134,7 @@ public class FTestResult<T>
     /// </para>
     /// </remarks>
     public int DenominatorDegreesOfFreedom { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the variance of the left (or first) sample.
     /// </summary>
@@ -159,7 +159,7 @@ public class FTestResult<T>
     /// </para>
     /// </remarks>
     public T LeftVariance { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the variance of the right (or second) sample.
     /// </summary>
@@ -184,7 +184,7 @@ public class FTestResult<T>
     /// </para>
     /// </remarks>
     public T RightVariance { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the lower bound of the confidence interval for the ratio of population variances.
     /// </summary>
@@ -214,7 +214,7 @@ public class FTestResult<T>
     /// </para>
     /// </remarks>
     public T LowerConfidenceInterval { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the upper bound of the confidence interval for the ratio of population variances.
     /// </summary>
@@ -244,7 +244,7 @@ public class FTestResult<T>
     /// </para>
     /// </remarks>
     public T UpperConfidenceInterval { get; set; }
-    
+
     /// <summary>
     /// Gets or sets a value indicating whether the F-test result is statistically significant.
     /// </summary>
@@ -274,7 +274,7 @@ public class FTestResult<T>
     /// </para>
     /// </remarks>
     public bool IsSignificant { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the significance level used for the test.
     /// </summary>

@@ -226,14 +226,14 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// using a scalar activation function that is applied element-wise to unit activations.
     /// </remarks>
     public DeepBoltzmannMachine(
-        NeuralNetworkArchitecture<T> architecture, 
-        int epochs, 
-        T learningRate, 
+        NeuralNetworkArchitecture<T> architecture,
+        int epochs,
+        T learningRate,
         double learningRateDecay = 1.0,
         ILossFunction<T>? lossFunction = null,
         IActivationFunction<T>? activationFunction = null,
-        int batchSize = 32, 
-        int cdSteps = 1) 
+        int batchSize = 32,
+        int cdSteps = 1)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _epochs = epochs;
@@ -265,14 +265,14 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// using a vector activation function that processes entire tensors at once for improved performance.
     /// </remarks>
     public DeepBoltzmannMachine(
-        NeuralNetworkArchitecture<T> architecture, 
-        int epochs, 
-        T learningRate, 
+        NeuralNetworkArchitecture<T> architecture,
+        int epochs,
+        T learningRate,
         double learningRateDecay = 1.0,
         ILossFunction<T>? lossFunction = null,
         IVectorActivationFunction<T>? vectorActivationFunction = null,
-        int batchSize = 32, 
-        int cdSteps = 1) 
+        int batchSize = 32,
+        int cdSteps = 1)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _epochs = epochs;
@@ -317,23 +317,23 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     {
         // Create temporary tensors to hold activations between layers
         Tensor<T> layerInput = input;
-    
+
         // Train each layer pair as an RBM
         for (int layer = 0; layer < _layerSizes.Count - 1; layer++)
         {
-            Console.WriteLine($"Pretraining layer {layer+1}/{_layerSizes.Count-1}");
-        
+            Console.WriteLine($"Pretraining layer {layer + 1}/{_layerSizes.Count - 1}");
+
             // Create a temporary RBM for this layer pair
             var tmpRBM = _activationFunction != null ? new RBMLayer<T>(
-                _layerSizes[layer], 
-                _layerSizes[layer + 1], 
+                _layerSizes[layer],
+                _layerSizes[layer + 1],
                 _activationFunction) : _vectorActivationFunction != null ? new RBMLayer<T>(
-                _layerSizes[layer], 
-                _layerSizes[layer + 1], 
+                _layerSizes[layer],
+                _layerSizes[layer + 1],
                 _vectorActivationFunction) : new RBMLayer<T>(
-                _layerSizes[layer], 
+                _layerSizes[layer],
                 _layerSizes[layer + 1], null as IActivationFunction<T>);
-        
+
             // Train the RBM on the current layer activations
             for (int epoch = 0; epoch < pretrainingEpochs; epoch++)
             {
@@ -343,35 +343,35 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
                     var batchSize = Math.Min(_batchSize, layerInput.Shape[0] - i);
                     var batch = layerInput.Slice(i, 0, i + batchSize, layerInput.Shape[1]);
                     tmpRBM.TrainWithContrastiveDivergence(batch.ToVector(), pretrainingLearningRate);
-                
+
                     // Calculate loss (simplified)
                     var reconstructed = tmpRBM.Forward(Tensor<T>.FromVector(batch.ToVector()));
                     var loss = CalculateLoss(batch, reconstructed);
                     epochLoss = NumOps.Add(epochLoss, loss);
                 }
-            
+
                 epochLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(layerInput.Shape[0]));
-                Console.WriteLine($"Layer {layer+1}, Epoch {epoch+1}/{pretrainingEpochs}, Loss: {epochLoss}");
+                Console.WriteLine($"Layer {layer + 1}, Epoch {epoch + 1}/{pretrainingEpochs}, Loss: {epochLoss}");
             }
-        
+
             // Copy the trained weights and biases to our DBM
             _layerWeights[layer] = new Tensor<T>(
-                _layerWeights[layer].Shape, 
+                _layerWeights[layer].Shape,
                 tmpRBM.GetParameters().GetSubVector(0, _layerSizes[layer] * _layerSizes[layer + 1]));
-        
+
             _layerBiases[layer] = new Tensor<T>(
                 _layerBiases[layer].Shape,
                 tmpRBM.GetParameters().GetSubVector(
-                    _layerSizes[layer] * _layerSizes[layer + 1], 
+                    _layerSizes[layer] * _layerSizes[layer + 1],
                     _layerSizes[layer]));
-        
+
             // Generate activations for the next layer
             if (layer < _layerSizes.Count - 2)
             {
                 layerInput = PropagateToLayer(input, layer + 1);
             }
         }
-    
+
         Console.WriteLine("Layer-wise pretraining complete.");
     }
 

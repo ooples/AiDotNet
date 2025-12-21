@@ -43,7 +43,7 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     private readonly TimeSeriesRegressionOptions<T> _options;
-    
+
     /// <summary>
     /// The underlying time series model that handles the core prediction logic.
     /// </summary>

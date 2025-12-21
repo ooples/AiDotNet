@@ -126,7 +126,7 @@ public class CompositePromptTemplateTests
             .Add(new SimplePromptTemplate("{name}"))
             .Add(new SimplePromptTemplate("{name}"));
 
-        Assert.Single(composite.InputVariables.Where(v => v == "name"));
+        Assert.Single(composite.InputVariables, v => v == "name");
     }
 
     [Fact]

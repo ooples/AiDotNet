@@ -82,13 +82,13 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     public Tensor(int[] dimensions, Matrix<T> matrix) : base(dimensions)
     {
         int totalSize = dimensions.Aggregate(1, (a, b) => a * b);
-    
+
         if (matrix.Rows * matrix.Columns != totalSize)
         {
             throw new ArgumentException($"Matrix size ({matrix.Rows}ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â{matrix.Columns} = {matrix.Rows * matrix.Columns}) " +
                                         $"does not match the specified tensor dimensions (total elements: {totalSize})");
         }
-    
+
         if (dimensions.Length == 2 && (dimensions[0] != matrix.Rows || dimensions[1] != matrix.Columns))
         {
             throw new ArgumentException($"For a 2D tensor, matrix dimensions must match exactly. " +
@@ -121,7 +121,7 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     /// This is useful when you need to iterate through all elements without worrying about dimensions.
     /// </para>
     /// </remarks>
-    public T this[int flatIndex]
+    public override T this[int flatIndex]
     {
         get => GetFlat(flatIndex);
         set => SetFlat(flatIndex, value);
@@ -423,13 +423,13 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     public static Complex<T> GetComplex(Tensor<T> tensor, int index)
     {
         var value = tensor[index];
-    
+
         // If the value is already a Complex<T>, return it
         if (value is Complex<T> complex)
         {
             return complex;
         }
-    
+
         // Otherwise, create a new Complex<T> with the value as the real part
         // and zero as the imaginary part
         return new Complex<T>(value, _numOps.Zero);
@@ -2035,13 +2035,13 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
         {
             throw new ArgumentNullException(nameof(vector), "Source vector cannot be null.");
         }
-    
+
         // If no shape is provided, create a 1D tensor with the same length as the vector
         if (shape == null || shape.Length == 0)
         {
             return new Tensor<T>([vector.Length], vector);
         }
-    
+
         // Calculate the total number of elements based on the shape
         int totalElements = 1;
         foreach (int dim in shape)
@@ -2050,16 +2050,16 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
             {
                 throw new ArgumentException($"Invalid dimension size {dim}. All dimensions must be positive.", nameof(shape));
             }
-        
+
             // Check for potential integer overflow
             if (int.MaxValue / dim < totalElements)
             {
                 throw new ArgumentException("The product of dimensions is too large and would cause an overflow.", nameof(shape));
             }
-        
+
             totalElements *= dim;
         }
-    
+
         // Verify that the vector has the correct number of elements
         if (totalElements != vector.Length)
         {
@@ -2067,7 +2067,7 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
                 $"Vector length ({vector.Length}) does not match the product of the specified dimensions ({totalElements}).",
                 nameof(shape));
         }
-    
+
         // Create a new tensor with the specified shape and data
         return new Tensor<T>(shape, vector);
     }
@@ -2344,7 +2344,7 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     /// This is different from element-wise multiplication, which would require both tensors to have the same shape.
     /// </para>
     /// </remarks>
-        public Tensor<T> Multiply(Tensor<T> other)
+    public Tensor<T> Multiply(Tensor<T> other)
     {
         // Support 2D matrix multiplication and 3D batch matrix multiplication
         if (Shape.Length == 2 && other.Shape.Length == 2)

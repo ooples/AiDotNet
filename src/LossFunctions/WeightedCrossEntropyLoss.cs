@@ -40,7 +40,7 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
     {
         _weights = weights ?? new Vector<T>(1) { NumOps.One };
     }
-    
+
     /// <summary>
     /// Calculates the Weighted Cross Entropy loss between predicted and actual values.
     /// </summary>
@@ -50,7 +50,7 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         // If weights are not provided, use uniform weights
         Vector<T> weights = _weights;
         if (weights == null || weights.Length != predicted.Length)
@@ -61,7 +61,7 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
                 weights[i] = NumOps.One;
             }
         }
-        
+
         T loss = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -76,10 +76,10 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
                 )
             ));
         }
-        
+
         return NumOps.Negate(loss);
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Weighted Cross Entropy loss function.
     /// </summary>
@@ -89,7 +89,7 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         // If weights are not provided, use uniform weights
         Vector<T> weights = _weights;
         if (weights == null || weights.Length != predicted.Length)
@@ -100,7 +100,7 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
                 weights[i] = NumOps.One;
             }
         }
-        
+
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -115,7 +115,7 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
                 )
             );
         }
-        
+
         return derivative;
     }
 }

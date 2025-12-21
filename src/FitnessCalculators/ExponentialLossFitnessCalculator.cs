@@ -46,7 +46,7 @@ public class ExponentialLossFitnessCalculator<T, TInput, TOutput> : FitnessCalcu
     /// better performance (0 would be a perfect model). This tells the system that smaller numbers are better.
     /// </para>
     /// </remarks>
-    public ExponentialLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) 
+    public ExponentialLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
     }
@@ -79,7 +79,7 @@ public class ExponentialLossFitnessCalculator<T, TInput, TOutput> : FitnessCalcu
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return new ExponentialLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+        return new ExponentialLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

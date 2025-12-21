@@ -156,8 +156,8 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// This is similar to how you might specify the size, number of rooms, and layout when building a house.
     /// </para>
     /// </remarks>
-    public Transformer(TransformerArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, 
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : 
+    public Transformer(TransformerArchitecture<T> architecture, ILossFunction<T>? lossFunction = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _transformerArchitecture = architecture;
@@ -234,10 +234,10 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     protected override void ValidateCustomLayers(List<ILayer<T>> layers)
     {
         base.ValidateCustomLayers(layers);
-    
+
         bool hasAttentionLayer = false;
         bool hasLayerNorm = false;
-    
+
         for (int i = 0; i < layers.Count; i++)
         {
             if (layers[i] is MultiHeadAttentionLayer<T>)
@@ -249,12 +249,12 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 hasLayerNorm = true;
             }
         }
-    
+
         if (!hasAttentionLayer)
         {
             throw new InvalidOperationException("Custom Transformer must include at least one MultiHeadAttentionLayer.");
         }
-    
+
         if (!hasLayerNorm)
         {
             throw new InvalidOperationException("Custom Transformer must include at least one LayerNormalizationLayer.");
@@ -660,7 +660,11 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         T dropoutRate = NumOps.FromDouble(reader.ReadDouble());
 
         // Read and reconstruct loss function and optimizer
-        _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader) ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        LossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader)
+            ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(_transformerArchitecture.TaskType);
+
+        _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader)
+            ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     /// <summary>

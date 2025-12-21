@@ -394,26 +394,26 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     {
         // Convert input tensor to vector
         Vector<T> inputVector = input.ToVector();
-        
+
         // Ensure the input vector has the correct size
         if (inputVector.Length != _size)
         {
             throw new ArgumentException($"Input vector length ({inputVector.Length}) does not match network size ({_size})");
         }
-        
+
         // Perform pattern recall
         Vector<T> recalledPattern = Recall(inputVector);
-        
+
         // Convert the recalled pattern back to a tensor with the same shape as the input
         Tensor<T> result = Tensor<T>.FromVector(recalledPattern);
-        
+
         // If the input has a non-trivial shape (not just a flat vector),
         // reshape the result to match the input shape
         if (input.Shape.Length > 1 || (input.Shape.Length == 1 && input.Shape[0] == recalledPattern.Length))
         {
             result = result.Reshape(input.Shape);
         }
-        
+
         return result;
     }
 
@@ -549,11 +549,11 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     {
         // Write network size
         writer.Write(_size);
-        
+
         // Write weight matrix
         writer.Write(_weights.Rows);
         writer.Write(_weights.Columns);
-        
+
         for (int i = 0; i < _weights.Rows; i++)
         {
             for (int j = 0; j < _weights.Columns; j++)
@@ -587,14 +587,14 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     {
         // Read network size
         _size = reader.ReadInt32();
-        
+
         // Read weight matrix dimensions
         int rows = reader.ReadInt32();
         int columns = reader.ReadInt32();
-        
+
         // Initialize weight matrix
         _weights = new Matrix<T>(rows, columns);
-        
+
         // Read weight values
         for (int i = 0; i < rows; i++)
         {
@@ -604,7 +604,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
             }
         }
     }
-    
+
     /// <summary>
     /// Calculates the energy of the current state of the Hopfield network.
     /// </summary>
@@ -637,11 +637,11 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentException($"State vector length ({state.Length}) does not match network size ({_size})");
         }
-        
+
         // Calculate energy: E = -0.5 * sum(sum(w_ij * s_i * s_j))
         // Lower energy = more stable state
         T energy = NumOps.Zero;
-        
+
         for (int i = 0; i < _size; i++)
         {
             for (int j = 0; j < _size; j++)
@@ -655,13 +655,13 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
                 );
             }
         }
-        
+
         // Multiply by 0.5 (we've double-counted each pair)
         energy = NumOps.Multiply(energy, NumOps.FromDouble(0.5));
-        
+
         return energy;
     }
-    
+
     /// <summary>
     /// Gets the maximum number of patterns that can be reliably stored in the network.
     /// </summary>

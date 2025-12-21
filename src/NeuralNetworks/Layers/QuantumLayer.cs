@@ -226,10 +226,10 @@ public class QuantumLayer<T> : LayerBase<T>
         int batchSize = outputGradient.Shape[0];
         int dimension = 1 << _numQubits;
         int inputDimension = _lastInput.Shape[1];
-        
+
         // Create input gradient tensor
         var inputGradient = new Tensor<T>([batchSize, inputDimension]);
-        
+
         for (int b = 0; b < batchSize; b++)
         {
             // Convert output gradient to complex form
@@ -248,7 +248,7 @@ public class QuantumLayer<T> : LayerBase<T>
                 {
                     // Use the Conjugate method from Complex<T> directly
                     var conjugate = _quantumCircuit[j, i].Conjugate();
-                    backpropGradient[i] = _complexOps.Add(backpropGradient[i], 
+                    backpropGradient[i] = _complexOps.Add(backpropGradient[i],
                         _complexOps.Multiply(conjugate, gradientState[j]));
                 }
             }
@@ -332,7 +332,7 @@ public class QuantumLayer<T> : LayerBase<T>
             // ... simplified logic matching Export ...
             // Input is [1, inputSize]. Flatten to [inputSize].
             var flatInput = Autodiff.TensorOperations<T>.Reshape(inputNode, inputSize);
-            
+
             // Padding
             int padAmount = dimension - inputSize;
             Autodiff.ComputationNode<T> paddedInput = flatInput;
@@ -399,7 +399,7 @@ public class QuantumLayer<T> : LayerBase<T>
                     var im = resGrad[dimension + i];
                     complexGrad[i] = new Complex<T>(r, im);
                 }
-                
+
                 UpdateAngleGradients(complexGrad, b);
             }
         }
@@ -573,14 +573,14 @@ public class QuantumLayer<T> : LayerBase<T>
     private void InitializeQuantumCircuit()
     {
         int dimension = 1 << _numQubits;
-            
+
         // Initialize quantum circuit as identity matrix
         for (int i = 0; i < dimension; i++)
         {
             for (int j = 0; j < dimension; j++)
             {
-                _quantumCircuit[i, j] = i == j ? 
-                    new Complex<T>(NumOps.One, NumOps.Zero) : 
+                _quantumCircuit[i, j] = i == j ?
+                    new Complex<T>(NumOps.One, NumOps.Zero) :
                     new Complex<T>(NumOps.Zero, NumOps.Zero);
                 _circuitReal[i, j] = _quantumCircuit[i, j].Real;
                 _circuitImag[i, j] = _quantumCircuit[i, j].Imaginary;
@@ -608,12 +608,12 @@ public class QuantumLayer<T> : LayerBase<T>
     private void ApplyRotation(int qubit, T angle)
     {
         int dimension = 1 << _numQubits;
-            
+
         // Calculate rotation parameters
         var halfAngle = NumOps.Divide(angle, NumOps.FromDouble(2.0));
         var cos = MathHelper.Cos(halfAngle);
         var sin = MathHelper.Sin(halfAngle);
-            
+
         // Create complex values for the rotation
         var cosComplex = new Complex<T>(cos, NumOps.Zero);
         var sinComplex = new Complex<T>(sin, NumOps.Zero);
@@ -631,13 +631,13 @@ public class QuantumLayer<T> : LayerBase<T>
                 for (int k = 0; k < dimension; k++)
                 {
                     var temp = tempCircuit[k, i];
-                        
+
                     // Apply rotation matrix
                     _quantumCircuit[k, i] = _complexOps.Add(
                         _complexOps.Multiply(cosComplex, temp),
                         _complexOps.Multiply(negativeImaginary, _complexOps.Multiply(sinComplex, tempCircuit[k, j]))
                     );
-                        
+
                     _quantumCircuit[k, j] = _complexOps.Add(
                         _complexOps.Multiply(imaginary, _complexOps.Multiply(sinComplex, temp)),
                         _complexOps.Multiply(cosComplex, tempCircuit[k, j])
@@ -660,26 +660,26 @@ public class QuantumLayer<T> : LayerBase<T>
     private void UpdateAngleGradients(Tensor<Complex<T>> gradientState, int batchIndex)
     {
         int dimension = 1 << _numQubits;
-        
+
         for (int qubit = 0; qubit < _numQubits; qubit++)
         {
             T qubitGradient = NumOps.Zero;
-            
+
             for (int i = 0; i < dimension; i++)
             {
                 if ((i & (1 << qubit)) == 0)
                 {
                     int j = i | (1 << qubit);
-                    
+
                     // Calculate gradient contribution for this qubit
                     var gradDiff = gradientState[j] * _quantumCircuit[j, i].Conjugate() -
                                    gradientState[i] * _quantumCircuit[i, j].Conjugate();
-                    
+
                     // Extract the real part of the complex number
                     qubitGradient = NumOps.Add(qubitGradient, gradDiff.Real);
                 }
             }
-            
+
             // Accumulate gradients across batches
             _angleGradients[qubit] = NumOps.Add(_angleGradients[qubit], qubitGradient);
         }
@@ -696,14 +696,14 @@ public class QuantumLayer<T> : LayerBase<T>
     private void ResetQuantumCircuit()
     {
         int dimension = 1 << _numQubits;
-    
+
         // Reset quantum circuit to identity matrix
         for (int i = 0; i < dimension; i++)
         {
             for (int j = 0; j < dimension; j++)
             {
-                _quantumCircuit[i, j] = i == j ? 
-                    new Complex<T>(NumOps.One, NumOps.Zero) : 
+                _quantumCircuit[i, j] = i == j ?
+                    new Complex<T>(NumOps.One, NumOps.Zero) :
                     new Complex<T>(NumOps.Zero, NumOps.Zero);
             }
         }

@@ -136,7 +136,7 @@ public class MultiModalEmbeddingModel<T> : EmbeddingModelBase<T>
         // Use ONNX-based sentence transformer for text embeddings
         var textModel = new ONNXSentenceTransformer<T>(_modelPath, _dimension, MaxTokens);
         var embedding = textModel.Embed(text);
-        
+
         return _normalizeEmbeddings ? embedding.Normalize() : embedding;
     }
 
@@ -157,7 +157,7 @@ public class MultiModalEmbeddingModel<T> : EmbeddingModelBase<T>
         // In production, this would use CLIP's image encoder with convolutional layers
         var values = new T[_dimension];
         var hash = GetImageHash(imagePath);
-        
+
         for (int i = 0; i < _dimension; i++)
         {
             var val = NumOps.FromDouble(Math.Sin((double)hash * (i + 1) * 0.003));
@@ -189,13 +189,13 @@ public class MultiModalEmbeddingModel<T> : EmbeddingModelBase<T>
         {
             int hash = 17;
             hash = (hash * 31) + imagePath.GetHashCode();
-            
+
             if (File.Exists(imagePath))
             {
                 var fileInfo = new FileInfo(imagePath);
                 hash = (hash * 31) + fileInfo.Length.GetHashCode();
             }
-            
+
             return hash;
         }
     }

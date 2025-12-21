@@ -44,12 +44,12 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     /// Options for configuring the AdaBoost.R2 regression algorithm.
     /// </summary>
     private AdaBoostR2RegressionOptions _options;
-    
+
     /// <summary>
     /// The ensemble of decision trees and their corresponding weights.
     /// </summary>
     private List<(DecisionTreeRegression<T> Tree, T Weight)> _ensemble;
-    
+
     /// <summary>
     /// Random number generator for creating diverse decision trees.
     /// </summary>
@@ -59,7 +59,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     /// Gets the number of decision trees in the ensemble.
     /// </summary>
     public override int NumberOfTrees => _options.NumberOfEstimators;
-    
+
     /// <summary>
     /// Gets the maximum depth of each decision tree in the ensemble.
     /// </summary>
@@ -226,7 +226,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 0; i < input.Rows; i++)
         {
-            result[i] = predictions.Aggregate(NumOps.Zero, (acc, p) => 
+            result[i] = predictions.Aggregate(NumOps.Zero, (acc, p) =>
                 NumOps.Add(acc, NumOps.Multiply(p.prediction[i], p.weight)));
             result[i] = NumOps.Divide(result[i], sumWeights);
         }
@@ -293,7 +293,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     private T CalculateAverageError(Vector<T> errors, Vector<T> sampleWeights)
     {
         var maxError = errors.Max();
-        var weightedErrors = errors.Select((e, i) => 
+        var weightedErrors = errors.Select((e, i) =>
             NumOps.Multiply(NumOps.Divide(e, maxError), sampleWeights[i]));
 
         return NumOps.Divide(weightedErrors.Aggregate(NumOps.Zero, NumOps.Add), sampleWeights.Sum());
@@ -332,7 +332,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     private Vector<T> UpdateSampleWeights(Vector<T> sampleWeights, Vector<T> errors, T beta)
     {
         var maxError = errors.Max();
-        var updatedWeights = sampleWeights.Select((w, i) => 
+        var updatedWeights = sampleWeights.Select((w, i) =>
             NumOps.Multiply(w, NumOps.Power(beta, NumOps.Subtract(NumOps.One, NumOps.Divide(errors[i], maxError)))));
         var sumWeights = updatedWeights.Aggregate(NumOps.Zero, NumOps.Add);
 
@@ -469,8 +469,8 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
         var serializableModel = new
         {
             Options = _options,
-            Ensemble = _ensemble.Select(e => new 
-            { 
+            Ensemble = _ensemble.Select(e => new
+            {
                 Tree = Convert.ToBase64String(e.Tree.Serialize()),
                 Weight = e.Weight
             }).ToList(),

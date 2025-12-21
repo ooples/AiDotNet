@@ -94,7 +94,7 @@ public class LearnedSparseEncoderExpansion : QueryExpansionBase
 
         // Simulate learned sparse expansion using TF-IDF-like term importance
         var expansionTerms = GenerateExpansionTerms(query);
-        
+
         if (expansionTerms.Count > 0)
         {
             var expandedQuery = BuildExpandedQuery(query, expansionTerms);
@@ -198,7 +198,7 @@ public class LearnedSparseEncoderExpansion : QueryExpansionBase
     private string BuildExpandedQuery(string originalQuery, List<(string term, double weight)> expansionTerms)
     {
         var sb = new StringBuilder(originalQuery);
-        
+
         // Add expansion terms with implicit weights (repetition for importance)
         foreach (var kvp in expansionTerms.Take(5))
         {

@@ -345,10 +345,10 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var attention = _selfAttention.Forward(input);
         // Residual connection: input + attention
         var residual1 = Engine.TensorAdd(input, attention);
-        
+
         var normalized1 = _norm1.Forward(residual1);
         var feedForward = _feedForward.Forward(normalized1);
-        
+
         // Residual connection: normalized1 + feedForward
         var residual2 = Engine.TensorAdd(normalized1, feedForward);
         var output = _norm2.Forward(residual2);

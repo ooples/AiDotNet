@@ -622,25 +622,25 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     {
         StringBuilder sb = new StringBuilder();
         sb.AppendLine($"ARMA({_arOrder},{_maOrder}) Model");
-    
+
         if (_arCoefficients.Length > 0)
         {
             sb.AppendLine("AR Coefficients:");
             for (int i = 0; i < _arOrder; i++)
             {
-                sb.AppendLine($"  AR[{i+1}] = {Convert.ToDouble(_arCoefficients[i]):F4}");
+                sb.AppendLine($"  AR[{i + 1}] = {Convert.ToDouble(_arCoefficients[i]):F4}");
             }
         }
-    
+
         if (_maCoefficients.Length > 0)
         {
             sb.AppendLine("MA Coefficients:");
             for (int i = 0; i < _maOrder; i++)
             {
-                sb.AppendLine($"  MA[{i+1}] = {Convert.ToDouble(_maCoefficients[i]):F4}");
+                sb.AppendLine($"  MA[{i + 1}] = {Convert.ToDouble(_maCoefficients[i]):F4}");
             }
         }
-    
+
         return sb.ToString();
     }
 
@@ -671,7 +671,7 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new ARMAModel<T>((ARMAOptions<T>)Options);
-    
+
         // Copy trained coefficients
         if (_arCoefficients.Length > 0)
         {
@@ -681,7 +681,7 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
                 clone._arCoefficients[i] = _arCoefficients[i];
             }
         }
-    
+
         if (_maCoefficients.Length > 0)
         {
             clone._maCoefficients = new Vector<T>(_maCoefficients.Length);
@@ -690,7 +690,7 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
                 clone._maCoefficients[i] = _maCoefficients[i];
             }
         }
-    
+
         return clone;
     }
 
@@ -787,20 +787,20 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         if (input.Length < minLength)
         {
             throw new ArgumentException(
-                $"Input vector must contain at least {minLength} elements for an ARMA({_arOrder},{_maOrder}) model.", 
+                $"Input vector must contain at least {minLength} elements for an ARMA({_arOrder},{_maOrder}) model.",
                 nameof(input));
         }
-    
+
         // Create a matrix with a single row
         Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
         for (int i = 0; i < input.Length; i++)
         {
             singleRowMatrix[0, i] = input[i];
         }
-    
+
         // Use the existing Predict method
         Vector<T> predictions = Predict(singleRowMatrix);
-    
+
         // Return the single prediction
         return predictions[0];
     }

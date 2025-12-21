@@ -58,7 +58,7 @@ public class JaccardLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculato
     /// making it simpler to use.
     /// </para>
     /// </remarks>
-    public JaccardLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) 
+    public JaccardLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
     }
@@ -96,7 +96,7 @@ public class JaccardLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculato
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return new JaccardLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+        return new JaccardLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

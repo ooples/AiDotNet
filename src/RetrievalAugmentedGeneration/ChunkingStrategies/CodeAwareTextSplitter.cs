@@ -32,7 +32,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         {
             var separators = GetLanguageSeparators(_language);
             var chunks = SplitTextRecursive(text, separators);
-            
+
             var position = 0;
             foreach (var chunk in chunks)
             {
@@ -70,7 +70,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
             }
 
             var currentChunk = new StringBuilder();
-            
+
             foreach (var separator in separators)
             {
                 var splits = text.Split(new[] { separator }, StringSplitOptions.None);
@@ -87,7 +87,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
                             currentChunk = new StringBuilder(currentChunk.ToString(currentChunk.Length - overlap, overlap));
                         }
                     }
-                    
+
                     // Handle splits larger than ChunkSize by breaking them down
                     if (currentChunk.Length == 0 && split.Length > ChunkSize)
                     {
@@ -103,7 +103,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
 
                     if (currentChunk.Length > 0)
                         currentChunk.Append(separator);
-                    
+
                     currentChunk.Append(split);
                 }
 

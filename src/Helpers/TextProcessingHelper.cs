@@ -35,7 +35,7 @@ namespace AiDotNet.Helpers
                 {
                     var lastChars = text.Substring(Math.Max(0, i - maxEndingLength + 1), Math.Min(maxEndingLength, i + 1));
                     var matchedEnding = sentenceEndings.FirstOrDefault(ending => lastChars.EndsWith(ending));
-                        
+
                     if (matchedEnding != null)
                     {
                         sentences.Add(currentSentence.ToString().Trim());

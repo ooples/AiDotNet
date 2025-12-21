@@ -195,7 +195,7 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
         // Default behavior: Element-wise multiplication of derivative and gradient
         // This works for ReLU, Sigmoid, Tanh, etc.
         // Derived classes like Softmax MUST override this.
-        
+
         var derivative = Derivative(input);
         return Engine.TensorMultiply(derivative, outputGradient);
     }

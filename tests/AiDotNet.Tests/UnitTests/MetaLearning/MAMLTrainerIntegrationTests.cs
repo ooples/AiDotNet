@@ -1,165 +1,122 @@
-using AiDotNet.Data.Loaders;
+using AiDotNet.Data.Structures;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LossFunctions;
-using AiDotNet.MetaLearning.Config;
-using AiDotNet.MetaLearning.Trainers;
-using AiDotNet.Models.Results;
+using AiDotNet.MetaLearning;
+using AiDotNet.MetaLearning.Algorithms;
+using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning;
 
-// Type alias for cleaner test code
-using MAMLTrainerDouble = MAMLTrainer<double, Tensor<double>, Tensor<double>>;
-using SimpleMockModelDouble = SimpleMockModel;
-
 /// <summary>
-/// Integration tests for MAMLTrainer demonstrating meta-learning framework functionality.
+/// Integration tests for MAMLAlgorithm demonstrating meta-learning framework functionality.
 /// </summary>
 /// <remarks>
 /// These tests verify that the MAML meta-learning framework operates correctly:
 /// - Parameters are updated through meta-training
 /// - Training completes without errors
-/// - Metadata is properly tracked
 /// - The two-loop (inner/outer) structure works as expected
 /// - Query set evaluation drives meta-optimization
 /// </remarks>
 public class MAMLTrainerIntegrationTests
 {
-    #region Helper Methods
+    private SimpleMockModel CreateMockModel() => new SimpleMockModel(50);
+
+    private MAMLOptions<double, Tensor<double>, Tensor<double>> CreateDefaultOptions()
+    {
+        var mockModel = CreateMockModel();
+        return new MAMLOptions<double, Tensor<double>, Tensor<double>>(mockModel)
+        {
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.02,
+            OuterLearningRate = 0.01,
+            AdaptationSteps = 5
+        };
+    }
 
     /// <summary>
-    /// Generates a classification dataset where features are derived from sine waves with task-specific amplitudes and phases.
-    /// Labels are discrete class indices (0 to numTasks-1) for N-way episodic classification tasks.
-    /// NOTE: This is classification, not regression - Y contains class labels, not continuous sine values.
+    /// Creates a mock task for testing purposes.
     /// </summary>
-    private (Matrix<double> X, Vector<double> Y) GenerateSineWaveFeaturesDataset(
-        int numTasks,
-        int samplesPerTask,
-        double minX = 0.0,
-        double maxX = 2 * Math.PI)
+    private IMetaLearningTask<double, Tensor<double>, Tensor<double>> CreateMockTask(int seed = 0)
     {
-        var random = new Random(42);
-        int totalSamples = numTasks * samplesPerTask;
-        var X = new Matrix<double>(totalSamples, 1);
-        var Y = new Vector<double>(totalSamples);
+        var supportInput = new Tensor<double>(new int[] { 15, 10 });  // 5 classes x 3 shots
+        var supportOutput = new Tensor<double>(new int[] { 15 });
+        var queryInput = new Tensor<double>(new int[] { 50, 10 });   // 5 classes x 10 queries
+        var queryOutput = new Tensor<double>(new int[] { 50 });
 
-        for (int taskIdx = 0; taskIdx < numTasks; taskIdx++)
+        // Fill with seeded random data for reproducibility
+        var random = new Random(42 + seed);
+        for (int i = 0; i < supportInput.Shape[0]; i++)
         {
-            // Random amplitude and phase for each task/class
-            double amplitude = 0.5 + random.NextDouble(); // Range: [0.5, 1.5]
-            double phase = random.NextDouble() * 2 * Math.PI; // Range: [0, 2π]
-
-            for (int sampleIdx = 0; sampleIdx < samplesPerTask; sampleIdx++)
+            for (int j = 0; j < supportInput.Shape[1]; j++)
             {
-                int rowIdx = taskIdx * samplesPerTask + sampleIdx;
-
-                // Random x value
-                double x = minX + random.NextDouble() * (maxX - minX);
-
-                // Feature: sine wave value with task-specific amplitude and phase
-                double sineValue = amplitude * Math.Sin(x + phase);
-
-                X[rowIdx, 0] = sineValue;
-                Y[rowIdx] = taskIdx; // Class label (0 to numTasks-1)
+                supportInput[new[] { i, j }] = random.NextDouble() * 2 - 1;
             }
+            supportOutput[new[] { i }] = i % 5; // Class labels 0-4
         }
 
-        return (X, Y);
-    }
-
-    /// <summary>
-    /// Generates a single classification task with features based on sine wave patterns.
-    /// </summary>
-    private (Tensor<double> X, Tensor<double> Y) GenerateSineWaveTask(
-        double amplitude,
-        double phase,
-        int classLabel,
-        int numSamples,
-        double minX = 0.0,
-        double maxX = 2 * Math.PI,
-        int? seed = null)
-    {
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
-        var X = new Tensor<double>(new[] { numSamples, 1 });
-        var Y = new Tensor<double>(new[] { numSamples, 1 });
-
-        for (int i = 0; i < numSamples; i++)
+        for (int i = 0; i < queryInput.Shape[0]; i++)
         {
-            double x = minX + random.NextDouble() * (maxX - minX);
-            double sineValue = amplitude * Math.Sin(x + phase);
-
-            X[new[] { i, 0 }] = sineValue;
-            Y[new[] { i, 0 }] = classLabel; // Classification label
+            for (int j = 0; j < queryInput.Shape[1]; j++)
+            {
+                queryInput[new[] { i, j }] = random.NextDouble() * 2 - 1;
+            }
+            queryOutput[new[] { i }] = i % 5; // Class labels 0-4
         }
 
-        return (X, Y);
-    }
-
-    /// <summary>
-    /// Computes the mean squared error between predictions and targets.
-    /// </summary>
-    private double ComputeMSE(Tensor<double> predictions, Tensor<double> targets)
-    {
-        double sum = 0;
-        int count = predictions.Shape[0];
-
-        for (int i = 0; i < count; i++)
+        return new MetaLearningTask<double, Tensor<double>, Tensor<double>>
         {
-            double diff = predictions[new[] { i, 0 }] - targets[new[] { i, 0 }];
-            sum += diff * diff;
-        }
-
-        return sum / count;
+            SupportSetX = supportInput,
+            SupportSetY = supportOutput,
+            QuerySetX = queryInput,
+            QuerySetY = queryOutput,
+            NumWays = 5,
+            NumShots = 3,
+            NumQueryPerClass = 10,
+            Name = $"test-task-{seed}"
+        };
     }
 
-    #endregion
+    private TaskBatch<double, Tensor<double>, Tensor<double>> CreateTaskBatch(int batchSize)
+    {
+        var tasks = Enumerable.Range(0, batchSize)
+            .Select(i => CreateMockTask(i))
+            .ToArray();
+        return new TaskBatch<double, Tensor<double>, Tensor<double>>(tasks);
+    }
 
     #region Integration Tests
 
     [Fact]
-    public void MetaTrain_WithEpisodicData_UpdatesParametersCorrectly()
+    public void MetaTrain_WithMultipleIterations_UpdatesParametersCorrectly()
     {
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-
-        // Generate meta-training dataset with 20 tasks
-        var (X, Y) = GenerateSineWaveFeaturesDataset(numTasks: 20, samplesPerTask: 25);
-
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
-            datasetX: X,
-            datasetY: Y,
-            nWay: 5,       // 5 different tasks per meta-batch
-            kShot: 5,      // 5 samples to learn from (support set)
-            queryShots: 10, // 10 samples to evaluate (query set)
-            seed: 42);
-
-        var config = new MAMLTrainerConfig<double>(
-            innerLearningRate: 0.02,
-            metaLearningRate: 0.01,
-            innerSteps: 5,      // MAML typically uses fewer inner steps
-            metaBatchSize: 4,   // MAML uses batch meta-updates
-            numMetaIterations: 50);
-        var trainer = new MAMLTrainerDouble(
-            metaModel: model,
-            lossFunction: lossFunction,
-            dataLoader: dataLoader,
-            config: config);
+        var options = CreateDefaultOptions();
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
         // Get initial parameters
-        var initialParams = model.GetParameters();
+        var metaModel = algorithm.GetMetaModel();
+        var initialParams = metaModel.GetParameters();
+        var initialParamsClone = initialParams.Clone();
 
-        // Act - Meta-train for 50 iterations
-        var result = trainer.Train();
+        // Act - Meta-train for multiple iterations
+        var lossHistory = new List<double>();
+        for (int i = 0; i < 10; i++)
+        {
+            var taskBatch = CreateTaskBatch(4);  // 4 tasks per batch
+            var loss = algorithm.MetaTrain(taskBatch);
+            lossHistory.Add(loss);
+        }
 
         // Assert - Parameters should have changed
-        var finalParams = model.GetParameters();
+        var finalParams = metaModel.GetParameters();
         bool paramsChanged = false;
-        for (int i = 0; i < initialParams.Length; i++)
+        for (int i = 0; i < initialParamsClone.Length; i++)
         {
-            if (Math.Abs(finalParams[i] - initialParams[i]) > 1e-6)
+            if (Math.Abs(finalParams[i] - initialParamsClone[i]) > 1e-10)
             {
                 paramsChanged = true;
                 break;
@@ -167,12 +124,8 @@ public class MAMLTrainerIntegrationTests
         }
 
         Assert.True(paramsChanged, "Meta-training should update model parameters");
-
-        // Assert - Training should complete successfully
-        Assert.NotNull(result);
-        Assert.Equal(50, result.TotalIterations);
-        Assert.NotNull(result.LossHistory);
-        Assert.Equal(50, result.LossHistory.Length);
+        Assert.Equal(10, lossHistory.Count);
+        Assert.All(lossHistory, loss => Assert.True(loss >= 0, "Loss should be non-negative"));
     }
 
     [Fact]
@@ -181,114 +134,114 @@ public class MAMLTrainerIntegrationTests
         // This test verifies the framework correctly processes multiple meta-learning tasks
         // and that MAML uses query set evaluation (key difference from Reptile)
 
-        // Arrange - Create two identical models
-        var metaTrainedModel = new SimpleMockModelDouble(10);
-        var baselineModel = new SimpleMockModelDouble(10);
+        // Arrange - Create two algorithms with same initial model
+        var model1 = new SimpleMockModel(50);
+        var model2 = new SimpleMockModel(50);
 
-        // Make sure they start with the same parameters
-        var initialParams = metaTrainedModel.GetParameters();
-        baselineModel.SetParameters(initialParams);
+        // Initialize both with same parameters
+        var initialParams = model1.GetParameters();
+        model2.SetParameters(initialParams.Clone());
 
-        var lossFunction = new MeanSquaredErrorLoss<double>();
+        var options1 = new MAMLOptions<double, Tensor<double>, Tensor<double>>(model1)
+        {
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.02,
+            OuterLearningRate = 0.01,
+            AdaptationSteps = 5
+        };
 
-        // Generate meta-training dataset
-        var (X, Y) = GenerateSineWaveFeaturesDataset(numTasks: 20, samplesPerTask: 25);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options1);
 
-        // Meta-train only one model
-        var config = new MAMLTrainerConfig<double>(
-            innerLearningRate: 0.02,
-            metaLearningRate: 0.01,
-            innerSteps: 5,
-            metaBatchSize: 4,
-            numMetaIterations: 50);
-        var trainer = new MAMLTrainerDouble(
-            metaModel: metaTrainedModel,
-            lossFunction: lossFunction,
-            dataLoader: dataLoader,
-            config: config);
+        // Act - Meta-train only one model
+        for (int i = 0; i < 20; i++)
+        {
+            var taskBatch = CreateTaskBatch(4);
+            algorithm.MetaTrain(taskBatch);
+        }
 
-        var trainingResult = trainer.Train();
+        // Assert - Meta-trained model should have different parameters than baseline
+        var metaTrainedParams = model1.GetParameters();
+        var baselineParams = model2.GetParameters();
 
-        // Act - Both models adapt to a new task (not in meta-training set)
-        var newTask = dataLoader.GetNextTask();
+        bool paramsDifferent = false;
+        for (int i = 0; i < metaTrainedParams.Length; i++)
+        {
+            if (Math.Abs(metaTrainedParams[i] - baselineParams[i]) > 1e-10)
+            {
+                paramsDifferent = true;
+                break;
+            }
+        }
 
-        // Meta-trained model adapts
-        var metaAdaptResult = trainer.AdaptAndEvaluate(newTask);
-
-        // Baseline model would need manual adaptation (simulated here)
-        // For this test, we just verify meta-trained model produces results
-
-        // Assert - Meta-trained model should successfully adapt
-        Assert.NotNull(metaAdaptResult);
-        Assert.True(metaAdaptResult.AdaptationSteps > 0);
-
-        // Assert - Training result should show progress
-        Assert.NotNull(trainingResult);
-        Assert.True(trainingResult.LossHistory.Length > 0);
+        Assert.True(paramsDifferent, "Meta-training should change parameters differently than baseline");
     }
 
     [Fact]
-    public void AdaptAndEvaluate_TracksLossImprovement()
+    public void Adapt_ProducesTaskSpecificModel()
     {
-        // This test verifies that MAML adaptation reduces loss (key meta-learning property)
+        // This test verifies that MAML adaptation creates a task-specialized model
 
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = GenerateSineWaveFeaturesDataset(numTasks: 20, samplesPerTask: 25);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
-            X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
+        var options = CreateDefaultOptions();
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
         // Meta-train first
-        var config = new MAMLTrainerConfig<double>(
-            innerLearningRate: 0.02,
-            metaLearningRate: 0.01,
-            innerSteps: 5,
-            metaBatchSize: 4,
-            numMetaIterations: 30);
-        var trainer = new MAMLTrainerDouble(model, lossFunction, dataLoader, config);
-        trainer.Train();
+        for (int i = 0; i < 10; i++)
+        {
+            var taskBatch = CreateTaskBatch(4);
+            algorithm.MetaTrain(taskBatch);
+        }
 
-        // Get a test task
-        var task = dataLoader.GetNextTask();
+        // Get original meta-model parameters
+        var metaModel = algorithm.GetMetaModel();
+        var metaParams = metaModel.GetParameters().Clone();
 
-        // Act - Adapt and evaluate
-        var result = trainer.AdaptAndEvaluate(task);
+        // Act - Adapt to a new task
+        var newTask = CreateMockTask(100);  // Different seed for novel task
+        var adaptedModel = algorithm.Adapt(newTask);
 
-        // Assert - Should track per-step losses
-        Assert.NotNull(result.PerStepLosses);
-        Assert.True(result.PerStepLosses.Count > 1); // Initial + at least one adaptation step
+        // Assert - Adapted model should be different from meta-model
+        Assert.NotNull(adaptedModel);
 
-        // Assert - Initial loss should be recorded
-        Assert.Contains("initial_query_loss", result.AdditionalMetrics.Keys);
-        Assert.Contains("loss_improvement", result.AdditionalMetrics.Keys);
+        // The adapted model should be a specialized version
+        // Meta-model parameters should remain unchanged (adaptation doesn't modify meta-model)
+        var currentMetaParams = metaModel.GetParameters();
+        bool metaParamsUnchanged = true;
+        for (int i = 0; i < metaParams.Length; i++)
+        {
+            if (Math.Abs(currentMetaParams[i] - metaParams[i]) > 1e-15)
+            {
+                metaParamsUnchanged = false;
+                break;
+            }
+        }
+        Assert.True(metaParamsUnchanged, "Adaptation should not modify meta-model parameters");
     }
 
     [Fact]
-    public void Evaluate_ProducesConsistentMetrics()
+    public void Evaluate_ProducesValidMetrics()
     {
-        // This test verifies evaluation produces valid metrics
+        // This test verifies evaluation produces valid loss values
 
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = GenerateSineWaveFeaturesDataset(numTasks: 20, samplesPerTask: 25);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
-            X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
-        var trainer = new MAMLTrainerDouble(model, lossFunction, dataLoader);
+        var options = CreateDefaultOptions();
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
-        // Act - Evaluate on multiple tasks
-        var result = trainer.Evaluate(numTasks: 20);
+        // Meta-train first
+        for (int i = 0; i < 5; i++)
+        {
+            var taskBatch = CreateTaskBatch(4);
+            algorithm.MetaTrain(taskBatch);
+        }
+
+        // Act - Evaluate on a task batch
+        var evalBatch = CreateTaskBatch(10);
+        var evalLoss = algorithm.Evaluate(evalBatch);
 
         // Assert
-        Assert.NotNull(result);
-        Assert.NotNull(result.PerTaskAccuracies);
-        Assert.NotNull(result.PerTaskLosses);
-        Assert.Equal(20, result.PerTaskAccuracies.Length);
-        Assert.Equal(20, result.PerTaskLosses.Length);
-        Assert.NotNull(result.AccuracyStats);
-        Assert.NotNull(result.LossStats);
+        Assert.True(evalLoss >= 0, "Evaluation loss should be non-negative");
+        Assert.False(double.IsNaN(evalLoss), "Evaluation loss should not be NaN");
+        Assert.False(double.IsPositiveInfinity(evalLoss), "Evaluation loss should not be infinite");
     }
 
     [Fact]
@@ -297,58 +250,131 @@ public class MAMLTrainerIntegrationTests
         // This test verifies FOMAML (first-order approximation) works
 
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = GenerateSineWaveFeaturesDataset(numTasks: 20, samplesPerTask: 25);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
-            X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
+        var mockModel = CreateMockModel();
+        var options = new MAMLOptions<double, Tensor<double>, Tensor<double>>(mockModel)
+        {
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.02,
+            OuterLearningRate = 0.01,
+            AdaptationSteps = 5,
+            UseFirstOrder = true  // FOMAML
+        };
 
-        var config = new MAMLTrainerConfig<double>(
-            innerLearningRate: 0.02,
-            metaLearningRate: 0.01,
-            innerSteps: 5,
-            metaBatchSize: 4,
-            numMetaIterations: 20,
-            useFirstOrderApproximation: true); // FOMAML
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
-        var trainer = new MAMLTrainerDouble(model, lossFunction, dataLoader, config);
-
-        // Act
-        var result = trainer.Train();
+        // Act - Train with first-order approximation
+        var losses = new List<double>();
+        for (int i = 0; i < 10; i++)
+        {
+            var taskBatch = CreateTaskBatch(4);
+            var loss = algorithm.MetaTrain(taskBatch);
+            losses.Add(loss);
+        }
 
         // Assert - Training should complete successfully
-        Assert.NotNull(result);
-        Assert.Equal(20, result.TotalIterations);
-
-        // Assert - Config should reflect FOMAML
-        var mamlConfig = (MAMLTrainerConfig<double>)trainer.Config;
-        Assert.True(mamlConfig.UseFirstOrderApproximation);
+        Assert.Equal(10, losses.Count);
+        Assert.All(losses, loss => Assert.True(loss >= 0, "Loss should be non-negative"));
+        Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
     }
 
     [Fact]
-    public void MetaTrainStep_ProducesValidMetrics()
+    public void MetaTrain_LongTraining_TracksLossCorrectly()
     {
-        // This test verifies a single meta-training step produces valid metrics
-
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = GenerateSineWaveFeaturesDataset(numTasks: 20, samplesPerTask: 25);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
-            X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
-        var trainer = new MAMLTrainerDouble(model, lossFunction, dataLoader);
+        var options = CreateDefaultOptions();
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
-        // Act
-        var stepResult = trainer.MetaTrainStep(batchSize: 4);
+        // Act - Train for many iterations
+        var losses = new List<double>();
+        for (int i = 0; i < 50; i++)
+        {
+            var taskBatch = CreateTaskBatch(4);
+            var loss = algorithm.MetaTrain(taskBatch);
+            losses.Add(loss);
+        }
 
         // Assert
-        Assert.NotNull(stepResult);
-        Assert.Equal(1, trainer.CurrentIteration);
-        Assert.Equal(4, stepResult.NumTasks);
-        Assert.True(stepResult.TimeMs >= 0);
+        Assert.Equal(50, losses.Count);
 
-        // Meta-loss and task loss should be equal for MAML (query set loss)
-        Assert.Equal(stepResult.MetaLoss, stepResult.TaskLoss);
+        // Check that we have recorded valid losses
+        double firstLoss = losses[0];
+        double lastLoss = losses[losses.Count - 1];
+
+        Assert.True(firstLoss >= 0, "Initial loss should be non-negative");
+        Assert.True(lastLoss >= 0, "Final loss should be non-negative");
+        Assert.True(lastLoss < double.MaxValue, "Loss should not explode");
+        Assert.True(!double.IsNaN(lastLoss), "Loss should not be NaN");
+    }
+
+    [Fact]
+    public void MetaTrain_WithLargeBatch_ProcessesAllTasks()
+    {
+        // Arrange
+        var options = CreateDefaultOptions();
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+
+        // Act - Process a larger batch
+        var largeBatch = CreateTaskBatch(8);  // 8 tasks
+        var loss = algorithm.MetaTrain(largeBatch);
+
+        // Assert
+        Assert.True(loss >= 0, "Loss should be non-negative");
+        Assert.False(double.IsNaN(loss), "Loss should not be NaN");
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    [InlineData(5)]
+    [InlineData(10)]
+    public void MetaTrain_WithDifferentAdaptationSteps_CompletesSuccessfully(int adaptationSteps)
+    {
+        // Arrange
+        var mockModel = CreateMockModel();
+        var options = new MAMLOptions<double, Tensor<double>, Tensor<double>>(mockModel)
+        {
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.02,
+            OuterLearningRate = 0.01,
+            AdaptationSteps = adaptationSteps
+        };
+
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+
+        // Act
+        var taskBatch = CreateTaskBatch(4);
+        var loss = algorithm.MetaTrain(taskBatch);
+
+        // Assert
+        Assert.True(loss >= 0, $"Loss should be non-negative for adaptation steps={adaptationSteps}");
+        Assert.False(double.IsNaN(loss), $"Loss should not be NaN for adaptation steps={adaptationSteps}");
+    }
+
+    [Theory]
+    [InlineData(0.001)]
+    [InlineData(0.01)]
+    [InlineData(0.1)]
+    public void MetaTrain_WithDifferentLearningRates_CompletesSuccessfully(double innerLr)
+    {
+        // Arrange
+        var mockModel = CreateMockModel();
+        var options = new MAMLOptions<double, Tensor<double>, Tensor<double>>(mockModel)
+        {
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = innerLr,
+            OuterLearningRate = 0.01,
+            AdaptationSteps = 5
+        };
+
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+
+        // Act
+        var taskBatch = CreateTaskBatch(4);
+        var loss = algorithm.MetaTrain(taskBatch);
+
+        // Assert
+        Assert.True(loss >= 0, $"Loss should be non-negative for inner LR={innerLr}");
+        Assert.False(double.IsNaN(loss), $"Loss should not be NaN for inner LR={innerLr}");
     }
 
     #endregion

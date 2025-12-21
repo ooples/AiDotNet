@@ -75,7 +75,7 @@ public class RegressionOptions<T> : ModelOptions
     /// </para>
     /// </remarks>
     public IMatrixDecomposition<T>? DecompositionMethod { get; set; }
-    
+
     /// <summary>
     /// Gets or sets whether the regression model should include an intercept term (also known as bias term).
     /// </summary>

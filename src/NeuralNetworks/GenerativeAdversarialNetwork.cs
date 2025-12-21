@@ -492,13 +492,13 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Create a tensor of shape [batchSize, 1] filled with the specified value
         var shape = new int[] { batchSize, 1 };
         var tensor = new Tensor<T>(shape);
-    
+
         // Fill with the specified value
         for (int i = 0; i < batchSize; i++)
         {
             tensor[i, 0] = value;
         }
-    
+
         return tensor;
     }
 
@@ -532,28 +532,28 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Ensure generator is in training mode and discriminator is not (we don't want to update discriminator)
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(false); // Freeze discriminator weights
-    
+
         // Forward pass through discriminator with generated images
         Tensor<T> discriminatorOutput = Discriminator.Predict(generatedImages);
-    
+
         // Calculate generator loss - we want the discriminator to classify fake images as real
         T loss = CalculateBatchLoss(discriminatorOutput, targetLabels);
-    
+
         // Calculate gradients for discriminator output
         Tensor<T> outputGradients = CalculateBatchGradients(discriminatorOutput, targetLabels);
-    
+
         // Backpropagate through discriminator to get gradients at its input (which is the generator's output)
         Tensor<T> discriminatorInputGradients = Discriminator.Backpropagate(outputGradients);
-    
+
         // Backpropagate through generator using the gradients from discriminator
         Generator.Backpropagate(discriminatorInputGradients);
-    
+
         // Update generator parameters
         UpdateNetworkParameters(Generator);
-    
+
         // Re-enable training mode for discriminator for future training steps
         Discriminator.SetTrainingMode(true);
-    
+
         return loss;
     }
 
@@ -654,7 +654,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         double maxScore = scoresList.Max();
 
         // Recent loss values
-        double recentLoss = _generatorLosses.Count > 0 ? 
+        double recentLoss = _generatorLosses.Count > 0 ?
             Convert.ToDouble(_generatorLosses[_generatorLosses.Count - 1]) : 0.0;
 
         // Store metrics
@@ -747,14 +747,14 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             // Batch of noise vectors
             var batchSize = input.Shape[0];
             var results = new List<Tensor<T>>(batchSize);
-        
+
             for (int i = 0; i < batchSize; i++)
             {
                 var noiseVector = results[i];
                 var generatedImage = Generator.Predict(noiseVector);
                 results.Add(generatedImage);
             }
-        
+
             return Tensor<T>.Stack([.. results]);
         }
     }
@@ -871,22 +871,22 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         // Ensure discriminator is in training mode
         Discriminator.SetTrainingMode(true);
-    
+
         // Forward pass - get predictions for the batch
         var predictions = Discriminator.Predict(images);
-    
+
         // Calculate loss
         var loss = CalculateBatchLoss(predictions, labels);
-    
+
         // Calculate gradients for backpropagation
         var outputGradients = CalculateBatchGradients(predictions, labels);
-    
+
         // Backpropagate through the discriminator
         Discriminator.Backpropagate(outputGradients);
-    
+
         // Update discriminator parameters
         UpdateNetworkParameters(Discriminator);
-    
+
         return loss;
     }
 
@@ -917,34 +917,34 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         // Ensure generator is in training mode
         Generator.SetTrainingMode(true);
-    
+
         // Temporarily freeze discriminator weights during generator training
         Discriminator.SetTrainingMode(false);
-    
+
         // Generate fake images
         var generatedImages = Generator.Predict(noise);
-    
+
         // Pass fake images through discriminator
         var discriminatorOutput = Discriminator.Predict(generatedImages);
-    
+
         // Calculate loss - we want the discriminator to classify fake images as real
         var loss = CalculateBatchLoss(discriminatorOutput, targetLabels);
-    
+
         // Calculate gradients for discriminator output
         var outputGradients = CalculateBatchGradients(discriminatorOutput, targetLabels);
-    
+
         // Backpropagate through discriminator (keeping its weights frozen)
         var discriminatorInputGradients = Discriminator.Backpropagate(outputGradients);
-    
+
         // Backpropagate through generator
         Generator.Backpropagate(discriminatorInputGradients);
-    
+
         // Update generator parameters
         UpdateNetworkParameters(Generator);
-    
+
         // Restore discriminator to training mode
         Discriminator.SetTrainingMode(true);
-    
+
         return loss;
     }
 
@@ -975,23 +975,23 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         int batchSize = predictions.Shape[0];
         T totalLoss = NumOps.Zero;
         T epsilon = NumOps.FromDouble(1e-10); // Small value to prevent log(0)
-    
+
         for (int i = 0; i < batchSize; i++)
         {
             T prediction = predictions[i, 0];
             T target = targets[i, 0];
-        
+
             // Binary cross-entropy: -target * log(prediction) - (1-target) * log(1-prediction)
             T logP = NumOps.Log(NumOps.Add(prediction, epsilon));
             T logOneMinusP = NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, prediction), epsilon));
-        
+
             T termOne = NumOps.Multiply(target, logP);
             T termTwo = NumOps.Multiply(NumOps.Subtract(NumOps.One, target), logOneMinusP);
-        
+
             T sampleLoss = NumOps.Negate(NumOps.Add(termOne, termTwo));
             totalLoss = NumOps.Add(totalLoss, sampleLoss);
         }
-    
+
         // Average the loss across the batch
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
@@ -1022,13 +1022,13 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Calculate gradients for binary cross-entropy: (prediction - target)
         int batchSize = predictions.Shape[0];
         var gradients = new Tensor<T>(predictions.Shape);
-    
+
         for (int i = 0; i < batchSize; i++)
         {
             // For binary cross-entropy, the gradient simplifies to (prediction - target)
             gradients[i, 0] = NumOps.Subtract(predictions[i, 0], targets[i, 0]);
         }
-    
+
         return gradients;
     }
 
@@ -1055,7 +1055,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         // Set generator to inference mode
         Generator.SetTrainingMode(false);
-    
+
         // Generate images using tensor operations
         return Generator.Predict(noise);
     }
@@ -1084,7 +1084,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         // Set discriminator to inference mode
         Discriminator.SetTrainingMode(false);
-    
+
         // Discriminate images using tensor operations
         return Discriminator.Predict(images);
     }
@@ -1124,7 +1124,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         var random = RandomHelper.CreateSecureRandom();
         var shape = new int[] { batchSize, noiseSize };
         var noise = new Tensor<T>(shape);
-    
+
         // Generate normally distributed random numbers using Box-Muller transform
         for (int b = 0; b < batchSize; b++)
         {
@@ -1132,14 +1132,14 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             {
                 double u1 = random.NextDouble(); // Uniform(0,1) random number
                 double u2 = random.NextDouble(); // Uniform(0,1) random number
-            
+
                 // Box-Muller transformation
                 double radius = Math.Sqrt(-2.0 * Math.Log(u1));
                 double theta = 2.0 * Math.PI * u2;
-            
+
                 double z1 = radius * Math.Cos(theta);
                 noise[b, i] = NumOps.FromDouble(z1);
-            
+
                 // If we're not at the last element, generate the second value
                 if (i + 1 < noiseSize)
                 {
@@ -1148,7 +1148,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 }
             }
         }
-    
+
         return noise;
     }
 
@@ -1175,31 +1175,31 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     public Dictionary<string, double> EvaluateModelWithTensors(int sampleSize = 100)
     {
         var metrics = new Dictionary<string, double>();
-    
+
         // Generate sample images using tensor operations
         var noise = GenerateRandomNoiseTensor(sampleSize, Generator.Architecture.InputSize);
         var generatedImages = GenerateImages(noise);
-    
+
         // Get discriminator scores for all images at once
         var discriminatorScores = DiscriminateImages(generatedImages);
-    
+
         // Extract scores for calculations
         var scoresList = new List<double>(sampleSize);
         for (int i = 0; i < sampleSize; i++)
         {
             scoresList.Add(Convert.ToDouble(discriminatorScores[i, 0]));
         }
-    
+
         // Calculate metrics
         double averageScore = scoresList.Average();
         double stdDevScore = StatisticsHelper<double>.CalculateStandardDeviation(scoresList);
         double minScore = scoresList.Min();
         double maxScore = scoresList.Max();
-    
+
         // Recent loss values
-        double recentLoss = _generatorLosses.Count > 0 ? 
+        double recentLoss = _generatorLosses.Count > 0 ?
             Convert.ToDouble(_generatorLosses[_generatorLosses.Count - 1]) : 0.0;
-    
+
         // Store metrics
         metrics["AverageDiscriminatorScore"] = averageScore;
         metrics["MinDiscriminatorScore"] = minScore;
@@ -1210,7 +1210,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         // Mode collapse indicator (if very low standard deviation, might indicate mode collapse)
         metrics["PotentialModeCollapse"] = stdDevScore < 0.05 ? 1.0 : 0.0;
-    
+
         return metrics;
     }
 
@@ -1278,7 +1278,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             foreach (var pair in scoreIndexPairs)
             {
                 if (qualityImages.Count >= count) break;
-    
+
                 // Check if this image is already included
                 bool alreadyIncluded = qualityImages.Any(img => img.TensorEquals(candidateImages.GetSlice(pair.index)));
                 if (!alreadyIncluded)

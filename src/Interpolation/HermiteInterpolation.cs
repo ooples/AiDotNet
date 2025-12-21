@@ -22,17 +22,17 @@ public class HermiteInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the data points (independent variable).
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the data points (dependent variable).
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The slopes (derivatives) at each data point.
     /// </summary>
     private readonly Vector<T> _m;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
@@ -104,7 +104,7 @@ public class HermiteInterpolation<T> : IInterpolation<T>
 
         // Calculate the width of the interval
         T h = _numOps.Subtract(x1, x0);
-        
+
         // Calculate the normalized position within the interval (0 to 1)
         T t = _numOps.Divide(_numOps.Subtract(x, x0), h);
 
@@ -154,7 +154,7 @@ public class HermiteInterpolation<T> : IInterpolation<T>
         // Handle edge cases: if x is at or before the first point
         if (_numOps.LessThanOrEquals(x, _x[0]))
             return 0;
-        
+
         // Handle edge cases: if x is at or after the last point
         if (_numOps.GreaterThanOrEquals(x, _x[_x.Length - 1]))
             return _x.Length - 1;

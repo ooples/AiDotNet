@@ -34,12 +34,12 @@ public class GaussianRBF<T> : IRadialBasisFunction<T>
     /// The width parameter (epsilon) controlling how quickly the function decreases with distance.
     /// </summary>
     private readonly T _epsilon;
-    
+
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GaussianRBF{T}"/> class with a specified width parameter.
     /// </summary>
@@ -65,7 +65,7 @@ public class GaussianRBF<T> : IRadialBasisFunction<T>
         _numOps = MathHelper.GetNumericOperations<T>();
         _epsilon = _numOps.FromDouble(epsilon);
     }
-    
+
     /// <summary>
     /// Computes the value of the Gaussian Radial Basis Function for a given radius.
     /// </summary>
@@ -96,7 +96,7 @@ public class GaussianRBF<T> : IRadialBasisFunction<T>
     {
         return _numOps.Exp(_numOps.Negate(_numOps.Multiply(_epsilon, _numOps.Multiply(r, r))));
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Gaussian RBF with respect to the radius.
     /// </summary>
@@ -125,17 +125,17 @@ public class GaussianRBF<T> : IRadialBasisFunction<T>
     public T ComputeDerivative(T r)
     {
         // Derivative with respect to r: -2er * exp(-e*r²)
-        
+
         // Calculate -2er
         T minusTwoEpsilonR = _numOps.Multiply(
-            _numOps.Multiply(_numOps.FromDouble(-2.0), _epsilon), 
+            _numOps.Multiply(_numOps.FromDouble(-2.0), _epsilon),
             r
         );
-        
+
         // Multiply by exp(-e*r²)
         return _numOps.Multiply(minusTwoEpsilonR, Compute(r));
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Gaussian RBF with respect to the width parameter epsilon.
     /// </summary>
@@ -164,11 +164,11 @@ public class GaussianRBF<T> : IRadialBasisFunction<T>
     public T ComputeWidthDerivative(T r)
     {
         // Derivative with respect to e: -r² * exp(-e*r²)
-        
+
         // Calculate -r²
         T rSquared = _numOps.Multiply(r, r);
         T negativeRSquared = _numOps.Negate(rSquared);
-        
+
         // Multiply by exp(-e*r²)
         return _numOps.Multiply(negativeRSquared, Compute(r));
     }

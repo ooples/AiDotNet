@@ -85,7 +85,7 @@ public class MishActivation<T> : ActivationFunctionBase<T>
         T exp_x = NumOps.Exp(input);
         T exp_2x = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), input));
         T exp_3x = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(3), input));
-        
+
         T omega = NumOps.Add(
             NumOps.Add(
                 NumOps.Multiply(NumOps.FromDouble(4), NumOps.Add(input, NumOps.One)),
@@ -96,12 +96,12 @@ public class MishActivation<T> : ActivationFunctionBase<T>
                 NumOps.Multiply(exp_x, NumOps.Add(NumOps.Multiply(NumOps.FromDouble(4), input), NumOps.FromDouble(6)))
             )
         );
-        
+
         T delta = NumOps.Add(
             NumOps.Add(NumOps.Multiply(NumOps.FromDouble(2), exp_2x), NumOps.FromDouble(2)),
             NumOps.Multiply(exp_2x, NumOps.Square(NumOps.Add(input, NumOps.FromDouble(2))))
         );
-        
+
         return NumOps.Divide(NumOps.Multiply(exp_x, omega), NumOps.Square(delta));
     }
 

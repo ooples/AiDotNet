@@ -1,7 +1,7 @@
-using Xunit;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.JitCompiler;
+using Xunit;
 using JitCompilerClass = AiDotNet.JitCompiler.JitCompiler;
 
 namespace AiDotNet.Tests.UnitTests.JitCompiler;

@@ -89,14 +89,14 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         int dimensions = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
-        
+
         // Initialize particles using InitializeRandomSolution
         var swarm = new List<IFullModel<T, TInput, TOutput>>();
         for (int i = 0; i < _psoOptions.SwarmSize; i++)
         {
             swarm.Add(InitializeRandomSolution(inputData.XTrain));
         }
-        
+
         // Initialize velocities for each particle
         var velocities = new List<Vector<T>>();
         for (int i = 0; i < _psoOptions.SwarmSize; i++)
@@ -108,19 +108,19 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
             }
             velocities.Add(velocity);
         }
-        
+
         // Initialize personal bests with current particles
         var personalBests = new List<OptimizationStepData<T, TInput, TOutput>>();
         var globalBest = new OptimizationStepData<T, TInput, TOutput>();
-        
+
         // First evaluate all particles and initialize personal/global bests
         for (int i = 0; i < _psoOptions.SwarmSize; i++)
         {
             var stepData = EvaluateSolution(swarm[i], inputData);
             personalBests.Add(stepData);
-            
+
             // Update global best if needed
-            if (globalBest.Solution == null || 
+            if (globalBest.Solution == null ||
                 FitnessCalculator.IsBetterFitness(stepData.FitnessScore, globalBest.FitnessScore))
             {
                 globalBest = stepData;
@@ -152,10 +152,10 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
 
                 // Update the particle model with new position
                 swarm[i] = swarm[i].WithParameters(newPosition);
-                
+
                 // Evaluate the updated particle
                 var stepData = EvaluateSolution(swarm[i], inputData);
-                
+
                 // Update personal best if better
                 if (FitnessCalculator.IsBetterFitness(stepData.FitnessScore, personalBests[i].FitnessScore))
                 {
@@ -239,13 +239,13 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
         // Update PSO-specific parameters
-        _currentInertia = Math.Max(_psoOptions.MinInertia, 
+        _currentInertia = Math.Max(_psoOptions.MinInertia,
             Math.Min(_psoOptions.MaxInertia, _currentInertia * _psoOptions.InertiaDecayRate));
-            
-        _currentCognitiveWeight = Math.Max(_psoOptions.MinCognitiveWeight, 
+
+        _currentCognitiveWeight = Math.Max(_psoOptions.MinCognitiveWeight,
             Math.Min(_psoOptions.MaxCognitiveWeight, _currentCognitiveWeight * _psoOptions.CognitiveWeightAdaptationRate));
-            
-        _currentSocialWeight = Math.Max(_psoOptions.MinSocialWeight, 
+
+        _currentSocialWeight = Math.Max(_psoOptions.MinSocialWeight,
             Math.Min(_psoOptions.MaxSocialWeight, _currentSocialWeight * _psoOptions.SocialWeightAdaptationRate));
     }
 
@@ -292,7 +292,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
             // Serialize ParticleSwarmOptimizationOptions
             string optionsJson = JsonConvert.SerializeObject(_psoOptions);
             writer.Write(optionsJson);
-            
+
             // Serialize current adaptive parameters
             writer.Write(_currentInertia);
             writer.Write(_currentCognitiveWeight);
@@ -321,7 +321,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
             string optionsJson = reader.ReadString();
             _psoOptions = JsonConvert.DeserializeObject<ParticleSwarmOptimizationOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-                
+
             // Deserialize current adaptive parameters
             _currentInertia = reader.ReadDouble();
             _currentCognitiveWeight = reader.ReadDouble();

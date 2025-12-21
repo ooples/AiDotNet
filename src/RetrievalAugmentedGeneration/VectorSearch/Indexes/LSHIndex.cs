@@ -1,7 +1,8 @@
-using AiDotNet.LinearAlgebra;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 {
@@ -53,7 +54,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             _vectors = new Dictionary<string, Vector<T>>();
             _hashTables = new List<Dictionary<int, List<string>>>();
             _randomVectors = new List<Vector<T>[]>();
-            _random = new Random(seed);
+            _random = RandomHelper.CreateSeededRandom(seed);
             _dimension = 0;
 
             for (int i = 0; i < _numHashTables; i++)

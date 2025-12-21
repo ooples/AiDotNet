@@ -39,27 +39,27 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// The activation function to apply to cell state outputs. Default is tanh.
     /// </summary>
     private IActivationFunction<T>? ScalarActivation { get; }
-    
+
     /// <summary>
     /// The vector activation function to apply to cell state outputs.
     /// </summary>
     private IVectorActivationFunction<T>? VectorActivation { get; }
-    
+
     /// <summary>
     /// The activation function to apply to the forget gate. Default is sigmoid.
     /// </summary>
     private IActivationFunction<T>? ForgetGateActivation { get; }
-    
+
     /// <summary>
     /// The activation function to apply to the input gate. Default is sigmoid.
     /// </summary>
     private IActivationFunction<T>? InputGateActivation { get; }
-    
+
     /// <summary>
     /// The activation function to apply to the cell gate. Default is tanh.
     /// </summary>
     private IActivationFunction<T>? CellGateActivation { get; }
-    
+
     /// <summary>
     /// The activation function to apply to the output gate. Default is sigmoid.
     /// </summary>
@@ -69,17 +69,17 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// The activation function to apply to the forget gate. Default is sigmoid.
     /// </summary>
     private IVectorActivationFunction<T>? ForgetGateVectorActivation { get; }
-    
+
     /// <summary>
     /// The activation function to apply to the input gate. Default is sigmoid.
     /// </summary>
     private IVectorActivationFunction<T>? InputGateVectorActivation { get; }
-    
+
     /// <summary>
     /// The activation function to apply to the cell gate. Default is tanh.
     /// </summary>
     private IVectorActivationFunction<T>? CellGateVectorActivation { get; }
-    
+
     /// <summary>
     /// The activation function to apply to the output gate. Default is sigmoid.
     /// </summary>
@@ -139,7 +139,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         IActivationFunction<T>? forgetGateActivation = null,
         IActivationFunction<T>? inputGateActivation = null,
         IActivationFunction<T>? cellGateActivation = null,
-        IActivationFunction<T>? outputGateActivation = null) : 
+        IActivationFunction<T>? outputGateActivation = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         // Set activation functions (or defaults)
@@ -150,7 +150,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         InputGateActivation = inputGateActivation ?? new SigmoidActivation<T>();
         CellGateActivation = cellGateActivation ?? new TanhActivation<T>();
         OutputGateActivation = outputGateActivation ?? new SigmoidActivation<T>();
-        
+
         InitializeLayers();
     }
 
@@ -208,7 +208,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         IVectorActivationFunction<T>? forgetGateVectorActivation = null,
         IVectorActivationFunction<T>? inputGateVectorActivation = null,
         IVectorActivationFunction<T>? cellGateVectorActivation = null,
-        IVectorActivationFunction<T>? outputGateVectorActivation = null) : 
+        IVectorActivationFunction<T>? outputGateVectorActivation = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         // Set activation functions (or defaults)
@@ -219,10 +219,10 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         InputGateVectorActivation = inputGateVectorActivation ?? new SigmoidActivation<T>();
         CellGateVectorActivation = cellGateVectorActivation ?? new TanhActivation<T>();
         OutputGateVectorActivation = outputGateVectorActivation ?? new SigmoidActivation<T>();
-        
+
         InitializeLayers();
     }
-    
+
     /// <summary>
     /// Sets up the layers of the LSTM network based on the provided architecture.
     /// If no layers are specified in the architecture, default LSTM layers will be created.
@@ -340,12 +340,12 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Set to inference mode
         SetTrainingMode(false);
-    
+
         // Check input dimensions and determine if we're processing a batch or a single sequence
         bool isBatchedSequence = input.Shape.Length >= 3;
         bool isBatch = input.Shape.Length >= 2;
         bool isSequence = input.Shape.Length >= 2 && !isBatchedSequence;
-    
+
         // Handle different input shapes
         if (isBatchedSequence)
         {
@@ -378,26 +378,26 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         int batchSize = input.Shape[0];
         int sequenceLength = input.Shape[1];
-    
+
         // Initialize hidden states and cell states for all LSTM layers
         var states = InitializeStates(batchSize);
-    
+
         // Create storage for outputs at each time step
         var outputs = new List<Tensor<T>>(sequenceLength);
-    
+
         // Process each time step
         for (int t = 0; t < sequenceLength; t++)
         {
             // Extract the current time step for all batches
             var timeStep = ExtractTimeStep(input, t);
-        
+
             // Process this time step through all layers
             var result = ProcessTimeStep(timeStep, states);
-        
+
             // Store output
             outputs.Add(result);
         }
-    
+
         // Stack outputs along time dimension if they should be returned as a sequence
         // or return just the final output if only the final result is needed
         if (Architecture.ShouldReturnFullSequence)
@@ -419,10 +419,10 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Add batch dimension of size 1
         var batchedInput = AddBatchDimension(input);
-    
+
         // Process as a batched sequence
         var result = ProcessBatchedSequence(batchedInput);
-    
+
         // Remove batch dimension if it was added
         if (result.Shape.Length > 2)
         {
@@ -443,10 +443,10 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Add time dimension of size 1
         var sequenceInput = AddTimeDimension(input);
-    
+
         // Process as a batched sequence
         var result = ProcessBatchedSequence(sequenceInput);
-    
+
         // Remove time dimension if necessary
         if (result.Shape.Length > 2)
         {
@@ -467,10 +467,10 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Add batch and time dimensions (both of size 1)
         var batchedSequenceInput = AddBatchAndTimeDimensions(input);
-    
+
         // Process as a batched sequence
         var result = ProcessBatchedSequence(batchedSequenceInput);
-    
+
         // Remove batch and time dimensions
         return RemoveBatchAndTimeDimensions(result);
     }
@@ -483,13 +483,13 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     private Dictionary<int, (Tensor<T> h, Tensor<T> c)> InitializeStates(int batchSize)
     {
         var states = new Dictionary<int, (Tensor<T> h, Tensor<T> c)>();
-    
+
         // Count LSTM layers
         int lstmLayers = CountLSTMLayers();
-    
+
         // Get hidden size from architecture
         int hiddenSize = GetLSTMHiddenSize();
-    
+
         // Initialize states for each LSTM layer
         int lstmIndex = 0;
         for (int i = 0; i < Layers.Count; i++)
@@ -500,7 +500,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
                 // Shape: [batch_size, hidden_size]
                 var hiddenState = new Tensor<T>(new int[] { batchSize, hiddenSize });
                 var cellState = new Tensor<T>(new int[] { batchSize, hiddenSize });
-            
+
                 // Initialize with zeros
                 for (int b = 0; b < batchSize; b++)
                 {
@@ -510,12 +510,12 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
                         cellState[b, h] = NumOps.Zero;
                     }
                 }
-            
+
                 states[i] = (hiddenState, cellState);
                 lstmIndex++;
             }
         }
-    
+
         return states;
     }
 
@@ -526,7 +526,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     private int CountLSTMLayers()
     {
         int count = 0;
-    
+
         foreach (var layer in Layers)
         {
             if (IsLSTMLayer(layer))
@@ -534,7 +534,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
                 count++;
             }
         }
-    
+
         return count;
     }
 
@@ -550,11 +550,11 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             return true;
         }
-        
+
         // Check for custom layer types that might include LSTM in their name
         string layerType = layer.GetType().Name;
-        return layerType.Contains("LSTM") || 
-               layerType.Contains("Recurrent") || 
+        return layerType.Contains("LSTM") ||
+               layerType.Contains("Recurrent") ||
                layerType.Contains("GRU");
     }
 
@@ -569,13 +569,13 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         var metadata = GetModelMetadata();
         // First, try to get the hidden size from the architecture
-        if (metadata.AdditionalInfo != null && 
+        if (metadata.AdditionalInfo != null &&
             metadata.AdditionalInfo.TryGetValue("LSTMHiddenSize", out var hiddenSizeObj) &&
             hiddenSizeObj is int hiddenSize)
         {
             return hiddenSize;
         }
-        
+
         // Next, check if there's an explicit architecture parameter
         var hiddenLayerSizes = Architecture.GetHiddenLayerSizes();
         if (hiddenLayerSizes != null && hiddenLayerSizes.Length > 0)
@@ -583,14 +583,14 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
             // Use the size of the first hidden layer as a default
             return hiddenLayerSizes[0];
         }
-        
+
         // Next, look for LSTM layer and get its output shape
         foreach (var layer in Layers)
         {
             if (IsLSTMLayer(layer))
             {
                 var outputShape = layer.GetOutputShape();
-                
+
                 // For LSTM layers, output shape is typically [batch_size, hidden_size] or
                 // [batch_size, sequence_length, hidden_size]
                 if (outputShape.Length >= 2)
@@ -600,7 +600,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
                 }
             }
         }
-        
+
         // If no LSTM layers are found or their shape can't be determined, throw an exception
         throw new InvalidOperationException(
             "Could not determine LSTM hidden size. Please specify LSTMHiddenSize in the architecture's AdditionalInfo.");
@@ -749,10 +749,10 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         int batchSize = input.Shape[0];
         int features = input.Shape[2];
-    
+
         // Create result tensor with shape [batch_size, features]
         var result = new Tensor<T>(new int[] { batchSize, features });
-    
+
         // Copy data for this time step
         for (int b = 0; b < batchSize; b++)
         {
@@ -761,7 +761,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
                 result[b, f] = input[b, timeStep, f];
             }
         }
-    
+
         return result;
     }
 
@@ -774,7 +774,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T> ProcessTimeStep(Tensor<T> input, Dictionary<int, (Tensor<T> h, Tensor<T> c)> states)
     {
         Tensor<T> current = input;
-    
+
         // Process through each layer
         for (int i = 0; i < Layers.Count; i++)
         {
@@ -785,10 +785,10 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
                 {
                     // Process through LSTM cell
                     var result = ProcessLSTMCell(current, state.h, state.c, i);
-                
+
                     // Update state for next time step
                     states[i] = (result.h, result.c);
-                
+
                     // Pass hidden state to next layer
                     current = result.output;
                 }
@@ -804,7 +804,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
                 current = Layers[i].Forward(current);
             }
         }
-    
+
         return current;
     }
 
@@ -819,34 +819,34 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             return new Tensor<T>([0]);
         }
-    
+
         // Get shape information from the first tensor
         int[] shape = tensors[0].Shape;
-    
+
         // Create result shape with time dimension inserted at position 1
         int[] resultShape = new int[shape.Length + 1];
         resultShape[0] = shape[0]; // Batch size
         resultShape[1] = tensors.Count; // Sequence length
-    
+
         for (int i = 1; i < shape.Length; i++)
         {
             resultShape[i + 1] = shape[i];
         }
-    
+
         // Create result tensor
         var result = new Tensor<T>(resultShape);
-    
+
         // Copy data from each tensor
         for (int t = 0; t < tensors.Count; t++)
         {
             var tensor = tensors[t];
-        
+
             // Copy based on tensor rank
             if (shape.Length == 2)
             {
                 int batchSize = shape[0];
                 int features = shape[1];
-            
+
                 for (int b = 0; b < batchSize; b++)
                 {
                     for (int f = 0; f < features; f++)
@@ -860,7 +860,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
                 throw new NotSupportedException("Only 2D tensor stacking is currently supported");
             }
         }
-    
+
         return result;
     }
 
@@ -873,25 +873,25 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         int[] inputShape = input.Shape;
         int[] resultShape = new int[inputShape.Length + 1];
-    
+
         // Add batch dimension of size 1
         resultShape[0] = 1;
-    
+
         // Copy remaining dimensions
         for (int i = 0; i < inputShape.Length; i++)
         {
             resultShape[i + 1] = inputShape[i];
         }
-    
+
         // Create result tensor
         var result = new Tensor<T>(resultShape);
-    
+
         // Copy data
         if (inputShape.Length == 2)
         {
             int seqLength = inputShape[0];
             int features = inputShape[1];
-        
+
             for (int s = 0; s < seqLength; s++)
             {
                 for (int f = 0; f < features; f++)
@@ -903,13 +903,13 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         else if (inputShape.Length == 1)
         {
             int features = inputShape[0];
-        
+
             for (int f = 0; f < features; f++)
             {
                 result[0, f] = input[f];
             }
         }
-    
+
         return result;
     }
 
@@ -921,30 +921,30 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T> RemoveBatchDimension(Tensor<T> input)
     {
         int[] inputShape = input.Shape;
-    
+
         // Ensure first dimension is batch and has size 1
         if (inputShape[0] != 1)
         {
             throw new ArgumentException("Cannot remove batch dimension with size != 1");
         }
-    
+
         int[] resultShape = new int[inputShape.Length - 1];
-    
+
         // Copy dimensions except batch
         for (int i = 1; i < inputShape.Length; i++)
         {
             resultShape[i - 1] = inputShape[i];
         }
-    
+
         // Create result tensor
         var result = new Tensor<T>(resultShape);
-    
+
         // Copy data
         if (inputShape.Length == 3)
         {
             int seqLength = inputShape[1];
             int features = inputShape[2];
-        
+
             for (int s = 0; s < seqLength; s++)
             {
                 for (int f = 0; f < features; f++)
@@ -956,13 +956,13 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         else if (inputShape.Length == 2)
         {
             int features = inputShape[1];
-        
+
             for (int f = 0; f < features; f++)
             {
                 result[f] = input[0, f];
             }
         }
-    
+
         return result;
     }
 
@@ -975,28 +975,28 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         int[] inputShape = input.Shape;
         int[] resultShape = new int[inputShape.Length + 1];
-    
+
         // First dimension is batch
         resultShape[0] = inputShape[0];
-    
+
         // Add time dimension of size 1
         resultShape[1] = 1;
-    
+
         // Copy remaining dimensions
         for (int i = 1; i < inputShape.Length; i++)
         {
             resultShape[i + 1] = inputShape[i];
         }
-    
+
         // Create result tensor
         var result = new Tensor<T>(resultShape);
-    
+
         // Copy data
         if (inputShape.Length == 2)
         {
             int batchSize = inputShape[0];
             int features = inputShape[1];
-        
+
             for (int b = 0; b < batchSize; b++)
             {
                 for (int f = 0; f < features; f++)
@@ -1005,7 +1005,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
                 }
             }
         }
-    
+
         return result;
     }
 
@@ -1017,33 +1017,33 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T> RemoveTimeDimension(Tensor<T> input)
     {
         int[] inputShape = input.Shape;
-    
+
         // Ensure second dimension is time and has size 1
         if (inputShape[1] != 1)
         {
             throw new ArgumentException("Cannot remove time dimension with size != 1");
         }
-    
+
         int[] resultShape = new int[inputShape.Length - 1];
-    
+
         // Copy first dimension (batch)
         resultShape[0] = inputShape[0];
-    
+
         // Copy dimensions except time
         for (int i = 2; i < inputShape.Length; i++)
         {
             resultShape[i - 1] = inputShape[i];
         }
-    
+
         // Create result tensor
         var result = new Tensor<T>(resultShape);
-    
+
         // Copy data
         if (inputShape.Length == 3)
         {
             int batchSize = inputShape[0];
             int features = inputShape[2];
-        
+
             for (int b = 0; b < batchSize; b++)
             {
                 for (int f = 0; f < features; f++)
@@ -1052,7 +1052,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
                 }
             }
         }
-    
+
         return result;
     }
 
@@ -1065,31 +1065,31 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         int[] inputShape = input.Shape;
         int[] resultShape = new int[inputShape.Length + 2];
-    
+
         // Add batch and time dimensions of size 1
         resultShape[0] = 1;
         resultShape[1] = 1;
-    
+
         // Copy remaining dimensions
         for (int i = 0; i < inputShape.Length; i++)
         {
             resultShape[i + 2] = inputShape[i];
         }
-    
+
         // Create result tensor
         var result = new Tensor<T>(resultShape);
-    
+
         // Copy data
         if (inputShape.Length == 1)
         {
             int features = inputShape[0];
-        
+
             for (int f = 0; f < features; f++)
             {
                 result[0, 0, f] = input[f];
             }
         }
-    
+
         return result;
     }
 
@@ -1101,35 +1101,35 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T> RemoveBatchAndTimeDimensions(Tensor<T> input)
     {
         int[] inputShape = input.Shape;
-    
+
         // Ensure first and second dimensions are batch and time with size 1
         if (inputShape[0] != 1 || inputShape[1] != 1)
         {
             throw new ArgumentException("Cannot remove dimensions with size != 1");
         }
-    
+
         int[] resultShape = new int[inputShape.Length - 2];
-    
+
         // Copy dimensions except batch and time
         for (int i = 2; i < inputShape.Length; i++)
         {
             resultShape[i - 2] = inputShape[i];
         }
-    
+
         // Create result tensor
         var result = new Tensor<T>(resultShape);
-    
+
         // Copy data
         if (inputShape.Length == 3)
         {
             int features = inputShape[2];
-        
+
             for (int f = 0; f < features; f++)
             {
                 result[f] = input[0, 0, f];
             }
         }
-    
+
         return result;
     }
 
@@ -1161,7 +1161,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Set to training mode
         SetTrainingMode(true);
-    
+
         // Forward pass to get predictions
         var predictions = Predict(input);
 
@@ -1170,14 +1170,14 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
 
         // Calculate loss
         LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
-    
+
         // Calculate output gradients
         var gradientVector = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
         var outputGradients = new Tensor<T>(predictions.Shape, gradientVector);
 
         // Backpropagation through time
         BackpropagateOverTime(outputGradients, input);
-    
+
         // Update parameters
         UpdateNetworkParameters();
     }
@@ -1985,7 +1985,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Simple learning rate for gradient descent
         T learningRate = NumOps.FromDouble(0.01);
-    
+
         // Update parameters for each layer
         foreach (var layer in Layers)
         {
@@ -2027,7 +2027,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         // Count LSTM layers and get their sizes
         int lstmLayerCount = 0;
         var lstmSizes = new List<int>();
-    
+
         foreach (var layer in Layers)
         {
             if (IsLSTMLayer(layer))
@@ -2036,7 +2036,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
                 lstmSizes.Add(layer.GetOutputShape()[1]); // Hidden size
             }
         }
-    
+
         return new ModelMetadata<T>
         {
             ModelType = ModelType.LSTMNeuralNetwork,
@@ -2134,8 +2134,8 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         // Determine which constructor to use based on whether we're using scalar or vector activations
-        if (VectorActivation != null || ForgetGateVectorActivation != null || 
-            InputGateVectorActivation != null || CellGateVectorActivation != null || 
+        if (VectorActivation != null || ForgetGateVectorActivation != null ||
+            InputGateVectorActivation != null || CellGateVectorActivation != null ||
             OutputGateVectorActivation != null)
         {
             // Use the vector activation constructor

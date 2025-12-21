@@ -629,117 +629,117 @@ public class ParticleSwarmOptimizationOptions<T, TInput, TOutput> : Optimization
     /// </remarks>
     public double MaxSocialWeight { get; set; } = 2.5;
 
-   /// <summary>
-   /// Gets or sets the rate at which inertia weight decays when using adaptive inertia.
-   /// </summary>
-   /// <value>The inertia decay rate, defaulting to 0.99.</value>
-   /// <remarks>
-   /// <para>
-   /// This parameter controls how rapidly the inertia weight changes when UseAdaptiveInertia is enabled.
-   /// In typical implementations, this represents a multiplicative factor applied to the inertia weight
-   /// after each iteration. Values closer to 1.0 result in slower decay and more gradual transition from
-   /// exploration to exploitation. Values further from 1.0 (smaller) cause faster decay and more rapid
-   /// transition. This parameter is only relevant when UseAdaptiveInertia is set to true.
-   /// </para>
-   /// <para><b>For Beginners:</b> This setting controls how quickly the inertia weight changes
-   /// over time when adaptive inertia is enabled.
-   /// 
-   /// The default value of 0.99 means:
-   /// - After each iteration, the inertia weight is multiplied by 0.99
-   /// - This creates a very gradual reduction in momentum over time
-   /// 
-   /// Think of it like gradually slowing down as the search progresses:
-   /// - A value near 1.0 (like 0.99) creates a very slow, gradual transition
-   /// - A smaller value (like 0.95) creates a much faster transition from exploration to exploitation
-   /// 
-   /// You might want a value closer to 1.0 (like 0.995) if:
-   /// - You want a very gradual transition from exploration to exploitation
-   /// - You have many iterations available for the search
-   /// - You want to maintain exploration capability for longer
-   /// 
-   /// You might want a smaller value (like 0.95) if:
-   /// - You want a quicker transition to focused refinement
-   /// - You have limited iterations available
-   /// - You want the algorithm to settle faster
-   /// 
-   /// This setting has no effect unless UseAdaptiveInertia is set to true.
-   /// </para>
-   /// </remarks>
-   public double InertiaDecayRate { get; set; } = 0.99;
+    /// <summary>
+    /// Gets or sets the rate at which inertia weight decays when using adaptive inertia.
+    /// </summary>
+    /// <value>The inertia decay rate, defaulting to 0.99.</value>
+    /// <remarks>
+    /// <para>
+    /// This parameter controls how rapidly the inertia weight changes when UseAdaptiveInertia is enabled.
+    /// In typical implementations, this represents a multiplicative factor applied to the inertia weight
+    /// after each iteration. Values closer to 1.0 result in slower decay and more gradual transition from
+    /// exploration to exploitation. Values further from 1.0 (smaller) cause faster decay and more rapid
+    /// transition. This parameter is only relevant when UseAdaptiveInertia is set to true.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls how quickly the inertia weight changes
+    /// over time when adaptive inertia is enabled.
+    /// 
+    /// The default value of 0.99 means:
+    /// - After each iteration, the inertia weight is multiplied by 0.99
+    /// - This creates a very gradual reduction in momentum over time
+    /// 
+    /// Think of it like gradually slowing down as the search progresses:
+    /// - A value near 1.0 (like 0.99) creates a very slow, gradual transition
+    /// - A smaller value (like 0.95) creates a much faster transition from exploration to exploitation
+    /// 
+    /// You might want a value closer to 1.0 (like 0.995) if:
+    /// - You want a very gradual transition from exploration to exploitation
+    /// - You have many iterations available for the search
+    /// - You want to maintain exploration capability for longer
+    /// 
+    /// You might want a smaller value (like 0.95) if:
+    /// - You want a quicker transition to focused refinement
+    /// - You have limited iterations available
+    /// - You want the algorithm to settle faster
+    /// 
+    /// This setting has no effect unless UseAdaptiveInertia is set to true.
+    /// </para>
+    /// </remarks>
+    public double InertiaDecayRate { get; set; } = 0.99;
 
-   /// <summary>
-   /// Gets or sets the rate at which the cognitive weight adapts when using adaptive weights.
-   /// </summary>
-   /// <value>The cognitive weight adaptation rate, defaulting to 1.0.</value>
-   /// <remarks>
-   /// <para>
-   /// This parameter controls how rapidly the cognitive parameter changes when UseAdaptiveWeights is enabled.
-   /// Higher values lead to faster adaptation, while lower values result in more gradual changes.
-   /// The exact effect depends on the specific adaptive weight scheme implemented, but generally this
-   /// acts as a multiplier on the amount of change applied to the cognitive parameter in each iteration.
-   /// This parameter is only relevant when UseAdaptiveWeights is set to true.
-   /// </para>
-   /// <para><b>For Beginners:</b> This setting controls how quickly the cognitive weight (attraction
-   /// to personal best) changes over time when adaptive weights are enabled.
-   /// 
-   /// The default value of 1.0 means:
-   /// - The cognitive weight changes at a standard rate
-   /// - Neither accelerated nor slowed down
-   /// 
-   /// Think of it like setting the speed for changing from individual exploration to group consensus:
-   /// - Higher values (like 1.5) make this transition happen faster
-   /// - Lower values (like 0.5) make this transition happen more gradually
-   /// 
-   /// You might want a higher value if:
-   /// - You want faster transition from exploration to exploitation
-   /// - You have limited iterations available for the search
-   /// - You want more responsive adaptation to the optimization progress
-   /// 
-   /// You might want a lower value if:
-   /// - You want more gradual, stable changes in search behavior
-   /// - You have many iterations available
-   /// - You want the exploration phase to last longer
-   /// 
-   /// This setting has no effect unless UseAdaptiveWeights is set to true.
-   /// </para>
-   /// </remarks>
-   public double CognitiveWeightAdaptationRate { get; set; } = 1.0;
+    /// <summary>
+    /// Gets or sets the rate at which the cognitive weight adapts when using adaptive weights.
+    /// </summary>
+    /// <value>The cognitive weight adaptation rate, defaulting to 1.0.</value>
+    /// <remarks>
+    /// <para>
+    /// This parameter controls how rapidly the cognitive parameter changes when UseAdaptiveWeights is enabled.
+    /// Higher values lead to faster adaptation, while lower values result in more gradual changes.
+    /// The exact effect depends on the specific adaptive weight scheme implemented, but generally this
+    /// acts as a multiplier on the amount of change applied to the cognitive parameter in each iteration.
+    /// This parameter is only relevant when UseAdaptiveWeights is set to true.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls how quickly the cognitive weight (attraction
+    /// to personal best) changes over time when adaptive weights are enabled.
+    /// 
+    /// The default value of 1.0 means:
+    /// - The cognitive weight changes at a standard rate
+    /// - Neither accelerated nor slowed down
+    /// 
+    /// Think of it like setting the speed for changing from individual exploration to group consensus:
+    /// - Higher values (like 1.5) make this transition happen faster
+    /// - Lower values (like 0.5) make this transition happen more gradually
+    /// 
+    /// You might want a higher value if:
+    /// - You want faster transition from exploration to exploitation
+    /// - You have limited iterations available for the search
+    /// - You want more responsive adaptation to the optimization progress
+    /// 
+    /// You might want a lower value if:
+    /// - You want more gradual, stable changes in search behavior
+    /// - You have many iterations available
+    /// - You want the exploration phase to last longer
+    /// 
+    /// This setting has no effect unless UseAdaptiveWeights is set to true.
+    /// </para>
+    /// </remarks>
+    public double CognitiveWeightAdaptationRate { get; set; } = 1.0;
 
-   /// <summary>
-   /// Gets or sets the rate at which the social weight adapts when using adaptive weights.
-   /// </summary>
-   /// <value>The social weight adaptation rate, defaulting to 1.0.</value>
-   /// <remarks>
-   /// <para>
-   /// This parameter controls how rapidly the social parameter changes when UseAdaptiveWeights is enabled.
-   /// Higher values lead to faster adaptation, while lower values result in more gradual changes.
-   /// The exact effect depends on the specific adaptive weight scheme implemented, but generally this
-   /// acts as a multiplier on the amount of change applied to the social parameter in each iteration.
-   /// This parameter is only relevant when UseAdaptiveWeights is set to true.
-   /// </para>
-   /// <para><b>For Beginners:</b> This setting controls how quickly the social weight (attraction
-   /// to group's best position) changes over time when adaptive weights are enabled.
-   /// 
-   /// The default value of 1.0 means:
-   /// - The social weight changes at a standard rate
-   /// - Neither accelerated nor slowed down
-   /// 
-   /// Think of it like setting the speed for changing the level of group influence:
-   /// - Higher values (like 1.5) make group consensus become influential more quickly
-   /// - Lower values (like 0.5) delay the transition to strong group influence
-   /// 
-   /// You might want a higher value if:
-   /// - You want faster convergence in later stages
-   /// - You have limited iterations available for the search
-   /// - You want more aggressive refinement once good regions are identified
-   /// 
-   /// You might want a lower value if:
-   /// - You want to maintain diversity longer
-   /// - You're concerned about premature convergence
-   /// - You prefer more gradual transitions in search behavior
-   /// 
-   /// This setting has no effect unless UseAdaptiveWeights is set to true.
-   /// </para>
-   /// </remarks>
-   public double SocialWeightAdaptationRate { get; set; } = 1.0;
+    /// <summary>
+    /// Gets or sets the rate at which the social weight adapts when using adaptive weights.
+    /// </summary>
+    /// <value>The social weight adaptation rate, defaulting to 1.0.</value>
+    /// <remarks>
+    /// <para>
+    /// This parameter controls how rapidly the social parameter changes when UseAdaptiveWeights is enabled.
+    /// Higher values lead to faster adaptation, while lower values result in more gradual changes.
+    /// The exact effect depends on the specific adaptive weight scheme implemented, but generally this
+    /// acts as a multiplier on the amount of change applied to the social parameter in each iteration.
+    /// This parameter is only relevant when UseAdaptiveWeights is set to true.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls how quickly the social weight (attraction
+    /// to group's best position) changes over time when adaptive weights are enabled.
+    /// 
+    /// The default value of 1.0 means:
+    /// - The social weight changes at a standard rate
+    /// - Neither accelerated nor slowed down
+    /// 
+    /// Think of it like setting the speed for changing the level of group influence:
+    /// - Higher values (like 1.5) make group consensus become influential more quickly
+    /// - Lower values (like 0.5) delay the transition to strong group influence
+    /// 
+    /// You might want a higher value if:
+    /// - You want faster convergence in later stages
+    /// - You have limited iterations available for the search
+    /// - You want more aggressive refinement once good regions are identified
+    /// 
+    /// You might want a lower value if:
+    /// - You want to maintain diversity longer
+    /// - You're concerned about premature convergence
+    /// - You prefer more gradual transitions in search behavior
+    /// 
+    /// This setting has no effect unless UseAdaptiveWeights is set to true.
+    /// </para>
+    /// </remarks>
+    public double SocialWeightAdaptationRate { get; set; } = 1.0;
 }

@@ -35,7 +35,7 @@ public class SwishActivation<T> : ActivationFunctionBase<T>
     /// </para>
     /// </remarks>
     protected override bool SupportsScalarOperations() => true;
-    
+
     /// <summary>
     /// Applies the Swish activation function to a scalar input value.
     /// </summary>
@@ -57,7 +57,7 @@ public class SwishActivation<T> : ActivationFunctionBase<T>
     {
         return NumOps.Multiply(x, Sigmoid(x));
     }
-    
+
     /// <summary>
     /// Applies the Swish activation function to each element of an input vector.
     /// </summary>
@@ -67,7 +67,7 @@ public class SwishActivation<T> : ActivationFunctionBase<T>
     {
         return input.Transform(x => Activate(x));
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Swish activation function for a scalar input value.
     /// </summary>
@@ -98,7 +98,7 @@ public class SwishActivation<T> : ActivationFunctionBase<T>
             )
         );
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Swish activation function for each element of an input vector.
     /// </summary>
@@ -108,12 +108,12 @@ public class SwishActivation<T> : ActivationFunctionBase<T>
     {
         int n = input.Length;
         Matrix<T> jacobian = new Matrix<T>(n, n);
-        
+
         for (int i = 0; i < n; i++)
         {
             // Set diagonal elements to the derivative at that point
             jacobian[i, i] = Derivative(input[i]);
-            
+
             // Off-diagonal elements are zero for element-wise activation functions
             for (int j = 0; j < n; j++)
             {
@@ -123,10 +123,10 @@ public class SwishActivation<T> : ActivationFunctionBase<T>
                 }
             }
         }
-        
+
         return jacobian;
     }
-    
+
     /// <summary>
     /// Calculates the sigmoid function for a scalar value.
     /// </summary>

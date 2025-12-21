@@ -78,7 +78,7 @@ public class TransferFunctionOptions<T, TInput, TOutput> : TimeSeriesRegressionO
     /// </para>
     /// </remarks>
     public int AROrder { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the order of the Moving Average (MA) component.
     /// </summary>
@@ -119,7 +119,7 @@ public class TransferFunctionOptions<T, TInput, TOutput> : TimeSeriesRegressionO
     /// </para>
     /// </remarks>
     public int MAOrder { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the order of the input lag in the transfer function.
     /// </summary>
@@ -159,7 +159,7 @@ public class TransferFunctionOptions<T, TInput, TOutput> : TimeSeriesRegressionO
     /// </para>
     /// </remarks>
     public int InputLagOrder { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the order of the output lag in the transfer function.
     /// </summary>
@@ -200,7 +200,7 @@ public class TransferFunctionOptions<T, TInput, TOutput> : TimeSeriesRegressionO
     /// </para>
     /// </remarks>
     public int OutputLagOrder { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the optimizer used for parameter estimation.
     /// </summary>

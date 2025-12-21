@@ -286,7 +286,7 @@ public static class MathHelper
     public static T Gamma<T>(T x)
     {
         var numOps = GetNumericOperations<T>();
-        
+
         // Lanczos approximation for Gamma function
         T[] p = { numOps.FromDouble(676.5203681218851),
                   numOps.FromDouble(-1259.1392167224028),
@@ -299,8 +299,8 @@ public static class MathHelper
 
         if (numOps.LessThanOrEquals(x, numOps.Zero))
         {
-            return numOps.Divide(Pi<T>(), 
-                numOps.Multiply(Sin(numOps.Multiply(Pi<T>(), x)), 
+            return numOps.Divide(Pi<T>(),
+                numOps.Multiply(Sin(numOps.Multiply(Pi<T>(), x)),
                 Gamma(numOps.Subtract(numOps.One, x))));
         }
 
@@ -349,17 +349,17 @@ public static class MathHelper
         if (numOps.LessThan(x, numOps.FromDouble(2)))
         {
             T y = numOps.Multiply(numOps.FromDouble(0.25), numOps.Power(x, numOps.FromDouble(2)));
-            result = numOps.Multiply(numOps.Power(numOps.FromDouble(0.5), nu), 
-                numOps.Divide(Gamma(numOps.Add(nu, numOps.FromDouble(1))), 
+            result = numOps.Multiply(numOps.Power(numOps.FromDouble(0.5), nu),
+                numOps.Divide(Gamma(numOps.Add(nu, numOps.FromDouble(1))),
                 numOps.Power(x, nu)));
 
             T sum = numOps.One;
             T term = numOps.One;
             for (int k = 1; k <= 20; k++)
             {
-                term = numOps.Multiply(term, 
-                    numOps.Divide(y, 
-                        numOps.Multiply(numOps.FromDouble(k), 
+                term = numOps.Multiply(term,
+                    numOps.Divide(y,
+                        numOps.Multiply(numOps.FromDouble(k),
                             numOps.Add(nu, numOps.FromDouble(k)))));
                 sum = numOps.Add(sum, term);
                 if (numOps.LessThan(numOps.Abs(term), numOps.Multiply(sum, numOps.FromDouble(1e-15))))
@@ -372,18 +372,18 @@ public static class MathHelper
         else
         {
             T y = numOps.Divide(numOps.FromDouble(2), x);
-            result = numOps.Multiply(numOps.Exp(numOps.Multiply(x, numOps.FromDouble(-1))), 
+            result = numOps.Multiply(numOps.Exp(numOps.Multiply(x, numOps.FromDouble(-1))),
                 numOps.Divide(numOps.Sqrt(numOps.Multiply(Pi<T>(), y)), numOps.FromDouble(2)));
 
             T sum = numOps.One;
             T term = numOps.One;
             for (int k = 1; k <= 20; k++)
             {
-                term = numOps.Multiply(term, 
-                    numOps.Multiply(numOps.Add(numOps.Multiply(numOps.FromDouble(4), 
-                        numOps.Power(nu, numOps.FromDouble(2))), 
-                        numOps.Subtract(numOps.Power(numOps.FromDouble(2 * k - 1), numOps.FromDouble(2)), 
-                            numOps.One)), 
+                term = numOps.Multiply(term,
+                    numOps.Multiply(numOps.Add(numOps.Multiply(numOps.FromDouble(4),
+                        numOps.Power(nu, numOps.FromDouble(2))),
+                        numOps.Subtract(numOps.Power(numOps.FromDouble((2d * k) - 1d), numOps.FromDouble(2)),
+                            numOps.One)),
                         numOps.Divide(y, numOps.FromDouble(k))));
                 sum = numOps.Add(sum, term);
                 if (numOps.LessThan(numOps.Abs(term), numOps.Multiply(sum, numOps.FromDouble(1e-15))))
@@ -444,7 +444,7 @@ public static class MathHelper
         {
             return numOps.One;
         }
-        
+
         T piX = numOps.Multiply(numOps.FromDouble(Math.PI), x);
         return numOps.Divide(Sin(piX), piX);
     }
@@ -634,7 +634,7 @@ public static class MathHelper
     public static T BesselJ<T>(T nu, T x)
     {
         var numOps = GetNumericOperations<T>();
-    
+
         // Handle special cases
         if (numOps.Equals(x, numOps.Zero))
         {
@@ -696,7 +696,7 @@ public static class MathHelper
 
             T _numerator = numOps.Power(numOps.Negate(numOps.One), numOps.FromDouble(m));
             T _denominator = numOps.Multiply(_factorial, Gamma(numOps.Add(numOps.FromDouble(m), numOps.Add(nu, numOps.One))));
-        
+
             T _summand = numOps.Multiply(_numerator, numOps.Divide(numOps.Power(_xOver2, numOps.Add(numOps.FromDouble(2 * m), nu)), _denominator));
             _sum = numOps.Add(_sum, _summand);
 
@@ -1008,11 +1008,11 @@ public static class MathHelper
     public static T ArcCos<T>(T x)
     {
         var numOps = GetNumericOperations<T>();
-    
+
         // ArcCos(x) = p/2 - ArcSin(x)
         var arcSin = MathHelper.ArcSin(x);
         var halfPi = numOps.Divide(Pi<T>(), numOps.FromDouble(2.0));
-    
+
         return numOps.Subtract(halfPi, arcSin);
     }
 
@@ -1034,18 +1034,18 @@ public static class MathHelper
     public static T ArcSin<T>(T x)
     {
         var numOps = GetNumericOperations<T>();
-    
+
         // Check if x is within the valid range [-1, 1]
         if (numOps.LessThan(x, numOps.FromDouble(-1)) || numOps.GreaterThan(x, numOps.One))
         {
             throw new ArgumentOutOfRangeException(nameof(x), "ArcSin is only defined for values between -1 and 1.");
         }
-    
+
         // ArcSin(x) = ArcTan(x / sqrt(1 - x^2))
         var oneMinusXSquared = numOps.Subtract(numOps.One, numOps.Multiply(x, x));
         var denominator = numOps.Sqrt(oneMinusXSquared);
         var fraction = numOps.Divide(x, denominator);
-    
+
         return ArcTan(fraction);
     }
 
@@ -1161,17 +1161,17 @@ public static class MathHelper
         T _p = _numOps.FromDouble(0.3275911);
 
         T _t = _numOps.Divide(_numOps.FromDouble(1), _numOps.Add(_numOps.FromDouble(1), _numOps.Multiply(_p, x)));
-        T _y = _numOps.Subtract(_numOps.FromDouble(1), 
+        T _y = _numOps.Subtract(_numOps.FromDouble(1),
             _numOps.Multiply(_t,
                 _numOps.Multiply(
                     _numOps.Exp(_numOps.Negate(_numOps.Square(x))),
-                    _numOps.Add(_a1, 
-                        _numOps.Multiply(_t, 
-                            _numOps.Add(_a2, 
-                                _numOps.Multiply(_t, 
-                                    _numOps.Add(_a3, 
-                                        _numOps.Multiply(_t, 
-                                            _numOps.Add(_a4, 
+                    _numOps.Add(_a1,
+                        _numOps.Multiply(_t,
+                            _numOps.Add(_a2,
+                                _numOps.Multiply(_t,
+                                    _numOps.Add(_a3,
+                                        _numOps.Multiply(_t,
+                                            _numOps.Add(_a4,
                                                 _numOps.Multiply(_a5, _t)))))))))));
 
         return _numOps.Multiply(_sign, _y);

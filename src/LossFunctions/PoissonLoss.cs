@@ -38,7 +38,7 @@ public class PoissonLoss<T> : LossFunctionBase<T>
     public PoissonLoss()
     {
     }
-    
+
     /// <summary>
     /// Calculates the Poisson loss between predicted and actual values.
     /// </summary>
@@ -48,7 +48,7 @@ public class PoissonLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T sum = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -59,10 +59,10 @@ public class PoissonLoss<T> : LossFunctionBase<T>
                 NumOps.Multiply(actual[i], NumericalStabilityHelper.SafeLog(predicted[i], NumericalStabilityHelper.SmallEpsilon))
             ));
         }
-        
+
         return NumOps.Divide(sum, NumOps.FromDouble(predicted.Length));
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Poisson loss function.
     /// </summary>
@@ -72,14 +72,14 @@ public class PoissonLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
             // The derivative is 1 - actual/predicted
             derivative[i] = NumOps.Subtract(NumOps.One, NumericalStabilityHelper.SafeDiv(actual[i], predicted[i], NumericalStabilityHelper.SmallEpsilon));
         }
-        
+
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
 }

@@ -1,5 +1,5 @@
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.DistributedTraining;
 

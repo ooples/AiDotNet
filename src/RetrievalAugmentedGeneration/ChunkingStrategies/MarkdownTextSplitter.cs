@@ -28,7 +28,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         {
             var separators = new[] { "\n## ", "\n### ", "\n#### ", "\n\n", "\n", ". ", " " };
             var chunks = SplitTextRecursive(text, separators);
-            
+
             var position = 0;
             foreach (var chunk in chunks)
             {
@@ -42,7 +42,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         {
             var chunks = new List<string>();
 
-if (text.Length <= ChunkSize)
+            if (text.Length <= ChunkSize)
             {
                 chunks.Add(text);
                 return chunks;
@@ -50,7 +50,7 @@ if (text.Length <= ChunkSize)
 
 
             var currentChunk = new StringBuilder();
-            
+
             foreach (var separator in separators)
             {
                 var splits = text.Split(new[] { separator }, StringSplitOptions.None);
@@ -70,7 +70,7 @@ if (text.Length <= ChunkSize)
 
                     if (currentChunk.Length > 0)
                         currentChunk.Append(separator);
-                    
+
                     currentChunk.Append(split);
                 }
 

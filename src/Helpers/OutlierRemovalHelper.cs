@@ -37,17 +37,17 @@ public static class OutlierRemovalHelper<T, TInput, TOutput>
             {
                 throw new InvalidOperationException("Input tensor must be 2-dimensional (matrix-like)");
             }
-            
+
             if (outputTensor.Shape.Length != 1)
             {
                 throw new InvalidOperationException("Output tensor must be 1-dimensional (vector-like)");
             }
-            
+
             // Convert tensor to matrix - create a new matrix with the same data
             var inputRows = inputTensor.Shape[0];
             var inputCols = inputTensor.Shape[1];
             var inputMatrix2 = new Matrix<T>(inputRows, inputCols);
-            
+
             for (int i = 0; i < inputRows; i++)
             {
                 for (int j = 0; j < inputCols; j++)
@@ -55,17 +55,17 @@ public static class OutlierRemovalHelper<T, TInput, TOutput>
                     inputMatrix2[i, j] = inputTensor[i, j];
                 }
             }
-            
+
             return (inputMatrix2, outputTensor.ToVector());
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported combination of input type {typeof(TInput).Name} and output type {typeof(TOutput).Name}. " +
             "Currently supported combinations are: " +
             $"(Matrix<{typeof(T).Name}>, Vector<{typeof(T).Name}>) for linear models and " +
             $"(Tensor<{typeof(T).Name}>, Tensor<{typeof(T).Name}>) for tensor models.");
     }
-    
+
     /// <summary>
     /// Converts Matrix and Vector data back to the original generic types.
     /// </summary>
@@ -80,9 +80,9 @@ public static class OutlierRemovalHelper<T, TInput, TOutput>
     /// from the common language back to each person's native language.</para>
     /// </remarks>
     public static (TInput CleanedInputs, TOutput CleanedOutputs) ConvertToOriginalTypes(
-        Matrix<T> cleanedInputMatrix, 
-        Vector<T> cleanedOutputVector, 
-        Type inputType, 
+        Matrix<T> cleanedInputMatrix,
+        Vector<T> cleanedOutputVector,
+        Type inputType,
         Type outputType)
     {
         if (inputType == typeof(Matrix<T>) && outputType == typeof(Vector<T>))
@@ -93,13 +93,13 @@ public static class OutlierRemovalHelper<T, TInput, TOutput>
         {
             // Convert Matrix to Tensor
             var inputTensor = Tensor<T>.FromRowMatrix(cleanedInputMatrix);
-            
+
             // Convert Vector to Tensor
             var outputTensor = Tensor<T>.FromVector(cleanedOutputVector);
-            
+
             return ((TInput)(object)inputTensor, (TOutput)(object)outputTensor);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported combination of input type {inputType.Name} and output type {outputType.Name}. " +
             "Currently supported combinations are: " +

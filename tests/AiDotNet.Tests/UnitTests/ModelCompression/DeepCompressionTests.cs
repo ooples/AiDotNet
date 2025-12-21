@@ -1,6 +1,6 @@
 using System;
-using AiDotNet.ModelCompression;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.ModelCompression;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.ModelCompression
@@ -203,7 +203,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 numClusters: 8,
                 randomSeed: 42);
 
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             var weights = new double[100];
             for (int i = 0; i < weights.Length; i++)
             {
@@ -307,7 +307,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 numClusters: 32,
                 randomSeed: 42);
 
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             var weights = new double[200];
             for (int i = 0; i < weights.Length; i++)
             {
@@ -504,7 +504,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 maxClusteringIterations: 50,
                 randomSeed: 42);
 
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             var weights = new double[1000];
             for (int i = 0; i < weights.Length; i++)
             {

@@ -36,11 +36,11 @@ public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T
     /// </para>
     /// </remarks>
     public ElasticNetRegularization(RegularizationOptions? options = null) : base(options ?? new RegularizationOptions
-        {
-            Type = RegularizationType.ElasticNet,
-            Strength = 0.1, // Default Elastic Net regularization strength
-            L1Ratio = 0.5  // Default balance between L1 and L2
-        })
+    {
+        Type = RegularizationType.ElasticNet,
+        Strength = 0.1, // Default Elastic Net regularization strength
+        L1Ratio = 0.5  // Default balance between L1 and L2
+    })
     {
     }
 
@@ -62,7 +62,7 @@ public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T
         var regularizationStrength = NumOps.FromDouble(Options.Strength);
         var l1Ratio = NumOps.FromDouble(Options.L1Ratio);
         var l2Ratio = NumOps.FromDouble(1 - Options.L1Ratio);
-        
+
         if (gradient is Vector<T> gradientVector && coefficients is Vector<T> coefficientVector)
         {
             var result = gradientVector.Add(coefficientVector.Transform(c =>
@@ -71,7 +71,7 @@ public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T
                 var l2Part = NumOps.Multiply(regularizationStrength, NumOps.Multiply(l2Ratio, c));
                 return NumOps.Add(l1Part, l2Part);
             }));
-            
+
             return (TOutput)(object)result;
         }
         else if (gradient is Tensor<T> gradientTensor && coefficients is Tensor<T> coefficientTensor)
@@ -79,7 +79,7 @@ public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T
             // Convert tensors to vectors for calculation
             var gradientFlattenedVector = gradientTensor.ToVector();
             var coefficientFlattenedVector = coefficientTensor.ToVector();
-            
+
             // Apply regularization to gradient
             var result = gradientFlattenedVector.Add(coefficientFlattenedVector.Transform(c =>
             {
@@ -87,17 +87,17 @@ public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T
                 var l2Part = NumOps.Multiply(regularizationStrength, NumOps.Multiply(l2Ratio, c));
                 return NumOps.Add(l1Part, l2Part);
             }));
-            
+
             // Convert back to tensor with the same shape as the gradient tensor
             var resultTensor = Tensor<T>.FromVector(result);
             if (gradientTensor.Shape.Length > 1)
             {
                 resultTensor = resultTensor.Reshape(gradientTensor.Shape);
             }
-            
+
             return (TOutput)(object)resultTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported output types {typeof(TOutput).Name} for Elastic Net regularization gradient. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -121,28 +121,28 @@ public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T
         var l1Ratio = NumOps.FromDouble(Options.L1Ratio);
         var l2Ratio = NumOps.FromDouble(1 - Options.L1Ratio);
         var result = new Matrix<T>(data.Rows, data.Columns);
-    
+
         for (int i = 0; i < data.Rows; i++)
         {
             for (int j = 0; j < data.Columns; j++)
             {
                 var value = data[i, j];
                 var subPart = NumOps.Subtract(NumOps.Abs(value), NumOps.Multiply(regularizationStrength, l1Ratio));
-            
+
                 var l1Part = NumOps.Multiply(
                     NumOps.SignOrZero(value),
                     NumOps.GreaterThan(subPart, NumOps.Zero) ? subPart : NumOps.Zero
                 );
-            
+
                 var l2Part = NumOps.Multiply(
                     value,
                     NumOps.Subtract(NumOps.One, NumOps.Multiply(regularizationStrength, l2Ratio))
                 );
-            
+
                 result[i, j] = NumOps.Add(l1Part, l2Part);
             }
         }
-    
+
         return result;
     }
 
@@ -164,25 +164,25 @@ public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T
         var l1Ratio = NumOps.FromDouble(Options.L1Ratio);
         var l2Ratio = NumOps.FromDouble(1 - Options.L1Ratio);
         var result = new Vector<T>(data.Length);
-    
+
         for (int i = 0; i < data.Length; i++)
         {
             var value = data[i];
             var subPart = NumOps.Subtract(NumOps.Abs(value), NumOps.Multiply(regularizationStrength, l1Ratio));
-        
+
             var l1Part = NumOps.Multiply(
                 NumOps.SignOrZero(value),
                 NumOps.GreaterThan(subPart, NumOps.Zero) ? subPart : NumOps.Zero
             );
-        
+
             var l2Part = NumOps.Multiply(
                 value,
                 NumOps.Subtract(NumOps.One, NumOps.Multiply(regularizationStrength, l2Ratio))
             );
-        
+
             result[i] = NumOps.Add(l1Part, l2Part);
         }
-    
+
         return result;
     }
 }

@@ -34,23 +34,23 @@ public class HingeLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T sum = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
             // Hinge loss: max(0, 1 - y*f(x))
             T margin = NumOps.Subtract(
-                NumOps.One, 
+                NumOps.One,
                 NumOps.Multiply(actual[i], predicted[i])
             );
-            
+
             T loss = MathHelper.Max(NumOps.Zero, margin);
             sum = NumOps.Add(sum, loss);
         }
-        
+
         return NumOps.Divide(sum, NumOps.FromDouble(predicted.Length));
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Hinge loss function.
     /// </summary>
@@ -60,12 +60,12 @@ public class HingeLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
             T margin = NumOps.Multiply(actual[i], predicted[i]);
-            
+
             if (NumOps.LessThan(margin, NumOps.One))
             {
                 // If y*f(x) < 1, derivative is -y
@@ -77,7 +77,7 @@ public class HingeLoss<T> : LossFunctionBase<T>
                 derivative[i] = NumOps.Zero;
             }
         }
-        
+
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
 }

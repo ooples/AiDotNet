@@ -34,7 +34,7 @@ public class BSplineKernel<T> : IKernelFunction<T>
     /// balance between smoothness and computational efficiency for most applications.
     /// </remarks>
     private readonly int _degree;
-    
+
     /// <summary>
     /// The spacing between knots in the B-spline function.
     /// </summary>
@@ -45,7 +45,7 @@ public class BSplineKernel<T> : IKernelFunction<T>
     /// while a larger spacing makes it more tolerant of differences.
     /// </remarks>
     private readonly T _knotSpacing;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

@@ -359,12 +359,12 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public DilatedConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth, 
-                                     int dilation, int stride = 1, int padding = 0, 
+    public DilatedConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth,
+                                     int dilation, int stride = 1, int padding = 0,
                                      IActivationFunction<T>? activation = null)
-        : base(CalculateInputShape(inputDepth, inputHeight, inputWidth), 
-               CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding, dilation), 
-                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding, dilation)), 
+        : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
+               CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding, dilation),
+                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding, dilation)),
                activation ?? new ReLUActivation<T>())
     {
         _inputDepth = inputDepth;
@@ -410,12 +410,12 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// For most basic uses, the regular constructor is sufficient.
     /// </para>
     /// </remarks>
-    public DilatedConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth, 
-                                     int dilation, int stride = 1, int padding = 0, 
+    public DilatedConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth,
+                                     int dilation, int stride = 1, int padding = 0,
                                      IVectorActivationFunction<T>? vectorActivation = null)
-        : base(CalculateInputShape(inputDepth, inputHeight, inputWidth), 
-               CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding, dilation), 
-                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding, dilation)), 
+        : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
+               CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding, dilation),
+                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding, dilation)),
                vectorActivation ?? new ReLUActivation<T>())
     {
         _inputDepth = inputDepth;

@@ -60,7 +60,7 @@ public class KullbackLeiblerDivergenceFitnessCalculator<T, TInput, TOutput> : Fi
     /// making it simpler to use.
     /// </para>
     /// </remarks>
-    public KullbackLeiblerDivergenceFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) 
+    public KullbackLeiblerDivergenceFitnessCalculator(DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
     }
@@ -97,7 +97,7 @@ public class KullbackLeiblerDivergenceFitnessCalculator<T, TInput, TOutput> : Fi
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return new KullbackLeiblerDivergence<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+        return new KullbackLeiblerDivergence<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

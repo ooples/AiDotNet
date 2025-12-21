@@ -53,13 +53,13 @@ public class TimeSeriesModelFactory<T, TInput, TOutput>
             (TimeSeriesModelType.ARMA, ARMAOptions<T> armaOptions) => new ARMAModel<T>(armaOptions),
             (TimeSeriesModelType.AR, ARModelOptions<T> arOptions) => new ARModel<T>(arOptions),
             (TimeSeriesModelType.MA, MAModelOptions<T> maOptions) => new MAModel<T>(maOptions),
-            (TimeSeriesModelType.ExponentialSmoothing, ExponentialSmoothingOptions<T> esOptions) => 
+            (TimeSeriesModelType.ExponentialSmoothing, ExponentialSmoothingOptions<T> esOptions) =>
                 new ExponentialSmoothingModel<T>(esOptions),
-            (TimeSeriesModelType.SimpleExponentialSmoothing, ExponentialSmoothingOptions<T> esOptions) => 
+            (TimeSeriesModelType.SimpleExponentialSmoothing, ExponentialSmoothingOptions<T> esOptions) =>
                 new ExponentialSmoothingModel<T>(esOptions),
-            (TimeSeriesModelType.DoubleExponentialSmoothing, ExponentialSmoothingOptions<T> esOptions) => 
+            (TimeSeriesModelType.DoubleExponentialSmoothing, ExponentialSmoothingOptions<T> esOptions) =>
                 new ExponentialSmoothingModel<T>(esOptions),
-            (TimeSeriesModelType.TripleExponentialSmoothing, ExponentialSmoothingOptions<T> esOptions) => 
+            (TimeSeriesModelType.TripleExponentialSmoothing, ExponentialSmoothingOptions<T> esOptions) =>
                 new ExponentialSmoothingModel<T>(esOptions),
             (TimeSeriesModelType.StateSpace, StateSpaceModelOptions<T> ssOptions) => new StateSpaceModel<T>(ssOptions),
             (TimeSeriesModelType.TBATS, TBATSModelOptions<T> tbatsOptions) => new TBATSModel<T>(tbatsOptions),
@@ -109,19 +109,19 @@ public class TimeSeriesModelFactory<T, TInput, TOutput>
             TimeSeriesModelType.AR => new ARModelOptions<T>(),
             TimeSeriesModelType.MA => new MAModelOptions<T>(),
             TimeSeriesModelType.ExponentialSmoothing => new ExponentialSmoothingOptions<T>(),
-            TimeSeriesModelType.SimpleExponentialSmoothing => new ExponentialSmoothingOptions<T> 
-            { 
-                UseTrend = false, 
-                UseSeasonal = false 
+            TimeSeriesModelType.SimpleExponentialSmoothing => new ExponentialSmoothingOptions<T>
+            {
+                UseTrend = false,
+                UseSeasonal = false
             },
-            TimeSeriesModelType.DoubleExponentialSmoothing => new ExponentialSmoothingOptions<T> 
-            { 
-                UseTrend = true, 
-                UseSeasonal = false 
+            TimeSeriesModelType.DoubleExponentialSmoothing => new ExponentialSmoothingOptions<T>
+            {
+                UseTrend = true,
+                UseSeasonal = false
             },
-            TimeSeriesModelType.TripleExponentialSmoothing => new ExponentialSmoothingOptions<T> 
-            { 
-                UseTrend = true, 
+            TimeSeriesModelType.TripleExponentialSmoothing => new ExponentialSmoothingOptions<T>
+            {
+                UseTrend = true,
                 UseSeasonal = true,
                 SeasonalPeriod = 12  // Default to monthly seasonality
             },
@@ -143,7 +143,7 @@ public class TimeSeriesModelFactory<T, TInput, TOutput>
             TimeSeriesModelType.Custom => throw new ArgumentException("Custom models require custom options to be provided explicitly"),
             _ => throw new ArgumentException($"Unsupported model type: {modelType}")
         };
-    
+
         return CreateModel(modelType, options);
     }
 }

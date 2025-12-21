@@ -38,12 +38,12 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// The Gram matrix (kernel matrix) that represents pairwise similarities between all training points.
     /// </summary>
     private Matrix<T> _gramMatrix;
-    
+
     /// <summary>
     /// The dual coefficients used for making predictions.
     /// </summary>
     private Vector<T> _dualCoefficients;
-    
+
     /// <summary>
     /// Gets the configuration options specific to Kernel Ridge Regression.
     /// </summary>

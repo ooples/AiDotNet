@@ -3,39 +3,31 @@ global using System;
 global using System.Collections.Generic;
 global using System.IO;
 global using System.Linq;
-
-// BenchmarkDotNet
-global using BenchmarkDotNet.Attributes;
-global using BenchmarkDotNet.Jobs;
-
-// AiDotNet Core
-global using AiDotNet.Tensors.LinearAlgebra;
-global using AiDotNet.Interfaces;
-global using AiDotNet.Enums;
-
 // AiDotNet Components
 global using AiDotNet.ActivationFunctions;
+global using AiDotNet.Autodiff;
 global using AiDotNet.AutoML;
 global using AiDotNet.Caching;
 global using AiDotNet.CrossValidators;
 global using AiDotNet.DataProcessor;
 global using AiDotNet.DecompositionMethods.MatrixDecomposition;
+global using AiDotNet.Enums;
 global using AiDotNet.Evaluation;
 global using AiDotNet.FeatureSelectors;
 global using AiDotNet.FitDetectors;
 global using AiDotNet.FitnessCalculators;
 global using AiDotNet.GaussianProcesses;
 global using AiDotNet.Genetics;
+global using AiDotNet.Interfaces;
 global using AiDotNet.Interpretability;
 global using AiDotNet.JitCompiler;
 global using AiDotNet.Kernels;
+global using AiDotNet.LoRA;
 global using AiDotNet.LossFunctions;
 global using AiDotNet.MetaLearning;
 global using AiDotNet.Models;
 global using AiDotNet.Models.Options;
 global using AiDotNet.Models.Results;
-global using AiDotNet.Autodiff;
-global using AiDotNet.LoRA;
 global using AiDotNet.NeuralNetworks;
 global using AiDotNet.NeuralNetworks.Layers;
 global using AiDotNet.Normalizers;
@@ -43,7 +35,12 @@ global using AiDotNet.Optimizers;
 global using AiDotNet.OutlierRemoval;
 global using AiDotNet.Regularization;
 global using AiDotNet.Statistics;
+// AiDotNet Core
+global using AiDotNet.Tensors.LinearAlgebra;
 global using AiDotNet.TimeSeries;
 global using AiDotNet.TransferLearning.Algorithms;
 global using AiDotNet.TransferLearning.DomainAdaptation;
 global using AiDotNet.TransferLearning.FeatureMapping;
+// BenchmarkDotNet
+global using BenchmarkDotNet.Attributes;
+global using BenchmarkDotNet.Jobs;

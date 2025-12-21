@@ -82,7 +82,7 @@ public class RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> : Gra
     /// </para>
     /// </remarks>
     public double Decay { get; set; } = 0.9;
-    
+
     /// <summary>
     /// Gets or sets a small constant added to the denominator to improve numerical stability.
     /// </summary>

@@ -1,6 +1,6 @@
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.JitCompiler.CodeGen;
 
@@ -2136,49 +2136,49 @@ public static class GradientOps
         switch (inputIndex)
         {
             case 0: // Input gradient
+            {
+                // grad_input = W_ih^T @ grad_gates
+                // Simplified: return gradient scaled by hidden size
+                var result = new T[batchSize * inputSize];
+                for (int i = 0; i < result.Length; i++)
                 {
-                    // grad_input = W_ih^T @ grad_gates
-                    // Simplified: return gradient scaled by hidden size
-                    var result = new T[batchSize * inputSize];
-                    for (int i = 0; i < result.Length; i++)
-                    {
-                        result[i] = i < gradHData.Length ? gradHData[i] : numOps.Zero;
-                    }
-                    return new Tensor<T>(input.Shape, new Vector<T>(result));
+                    result[i] = i < gradHData.Length ? gradHData[i] : numOps.Zero;
                 }
+                return new Tensor<T>(input.Shape, new Vector<T>(result));
+            }
             case 1: // h_prev gradient
-                {
-                    // grad_h_prev = W_hh^T @ grad_gates
-                    var result = new T[batchSize * hiddenSize];
-                    Array.Copy(gradHData, result, Math.Min(gradHData.Length, result.Length));
-                    return new Tensor<T>(hPrev.Shape, new Vector<T>(result));
-                }
+            {
+                // grad_h_prev = W_hh^T @ grad_gates
+                var result = new T[batchSize * hiddenSize];
+                Array.Copy(gradHData, result, Math.Min(gradHData.Length, result.Length));
+                return new Tensor<T>(hPrev.Shape, new Vector<T>(result));
+            }
             case 2: // c_prev gradient
+            {
+                // grad_c_prev = grad_c * f
+                var result = new T[batchSize * hiddenSize];
+                for (int b = 0; b < batchSize; b++)
                 {
-                    // grad_c_prev = grad_c * f
-                    var result = new T[batchSize * hiddenSize];
-                    for (int b = 0; b < batchSize; b++)
+                    for (int h = 0; h < hiddenSize; h++)
                     {
-                        for (int h = 0; h < hiddenSize; h++)
-                        {
-                            int idx = b * hiddenSize + h;
-                            int fIdx = b * 4 * hiddenSize + hiddenSize + h;
-                            result[idx] = numOps.Multiply(gradC[idx], gatesData[fIdx]);
-                        }
+                        int idx = b * hiddenSize + h;
+                        int fIdx = b * 4 * hiddenSize + hiddenSize + h;
+                        result[idx] = numOps.Multiply(gradC[idx], gatesData[fIdx]);
                     }
-                    return new Tensor<T>(cPrev.Shape, new Vector<T>(result));
                 }
+                return new Tensor<T>(cPrev.Shape, new Vector<T>(result));
+            }
             default: // Weight/bias gradients
+            {
+                var resultShape = inputIndex switch
                 {
-                    var resultShape = inputIndex switch
-                    {
-                        3 => new int[] { 4 * hiddenSize, inputSize },
-                        4 => new int[] { 4 * hiddenSize, hiddenSize },
-                        _ => new int[] { 4 * hiddenSize }
-                    };
-                    var result = new T[resultShape.Aggregate(1, (a, b) => a * b)];
-                    return new Tensor<T>(resultShape, new Vector<T>(result));
-                }
+                    3 => new int[] { 4 * hiddenSize, inputSize },
+                    4 => new int[] { 4 * hiddenSize, hiddenSize },
+                    _ => new int[] { 4 * hiddenSize }
+                };
+                var result = new T[resultShape.Aggregate(1, (a, b) => a * b)];
+                return new Tensor<T>(resultShape, new Vector<T>(result));
+            }
         }
     }
 
@@ -2237,42 +2237,42 @@ public static class GradientOps
         switch (inputIndex)
         {
             case 0: // Input gradient
+            {
+                var result = new T[batchSize * inputSize];
+                for (int i = 0; i < result.Length; i++)
                 {
-                    var result = new T[batchSize * inputSize];
-                    for (int i = 0; i < result.Length; i++)
-                    {
-                        result[i] = i < gradHData.Length ? gradHData[i] : numOps.Zero;
-                    }
-                    return new Tensor<T>(input.Shape, new Vector<T>(result));
+                    result[i] = i < gradHData.Length ? gradHData[i] : numOps.Zero;
                 }
+                return new Tensor<T>(input.Shape, new Vector<T>(result));
+            }
             case 1: // h_prev gradient
+            {
+                // grad_h_prev = grad_h * (1 - z) + grad_h_tilde @ U_h^T * r + grad_z @ U_z^T + grad_r @ U_r^T
+                var result = new T[batchSize * hiddenSize];
+                for (int b = 0; b < batchSize; b++)
                 {
-                    // grad_h_prev = grad_h * (1 - z) + grad_h_tilde @ U_h^T * r + grad_z @ U_z^T + grad_r @ U_r^T
-                    var result = new T[batchSize * hiddenSize];
-                    for (int b = 0; b < batchSize; b++)
+                    for (int h = 0; h < hiddenSize; h++)
                     {
-                        for (int h = 0; h < hiddenSize; h++)
-                        {
-                            int idx = b * hiddenSize + h;
-                            int zIdx = b * 3 * hiddenSize + h;
-                            T z = gatesData[zIdx];
-                            T oneMinusZ = numOps.Subtract(numOps.FromDouble(1), z);
-                            result[idx] = numOps.Multiply(gradHData[idx], oneMinusZ);
-                        }
+                        int idx = b * hiddenSize + h;
+                        int zIdx = b * 3 * hiddenSize + h;
+                        T z = gatesData[zIdx];
+                        T oneMinusZ = numOps.Subtract(numOps.FromDouble(1), z);
+                        result[idx] = numOps.Multiply(gradHData[idx], oneMinusZ);
                     }
-                    return new Tensor<T>(hPrev.Shape, new Vector<T>(result));
                 }
+                return new Tensor<T>(hPrev.Shape, new Vector<T>(result));
+            }
             default: // Weight/bias gradients
+            {
+                var resultShape = inputIndex switch
                 {
-                    var resultShape = inputIndex switch
-                    {
-                        2 => new int[] { 3 * hiddenSize, inputSize },
-                        3 => new int[] { 3 * hiddenSize, hiddenSize },
-                        _ => new int[] { 3 * hiddenSize }
-                    };
-                    var result = new T[resultShape.Aggregate(1, (a, b) => a * b)];
-                    return new Tensor<T>(resultShape, new Vector<T>(result));
-                }
+                    2 => new int[] { 3 * hiddenSize, inputSize },
+                    3 => new int[] { 3 * hiddenSize, hiddenSize },
+                    _ => new int[] { 3 * hiddenSize }
+                };
+                var result = new T[resultShape.Aggregate(1, (a, b) => a * b)];
+                return new Tensor<T>(resultShape, new Vector<T>(result));
+            }
         }
     }
 

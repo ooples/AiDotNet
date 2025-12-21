@@ -36,7 +36,7 @@ public class MeanSquaredErrorLoss<T> : LossFunctionBase<T>
         ValidateVectorLengths(predicted, actual);
         return StatisticsHelper<T>.CalculateMeanSquaredError(predicted, actual);
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Mean Squared Error loss function.
     /// </summary>
@@ -46,9 +46,9 @@ public class MeanSquaredErrorLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         // The derivative of MSE is 2*(predicted-actual)/n
-        return predicted.Subtract(actual).Transform(x => 
+        return predicted.Subtract(actual).Transform(x =>
             NumOps.Multiply(NumOps.FromDouble(2), x)
         ).Divide(NumOps.FromDouble(predicted.Length));
     }

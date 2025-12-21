@@ -23,12 +23,12 @@ public class SincInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-values at each data point.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The cutoff frequency that controls the bandwidth of the interpolation.
     /// </summary>
@@ -36,7 +36,7 @@ public class SincInterpolation<T> : IInterpolation<T>
     /// Higher values allow for more rapid changes in the interpolated curve.
     /// </remarks>
     private readonly T _cutoffFrequency;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

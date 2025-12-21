@@ -1,7 +1,7 @@
 
+using System;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
-using System;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 {
@@ -38,7 +38,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
         {
             var values = new T[_dimension];
             var hash = GetDeterministicHash(text);
-            
+
             for (int i = 0; i < _dimension; i++)
             {
                 var val = NumOps.FromDouble(Math.Cos((double)hash * (i + 1) * 0.002));

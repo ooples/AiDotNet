@@ -1,13 +1,13 @@
 
-using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Generators;
-using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
-using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using AiDotNet.Interfaces;
+using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Generators;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -103,10 +103,10 @@ public class SelfCorrectingRetriever<T>
     {
         _generator = generator ?? throw new ArgumentNullException(nameof(generator));
         _baseRetriever = baseRetriever ?? throw new ArgumentNullException(nameof(baseRetriever));
-        
+
         if (maxIterations <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxIterations), "Max iterations must be positive");
-            
+
         _maxIterations = maxIterations;
     }
 
@@ -154,7 +154,7 @@ public class SelfCorrectingRetriever<T>
 
         // Step 1: Initial retrieval
         var documents = _baseRetriever.Retrieve(query, topK, metadataFilters).ToList();
-        
+
         if (documents.Count == 0)
         {
             return "I don't have enough information to answer this question.";
@@ -195,7 +195,7 @@ Provide a brief critique.";
 
             // Step 5: Identify missing information
             var missingInfo = ExtractMissingInformation(critique);
-            
+
             if (string.IsNullOrEmpty(missingInfo))
             {
                 // No clear improvement path, stop
@@ -204,7 +204,7 @@ Provide a brief critique.";
 
             // Step 6: Retrieve additional documents
             var additionalDocs = _baseRetriever.Retrieve(missingInfo, topK: 2, metadataFilters).ToList();
-            
+
             if (additionalDocs.Count == 0)
             {
                 // No new documents found, stop
@@ -229,17 +229,17 @@ Provide a brief critique.";
     private bool IsAnswerSatisfactory(string critique)
     {
         // Check for positive indicators
-        var positiveIndicators = new[] 
-        { 
-            "complete", "accurate", "comprehensive", "satisfactory", 
-            "no errors", "well-covered", "sufficient" 
+        var positiveIndicators = new[]
+        {
+            "complete", "accurate", "comprehensive", "satisfactory",
+            "no errors", "well-covered", "sufficient"
         };
 
         // Check for negative indicators
-        var negativeIndicators = new[] 
-        { 
-            "missing", "incorrect", "incomplete", "error", "gap", 
-            "unclear", "needs", "lacks", "wrong" 
+        var negativeIndicators = new[]
+        {
+            "missing", "incorrect", "incomplete", "error", "gap",
+            "unclear", "needs", "lacks", "wrong"
         };
 
         var critiqueLower = critique.ToLower();

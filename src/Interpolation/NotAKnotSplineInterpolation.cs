@@ -30,17 +30,17 @@ public class NotAKnotSplineInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the known data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates (values) of the known data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// Optional matrix decomposition method used to solve the linear system of equations.
     /// </summary>
     private readonly IMatrixDecomposition<T>? _decomposition;
-    
+
     /// <summary>
     /// The coefficients of the cubic spline polynomials for each segment.
     /// </summary>
@@ -52,7 +52,7 @@ public class NotAKnotSplineInterpolation<T> : IInterpolation<T>
     /// - _coefficients[3]: Cubic terms (d)
     /// </remarks>
     private readonly Vector<T>[] _coefficients;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with generic type T.
     /// </summary>

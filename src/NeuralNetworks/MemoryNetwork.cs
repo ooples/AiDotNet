@@ -142,7 +142,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     /// and sets up the layers needed for processing inputs and interacting with memory.
     /// </para>
     /// </remarks>
-    public MemoryNetwork(NeuralNetworkArchitecture<T> architecture, int memorySize, int embeddingSize, ILossFunction<T>? lossFunction = null) : 
+    public MemoryNetwork(NeuralNetworkArchitecture<T> architecture, int memorySize, int embeddingSize, ILossFunction<T>? lossFunction = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _memorySize = memorySize;
@@ -265,32 +265,32 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     {
         // Set to inference mode
         SetTrainingMode(false);
-    
+
         // Get batch size from input shape
         bool isBatch = input.Shape.Length > 1 && input.Shape[0] > 1;
         int batchSize = isBatch ? input.Shape[0] : 1;
-    
+
         // Process through input encoding layers (first quarter of layers)
         Tensor<T> encoded = EncodeInput(input);
-    
+
         // Calculate attention over memory
         Tensor<T> attentionWeights = CalculateAttention(encoded);
-    
+
         // Read from memory using attention weights
         Tensor<T> memoryReadout = ReadFromMemory(attentionWeights);
-    
+
         // Combine input representation with memory
         Tensor<T> combined = CombineInputAndMemory(encoded, memoryReadout);
-    
+
         // Process through output layers to generate prediction
         Tensor<T> output = GenerateOutput(combined);
-    
+
         // Update memory with new information (optional, depends on architecture)
         if (ShouldUpdateMemoryDuringInference())
         {
             UpdateMemory(encoded, attentionWeights);
         }
-    
+
         return output;
     }
 
@@ -303,13 +303,13 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     {
         // Use the first quarter of layers for input encoding
         int encodingLayerCount = Layers.Count / 4;
-    
+
         Tensor<T> current = input;
         for (int i = 0; i < encodingLayerCount; i++)
         {
             current = Layers[i].Forward(current);
         }
-    
+
         return current;
     }
 
@@ -323,16 +323,16 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         // Use the second quarter of layers for attention calculation
         int startLayerIndex = Layers.Count / 4;
         int endLayerIndex = Layers.Count / 2;
-    
+
         Tensor<T> current = encoded;
         for (int i = startLayerIndex; i < endLayerIndex; i++)
         {
             current = Layers[i].Forward(current);
         }
-    
+
         // Apply softmax to get normalized attention weights
         current = ApplySoftmax(current);
-    
+
         return current;
     }
 
@@ -347,10 +347,10 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         int[] shape = logits.Shape;
         int batchSize = shape[0];
         int attentionSize = shape[shape.Length - 1];
-    
+
         // Create result tensor with same shape
         Tensor<T> softmax = new Tensor<T>(shape);
-    
+
         // Apply softmax for each batch
         for (int b = 0; b < batchSize; b++)
         {
@@ -364,11 +364,11 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
                     max = val;
                 }
             }
-        
+
             // Calculate exp(x - max) for each element
             T[] expValues = new T[attentionSize];
             T sumExp = NumOps.Zero;
-        
+
             for (int i = 0; i < attentionSize; i++)
             {
                 T val = logits[b, i];
@@ -376,14 +376,14 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
                 expValues[i] = expVal;
                 sumExp = NumOps.Add(sumExp, expVal);
             }
-        
+
             // Normalize by sum of exponentials
             for (int i = 0; i < attentionSize; i++)
             {
                 softmax[b, i] = NumOps.Divide(expValues[i], sumExp);
             }
         }
-    
+
         return softmax;
     }
 
@@ -397,10 +397,10 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         // Get shape information
         int[] shape = attentionWeights.Shape;
         int batchSize = shape[0];
-    
+
         // Create result tensor with shape [batchSize, embeddingSize]
         Tensor<T> readout = new Tensor<T>(new int[] { batchSize, _embeddingSize });
-    
+
         // For each batch, compute weighted sum of memory
         for (int b = 0; b < batchSize; b++)
         {
@@ -409,12 +409,12 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
             {
                 readout[b, e] = NumOps.Zero;
             }
-        
+
             // Compute weighted sum of memory slots
             for (int m = 0; m < _memorySize; m++)
             {
                 T weight = attentionWeights[b, m];
-            
+
                 for (int e = 0; e < _embeddingSize; e++)
                 {
                     // Add weighted contribution from this memory slot
@@ -423,7 +423,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
                 }
             }
         }
-    
+
         return readout;
     }
 
@@ -440,10 +440,10 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         int[] readoutShape = memoryReadout.Shape;
         int batchSize = encodedShape[0];
         int encodedSize = encodedShape[1];
-    
+
         // Create result tensor with shape [batchSize, encodedSize + embeddingSize]
         Tensor<T> combined = new Tensor<T>(new int[] { batchSize, encodedSize + _embeddingSize });
-    
+
         // Concatenate encoded input and memory readout
         for (int b = 0; b < batchSize; b++)
         {
@@ -452,14 +452,14 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
             {
                 combined[b, i] = encoded[b, i];
             }
-        
+
             // Copy memory readout
             for (int i = 0; i < _embeddingSize; i++)
             {
                 combined[b, encodedSize + i] = memoryReadout[b, i];
             }
         }
-    
+
         return combined;
     }
 
@@ -472,13 +472,13 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     {
         // Use the fourth quarter of layers for output generation
         int startLayerIndex = 3 * Layers.Count / 4;
-    
+
         Tensor<T> current = combined;
         for (int i = startLayerIndex; i < Layers.Count; i++)
         {
             current = Layers[i].Forward(current);
         }
-    
+
         return current;
     }
 
@@ -503,31 +503,31 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         // Use the third quarter of layers for memory writing
         int startLayerIndex = Layers.Count / 2;
         int endLayerIndex = 3 * Layers.Count / 4;
-    
+
         // Get memory write controls from layers
         Tensor<T> current = encoded;
         for (int i = startLayerIndex; i < endLayerIndex; i++)
         {
             current = Layers[i].Forward(current);
         }
-    
+
         // Extract memory update parameters
         // In a realistic implementation, we would extract:
         // - erase vector (how much to erase from existing memory)
         // - write vector (what to write to memory)
         // For simplicity, we'll just use the layer output directly as write vector
-    
+
         // Get shape information
         int[] shape = current.Shape;
         int batchSize = shape[0];
-    
+
         // Use first batch's attention and write values
         // In a full implementation, each batch would have its own memory state
-    
+
         // Find most attended memory slot
         int maxIndex = 0;
         T maxAttention = attentionWeights[0, 0];
-    
+
         for (int m = 1; m < _memorySize; m++)
         {
             if (NumOps.GreaterThan(attentionWeights[0, m], maxAttention))
@@ -536,7 +536,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
                 maxIndex = m;
             }
         }
-    
+
         // Update this memory slot with write values
         T writeStrength = NumOps.FromDouble(0.1); // How strongly to write (small value for stability)
         for (int e = 0; e < _embeddingSize && e < shape[1]; e++)
@@ -544,7 +544,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
             // Weighted update: memory = (1-strength) * memory + strength * write_value
             T oldValue = _memory[maxIndex, e];
             T newValue = current[0, e];
-        
+
             _memory[maxIndex, e] = NumOps.Add(
                 NumOps.Multiply(NumOps.Subtract(NumOps.One, writeStrength), oldValue),
                 NumOps.Multiply(writeStrength, newValue)
@@ -622,11 +622,11 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentException("Prediction and expected output shapes must be compatible");
         }
-    
+
         // Calculate squared differences
         T sumSquaredDiff = NumOps.Zero;
         int totalElements = 0;
-    
+
         // Handle different tensor shapes
         if (predictions.Shape.Length == 2)
         {
@@ -634,7 +634,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
             int batchSize = predictions.Shape[0];
             int features = predictions.Shape[1];
             totalElements = batchSize * features;
-        
+
             for (int b = 0; b < batchSize; b++)
             {
                 for (int f = 0; f < features; f++)
@@ -651,7 +651,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
             int seqLength = predictions.Shape[1];
             int features = predictions.Shape[2];
             totalElements = batchSize * seqLength * features;
-        
+
             for (int b = 0; b < batchSize; b++)
             {
                 for (int s = 0; s < seqLength; s++)
@@ -664,7 +664,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
                 }
             }
         }
-    
+
         // Calculate mean
         return NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(totalElements));
     }
@@ -689,7 +689,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
             }
             return true;
         }
-    
+
         return false;
     }
 
@@ -706,20 +706,20 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentException("Prediction and expected output shapes must be compatible");
         }
-    
+
         // For MSE loss, gradient is 2 * (predictions - expected) / N
         // We can simplify to (predictions - expected) and adjust learning rate
-    
+
         // Create gradient tensor with same shape as predictions
         Tensor<T> gradients = new Tensor<T>(predictions.Shape);
-    
+
         // Calculate gradients
         if (predictions.Shape.Length == 2)
         {
             // 2D tensors [batch, features]
             int batchSize = predictions.Shape[0];
             int features = predictions.Shape[1];
-        
+
             for (int b = 0; b < batchSize; b++)
             {
                 for (int f = 0; f < features; f++)
@@ -734,7 +734,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
             int batchSize = predictions.Shape[0];
             int seqLength = predictions.Shape[1];
             int features = predictions.Shape[2];
-        
+
             for (int b = 0; b < batchSize; b++)
             {
                 for (int s = 0; s < seqLength; s++)
@@ -746,7 +746,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
                 }
             }
         }
-    
+
         return gradients;
     }
 
@@ -758,25 +758,25 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     {
         // Start with output gradients
         Tensor<T> gradients = outputGradients;
-    
+
         // Backpropagate through output layers (fourth quarter)
         for (int i = Layers.Count - 1; i >= 3 * Layers.Count / 4; i--)
         {
             gradients = Layers[i].Backward(gradients);
         }
-    
+
         // Split gradients for memory reading and input encoding paths
         // In a real implementation, we would calculate:
         // - gradients for memory attention
         // - gradients for memory content
         // - gradients for input encoding
-    
+
         // For simplicity, we'll just continue backpropagation through all previous layers
         for (int i = 3 * Layers.Count / 4 - 1; i >= 0; i--)
         {
             gradients = Layers[i].Backward(gradients);
         }
-    
+
         // The result is that all layers now have their gradients computed and stored internally
     }
 
@@ -787,7 +787,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     {
         // Simple learning rate for gradient descent
         T learningRate = NumOps.FromDouble(0.01);
-    
+
         // Update parameters for each layer
         foreach (var layer in Layers)
         {
@@ -830,7 +830,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         double avgMemValue = 0.0;
         double minMemValue = double.MaxValue;
         double maxMemValue = double.MinValue;
-    
+
         for (int i = 0; i < _memorySize; i++)
         {
             for (int j = 0; j < _embeddingSize; j++)
@@ -841,9 +841,9 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
                 maxMemValue = Math.Max(maxMemValue, value);
             }
         }
-    
+
         avgMemValue /= _memorySize * _embeddingSize;
-    
+
         return new ModelMetadata<T>
         {
             ModelType = ModelType.MemoryNetwork,
@@ -889,7 +889,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         // Save memory configuration
         writer.Write(_memorySize);
         writer.Write(_embeddingSize);
-    
+
         // Save memory matrix contents
         for (int i = 0; i < _memorySize; i++)
         {
@@ -898,7 +898,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
                 writer.Write(Convert.ToDouble(_memory[i, j]));
             }
         }
-    
+
         // Save each layer
         writer.Write(Layers.Count);
         foreach (var layer in Layers)
@@ -936,13 +936,13 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         // Load memory configuration
         int memorySize = reader.ReadInt32();
         int embeddingSize = reader.ReadInt32();
-    
+
         // Verify configuration matches
         if (memorySize != _memorySize || embeddingSize != _embeddingSize)
         {
             throw new InvalidOperationException("Memory configuration in saved model does not match current configuration");
         }
-    
+
         // Load memory matrix contents
         for (int i = 0; i < _memorySize; i++)
         {
@@ -951,14 +951,14 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
                 _memory[i, j] = NumOps.FromDouble(reader.ReadDouble());
             }
         }
-    
+
         // Load layers
         int layerCount = reader.ReadInt32();
         if (layerCount != Layers.Count)
         {
             throw new InvalidOperationException("Layer count in saved model does not match current model");
         }
-    
+
         for (int i = 0; i < layerCount; i++)
         {
             Layers[i].Deserialize(reader);
@@ -991,11 +991,11 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     {
         // Encode the fact
         Tensor<T> encoded = EncodeInput(fact);
-    
+
         // Find a memory slot to store the fact
         // Here we use a simple strategy of writing to the next available slot
         // In a real implementation, we might use more sophisticated strategies
-    
+
         // Calculate usage based on L2 norm of each memory row
         var usage = new Dictionary<int, T>();
         for (int m = 0; m < _memorySize; m++)
@@ -1006,14 +1006,14 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
                 T val = _memory[m, e];
                 sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(val, val));
             }
-        
+
             usage[m] = sumSquared;
         }
-    
+
         // Find least used memory slot
         int leastUsedSlot = 0;
         T minUsage = usage[0];
-    
+
         for (int m = 1; m < _memorySize; m++)
         {
             if (NumOps.LessThan(usage[m], minUsage))
@@ -1022,7 +1022,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
                 leastUsedSlot = m;
             }
         }
-    
+
         // Store the encoded fact
         for (int e = 0; e < _embeddingSize && e < encoded.Shape[1]; e++)
         {

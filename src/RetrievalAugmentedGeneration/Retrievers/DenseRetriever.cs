@@ -1,10 +1,10 @@
 
-using AiDotNet.LinearAlgebra;
-using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 {
@@ -17,7 +17,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
         private readonly IDocumentStore<T> _documentStore;
         private readonly IEmbeddingModel<T> _embeddingModel;
 
-        public DenseRetriever(IDocumentStore<T> documentStore, IEmbeddingModel<T> embeddingModel, int defaultTopK = 5) 
+        public DenseRetriever(IDocumentStore<T> documentStore, IEmbeddingModel<T> embeddingModel, int defaultTopK = 5)
             : base(defaultTopK)
         {
             if (documentStore == null)

@@ -1,14 +1,18 @@
 using AiDotNet.Configuration;
 using AiDotNet.Deployment.Configuration;
-using AiDotNet.Models.Results;
 using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.MixedPrecision;
 using AiDotNet.Models;
+using AiDotNet.Models.Inputs;
+using AiDotNet.Models.Options;
+using AiDotNet.Models.Results;
+using AiDotNet.PromptEngineering.FewShot;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Graph;
-using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Configuration;
-using AiDotNet.PromptEngineering.FewShot;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Interfaces;
 
@@ -346,6 +350,30 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration);
 
     /// <summary>
+    /// Configures uncertainty quantification (UQ) for inference-time uncertainty estimates.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Uncertainty quantification augments point predictions with uncertainty signals (for example: variance and predictive entropy).
+    /// This can be used to detect low-confidence outputs and make safer decisions.
+    /// </para>
+    /// <para>
+    /// Some uncertainty features optionally use a separate calibration dataset (held out from training) to compute
+    /// calibration artifacts (for example: conformal thresholds or temperature scaling).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This enables a "confidence signal" alongside predictions. If you're not sure what to choose,
+    /// call this method with no parameters to enable industry-standard defaults.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">Optional options; when null, defaults are used and UQ is enabled.</param>
+    /// <param name="calibrationData">Optional calibration data for conformal/prediction calibration features.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureUncertaintyQuantification(
+        UncertaintyQuantificationOptions? options = null,
+        UncertaintyCalibrationData<TInput, TOutput>? calibrationData = null);
+
+    /// <summary>
     /// Configures the retrieval-augmented generation (RAG) components for use during model inference.
     /// </summary>
     /// <remarks>
@@ -611,17 +639,36 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <para>
     /// Example:
     /// <code>
-    /// var autoML = new BayesianOptimizationAutoML&lt;double, double[][], double[]&gt;();
+    /// // Advanced usage: plug in your own AutoML implementation.
+    /// // Most users should prefer the ConfigureAutoML(AutoMLOptions&lt;...&gt;) overload instead.
+    /// var autoML = new RandomSearchAutoML&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
     /// autoML.SetTimeLimit(TimeSpan.FromMinutes(30));
-    /// autoML.SetCandidateModels(new[] { ModelType.RandomForest, ModelType.GradientBoosting });
+    /// autoML.SetCandidateModels(new List&lt;ModelType&gt; { ModelType.RandomForest, ModelType.GradientBoosting });
     ///
-    /// var builder = new PredictionModelBuilder&lt;double, double[][], double[]&gt;()
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAutoML(autoML)
     ///     .Build(trainingData, trainingLabels);
     /// </code>
     /// </para>
     /// </remarks>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel);
+
+    /// <summary>
+    /// Configures AutoML using facade-style options (recommended for most users).
+    /// </summary>
+    /// <param name="options">AutoML options (budget, strategy, and optional overrides). If null, defaults are used.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This overload follows the AiDotNet facade pattern: you provide a small options object, and the library
+    /// chooses an appropriate built-in AutoML implementation and industry-standard defaults for you.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Use this overload if you want AutoML without having to manually instantiate
+    /// an AutoML implementation. Pick a budget preset (Fast/Standard/Thorough) and let AiDotNet handle the rest.
+    /// </para>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(AutoMLOptions<T, TInput, TOutput>? options = null);
 
     /// <summary>
     /// Configures reinforcement learning options for training an RL agent.
@@ -722,7 +769,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureQuantization(new QuantizationConfig { Mode = QuantizationMode.Float16 })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     /// <param name="config">The quantization configuration (optional, uses no quantization if null).</param>
@@ -752,7 +799,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureCompression()  // Uses industry-standard defaults
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     ///
     /// // Model is now configured to compress on save
     /// builder.SaveModel(result, "model.bin");  // Compressed automatically
@@ -766,7 +813,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///         Type = CompressionType.HybridHuffmanClustering,
     ///         NumClusters = 256
     ///     })
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     /// <param name="config">The compression configuration (optional, uses automatic mode if null).</param>
@@ -791,7 +838,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureCaching()
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     /// <param name="config">The caching configuration (optional, uses default cache settings if null).</param>
@@ -815,7 +862,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureVersioning()
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     /// <param name="config">The versioning configuration (optional, uses "latest" version if null).</param>
@@ -847,7 +894,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureABTesting(abConfig)
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     /// <param name="config">The A/B testing configuration (optional, disables A/B testing if null).</param>
@@ -877,7 +924,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureTelemetry()
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     /// <param name="config">The telemetry configuration (optional, uses default telemetry settings if null).</param>
@@ -910,7 +957,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureExport(exportConfig)
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     ///
     /// // After training, export the model
     /// result.ExportToTensorRT("model.trt");
@@ -940,7 +987,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
     ///     .ConfigureTokenizer(tokenizer)
     ///     .ConfigureModel(new TransformerModel())
-    ///     .BuildAsync(trainingData, labels);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     /// <param name="tokenizer">The tokenizer to use for text processing. If null, no tokenizer is configured.</param>
@@ -960,7 +1007,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
     ///     .ConfigureTokenizerFromPretrained()  // Uses BertBaseUncased by default
     ///     .ConfigureModel(new BertModel())
-    ///     .BuildAsync(trainingData, labels);
+    ///     .BuildAsync();
     /// </code>
     ///
     /// Or specify a model using the enum:
@@ -1066,7 +1113,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureGpuAcceleration()
-    ///     .BuildAsync(data, labels);
+    ///     .BuildAsync();
     ///
     /// // Or with aggressive settings for high-end GPUs
     /// builder.ConfigureGpuAcceleration(GpuAccelerationConfig.Aggressive());
@@ -1108,7 +1155,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureJitCompilation()
-    ///     .BuildAsync(data, labels);
+    ///     .BuildAsync();
     ///
     /// // Or with custom settings
     /// builder.ConfigureJitCompilation(new JitCompilationConfig
@@ -1146,7 +1193,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await new PredictionModelBuilder&lt;double, ...&gt;()
     ///     .ConfigureModel(myModel)
     ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     ///
     /// // Or with custom settings:
     /// var config = new InferenceOptimizationConfig
@@ -1158,7 +1205,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///
     /// var result = await builder
     ///     .ConfigureInferenceOptimizations(config)
-    ///     .BuildAsync(x, y);
+    ///     .BuildAsync();
     /// </code>
     /// </para>
     /// </remarks>
@@ -1190,7 +1237,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///     .ConfigureModel(network)
     ///     .ConfigureOptimizer(optimizer)
     ///     .ConfigureMixedPrecision()  // Enable mixed-precision
-    ///     .BuildAsync(trainingData, labels);
+    ///     .BuildAsync();
     ///
     /// // Or with custom configuration
     /// builder.ConfigureMixedPrecision(MixedPrecisionConfig.Conservative());
@@ -1231,7 +1278,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(agentConfig)
     ///     .ConfigureReasoning()
-    ///     .BuildAsync(data, labels);
+    ///     .BuildAsync();
     ///
     /// // Use reasoning on the trained model
     /// var reasoningResult = await result.ReasonAsync(
@@ -1384,7 +1431,150 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if neither ConfigureDataLoader nor ConfigureMetaLearning has been called.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if no valid training path was configured.</exception>
     Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync();
+
+    // ============================================================================
+    // Training Infrastructure Configuration Methods
+    // ============================================================================
+
+    /// <summary>
+    /// Configures experiment tracking for organizing and logging ML experiments.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Experiment tracking is like a lab notebook for your machine learning work.
+    /// It helps you keep track of what you've tried, what worked, and what didn't.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Creating experiments to group related training runs
+    /// - Logging hyperparameters, metrics, and artifacts
+    /// - Comparing different runs to find the best approach
+    /// - Reproducing previous experiments
+    /// </para>
+    /// </remarks>
+    /// <param name="tracker">The experiment tracker implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureExperimentTracker(IExperimentTracker<T> tracker);
+
+    /// <summary>
+    /// Configures checkpoint management for saving and restoring training state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Checkpoints are like save points in a video game.
+    /// They let you pause training and resume later, or go back to an earlier state if something goes wrong.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Saving model state periodically during training
+    /// - Restoring from the latest or best checkpoint
+    /// - Automatic cleanup of old checkpoints
+    /// - Tracking metrics at each checkpoint
+    /// </para>
+    /// </remarks>
+    /// <param name="manager">The checkpoint manager implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureCheckpointManager(ICheckpointManager<T, TInput, TOutput> manager);
+
+    /// <summary>
+    /// Configures training monitoring for real-time visibility into training progress.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A training monitor is like a dashboard for your model training.
+    /// It shows you how training is progressing, what resources are being used, and if there are any problems.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Real-time metric tracking (loss, accuracy, etc.)
+    /// - Resource usage monitoring (CPU, GPU, memory)
+    /// - Progress updates and ETA estimation
+    /// - Alert thresholds for detecting problems
+    /// </para>
+    /// </remarks>
+    /// <param name="monitor">The training monitor implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingMonitor(ITrainingMonitor<T> monitor);
+
+    /// <summary>
+    /// Configures model registry for centralized model storage and versioning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A model registry is like a library for your trained models.
+    /// It keeps track of all your models, their versions, and which ones are in production.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Storing and versioning trained models
+    /// - Managing model lifecycle (development → staging → production)
+    /// - Tracking model metadata and lineage
+    /// - Comparing different model versions
+    /// </para>
+    /// </remarks>
+    /// <param name="registry">The model registry implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelRegistry(IModelRegistry<T, TInput, TOutput> registry);
+
+    /// <summary>
+    /// Configures data version control for tracking dataset changes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Data version control is like Git, but for your datasets.
+    /// It tracks what data was used for training each model and lets you reproduce experiments.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Creating and tracking dataset versions
+    /// - Computing dataset hashes for integrity verification
+    /// - Tracking data lineage and transformations
+    /// - Linking datasets to training runs
+    /// </para>
+    /// </remarks>
+    /// <param name="dataVersionControl">The data version control implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataVersionControl(IDataVersionControl<T> dataVersionControl);
+
+    /// <summary>
+    /// Configures hyperparameter optimization for automatic tuning of model settings.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Hyperparameter optimization automatically finds the best settings
+    /// for your model (like learning rate, number of layers, etc.) instead of you having to guess.
+    /// </para>
+    /// <para>
+    /// Key features include:
+    /// - Systematic search through hyperparameter space
+    /// - Multiple search strategies (grid, random, Bayesian)
+    /// - Tracking and comparing trial results
+    /// - Early stopping of unpromising trials
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var searchSpace = new HyperparameterSearchSpace();
+    /// searchSpace.AddContinuous("learning_rate", 0.0001, 0.1, logScale: true);
+    /// searchSpace.AddInteger("hidden_units", 32, 256);
+    ///
+    /// var optimizer = new RandomSearchOptimizer&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(maximize: false);
+    /// var result = builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureHyperparameterOptimizer(optimizer, searchSpace, nTrials: 20)
+    ///     .Build(x, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="optimizer">The hyperparameter optimizer implementation to use.</param>
+    /// <param name="searchSpace">The hyperparameter search space defining parameter ranges. If null, hyperparameter optimization is disabled.</param>
+    /// <param name="nTrials">Number of trials to run. Default is 10.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureHyperparameterOptimizer(
+        IHyperparameterOptimizer<T, TInput, TOutput> optimizer,
+        HyperparameterSearchSpace? searchSpace = null,
+        int nTrials = 10);
 
 }

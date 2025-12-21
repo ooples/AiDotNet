@@ -43,7 +43,7 @@ public class ThinPlateSplineRBF<T> : IRadialBasisFunction<T>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ThinPlateSplineRBF{T}"/> class.
     /// </summary>
@@ -65,7 +65,7 @@ public class ThinPlateSplineRBF<T> : IRadialBasisFunction<T>
     {
         _numOps = MathHelper.GetNumericOperations<T>();
     }
-    
+
     /// <summary>
     /// Computes the value of the Thin Plate Spline Radial Basis Function for a given radius.
     /// </summary>
@@ -98,11 +98,11 @@ public class ThinPlateSplineRBF<T> : IRadialBasisFunction<T>
         {
             return _numOps.Zero;
         }
-        
+
         T r2 = _numOps.Multiply(r, r);
         return _numOps.Multiply(r2, _numOps.Log(r));
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Thin Plate Spline RBF with respect to the radius.
     /// </summary>
@@ -135,20 +135,20 @@ public class ThinPlateSplineRBF<T> : IRadialBasisFunction<T>
         {
             return _numOps.Zero;
         }
-        
+
         // Calculate log(r)
         T logR = _numOps.Log(r);
-        
+
         // Calculate 2 * log(r)
         T twoLogR = _numOps.Multiply(_numOps.FromDouble(2.0), logR);
-        
+
         // Calculate 2 * log(r) + 1
         T term = _numOps.Add(twoLogR, _numOps.One);
-        
+
         // Return r * (2 * log(r) + 1)
         return _numOps.Multiply(r, term);
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Thin Plate Spline RBF with respect to a width parameter.
     /// </summary>

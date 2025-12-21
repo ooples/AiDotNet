@@ -177,7 +177,7 @@ public class AntColonyOptimizationOptions<T, TInput, TOutput> : OptimizationAlgo
     /// </remarks>
     public double PheromoneIntensityIncrease { get; set; } = 1.05;
 
-        /// <summary>
+    /// <summary>
     /// Gets or sets the minimum allowed value for pheromone intensity on any path.
     /// </summary>
     /// <value>The minimum pheromone intensity, defaulting to 0.1.</value>

@@ -655,19 +655,19 @@ public class NEAT<T> : NeuralNetworkBase<T>
     {
         // Get the best genome (the one with highest fitness)
         var bestGenome = GetBestGenome();
-    
+
         // Check if we're dealing with a batch or a single input
         bool isBatch = input.Shape.Length > 1 && input.Shape[0] > 1;
-    
+
         if (isBatch)
         {
             // Process each input in the batch
             int batchSize = input.Shape[0];
             int featureSize = input.Shape[1];
-        
+
             // Create output tensor with correct shape
             var output = new Tensor<T>(new int[] { batchSize, Architecture.OutputSize });
-        
+
             // Process each sample
             for (int b = 0; b < batchSize; b++)
             {
@@ -677,17 +677,17 @@ public class NEAT<T> : NeuralNetworkBase<T>
                 {
                     sampleInput[f] = input[b, f];
                 }
-            
+
                 // Get activations for this sample
                 var activations = ActivateGenome(bestGenome, sampleInput);
-            
+
                 // Store output activations
                 for (int o = 0; o < Architecture.OutputSize; o++)
                 {
                     output[b, o] = activations[Architecture.InputSize + o];
                 }
             }
-        
+
             return output;
         }
         else
@@ -695,17 +695,17 @@ public class NEAT<T> : NeuralNetworkBase<T>
             // Single input
             // Convert input tensor to vector
             var inputVector = input.ToVector();
-        
+
             // Get activations
             var activations = ActivateGenome(bestGenome, inputVector);
-        
+
             // Create output tensor
             var output = new Tensor<T>([Architecture.OutputSize]);
             for (int i = 0; i < Architecture.OutputSize; i++)
             {
                 output[i] = activations[Architecture.InputSize + i];
             }
-        
+
             return output;
         }
     }
@@ -735,7 +735,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     {
         // Check if any genomes have fitness set
         bool anyFitnessSet = _population.Any(g => !NumOps.Equals(g.Fitness, NumOps.Zero));
-    
+
         // If no fitness values are set, assign default
         if (!anyFitnessSet)
         {
@@ -744,7 +744,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
                 genome.Fitness = NumOps.One; // Neutral fitness
             }
         }
-    
+
         // Sort by fitness and return the best
         return _population.OrderByDescending(g => g.Fitness).First();
     }
@@ -778,30 +778,30 @@ public class NEAT<T> : NeuralNetworkBase<T>
     {
         // Initialize all nodes with zero activation
         var activations = new Dictionary<int, T>();
-    
+
         // Set input nodes
         for (int i = 0; i < Architecture.InputSize; i++)
         {
             activations[i] = input[i];
         }
-    
+
         // Set bias node if needed
         activations[Architecture.InputSize + Architecture.OutputSize] = NumOps.One;
-    
+
         // Initialize output nodes
         for (int i = 0; i < Architecture.OutputSize; i++)
         {
             activations[Architecture.InputSize + i] = NumOps.Zero;
         }
-    
+
         // Sort connections topologically for proper feed-forward activation
         var sortedConnections = SortConnectionsTopologically(genome);
-    
+
         // Process connections
         foreach (var connection in sortedConnections)
         {
             if (!connection.IsEnabled) continue;
-        
+
             // Ensure nodes exist in activations
             if (!activations.ContainsKey(connection.FromNode))
             {
@@ -811,19 +811,19 @@ public class NEAT<T> : NeuralNetworkBase<T>
             {
                 activations[connection.ToNode] = NumOps.Zero;
             }
-        
+
             // Calculate weighted input and add to target node
             T weightedInput = NumOps.Multiply(activations[connection.FromNode], connection.Weight);
             activations[connection.ToNode] = NumOps.Add(activations[connection.ToNode], weightedInput);
         }
-    
+
         // Apply activation function to all non-input nodes
         var nonInputNodes = activations.Keys.Where(k => k >= Architecture.InputSize).ToList();
         foreach (var nodeId in nonInputNodes)
         {
             activations[nodeId] = ApplySigmoid(activations[nodeId]);
         }
-    
+
         return activations;
     }
 
@@ -858,67 +858,67 @@ public class NEAT<T> : NeuralNetworkBase<T>
     {
         // Create a dictionary to track nodes that feed into each node
         var incomingConnections = new Dictionary<int, List<Connection<T>>>();
-    
+
         // Create a set of all nodes
         var allNodes = new HashSet<int>();
-    
+
         // Populate incoming connections and collect all nodes
         foreach (var conn in genome.Connections)
         {
             if (!conn.IsEnabled) continue;
-        
+
             allNodes.Add(conn.FromNode);
             allNodes.Add(conn.ToNode);
-        
+
             if (!incomingConnections.ContainsKey(conn.ToNode))
             {
                 incomingConnections[conn.ToNode] = [];
             }
-        
+
             incomingConnections[conn.ToNode].Add(conn);
         }
-    
+
         // Create a dictionary to track processed nodes
         var processedNodes = new Dictionary<int, bool>();
-    
+
         // Input nodes don't have incoming connections and are already processed
         for (int i = 0; i < Architecture.InputSize; i++)
         {
             processedNodes[i] = true;
         }
-    
+
         // Sort connections
         var sortedConnections = new List<Connection<T>>();
-    
+
         // Process until all connections are sorted
         while (sortedConnections.Count < genome.Connections.Count(c => c.IsEnabled))
         {
             bool addedConnection = false;
-        
+
             // Check each enabled connection
             foreach (var conn in genome.Connections.Where(c => c.IsEnabled))
             {
                 // Skip if already in sorted list
                 if (sortedConnections.Contains(conn)) continue;
-            
+
                 // Check if from node is processed
                 if (processedNodes.ContainsKey(conn.FromNode) && processedNodes[conn.FromNode])
                 {
                     // Add connection to sorted list
                     sortedConnections.Add(conn);
-                
+
                     // Mark to node as processed
                     processedNodes[conn.ToNode] = true;
-                
+
                     addedConnection = true;
                 }
             }
-        
+
             // If no connections were added in this iteration, we might have a cycle
             // In an evolved network, this shouldn't happen with proper constraints
             if (!addedConnection) break;
         }
-    
+
         return sortedConnections;
     }
 
@@ -954,7 +954,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
         T negValue = NumOps.Negate(value);
         T expNeg = NumOps.Exp(negValue);
         T denominator = NumOps.Add(NumOps.One, expNeg);
-    
+
         return NumOps.Divide(NumOps.One, denominator);
     }
 
@@ -1075,9 +1075,9 @@ public class NEAT<T> : NeuralNetworkBase<T>
         int batchSize = input.Shape[0];
         int inputFeatures = input.Shape[1];
         int outputFeatures = expectedOutput.Shape[1];
-    
+
         var trainingData = new List<(Vector<T> input, Vector<T> expected)>(batchSize);
-    
+
         for (int b = 0; b < batchSize; b++)
         {
             // Extract input vector
@@ -1086,18 +1086,18 @@ public class NEAT<T> : NeuralNetworkBase<T>
             {
                 inputVector[i] = input[b, i];
             }
-        
+
             // Extract expected output vector
             var expectedVector = new Vector<T>(outputFeatures);
             for (int o = 0; o < outputFeatures; o++)
             {
                 expectedVector[o] = expectedOutput[b, o];
             }
-        
+
             // Add pair to training data
             trainingData.Add((inputVector, expectedVector));
         }
-    
+
         return trainingData;
     }
 
@@ -1130,20 +1130,20 @@ public class NEAT<T> : NeuralNetworkBase<T>
     {
         // Get the best genome
         var bestGenome = GetBestGenome();
-    
+
         // Count average number of connections and nodes in the population
         double avgConnections = _population.Average(g => g.Connections.Count);
         int maxConnections = _population.Max(g => g.Connections.Count);
-    
+
         // Count nodes by finding the highest node ID in each genome
-        var nodeCounts = _population.Select(g => 
-            g.Connections.Any() ? 
-                g.Connections.Max(c => Math.Max(c.FromNode, c.ToNode)) + 1 : 
+        var nodeCounts = _population.Select(g =>
+            g.Connections.Any() ?
+                g.Connections.Max(c => Math.Max(c.FromNode, c.ToNode)) + 1 :
                 Architecture.InputSize + Architecture.OutputSize
         );
         double avgNodes = nodeCounts.Average();
         int maxNodes = nodeCounts.Max();
-    
+
         return new ModelMetadata<T>
         {
             ModelType = ModelType.NEAT,
@@ -1196,14 +1196,14 @@ public class NEAT<T> : NeuralNetworkBase<T>
         writer.Write(_mutationRate);
         writer.Write(_crossoverRate);
         writer.Write(_innovationNumber);
-    
+
         // Save population
         writer.Write(_population.Count);
         foreach (var genome in _population)
         {
             // Save genome fitness
             writer.Write(Convert.ToDouble(genome.Fitness));
-        
+
             // Save connections
             writer.Write(genome.Connections.Count);
             foreach (var conn in genome.Connections)
@@ -1247,19 +1247,19 @@ public class NEAT<T> : NeuralNetworkBase<T>
         _mutationRate = reader.ReadDouble();
         _crossoverRate = reader.ReadDouble();
         _innovationNumber = reader.ReadInt32();
-    
+
         // Load population
         int populationCount = reader.ReadInt32();
         _population = new List<Genome<T>>(populationCount);
-    
+
         for (int i = 0; i < populationCount; i++)
         {
             // Create new genome
             var genome = new Genome<T>(Architecture.InputSize, Architecture.OutputSize);
-        
+
             // Load genome fitness
             genome.Fitness = NumOps.FromDouble(reader.ReadDouble());
-        
+
             // Load connections
             int connectionCount = reader.ReadInt32();
             for (int j = 0; j < connectionCount; j++)
@@ -1269,10 +1269,10 @@ public class NEAT<T> : NeuralNetworkBase<T>
                 T weight = NumOps.FromDouble(reader.ReadDouble());
                 bool isEnabled = reader.ReadBoolean();
                 int innovation = reader.ReadInt32();
-            
+
                 genome.AddConnection(fromNode, toNode, weight, isEnabled, innovation);
             }
-        
+
             _population.Add(genome);
         }
     }
@@ -1300,8 +1300,8 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// </remarks>
     public bool IsReadyToPredict()
     {
-        return _population != null && 
-               _population.Count > 0 && 
+        return _population != null &&
+               _population.Count > 0 &&
                _population.Any(g => g.Connections.Count > 0);
     }
 

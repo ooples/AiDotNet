@@ -1055,10 +1055,10 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
 
             // Create a vector with a single element
             var outputVector = new Vector<T>([output]);
-        
+
             // Get the derivative matrix (1x1 in this case)
             var derivativeMatrix = VectorActivation.Derivative(outputVector);
-        
+
             // Multiply the gradient with the single element of the derivative matrix
             return NumOps.Multiply(gradient, derivativeMatrix[0, 0]);
         }

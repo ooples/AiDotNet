@@ -49,7 +49,7 @@ public class FixedSizeChunkingStrategy : ChunkingStrategyBase
     /// </summary>
     /// <param name="chunkSize">The target size for each chunk in characters (default: 500).</param>
     /// <param name="chunkOverlap">The number of characters that should overlap between consecutive chunks (default: 50).</param>
-    public FixedSizeChunkingStrategy(int chunkSize = 500, int chunkOverlap = 50) 
+    public FixedSizeChunkingStrategy(int chunkSize = 500, int chunkOverlap = 50)
         : base(chunkSize, chunkOverlap)
     {
     }

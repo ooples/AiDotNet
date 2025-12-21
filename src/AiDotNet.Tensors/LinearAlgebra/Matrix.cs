@@ -528,7 +528,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     {
         if (min >= max)
             throw new ArgumentException("Minimum value must be less than maximum value");
-    
+
         var random = RandomHelper.CreateSecureRandom();
         var matrix = new Matrix<T>(rows, columns);
 

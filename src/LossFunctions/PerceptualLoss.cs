@@ -33,12 +33,12 @@ public class PerceptualLoss<T> : LossFunctionBase<T>
     /// The feature extractor function that converts images to feature representations.
     /// </summary>
     private readonly Func<Matrix<T>, Vector<Vector<T>>> _featureExtractor;
-    
+
     /// <summary>
     /// The weights for each feature layer.
     /// </summary>
     private readonly Vector<T> _layerWeights;
-    
+
     /// <summary>
     /// Initializes a new instance of the PerceptualLoss class.
     /// </summary>
@@ -49,7 +49,7 @@ public class PerceptualLoss<T> : LossFunctionBase<T>
         _featureExtractor = featureExtractor ?? throw new ArgumentNullException(nameof(featureExtractor));
         _layerWeights = layerWeights;
     }
-    
+
     /// <summary>
     /// Calculates the Perceptual Loss between generated and target images.
     /// </summary>
@@ -61,13 +61,13 @@ public class PerceptualLoss<T> : LossFunctionBase<T>
         // Extract features from both images
         Vector<Vector<T>> generatedFeatures = _featureExtractor(generated);
         Vector<Vector<T>> targetFeatures = _featureExtractor(target);
-        
+
         // Ensure we have the same number of feature layers
         if (generatedFeatures.Length != targetFeatures.Length)
         {
             throw new ArgumentException("Generated and target feature counts do not match.");
         }
-        
+
         // If layer weights are not provided or have incorrect length, use uniform weights
         Vector<T> weights = _layerWeights;
         if (weights == null || weights.Length != generatedFeatures.Length)
@@ -78,24 +78,24 @@ public class PerceptualLoss<T> : LossFunctionBase<T>
                 weights[i] = NumOps.One;
             }
         }
-        
+
         // Calculate weighted MSE loss for each feature layer
         T totalLoss = NumOps.Zero;
         for (int layer = 0; layer < generatedFeatures.Length; layer++)
         {
             Vector<T> genFeatures = generatedFeatures[layer];
             Vector<T> tgtFeatures = targetFeatures[layer];
-            
+
             // Calculate MSE for this feature layer
             T layerLoss = MeanSquaredError(genFeatures, tgtFeatures);
-            
+
             // Apply weight to this layer's loss
             totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(weights[layer], layerLoss));
         }
-        
+
         return totalLoss;
     }
-    
+
     /// <summary>
     /// Calculates the Mean Squared Error between two vectors.
     /// </summary>
@@ -105,17 +105,17 @@ public class PerceptualLoss<T> : LossFunctionBase<T>
         {
             throw new ArgumentException("Vectors must have the same length.");
         }
-        
+
         T sum = NumOps.Zero;
         for (int i = 0; i < v1.Length; i++)
         {
             T diff = NumOps.Subtract(v1[i], v2[i]);
             sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
         }
-        
+
         return NumOps.Divide(sum, NumOps.FromDouble(v1.Length));
     }
-    
+
     /// <summary>
     /// This method is not used for Perceptual Loss as it requires image matrices.
     /// </summary>
@@ -130,7 +130,7 @@ public class PerceptualLoss<T> : LossFunctionBase<T>
             "Use the Calculate(Matrix<T>, Matrix<T>) method instead."
         );
     }
-    
+
     /// <summary>
     /// This method is not used for Perceptual Loss as it requires image matrices.
     /// </summary>

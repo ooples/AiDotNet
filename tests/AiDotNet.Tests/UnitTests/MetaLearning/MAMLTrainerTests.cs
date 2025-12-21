@@ -1,54 +1,60 @@
-using AiDotNet.Data.Loaders;
+using AiDotNet.Data.Structures;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LossFunctions;
-using AiDotNet.MetaLearning.Config;
-using AiDotNet.MetaLearning.Trainers;
-using AiDotNet.Models.Results;
+using AiDotNet.MetaLearning;
+using AiDotNet.MetaLearning.Algorithms;
+using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning;
 
-// Type alias for cleaner test code
-using MAMLTrainerDouble = MAMLTrainer<double, Tensor<double>, Tensor<double>>;
-using SimpleMockModelDouble = SimpleMockModel;
-
 /// <summary>
-/// Unit tests for the MAMLTrainer class.
+/// Unit tests for the MAMLAlgorithm class.
 /// </summary>
 public class MAMLTrainerTests
 {
-    #region Test Helper Methods
+    private SimpleMockModel CreateMockModel() => new SimpleMockModel(50);
 
-    /// <summary>
-    /// Creates a synthetic dataset for testing.
-    /// </summary>
-    private (Matrix<double> X, Vector<double> Y) CreateTestDataset(int numClasses, int examplesPerClass, int numFeatures)
+    private MAMLOptions<double, Tensor<double>, Tensor<double>> CreateDefaultOptions()
     {
-        int totalExamples = numClasses * examplesPerClass;
-        var X = new Matrix<double>(totalExamples, numFeatures);
-        var Y = new Vector<double>(totalExamples);
-
-        for (int classIdx = 0; classIdx < numClasses; classIdx++)
+        var mockModel = CreateMockModel();
+        return new MAMLOptions<double, Tensor<double>, Tensor<double>>(mockModel)
         {
-            for (int exampleIdx = 0; exampleIdx < examplesPerClass; exampleIdx++)
-            {
-                int rowIdx = classIdx * examplesPerClass + exampleIdx;
-
-                for (int featureIdx = 0; featureIdx < numFeatures; featureIdx++)
-                {
-                    X[rowIdx, featureIdx] = (double)classIdx + (double)exampleIdx * 0.1 + (double)featureIdx * 0.01;
-                }
-
-                Y[rowIdx] = classIdx;
-            }
-        }
-
-        return (X, Y);
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 0.001,
+            AdaptationSteps = 5
+        };
     }
 
-    #endregion
+    /// <summary>
+    /// Creates a mock task for testing purposes.
+    /// </summary>
+    private IMetaLearningTask<double, Tensor<double>, Tensor<double>> CreateMockTask()
+    {
+        // Create mock support data (5 examples, 10 features each)
+        var supportInput = new Tensor<double>(new int[] { 5, 10 });
+        var supportOutput = new Tensor<double>(new int[] { 5 });
+
+        // Create mock query data (15 examples)
+        var queryInput = new Tensor<double>(new int[] { 15, 10 });
+        var queryOutput = new Tensor<double>(new int[] { 15 });
+
+        return new MetaLearningTask<double, Tensor<double>, Tensor<double>>
+        {
+            SupportSetX = supportInput,
+            SupportSetY = supportOutput,
+            QuerySetX = queryInput,
+            QuerySetY = queryOutput,
+            NumWays = 5,
+            NumShots = 1,
+            NumQueryPerClass = 3,
+            Name = "test-task"
+        };
+    }
 
     #region Constructor Tests
 
@@ -56,382 +62,230 @@ public class MAMLTrainerTests
     public void Constructor_ValidInputs_InitializesSuccessfully()
     {
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-        var config = new MAMLTrainerConfig<double>(
-            innerLearningRate: 0.01,
-            metaLearningRate: 0.001,
-            innerSteps: 5);
+        var options = CreateDefaultOptions();
 
         // Act
-        var trainer = new MAMLTrainerDouble(
-            metaModel: model,
-            lossFunction: lossFunction,
-            dataLoader: dataLoader,
-            config: config);
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
         // Assert
-        Assert.NotNull(trainer);
-        Assert.NotNull(trainer.BaseModel);
-        Assert.NotNull(trainer.Config);
-        Assert.Equal(0, trainer.CurrentIteration);
+        Assert.NotNull(algorithm);
+        Assert.Equal(MetaLearningAlgorithmType.MAML, algorithm.AlgorithmType);
     }
 
     [Fact]
-    public void Constructor_DefaultConfig_UsesMAMLDefaults()
+    public void Constructor_NullOptions_ThrowsArgumentNullException()
     {
-        // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-
-        // Act
-        var trainer = new MAMLTrainerDouble(
-            metaModel: model,
-            lossFunction: lossFunction,
-            dataLoader: dataLoader);
-
-        // Assert
-        Assert.NotNull(trainer);
-        Assert.IsType<MAMLTrainerConfig<double>>(trainer.Config);
-        var config = (MAMLTrainerConfig<double>)trainer.Config;
-        Assert.Equal(0.01, config.InnerLearningRate);
-        Assert.Equal(0.001, config.MetaLearningRate);
-        Assert.Equal(5, config.InnerSteps);
-        Assert.Equal(4, config.MetaBatchSize);
-        Assert.True(config.UseFirstOrderApproximation); // FOMAML by default
-    }
-
-    [Fact]
-    public void Constructor_NullModel_ThrowsArgumentNullException()
-    {
-        // Arrange
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-
         // Act & Assert
-        var exception = Assert.Throws<ArgumentNullException>(() =>
-            new MAMLTrainerDouble(
-                metaModel: null!,
-                lossFunction: lossFunction,
-                dataLoader: dataLoader));
-
-        Assert.Contains("metaModel", exception.Message);
-    }
-
-    [Fact]
-    public void Constructor_NullLossFunction_ThrowsArgumentNullException()
-    {
-        // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentNullException>(() =>
-            new MAMLTrainerDouble(
-                metaModel: model,
-                lossFunction: null!,
-                dataLoader: dataLoader));
-
-        Assert.Contains("lossFunction", exception.Message);
-    }
-
-    [Fact]
-    public void Constructor_NullDataLoader_ThrowsArgumentNullException()
-    {
-        // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentNullException>(() =>
-            new MAMLTrainerDouble(
-                metaModel: model,
-                lossFunction: lossFunction,
-                dataLoader: null!));
-
-        Assert.Contains("dataLoader", exception.Message);
-    }
-
-    [Fact]
-    public void Constructor_InvalidInnerSteps_ThrowsArgumentException()
-    {
-        // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-        var config = new MAMLTrainerConfig<double>(
-            innerLearningRate: 0.01,
-            metaLearningRate: 0.001,
-            innerSteps: 0); // Invalid
-
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            new MAMLTrainerDouble(
-                metaModel: model,
-                lossFunction: lossFunction,
-                dataLoader: dataLoader,
-                config: config));
-
-        Assert.Contains("Configuration validation failed", exception.Message);
+        Assert.Throws<ArgumentNullException>(() =>
+            new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(null!));
     }
 
     #endregion
 
-    #region MetaTrainStep Tests
+    #region MetaTrain Tests
 
     [Fact]
-    public void MetaTrainStep_ValidBatchSize_UpdatesParameters()
+    public void MetaTrain_WithValidTaskBatch_ReturnsNonNegativeLoss()
     {
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: 42);
-        var trainer = new MAMLTrainerDouble(model, lossFunction, dataLoader);
-
-        var initialParams = model.GetParameters();
+        var options = CreateDefaultOptions();
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+        var task = CreateMockTask();
+        var taskBatch = new TaskBatch<double, Tensor<double>, Tensor<double>>(new[] { task });
 
         // Act
-        var result = trainer.MetaTrainStep(batchSize: 2);
+        var loss = algorithm.MetaTrain(taskBatch);
 
         // Assert
-        Assert.NotNull(result);
-        Assert.Equal(1, trainer.CurrentIteration);
-        Assert.Equal(2, result.NumTasks);
-
-        var finalParams = model.GetParameters();
-        Assert.NotEqual(initialParams[0], finalParams[0]); // Parameters should have changed
+        Assert.True(loss >= 0, "Loss should be non-negative");
     }
 
     [Fact]
-    public void MetaTrainStep_ZeroBatchSize_ThrowsArgumentException()
+    public void MetaTrain_WithMultipleTasks_ReturnsValidLoss()
     {
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-        var trainer = new MAMLTrainerDouble(model, lossFunction, dataLoader);
+        var options = CreateDefaultOptions();
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+        var tasks = Enumerable.Range(0, 4).Select(_ => CreateMockTask()).ToArray();
+        var taskBatch = new TaskBatch<double, Tensor<double>, Tensor<double>>(tasks);
 
-        // Act & Assert
-        Assert.Throws<ArgumentException>(() => trainer.MetaTrainStep(batchSize: 0));
+        // Act
+        var loss = algorithm.MetaTrain(taskBatch);
+
+        // Assert
+        Assert.True(loss >= 0, "Loss should be non-negative");
+        Assert.False(double.IsNaN(loss), "Loss should not be NaN");
     }
 
     [Fact]
-    public void MetaTrainStep_NegativeBatchSize_ThrowsArgumentException()
+    public void MetaTrain_NullTaskBatch_ThrowsArgumentException()
     {
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-        var trainer = new MAMLTrainerDouble(model, lossFunction, dataLoader);
+        var options = CreateDefaultOptions();
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => trainer.MetaTrainStep(batchSize: -1));
+        Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(null!));
+    }
+
+    [Fact]
+    public void MetaTrain_EmptyTaskBatch_ThrowsArgumentException()
+    {
+        // Arrange
+        var emptyTasks = Array.Empty<IMetaLearningTask<double, Tensor<double>, Tensor<double>>>();
+
+        // Act & Assert
+        // TaskBatch constructor validates that tasks are not empty (fail fast)
+        Assert.Throws<ArgumentException>(() =>
+            new TaskBatch<double, Tensor<double>, Tensor<double>>(emptyTasks));
     }
 
     #endregion
 
-    #region AdaptAndEvaluate Tests
+    #region Adapt Tests
 
     [Fact]
-    public void AdaptAndEvaluate_ValidTask_ReturnsResult()
+    public void Adapt_ValidTask_ReturnsAdaptedModel()
     {
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: 42);
-        var trainer = new MAMLTrainerDouble(model, lossFunction, dataLoader);
-
-        var task = dataLoader.GetNextTask();
+        var options = CreateDefaultOptions();
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+        var task = CreateMockTask();
 
         // Act
-        var result = trainer.AdaptAndEvaluate(task);
+        var adaptedModel = algorithm.Adapt(task);
 
         // Assert
-        Assert.NotNull(result);
-        Assert.True(result.AdaptationSteps > 0);
-        Assert.NotNull(result.PerStepLosses);
-        Assert.True(result.PerStepLosses.Count > 0);
+        Assert.NotNull(adaptedModel);
     }
 
     [Fact]
-    public void AdaptAndEvaluate_NullTask_ThrowsArgumentNullException()
+    public void Adapt_NullTask_ThrowsArgumentNullException()
     {
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-        var trainer = new MAMLTrainerDouble(model, lossFunction, dataLoader);
+        var options = CreateDefaultOptions();
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => trainer.AdaptAndEvaluate(null!));
+        Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(null!));
     }
 
     #endregion
 
-    #region Train Tests
+    #region FirstOrder Approximation Tests
 
     [Fact]
-    public void Train_CompletesSuccessfully()
+    public void MetaTrain_WithFirstOrderApproximation_ReturnsValidLoss()
     {
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: 42);
-        var config = new MAMLTrainerConfig<double>(
-            innerLearningRate: 0.01,
-            metaLearningRate: 0.001,
-            innerSteps: 3,
-            metaBatchSize: 2,
-            numMetaIterations: 5); // Small for fast test
-
-        var trainer = new MAMLTrainerDouble(model, lossFunction, dataLoader, config);
+        var mockModel = CreateMockModel();
+        var options = new MAMLOptions<double, Tensor<double>, Tensor<double>>(mockModel)
+        {
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 0.001,
+            AdaptationSteps = 5,
+            UseFirstOrder = true
+        };
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+        var task = CreateMockTask();
+        var taskBatch = new TaskBatch<double, Tensor<double>, Tensor<double>>(new[] { task });
 
         // Act
-        var result = trainer.Train();
+        var loss = algorithm.MetaTrain(taskBatch);
 
         // Assert
-        Assert.NotNull(result);
-        Assert.NotNull(result.LossHistory);
-        Assert.NotNull(result.AccuracyHistory);
-        Assert.Equal(5, result.LossHistory.Length);
-        Assert.Equal(5, result.AccuracyHistory.Length);
+        Assert.True(loss >= 0, "Loss should be non-negative");
+        Assert.False(double.IsNaN(loss), "Loss should not be NaN");
     }
 
     #endregion
 
-    #region Evaluate Tests
+    #region Options Tests
 
     [Fact]
-    public void Evaluate_ValidNumberOfTasks_ReturnsResult()
+    public void Options_IsValid_ReturnsTrueForValidOptions()
     {
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: 42);
-        var trainer = new MAMLTrainerDouble(model, lossFunction, dataLoader);
+        var options = CreateDefaultOptions();
 
         // Act
-        var result = trainer.Evaluate(numTasks: 10);
+        var isValid = options.IsValid();
 
         // Assert
-        Assert.NotNull(result);
-        Assert.NotNull(result.PerTaskAccuracies);
-        Assert.NotNull(result.PerTaskLosses);
-        Assert.Equal(10, result.PerTaskAccuracies.Length);
-        Assert.Equal(10, result.PerTaskLosses.Length);
+        Assert.True(isValid);
     }
 
     [Fact]
-    public void Evaluate_ZeroTasks_ThrowsArgumentException()
+    public void Options_Clone_CreatesIndependentCopy()
     {
         // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-        var trainer = new MAMLTrainerDouble(model, lossFunction, dataLoader);
-
-        // Act & Assert
-        Assert.Throws<ArgumentException>(() => trainer.Evaluate(numTasks: 0));
-    }
-
-    #endregion
-
-    #region Save/Load/Reset Tests
-
-    [Fact]
-    public void Save_ValidPath_DoesNotThrow()
-    {
-        // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-        var trainer = new MAMLTrainerDouble(model, lossFunction, dataLoader);
-
-        // Act & Assert - just verify it doesn't throw
-        // (SimpleMockModel has empty Save implementation)
-        trainer.Save("test_model.bin");
-    }
-
-    [Fact]
-    public void Save_NullPath_ThrowsArgumentException()
-    {
-        // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
-        var trainer = new MAMLTrainerDouble(model, lossFunction, dataLoader);
-
-        // Act & Assert
-        Assert.Throws<ArgumentException>(() => trainer.Save(null!));
-    }
-
-    [Fact]
-    public void Reset_ResetsIterationCounter()
-    {
-        // Arrange
-        var model = new SimpleMockModelDouble(10);
-        var lossFunction = new MeanSquaredErrorLoss<double>();
-        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: 42);
-        var trainer = new MAMLTrainerDouble(model, lossFunction, dataLoader);
-
-        // Perform some iterations
-        trainer.MetaTrainStep(batchSize: 2);
-        trainer.MetaTrainStep(batchSize: 2);
-        Assert.Equal(2, trainer.CurrentIteration);
+        var options = CreateDefaultOptions();
 
         // Act
-        trainer.Reset();
+        var clonedOptions = options.Clone() as MAMLOptions<double, Tensor<double>, Tensor<double>>;
 
         // Assert
-        Assert.Equal(0, trainer.CurrentIteration);
+        Assert.NotNull(clonedOptions);
+        Assert.Equal(options.InnerLearningRate, clonedOptions.InnerLearningRate);
+        Assert.Equal(options.OuterLearningRate, clonedOptions.OuterLearningRate);
+        Assert.Equal(options.AdaptationSteps, clonedOptions.AdaptationSteps);
     }
 
     #endregion
 
-    #region Configuration-Specific Tests
+    #region Parameterized Tests
 
-    [Fact]
-    public void Config_FirstOrderApproximation_DefaultsToTrue()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    [InlineData(10)]
+    public void MetaTrain_WithDifferentAdaptationSteps_ReturnsValidLoss(int adaptationSteps)
     {
         // Arrange
-        var config = new MAMLTrainerConfig<double>();
+        var mockModel = CreateMockModel();
+        var options = new MAMLOptions<double, Tensor<double>, Tensor<double>>(mockModel)
+        {
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 0.001,
+            AdaptationSteps = adaptationSteps
+        };
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+        var task = CreateMockTask();
+        var taskBatch = new TaskBatch<double, Tensor<double>, Tensor<double>>(new[] { task });
+
+        // Act
+        var loss = algorithm.MetaTrain(taskBatch);
 
         // Assert
-        Assert.True(config.UseFirstOrderApproximation);
+        Assert.True(loss >= 0, $"Loss should be non-negative for adaptation steps={adaptationSteps}");
     }
 
-    [Fact]
-    public void Config_CanSetFullMAML()
+    [Theory]
+    [InlineData(0.001)]
+    [InlineData(0.01)]
+    [InlineData(0.1)]
+    public void MetaTrain_WithDifferentInnerLearningRates_ReturnsValidLoss(double innerLr)
     {
         // Arrange
-        var config = new MAMLTrainerConfig<double>(
-            innerLearningRate: 0.01,
-            metaLearningRate: 0.001,
-            innerSteps: 5,
-            metaBatchSize: 4,
-            numMetaIterations: 1000,
-            useFirstOrderApproximation: false); // Full MAML
+        var mockModel = CreateMockModel();
+        var options = new MAMLOptions<double, Tensor<double>, Tensor<double>>(mockModel)
+        {
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = innerLr,
+            OuterLearningRate = 0.001,
+            AdaptationSteps = 5
+        };
+        var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+        var task = CreateMockTask();
+        var taskBatch = new TaskBatch<double, Tensor<double>, Tensor<double>>(new[] { task });
+
+        // Act
+        var loss = algorithm.MetaTrain(taskBatch);
 
         // Assert
-        Assert.False(config.UseFirstOrderApproximation);
+        Assert.True(loss >= 0, $"Loss should be non-negative for inner LR={innerLr}");
     }
 
     #endregion

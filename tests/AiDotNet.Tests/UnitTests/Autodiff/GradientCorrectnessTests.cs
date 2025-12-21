@@ -1,11 +1,11 @@
 using System.Linq;
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Autodiff.Testing;
-using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ActivationFunctions;
-using AiDotNet.Interfaces;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Autodiff;
@@ -49,7 +49,7 @@ public class GradientCorrectnessTests
 
         // Create test input
         var input = new Tensor<float>(new[] { batchSize, inputSize });
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++)
         {
             SetTensorValue(input, i, (float)(random.NextDouble() * 2 - 1)); // Range: [-1, 1]
@@ -99,7 +99,7 @@ public class GradientCorrectnessTests
 
         // Create test input with mix of positive and negative values
         var input = new Tensor<float>(shape);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++)
         {
             SetTensorValue(input, i, (float)(random.NextDouble() * 4 - 2)); // Range: [-2, 2]
@@ -144,7 +144,7 @@ public class GradientCorrectnessTests
         var layer = new ActivationLayer<float>(shape, (IActivationFunction<float>)new SigmoidActivation<float>());
 
         var input = new Tensor<float>(shape);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++)
         {
             SetTensorValue(input, i, (float)(random.NextDouble() * 2 - 1));
@@ -187,7 +187,7 @@ public class GradientCorrectnessTests
         var layer = new ActivationLayer<float>(shape, (IActivationFunction<float>)new TanhActivation<float>());
 
         var input = new Tensor<float>(shape);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++)
         {
             SetTensorValue(input, i, (float)(random.NextDouble() * 2 - 1));
@@ -233,7 +233,7 @@ public class GradientCorrectnessTests
         var layer = new BatchNormalizationLayer<float>(features);
 
         var input = new Tensor<float>(shape);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++)
         {
             SetTensorValue(input, i, (float)(random.NextDouble() * 2));
@@ -279,7 +279,7 @@ public class GradientCorrectnessTests
         layer.SetTrainingMode(true); // Enable dropout
 
         var input = new Tensor<float>(shape);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++)
         {
             SetTensorValue(input, i, (float)(random.NextDouble()));
@@ -1280,7 +1280,7 @@ public class GradientCorrectnessTests
     {
         int totalSize = shape.Aggregate(1, (acc, dim) => acc * dim);
         var data = new float[totalSize];
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < totalSize; i++)
         {
             data[i] = (float)(random.NextDouble() * 2 - 1);

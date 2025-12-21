@@ -257,7 +257,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         T mean = CalculateSeriesMean();
         T stdDev = CalculateSeriesStdDev();
-    
+
         // Avoid division by zero
         if (NumOps.Equals(stdDev, NumOps.Zero))
         {
@@ -328,9 +328,9 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     private T CalculateSeriesStdDev()
     {
         T mean = CalculateSeriesMean();
-        T sumSquaredDiff = TimeSeries.Aggregate(NumOps.Zero, (acc, val) => 
+        T sumSquaredDiff = TimeSeries.Aggregate(NumOps.Zero, (acc, val) =>
             NumOps.Add(acc, NumOps.Multiply(NumOps.Subtract(val, mean), NumOps.Subtract(val, mean))));
-    
+
         T variance = NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(TimeSeries.Length - 1));
         return NumOps.Sqrt(variance);
     }
@@ -356,7 +356,7 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
         int windowSize = 5;
         int start = Math.Max(0, index - windowSize / 2);
         int end = Math.Min(TimeSeries.Length - 1, index + windowSize / 2);
-    
+
         var window = new List<T>();
         for (int i = start; i <= end; i++)
         {

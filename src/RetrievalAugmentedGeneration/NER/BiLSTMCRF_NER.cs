@@ -40,7 +40,7 @@ public class NamedEntityRecognizer
     private readonly Dictionary<string, string> _commonNames;
     private readonly Dictionary<string, string> _commonLocations;
     private readonly Dictionary<string, string> _commonOrganizations;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="NamedEntityRecognizer"/> class.
     /// </summary>
@@ -50,7 +50,7 @@ public class NamedEntityRecognizer
         _commonLocations = InitializeCommonLocations();
         _commonOrganizations = InitializeCommonOrganizations();
     }
-    
+
     private Dictionary<string, string> InitializeCommonNames()
     {
         var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -66,7 +66,7 @@ public class NamedEntityRecognizer
         }
         return names;
     }
-    
+
     private Dictionary<string, string> InitializeCommonLocations()
     {
         var locations = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -83,7 +83,7 @@ public class NamedEntityRecognizer
         }
         return locations;
     }
-    
+
     private Dictionary<string, string> InitializeCommonOrganizations()
     {
         var orgs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -97,7 +97,7 @@ public class NamedEntityRecognizer
         }
         return orgs;
     }
-    
+
     /// <summary>
     /// Extracts named entities from text.
     /// </summary>
@@ -107,29 +107,29 @@ public class NamedEntityRecognizer
     {
         if (string.IsNullOrWhiteSpace(text))
             return new List<ExtractedEntity>();
-            
+
         var tokens = TokenizeText(text);
         if (tokens.Count == 0)
             return new List<ExtractedEntity>();
-        
+
         return ExtractEntitiesFromTokens(tokens, text);
     }
-    
+
     private List<string> TokenizeText(string text)
     {
         return text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
                    .ToList();
     }
-    
+
     private List<ExtractedEntity> ExtractEntitiesFromTokens(List<string> tokens, string originalText)
     {
         var entities = new List<ExtractedEntity>();
         int i = 0;
-        
+
         while (i < tokens.Count)
         {
             var token = tokens[i];
-            
+
             // Check for multi-word entities first
             if (i < tokens.Count - 1 && char.IsUpper(token[0]))
             {
@@ -141,44 +141,44 @@ public class NamedEntityRecognizer
                     continue;
                 }
             }
-            
+
             // Check for single-word entities
             var entity = TryExtractSingleEntity(token, i);
             if (entity != null)
             {
                 entities.Add(entity);
             }
-            
+
             i++;
         }
-        
+
         return entities;
     }
-    
+
     private ExtractedEntity? TryExtractMultiWordEntity(List<string> tokens, int startIndex, out int consumed)
     {
         consumed = 1;
         var entityTokens = new List<string> { tokens[startIndex] };
         var entityType = PredictEntityType(tokens[startIndex]);
-        
+
         // Look ahead for continuation
         for (int i = startIndex + 1; i < Math.Min(startIndex + 4, tokens.Count); i++)
         {
             var nextToken = tokens[i];
-            
+
             // Stop at lowercase words (unless connectors)
             if (!char.IsUpper(nextToken[0]) && !IsConnector(nextToken))
                 break;
-                
+
             // Stop at different entity type indicators
             var nextType = PredictEntityType(nextToken);
             if (nextType != entityType && nextType != "UNKNOWN")
                 break;
-                
+
             entityTokens.Add(nextToken);
             consumed++;
         }
-        
+
         if (entityTokens.Count > 1 || entityType != "UNKNOWN")
         {
             return new ExtractedEntity
@@ -190,22 +190,22 @@ public class NamedEntityRecognizer
                 Confidence = 0.85
             };
         }
-        
+
         consumed = 1;
         return null;
     }
-    
+
     private bool IsConnector(string token)
     {
         return token.Equals("of", StringComparison.OrdinalIgnoreCase) ||
                token.Equals("the", StringComparison.OrdinalIgnoreCase) ||
                token.Equals("and", StringComparison.OrdinalIgnoreCase);
     }
-    
+
     private ExtractedEntity? TryExtractSingleEntity(string token, int index)
     {
         var entityType = PredictEntityType(token);
-        
+
         if (entityType != "UNKNOWN")
         {
             return new ExtractedEntity
@@ -217,10 +217,10 @@ public class NamedEntityRecognizer
                 Confidence = 0.75
             };
         }
-        
+
         return null;
     }
-    
+
     private string PredictEntityType(string token)
     {
         // Check dictionaries first
@@ -230,11 +230,11 @@ public class NamedEntityRecognizer
             return "LOCATION";
         if (_commonOrganizations.ContainsKey(token))
             return "ORGANIZATION";
-        
+
         // Pattern-based detection
         if (!char.IsUpper(token[0]))
             return "UNKNOWN";
-        
+
         // Organization indicators
         if (token.EndsWith("Corp") || token.EndsWith("Inc") || token.EndsWith("LLC") ||
             token.EndsWith("Ltd") || token.EndsWith("GmbH") || token.EndsWith("SA") ||
@@ -243,7 +243,7 @@ public class NamedEntityRecognizer
         {
             return "ORGANIZATION";
         }
-        
+
         // Location indicators
         if (token.EndsWith("City") || token.EndsWith("Town") || token.EndsWith("Village") ||
             token.EndsWith("County") || token.EndsWith("State") || token.EndsWith("Province") ||
@@ -251,14 +251,14 @@ public class NamedEntityRecognizer
         {
             return "LOCATION";
         }
-        
+
         // Person name patterns (capital first letter, common suffixes)
         if (token.EndsWith("son") || token.EndsWith("sen") || token.EndsWith("berg") ||
             token.EndsWith("stein") || token.EndsWith("man") || token.EndsWith("ton"))
         {
             return "PERSON";
         }
-        
+
         // Default to PERSON for capitalized words (most common)
         return token.Length > 2 ? "PERSON" : "UNKNOWN";
     }
@@ -273,27 +273,27 @@ public class ExtractedEntity
     /// The entity text.
     /// </summary>
     public string Text { get; set; } = string.Empty;
-    
+
     /// <summary>
     /// The entity type (PERSON, ORGANIZATION, LOCATION, DATE).
     /// </summary>
     public string Type { get; set; } = string.Empty;
-    
+
     /// <summary>
     /// Starting token index in the original text.
     /// </summary>
     public int StartIndex { get; set; }
-    
+
     /// <summary>
     /// Ending token index in the original text.
     /// </summary>
     public int EndIndex { get; set; }
-    
+
     /// <summary>
     /// Confidence score for this entity (0.0 to 1.0).
     /// </summary>
     public double Confidence { get; set; } = 1.0;
-    
+
     public override string ToString()
     {
         return $"{Text} ({Type})";

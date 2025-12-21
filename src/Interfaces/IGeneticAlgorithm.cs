@@ -54,25 +54,25 @@ public interface IGeneticAlgorithm<T, TInput, TOutput, TIndividual, TGene>
     /// </summary>
     /// <returns>The fitness calculator instance used by this genetic model.</returns>
     IFitnessCalculator<T, TInput, TOutput> GetFitnessCalculator();
-    
+
     /// <summary>
     /// Sets the fitness calculator to be used for evaluating individuals.
     /// </summary>
     /// <param name="fitnessCalculator">The fitness calculator to use.</param>
     void SetFitnessCalculator(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator);
-    
+
     /// <summary>
     /// Gets the current population of individuals in the genetic model.
     /// </summary>
     /// <returns>A collection of individuals representing the current population.</returns>
     ICollection<TIndividual> GetPopulation();
-    
+
     /// <summary>
     /// Gets the best individual from the current population.
     /// </summary>
     /// <returns>The individual with the highest fitness.</returns>
     TIndividual GetBestIndividual();
-    
+
     /// <summary>
     /// Evaluates an individual by converting it to a model and generating evaluation data.
     /// </summary>
@@ -88,12 +88,12 @@ public interface IGeneticAlgorithm<T, TInput, TOutput, TIndividual, TGene>
     /// data to generate evaluation metrics, which are then passed to the fitness calculator.
     /// </remarks>
     T EvaluateIndividual(
-        TIndividual individual, 
-        TInput trainingInput, 
-        TOutput trainingOutput, 
-        TInput? validationInput = default, 
+        TIndividual individual,
+        TInput trainingInput,
+        TOutput trainingOutput,
+        TInput? validationInput = default,
         TOutput? validationOutput = default);
-    
+
     /// <summary>
     /// Evolves the population for a specified number of generations.
     /// </summary>
@@ -105,13 +105,13 @@ public interface IGeneticAlgorithm<T, TInput, TOutput, TIndividual, TGene>
     /// <param name="stopCriteria">Optional function that determines when to stop evolution.</param>
     /// <returns>Statistics about the evolutionary process.</returns>
     EvolutionStats<T, TInput, TOutput> Evolve(
-        int generations, 
-        TInput trainingInput, 
-        TOutput trainingOutput, 
-        TInput? validationInput = default, 
-        TOutput? validationOutput = default, 
+        int generations,
+        TInput trainingInput,
+        TOutput trainingOutput,
+        TInput? validationInput = default,
+        TOutput? validationOutput = default,
         Func<EvolutionStats<T, TInput, TOutput>, bool>? stopCriteria = null);
-    
+
     /// <summary>
     /// Performs crossover between two parent individuals to produce offspring.
     /// </summary>
@@ -120,7 +120,7 @@ public interface IGeneticAlgorithm<T, TInput, TOutput, TIndividual, TGene>
     /// <param name="crossoverRate">The probability of crossover occurring.</param>
     /// <returns>One or more offspring produced by crossover.</returns>
     ICollection<TIndividual> Crossover(TIndividual parent1, TIndividual parent2, double crossoverRate);
-    
+
     /// <summary>
     /// Applies mutation to an individual.
     /// </summary>
@@ -128,7 +128,7 @@ public interface IGeneticAlgorithm<T, TInput, TOutput, TIndividual, TGene>
     /// <param name="mutationRate">The probability of each gene mutating.</param>
     /// <returns>The mutated individual.</returns>
     TIndividual Mutate(TIndividual individual, double mutationRate);
-    
+
     /// <summary>
     /// Selects individuals from the population for reproduction.
     /// </summary>
@@ -136,7 +136,7 @@ public interface IGeneticAlgorithm<T, TInput, TOutput, TIndividual, TGene>
     /// <param name="selectionMethod">The method to use for selection (e.g., tournament, roulette wheel).</param>
     /// <returns>The selected individuals.</returns>
     ICollection<TIndividual> Select(int selectionSize, SelectionMethod selectionMethod);
-    
+
     /// <summary>
     /// Initializes a new population with random individuals.
     /// </summary>
@@ -144,7 +144,7 @@ public interface IGeneticAlgorithm<T, TInput, TOutput, TIndividual, TGene>
     /// <param name="initializationMethod">The method to use for initialization.</param>
     /// <returns>The newly created population.</returns>
     ICollection<TIndividual> InitializePopulation(int populationSize, InitializationMethod initializationMethod);
-    
+
     /// <summary>
     /// Creates a new individual with the specified genes.
     /// </summary>
@@ -158,46 +158,46 @@ public interface IGeneticAlgorithm<T, TInput, TOutput, TIndividual, TGene>
     /// <param name="individual">The individual to convert.</param>
     /// <returns>A model capable of making predictions based on the individual's genes.</returns>
     IFullModel<T, TInput, TOutput> IndividualToModel(TIndividual individual);
-    
+
     /// <summary>
     /// Gets statistics about the current evolutionary state, including generation number,
     /// population diversity, and fitness distribution.
     /// </summary>
     /// <returns>Statistics about the current evolutionary state.</returns>
     EvolutionStats<T, TInput, TOutput> GetEvolutionStats(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator);
-    
+
     /// <summary>
     /// Configures the genetic algorithm parameters.
     /// </summary>
     /// <param name="parameters">The genetic algorithm parameters to use.</param>
     void ConfigureGeneticParameters(GeneticParameters parameters);
-    
+
     /// <summary>
     /// Gets the current genetic algorithm parameters.
     /// </summary>
     /// <returns>The current genetic algorithm parameters.</returns>
     GeneticParameters GetGeneticParameters();
-    
+
     /// <summary>
     /// Adds a custom crossover operator.
     /// </summary>
     /// <param name="name">The name of the crossover operator.</param>
     /// <param name="crossoverOperator">The crossover function.</param>
     void AddCrossoverOperator(string name, Func<TIndividual, TIndividual, double, ICollection<TIndividual>> crossoverOperator);
-    
+
     /// <summary>
     /// Adds a custom mutation operator.
     /// </summary>
     /// <param name="name">The name of the mutation operator.</param>
     /// <param name="mutationOperator">The mutation function.</param>
     void AddMutationOperator(string name, Func<TIndividual, double, TIndividual> mutationOperator);
-    
+
     /// <summary>
     /// Saves the current population to a file.
     /// </summary>
     /// <param name="filePath">The path where the population should be saved.</param>
     void SavePopulation(string filePath);
-    
+
     /// <summary>
     /// Loads a population from a file.
     /// </summary>
@@ -218,67 +218,67 @@ public class GeneticParameters
     /// Gets or sets the size of the population.
     /// </summary>
     public int PopulationSize { get; set; } = 100;
-    
+
     /// <summary>
     /// Gets or sets the probability of crossover occurring.
     /// </summary>
     public double CrossoverRate { get; set; } = 0.8;
-    
+
     /// <summary>
     /// Gets or sets the probability of mutation occurring.
     /// </summary>
     public double MutationRate { get; set; } = 0.1;
-    
+
     /// <summary>
     /// Gets or sets the selection method to use.
     /// </summary>
     public SelectionMethod SelectionMethod { get; set; } = SelectionMethod.Tournament;
-    
+
     /// <summary>
     /// Gets or sets the tournament size for tournament selection.
     /// </summary>
     public int TournamentSize { get; set; } = 3;
-    
+
     /// <summary>
     /// Gets or sets the elitism rate (percentage of top individuals to preserve unchanged).
     /// </summary>
     public double ElitismRate { get; set; } = 0.1;
-    
+
     /// <summary>
     /// Gets or sets the maximum number of generations to evolve.
     /// </summary>
     public int MaxGenerations { get; set; } = 100;
-    
+
     /// <summary>
     /// Gets or sets the fitness threshold for termination.
     /// </summary>
     public double FitnessThreshold { get; set; } = double.MaxValue;
-    
+
     /// <summary>
     /// Gets or sets the maximum time allowed for evolution.
     /// </summary>
     public TimeSpan MaxTime { get; set; } = TimeSpan.FromMinutes(10);
-    
+
     /// <summary>
     /// Gets or sets the maximum number of generations without improvement before termination.
     /// </summary>
     public int MaxGenerationsWithoutImprovement { get; set; } = 20;
-    
+
     /// <summary>
     /// Gets or sets the name of the crossover operator to use.
     /// </summary>
     public string CrossoverOperator { get; set; } = "SinglePoint";
-    
+
     /// <summary>
     /// Gets or sets the name of the mutation operator to use.
     /// </summary>
     public string MutationOperator { get; set; } = "Uniform";
-    
+
     /// <summary>
     /// Gets or sets whether to use parallel evaluation of fitness.
     /// </summary>
     public bool UseParallelEvaluation { get; set; } = true;
-    
+
     /// <summary>
     /// Gets or sets the initialization method to use for creating the initial population.
     /// </summary>

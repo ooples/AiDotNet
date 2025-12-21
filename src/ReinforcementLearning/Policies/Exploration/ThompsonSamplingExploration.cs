@@ -1,6 +1,6 @@
-using AiDotNet.LinearAlgebra;
 using System;
 using System.Collections.Generic;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ReinforcementLearning.Policies.Exploration
 {

@@ -1,6 +1,7 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
-using AiDotNet.ActivationFunctions;
+using AiDotNet.Tensors.Helpers;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 
@@ -37,7 +38,7 @@ public class NeuralNetworkLayersBenchmarks
     public void Setup()
     {
         // Using seeded Random for reproducible benchmark data - not used for security purposes
-        var random = new Random(42); // NOSONAR S2245 - benchmarks don't need cryptographic randomness
+        var random = RandomHelper.CreateSeededRandom(42); // NOSONAR S2245 - benchmarks don't need cryptographic randomness
 
         // Initialize input tensor (batch_size x input_size)
         _input = new Tensor<double>(new[] { BatchSize, InputSize });

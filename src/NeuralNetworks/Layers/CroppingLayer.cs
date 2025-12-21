@@ -404,7 +404,7 @@ public class CroppingLayer<T> : LayerBase<T>
 
         return ApplyActivationDerivative(_lastInput, inputGradient);
     }
-   
+
     /// <summary>
     /// Updates the layer's parameters using the specified learning rate.
     /// </summary>

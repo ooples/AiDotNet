@@ -45,12 +45,12 @@ public class SquaredExponentialRBF<T> : IRadialBasisFunction<T>
     /// The shape parameter (epsilon) controlling the width of the function.
     /// </summary>
     private readonly T _epsilon;
-    
+
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SquaredExponentialRBF{T}"/> class with a specified shape parameter.
     /// </summary>
@@ -80,7 +80,7 @@ public class SquaredExponentialRBF<T> : IRadialBasisFunction<T>
         _numOps = MathHelper.GetNumericOperations<T>();
         _epsilon = _numOps.FromDouble(epsilon);
     }
-    
+
     /// <summary>
     /// Computes the value of the Squared Exponential Radial Basis Function for a given radius.
     /// </summary>
@@ -115,7 +115,7 @@ public class SquaredExponentialRBF<T> : IRadialBasisFunction<T>
         T negativeSquaredEpsilonR = _numOps.Negate(squaredEpsilonR);
         return _numOps.Exp(negativeSquaredEpsilonR);
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Squared Exponential RBF with respect to the radius.
     /// </summary>
@@ -144,35 +144,35 @@ public class SquaredExponentialRBF<T> : IRadialBasisFunction<T>
     public T ComputeDerivative(T r)
     {
         // Derivative with respect to r: -2e²r * exp(-(er)²)
-        
+
         // Calculate er
         T epsilonR = _numOps.Multiply(_epsilon, r);
-        
+
         // Calculate (er)²
         T squaredEpsilonR = _numOps.Multiply(epsilonR, epsilonR);
-        
+
         // Calculate -(er)²
         T negativeSquaredEpsilonR = _numOps.Negate(squaredEpsilonR);
-        
+
         // Calculate exp(-(er)²)
         T expTerm = _numOps.Exp(negativeSquaredEpsilonR);
-        
+
         // Calculate e²
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
-        
+
         // Calculate 2e²r
         T twoEpsilonSquaredR = _numOps.Multiply(
             _numOps.Multiply(_numOps.FromDouble(2.0), epsilonSquared),
             r
         );
-        
+
         // Calculate -2e²r
         T negativeTwoEpsilonSquaredR = _numOps.Negate(twoEpsilonSquaredR);
-        
+
         // Return -2e²r * exp(-(er)²)
         return _numOps.Multiply(negativeTwoEpsilonSquaredR, expTerm);
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Squared Exponential RBF with respect to the shape parameter epsilon.
     /// </summary>
@@ -201,31 +201,31 @@ public class SquaredExponentialRBF<T> : IRadialBasisFunction<T>
     public T ComputeWidthDerivative(T r)
     {
         // Derivative with respect to e: -2er² * exp(-(er)²)
-        
+
         // Calculate er
         T epsilonR = _numOps.Multiply(_epsilon, r);
-        
+
         // Calculate (er)²
         T squaredEpsilonR = _numOps.Multiply(epsilonR, epsilonR);
-        
+
         // Calculate -(er)²
         T negativeSquaredEpsilonR = _numOps.Negate(squaredEpsilonR);
-        
+
         // Calculate exp(-(er)²)
         T expTerm = _numOps.Exp(negativeSquaredEpsilonR);
-        
+
         // Calculate r²
         T rSquared = _numOps.Multiply(r, r);
-        
+
         // Calculate 2er²
         T twoEpsilonRSquared = _numOps.Multiply(
             _numOps.Multiply(_numOps.FromDouble(2.0), _epsilon),
             rSquared
         );
-        
+
         // Calculate -2er²
         T negativeTwoEpsilonRSquared = _numOps.Negate(twoEpsilonRSquared);
-        
+
         // Return -2er² * exp(-(er)²)
         return _numOps.Multiply(negativeTwoEpsilonRSquared, expTerm);
     }

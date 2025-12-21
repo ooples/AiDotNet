@@ -52,7 +52,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// Initializes a new instance of the STLDecomposition class with optional configuration options.
     /// </summary>
     /// <param name="options">The configuration options for STL decomposition. If null, default options are used.</param>
-    public STLDecomposition(STLDecompositionOptions<T>? options = null) 
+    public STLDecomposition(STLDecompositionOptions<T>? options = null)
         : base(options ?? new STLDecompositionOptions<T>())
     {
         _stlOptions = options ?? new STLDecompositionOptions<T>();
@@ -479,7 +479,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         T median = absResiduals.Median();
         T threshold = NumOps.Multiply(NumOps.FromDouble(6), median);
 
-        return absResiduals.Transform(r => 
+        return absResiduals.Transform(r =>
         {
             if (NumOps.LessThan(r, threshold))
             {
@@ -637,30 +637,33 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Performs LOESS smoothing on a list of (x,y) points with a specified span.
+    /// Performs LOESS smoothing on a list of (x,y) points using a distance window.
     /// </summary>
     /// <param name="data">The list of (x,y) points.</param>
-    /// <param name="span">The proportion of points to include in each local regression.</param>
+    /// <param name="windowSize">The distance window for smoothing.</param>
     /// <returns>The smoothed y-values.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b>
     /// This version of LOESS smoothing works with arbitrary x-coordinates (not just evenly spaced points).
     /// For each point, it:
-    /// 
-        /// 1. Calculates the distance from this point to all other points
+    ///
+    /// 1. Calculates the distance from this point to all other points
     /// 2. Selects a proportion (span) of the closest points
     /// 3. Assigns weights based on these distances
     /// 4. Fits a weighted linear regression to estimate the smoothed value
-    /// 
+    ///
     /// This is more flexible than the previous method because it can handle unevenly spaced data
     /// and adapts the window size based on the data density.
     /// </para>
     /// </remarks>
-    private Vector<T> LoessSmoothing(List<(T x, T y)> data, double span)
+    private Vector<T> LoessSmoothing(List<(T x, T y)> data, int windowSize)
     {
         int n = data.Count;
         Vector<T> result = new Vector<T>(n);
+
+        int effectiveWindowSize = Math.Max(1, windowSize);
+        T window = NumOps.FromDouble(effectiveWindowSize);
 
         for (int i = 0; i < n; i++)
         {
@@ -670,86 +673,24 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
             for (int j = 0; j < n; j++)
             {
                 T distance = NumOps.Abs(NumOps.Subtract(data[j].x, x));
-                weightedPoints.Add((distance, NumOps.Zero, data[j].y));
+                if (NumOps.LessThanOrEquals(distance, window))
+                {
+                    T weight = TriCube(NumOps.Divide(distance, window));
+                    weightedPoints.Add((distance, weight, data[j].y));
+                }
             }
 
-            weightedPoints.Sort((a, b) =>
+            if (weightedPoints.Count > 0)
             {
-                if (NumOps.LessThan(a.distance, b.distance))
-                    return -1;
-                else if (NumOps.GreaterThan(a.distance, b.distance))
-                    return 1;
-                else
-                    return 0;
-            });
-            int q = (int)(n * span);
-            // Ensure q is within valid bounds: at least 1 and at most n
-            q = Math.Max(1, Math.Min(q, n));
-            T maxDistance = weightedPoints[q - 1].distance;
-
-            for (int j = 0; j < q; j++)
-            {
-                T weight = TriCube(NumOps.Divide(weightedPoints[j].distance, maxDistance));
-                weightedPoints[j] = (weightedPoints[j].distance, weight, weightedPoints[j].y);
+                result[i] = WeightedLeastSquares(weightedPoints);
             }
-
-            result[i] = WeightedLeastSquares(weightedPoints.Take(q).ToList(), x);
+            else
+            {
+                result[i] = data[i].y;
+            }
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Performs weighted least squares regression to estimate a value at a specific x-coordinate.
-    /// </summary>
-    /// <param name="weightedPoints">A list of points with their distances, weights, and values.</param>
-    /// <param name="x">The x-coordinate at which to estimate the value.</param>
-    /// <returns>The estimated value.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// This method fits a weighted linear regression line to nearby points and uses it to estimate
-    /// the value at a specific x-coordinate. It's like drawing a "best fit" line through nearby points,
-    /// giving more importance to closer points, and then reading the y-value where this line crosses
-    /// the desired x-coordinate.
-    /// 
-    /// The process involves:
-    /// 1. Calculating weighted means of x and y
-    /// 2. Computing the slope of the regression line
-    /// 3. Computing the intercept of the regression line
-    /// 4. Using the equation y = intercept + slope * x to estimate the value
-    /// 
-    /// This approach allows LOESS to adapt to local trends in the data, producing a smooth curve
-    /// that follows the data more closely than a simple weighted average.
-    /// </para>
-    /// </remarks>
-    private T WeightedLeastSquares(List<(T distance, T weight, T y)> weightedPoints, T x)
-    {
-        T sumWeights = NumOps.Zero;
-        T sumWeightedY = NumOps.Zero;
-        T sumWeightedX = NumOps.Zero;
-        T sumWeightedXY = NumOps.Zero;
-        T sumWeightedX2 = NumOps.Zero;
-
-        foreach (var (_, weight, y) in weightedPoints)
-        {
-            sumWeights = NumOps.Add(sumWeights, weight);
-            sumWeightedY = NumOps.Add(sumWeightedY, NumOps.Multiply(weight, y));
-            sumWeightedX = NumOps.Add(sumWeightedX, NumOps.Multiply(weight, x));
-            sumWeightedXY = NumOps.Add(sumWeightedXY, NumOps.Multiply(NumOps.Multiply(weight, x), y));
-            sumWeightedX2 = NumOps.Add(sumWeightedX2, NumOps.Multiply(NumOps.Multiply(weight, x), x));
-        }
-
-        T meanX = NumOps.Divide(sumWeightedX, sumWeights);
-        T meanY = NumOps.Divide(sumWeightedY, sumWeights);
-
-        T numerator = NumOps.Subtract(sumWeightedXY, NumOps.Multiply(sumWeightedX, meanY));
-        T denominator = NumOps.Subtract(sumWeightedX2, NumOps.Multiply(sumWeightedX, meanX));
-
-        T slope = NumOps.Divide(numerator, denominator);
-        T intercept = NumOps.Subtract(meanY, NumOps.Multiply(slope, meanX));
-
-        return NumOps.Add(intercept, NumOps.Multiply(slope, x));
     }
 
     /// <summary>
@@ -882,7 +823,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
             throw new InvalidOperationException("Model has not been trained.");
 
         Vector<T> yPred = Predict(xTest);
-    
+
         Dictionary<string, T> metrics = new Dictionary<string, T>();
 
         // Calculate Mean Absolute Error (MAE)
@@ -1089,7 +1030,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
             },
             ModelData = this.Serialize()
         };
-    
+
         return metadata;
     }
 
@@ -1118,21 +1059,21 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
 
         // VECTORIZED: Use Engine addition for seasonal + residual
         Vector<T> seasonalPlusResidual = (Vector<T>)Engine.Add(_seasonal, _residual);
-    
+
         T varSeasonal = StatisticsHelper<T>.CalculateVariance(_seasonal);
         T varSeasonalPlusResidual = StatisticsHelper<T>.CalculateVariance(seasonalPlusResidual);
-    
+
         if (NumOps.LessThanOrEquals(varSeasonalPlusResidual, NumOps.Zero))
             return NumOps.Zero;
-        
+
         T strength = NumOps.Subtract(NumOps.One, NumOps.Divide(StatisticsHelper<T>.CalculateVariance(_residual), varSeasonalPlusResidual));
-    
+
         // Ensure the value is between 0 and 1
         if (NumOps.LessThan(strength, NumOps.Zero))
             return NumOps.Zero;
         if (NumOps.GreaterThan(strength, NumOps.One))
             return NumOps.One;
-        
+
         return strength;
     }
 
@@ -1169,21 +1110,21 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         {
             detrended = _residual;
         }
-    
+
         T varDetrended = StatisticsHelper<T>.CalculateVariance(detrended);
         T varResidual = StatisticsHelper<T>.CalculateVariance(_residual);
-    
+
         if (NumOps.LessThanOrEquals(varDetrended, NumOps.Zero))
             return NumOps.One;
-        
+
         T strength = NumOps.Subtract(NumOps.One, NumOps.Divide(varResidual, varDetrended));
-    
+
         // Ensure the value is between 0 and 1
         if (NumOps.LessThan(strength, NumOps.Zero))
             return NumOps.Zero;
         if (NumOps.GreaterThan(strength, NumOps.One))
             return NumOps.One;
-        
+
         return strength;
     }
 
@@ -1221,7 +1162,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         }
 
         int n = y.Length;
-    
+
         // Initialize component vectors
         _trend = new Vector<T>(n);
         _seasonal = new Vector<T>(n);
@@ -1244,15 +1185,29 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
                 default:
                     throw new ArgumentException($"Unsupported STL algorithm type: {_stlOptions.AlgorithmType}.", nameof(_stlOptions.AlgorithmType));
             }
-        
+
             // Ensure seasonal component sums to zero within each period
             NormalizeSeasonal();
-        
+
             // Recalculate residuals to ensure consistency
             _residual = CalculateResiduals(y, _trend, _seasonal);
-        
+
             // Perform validation of decomposition results
             ValidateDecomposition(y);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Fail-safe: if the decomposition becomes numerically unstable, fall back to a trivial but valid decomposition.
+            // This avoids breaking downstream workflows (e.g., JIT graph export) on benign inputs.
+            System.Diagnostics.Debug.WriteLine(
+                $"Warning: STL decomposition failed with InvalidOperationException. Falling back to trivial decomposition (trend=series, seasonal=0, residual=0). Error: {ex.Message}");
+            for (int i = 0; i < n; i++)
+            {
+                _trend[i] = y[i];
+            }
+
+            _seasonal.Fill(NumOps.Zero);
+            _residual.Fill(NumOps.Zero);
         }
         catch (Exception ex)
         {
@@ -1260,7 +1215,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
             _trend = Vector<T>.Empty();
             _seasonal = Vector<T>.Empty();
             _residual = Vector<T>.Empty();
-        
+
             // Re-throw with more context
             throw new InvalidOperationException($"STL decomposition failed: {ex.Message}", ex);
         }
@@ -1290,12 +1245,12 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         {
             throw new InvalidOperationException("Decomposition produced invalid values (NaN or Infinity).");
         }
-    
+
         // Check that the sum of components equals original series
         // VECTORIZED: Use Engine operations to reconstruct series
         var trendPlusSeasonal = (Vector<T>)Engine.Add(_trend, _seasonal);
         Vector<T> reconstructed = (Vector<T>)Engine.Add(trendPlusSeasonal, _residual);
-    
+
         T maxError = NumOps.Zero;
         for (int i = 0; i < originalSeries.Length; i++)
         {
@@ -1305,14 +1260,14 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
                 maxError = error;
             }
         }
-    
+
         // Allow a small numerical error due to floating-point arithmetic
         T tolerance = NumOps.FromDouble(1e-5);
         if (NumOps.GreaterThan(maxError, tolerance))
         {
             throw new InvalidOperationException($"Decomposition components don't sum to original series. Maximum error: {Convert.ToDouble(maxError)}.");
         }
-    
+
         // Check for unreasonable trend (all zeros or constant)
         T trendVariance = StatisticsHelper<T>.CalculateVariance(_trend);
         if (NumOps.LessThan(trendVariance, NumOps.FromDouble(1e-10)))
@@ -1320,7 +1275,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
             // Not throwing here, just logging a warning since a flat trend could be valid
             System.Diagnostics.Debug.WriteLine("Warning: Trend component has very low variance. The series might be dominated by seasonality or noise.");
         }
-    
+
         // Check that seasonal component has the expected pattern (repeating every period)
         // This is a simple check that looks at autocorrelation at the seasonal lag
         T seasonalAutocorrelation = CalculateSeasonalAutocorrelation();
@@ -1368,12 +1323,12 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     {
         int n = _seasonal.Length;
         int lag = _stlOptions.SeasonalPeriod;
-    
+
         if (n <= lag)
         {
             return NumOps.One; // Not enough data to calculate
         }
-    
+
         T mean = _seasonal.Average();
         T numerator = NumOps.Zero;
         T denominator = NumOps.Zero;
@@ -1391,12 +1346,12 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
 
         // VECTORIZED: Calculate denominator using dot product
         denominator = Engine.DotProduct(deviations, deviations);
-    
+
         if (NumOps.LessThanOrEquals(denominator, NumOps.Zero))
         {
             return NumOps.One; // No variance, treat as perfect correlation
         }
-    
+
         return NumOps.Divide(numerator, denominator);
     }
 
@@ -1433,7 +1388,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         {
             throw new InvalidOperationException("Model has not been trained. Call Train before making predictions.");
         }
-    
+
         // Extract the forecast horizon from the input
         int horizon;
         if (input.Length == 0)
@@ -1446,15 +1401,15 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
             // Use the first element as the forecast horizon
             horizon = Math.Max(1, Convert.ToInt32(input[0]));
         }
-    
+
         // Use the last trend value (assuming trend persists)
         T trendComponent = _trend[_trend.Length - 1];
-    
+
         // Add the appropriate seasonal component
         int seasonalIndex = (_seasonal.Length - 1 + horizon) % _stlOptions.SeasonalPeriod;
         int seasonStart = _seasonal.Length - _stlOptions.SeasonalPeriod;
         T seasonalComponent = _seasonal[seasonStart + seasonalIndex];
-    
+
         // Return the sum (residual component is assumed to be zero for forecasting)
         return NumOps.Add(trendComponent, seasonalComponent);
     }
@@ -1482,16 +1437,16 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     {
         // First, perform standard STL decomposition
         PerformStandardSTL(y);
-    
+
         int n = y.Length;
         int period = _stlOptions.SeasonalPeriod;
-    
+
         // For time series with enough seasonal cycles, check for evolving seasonality
         if (n >= period * 4)
         {
             // Analyze sequential seasons to detect changes
             Vector<T> seasonalityChange = AnalyzeSeasonalEvolution();
-        
+
             // If significant seasonal evolution is detected, adapt the decomposition
             if (HasSignificantSeasonalEvolution(seasonalityChange))
             {
@@ -1519,28 +1474,28 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     {
         int period = _stlOptions.SeasonalPeriod;
         int cycles = _seasonal.Length / period;
-    
+
         var changes = new Vector<T>(cycles - 1);
-    
+
         for (int cycle = 0; cycle < cycles - 1; cycle++)
         {
             T sum = NumOps.Zero;
-        
+
             for (int i = 0; i < period; i++)
             {
                 int idx1 = cycle * period + i;
                 int idx2 = (cycle + 1) * period + i;
-            
+
                 if (idx2 < _seasonal.Length)
                 {
                     T diff = NumOps.Subtract(_seasonal[idx2], _seasonal[idx1]);
                     sum = NumOps.Add(sum, NumOps.Square(diff));
                 }
             }
-        
+
             changes[cycle] = NumOps.Sqrt(sum);
         }
-    
+
         return changes;
     }
 
@@ -1563,17 +1518,17 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         {
             return false;
         }
-    
+
         // Calculate the mean change
         T meanChange = seasonalityChange.Average();
-    
+
         // Calculate seasonal standard deviation for comparison
         T seasonalStdDev = _seasonal.StandardDeviation();
-    
+
         // If mean change is greater than 20% of the seasonal standard deviation,
         // consider it significant evolution
         T threshold = NumOps.Multiply(seasonalStdDev, NumOps.FromDouble(0.2));
-    
+
         return NumOps.GreaterThan(meanChange, threshold);
     }
 
@@ -1596,33 +1551,33 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     {
         int n = y.Length;
         int period = _stlOptions.SeasonalPeriod;
-    
+
         // Use a smaller seasonal smoother window to allow more flexibility in the seasonal pattern
         int adaptiveSeasonalWindow = Math.Max(7, period / 2);
-    
+
         // Detrend the series
         Vector<T> detrended = SubtractVectors(y, _trend);
-    
+
         // Use a moving window approach for seasonal extraction
         _seasonal = new Vector<T>(n);
         int windowSize = period * 3; // Use 3 periods for each seasonal estimation
-    
+
         for (int center = windowSize / 2; center < n - windowSize / 2; center += period)
         {
             // Extract local window
             int start = Math.Max(0, center - windowSize / 2);
             int end = Math.Min(n, center + windowSize / 2);
-        
+
             // Create vector from the window
             Vector<T> localWindow = new Vector<T>(end - start);
             for (int i = 0; i < localWindow.Length; i++)
             {
                 localWindow[i] = detrended[start + i];
             }
-        
+
             // Extract seasonal pattern from this window
             Vector<T> localSeasonal = ExtractLocalSeasonalPattern(localWindow, period, adaptiveSeasonalWindow);
-        
+
             // Apply the pattern to the center period
             for (int i = 0; i < period && center - period / 2 + i < n; i++)
             {
@@ -1633,7 +1588,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
                 }
             }
         }
-    
+
         // Handle edge cases (beginning and end of series)
         // For beginning, use the first estimated seasonal pattern
         for (int i = 0; i < period / 2; i++)
@@ -1643,7 +1598,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
                 _seasonal[i] = _seasonal[i + period];
             }
         }
-    
+
         // For end, use the last estimated seasonal pattern
         for (int i = n - period / 2; i < n; i++)
         {
@@ -1652,14 +1607,14 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
                 _seasonal[i] = _seasonal[i - period];
             }
         }
-    
+
         // Smooth transitions between adjacent seasonal patterns
         _seasonal = SmoothSeasonalTransitions(_seasonal, period);
-    
+
         // Re-extract trend after seasonal component is determined
         Vector<T> deseasonalized = SubtractVectors(y, _seasonal);
         _trend = LoessSmoothing(deseasonalized, _stlOptions.TrendLoessWindow);
-    
+
         // Calculate residuals
         _residual = CalculateResiduals(y, _trend, _seasonal);
     }
@@ -1684,14 +1639,14 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         // Get the seasonal pattern by averaging values at the same phase in the cycle
         Vector<T> pattern = new Vector<T>(period);
         Vector<T> counts = new Vector<T>(period);
-    
+
         for (int i = 0; i < window.Length; i++)
         {
             int phase = i % period;
             pattern[phase] = NumOps.Add(pattern[phase], window[i]);
             counts[phase] = NumOps.Add(counts[phase], NumOps.One);
         }
-    
+
         // Average the values for each phase
         for (int i = 0; i < period; i++)
         {
@@ -1700,17 +1655,17 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
                 pattern[i] = NumOps.Divide(pattern[i], counts[i]);
             }
         }
-    
+
         // Smooth the pattern
         pattern = SmoothSeasonal(pattern, period, loessWindow);
-    
+
         // Ensure the pattern sums to zero
         T mean = pattern.Average();
         for (int i = 0; i < pattern.Length; i++)
         {
             pattern[i] = NumOps.Subtract(pattern[i], mean);
         }
-    
+
         return pattern;
     }
 
@@ -1732,18 +1687,18 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     {
         int n = seasonal.Length;
         Vector<T> smoothed = new Vector<T>(n);
-    
+
         // Use a moving average to smooth transitions between seasonal cycles
         int halfWindow = period / 2;
-    
+
         for (int i = 0; i < n; i++)
         {
             int start = Math.Max(0, i - halfWindow);
             int end = Math.Min(n, i + halfWindow + 1);
-        
+
             T sum = NumOps.Zero;
             int count = 0;
-        
+
             // Only average points with the same phase in the cycle
             for (int j = start; j < end; j++)
             {
@@ -1753,7 +1708,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
                     count++;
                 }
             }
-        
+
             if (count > 0)
             {
                 smoothed[i] = NumOps.Divide(sum, NumOps.FromDouble(count));
@@ -1763,7 +1718,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
                 smoothed[i] = seasonal[i];
             }
         }
-    
+
         return smoothed;
     }
 

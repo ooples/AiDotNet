@@ -33,12 +33,12 @@ public class ExponentialRBF<T> : IRadialBasisFunction<T>
     /// The width parameter (epsilon) controlling how quickly the function decreases with distance.
     /// </summary>
     private readonly T _epsilon;
-    
+
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ExponentialRBF{T}"/> class with a specified width parameter.
     /// </summary>
@@ -64,7 +64,7 @@ public class ExponentialRBF<T> : IRadialBasisFunction<T>
         _numOps = MathHelper.GetNumericOperations<T>();
         _epsilon = _numOps.FromDouble(epsilon);
     }
-    
+
     /// <summary>
     /// Computes the value of the Exponential Radial Basis Function for a given radius.
     /// </summary>
@@ -95,7 +95,7 @@ public class ExponentialRBF<T> : IRadialBasisFunction<T>
         T negativeEpsilonR = _numOps.Multiply(_numOps.Negate(_epsilon), r);
         return _numOps.Exp(negativeEpsilonR);
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Exponential RBF with respect to the radius.
     /// </summary>
@@ -125,7 +125,7 @@ public class ExponentialRBF<T> : IRadialBasisFunction<T>
         T negativeEpsilon = _numOps.Negate(_epsilon);
         return _numOps.Multiply(negativeEpsilon, Compute(r));
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Exponential RBF with respect to the width parameter epsilon.
     /// </summary>

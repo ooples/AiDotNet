@@ -1,7 +1,7 @@
-using AiDotNet.LinearAlgebra;
-using AiDotNet.Interpretability;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using AiDotNet.Interpretability;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Interfaces
 {

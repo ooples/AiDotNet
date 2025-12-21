@@ -59,7 +59,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// to run, and whether to optimize the model parameters automatically.
     /// </remarks>
     private readonly UnobservedComponentsOptions<T, TInput, TOutput> _ucOptions;
-    
+
     /// <summary>
     /// The estimated trend component of the time series.
     /// </summary>
@@ -71,7 +71,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// fluctuations and short-term noise.
     /// </remarks>
     private Vector<T> _trend;
-    
+
     /// <summary>
     /// The previous iteration's trend estimates, used to check for convergence.
     /// </summary>
@@ -83,7 +83,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// its calculations (convergence).
     /// </remarks>
     private Vector<T> _previousTrend;
-    
+
     /// <summary>
     /// The original time series data.
     /// </summary>
@@ -93,7 +93,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// or monthly temperature readings.
     /// </remarks>
     private Vector<T> _y;
-    
+
     /// <summary>
     /// The estimated seasonal component of the time series.
     /// </summary>
@@ -105,7 +105,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// These patterns repeat at fixed intervals (like weekly, monthly, or yearly).
     /// </remarks>
     private Vector<T> _seasonal;
-    
+
     /// <summary>
     /// The estimated cycle component of the time series.
     /// </summary>
@@ -117,7 +117,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// are examples of cyclical patterns.
     /// </remarks>
     private Vector<T> _cycle;
-    
+
     /// <summary>
     /// The estimated irregular component of the time series.
     /// </summary>
@@ -129,7 +129,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// truly random variations.
     /// </remarks>
     private Vector<T> _irregular;
-    
+
     /// <summary>
     /// Fast Fourier Transform utility for frequency analysis.
     /// </summary>
@@ -141,7 +141,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// your time series into different cycle lengths.
     /// </remarks>
     private readonly FastFourierTransform<T> _fft;
-    
+
     /// <summary>
     /// The state transition matrix for the Kalman filter.
     /// </summary>
@@ -153,7 +153,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// if no new information is observed.
     /// </remarks>
     private Matrix<T> _stateTransition;
-    
+
     /// <summary>
     /// The observation model matrix for the Kalman filter.
     /// </summary>
@@ -165,7 +165,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// final dish (observed value).
     /// </remarks>
     private Matrix<T> _observationModel;
-    
+
     /// <summary>
     /// The process noise covariance matrix for the Kalman filter.
     /// </summary>
@@ -177,7 +177,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// less smooth.
     /// </remarks>
     private Matrix<T> _processNoise;
-    
+
     /// <summary>
     /// The observation noise variance for the Kalman filter.
     /// </summary>
@@ -189,7 +189,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// of how the components should behave.
     /// </remarks>
     private T _observationNoise;
-    
+
     /// <summary>
     /// The current state vector for the Kalman filter.
     /// </summary>
@@ -201,7 +201,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// happening in your time series.
     /// </remarks>
     private Vector<T> _state;
-    
+
     /// <summary>
     /// The current state covariance matrix for the Kalman filter.
     /// </summary>
@@ -214,7 +214,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// of its estimates.
     /// </remarks>
     private Matrix<T> _stateCovariance;
-    
+
     /// <summary>
     /// The threshold for determining when the model has converged.
     /// </summary>
@@ -225,7 +225,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// the model considers its estimates "good enough" and stops further refinement.
     /// </remarks>
     private T _convergenceThreshold;
-    
+
     /// <summary>
     /// Collection of filtered state vectors from the Kalman filter.
     /// </summary>
@@ -236,7 +236,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// best guess possible at each step without peeking into the future.
     /// </remarks>
     private List<Vector<T>> _filteredState;
-    
+
     /// <summary>
     /// Collection of filtered state covariance matrices from the Kalman filter.
     /// </summary>
@@ -265,11 +265,11 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// 
     /// If you don't provide options, the model will use reasonable default settings.
     /// </remarks>
-    public UnobservedComponentsModel(UnobservedComponentsOptions<T, TInput, TOutput>? options = null) 
+    public UnobservedComponentsModel(UnobservedComponentsOptions<T, TInput, TOutput>? options = null)
         : base(options ?? new UnobservedComponentsOptions<T, TInput, TOutput>())
     {
         _ucOptions = options ?? new UnobservedComponentsOptions<T, TInput, TOutput>();
-        
+
         // Initialize model components
         _trend = new Vector<T>(_ucOptions.MaxIterations);
         _previousTrend = new Vector<T>(_ucOptions.MaxIterations);
@@ -1207,45 +1207,45 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         // Save the original time series data
         _y = y.Clone();
         int n = _y.Length;
-    
+
         if (n < 2)
         {
             throw new ArgumentException("Time series must contain at least 2 observations for training.", nameof(y));
         }
-    
+
         // Verify that options are appropriate for the data length
         if (_ucOptions.SeasonalPeriod >= n)
         {
             throw new ArgumentException($"Seasonal period ({_ucOptions.SeasonalPeriod}) must be less than the number of observations ({n}).", nameof(_ucOptions));
         }
-    
+
         // Initialize components with initial estimates
         InitializeComponents(_y);
-    
+
         // Save initial trend estimates for convergence checking
         _previousTrend = _trend.Clone();
-    
+
         // Initialize Kalman filter parameters
         InitializeKalmanParameters();
-    
+
         // Iterative refinement of components
         bool converged = false;
         int iteration = 0;
-    
+
         while (!converged && iteration < _ucOptions.MaxIterations)
         {
             // Apply Kalman filter to estimate state at each time point
             KalmanFilter(_y);
-        
+
             // Apply Kalman smoother to refine estimates using future information
             KalmanSmoother(_y);
-        
+
             // Check for convergence
             converged = HasConverged();
-        
+
             iteration++;
         }
-    
+
         // Optimize parameters if requested
         if (_ucOptions.OptimizeParameters)
         {
@@ -1260,7 +1260,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
                 // In production, you might use a proper logging framework here
             }
         }
-    
+
         // Final refinement with optimized parameters if optimization was performed
         if (_ucOptions.OptimizeParameters)
         {
@@ -1306,7 +1306,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
-    
+
         // Extract time index from input
         int timeIndex;
         if (input.Length > 0)
@@ -1317,36 +1317,36 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         {
             throw new ArgumentException("Input vector must contain at least one element (time index).", nameof(input));
         }
-    
+
         // Validate time index
         if (timeIndex < 0 || timeIndex >= _trend.Length)
         {
             throw new ArgumentException($"Time index {timeIndex} is out of range [0, {_trend.Length - 1}].", nameof(input));
         }
-    
+
         // Combine components to produce the prediction
         T prediction = NumOps.Zero;
-    
+
         // Add trend component
         prediction = NumOps.Add(prediction, _trend[timeIndex]);
-    
+
         // Add seasonal component if enabled
         if (_ucOptions.SeasonalPeriod > 1)
         {
             prediction = NumOps.Add(prediction, _seasonal[timeIndex]);
         }
-    
+
         // Add cycle component if enabled
         if (_ucOptions.IncludeCycle)
         {
             prediction = NumOps.Add(prediction, _cycle[timeIndex]);
         }
-    
+
         // Add a portion of the irregular component to maintain some of the time series character
         // This is optional and depends on the application
         T irregularComponent = NumOps.Multiply(_irregular[timeIndex], NumOps.FromDouble(0.2));
         prediction = NumOps.Add(prediction, irregularComponent);
-    
+
         return prediction;
     }
 
@@ -1414,43 +1414,43 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         {
             throw new InvalidOperationException("Model must be trained before forecasting.");
         }
-    
+
         if (horizon <= 0)
         {
             throw new ArgumentException("Forecast horizon must be positive.", nameof(horizon));
         }
-    
+
         // If startIndex is not specified, use the last point in the training data
         if (startIndex < 0)
         {
             startIndex = _trend.Length - 1;
         }
-    
+
         if (startIndex < 0 || startIndex >= _trend.Length)
         {
             throw new ArgumentException($"Start index {startIndex} is out of range [0, {_trend.Length - 1}].", nameof(startIndex));
         }
-    
+
         Vector<T> forecast = new Vector<T>(horizon);
-    
+
         // Calculate trend component forecasts
         Vector<T> trendForecast = ForecastTrend(horizon, startIndex);
-    
+
         // Calculate seasonal component forecasts
         Vector<T> seasonalForecast = ForecastSeasonal(horizon, startIndex);
-    
+
         // Calculate cycle component forecasts
         Vector<T> cycleForecast = ForecastCycle(horizon, startIndex);
-    
+
         // Generate irregular component forecasts (small random variations)
         Vector<T> irregularForecast = ForecastIrregular(horizon);
-    
+
         // Combine components to produce the final forecast
         // VECTORIZED: Add forecast components using Engine operations
         forecast = (Vector<T>)Engine.Add(trendForecast, seasonalForecast);
         forecast = (Vector<T>)Engine.Add(forecast, cycleForecast);
         forecast = (Vector<T>)Engine.Add(forecast, irregularForecast);
-    
+
         return forecast;
     }
 
@@ -1475,11 +1475,11 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     private Vector<T> ForecastTrend(int horizon, int startIndex)
     {
         Vector<T> trendForecast = new Vector<T>(horizon);
-    
+
         // Calculate recent slope in the trend
         T slope = NumOps.Zero;
         int lookback = Math.Min(5, startIndex); // Look at the last 5 points or fewer if not available
-    
+
         if (lookback > 0)
         {
             slope = NumOps.Divide(
@@ -1487,24 +1487,24 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
                 NumOps.FromDouble(lookback)
             );
         }
-    
+
         // Apply damping factor to avoid explosive forecasts
         T dampingFactor = NumOps.FromDouble(0.95); // Gradually reduce the impact of the slope
-    
+
         // Generate trend forecasts using damped growth model
         T currentTrend = _trend[startIndex];
         T currentSlope = slope;
-    
+
         for (int i = 0; i < horizon; i++)
         {
             // Add damped slope to current trend
             currentTrend = NumOps.Add(currentTrend, currentSlope);
             trendForecast[i] = currentTrend;
-        
+
             // Dampen the slope for next iteration
             currentSlope = NumOps.Multiply(currentSlope, dampingFactor);
         }
-    
+
         return trendForecast;
     }
 
@@ -1529,22 +1529,22 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     private Vector<T> ForecastSeasonal(int horizon, int startIndex)
     {
         Vector<T> seasonalForecast = new Vector<T>(horizon);
-    
+
         // If no seasonality is included in the model, return zeros
         if (_ucOptions.SeasonalPeriod <= 1)
         {
             return seasonalForecast; // All zeros
         }
-    
+
         int period = _ucOptions.SeasonalPeriod;
-    
+
         // Use the last complete seasonal cycle as the pattern for forecasting
         int seasonStart = Math.Max(0, startIndex - period + 1);
-    
+
         for (int i = 0; i < horizon; i++)
         {
             int patternIndex = (seasonStart + i) % period;
-        
+
             // Find the most recent occurrence of this seasonal position
             for (int j = startIndex; j >= 0; j--)
             {
@@ -1555,7 +1555,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
                 }
             }
         }
-    
+
         return seasonalForecast;
     }
 
@@ -1581,23 +1581,23 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     private Vector<T> ForecastCycle(int horizon, int startIndex)
     {
         Vector<T> cycleForecast = new Vector<T>(horizon);
-    
+
         // If no cycle is included in the model, return zeros
         if (!_ucOptions.IncludeCycle)
         {
             return cycleForecast; // All zeros
         }
-    
+
         // Estimate cycle properties from the most recent data
         T cycleAmplitude = _cycle[startIndex];
-    
+
         // Calculate approximate cycle frequency
         T cyclePeriod = NumOps.Divide(NumOps.FromDouble(_ucOptions.CycleMinPeriod + _ucOptions.CycleMaxPeriod), NumOps.FromDouble(2));
-    
+
         // Find the phase of the cycle at the starting point
         T cyclePhase = NumOps.Zero;
         int lookback = Math.Min(startIndex, Convert.ToInt32(cyclePeriod));
-    
+
         if (lookback > 0 && !NumOps.Equals(_cycle[startIndex], NumOps.Zero))
         {
             // Estimate phase based on recent movement
@@ -1630,21 +1630,21 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
                 }
             }
         }
-    
+
         // Damping factor to reduce cycle amplitude over time
         T dampingFactor = NumOps.FromDouble(0.98);
-    
+
         // Generate cycle forecasts
         for (int i = 0; i < horizon; i++)
         {
             // Calculate cycle position using phase and frequency
             T position = NumOps.Add(cyclePhase, NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2 * Math.PI), NumOps.FromDouble(i)), cyclePeriod));
-        
+
             // Apply cycle equation: amplitude * damping^i * cos(position)
             T dampedAmplitude = NumOps.Multiply(cycleAmplitude, NumOps.Power(dampingFactor, NumOps.FromDouble(i)));
             cycleForecast[i] = NumOps.Multiply(dampedAmplitude, MathHelper.Cos(position));
         }
-    
+
         return cycleForecast;
     }
 
@@ -1669,31 +1669,31 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     private Vector<T> ForecastIrregular(int horizon)
     {
         Vector<T> irregularForecast = new Vector<T>(horizon);
-    
+
         // Calculate the standard deviation of the historical irregular component
         T irregularStdDev = _irregular.StandardDeviation();
-    
+
         // Create a random number generator
         Random random = RandomHelper.CreateSecureRandom();
-    
+
         // Damping factor to reduce irregular component over time
         T dampingFactor = NumOps.FromDouble(0.9);
-    
+
         // Generate irregular component forecasts with decreasing variance
         for (int i = 0; i < horizon; i++)
         {
             // Calculate damped standard deviation
             T dampedStdDev = NumOps.Multiply(irregularStdDev, NumOps.Power(dampingFactor, NumOps.FromDouble(i)));
-        
+
             // Generate random value with appropriate standard deviation
             // Using Gaussian approximation (Box-Muller transform)
             double u1 = 1.0 - random.NextDouble();
             double u2 = 1.0 - random.NextDouble();
             double randomGaussian = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-        
+
             irregularForecast[i] = NumOps.Multiply(dampedStdDev, NumOps.FromDouble(randomGaussian));
         }
-    
+
         return irregularForecast;
     }
 
@@ -1726,7 +1726,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         {
             throw new InvalidOperationException("Model must be trained before getting components.");
         }
-    
+
         Dictionary<string, Vector<T>> components = new Dictionary<string, Vector<T>>
         {
             ["Trend"] = _trend.Clone(),
@@ -1734,7 +1734,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
             ["Cycle"] = _cycle.Clone(),
             ["Irregular"] = _irregular.Clone()
         };
-    
+
         return components;
     }
 
@@ -1759,7 +1759,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     public override void Reset()
     {
         base.Reset();
-    
+
         // Reset decomposed components
         _trend = new Vector<T>(0);
         _previousTrend = new Vector<T>(0);
@@ -1767,7 +1767,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         _cycle = new Vector<T>(0);
         _irregular = new Vector<T>(0);
         _y = new Vector<T>(0);
-    
+
         // Reset Kalman filter state
         _stateCovariance = Matrix<T>.Empty();
         _state = new Vector<T>(0);
@@ -1775,7 +1775,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         _observationModel = Matrix<T>.Empty();
         _processNoise = Matrix<T>.Empty();
         _observationNoise = NumOps.Zero;
-    
+
         // Clear filtered results
         _filteredState = [];
         _filteredCovariance = [];
@@ -1837,7 +1837,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
             },
             ModelData = this.Serialize()
         };
-    
+
         return metadata;
     }
 

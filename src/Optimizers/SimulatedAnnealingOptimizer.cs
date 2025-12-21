@@ -250,8 +250,8 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
             _currentTemperature = NumOps.Divide(_currentTemperature, NumOps.FromDouble(_saOptions.CoolingRate));
         }
 
-        _currentTemperature = MathHelper.Clamp(_currentTemperature, 
-            NumOps.FromDouble(_saOptions.MinTemperature), 
+        _currentTemperature = MathHelper.Clamp(_currentTemperature,
+            NumOps.FromDouble(_saOptions.MinTemperature),
             NumOps.FromDouble(_saOptions.MaxTemperature));
     }
 

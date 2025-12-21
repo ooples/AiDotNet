@@ -946,7 +946,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         _beta = new Vector<T>(_garchOptions.GARCHOrder);
         _residuals = new Vector<T>(0);
         _conditionalVariances = new Vector<T>(0);
-    
+
         // Initialize with reasonable default values
         InitializeParameters();
     }
@@ -1105,23 +1105,23 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         {
             inputMatrix[0, i] = input[i];
         }
-    
+
         // Make sure we have some volatility estimate to work with
         if (_conditionalVariances.Length == 0)
         {
             throw new InvalidOperationException("Model has not been trained. Cannot make predictions without volatility estimates.");
         }
-    
+
         // Get the mean prediction from the mean model
         T meanPrediction = _meanModel.PredictSingle(input);
-    
+
         // Get the last known conditional variance
         T lastVariance = _conditionalVariances[_conditionalVariances.Length - 1];
-    
+
         // Generate a random residual based on the estimated variance
         T standardNormal = GenerateStandardNormal();
         T residual = NumOps.Multiply(NumOps.Sqrt(lastVariance), standardNormal);
-    
+
         // Combine the mean prediction with the residual
         return NumOps.Add(meanPrediction, residual);
     }

@@ -1,7 +1,7 @@
-using Newtonsoft.Json;
 using AiDotNet.Interfaces;
-using AiDotNet.Models.Results;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Results;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Tools;
 

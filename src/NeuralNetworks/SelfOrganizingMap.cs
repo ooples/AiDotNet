@@ -148,25 +148,25 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// These weights are initially random and will be adjusted during training.
     /// </para>
     /// </remarks>
-    public SelfOrganizingMap(NeuralNetworkArchitecture<T> architecture, int totalEpochs = 1000, ILossFunction<T>? lossFunction = null) : 
+    public SelfOrganizingMap(NeuralNetworkArchitecture<T> architecture, int totalEpochs = 1000, ILossFunction<T>? lossFunction = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         // Get input dimension from the architecture
         _inputDimension = architecture.InputSize;
-    
+
         if (_inputDimension <= 0)
         {
             throw new ArgumentException("Input dimension must be greater than zero for SOM.");
         }
-    
+
         // Get map size from the output size
         int mapSize = architecture.OutputSize;
-    
+
         if (mapSize <= 0)
         {
             throw new ArgumentException("Map size (output size) must be greater than zero for SOM.");
         }
-    
+
         // Calculate map dimensions - allow for rectangular maps
         int totalNeurons = mapSize;
         double aspectRatio = 1.6; // Golden ratio, but this could be adjustable
@@ -196,11 +196,11 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
             // Use a logger instead of Console.WriteLine
             Console.WriteLine($"Adjusted map size from {totalNeurons} to {_mapWidth * _mapHeight} to maintain aspect ratio.");
         }
-    
+
         _weights = new Matrix<T>(_mapWidth * _mapHeight, _inputDimension);
         _totalEpochs = totalEpochs;
         _currentEpoch = 0;
-    
+
         InitializeWeights();
         InitializeLayers();
     }

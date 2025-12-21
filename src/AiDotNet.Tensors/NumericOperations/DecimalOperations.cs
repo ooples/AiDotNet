@@ -49,7 +49,7 @@ public class DecimalOperations : INumericOperations<decimal>
     /// </para>
     /// </remarks>
     public decimal Add(decimal a, decimal b) => a + b;
-    
+
     /// <summary>
     /// Subtracts the second decimal value from the first.
     /// </summary>

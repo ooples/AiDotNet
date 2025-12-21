@@ -196,7 +196,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
 
         // Initial estimates using method of moments (via autocorrelation)
         Vector<T> initialTheta = InitialMACoefficientsEstimate(y, q);
-        
+
         // Refine estimates using maximum likelihood estimation
         return OptimizeMACoefficients(y, initialTheta);
     }
@@ -219,15 +219,15 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     {
         // Calculate the autocorrelation function (ACF) up to lag q+1
         var acf = TimeSeriesHelper<T>.CalculateMultipleAutoCorrelation(y, q + 1);
-        
+
         // For a pure MA(q) process, we use the innovations algorithm
         // to get initial estimates of the MA coefficients
         Vector<T> theta = new Vector<T>(q);
         Vector<T> v = new Vector<T>(q + 1);
-        
+
         // Set initial innovation variance to variance of the series
         v[0] = acf[0];
-        
+
         for (int k = 1; k <= q; k++)
         {
             // Calculate the sum term
@@ -236,21 +236,21 @@ public class MAModel<T> : TimeSeriesModelBase<T>
             {
                 sum = NumOps.Add(sum, NumOps.Multiply(theta[j - 1], NumOps.Multiply(v[k - j], v[0])));
             }
-            
+
             // Calculate the k-th MA coefficient
             if (NumOps.GreaterThan(v[0], NumOps.Zero))
             {
                 theta[k - 1] = NumOps.Divide(NumOps.Subtract(acf[k], sum), v[0]);
             }
-            
+
             // Ensure the coefficient is within the invertibility bounds (-1, 1)
             if (NumOps.GreaterThan(NumOps.Abs(theta[k - 1]), NumOps.FromDouble(0.98)))
             {
-                T sign = NumOps.GreaterThan(theta[k - 1], NumOps.Zero) ? 
+                T sign = NumOps.GreaterThan(theta[k - 1], NumOps.Zero) ?
                     NumOps.FromDouble(0.98) : NumOps.FromDouble(-0.98);
                 theta[k - 1] = sign;
             }
-            
+
             // Update the innovation variance for the next iteration
             if (k < q)
             {
@@ -260,7 +260,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
                 );
             }
         }
-        
+
         return theta;
     }
 
@@ -289,27 +289,27 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         {
             return new Vector<T>(0);
         }
-        
+
         // Copy initial estimates
         Vector<T> theta = new Vector<T>(initialTheta);
-        
+
         // Initialize optimization variables
         Vector<T> gradient = new Vector<T>(q);
         Matrix<T> hessianApprox = Matrix<T>.CreateIdentity(q);
         T prevLogLikelihood = CalculateNegativeLogLikelihood(y, theta);
-        
+
         // BFGS optimization
         for (int iter = 0; iter < _maxIterations; iter++)
         {
             // Calculate gradient
             CalculateGradient(y, theta, gradient);
-            
+
             // Calculate search direction
             Vector<T> searchDir = CalculateSearchDirection(hessianApprox, gradient);
-            
+
             // Line search to find step size
             T alpha = LineSearch(y, theta, searchDir, prevLogLikelihood);
-            
+
             // Update parameters
             // VECTORIZED: Compute new theta using Engine operations
             var alphaScaled = (Vector<T>)Engine.Multiply(searchDir, alpha);
@@ -325,10 +325,10 @@ public class MAModel<T> : TimeSeriesModelBase<T>
                     newTheta[i] = sign;
                 }
             }
-            
+
             // Calculate new log-likelihood
             T newLogLikelihood = CalculateNegativeLogLikelihood(y, newTheta);
-            
+
             // Check convergence
             T improvement = NumOps.Abs(NumOps.Subtract(prevLogLikelihood, newLogLikelihood));
             if (NumOps.LessThan(improvement, _convergenceTolerance))
@@ -336,15 +336,15 @@ public class MAModel<T> : TimeSeriesModelBase<T>
                 theta = newTheta;
                 break;
             }
-            
+
             // Update BFGS approximation of the Hessian
             UpdateHessianApproximation(y, hessianApprox, theta, newTheta, gradient);
-            
+
             // Update for next iteration
             theta = newTheta;
             prevLogLikelihood = newLogLikelihood;
         }
-        
+
         return theta;
     }
 
@@ -368,43 +368,43 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     {
         int n = y.Length;
         int q = theta.Length;
-        
+
         // Initialize errors and their variance
         Vector<T> errors = new Vector<T>(n);
         T variance = NumOps.Zero;
-        
+
         // Calculate residuals using Kalman filter-like approach
         for (int t = 0; t < n; t++)
         {
             T prediction = NumOps.Zero;
-            
+
             // MA component (previous errors)
             for (int i = 0; i < q && t - i - 1 >= 0; i++)
             {
-                prediction = NumOps.Add(prediction, 
+                prediction = NumOps.Add(prediction,
                     NumOps.Multiply(theta[i], errors[t - i - 1]));
             }
-            
+
             // Calculate error
             errors[t] = NumOps.Subtract(y[t], prediction);
-            
+
             // Accumulate squared errors for variance estimation
             variance = NumOps.Add(variance, NumOps.Multiply(errors[t], errors[t]));
         }
-        
+
         // Calculate log-likelihood (ignoring constant terms)
         if (NumOps.GreaterThan(variance, NumOps.Zero))
         {
             variance = NumOps.Divide(variance, NumOps.FromDouble(n));
-            
+
             // log-likelihood = -n/2 * log(2p) - n/2 * log(variance) - 1/(2*variance) * sum(errors²)
             // We ignore the constant terms and return negative log-likelihood
             T logVariance = NumOps.Log(variance);
             T scaledVariance = NumOps.Multiply(NumOps.FromDouble(n), logVariance);
-            
+
             return scaledVariance;
         }
-        
+
         // If variance is zero (highly unlikely), return a large number
         return NumOps.FromDouble(1e10);
     }
@@ -428,23 +428,23 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     {
         int n = y.Length;
         int q = theta.Length;
-        
+
         // Use finite differences to approximate the gradient
         T h = NumOps.FromDouble(1e-5); // Small step size
-        
+
         for (int i = 0; i < q; i++)
         {
             // Create parameter vectors with slight perturbations
             Vector<T> thetaPlus = new Vector<T>(theta);
             Vector<T> thetaMinus = new Vector<T>(theta);
-            
+
             thetaPlus[i] = NumOps.Add(theta[i], h);
             thetaMinus[i] = NumOps.Subtract(theta[i], h);
-            
+
             // Calculate log-likelihood at perturbed points
             T logLikePlus = CalculateNegativeLogLikelihood(y, thetaPlus);
             T logLikeMinus = CalculateNegativeLogLikelihood(y, thetaMinus);
-            
+
             // Central difference approximation of derivative
             gradient[i] = NumOps.Divide(
                 NumOps.Subtract(logLikePlus, logLikeMinus),
@@ -478,13 +478,13 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         var negOneVec = new Vector<T>(gradient.Length);
         for (int i = 0; i < negOneVec.Length; i++) negOneVec[i] = NumOps.FromDouble(-1.0);
         Vector<T> negGradient = (Vector<T>)Engine.Multiply(gradient, negOneVec);
-        
+
         try
         {
             // Solve the system using a stable matrix decomposition
             return MatrixSolutionHelper.SolveLinearSystem(
-                hessianApprox, 
-                negGradient, 
+                hessianApprox,
+                negGradient,
                 MatrixDecompositionType.Qr
             );
         }
@@ -516,12 +516,12 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     private T LineSearch(Vector<T> y, Vector<T> theta, Vector<T> searchDir, T currentLogLikelihood)
     {
         int q = theta.Length;
-    
+
         // Backtracking line search with Armijo condition
         T alpha = NumOps.One; // Initial step size
         T c = NumOps.FromDouble(0.1); // Armijo parameter
         T rho = NumOps.FromDouble(0.5); // Reduction factor
-    
+
         // VECTORIZED: Calculate directional derivative using Engine.DotProduct
         Vector<T> gradient = new Vector<T>(q);
         CalculateGradient(y, theta, gradient);
@@ -539,7 +539,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
             }
             directionalDerivative = NumOps.Negate(gradientDotProduct);
         }
-    
+
         // Rest of method unchanged...
         // Perform backtracking line search
         int maxBacktracks = 10;
@@ -555,28 +555,28 @@ public class MAModel<T> : TimeSeriesModelBase<T>
             {
                 if (NumOps.GreaterThan(NumOps.Abs(newTheta[j]), NumOps.FromDouble(0.99)))
                 {
-                    T sign = NumOps.GreaterThan(newTheta[j], NumOps.Zero) ? 
+                    T sign = NumOps.GreaterThan(newTheta[j], NumOps.Zero) ?
                         NumOps.FromDouble(0.99) : NumOps.FromDouble(-0.99);
                     newTheta[j] = sign;
                 }
             }
-        
+
             // Calculate new log-likelihood
             T newLogLikelihood = CalculateNegativeLogLikelihood(y, newTheta);
-        
+
             // Check Armijo condition
-            T armijo = NumOps.Add(currentLogLikelihood, 
+            T armijo = NumOps.Add(currentLogLikelihood,
                 NumOps.Multiply(NumOps.Multiply(c, alpha), directionalDerivative));
-        
+
             if (NumOps.LessThanOrEquals(newLogLikelihood, armijo))
             {
                 return alpha;
             }
-        
+
             // Reduce step size
             alpha = NumOps.Multiply(alpha, rho);
         }
-    
+
         // If backtracking failed, return a small step size
         return NumOps.FromDouble(0.01);
     }
@@ -605,21 +605,21 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         // Calculate new gradient
         Vector<T> newGradient = new Vector<T>(q);
         CalculateGradient(data, newTheta, newGradient);
-        
+
         // Calculate s = newTheta - oldTheta
         Vector<T> s = new Vector<T>(q);
         for (int i = 0; i < q; i++)
         {
             s[i] = NumOps.Subtract(newTheta[i], oldTheta[i]);
         }
-        
+
         // Calculate y = newGradient - oldGradient
         Vector<T> y = new Vector<T>(q);
         for (int i = 0; i < q; i++)
         {
             y[i] = NumOps.Subtract(newGradient[i], oldGradient[i]);
         }
-        
+
         // VECTORIZED: Calculate ? = 1 / (y^T * s) using dot product
         T dotProduct = y.DotProduct(s);
 
@@ -636,30 +636,30 @@ public class MAModel<T> : TimeSeriesModelBase<T>
 
         // VECTORIZED: Calculate H_k * y using matrix-vector multiplication
         Vector<T> Hy = hessianApprox.Multiply(y);
-        
+
         // Calculate intermediate terms
         Matrix<T> term1 = new Matrix<T>(q, q);
         Matrix<T> term2 = new Matrix<T>(q, q);
-        
+
         for (int i = 0; i < q; i++)
         {
             for (int j = 0; j < q; j++)
             {
                 T factor1 = NumOps.Multiply(rho, NumOps.Multiply(s[i], y[j]));
                 T factor2 = NumOps.Multiply(rho, NumOps.Multiply(y[i], s[j]));
-                
+
                 term1[i, j] = NumOps.Negate(factor1);
                 term2[i, j] = NumOps.Negate(factor2);
             }
         }
-        
+
         // Add identity to both terms
         for (int i = 0; i < q; i++)
         {
             term1[i, i] = NumOps.Add(term1[i, i], NumOps.One);
             term2[i, i] = NumOps.Add(term2[i, i], NumOps.One);
         }
-        
+
         // Calculate term1 * H_k
         Matrix<T> term1H = new Matrix<T>(q, q);
         for (int i = 0; i < q; i++)
@@ -668,12 +668,12 @@ public class MAModel<T> : TimeSeriesModelBase<T>
             {
                 for (int k = 0; k < q; k++)
                 {
-                    term1H[i, j] = NumOps.Add(term1H[i, j], 
+                    term1H[i, j] = NumOps.Add(term1H[i, j],
                         NumOps.Multiply(term1[i, k], hessianApprox[k, j]));
                 }
             }
         }
-        
+
         // Calculate term1 * H_k * term2
         Matrix<T> term1Hterm2 = new Matrix<T>(q, q);
         for (int i = 0; i < q; i++)
@@ -682,12 +682,12 @@ public class MAModel<T> : TimeSeriesModelBase<T>
             {
                 for (int k = 0; k < q; k++)
                 {
-                    term1Hterm2[i, j] = NumOps.Add(term1Hterm2[i, j], 
+                    term1Hterm2[i, j] = NumOps.Add(term1Hterm2[i, j],
                         NumOps.Multiply(term1H[i, k], term2[k, j]));
                 }
             }
         }
-        
+
         // Calculate ?*s*s^T
         Matrix<T> rhoss = new Matrix<T>(q, q);
         for (int i = 0; i < q; i++)
@@ -697,7 +697,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
                 rhoss[i, j] = NumOps.Multiply(rho, NumOps.Multiply(s[i], s[j]));
             }
         }
-        
+
         // Update Hessian approximation: H_{k+1} = term1Hterm2 + rhoss
         for (int i = 0; i < q; i++)
         {
@@ -707,7 +707,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
             }
         }
     }
-    
+
     /// <summary>
     /// Estimates the variance of the white noise process in the MA model.
     /// </summary>
@@ -729,37 +729,37 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     {
         int n = y.Length;
         int q = maCoefficients.Length;
-        
+
         // Calculate residuals
         Vector<T> residuals = new Vector<T>(n);
         Vector<T> errors = new Vector<T>(n);
-        
+
         for (int t = 0; t < n; t++)
         {
             T prediction = NumOps.Zero;
-            
+
             // Add MA component
             for (int i = 0; i < q && t - i - 1 >= 0; i++)
             {
-                prediction = NumOps.Add(prediction, 
+                prediction = NumOps.Add(prediction,
                     NumOps.Multiply(maCoefficients[i], errors[t - i - 1]));
             }
-            
+
             // Calculate error
             residuals[t] = NumOps.Subtract(y[t], prediction);
             errors[t] = residuals[t];
         }
-        
+
         // Calculate variance starting after the initial q values
         T sumSquaredResiduals = NumOps.Zero;
         int effectiveN = n - q;
-        
+
         for (int t = q; t < n; t++)
         {
-            sumSquaredResiduals = NumOps.Add(sumSquaredResiduals, 
+            sumSquaredResiduals = NumOps.Add(sumSquaredResiduals,
                 NumOps.Multiply(residuals[t], residuals[t]));
         }
-        
+
         // Adjust for degrees of freedom
         return NumOps.Divide(sumSquaredResiduals, NumOps.FromDouble(effectiveN));
     }
@@ -783,25 +783,25 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     {
         int n = y.Length;
         int q = _maOptions.MAOrder;
-        
+
         // Calculate all errors
         Vector<T> allErrors = new Vector<T>(n);
-        
+
         for (int t = 0; t < n; t++)
         {
             T prediction = _mean;
-            
+
             // Add MA component
             for (int i = 0; i < q && t - i - 1 >= 0; i++)
             {
-                prediction = NumOps.Add(prediction, 
+                prediction = NumOps.Add(prediction,
                     NumOps.Multiply(_maCoefficients[i], allErrors[t - i - 1]));
             }
-            
+
             // Calculate error
             allErrors[t] = NumOps.Subtract(y[t], prediction);
         }
-        
+
         // Extract the most recent q errors
         Vector<T> recentErrors = new Vector<T>(q);
         for (int i = 0; i < q; i++)
@@ -811,7 +811,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
                 recentErrors[i] = allErrors[n - q + i];
             }
         }
-        
+
         return recentErrors;
     }
 
@@ -838,7 +838,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
-        
+
         // Start with the mean as the baseline prediction
         T prediction = _mean;
 
@@ -876,17 +876,17 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
-        
+
         int horizon = input.Rows;
         Vector<T> predictions = new Vector<T>(horizon);
-        
+
         // Make a copy of recent errors that we'll update during prediction
         Vector<T> workingErrors = new Vector<T>(_recentErrors.Length);
         for (int i = 0; i < _recentErrors.Length; i++)
         {
             workingErrors[i] = _recentErrors[i];
         }
-        
+
         // Generate predictions for each time step
         for (int t = 0; t < horizon; t++)
         {
@@ -900,7 +900,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
             }
 
             predictions[t] = prediction;
-            
+
             // Shift the working errors vector and add a zero error for the newly predicted value
             // (since we don't know the actual error for future predictions)
             for (int i = workingErrors.Length - 1; i > 0; i--)
@@ -909,7 +909,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
             }
             workingErrors[0] = NumOps.Zero;
         }
-        
+
         return predictions;
     }
 
@@ -939,29 +939,29 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         {
             throw new InvalidOperationException("Model must be trained before evaluation.");
         }
-        
+
         // Generate predictions for the test data
         Vector<T> predictions = Predict(xTest);
-        
+
         // Calculate various error metrics
         Dictionary<string, T> metrics = new Dictionary<string, T>();
-        
+
         // Mean Squared Error (MSE)
         T mse = StatisticsHelper<T>.CalculateMeanSquaredError(yTest, predictions);
         metrics["MSE"] = mse;
-        
+
         // Root Mean Squared Error (RMSE)
         T rmse = NumOps.Sqrt(mse);
         metrics["RMSE"] = rmse;
-        
+
         // Mean Absolute Error (MAE)
         T mae = StatisticsHelper<T>.CalculateMeanAbsoluteError(yTest, predictions);
         metrics["MAE"] = mae;
-        
+
         // Mean Absolute Percentage Error (MAPE)
         T mape = StatisticsHelper<T>.CalculateMeanAbsolutePercentageError(yTest, predictions);
         metrics["MAPE"] = mape;
-        
+
         return metrics;
     }
 
@@ -985,23 +985,23 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     {
         // Write model status
         writer.Write(_isTrained);
-        
+
         // Write MA-specific options
         writer.Write(_maOptions.MAOrder);
-        
+
         // Write mean
         writer.Write(Convert.ToDouble(_mean));
-        
+
         // Write noise variance
         writer.Write(Convert.ToDouble(_noiseVariance));
-        
+
         // Write MA coefficients
         writer.Write(_maCoefficients.Length);
         for (int i = 0; i < _maCoefficients.Length; i++)
         {
             writer.Write(Convert.ToDouble(_maCoefficients[i]));
         }
-        
+
         // Write recent errors
         writer.Write(_recentErrors.Length);
         for (int i = 0; i < _recentErrors.Length; i++)
@@ -1030,17 +1030,17 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     {
         // Read model status
         _isTrained = reader.ReadBoolean();
-        
+
         // Read MA-specific options
         int q = reader.ReadInt32();
         _maOptions = new MAModelOptions<T> { MAOrder = q };
-        
+
         // Read mean
         _mean = NumOps.FromDouble(reader.ReadDouble());
-        
+
         // Read noise variance
         _noiseVariance = NumOps.FromDouble(reader.ReadDouble());
-        
+
         // Read MA coefficients
         int maLength = reader.ReadInt32();
         _maCoefficients = new Vector<T>(maLength);
@@ -1048,7 +1048,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         {
             _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        
+
         // Read recent errors
         int errorsLength = reader.ReadInt32();
         _recentErrors = new Vector<T>(errorsLength);
@@ -1098,7 +1098,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
             },
             ModelData = this.Serialize()
         };
-        
+
         return metadata;
     }
 

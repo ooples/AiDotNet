@@ -1,13 +1,13 @@
 // Nullable disabled: This test file has methods that may return null for unsupported model types
 #nullable disable
 
-using Xunit;
-using AiDotNet.TimeSeries;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.JitCompiler;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
-using AiDotNet.Interfaces;
+using AiDotNet.TimeSeries;
+using Xunit;
 using JitCompilerClass = AiDotNet.JitCompiler.JitCompiler;
 
 namespace AiDotNet.Tests.UnitTests.JitCompiler;
@@ -450,7 +450,7 @@ public class TimeSeriesJitCompilationTests
 
     private static (Matrix<double> X, Vector<double> y) GenerateTrainingData(int samples, int lookbackWindow = 10)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         // Generate a time series with enough points
         var timeSeries = new double[samples + lookbackWindow];
@@ -532,7 +532,7 @@ public class TimeSeriesJitCompilationTests
 
     private static (Matrix<double> X, Vector<double> y) GenerateSimpleTimeSeriesData(int samples)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var x = new Matrix<double>(samples, 1);
         var y = new Vector<double>(samples);
 

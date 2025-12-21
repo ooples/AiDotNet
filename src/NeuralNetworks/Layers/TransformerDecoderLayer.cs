@@ -646,19 +646,19 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastEncoderOutput = encoderOutput;
 
         _lastSelfAttentionOutput = _selfAttention.Forward(input);
-        
+
         // residual1 = input + selfAttentionOutput
         var residual1 = Engine.TensorAdd(input, _lastSelfAttentionOutput);
         _lastNormalized1 = _norm1.Forward(residual1);
-        
+
         _lastCrossAttentionOutput = _crossAttention.Forward(_lastNormalized1, encoderOutput);
-        
+
         // residual2 = normalized1 + crossAttentionOutput
         var residual2 = Engine.TensorAdd(_lastNormalized1, _lastCrossAttentionOutput);
         _lastNormalized2 = _norm2.Forward(residual2);
-        
+
         _lastFeedForwardOutput = _feedForward.Forward(_lastNormalized2);
-        
+
         // residual3 = normalized2 + feedForwardOutput
         var residual3 = Engine.TensorAdd(_lastNormalized2, _lastFeedForwardOutput);
         var output = _norm3.Forward(residual3);
@@ -743,17 +743,17 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         var gradNorm3 = _norm3.Backward(outputGradient);
         var gradFeedForward = _feedForward.Backward(gradNorm3);
-        
+
         // gradInput2 = gradFeedForward + gradNorm3
         var gradInput2 = Engine.TensorAdd(gradFeedForward, gradNorm3);
         var gradNorm2 = _norm2.Backward(gradInput2);
-        
+
         var gradCrossAttention = _crossAttention.Backward(gradNorm2);
-        
+
         // gradInput1 = gradCrossAttention + gradNorm2
         var gradInput1 = Engine.TensorAdd(gradCrossAttention, gradNorm2);
         var gradNorm1 = _norm1.Backward(gradInput1);
-        
+
         var gradSelfAttention = _selfAttention.Backward(gradNorm1);
 
         // gradInput = gradSelfAttention + gradNorm1

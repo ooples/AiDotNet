@@ -20,12 +20,12 @@ public class Interpolation2DTo1DAdapter<T> : IInterpolation<T>
     /// The underlying two-dimensional interpolation method.
     /// </summary>
     private readonly I2DInterpolation<T> _interpolation2D;
-    
+
     /// <summary>
     /// The value of the coordinate that remains constant.
     /// </summary>
     private readonly T _fixedCoordinate;
-    
+
     /// <summary>
     /// Indicates whether the X coordinate is fixed (true) or the Y coordinate is fixed (false).
     /// </summary>

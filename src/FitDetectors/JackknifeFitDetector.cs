@@ -129,7 +129,7 @@ public class JackknifeFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInpu
         var originalMSE = evaluationData.TestSet.ErrorStats.MSE;
 
         var relativeDifference = NumOps.Abs(NumOps.Divide(NumOps.Subtract(jackknifeMSE, originalMSE), originalMSE));
-        
+
         return NumOps.Subtract(NumOps.One, NumOps.LessThan(relativeDifference, NumOps.One) ? relativeDifference : NumOps.One);
     }
 

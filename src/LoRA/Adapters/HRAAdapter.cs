@@ -1,5 +1,5 @@
-using AiDotNet.Interfaces;
 using System.Collections.Generic;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 

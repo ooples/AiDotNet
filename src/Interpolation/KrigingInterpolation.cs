@@ -20,37 +20,37 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// The x-coordinates of the known data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the known data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The z-values (heights) of the known data points.
     /// </summary>
     private readonly Vector<T> _z;
-    
+
     /// <summary>
     /// The calculated weights used in the Kriging interpolation.
     /// </summary>
     private Vector<T> _weights;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// The matrix decomposition method used for solving linear systems.
     /// </summary>
     private readonly IMatrixDecomposition<T>? _decomposition;
-    
+
     /// <summary>
     /// The kernel function that determines how the influence of points decreases with distance.
     /// </summary>
     private readonly IKernelFunction<T> _kernel;
-    
+
     /// <summary>
     /// The nugget parameter of the variogram model, representing measurement error or micro-scale variation.
     /// </summary>
@@ -59,7 +59,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// even when measuring the same location multiple times.
     /// </remarks>
     private T _nugget;
-    
+
     /// <summary>
     /// The sill parameter of the variogram model, representing the maximum variance between points.
     /// </summary>
@@ -68,7 +68,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// no matter how far apart they are.
     /// </remarks>
     private T _sill;
-    
+
     /// <summary>
     /// The range parameter of the variogram model, representing the distance at which points become uncorrelated.
     /// </summary>
@@ -95,7 +95,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// <param name="kernel">Optional kernel function that determines how influence decreases with distance.</param>
     /// <param name="decomposition">Optional matrix decomposition method for solving the linear system.</param>
     /// <exception cref="ArgumentException">Thrown when input vectors have different lengths or fewer than 3 points are provided.</exception>
-    public KrigingInterpolation(Vector<T> x, Vector<T> y, Vector<T> z, 
+    public KrigingInterpolation(Vector<T> x, Vector<T> y, Vector<T> z,
         IKernelFunction<T>? kernel = null, IMatrixDecomposition<T>? decomposition = null)
     {
         if (x.Length != y.Length || x.Length != z.Length)

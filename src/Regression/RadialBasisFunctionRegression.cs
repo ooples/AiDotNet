@@ -186,7 +186,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     /// which iteratively assigns points to the nearest center and then updates the centers based on these assignments.
     /// </para>
     /// </remarks>
-   private Matrix<T> SelectCenters(Matrix<T> x)
+    private Matrix<T> SelectCenters(Matrix<T> x)
     {
         int numCenters = Math.Min(_options.NumberOfCenters, x.Rows);
         var random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
@@ -368,7 +368,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         return NumOps.Sqrt(sumSquared);
     }
 
-        /// <summary>
+    /// <summary>
     /// Applies the radial basis function kernel to a distance value.
     /// </summary>
     /// <param name="distance">The distance value.</param>

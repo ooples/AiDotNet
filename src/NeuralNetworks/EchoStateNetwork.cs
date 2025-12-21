@@ -318,73 +318,73 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// The weight matrix for input-to-reservoir connections.
     /// </summary>
     private Matrix<T> _inputWeights;
-        
+
     /// <summary>
     /// The weight matrix for reservoir-to-reservoir connections.
     /// </summary>
     private Matrix<T> _reservoirWeights;
-        
+
     /// <summary>
     /// The weight matrix for reservoir-to-output connections.
     /// </summary>
     private Matrix<T> _outputWeights;
-        
+
     /// <summary>
     /// The bias vector for the reservoir.
     /// </summary>
     private Vector<T> _reservoirBias;
-        
+
     /// <summary>
     /// The bias vector for the output layer.
     /// </summary>
     private Vector<T> _outputBias;
-        
+
     /// <summary>
     /// The current state of the reservoir.
     /// </summary>
     private Vector<T> _currentState;
-        
+
     /// <summary>
     /// Indicates whether the network is being trained.
     /// </summary>
     private bool _isTraining = false;
-        
+
     /// <summary>
     /// Leaking rate for controlling the update speed of reservoir neurons.
     /// Value between 0 and 1, default is 1.0 (no leaking).
     /// </summary>
     private T _leakingRate;
-        
+
     /// <summary>
     /// Regularization parameter for ridge regression during training.
     /// </summary>
     private T _regularization;
-        
+
     /// <summary>
     /// Random number generator for initialization.
     /// </summary>
     private Random _random = RandomHelper.CreateSecureRandom();
-        
+
     /// <summary>
     /// Input dimension size.
     /// </summary>
     private int _inputSize;
-        
+
     /// <summary>
     /// Output dimension size.
     /// </summary>
     private int _outputSize;
-        
+
     /// <summary>
     /// Collected states during training for regression.
     /// </summary>
     private List<Vector<T>> _collectedStates;
-        
+
     /// <summary>
     /// Collected targets during training for regression.
     /// </summary>
     private List<Vector<T>> _collectedTargets;
-        
+
     /// <summary>
     /// Warmup period for discarding initial transient reservoir states during training.
     /// </summary>
@@ -422,18 +422,18 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public EchoStateNetwork(
-        NeuralNetworkArchitecture<T> architecture, 
-        int reservoirSize, 
-        double spectralRadius = 0.9, 
+        NeuralNetworkArchitecture<T> architecture,
+        int reservoirSize,
+        double spectralRadius = 0.9,
         double sparsity = 0.1,
         double leakingRate = 1.0,
         double regularization = 1e-4,
         int warmupPeriod = 10,
         ILossFunction<T>? lossFunction = null,
-        IVectorActivationFunction<T>? reservoirInputVectorActivation = null, 
-        IVectorActivationFunction<T>? reservoirOutputVectorActivation = null, 
-        IVectorActivationFunction<T>? reservoirVectorActivation = null, 
-        IVectorActivationFunction<T>? outputVectorActivation = null) 
+        IVectorActivationFunction<T>? reservoirInputVectorActivation = null,
+        IVectorActivationFunction<T>? reservoirOutputVectorActivation = null,
+        IVectorActivationFunction<T>? reservoirVectorActivation = null,
+        IVectorActivationFunction<T>? outputVectorActivation = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _reservoirSize = reservoirSize;
@@ -461,14 +461,14 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _reservoirOutputVectorActivation = reservoirOutputVectorActivation;
         _reservoirVectorActivation = reservoirVectorActivation;
         _outputVectorActivation = outputVectorActivation;
-    
+
         // Initialize collections for training
         _collectedStates = [];
         _collectedTargets = [];
-    
+
         // Initialize weights with random values
         InitializeWeights();
-    
+
         // Initialize layers
         InitializeLayers();
     }
@@ -503,18 +503,18 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public EchoStateNetwork(
-        NeuralNetworkArchitecture<T> architecture, 
-        int reservoirSize, 
-        double spectralRadius = 0.9, 
+        NeuralNetworkArchitecture<T> architecture,
+        int reservoirSize,
+        double spectralRadius = 0.9,
         double sparsity = 0.1,
         double leakingRate = 1.0,
         double regularization = 1e-4,
         int warmupPeriod = 10,
         ILossFunction<T>? lossFunction = null,
-        IActivationFunction<T>? reservoirInputScalarActivation = null, 
-        IActivationFunction<T>? reservoirOutputScalarActivation = null, 
-        IActivationFunction<T>? reservoirScalarActivation = null, 
-        IActivationFunction<T>? outputScalarActivation = null) 
+        IActivationFunction<T>? reservoirInputScalarActivation = null,
+        IActivationFunction<T>? reservoirOutputScalarActivation = null,
+        IActivationFunction<T>? reservoirScalarActivation = null,
+        IActivationFunction<T>? outputScalarActivation = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _reservoirSize = reservoirSize;
@@ -542,14 +542,14 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _reservoirOutputScalarActivation = reservoirOutputScalarActivation;
         _reservoirScalarActivation = reservoirScalarActivation;
         _outputScalarActivation = outputScalarActivation;
-    
+
         // Initialize collections for training
         _collectedStates = [];
         _collectedTargets = [];
-    
+
         // Initialize weights with random values
         InitializeWeights();
-    
+
         // Initialize layers
         InitializeLayers();
     }
@@ -569,7 +569,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _leakingRate = NumOps.FromDouble(1.0); // Default to no leaking
         _regularization = NumOps.FromDouble(1e-4); // Default regularization
         _warmupPeriod = 10; // Default warmup period
-            
+
         // Initialize input weights and reservoir bias
         for (int i = 0; i < _inputSize; i++)
         {
@@ -578,7 +578,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 _inputWeights[i, j] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * 0.1);
             }
         }
-            
+
         // Initialize reservoir weights with sparse connections based on sparsity
         for (int i = 0; i < _reservoirSize; i++)
         {
@@ -593,13 +593,13 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                     _reservoirWeights[i, j] = NumOps.Zero;
                 }
             }
-                
+
             _reservoirBias[i] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * 0.1);
         }
-            
+
         // Scale reservoir weights to achieve desired spectral radius
         _reservoirWeights = ScaleToSpectralRadius(_reservoirWeights, _spectralRadius);
-            
+
         // Initialize output weights and bias to zero
         // (These will be learned during training)
         for (int i = 0; i < _reservoirSize; i++)
@@ -609,17 +609,17 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 _outputWeights[i, j] = NumOps.Zero;
             }
         }
-            
+
         for (int i = 0; i < _outputSize; i++)
         {
             _outputBias[i] = NumOps.Zero;
         }
-            
+
         // Initialize collection lists for training
         _collectedStates = new List<Vector<T>>();
         _collectedTargets = new List<Vector<T>>();
     }
-        
+
     /// <summary>
     /// Scales a matrix to achieve the desired spectral radius.
     /// </summary>
@@ -630,10 +630,10 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     {
         // Calculate the current spectral radius using the power method
         double currentRadius = CalculateSpectralRadius(matrix);
-            
+
         // Scale the matrix to achieve the target radius
         double scaleFactor = targetRadius / currentRadius;
-            
+
         // Create a new scaled matrix
         Matrix<T> scaledMatrix = new Matrix<T>(matrix.Rows, matrix.Columns);
         for (int i = 0; i < matrix.Rows; i++)
@@ -643,10 +643,10 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 scaledMatrix[i, j] = NumOps.Multiply(matrix[i, j], NumOps.FromDouble(scaleFactor));
             }
         }
-            
+
         return scaledMatrix;
     }
-        
+
     /// <summary>
     /// Calculates the spectral radius of a matrix using the power method.
     /// </summary>
@@ -656,23 +656,23 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     {
         int n = matrix.Rows;
         Vector<T> x = new Vector<T>(n);
-            
+
         // Initialize with a random vector
         for (int i = 0; i < n; i++)
         {
             x[i] = NumOps.FromDouble(_random.NextDouble());
         }
-            
+
         // Normalize
         x = NormalizeVector(x);
-            
+
         // Iterate using power method (typically 100 iterations is sufficient)
         for (int iter = 0; iter < 100; iter++)
         {
             Vector<T> y = matrix.Multiply(x);
             x = NormalizeVector(y);
         }
-            
+
         // Calculate Rayleigh quotient
         Vector<T> Ax = matrix.Multiply(x);
         T rayleighQuotient = NumOps.Zero;
@@ -680,10 +680,10 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         {
             rayleighQuotient = NumOps.Add(rayleighQuotient, NumOps.Multiply(Ax[i], x[i]));
         }
-            
+
         return Math.Abs(Convert.ToDouble(rayleighQuotient));
     }
-        
+
     /// <summary>
     /// Normalizes a vector to unit length.
     /// </summary>
@@ -696,24 +696,24 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         {
             norm = NumOps.Add(norm, NumOps.Multiply(vector[i], vector[i]));
         }
-            
+
         norm = NumOps.Sqrt(norm);
-            
+
         // Avoid division by zero
         if (MathHelper.AlmostEqual(norm, NumOps.Zero))
         {
             return new Vector<T>(vector.Length); // Return zero vector
         }
-            
+
         Vector<T> normalized = new Vector<T>(vector.Length);
         for (int i = 0; i < vector.Length; i++)
         {
             normalized[i] = NumOps.Divide(vector[i], norm);
         }
-            
+
         return normalized;
     }
-        
+
     /// <summary>
     /// Updates the reservoir state based on the input.
     /// </summary>
@@ -731,7 +731,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             }
             inputContribution[i] = sum;
         }
-            
+
         // Calculate reservoir contribution: reservoir_weights * current_state
         Vector<T> reservoirContribution = new Vector<T>(_reservoirSize);
         for (int i = 0; i < _reservoirSize; i++)
@@ -743,13 +743,13 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             }
             reservoirContribution[i] = sum;
         }
-            
+
         // Calculate new state: input_contribution + reservoir_contribution + bias
         Vector<T> newState = new Vector<T>(_reservoirSize);
         for (int i = 0; i < _reservoirSize; i++)
         {
             T sum = NumOps.Add(NumOps.Add(inputContribution[i], reservoirContribution[i]), _reservoirBias[i]);
-                
+
             // Apply activation function
             T activated;
             if (_reservoirScalarActivation != null)
@@ -770,7 +770,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 double val = Math.Tanh(Convert.ToDouble(sum));
                 activated = NumOps.FromDouble(val);
             }
-                
+
             // Apply leaking rate
             if (MathHelper.AlmostEqual(_leakingRate, NumOps.One))
             {
@@ -787,11 +787,11 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 );
             }
         }
-            
+
         // Update the current state
         _currentState = newState;
     }
-        
+
     /// <summary>
     /// Computes the output based on the current reservoir state.
     /// </summary>
@@ -807,7 +807,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             {
                 sum = NumOps.Add(sum, NumOps.Multiply(_outputWeights[j, i], _currentState[j]));
             }
-                
+
             // Apply output activation if specified
             if (_outputScalarActivation != null)
             {
@@ -826,10 +826,10 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 output[i] = sum;
             }
         }
-            
+
         return output;
     }
-        
+
     /// <summary>
     /// Resets the reservoir state to zeros.
     /// </summary>
@@ -840,7 +840,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             _currentState[i] = NumOps.Zero;
         }
     }
-        
+
     /// <summary>
     /// Sets the leaking rate for the reservoir.
     /// </summary>
@@ -851,10 +851,10 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentOutOfRangeException(nameof(leakingRate), "Leaking rate must be between 0 and 1.");
         }
-            
+
         _leakingRate = NumOps.FromDouble(leakingRate);
     }
-        
+
     /// <summary>
     /// Sets the regularization parameter for ridge regression.
     /// </summary>
@@ -865,10 +865,10 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentOutOfRangeException(nameof(regularization), "Regularization must be non-negative.");
         }
-            
+
         _regularization = NumOps.FromDouble(regularization);
     }
-        
+
     /// <summary>
     /// Sets the warmup period for discarding initial transient reservoir states.
     /// </summary>
@@ -879,7 +879,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentOutOfRangeException(nameof(warmupPeriod), "Warmup period must be non-negative.");
         }
-            
+
         _warmupPeriod = warmupPeriod;
     }
 
@@ -918,7 +918,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             // Use default layer configuration if no layers are provided
             int inputSize = Architecture.GetInputShape()[0];
             int outputSize = Architecture.OutputSize;
-        
+
             Layers.AddRange(LayerHelper<T>.CreateDefaultESNLayers(
                 inputSize: inputSize,
                 outputSize: outputSize,
@@ -1097,19 +1097,19 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     {
         // Extract input as vector
         Vector<T> inputVector = input.ToVector();
-            
+
         // Check if input size matches expected size
         if (inputVector.Length != _inputSize)
         {
             throw new ArgumentException($"Input vector length ({inputVector.Length}) does not match expected input size ({_inputSize}).");
         }
-            
+
         // Update reservoir state
         UpdateReservoirState(inputVector);
-            
+
         // Compute output
         Vector<T> outputVector = ComputeOutput();
-            
+
         // Create and return output tensor
         return new Tensor<T>(new[] { 1, _outputSize }, outputVector);
     }
@@ -1144,14 +1144,14 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         {
             ResetReservoirState();
         }
-            
+
         List<Tensor<T>> outputs = new List<Tensor<T>>();
-            
+
         foreach (var input in inputSequence)
         {
             outputs.Add(Predict(input));
         }
-            
+
         return outputs;
     }
 
@@ -1250,48 +1250,48 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         {
             throw new InvalidOperationException("No training data collected. Call Train first.");
         }
-            
+
         // Prepare matrices for ridge regression
         // X: Matrix of reservoir states
         // Y: Matrix of target outputs
         int numSamples = _collectedStates.Count;
-            
+
         Matrix<T> X = new Matrix<T>(numSamples, _reservoirSize);
         Matrix<T> Y = new Matrix<T>(numSamples, _outputSize);
-            
+
         for (int i = 0; i < numSamples; i++)
         {
             for (int j = 0; j < _reservoirSize; j++)
             {
                 X[i, j] = _collectedStates[i][j];
             }
-                
+
             for (int j = 0; j < _outputSize; j++)
             {
                 Y[i, j] = _collectedTargets[i][j];
             }
         }
-            
+
         // Perform ridge regression: (X^T X + ?I)^(-1) X^T Y
         // Step 1: Compute X^T X
         Matrix<T> XtX = X.Transpose().Multiply(X);
-            
+
         // Step 2: Add regularization (X^T X + ?I)
         Matrix<T> regularized = XtX.Clone();
         for (int i = 0; i < _reservoirSize; i++)
         {
             regularized[i, i] = NumOps.Add(regularized[i, i], _regularization);
         }
-            
+
         // Step 3: Compute (X^T X + ?I)^(-1)
         Matrix<T> inverse = ComputeInverse(regularized);
-            
+
         // Step 4: Compute X^T Y
         Matrix<T> XtY = X.Transpose().Multiply(Y);
-            
+
         // Step 5: Compute (X^T X + ?I)^(-1) X^T Y
         Matrix<T> weights = inverse.Multiply(XtY);
-            
+
         // Update output weights
         for (int i = 0; i < _reservoirSize; i++)
         {
@@ -1300,7 +1300,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 _outputWeights[i, j] = weights[i, j];
             }
         }
-            
+
         // Compute bias terms (mean of target - mean of prediction)
         // For each output dimension, we need to compute:
         // bias = mean(targets) - mean(weights * states)
@@ -1312,7 +1312,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 targetSum = NumOps.Add(targetSum, Y[i, j]);
             }
             T targetMean = NumOps.Divide(targetSum, NumOps.FromDouble(numSamples));
-                
+
             // For each sample, compute the output without bias
             T outputSum = NumOps.Zero;
             for (int i = 0; i < numSamples; i++)
@@ -1325,17 +1325,17 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 outputSum = NumOps.Add(outputSum, output);
             }
             T outputMean = NumOps.Divide(outputSum, NumOps.FromDouble(numSamples));
-                
+
             // Bias is target mean - output mean
             _outputBias[j] = NumOps.Subtract(targetMean, outputMean);
         }
-            
+
         // Reset training state
         _isTraining = false;
         _collectedStates.Clear();
         _collectedTargets.Clear();
     }
-        
+
     /// <summary>
     /// Computes the inverse of a matrix using Gaussian elimination.
     /// </summary>
@@ -1345,13 +1345,13 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     {
         // For simplicity, we'll assume the matrix is invertible and not ill-conditioned
         // A more robust implementation would use SVD or other techniques
-            
+
         int n = matrix.Rows;
         if (n != matrix.Columns)
         {
             throw new ArgumentException("Matrix must be square.");
         }
-            
+
         // Create augmented matrix [A|I]
         Matrix<T> augmented = new Matrix<T>(n, 2 * n);
         for (int i = 0; i < n; i++)
@@ -1360,18 +1360,18 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             {
                 augmented[i, j] = matrix[i, j];
             }
-                
+
             // Identity matrix on the right
             augmented[i, i + n] = NumOps.One;
         }
-            
+
         // Gaussian elimination
         for (int i = 0; i < n; i++)
         {
             // Find pivot
             T pivot = augmented[i, i];
             int pivotRow = i;
-                
+
             // Find the row with the largest absolute value in this column
             for (int j = i + 1; j < n; j++)
             {
@@ -1381,7 +1381,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                     pivotRow = j;
                 }
             }
-                
+
             // Swap rows if needed
             if (pivotRow != i)
             {
@@ -1392,13 +1392,13 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                     augmented[pivotRow, j] = temp;
                 }
             }
-                
+
             // Scale the pivot row
             for (int j = 0; j < 2 * n; j++)
             {
                 augmented[i, j] = NumOps.Divide(augmented[i, j], pivot);
             }
-                
+
             // Eliminate other rows
             for (int j = 0; j < n; j++)
             {
@@ -1415,7 +1415,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 }
             }
         }
-            
+
         // Extract the inverse
         Matrix<T> inverse = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
@@ -1425,7 +1425,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 inverse[i, j] = augmented[i, j + n];
             }
         }
-            
+
         return inverse;
     }
 
@@ -1503,72 +1503,72 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         writer.Write(Convert.ToDouble(_leakingRate));
         writer.Write(Convert.ToDouble(_regularization));
         writer.Write(_warmupPeriod);
-            
+
         // Write activation function information
         // Write scalar activation function flags
         writer.Write(_reservoirInputScalarActivation != null);
         writer.Write(_reservoirOutputScalarActivation != null);
         writer.Write(_reservoirScalarActivation != null);
         writer.Write(_outputScalarActivation != null);
-            
+
         // Write vector activation function flags
         writer.Write(_reservoirInputVectorActivation != null);
         writer.Write(_reservoirOutputVectorActivation != null);
         writer.Write(_reservoirVectorActivation != null);
         writer.Write(_outputVectorActivation != null);
-            
+
         // Serialize activation functions if present
         if (_reservoirInputScalarActivation != null)
         {
             SerializationHelper<T>.SerializeInterface(writer, _reservoirInputScalarActivation);
         }
-            
+
         if (_reservoirOutputScalarActivation != null)
         {
             SerializationHelper<T>.SerializeInterface(writer, _reservoirOutputScalarActivation);
         }
-            
+
         if (_reservoirScalarActivation != null)
         {
             SerializationHelper<T>.SerializeInterface(writer, _reservoirScalarActivation);
         }
-            
+
         if (_outputScalarActivation != null)
         {
             SerializationHelper<T>.SerializeInterface(writer, _outputScalarActivation);
         }
-            
+
         if (_reservoirInputVectorActivation != null)
         {
             SerializationHelper<T>.SerializeInterface(writer, _reservoirInputVectorActivation);
         }
-            
+
         if (_reservoirOutputVectorActivation != null)
         {
             SerializationHelper<T>.SerializeInterface(writer, _reservoirOutputVectorActivation);
         }
-            
+
         if (_reservoirVectorActivation != null)
         {
             SerializationHelper<T>.SerializeInterface(writer, _reservoirVectorActivation);
         }
-            
+
         if (_outputVectorActivation != null)
         {
             SerializationHelper<T>.SerializeInterface(writer, _outputVectorActivation);
         }
-            
+
         // Write weight matrices and bias vectors
         SerializeMatrix(writer, _inputWeights);
         SerializeMatrix(writer, _reservoirWeights);
         SerializeMatrix(writer, _outputWeights);
         SerializeVector(writer, _reservoirBias);
         SerializeVector(writer, _outputBias);
-            
+
         // Write current state
         SerializeVector(writer, _currentState);
     }
-        
+
     /// <summary>
     /// Serializes a matrix to a binary writer.
     /// </summary>
@@ -1578,7 +1578,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     {
         writer.Write(matrix.Rows);
         writer.Write(matrix.Columns);
-            
+
         for (int i = 0; i < matrix.Rows; i++)
         {
             for (int j = 0; j < matrix.Columns; j++)
@@ -1587,7 +1587,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             }
         }
     }
-        
+
     /// <summary>
     /// Serializes a vector to a binary writer.
     /// </summary>
@@ -1596,7 +1596,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     private void SerializeVector(BinaryWriter writer, Vector<T> vector)
     {
         writer.Write(vector.Length);
-            
+
         for (int i = 0; i < vector.Length; i++)
         {
             writer.Write(Convert.ToDouble(vector[i]));
@@ -1635,75 +1635,75 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _leakingRate = NumOps.FromDouble(reader.ReadDouble());
         _regularization = NumOps.FromDouble(reader.ReadDouble());
         _warmupPeriod = reader.ReadInt32();
-            
+
         // Read activation function flags
         bool hasReservoirInputScalarActivation = reader.ReadBoolean();
         bool hasReservoirOutputScalarActivation = reader.ReadBoolean();
         bool hasReservoirScalarActivation = reader.ReadBoolean();
         bool hasOutputScalarActivation = reader.ReadBoolean();
-            
+
         bool hasReservoirInputVectorActivation = reader.ReadBoolean();
         bool hasReservoirOutputVectorActivation = reader.ReadBoolean();
         bool hasReservoirVectorActivation = reader.ReadBoolean();
         bool hasOutputVectorActivation = reader.ReadBoolean();
-            
+
         // Deserialize activation functions if present
         if (hasReservoirInputScalarActivation)
         {
             _reservoirInputScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
         }
-            
+
         if (hasReservoirOutputScalarActivation)
         {
             _reservoirOutputScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
         }
-            
+
         if (hasReservoirScalarActivation)
         {
             _reservoirScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
         }
-            
+
         if (hasOutputScalarActivation)
         {
             _outputScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
         }
-            
+
         if (hasReservoirInputVectorActivation)
         {
             _reservoirInputVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
         }
-            
+
         if (hasReservoirOutputVectorActivation)
         {
             _reservoirOutputVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
         }
-            
+
         if (hasReservoirVectorActivation)
         {
             _reservoirVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
         }
-            
+
         if (hasOutputVectorActivation)
         {
             _outputVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
         }
-            
+
         // Read weight matrices and bias vectors
         _inputWeights = DeserializeMatrix(reader);
         _reservoirWeights = DeserializeMatrix(reader);
         _outputWeights = DeserializeMatrix(reader);
         _reservoirBias = DeserializeVector(reader);
         _outputBias = DeserializeVector(reader);
-            
+
         // Read current state
         _currentState = DeserializeVector(reader);
-            
+
         // Initialize training collections
         _collectedStates = new List<Vector<T>>();
         _collectedTargets = new List<Vector<T>>();
         _isTraining = false;
     }
-        
+
     /// <summary>
     /// Deserializes a matrix from a binary reader.
     /// </summary>
@@ -1713,9 +1713,9 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     {
         int rows = reader.ReadInt32();
         int columns = reader.ReadInt32();
-            
+
         Matrix<T> matrix = new Matrix<T>(rows, columns);
-            
+
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < columns; j++)
@@ -1723,10 +1723,10 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 matrix[i, j] = NumOps.FromDouble(reader.ReadDouble());
             }
         }
-            
+
         return matrix;
     }
-        
+
     /// <summary>
     /// Deserializes a vector from a binary reader.
     /// </summary>
@@ -1735,14 +1735,14 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     private Vector<T> DeserializeVector(BinaryReader reader)
     {
         int length = reader.ReadInt32();
-            
+
         Vector<T> vector = new Vector<T>(length);
-            
+
         for (int i = 0; i < length; i++)
         {
             vector[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-            
+
         return vector;
     }
 
@@ -1771,39 +1771,39 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        if (_reservoirInputVectorActivation != null || _reservoirOutputVectorActivation != null || 
+        if (_reservoirInputVectorActivation != null || _reservoirOutputVectorActivation != null ||
             _reservoirVectorActivation != null || _outputVectorActivation != null)
         {
             // If using vector activations
             return new EchoStateNetwork<T>(
-                Architecture, 
-                _reservoirSize, 
-                _spectralRadius, 
+                Architecture,
+                _reservoirSize,
+                _spectralRadius,
                 _sparsity,
                 Convert.ToDouble(_leakingRate),
                 Convert.ToDouble(_regularization),
                 _warmupPeriod,
                 _lossFunction,
-                _reservoirInputVectorActivation, 
-                _reservoirOutputVectorActivation, 
-                _reservoirVectorActivation, 
+                _reservoirInputVectorActivation,
+                _reservoirOutputVectorActivation,
+                _reservoirVectorActivation,
                 _outputVectorActivation);
         }
         else
         {
             // If using scalar activations
             return new EchoStateNetwork<T>(
-                Architecture, 
-                _reservoirSize, 
-                _spectralRadius, 
+                Architecture,
+                _reservoirSize,
+                _spectralRadius,
                 _sparsity,
                 Convert.ToDouble(_leakingRate),
                 Convert.ToDouble(_regularization),
                 _warmupPeriod,
                 _lossFunction,
-                _reservoirInputScalarActivation, 
-                _reservoirOutputScalarActivation, 
-                _reservoirScalarActivation, 
+                _reservoirInputScalarActivation,
+                _reservoirOutputScalarActivation,
+                _reservoirScalarActivation,
                 _outputScalarActivation);
         }
     }

@@ -1,10 +1,9 @@
+using System;
+using System.Collections.Generic;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
-
 using AiDotNet.ReinforcementLearning.Policies.Exploration;
-using System;
-using System.Collections.Generic;
 
 namespace AiDotNet.ReinforcementLearning.Policies
 {

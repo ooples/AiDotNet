@@ -315,7 +315,7 @@ public enum FitType
     /// </remarks>
     PoorFit,
 
-        /// <summary>
+    /// <summary>
     /// Indicates that the model performs extremely poorly and fails to capture meaningful patterns in the data.
     /// </summary>
     /// <remarks>

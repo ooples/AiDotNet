@@ -6,7 +6,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// Result of draft token generation.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class DraftResult<T>
+internal class DraftResult<T>
 {
     /// <summary>
     /// Gets the generated draft tokens.

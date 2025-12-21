@@ -1,9 +1,9 @@
-using AiDotNet.Tensors.LinearAlgebra;
 using System;
 using System.Collections.Generic;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -365,8 +365,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
         public void UpdateParameters_DifferentBeta1Values_ProducesDifferentResults()
         {
             // Arrange
-            var options1 = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>> {LearningRate = 0.1, Beta1 = 0.5, Beta2 = 0.999 };
-            var options2 = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>> {LearningRate = 0.1, Beta1 = 0.99, Beta2 = 0.999 };
+            var options1 = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>> { LearningRate = 0.1, Beta1 = 0.5, Beta2 = 0.999 };
+            var options2 = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>> { LearningRate = 0.1, Beta1 = 0.99, Beta2 = 0.999 };
 
             var optimizer1 = new AdamWOptimizer<double, Vector<double>, Vector<double>>(null, options1);
             var optimizer2 = new AdamWOptimizer<double, Vector<double>, Vector<double>>(null, options2);

@@ -23,7 +23,7 @@ public class NeuralNetworkFitDetector<T, TInput, TOutput> : FitDetectorBase<T, T
     /// Configuration options for the neural network fit detector.
     /// </summary>
     private readonly NeuralNetworkFitDetectorOptions _options;
-    
+
     /// <summary>
     /// The error measurement on the training dataset.
     /// </summary>
@@ -34,7 +34,7 @@ public class NeuralNetworkFitDetector<T, TInput, TOutput> : FitDetectorBase<T, T
     /// </para>
     /// </remarks>
     private double _trainingLoss { get; set; }
-    
+
     /// <summary>
     /// The error measurement on the validation dataset.
     /// </summary>
@@ -45,7 +45,7 @@ public class NeuralNetworkFitDetector<T, TInput, TOutput> : FitDetectorBase<T, T
     /// </para>
     /// </remarks>
     private double _validationLoss { get; set; }
-    
+
     /// <summary>
     /// The error measurement on the test dataset.
     /// </summary>
@@ -56,7 +56,7 @@ public class NeuralNetworkFitDetector<T, TInput, TOutput> : FitDetectorBase<T, T
     /// </para>
     /// </remarks>
     private double _testLoss { get; set; }
-    
+
     /// <summary>
     /// A measure of how much the model is overfitting to the training data.
     /// </summary>

@@ -1,3 +1,4 @@
+using System.Linq;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -351,13 +352,13 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         {
             indices[i] = NumOps.FromDouble(i);
         }
-        
+
         // weights[i] = (mu + 0.5) - log(mu + 0.5 + i)
         var muPlusHalf = AiDotNetEngine.Current.Fill<T>(mu, NumOps.FromDouble(mu + 0.5));
         var indexPlusMu = (Vector<T>)AiDotNetEngine.Current.Add(indices, muPlusHalf);
         var logValues = (Vector<T>)AiDotNetEngine.Current.Log(indexPlusMu);
         var weights = (Vector<T>)AiDotNetEngine.Current.Subtract(muPlusHalf, logValues);
-        
+
         // Normalize weights
         T sumWeights = AiDotNetEngine.Current.Sum(weights);
         weights = weights.Divide(sumWeights);
@@ -417,7 +418,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
             .Add(artmp.Transpose().Multiply(weights.CreateDiagonal()).Multiply(artmp).Multiply(cmu));
 
         // Update step size
-        T damps = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(2), 
+        T damps = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(2),
             MathHelper.Max(NumOps.Zero, NumOps.Subtract(NumOps.Sqrt(NumOps.Divide(NumOps.Subtract(muEff, NumOps.One), NumOps.FromDouble(dimensions + 1))), NumOps.One))
         ));
         damps = NumOps.Add(damps, cs);

@@ -722,15 +722,15 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         if (UsingVectorActivation && VectorActivation != null)
         {
-             activationGradient = VectorActivation.Backward(_lastOutput, outputGradient);
+            activationGradient = VectorActivation.Backward(_lastOutput, outputGradient);
         }
         else if (ScalarActivation != null)
         {
-             activationGradient = ScalarActivation.Backward(_lastOutput, outputGradient);
+            activationGradient = ScalarActivation.Backward(_lastOutput, outputGradient);
         }
         else
         {
-             activationGradient = outputGradient; // Identity
+            activationGradient = outputGradient; // Identity
         }
 
         // Handle both 1D and 2D inputs for gradient computation
@@ -1058,7 +1058,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override LayerBase<T> Clone()
     {
         DenseLayer<T> copy;
-        
+
         if (UsingVectorActivation)
         {
             copy = new DenseLayer<T>(InputShape[0], OutputShape[0], VectorActivation);
@@ -1067,7 +1067,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             copy = new DenseLayer<T>(InputShape[0], OutputShape[0], ScalarActivation);
         }
-        
+
         copy.SetParameters(GetParameters());
         return copy;
     }

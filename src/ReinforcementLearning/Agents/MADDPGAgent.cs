@@ -1,15 +1,14 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ActivationFunctions;
-using AiDotNet.ReinforcementLearning.ReplayBuffers;
-
-using AiDotNet.Enums;
-using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;
+using AiDotNet.ReinforcementLearning.ReplayBuffers;
 
 namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
 
@@ -173,7 +172,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     /// <summary>
     /// Select action for a specific agent.
-    
+
     public Vector<T> SelectActionForAgent(int agentId, Vector<T> state, bool training = true)
     {
         if (agentId < 0 || agentId >= _options.NumAgents)

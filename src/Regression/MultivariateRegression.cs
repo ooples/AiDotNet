@@ -183,16 +183,16 @@ public class MultivariateRegression<T> : RegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         var newModel = new MultivariateRegression<T>(Options, Regularization);
-        
+
         // Copy coefficients if they exist
         if (Coefficients != null)
         {
             newModel.Coefficients = Coefficients.Clone();
         }
-        
+
         // Copy the intercept
         newModel.Intercept = Intercept;
-        
+
         return newModel;
     }
 }

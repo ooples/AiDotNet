@@ -163,19 +163,19 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     {
         // Get batch size (number of examples)
         int m = InputHelper<T, TInput>.GetBatchSize(X);
-    
+
         // Get number of parameters
         int n = model.GetParameters().Length;
-    
+
         // Create the Jacobian matrix
         var jacobian = new Matrix<T>(m, n);
-    
+
         // For each example and each parameter, calculate the partial derivative
         for (int i = 0; i < m; i++)
         {
             // Get the i-th example from the input batch
             var exampleX = InputHelper<T, TInput>.GetItem(X, i);
-        
+
             for (int j = 0; j < n; j++)
             {
                 // Calculate the partial derivative of the model output with respect to parameter j
@@ -183,7 +183,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
                 jacobian[i, j] = CalculatePartialDerivative(model, exampleX, j);
             }
         }
-    
+
         return jacobian;
     }
 
@@ -371,8 +371,8 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
                 _dampingFactor = NumOps.Multiply(_dampingFactor, NumOps.FromDouble(_options.DampingFactorIncreaseFactor));
             }
 
-            _dampingFactor = MathHelper.Clamp(_dampingFactor, 
-                NumOps.FromDouble(_options.MinDampingFactor), 
+            _dampingFactor = MathHelper.Clamp(_dampingFactor,
+                NumOps.FromDouble(_options.MinDampingFactor),
                 NumOps.FromDouble(_options.MaxDampingFactor));
         }
     }

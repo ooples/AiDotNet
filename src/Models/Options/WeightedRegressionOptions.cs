@@ -79,7 +79,7 @@ public class WeightedRegressionOptions<T> : RegressionOptions<T>
     /// </para>
     /// </remarks>
     public int Order { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the weights assigned to each observation.
     /// </summary>

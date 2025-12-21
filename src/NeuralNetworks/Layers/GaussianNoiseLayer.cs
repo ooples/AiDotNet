@@ -160,8 +160,8 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public GaussianNoiseLayer(
-        int[] inputShape, 
-        double standardDeviation = 0.1, 
+        int[] inputShape,
+        double standardDeviation = 0.1,
         double mean = 0)
         : base(inputShape, inputShape)
     {

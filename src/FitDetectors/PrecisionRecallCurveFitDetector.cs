@@ -23,7 +23,7 @@ namespace AiDotNet.FitDetectors;
 public class PrecisionRecallCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput, TOutput>
 {
     private readonly PrecisionRecallCurveFitDetectorOptions _options;
-    
+
     /// <summary>
     /// Gets or sets the Area Under the Curve value for the precision-recall curve.
     /// </summary>
@@ -41,7 +41,7 @@ public class PrecisionRecallCurveFitDetector<T, TInput, TOutput> : FitDetectorBa
     /// </para>
     /// </remarks>
     private double Auc { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the F1 Score, which is the harmonic mean of precision and recall.
     /// </summary>
@@ -60,7 +60,7 @@ public class PrecisionRecallCurveFitDetector<T, TInput, TOutput> : FitDetectorBa
     /// </para>
     /// </remarks>
     private double F1Score { get; set; }
-    
+
     /// <summary>
     /// Initializes a new instance of the PrecisionRecallCurveFitDetector class.
     /// </summary>

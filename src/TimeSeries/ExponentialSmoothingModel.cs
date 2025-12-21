@@ -359,7 +359,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     private Vector<T> EstimateInitialValues(Vector<T> y)
     {
         Vector<T> initialValues = new Vector<T>(Options.SeasonalPeriod > 0 ? Options.SeasonalPeriod + 2 : 2);
-        
+
         // Initial level
         initialValues[0] = y[0];
 
@@ -439,7 +439,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         var periodVec = new Vector<T>(Options.SeasonalPeriod);
         for (int i = 0; i < Options.SeasonalPeriod; i++) periodVec[i] = periodScalar;
         seasonalFactors = (Vector<T>)Engine.Multiply(seasonalFactors, periodVec);
-        
+
         var sumVec = new Vector<T>(Options.SeasonalPeriod);
         for (int i = 0; i < Options.SeasonalPeriod; i++) sumVec[i] = seasonalSum;
         seasonalFactors = (Vector<T>)Engine.Divide(seasonalFactors, sumVec);
@@ -760,17 +760,17 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     {
         // Estimate optimal alpha, beta, and gamma parameters
         (_alpha, _beta, _gamma) = EstimateParametersGridSearch(y);
-    
+
         // Estimate initial values for level, trend, and seasonal components
         _initialValues = EstimateInitialValues(y);
-    
+
         // If we're using the triple exponential smoothing model with seasonality,
         // validate and prepare the seasonal factors
         if (Options.SeasonalPeriod > 0 && y.Length >= Options.SeasonalPeriod)
         {
             // Make sure we have enough data for at least one full seasonal cycle
             Vector<T> seasonalFactors = EstimateInitialSeasonalFactors(y);
-        
+
             // Ensure the seasonal factors are properly included in the initial values
             for (int i = 0; i < Options.SeasonalPeriod && i + 2 < _initialValues.Length; i++)
             {
@@ -809,17 +809,17 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         {
             singleRowMatrix[0, i] = input[i];
         }
-    
+
         // Use the existing Predict method to get a vector of predictions
         // (in this case, a vector with just one value)
         Vector<T> predictions = Predict(singleRowMatrix);
-    
+
         // Return the single prediction value
         if (predictions.Length > 0)
         {
             return predictions[0];
         }
-    
+
         // If for some reason we couldn't make a prediction, return a default value
         // This should never happen in normal operation, but provides a fallback
         return NumOps.Zero;

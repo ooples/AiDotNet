@@ -66,7 +66,7 @@ public class MeanSquaredErrorFitnessCalculator<T, TInput, TOutput> : FitnessCalc
     /// - It's differentiable everywhere, which helps with gradient-based optimization
     /// </para>
     /// </remarks>
-    public MeanSquaredErrorFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) : 
+    public MeanSquaredErrorFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) :
         base(isHigherScoreBetter: false, dataSetType)
     {
     }

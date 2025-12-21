@@ -637,7 +637,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
             AutocorrelationCorrection = Options.AutocorrelationCorrection,
             ModelType = Options.ModelType
         };
-        
+
         return new ARIMAXModel<T>(optionsClone);
     }
 
@@ -655,29 +655,29 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     protected override void ApplyParameters(Vector<T> parameters)
     {
         int index = 0;
-        
+
         // Get the number of base parameters (if any)
         int baseParamCount = 0;
         base.ApplyParameters(parameters);
-        
+
         // Skip base parameters
         index += baseParamCount;
-        
+
         // Extract the intercept
         _intercept = parameters[index++];
-        
+
         // Extract the AR coefficients
         for (int i = 0; i < _arCoefficients.Length; i++)
         {
             _arCoefficients[i] = parameters[index++];
         }
-        
+
         // Extract the MA coefficients
         for (int i = 0; i < _maCoefficients.Length; i++)
         {
             _maCoefficients[i] = parameters[index++];
         }
-        
+
         // Extract the exogenous coefficients
         for (int i = 0; i < _exogenousCoefficients.Length; i++)
         {
@@ -706,7 +706,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var arimaxOptions = (ARIMAXModelOptions<T>)Options;
-    
+
         var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ARIMAXModel,
@@ -728,7 +728,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
             },
             ModelData = this.Serialize()
         };
-    
+
         return metadata;
     }
 
@@ -746,10 +746,10 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     {
         // Select features with coefficients significantly different from zero
         List<int> activeIndices = new List<int>();
-        
+
         // Define a threshold for "active" features
         T threshold = NumOps.FromDouble(0.01);
-        
+
         // Check exogenous coefficients
         for (int i = 0; i < _exogenousCoefficients.Length; i++)
         {
@@ -758,7 +758,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
                 activeIndices.Add(i);
             }
         }
-        
+
         return activeIndices;
     }
 
@@ -780,10 +780,10 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
         {
             return false;
         }
-        
+
         // Define a threshold for "active" features
         T threshold = NumOps.FromDouble(0.01);
-        
+
         // Check if the coefficient's absolute value exceeds the threshold
         return NumOps.GreaterThan(NumOps.Abs(_exogenousCoefficients[featureIndex]), threshold);
     }
@@ -806,7 +806,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
         {
             throw new ArgumentException("Input tensor must be 2-dimensional (equivalent to a matrix)");
         }
-        
+
         var matrix = new Matrix<T>(input.Shape[0], input.Shape[1]);
         for (int i = 0; i < input.Shape[0]; i++)
         {
@@ -815,17 +815,17 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
                 matrix[i, j] = input[i, j];
             }
         }
-        
+
         // Use the matrix-based predict method
         var predictions = Predict(matrix);
-        
+
         // Convert predictions to tensor
         var resultTensor = Tensor<T>.FromVector(predictions);
         for (int i = 0; i < predictions.Length; i++)
         {
             resultTensor[i] = predictions[i];
         }
-        
+
         return resultTensor;
     }
 
@@ -847,7 +847,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
         {
             throw new ArgumentException("Input tensor must be 2-dimensional (equivalent to a matrix)");
         }
-        
+
         var matrix = new Matrix<T>(input.Shape[0], input.Shape[1]);
         for (int i = 0; i < input.Shape[0]; i++)
         {
@@ -856,19 +856,19 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
                 matrix[i, j] = input[i, j];
             }
         }
-        
+
         // Convert output tensor to vector
         if (expectedOutput.Rank != 1)
         {
             throw new ArgumentException("Expected output tensor must be 1-dimensional (equivalent to a vector)");
         }
-        
+
         var vector = new Vector<T>(expectedOutput.Shape[0]);
         for (int i = 0; i < expectedOutput.Shape[0]; i++)
         {
             vector[i] = expectedOutput[i];
         }
-        
+
         // Use the matrix-based train method
         Train(matrix, vector);
     }
@@ -898,35 +898,35 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (ARIMAXModel<T>)CreateInstance();
-    
+
         // Copy AR coefficients
         for (int i = 0; i < _arCoefficients.Length; i++)
         {
             clone._arCoefficients[i] = _arCoefficients[i];
         }
-    
+
         // Copy MA coefficients
         for (int i = 0; i < _maCoefficients.Length; i++)
         {
             clone._maCoefficients[i] = _maCoefficients[i];
         }
-    
+
         // Copy exogenous coefficients
         for (int i = 0; i < _exogenousCoefficients.Length; i++)
         {
             clone._exogenousCoefficients[i] = _exogenousCoefficients[i];
         }
-    
+
         // Copy differenced values
         clone._differenced = new Vector<T>(_differenced.Length);
         for (int i = 0; i < _differenced.Length; i++)
         {
             clone._differenced[i] = _differenced[i];
         }
-    
+
         // Copy intercept
         clone._intercept = _intercept;
-    
+
         return clone;
     }
 
@@ -1035,17 +1035,17 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
                 $"Input vector length ({input.Length}) must match the number of exogenous variables ({_exogenousCoefficients.Length}).",
                 nameof(input));
         }
-    
+
         // Create a matrix with a single row
         Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
         for (int i = 0; i < input.Length; i++)
         {
             singleRowMatrix[0, i] = input[i];
         }
-    
+
         // Use the existing Predict method
         Vector<T> predictions = Predict(singleRowMatrix);
-    
+
         // Return the single prediction
         return predictions[0];
     }

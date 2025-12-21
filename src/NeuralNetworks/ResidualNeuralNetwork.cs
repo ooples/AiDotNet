@@ -241,11 +241,11 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     /// </para>
     /// </remarks>
     public ResidualNeuralNetwork(
-        NeuralNetworkArchitecture<T> architecture, 
-        T? learningRate = default, 
-        int epochs = 10, 
+        NeuralNetworkArchitecture<T> architecture,
+        T? learningRate = default,
+        int epochs = 10,
         int batchSize = 32,
-        ILossFunction<T>? lossFunction = null) 
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _learningRate = learningRate ?? NumOps.FromDouble(0.01);
@@ -440,7 +440,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
         {
             current = layer.Forward(current);
         }
-        
+
         return current;
     }
 
@@ -623,11 +623,11 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     {
         // Make sure we're in training mode
         SetTrainingMode(true);
-        
+
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
             T totalLoss = NumOps.Zero;
-            
+
             // Process data in batches
             for (int batchStart = 0; batchStart < input.Shape[0]; batchStart += _batchSize)
             {
@@ -636,10 +636,10 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
                 int actualBatchSize = batchEnd - batchStart;
                 var batchX = input.Slice(batchStart, 0, batchEnd, input.Shape[1]);
                 var batchY = expectedOutput.Slice(batchStart, 0, batchEnd, expectedOutput.Shape[1]);
-                
+
                 // Reset gradients at the start of each batch
                 var totalGradient = new Tensor<T>([GetParameterCount()], Vector<T>.CreateDefault(GetParameterCount(), NumOps.Zero));
-                
+
                 // Accumulate gradients for each example in the batch
                 for (int i = 0; i < actualBatchSize; i++)
                 {
@@ -684,27 +684,27 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
                     var gradientsTensor = Tensor<T>.FromVector(gradients);
                     totalGradient = totalGradient.Add(gradientsTensor);
                 }
-                
+
                 // Average the gradients across the batch
                 totalGradient = new Tensor<T>(totalGradient.Shape, totalGradient.ToVector().Divide(NumOps.FromDouble(actualBatchSize)));
-                
+
                 // Update parameters with averaged gradients
                 var currentParams = GetParameters();
                 var updatedParams = new Vector<T>(currentParams.Length);
                 for (int j = 0; j < currentParams.Length; j++)
                 {
                     updatedParams[j] = NumOps.Subtract(
-                        currentParams[j], 
+                        currentParams[j],
                         NumOps.Multiply(_learningRate, totalGradient.ToVector()[j]));
                 }
-                
+
                 UpdateParameters(updatedParams);
             }
-            
+
             // Calculate average loss for the epoch
             T avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(input.Shape[0]));
         }
-        
+
         // Set back to inference mode after training
         SetTrainingMode(false);
     }
@@ -736,7 +736,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     public override ModelMetadata<T> GetModelMetadata()
     {
         var layerSizes = Layers.Select(layer => layer.GetOutputShape()[0]).ToList();
-        
+
         return new ModelMetadata<T>
         {
             ModelType = ModelType.ResidualNeuralNetwork,

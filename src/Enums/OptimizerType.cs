@@ -315,7 +315,7 @@ public enum OptimizerType
     /// </remarks>
     Normal,
 
-        /// <summary>
+    /// <summary>
     /// Direct search method that doesn't require gradient information.
     /// </summary>
     /// <remarks>

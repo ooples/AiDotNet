@@ -1,9 +1,9 @@
-using AiDotNet.Tensors.LinearAlgebra;
-using AiDotNet.Engines;
-using AiDotNet.Tensors.LinearAlgebra;
-using Xunit;
 using System;
 using System.Threading;
+using AiDotNet.Engines;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
+using Xunit;
 
 namespace AiDotNet.Tests.Recovery;
 
@@ -339,7 +339,7 @@ public class GpuRecoveryTests
 
     private static Vector<float> CreateVector(int size, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         var vector = new Vector<float>(size);
         for (int i = 0; i < size; i++)
         {
@@ -350,7 +350,7 @@ public class GpuRecoveryTests
 
     private static Matrix<float> CreateMatrix(int rows, int cols, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         var matrix = new Matrix<float>(rows, cols);
         for (int i = 0; i < rows; i++)
         {

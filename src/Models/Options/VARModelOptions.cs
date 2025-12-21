@@ -79,7 +79,7 @@ public class VARModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int Lag { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the dimension of the output vector.
     /// </summary>
@@ -119,7 +119,7 @@ public class VARModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int OutputDimension { get; set; } = 1;
-    
+
     /// <summary>
     /// Gets or sets the type of matrix decomposition used in the estimation algorithm.
     /// </summary>

@@ -257,8 +257,8 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// This prepares the RBM for training, but it won't actually learn anything until you train it with data.
     /// </para>
     /// </remarks>
-    public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture, int visibleSize, int hiddenSize, double learningRate = 0.01, int cdSteps = 1, 
-        IActivationFunction<T>? scalarActivation = null, ILossFunction<T>? lossFunction = null) : 
+    public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture, int visibleSize, int hiddenSize, double learningRate = 0.01, int cdSteps = 1,
+        IActivationFunction<T>? scalarActivation = null, ILossFunction<T>? lossFunction = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         VisibleSize = visibleSize;
@@ -301,8 +301,8 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// that can process all neurons in a layer simultaneously, which can be more efficient.
     /// </para>
     /// </remarks>
-    public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture, int visibleSize, int hiddenSize, double learningRate = 0.01, int cdSteps = 1, 
-        IVectorActivationFunction<T>? vectorActivation = null, ILossFunction<T>? lossFunction = null) : 
+    public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture, int visibleSize, int hiddenSize, double learningRate = 0.01, int cdSteps = 1,
+        IVectorActivationFunction<T>? vectorActivation = null, ILossFunction<T>? lossFunction = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         VisibleSize = visibleSize;
@@ -412,7 +412,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     public Tensor<T> GetHiddenLayerActivation(Tensor<T> visibleLayer)
     {
         var hiddenActivations = _weights.Multiply(visibleLayer.ToMatrix()).Add(_hiddenBiases.ToColumnMatrix());
-            
+
         if (_vectorActivation != null)
         {
             return _vectorActivation.Activate(Tensor<T>.FromRowMatrix(hiddenActivations));
@@ -542,22 +542,22 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         // For RBMs, "prediction" is typically extracting the hidden layer representation
-        
+
         // Ensure input has the right shape
         if (input.Shape.Length != 2 || input.Shape[1] != VisibleSize)
         {
             // Reshape input if needed
             var reshapedInput = new Tensor<T>(new[] { 1, VisibleSize });
             Vector<T> inputVector = input.ToVector();
-            
+
             for (int i = 0; i < Math.Min(inputVector.Length, VisibleSize); i++)
             {
                 reshapedInput[0, i] = inputVector[i];
             }
-            
+
             input = reshapedInput;
         }
-        
+
         // Get hidden layer activations
         return GetHiddenLayerActivation(input);
     }
@@ -587,14 +587,14 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     {
         var result = new Tensor<T>(activations.Shape);
         var random = RandomHelper.CreateSecureRandom();
-        
+
         for (int i = 0; i < activations.Length; i++)
         {
             double probability = Convert.ToDouble(activations.GetFlatIndexValue(i));
             T state = NumOps.FromDouble(random.NextDouble() < probability ? 1.0 : 0.0);
             result.SetFlatIndex(i, state);
         }
-        
+
         return result;
     }
 
@@ -629,7 +629,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     {
         // We need to transpose the weights matrix for the reverse direction
         var visibleActivations = _weights.Transpose().Multiply(hiddenLayer.ToMatrix()).Add(_visibleBiases.ToColumnMatrix());
-            
+
         if (_vectorActivation != null)
         {
             return _vectorActivation.Activate(Tensor<T>.FromRowMatrix(visibleActivations));
@@ -804,7 +804,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     private Matrix<T> ComputeAssociations(Tensor<T> visible, Tensor<T> hidden)
     {
         var associations = new Matrix<T>(HiddenSize, VisibleSize);
-        
+
         for (int i = 0; i < HiddenSize; i++)
         {
             for (int j = 0; j < VisibleSize; j++)
@@ -812,7 +812,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
                 associations[i, j] = NumOps.Multiply(hidden[0, i], visible[0, j]);
             }
         }
-        
+
         return associations;
     }
 
@@ -846,7 +846,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     {
         var samples = new Tensor<T>(new[] { numSamples, VisibleSize });
         var random = RandomHelper.CreateSecureRandom();
-        
+
         for (int s = 0; s < numSamples; s++)
         {
             // Start with random visible state
@@ -855,26 +855,26 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             {
                 visibleState[0, i] = NumOps.FromDouble(random.NextDouble() > 0.5 ? 1.0 : 0.0);
             }
-            
+
             // Run Gibbs sampling
             for (int step = 0; step < numSteps; step++)
             {
                 // Visible -> Hidden
                 var hiddenActivations = GetHiddenLayerActivation(visibleState);
                 var hiddenState = SampleBinaryStates(hiddenActivations);
-                
+
                 // Hidden -> Visible
                 var visibleActivations = GetVisibleLayerActivation(hiddenState);
                 visibleState = SampleBinaryStates(visibleActivations);
             }
-            
+
             // Store the final sample
             for (int i = 0; i < VisibleSize; i++)
             {
                 samples[s, i] = visibleState[0, i];
             }
         }
-        
+
         return samples;
     }
 
@@ -894,10 +894,10 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         {
             reshapedInput = input;
         }
-        
+
         int batchSize = reshapedInput.Shape[0];
         T totalError = NumOps.Zero;
-        
+
         for (int b = 0; b < batchSize; b++)
         {
             // Extract single sample
@@ -906,13 +906,13 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             {
                 visibleSample[0, i] = reshapedInput[b, i];
             }
-            
+
             // Forward pass to hidden layer
             var hiddenActivations = GetHiddenLayerActivation(visibleSample);
-            
+
             // Reconstruct visible layer
             var visibleReconstruction = GetVisibleLayerActivation(hiddenActivations);
-            
+
             // Compute mean squared error
             T sampleError = NumOps.Zero;
             for (int i = 0; i < VisibleSize; i++)
@@ -920,14 +920,14 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
                 T diff = NumOps.Subtract(visibleSample[0, i], visibleReconstruction[0, i]);
                 sampleError = NumOps.Add(sampleError, NumOps.Multiply(diff, diff));
             }
-            
+
             // Average error over features
             sampleError = NumOps.Divide(sampleError, NumOps.FromDouble(VisibleSize));
-            
+
             // Add to total error
             totalError = NumOps.Add(totalError, sampleError);
         }
-        
+
         // Average error over batch
         return NumOps.Divide(totalError, NumOps.FromDouble(batchSize));
     }
@@ -958,12 +958,12 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     {
         // Count total parameters
         int totalParams = (VisibleSize * HiddenSize) + VisibleSize + HiddenSize;
-        
+
         // Determine activation type
-        string activationType = _vectorActivation != null 
-            ? _vectorActivation.GetType().Name 
+        string activationType = _vectorActivation != null
+            ? _vectorActivation.GetType().Name
             : (_scalarActivation != null ? _scalarActivation.GetType().Name : "None");
-        
+
         return new ModelMetadata<T>
         {
             ModelType = ModelType.RestrictedBoltzmannMachine,
@@ -982,7 +982,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             ModelData = this.Serialize()
         };
     }
-    
+
     /// <summary>
     /// Serializes the RBM-specific data to a binary writer.
     /// </summary>
@@ -1008,7 +1008,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         // Write layer sizes
         writer.Write(VisibleSize);
         writer.Write(HiddenSize);
-        
+
         // Write weights
         for (int i = 0; i < HiddenSize; i++)
         {
@@ -1017,27 +1017,27 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
                 writer.Write(Convert.ToDouble(_weights[i, j]));
             }
         }
-        
+
         // Write visible biases
         for (int i = 0; i < VisibleSize; i++)
         {
             writer.Write(Convert.ToDouble(_visibleBiases[i]));
         }
-        
+
         // Write hidden biases
         for (int i = 0; i < HiddenSize; i++)
         {
             writer.Write(Convert.ToDouble(_hiddenBiases[i]));
         }
-        
+
         // Write configuration parameters
         writer.Write(Convert.ToDouble(_learningRate));
         writer.Write(_cdSteps);
-        
+
         // Write activation type
         bool hasVectorActivation = _vectorActivation != null;
         writer.Write(hasVectorActivation);
-        
+
         if (hasVectorActivation)
         {
             writer.Write(_vectorActivation!.GetType().FullName ?? "Unknown");
@@ -1078,7 +1078,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         // Read layer sizes (and validate they match)
         int storedVisibleSize = reader.ReadInt32();
         int storedHiddenSize = reader.ReadInt32();
-        
+
         if (storedVisibleSize != VisibleSize || storedHiddenSize != HiddenSize)
         {
             throw new InvalidOperationException(
@@ -1086,7 +1086,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
                 $"but found {storedVisibleSize}x{storedHiddenSize}."
             );
         }
-        
+
         // Read weights
         for (int i = 0; i < HiddenSize; i++)
         {
@@ -1095,27 +1095,27 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
                 _weights[i, j] = NumOps.FromDouble(reader.ReadDouble());
             }
         }
-        
+
         // Read visible biases
         for (int i = 0; i < VisibleSize; i++)
         {
             _visibleBiases[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        
+
         // Read hidden biases
         for (int i = 0; i < HiddenSize; i++)
         {
             _hiddenBiases[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        
+
         // Read configuration parameters
         _learningRate = NumOps.FromDouble(reader.ReadDouble());
         _cdSteps = reader.ReadInt32();
-        
+
         // Read activation type
         bool hasVectorActivation = reader.ReadBoolean();
         string activationType = reader.ReadString();
-        
+
         if (hasVectorActivation)
         {
             // Default to sigmoid if the exact type can't be recreated
@@ -1130,7 +1130,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             _scalarActivation = new SigmoidActivation<T>();
         }
     }
-    
+
     /// <summary>
     /// Sets the training parameters for the RBM.
     /// </summary>
@@ -1160,7 +1160,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         _learningRate = learningRate;
         _cdSteps = Math.Max(1, cdSteps); // Ensure at least 1 CD step
     }
-    
+
     /// <summary>
     /// Extracts features from input data using the trained RBM.
     /// </summary>
@@ -1194,13 +1194,13 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     {
         // For RBMs, feature extraction is simply getting the hidden layer activations
         var hiddenActivations = Predict(input);
-        
+
         // Optionally binarize the features
         if (binarize)
         {
             return SampleBinaryStates(hiddenActivations);
         }
-        
+
         return hiddenActivations;
     }
 

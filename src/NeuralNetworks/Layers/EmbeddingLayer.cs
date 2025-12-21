@@ -755,4 +755,13 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Use EmbeddingLookup operation which supports gradients
         return Autodiff.TensorOperations<T>.EmbeddingLookup(embeddingNode, inputNode);
     }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        return new Dictionary<string, string>
+        {
+            ["VocabularySize"] = _embeddingTensor.Shape[0].ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["EmbeddingDimension"] = _embeddingTensor.Shape[1].ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
+    }
 }

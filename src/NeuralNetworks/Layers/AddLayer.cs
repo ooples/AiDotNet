@@ -39,7 +39,7 @@ public class AddLayer<T> : LayerBase<T>
     /// until Forward() is called at least once.
     /// </remarks>
     private Tensor<T>[]? _lastInputs;
-    
+
     /// <summary>
     /// Stores the output tensor from the most recent forward pass for use in the backward pass.
     /// </summary>

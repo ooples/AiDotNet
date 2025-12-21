@@ -22,17 +22,17 @@ public class GaussianProcessInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the data points (independent variable).
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the data points (dependent variable).
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The Gaussian Process Regression model used for interpolation.
     /// </summary>
     private readonly GaussianProcessRegression<T> _gpr;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
@@ -66,20 +66,20 @@ public class GaussianProcessInterpolation<T> : IInterpolation<T>
         {
             // Automatically find the best parameters for the model
             OptimizeHyperparameters = true,
-            
+
             // Maximum number of iterations for parameter optimization
             MaxIterations = 100,
-            
+
             // Convergence threshold for optimization
             Tolerance = 1e-6,
-            
+
             // Small amount of noise to improve numerical stability
             NoiseLevel = 1e-8
         };
 
         // Create the Gaussian Process Regression model with the specified options
         _gpr = new GaussianProcessRegression<T>(options);
-        
+
         // Train the GPR model with our data points
         // First, convert the x vector to a matrix format required by the GPR
         Matrix<T> xMatrix = new Matrix<T>(_x.Length, 1);
@@ -110,14 +110,14 @@ public class GaussianProcessInterpolation<T> : IInterpolation<T>
     {
         // Create a vector containing the single x-value
         Vector<T> xVector = new Vector<T>([x]);
-        
+
         // Convert the x-value to a matrix format required by the GPR
         Matrix<T> xMatrix = new Matrix<T>(1, 1);
         xMatrix[0, 0] = x;
 
         // Use the trained model to predict the y-value
         Vector<T> prediction = _gpr.Predict(xMatrix);
-        
+
         // Return the predicted value
         return prediction[0];
     }

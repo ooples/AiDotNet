@@ -1,10 +1,10 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using AiDotNet.ActivationFunctions;
-using AiDotNet.Interfaces;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
 
@@ -68,7 +68,7 @@ public class GpuAccelerationBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         // Initialize engines
         _cpuEngine = new CpuEngine();

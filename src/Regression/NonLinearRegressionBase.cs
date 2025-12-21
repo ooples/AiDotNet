@@ -1,5 +1,5 @@
-using Newtonsoft.Json;
 using AiDotNet.Autodiff;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Regression;
 
@@ -370,7 +370,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         return result;
     }
 
-        /// <summary>
+    /// <summary>
     /// Computes the kernel function between two vectors.
     /// </summary>
     /// <param name="x1">The first vector.</param>
@@ -633,7 +633,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
 
         // Deserialize regularization options
         var regularizationOptionsJson = reader.ReadString();
-        var regularizationOptions = JsonConvert.DeserializeObject<RegularizationOptions>(regularizationOptionsJson) 
+        var regularizationOptions = JsonConvert.DeserializeObject<RegularizationOptions>(regularizationOptionsJson)
             ?? new RegularizationOptions();
 
         // Create regularization based on deserialized options
@@ -664,16 +664,16 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     {
         // Create a vector to hold all parameters (bias + alphas)
         var parameters = new Vector<T>(Alphas.Length + 1);
-    
+
         // Set the bias term as the first parameter
         parameters[0] = B;
-    
+
         // Copy all alpha coefficients
         for (int i = 0; i < Alphas.Length; i++)
         {
             parameters[i + 1] = Alphas[i];
         }
-    
+
         return parameters;
     }
 
@@ -705,19 +705,19 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
             throw new ArgumentException($"Parameters vector length ({parameters.Length}) " +
                                        $"does not match expected length ({Alphas.Length + 1}).");
         }
-    
+
         // Create a new instance of the model
         var clone = (NonLinearRegressionBase<T>)this.Clone();
-    
+
         // Set the bias term
         clone.B = parameters[0];
-    
+
         // Set the alpha coefficients
         for (int i = 0; i < Alphas.Length; i++)
         {
             clone.Alphas[i] = parameters[i + 1];
         }
-    
+
         return clone;
     }
 
@@ -745,14 +745,14 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         // Create a set to store the active feature indices
         // This set will automatically remove duplicate indices and ensure that we only return unique values
         var activeIndices = new HashSet<int>(); activeIndices = new HashSet<int>();
-    
+
         // Identify features that have non-zero weight in support vectors with non-zero alpha
         for (int i = 0; i < Alphas.Length; i++)
         {
             // Skip if the alpha coefficient is effectively zero
             if (NumOps.LessThan(NumOps.Abs(Alphas[i]), NumOps.FromDouble(1e-5)))
                 continue;
-        
+
             // Check each feature in this support vector
             for (int j = 0; j < SupportVectors.Columns; j++)
             {
@@ -763,7 +763,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
                 }
             }
         }
-    
+
         return activeIndices;
     }
 
@@ -792,24 +792,24 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         // Validate feature index
         if (featureIndex < 0 || featureIndex >= SupportVectors.Columns)
         {
-            throw new ArgumentOutOfRangeException(nameof(featureIndex), 
+            throw new ArgumentOutOfRangeException(nameof(featureIndex),
                 $"Feature index must be between 0 and {SupportVectors.Columns - 1}.");
         }
-    
+
         // Check if the feature has a non-zero value in any support vector with non-zero alpha
         for (int i = 0; i < Alphas.Length; i++)
         {
             // Skip if the alpha coefficient is effectively zero
             if (NumOps.LessThan(NumOps.Abs(Alphas[i]), NumOps.FromDouble(1e-5)))
                 continue;
-        
+
             // Check if this feature has a non-zero value in this support vector
             if (!NumOps.LessThan(NumOps.Abs(SupportVectors[i, featureIndex]), NumOps.FromDouble(1e-5)))
             {
                 return true;
             }
         }
-    
+
         return false;
     }
 
@@ -907,18 +907,18 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     {
         // Create a new instance through cloning
         var clone = (NonLinearRegressionBase<T>)this.Clone();
-    
+
         // Perform deep copy of all mutable fields
         clone.SupportVectors = SupportVectors.Clone();
         clone.Alphas = Alphas.Clone();
         clone.B = B; // Value types are copied by value
         clone.Options = JsonConvert.DeserializeObject<NonLinearRegressionOptions>(
             JsonConvert.SerializeObject(Options)) ?? new NonLinearRegressionOptions();
-    
+
         // Create a new regularization instance with the same options
         var regularizationOptions = Regularization.GetOptions();
         clone.Regularization = RegularizationFactory.CreateRegularization<T, Matrix<T>, Vector<T>>(regularizationOptions);
-    
+
         return clone;
     }
 
@@ -1261,9 +1261,8 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
             };
 
             // Multiply by alpha coefficient
-            var alphaShape = new int[] { 1, 1 };
-            var alphaTensor = new Tensor<T>(alphaShape, new Vector<T>(new T[] { Alphas[i] }));
-            var alphaNode = new ComputationNode<T>(alphaTensor);
+            var alphaTensor = CreateFilledTensorLike(kernelNode, Alphas[i]);
+            var alphaNode = TensorOperations<T>.Constant(alphaTensor, $"alpha_{i}");
             var weightedNode = TensorOperations<T>.ElementwiseMultiply(kernelNode, alphaNode);
 
             // Add to accumulator
@@ -1278,9 +1277,8 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         }
 
         // Add bias term
-        var biasShape = new int[] { 1, 1 };
-        var biasTensor = new Tensor<T>(biasShape, new Vector<T>(new T[] { B }));
-        var biasNode = new ComputationNode<T>(biasTensor);
+        var biasTensor = CreateFilledTensorLike(sumNode!, B);
+        var biasNode = TensorOperations<T>.Constant(biasTensor, "bias");
         var outputNode = TensorOperations<T>.Add(sumNode!, biasNode);
 
         return outputNode;
@@ -1313,9 +1311,8 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         var sumSquared = TensorOperations<T>.Sum(squared);
 
         // Multiply by -gamma
-        var gammaShape = new int[] { 1, 1 };
-        var gammaTensor = new Tensor<T>(gammaShape, new Vector<T>(new T[] { NumOps.FromDouble(-Options.Gamma) }));
-        var gammaNode = new ComputationNode<T>(gammaTensor);
+        var gammaTensor = CreateFilledTensorLike(sumSquared, NumOps.FromDouble(-Options.Gamma));
+        var gammaNode = TensorOperations<T>.Constant(gammaTensor, "gamma");
         var scaled = TensorOperations<T>.ElementwiseMultiply(sumSquared, gammaNode);
 
         // Exp(-gamma * ||x1 - x2||^2)
@@ -1334,15 +1331,13 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         var dotProduct = TensorOperations<T>.Sum(product);
 
         // Multiply by gamma
-        var gammaShape = new int[] { 1, 1 };
-        var gammaTensor = new Tensor<T>(gammaShape, new Vector<T>(new T[] { NumOps.FromDouble(Options.Gamma) }));
-        var gammaNode = new ComputationNode<T>(gammaTensor);
+        var gammaTensor = CreateFilledTensorLike(dotProduct, NumOps.FromDouble(Options.Gamma));
+        var gammaNode = TensorOperations<T>.Constant(gammaTensor, "gamma");
         var scaled = TensorOperations<T>.ElementwiseMultiply(dotProduct, gammaNode);
 
         // Add coef0
-        var coef0Shape = new int[] { 1, 1 };
-        var coef0Tensor = new Tensor<T>(coef0Shape, new Vector<T>(new T[] { NumOps.FromDouble(Options.Coef0) }));
-        var coef0Node = new ComputationNode<T>(coef0Tensor);
+        var coef0Tensor = CreateFilledTensorLike(scaled, NumOps.FromDouble(Options.Coef0));
+        var coef0Node = TensorOperations<T>.Constant(coef0Tensor, "coef0");
         var sum = TensorOperations<T>.Add(scaled, coef0Node);
 
         // Tanh
@@ -1361,15 +1356,13 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         var dotProduct = TensorOperations<T>.Sum(product);
 
         // Multiply by gamma
-        var gammaShape = new int[] { 1, 1 };
-        var gammaTensor = new Tensor<T>(gammaShape, new Vector<T>(new T[] { NumOps.FromDouble(Options.Gamma) }));
-        var gammaNode = new ComputationNode<T>(gammaTensor);
+        var gammaTensor = CreateFilledTensorLike(dotProduct, NumOps.FromDouble(Options.Gamma));
+        var gammaNode = TensorOperations<T>.Constant(gammaTensor, "gamma");
         var scaled = TensorOperations<T>.ElementwiseMultiply(dotProduct, gammaNode);
 
         // Add coef0
-        var coef0Shape = new int[] { 1, 1 };
-        var coef0Tensor = new Tensor<T>(coef0Shape, new Vector<T>(new T[] { NumOps.FromDouble(Options.Coef0) }));
-        var coef0Node = new ComputationNode<T>(coef0Tensor);
+        var coef0Tensor = CreateFilledTensorLike(scaled, NumOps.FromDouble(Options.Coef0));
+        var coef0Node = TensorOperations<T>.Constant(coef0Tensor, "coef0");
         var sum = TensorOperations<T>.Add(scaled, coef0Node);
 
         // Power(sum, degree)
@@ -1395,9 +1388,8 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         var l1Norm = TensorOperations<T>.Sum(absDiff);
 
         // Multiply by -gamma
-        var gammaShape = new int[] { 1, 1 };
-        var gammaTensor = new Tensor<T>(gammaShape, new Vector<T>(new T[] { NumOps.FromDouble(-Options.Gamma) }));
-        var gammaNode = new ComputationNode<T>(gammaTensor);
+        var gammaTensor = CreateFilledTensorLike(l1Norm, NumOps.FromDouble(-Options.Gamma));
+        var gammaNode = TensorOperations<T>.Constant(gammaTensor, "gamma");
         var scaled = TensorOperations<T>.ElementwiseMultiply(l1Norm, gammaNode);
 
         // Exp(-gamma * |x1 - x2|_1)
@@ -1407,4 +1399,11 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     }
 
     #endregion
+
+    private static Tensor<T> CreateFilledTensorLike(ComputationNode<T> referenceNode, T value)
+    {
+        var tensor = new Tensor<T>((int[])referenceNode.Value.Shape.Clone());
+        tensor.Fill(value);
+        return tensor;
+    }
 }

@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
-using AiDotNet.Interfaces;
-using AiDotNet.Regression;
-using AiDotNet.Models.Options;
-using AiDotNet.Regularization;
-using AiDotNet.TransferLearning.FeatureMapping;
-using AiDotNet.Tensors.Helpers;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.Regression;
+using AiDotNet.Regularization;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.TransferLearning.FeatureMapping;
 
 namespace AiDotNet.TransferLearning.Algorithms;
 
@@ -371,7 +371,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         _baseModel.Deserialize(baseBytes);
     }
 
-        public virtual Dictionary<string, T> GetFeatureImportance()
+    public virtual Dictionary<string, T> GetFeatureImportance()
     {
         var baseImportance = _baseModel.GetFeatureImportance();
         var mappedImportance = new Dictionary<string, T>(baseImportance.Count);
@@ -394,7 +394,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                     // Failed to inverse map feature name; using original key as fallback
                 }
             }
-        mappedImportance[key] = kvp.Value;
+            mappedImportance[key] = kvp.Value;
         }
         return mappedImportance;
     }

@@ -1809,7 +1809,7 @@ public class GPUCodeGenerator
         var outputName = EnsureTensorName(op.OutputId);
         var input = GetTensorName(op.InputIds[0]);
         var kernel = GetTensorName(op.InputIds[1]);
-        
+
         var kH = op.KernelSize[0];
         var kW = op.KernelSize[1];
         var strideH = op.Stride[0];

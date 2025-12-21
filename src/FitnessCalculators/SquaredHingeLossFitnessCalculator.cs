@@ -55,7 +55,7 @@ public class SquaredHingeLossFitnessCalculator<T, TInput, TOutput> : FitnessCalc
     /// lower values indicate better performance (0 would be a perfect model).
     /// </para>
     /// </remarks>
-    public SquaredHingeLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) 
+    public SquaredHingeLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
     }
@@ -88,7 +88,7 @@ public class SquaredHingeLossFitnessCalculator<T, TInput, TOutput> : FitnessCalc
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return new SquaredHingeLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+        return new SquaredHingeLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

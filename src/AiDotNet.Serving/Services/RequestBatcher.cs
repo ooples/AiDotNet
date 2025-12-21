@@ -1,12 +1,12 @@
 using System.Diagnostics;
 using System.Threading.Channels;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Serving.Batching;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Monitoring;
 using AiDotNet.Serving.Padding;
 using AiDotNet.Serving.Scheduling;
+using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

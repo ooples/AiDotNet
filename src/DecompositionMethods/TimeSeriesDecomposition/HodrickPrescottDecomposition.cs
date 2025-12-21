@@ -43,8 +43,8 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="decomposition">Optional matrix decomposition method for solving linear systems.</param>
     /// <param name="algorithm">The algorithm type to use for decomposition (default: MatrixMethod).</param>
     /// <exception cref="ArgumentException">Thrown when lambda is not positive.</exception>
-    public HodrickPrescottDecomposition(Vector<T> timeSeries, double lambda = 1600, IMatrixDecomposition<T>? decomposition = null, 
-        HodrickPrescottAlgorithmType algorithm = HodrickPrescottAlgorithmType.MatrixMethod) 
+    public HodrickPrescottDecomposition(Vector<T> timeSeries, double lambda = 1600, IMatrixDecomposition<T>? decomposition = null,
+        HodrickPrescottAlgorithmType algorithm = HodrickPrescottAlgorithmType.MatrixMethod)
         : base(timeSeries)
     {
         if (lambda <= 0)
@@ -104,7 +104,7 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
 
         // State transition matrix
         Matrix<T> F = new Matrix<T>(new T[,] { { NumOps.One, NumOps.One }, { NumOps.Zero, NumOps.One } });
-    
+
         // Observation matrix
         Matrix<T> H = new Matrix<T>(new T[,] { { NumOps.One, NumOps.Zero } });
 
@@ -112,15 +112,15 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         Vector<T> x = new Vector<T>(new T[] { TimeSeries[0], NumOps.Zero });
 
         // Initial error covariance
-        Matrix<T> P = new Matrix<T>(new T[,] { 
-            { NumOps.FromDouble(1000), NumOps.Zero }, 
-            { NumOps.Zero, NumOps.FromDouble(1000) } 
+        Matrix<T> P = new Matrix<T>(new T[,] {
+            { NumOps.FromDouble(1000), NumOps.Zero },
+            { NumOps.Zero, NumOps.FromDouble(1000) }
         });
 
         // Process noise covariance
-        Matrix<T> Q = new Matrix<T>(new T[,] { 
-            { NumOps.FromDouble(0.01), NumOps.Zero }, 
-            { NumOps.Zero, NumOps.FromDouble(0.01) } 
+        Matrix<T> Q = new Matrix<T>(new T[,] {
+            { NumOps.FromDouble(0.01), NumOps.Zero },
+            { NumOps.Zero, NumOps.FromDouble(0.01) }
         });
 
         // Measurement noise covariance
@@ -268,7 +268,7 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     private void DecomposeFrequencyDomainMethod()
     {
         int n = TimeSeries.Length;
-    
+
         // Perform FFT
         FastFourierTransform<T> fft = new();
         Vector<Complex<T>> frequencyDomain = fft.Forward(TimeSeries);
@@ -389,7 +389,7 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         {
             for (int i = 2; i < n - 2; i++)
             {
-                T numerator = NumOps.Multiply(lambda2, NumOps.Add(NumOps.Add(trend[i - 1], trend[i + 1]), 
+                T numerator = NumOps.Multiply(lambda2, NumOps.Add(NumOps.Add(trend[i - 1], trend[i + 1]),
                               NumOps.Multiply(lambda22, NumOps.Add(NumOps.Add(trend[i - 2], trend[i + 2]), TimeSeries[i]))));
                 T denominator = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(6), _lambda));
                 trend[i] = NumOps.Divide(numerator, denominator);

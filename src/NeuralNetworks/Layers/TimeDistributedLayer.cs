@@ -542,7 +542,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     {
         // Reset the inner layer's state
         _innerLayer.ResetState();
-    
+
         // Clear cached values
         _lastInput = null;
         _lastOutput = null;

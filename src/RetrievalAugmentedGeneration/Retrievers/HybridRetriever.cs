@@ -1,9 +1,9 @@
 
-using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 {
@@ -19,11 +19,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
         private readonly T _sparseWeight;
 
         public HybridRetriever(
-            IRetriever<T> denseRetriever, 
-            IRetriever<T> sparseRetriever, 
-            double denseWeight = 0.7, 
+            IRetriever<T> denseRetriever,
+            IRetriever<T> sparseRetriever,
+            double denseWeight = 0.7,
             double sparseWeight = 0.3,
-            int defaultTopK = 5) 
+            int defaultTopK = 5)
             : base(defaultTopK)
         {
             if (denseRetriever == null)

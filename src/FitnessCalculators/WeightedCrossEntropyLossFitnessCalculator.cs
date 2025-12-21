@@ -79,7 +79,7 @@ public class WeightedCrossEntropyLossFitnessCalculator<T, TInput, TOutput> : Fit
     /// If you don't provide weights, the system will create default weights that treat all classes equally.
     /// </para>
     /// </remarks>
-    public WeightedCrossEntropyLossFitnessCalculator(Vector<T>? weights = default, DataSetType dataSetType = DataSetType.Validation) 
+    public WeightedCrossEntropyLossFitnessCalculator(Vector<T>? weights = default, DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
         _weights = weights;
@@ -115,7 +115,7 @@ public class WeightedCrossEntropyLossFitnessCalculator<T, TInput, TOutput> : Fit
             _weights = new Vector<T>(actual.Length);
         }
 
-        return new WeightedCrossEntropyLoss<T>(_weights).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+        return new WeightedCrossEntropyLoss<T>(_weights).CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

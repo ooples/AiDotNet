@@ -93,7 +93,7 @@ public class MatrixCompressionMetadata<T> : ICompressionMetadata<T>
     /// This is needed to allocate the right amount of memory when decompressing.
     /// </para>
     /// </remarks>
-    public int OriginalLength => OriginalRows * OriginalColumns;
+    public int OriginalLength => checked(OriginalRows * OriginalColumns);
 
     /// <summary>
     /// Gets the number of rows in the original matrix.

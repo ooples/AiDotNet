@@ -269,7 +269,7 @@ public enum SvdAlgorithmType
     /// </remarks>
     TruncatedSVD,
 
-        /// <summary>
+    /// <summary>
     /// Uses the Divide and Conquer algorithm for SVD computation, which is efficient for large matrices.
     /// </summary>
     /// <remarks>

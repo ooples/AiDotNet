@@ -44,12 +44,12 @@ public class PolyharmonicSplineRBF<T> : IRadialBasisFunction<T>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// The parameter k that determines the type and order of the polyharmonic spline.
     /// </summary>
     private readonly int _k;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PolyharmonicSplineRBF{T}"/> class with a specified k parameter.
     /// </summary>
@@ -79,7 +79,7 @@ public class PolyharmonicSplineRBF<T> : IRadialBasisFunction<T>
         _numOps = MathHelper.GetNumericOperations<T>();
         _k = k;
     }
-    
+
     /// <summary>
     /// Computes the value of the Polyharmonic Spline Radial Basis Function for a given radius.
     /// </summary>
@@ -124,7 +124,7 @@ public class PolyharmonicSplineRBF<T> : IRadialBasisFunction<T>
             return _numOps.Power(r, _numOps.FromDouble(_k));
         }
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Polyharmonic Spline RBF with respect to the radius.
     /// </summary>
@@ -174,31 +174,31 @@ public class PolyharmonicSplineRBF<T> : IRadialBasisFunction<T>
         if (_k % 2 == 0)
         {
             // For even k: d/dr[r^k * log(r)] = r^(k-1) * (k * log(r) + 1)
-            
+
             // Calculate r^(k-1)
             T rPowKMinus1 = _numOps.Power(r, _numOps.FromDouble(_k - 1));
-            
+
             // Calculate k * log(r)
             T kLogR = _numOps.Multiply(_numOps.FromDouble(_k), _numOps.Log(r));
-            
+
             // Calculate k * log(r) + 1
             T term = _numOps.Add(kLogR, _numOps.One);
-            
+
             // Return r^(k-1) * (k * log(r) + 1)
             return _numOps.Multiply(rPowKMinus1, term);
         }
         else
         {
             // For odd k: d/dr[r^k] = k * r^(k-1)
-            
+
             // Calculate r^(k-1)
             T rPowKMinus1 = _numOps.Power(r, _numOps.FromDouble(_k - 1));
-            
+
             // Return k * r^(k-1)
             return _numOps.Multiply(_numOps.FromDouble(_k), rPowKMinus1);
         }
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Polyharmonic Spline RBF with respect to a width parameter.
     /// </summary>

@@ -1,6 +1,6 @@
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.ReinforcementLearning;

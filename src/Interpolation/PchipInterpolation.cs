@@ -23,17 +23,17 @@ public class PchipInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The calculated slopes at each data point.
     /// </summary>
     private readonly Vector<T> _slopes;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

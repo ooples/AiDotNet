@@ -142,13 +142,13 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
             throw new ArgumentNullException("Embeddings cannot be null");
         if (studentEmbeddings.Length != teacherEmbeddings.Length)
             throw new ArgumentException("Student and teacher must have same batch size");
-        
+
         // Validate all vectors have same dimensions
         if (studentEmbeddings.Length > 0)
         {
             int studentDim = studentEmbeddings[0].Length;
             int teacherDim = teacherEmbeddings[0].Length;
-            
+
             for (int i = 0; i < studentEmbeddings.Length; i++)
             {
                 if (studentEmbeddings[i].Length != studentDim)
@@ -161,7 +161,7 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
                     throw new ArgumentException($"Embedding vectors cannot be empty at index {i}");
             }
         }
-        
+
         int n = studentEmbeddings.Length;
         T totalLoss = NumOps.Zero;
         int pairCount = 0;

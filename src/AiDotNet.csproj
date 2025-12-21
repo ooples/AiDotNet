@@ -3,6 +3,7 @@
 	  <TargetFrameworks>net8.0;net471</TargetFrameworks>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Version>0.0.5-preview</Version>
 		<Title>Ai for .Net</Title>
@@ -87,6 +88,13 @@
 	  <Compile Remove="AiDotNet.Serving\**\*.cs" />
 	  <EmbeddedResource Remove="AiDotNet.Serving\**\*" />
 	  <None Remove="AiDotNet.Serving\**\*" />
+	</ItemGroup>
+
+	<!-- Exclude the AiDotNet.Dashboard project files from this project -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Dashboard\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Dashboard\**\*" />
+	  <None Remove="AiDotNet.Dashboard\**\*" />
 	</ItemGroup>
 
 	<!-- Exclude the AiDotNet.Tensors project files from this project -->

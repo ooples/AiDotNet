@@ -89,7 +89,6 @@ namespace AiDotNetTests.UnitTests.FitDetectors
 
             // Assert
             Assert.NotNull(result);
-            Assert.NotNull(result.FitType);
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
         }
 
@@ -109,7 +108,6 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             var result = detector.DetectFit(evaluationData);
 
             // Assert
-            Assert.NotNull(result.ConfidenceLevel);
             Assert.True(result.ConfidenceLevel >= 0.0);
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
@@ -293,7 +291,6 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(residualResult);
             // Verify the residual analyzer produced valid output that can influence hybrid
             Assert.True(System.Enum.IsDefined(typeof(FitType), residualResult.FitType));
-            Assert.NotNull(residualResult.ConfidenceLevel);
             // Recommendations should include insights from residual analysis
             Assert.True(hybridResult.Recommendations.Count > 0);
         }
@@ -320,7 +317,6 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(learningResult);
             // Verify the learning curve detector produced valid output that can influence hybrid
             Assert.True(System.Enum.IsDefined(typeof(FitType), learningResult.FitType));
-            Assert.NotNull(learningResult.ConfidenceLevel);
             // Recommendations should include insights from learning curve detector
             Assert.True(hybridResult.Recommendations.Count > 0);
         }
@@ -343,8 +339,6 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             // Assert
             // Hybrid analysis should be comprehensive
             Assert.NotNull(result);
-            Assert.NotNull(result.FitType);
-            Assert.NotNull(result.ConfidenceLevel);
             Assert.NotNull(result.Recommendations);
             Assert.NotEmpty(result.Recommendations);
         }
@@ -397,8 +391,6 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             // Verify both components produced valid outputs
             Assert.True(System.Enum.IsDefined(typeof(FitType), residualResult.FitType));
             Assert.True(System.Enum.IsDefined(typeof(FitType), learningResult.FitType));
-            Assert.NotNull(residualResult.ConfidenceLevel);
-            Assert.NotNull(learningResult.ConfidenceLevel);
 
             // Check that the hybrid incorporates information from both
             Assert.True(hybridResult.Recommendations.Count >= 1);
@@ -473,9 +465,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             var learningResult = learningCurveDetector.DetectFit(evaluationData);
 
             // Assert
-            Assert.NotNull(result.ConfidenceLevel);
-            Assert.NotNull(residualResult.ConfidenceLevel);
-            Assert.NotNull(learningResult.ConfidenceLevel);
+            Assert.InRange(residualResult.ConfidenceLevel, 0.0, 1.0);
 
             // The combined confidence should be reasonable
             Assert.True(result.ConfidenceLevel >= 0.0);

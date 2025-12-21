@@ -35,7 +35,7 @@ public class HuberLoss<T> : LossFunctionBase<T>
     /// The threshold parameter that determines the transition between quadratic and linear loss.
     /// </summary>
     private readonly T _delta;
-    
+
     /// <summary>
     /// Initializes a new instance of the HuberLoss class with the specified delta.
     /// </summary>
@@ -44,7 +44,7 @@ public class HuberLoss<T> : LossFunctionBase<T>
     {
         _delta = NumOps.FromDouble(delta);
     }
-    
+
     /// <summary>
     /// Calculates the Huber loss between predicted and actual values.
     /// </summary>
@@ -54,17 +54,17 @@ public class HuberLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T sum = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
             T diff = NumOps.Abs(NumOps.Subtract(predicted[i], actual[i]));
-            
+
             if (NumOps.LessThanOrEquals(diff, _delta))
             {
                 // 0.5 * error²
                 sum = NumOps.Add(sum, NumOps.Multiply(
-                    NumOps.FromDouble(0.5), 
+                    NumOps.FromDouble(0.5),
                     NumOps.Multiply(diff, diff)
                 ));
             }
@@ -77,10 +77,10 @@ public class HuberLoss<T> : LossFunctionBase<T>
                 ));
             }
         }
-        
+
         return NumOps.Divide(sum, NumOps.FromDouble(predicted.Length));
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Huber loss function.
     /// </summary>
@@ -90,12 +90,12 @@ public class HuberLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
             T diff = NumOps.Subtract(predicted[i], actual[i]);
-            
+
             if (NumOps.LessThanOrEquals(NumOps.Abs(diff), _delta))
             {
                 // For small errors: diff
@@ -105,12 +105,12 @@ public class HuberLoss<T> : LossFunctionBase<T>
             {
                 // For large errors: delta * sign(diff)
                 derivative[i] = NumOps.Multiply(
-                    _delta, 
+                    _delta,
                     NumOps.GreaterThan(diff, NumOps.Zero) ? NumOps.One : NumOps.Negate(NumOps.One)
                 );
             }
         }
-        
+
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
 }

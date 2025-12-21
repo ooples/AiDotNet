@@ -65,7 +65,7 @@ public class ModifiedHuberLossFitnessCalculator<T, TInput, TOutput> : FitnessCal
     /// - You want a loss function that's both robust and mathematically convenient
     /// </para>
     /// </remarks>
-    public ModifiedHuberLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) 
+    public ModifiedHuberLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
     }
@@ -106,7 +106,7 @@ public class ModifiedHuberLossFitnessCalculator<T, TInput, TOutput> : FitnessCal
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return new ModifiedHuberLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted), 
+        return new ModifiedHuberLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }

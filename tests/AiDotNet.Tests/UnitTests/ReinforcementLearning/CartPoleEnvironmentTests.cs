@@ -82,7 +82,7 @@ public class CartPoleEnvironmentTests
         int maxSteps = 1000; // Safety limit
 
         // Act - take random actions until done
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         while (!done && steps < maxSteps)
         {
             int actionIndex = random.Next(2);

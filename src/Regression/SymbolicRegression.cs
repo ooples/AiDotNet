@@ -57,7 +57,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     private readonly SymbolicRegressionOptions _options;
-    
+
     /// <summary>
     /// The calculator used to evaluate the fitness or quality of symbolic models.
     /// </summary>
@@ -78,7 +78,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     private readonly IFitnessCalculator<T, Matrix<T>, Vector<T>> _fitnessCalculator;
-    
+
     /// <summary>
     /// The component responsible for normalizing input and output data.
     /// </summary>
@@ -99,7 +99,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     private readonly INormalizer<T, Matrix<T>, Vector<T>> _normalizer;
-    
+
     /// <summary>
     /// The component responsible for selecting relevant features from the input data.
     /// </summary>
@@ -121,7 +121,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     private readonly IFeatureSelector<T, Matrix<T>> _featureSelector;
-    
+
     /// <summary>
     /// The component that detects when a satisfactory model has been found.
     /// </summary>
@@ -142,7 +142,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     private readonly IFitDetector<T, Matrix<T>, Vector<T>> _fitDetector;
-    
+
     /// <summary>
     /// The component responsible for identifying and removing outliers from the data.
     /// </summary>
@@ -164,7 +164,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     private readonly IOutlierRemoval<T, Matrix<T>, Vector<T>> _outlierRemoval;
-    
+
     /// <summary>
     /// The component that handles data preprocessing tasks before model training.
     /// </summary>
@@ -186,7 +186,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     private readonly IDataPreprocessor<T, Matrix<T>, Vector<T>> _dataPreprocessor;
-    
+
     /// <summary>
     /// The optimizer used to evolve and improve symbolic models.
     /// </summary>
@@ -209,7 +209,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     private readonly IOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
-    
+
     /// <summary>
     /// The best symbolic model found during the optimization process.
     /// </summary>
@@ -230,7 +230,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     private IFullModel<T, Matrix<T>, Vector<T>>? _bestModel;
-    
+
     /// <summary>
     /// The fitness score of the best model found.
     /// </summary>
@@ -312,7 +312,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     public SymbolicRegression(
-        SymbolicRegressionOptions? options = null, 
+        SymbolicRegressionOptions? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null,
         IFitnessCalculator<T, Matrix<T>, Vector<T>>? fitnessCalculator = null,
         INormalizer<T, Matrix<T>, Vector<T>>? normalizer = null,
@@ -505,16 +505,16 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
             fitDetector: _fitDetector,
             outlierRemoval: _outlierRemoval,
             dataPreprocessor: _dataPreprocessor);
-        
+
         // Copy the best model found (if any)
         if (_bestModel != null)
         {
             newModel._bestModel = _bestModel.Clone();
         }
-        
+
         // Copy the best fitness score
         newModel._bestFitness = _bestFitness;
-        
+
         return newModel;
     }
 }

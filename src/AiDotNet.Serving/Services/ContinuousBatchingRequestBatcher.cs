@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Serving.Batching;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Monitoring;
 using AiDotNet.Serving.Scheduling;
+using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

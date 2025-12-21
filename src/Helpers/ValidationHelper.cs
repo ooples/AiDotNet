@@ -48,7 +48,7 @@ public static class ValidationHelper<T>
             // Skip the specified number of frames to get to the actual client code
             var stackTrace = new StackTrace(skipFrames, false);
             var frame = stackTrace.GetFrame(0);
-            
+
             if (frame != null)
             {
                 var method = frame.GetMethod();
@@ -65,7 +65,7 @@ public static class ValidationHelper<T>
         {
             // Fallback if stack trace inspection fails
         }
-        
+
         // Default values if we can't determine the caller
         return ("Unknown", "Validation");
     }
@@ -88,15 +88,15 @@ public static class ValidationHelper<T>
         if (string.IsNullOrEmpty(component) || string.IsNullOrEmpty(operation))
         {
             var callerInfo = GetCallerInfo(skipFrames);
-            
+
             // Only use caller info for empty parameters
             if (string.IsNullOrEmpty(component))
                 component = callerInfo.component;
-                
+
             if (string.IsNullOrEmpty(operation))
                 operation = callerInfo.operation;
         }
-        
+
         return (component, operation);
     }
 

@@ -34,7 +34,7 @@ namespace AiDotNet.Models.Results;
 public struct ModelResult<T, TInput, TOutput>
 {
     public IFullModel<T, TInput, TOutput> Solution { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the fitness score of the model.
     /// </summary>
@@ -67,7 +67,7 @@ public struct ModelResult<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public T Fitness { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the results of fit detection analysis.
     /// </summary>
@@ -98,7 +98,7 @@ public struct ModelResult<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public FitDetectorResult<T> FitDetectionResult { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the detailed evaluation data for the model.
     /// </summary>
@@ -132,7 +132,7 @@ public struct ModelResult<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public ModelEvaluationData<T, TInput, TOutput> EvaluationData { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the list of feature vectors selected for the model.
     /// </summary>

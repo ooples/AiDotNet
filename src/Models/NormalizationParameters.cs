@@ -108,7 +108,7 @@ public class NormalizationParameters<T>
     /// </para>
     /// </remarks>
     public NormalizationMethod Method { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the minimum value observed in the data.
     /// </summary>
@@ -136,7 +136,7 @@ public class NormalizationParameters<T>
     /// </para>
     /// </remarks>
     public T Min { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the maximum value observed in the data.
     /// </summary>
@@ -164,7 +164,7 @@ public class NormalizationParameters<T>
     /// </para>
     /// </remarks>
     public T Max { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the mean (average) value of the data.
     /// </summary>
@@ -193,7 +193,7 @@ public class NormalizationParameters<T>
     /// </para>
     /// </remarks>
     public T Mean { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the standard deviation of the data.
     /// </summary>
@@ -222,7 +222,7 @@ public class NormalizationParameters<T>
     /// </para>
     /// </remarks>
     public T StdDev { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the scale factor for custom normalization.
     /// </summary>
@@ -250,7 +250,7 @@ public class NormalizationParameters<T>
     /// </para>
     /// </remarks>
     public T Scale { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the shift value for custom normalization.
     /// </summary>
@@ -279,7 +279,7 @@ public class NormalizationParameters<T>
     /// </para>
     /// </remarks>
     public T Shift { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the bin boundaries for binning normalization.
     /// </summary>

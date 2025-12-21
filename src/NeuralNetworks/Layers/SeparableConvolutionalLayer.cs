@@ -973,7 +973,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         _depthwiseKernelsGradient = null;
         _pointwiseKernelsGradient = null;
         _biasesGradient = null;
-    
+
         // Optionally reset velocity tensors
         _depthwiseKernelsVelocity = null;
         _pointwiseKernelsVelocity = null;

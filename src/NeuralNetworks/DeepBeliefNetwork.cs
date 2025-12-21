@@ -91,7 +91,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     private int _epochs;
-    
+
     /// <summary>
     /// Gets or sets the batch size for training.
     /// </summary>
@@ -116,7 +116,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     private int _batchSize;
-    
+
     /// <summary>
     /// Gets or sets the loss function used for fine-tuning.
     /// </summary>
@@ -179,11 +179,11 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public DeepBeliefNetwork(
-        NeuralNetworkArchitecture<T> architecture, 
-        T? learningRate = default, 
-        int epochs = 10, 
+        NeuralNetworkArchitecture<T> architecture,
+        T? learningRate = default,
+        int epochs = 10,
         int batchSize = 32,
-        ILossFunction<T>? lossFunction = null) 
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _learningRate = learningRate ?? NumOps.FromDouble(0.01);
@@ -235,7 +235,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
 
         ValidateRbmLayers();
     }
-    
+
     /// <summary>
     /// Validates that the RBM layers form a valid sequence for a Deep Belief Network.
     /// </summary>
@@ -267,7 +267,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         // Check that the first RBM's input size matches the network's input size
         var firstRbmInputShape = _rbmLayers[0].GetInputShape();
         var firstRbmInputSize = firstRbmInputShape[0];
-        
+
         if (firstRbmInputSize != Architecture.CalculatedInputSize)
         {
             throw new ArgumentException($"The first RBM layer's input size ({firstRbmInputSize}) must match the network's input size ({Architecture.CalculatedInputSize}).");
@@ -278,10 +278,10 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         {
             var currentRbmOutputShape = _rbmLayers[i].GetOutputShape();
             var nextRbmInputShape = _rbmLayers[i + 1].GetInputShape();
-            
+
             var currentRbmOutputSize = currentRbmOutputShape[0];
             var nextRbmInputSize = nextRbmInputShape[0];
-            
+
             if (currentRbmOutputSize != nextRbmInputSize)
             {
                 throw new ArgumentException($"RBM layer {i}'s output size ({currentRbmOutputSize}) must match RBM layer {i + 1}'s input size ({nextRbmInputSize}).");
@@ -320,29 +320,29 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public void PretrainGreedyLayerwise(
-        Tensor<T> trainingData, 
-        int pretrainingEpochs = 10, 
+        Tensor<T> trainingData,
+        int pretrainingEpochs = 10,
         T? pretrainingLearningRate = default,
         int cdSteps = 1)
     {
         var learningRate = pretrainingLearningRate ?? NumOps.FromDouble(0.1);
-        
+
         Console.WriteLine("Starting greedy layer-wise pre-training...");
-        
+
         // Initialize variable to hold input for the current layer
         var layerInput = trainingData;
-        
+
         // Train each RBM layer one by one, from bottom to top
         for (int layerIdx = 0; layerIdx < _rbmLayers.Count; layerIdx++)
         {
             var rbm = _rbmLayers[layerIdx];
             Console.WriteLine($"Pre-training layer {layerIdx + 1}/{_rbmLayers.Count}...");
-            
+
             // Train the current RBM layer
             for (int epoch = 0; epoch < pretrainingEpochs; epoch++)
             {
                 T totalLoss = NumOps.Zero;
-                
+
                 // Process data in batches
                 for (int batchStart = 0; batchStart < layerInput.Shape[0]; batchStart += _batchSize)
                 {
@@ -350,14 +350,14 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
                     int batchEnd = Math.Min(batchStart + _batchSize, layerInput.Shape[0]);
                     int actualBatchSize = batchEnd - batchStart;
                     var batch = layerInput.Slice(batchStart, 0, batchEnd, layerInput.Shape[1]);
-                    
+
                     // Train the RBM on the current batch using contrastive divergence
                     for (int i = 0; i < actualBatchSize; i++)
                     {
                         var example = batch.GetRow(i);
                         rbm.TrainWithContrastiveDivergence(example, learningRate, cdSteps);
                     }
-                    
+
                     // Calculate reconstruction error for monitoring
                     for (int i = 0; i < actualBatchSize; i++)
                     {
@@ -365,38 +365,38 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
                         var hidden = rbm.Forward(Tensor<T>.FromVector(example));
                         // Use RBMLayer Backward method to reconstruct the input
                         var reconstruction = rbm.Backward(hidden);
-                        
+
                         T sampleLoss = CalculateReconstructionError(
-                            Tensor<T>.FromVector(example), 
+                            Tensor<T>.FromVector(example),
                             reconstruction);
                         totalLoss = NumOps.Add(totalLoss, sampleLoss);
                     }
                 }
-                
+
                 // Calculate average loss for the epoch
                 T avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(layerInput.Shape[0]));
                 Console.WriteLine($"Layer {layerIdx + 1}, Epoch {epoch + 1}/{pretrainingEpochs}, Average Loss: {avgLoss}");
             }
-            
+
             // If not the last layer, transform data for the next layer
             if (layerIdx < _rbmLayers.Count - 1)
             {
                 var transformedData = new Tensor<T>(new[] { layerInput.Shape[0], rbm.GetOutputShape()[0] });
-                
+
                 for (int i = 0; i < layerInput.Shape[0]; i++)
                 {
                     var example = layerInput.GetRow(i);
                     var hidden = rbm.Forward(Tensor<T>.FromVector(example));
                     transformedData.SetRow(i, hidden.ToVector());
                 }
-                
+
                 layerInput = transformedData;
             }
         }
-        
+
         Console.WriteLine("Greedy layer-wise pre-training complete.");
     }
-    
+
     /// <summary>
     /// Calculates the reconstruction error between original and reconstructed data.
     /// </summary>
@@ -427,7 +427,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentException("Original and reconstruction tensors must have the same shape.");
         }
-        
+
         // Calculate mean squared error
         T sumSquaredError = NumOps.Zero;
         for (int i = 0; i < original.Length; i++)
@@ -436,7 +436,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
             T squaredDiff = NumOps.Multiply(diff, diff);
             sumSquaredError = NumOps.Add(sumSquaredError, squaredDiff);
         }
-        
+
         return NumOps.Divide(sumSquaredError, NumOps.FromDouble(original.Length));
     }
 
@@ -544,13 +544,13 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     {
         // Make sure we're in training mode
         SetTrainingMode(true);
-        
+
         Console.WriteLine("Starting supervised fine-tuning...");
-        
+
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
             T totalLoss = NumOps.Zero;
-            
+
             // Process data in batches
             for (int batchStart = 0; batchStart < input.Shape[0]; batchStart += _batchSize)
             {
@@ -559,32 +559,32 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
                 int actualBatchSize = batchEnd - batchStart;
                 var batchX = input.Slice(batchStart, 0, batchEnd, input.Shape[1]);
                 var batchY = expectedOutput.Slice(batchStart, 0, batchEnd, expectedOutput.Shape[1]);
-                
+
                 // Reset gradients at the start of each batch
                 int[] gradientShape = GetGradientShape();
                 Tensor<T> totalGradient = Tensor<T>.CreateDefault(gradientShape, NumOps.Zero);
-                
+
                 // Accumulate gradients for each example in the batch
                 for (int i = 0; i < actualBatchSize; i++)
                 {
                     var x = batchX.GetRow(i);
                     var y = batchY.GetRow(i);
-                    
+
                     // Forward pass with memory to save intermediate states
                     // NOTE: This optimization uses the prediction tensor directly instead of converting to Vector<T> and back.
                     // This is the recommended pattern for consistency across all neural network implementations.
                     var prediction = ForwardWithMemory(Tensor<T>.FromVector(x));
-                    
+
                     // Calculate loss and gradients for this example
                     T loss = CalculateLoss(prediction, Tensor<T>.FromVector(y));
                     totalLoss = NumOps.Add(totalLoss, loss);
-                    
+
                     // Calculate output gradients
                     Vector<T> outputGradients = CalculateOutputGradients(prediction.ToVector(), y);
-                    
+
                     // Backpropagate to compute gradients for all parameters
                     Backpropagate(Tensor<T>.FromVector(outputGradients));
-                    
+
                     // Accumulate gradients
                     var gradients = GetParameterGradients();
                     for (int j = 0; j < gradients.Length; j++)
@@ -592,23 +592,23 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
                         totalGradient[j] = NumOps.Add(totalGradient[j], gradients[j]);
                     }
                 }
-                
+
                 // Average the gradients across the batch
                 for (int j = 0; j < totalGradient.Length; j++)
                 {
                     totalGradient[j] = NumOps.Divide(totalGradient[j], NumOps.FromDouble(actualBatchSize));
                 }
-                
+
                 // Update parameters with averaged gradients
                 var currentParams = GetParameters();
                 var updatedParams = new Vector<T>(currentParams.Length);
                 for (int j = 0; j < currentParams.Length; j++)
                 {
                     updatedParams[j] = NumOps.Subtract(
-                        currentParams[j], 
+                        currentParams[j],
                         NumOps.Multiply(_learningRate, totalGradient[j]));
                 }
-                
+
                 UpdateParameters(updatedParams);
             }
 
@@ -659,7 +659,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
 
         return [.. shape];
     }
-    
+
     /// <summary>
     /// Calculates the loss between predicted and expected outputs using the appropriate loss function.
     /// </summary>
@@ -687,7 +687,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     {
         return _lossFunction.CalculateLoss(predicted.ToVector(), expected.ToVector());
     }
-    
+
     /// <summary>
     /// Calculates the gradients of the loss with respect to the network outputs.
     /// </summary>
@@ -714,7 +714,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     {
         return _lossFunction.CalculateDerivative(predicted, expected);
     }
-    
+
     /// <summary>
     /// Gets metadata about the Deep Belief Network model.
     /// </summary>
@@ -742,19 +742,19 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var layerSizes = new List<int>();
-        
+
         // Collect layer sizes from RBM layers
         foreach (var rbm in _rbmLayers)
         {
             layerSizes.Add(rbm.GetInputShape()[0]);
         }
-        
+
         // Add the size of the final hidden layer
         if (_rbmLayers.Count > 0)
         {
             layerSizes.Add(_rbmLayers[_rbmLayers.Count - 1].GetOutputShape()[0]);
         }
-        
+
         return new ModelMetadata<T>
         {
             ModelType = ModelType.DeepBeliefNetwork,
@@ -829,7 +829,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         _batchSize = reader.ReadInt32();
 
         // Read and set the loss function if a custom one was used
-        var lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader) ?? 
+        var lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader) ??
             throw new InvalidOperationException("Failed to deserialize the loss function. The loss function cannot be null.");
         _lossFunction = lossFunction;
     }

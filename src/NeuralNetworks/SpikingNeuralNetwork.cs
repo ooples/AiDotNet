@@ -25,7 +25,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// Gets or sets the scalar activation function used in the network.
     /// </summary>
     private IActivationFunction<T>? _scalarActivation { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the decay constant for neuron membrane potentials.
     /// </summary>
@@ -51,7 +51,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     private T _membraneDecay;
-    
+
     /// <summary>
     /// Gets or sets the refractory period for neurons after firing.
     /// </summary>
@@ -77,7 +77,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     private int _refractoryPeriod;
-    
+
     /// <summary>
     /// Stores the membrane potentials for all neurons in the network.
     /// </summary>
@@ -100,7 +100,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     private List<Vector<T>> _membranePotentials;
-    
+
     /// <summary>
     /// Tracks the refractory state of each neuron.
     /// </summary>
@@ -123,7 +123,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     private List<int[]> _refractoryCounters;
-    
+
     /// <summary>
     /// Firing thresholds for neurons in each layer.
     /// </summary>
@@ -154,8 +154,8 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <param name="timeStep">The simulation time step, defaults to 0.1.</param>
     /// <param name="simulationSteps">The number of time steps to simulate, defaults to 100.</param>
     /// <param name="vectorActivation">The vector activation function to use. If null, a default activation is used.</param>
-    public SpikingNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double timeStep = 0.1, int simulationSteps = 100, 
-        IVectorActivationFunction<T>? vectorActivation = null, ILossFunction<T>? lossFunction = null) 
+    public SpikingNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double timeStep = 0.1, int simulationSteps = 100,
+        IVectorActivationFunction<T>? vectorActivation = null, ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _timeStep = timeStep;
@@ -167,7 +167,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         _firingThresholds = [];
         _refractoryCounters = [];
         _membranePotentials = [];
-        
+
         InitializeLayers();
         InitializeNeuronStates();
     }
@@ -179,8 +179,8 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <param name="timeStep">The simulation time step, defaults to 0.1.</param>
     /// <param name="simulationSteps">The number of time steps to simulate, defaults to 100.</param>
     /// <param name="scalarActivation">The scalar activation function to use. If null, a default activation is used.</param>
-    public SpikingNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double timeStep = 0.1, int simulationSteps = 100, 
-        IActivationFunction<T>? scalarActivation = null, ILossFunction<T>? lossFunction = null) 
+    public SpikingNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double timeStep = 0.1, int simulationSteps = 100,
+        IActivationFunction<T>? scalarActivation = null, ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _timeStep = timeStep;
@@ -192,7 +192,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         _firingThresholds = [];
         _refractoryCounters = [];
         _membranePotentials = [];
-        
+
         InitializeLayers();
         InitializeNeuronStates();
     }
@@ -214,7 +214,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultSpikingLayers(Architecture));
         }
     }
-    
+
     /// <summary>
     /// Initializes the internal neuron states for simulation.
     /// </summary>
@@ -241,13 +241,13 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         _membranePotentials = [];
         _refractoryCounters = [];
         _firingThresholds = [];
-        
+
         // Initialize states for each layer
         foreach (var layer in Layers)
         {
             var outputShape = layer.GetOutputShape();
             int neuronCount = outputShape.Length > 0 ? outputShape[0] : 0;
-            
+
             // Initialize membrane potentials to zero
             var potentials = new Vector<T>(neuronCount);
             for (int i = 0; i < neuronCount; i++)
@@ -255,7 +255,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 potentials[i] = NumOps.Zero;
             }
             _membranePotentials.Add(potentials);
-            
+
             // Initialize refractory counters to zero
             var refractoryCounters = new int[neuronCount];
             for (int i = 0; i < neuronCount; i++)
@@ -263,7 +263,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 refractoryCounters[i] = 0;
             }
             _refractoryCounters.Add(refractoryCounters);
-            
+
             // Initialize firing thresholds (default value of 1.0)
             var thresholds = new Vector<T>(neuronCount);
             for (int i = 0; i < neuronCount; i++)
@@ -348,19 +348,19 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Reset network state
         ResetState();
-        
+
         // Convert input to appropriate format
         Vector<T> inputVector = input.ToVector();
-        
+
         // Create storage for output layer spike train
         List<Vector<T>> outputSpikeTrain = new List<Vector<T>>(_simulationSteps);
-        
+
         // Run simulation for the specified number of time steps
         for (int step = 0; step < _simulationSteps; step++)
         {
             // Process through layers
             Vector<T> currentInput = inputVector;
-            
+
             for (int layerIndex = 0; layerIndex < Layers.Count; layerIndex++)
             {
                 // Get current layer and its state
@@ -368,28 +368,28 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 var membranePotentials = _membranePotentials[layerIndex];
                 var refractoryCounters = _refractoryCounters[layerIndex];
                 var firingThresholds = _firingThresholds[layerIndex];
-                
+
                 // Process input through layer
                 Tensor<T> layerInput = Tensor<T>.FromVector(currentInput);
                 Tensor<T> layerOutput = layer.Forward(layerInput);
                 Vector<T> layerOutputVector = layerOutput.ToVector();
-                
+
                 // Update membrane potentials with decay and input
                 for (int i = 0; i < membranePotentials.Length; i++)
                 {
                     // Apply membrane decay
                     membranePotentials[i] = NumOps.Multiply(membranePotentials[i], _membraneDecay);
-                    
+
                     // Add input contribution
                     if (i < layerOutputVector.Length)
                     {
                         membranePotentials[i] = NumOps.Add(membranePotentials[i], layerOutputVector[i]);
                     }
                 }
-                
+
                 // Generate spikes for neurons that cross threshold and are not in refractory period
                 Vector<T> spikes = new Vector<T>(membranePotentials.Length);
-                
+
                 for (int i = 0; i < membranePotentials.Length; i++)
                 {
                     // Check if neuron is not in refractory period and exceeds threshold
@@ -397,10 +397,10 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                     {
                         // Generate spike
                         spikes[i] = NumOps.One;
-                        
+
                         // Reset membrane potential
                         membranePotentials[i] = NumOps.Zero;
-                        
+
                         // Start refractory period
                         refractoryCounters[i] = _refractoryPeriod;
                     }
@@ -408,7 +408,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                     {
                         // No spike
                         spikes[i] = NumOps.Zero;
-                        
+
                         // Decrement refractory counter if active
                         if (refractoryCounters[i] > 0)
                         {
@@ -416,10 +416,10 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                         }
                     }
                 }
-                
+
                 // Set spikes as input to next layer
                 currentInput = spikes;
-                
+
                 // Store output layer spikes
                 if (layerIndex == Layers.Count - 1)
                 {
@@ -427,10 +427,10 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 }
             }
         }
-        
+
         // Aggregate spike train to final output
         Vector<T> finalOutput = AggregateSpikeTrainToOutput(outputSpikeTrain);
-        
+
         return Tensor<T>.FromVector(finalOutput);
     }
 
@@ -596,31 +596,31 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Learning rate for weight updates
         T learningRate = NumOps.FromDouble(0.01);
-        
+
         // STDP time constants (in time steps)
         int stdpWindow = 20; // How many time steps to consider for STDP
-        
+
         // Process layers in reverse order (output to input)
         for (int layerIndex = Layers.Count - 1; layerIndex > 0; layerIndex--)
         {
             var layer = Layers[layerIndex];
-            
+
             // Skip layers that don't support training
             if (!layer.SupportsTraining)
                 continue;
-            
+
             // Get spike history for this layer and the previous layer
             var postSynapticSpikes = layerSpikeHistory[layerIndex];
             var preSynapticSpikes = layerSpikeHistory[layerIndex - 1];
-            
+
             // Calculate weight updates based on STDP
             int postSize = postSynapticSpikes[0].Length;
             int preSize = preSynapticSpikes[0].Length;
-            
+
             // Get layer parameters (weights)
             Vector<T> parameters = layer.GetParameters();
             Vector<T> parameterUpdates = new Vector<T>(parameters.Length);
-            
+
             // Simplified version - assumes weights are organized as [postNeuron][preNeuron]
             for (int post = 0; post < postSize; post++)
             {
@@ -628,21 +628,21 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 {
                     // Calculate STDP weight change
                     T weightChange = CalculateSTDPWeightChange(
-                        preSynapticSpikes, 
-                        postSynapticSpikes, 
-                        pre, 
-                        post, 
+                        preSynapticSpikes,
+                        postSynapticSpikes,
+                        pre,
+                        post,
                         stdpWindow);
-                    
+
                     // For output layer, modulate weight change by output error
                     if (layerIndex == Layers.Count - 1 && post < outputError.Length)
                     {
                         weightChange = NumOps.Multiply(weightChange, outputError[post]);
                     }
-                    
+
                     // Apply learning rate
                     weightChange = NumOps.Multiply(weightChange, learningRate);
-                    
+
                     // Store weight update
                     int paramIndex = post * preSize + pre;
                     if (paramIndex < parameterUpdates.Length)
@@ -651,7 +651,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                     }
                 }
             }
-            
+
             // Apply weight updates
             Vector<T> updatedParameters = new Vector<T>(parameters.Length);
             for (int i = 0; i < parameters.Length; i++)
@@ -665,12 +665,12 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                     updatedParameters[i] = parameters[i];
                 }
             }
-            
+
             // Update layer parameters
             layer.SetParameters(updatedParameters);
         }
     }
-    
+
     /// <summary>
     /// Calculates weight change based on STDP rule for a specific connection.
     /// </summary>
@@ -681,18 +681,18 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <param name="stdpWindow">Time window for STDP effect.</param>
     /// <returns>The calculated weight change based on STDP.</returns>
     private T CalculateSTDPWeightChange(
-        List<Vector<T>> preSynapticSpikes, 
-        List<Vector<T>> postSynapticSpikes, 
-        int preIndex, 
-        int postIndex, 
+        List<Vector<T>> preSynapticSpikes,
+        List<Vector<T>> postSynapticSpikes,
+        int preIndex,
+        int postIndex,
         int stdpWindow)
     {
         // STDP Parameters
         T stdpAmplitude = NumOps.FromDouble(0.1); // Maximum weight change
         T stdpTimeFactor = NumOps.FromDouble(0.2); // How quickly effect decays with time
-        
+
         T totalChange = NumOps.Zero;
-        
+
         // Loop through all time steps
         for (int t = 0; t < preSynapticSpikes.Count; t++)
         {
@@ -702,7 +702,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             {
                 continue;
             }
-            
+
             // If post-synaptic neuron spikes at this time
             if (NumOps.Equals(postSynapticSpikes[t][postIndex], NumOps.One))
             {
@@ -714,15 +714,15 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                         // Pre-synaptic neuron fired before post-synaptic neuron
                         // This should strengthen the connection (positive change)
                         T timeFactor = NumOps.Exp(NumOps.Multiply(
-                            NumOps.Negate(NumOps.FromDouble(dt)), 
+                            NumOps.Negate(NumOps.FromDouble(dt)),
                             stdpTimeFactor));
-                        
+
                         T change = NumOps.Multiply(stdpAmplitude, timeFactor);
                         totalChange = NumOps.Add(totalChange, change);
                     }
                 }
             }
-            
+
             // If pre-synaptic neuron spikes at this time
             if (NumOps.Equals(preSynapticSpikes[t][preIndex], NumOps.One))
             {
@@ -734,16 +734,16 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                         // Post-synaptic neuron fired before pre-synaptic neuron
                         // This should weaken the connection (negative change)
                         T timeFactor = NumOps.Exp(NumOps.Multiply(
-                            NumOps.Negate(NumOps.FromDouble(dt)), 
+                            NumOps.Negate(NumOps.FromDouble(dt)),
                             stdpTimeFactor));
-                        
+
                         T change = NumOps.Multiply(NumOps.Negate(stdpAmplitude), timeFactor);
                         totalChange = NumOps.Add(totalChange, change);
                     }
                 }
             }
         }
-        
+
         return totalChange;
     }
 
@@ -781,7 +781,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 _membranePotentials[layer][i] = NumOps.Zero;
             }
         }
-        
+
         // Reset refractory counters to zero
         for (int layer = 0; layer < _refractoryCounters.Count; layer++)
         {
@@ -833,19 +833,19 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 layerTypes[layerType] = 1;
             }
         }
-        
+
         // Calculate total neurons
         int totalNeurons = 0;
         foreach (var potentials in _membranePotentials)
         {
             totalNeurons += potentials.Length;
         }
-        
+
         // Get activation type
-        string activationType = _vectorActivation != null 
-            ? _vectorActivation.GetType().Name 
+        string activationType = _vectorActivation != null
+            ? _vectorActivation.GetType().Name
             : (_scalarActivation != null ? _scalarActivation.GetType().Name : "None");
-        
+
         return new ModelMetadata<T>
         {
             ModelType = ModelType.SpikingNeuralNetwork,
@@ -899,15 +899,15 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         // Write temporal parameters
         writer.Write(_timeStep);
         writer.Write(_simulationSteps);
-        
+
         // Write neuron model parameters
         writer.Write(Convert.ToDouble(_membraneDecay));
         writer.Write(_refractoryPeriod);
-        
+
         // Write activation type
         bool hasVectorActivation = _vectorActivation != null;
         writer.Write(hasVectorActivation);
-        
+
         if (hasVectorActivation)
         {
             writer.Write(_vectorActivation!.GetType().FullName ?? "Unknown");
@@ -920,30 +920,30 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             writer.Write("None");
         }
-        
+
         // Write neuron states
-        
+
         // Write number of layers
         writer.Write(_membranePotentials.Count);
-        
+
         // Write membrane potentials
         for (int layer = 0; layer < _membranePotentials.Count; layer++)
         {
             // Write number of neurons in this layer
             writer.Write(_membranePotentials[layer].Length);
-            
+
             // Write membrane potentials
             for (int i = 0; i < _membranePotentials[layer].Length; i++)
             {
                 writer.Write(Convert.ToDouble(_membranePotentials[layer][i]));
             }
-            
+
             // Write refractory counters
             for (int i = 0; i < _refractoryCounters[layer].Length; i++)
             {
                 writer.Write(_refractoryCounters[layer][i]);
             }
-            
+
             // Write firing thresholds
             for (int i = 0; i < _firingThresholds[layer].Length; i++)
             {
@@ -980,15 +980,15 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         // Read temporal parameters
         _timeStep = reader.ReadDouble();
         _simulationSteps = reader.ReadInt32();
-        
+
         // Read neuron model parameters
         _membraneDecay = NumOps.FromDouble(reader.ReadDouble());
         _refractoryPeriod = reader.ReadInt32();
-        
+
         // Read activation type
         bool hasVectorActivation = reader.ReadBoolean();
         string activationType = reader.ReadString();
-        
+
         // Recreate activation function if needed
         if (hasVectorActivation)
         {
@@ -1003,12 +1003,12 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             // Use existing or create default
             _scalarActivation = new BinarySpikingActivation<T>();
         }
-        
+
         // Read neuron states
-        
+
         // Read number of layers
         int layerCount = reader.ReadInt32();
-        
+
         // Initialize state containers if not already done
         if (_membranePotentials == null || _membranePotentials.Count == 0)
         {
@@ -1016,48 +1016,48 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             _refractoryCounters = new List<int[]>(layerCount);
             _firingThresholds = new List<Vector<T>>(layerCount);
         }
-        
+
         // Clear existing data if needed
         _membranePotentials.Clear();
         _refractoryCounters.Clear();
         _firingThresholds.Clear();
-        
+
         // Read membrane potentials, refractory counters, and firing thresholds
         for (int layer = 0; layer < layerCount; layer++)
         {
             // Read number of neurons in this layer
             int neuronCount = reader.ReadInt32();
-            
+
             // Create vectors and arrays
             var potentials = new Vector<T>(neuronCount);
             var refractoryCounters = new int[neuronCount];
             var thresholds = new Vector<T>(neuronCount);
-            
+
             // Read membrane potentials
             for (int i = 0; i < neuronCount; i++)
             {
                 potentials[i] = NumOps.FromDouble(reader.ReadDouble());
             }
-            
+
             // Read refractory counters
             for (int i = 0; i < neuronCount; i++)
             {
                 refractoryCounters[i] = reader.ReadInt32();
             }
-            
+
             // Read firing thresholds
             for (int i = 0; i < neuronCount; i++)
             {
                 thresholds[i] = NumOps.FromDouble(reader.ReadDouble());
             }
-            
+
             // Add to collections
             _membranePotentials.Add(potentials);
             _refractoryCounters.Add(refractoryCounters);
             _firingThresholds.Add(thresholds);
         }
     }
-    
+
     /// <summary>
     /// Sets the neuron model parameters for the network.
     /// </summary>
@@ -1092,17 +1092,17 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentOutOfRangeException(nameof(membraneDecay), "Membrane decay must be between 0 and 1.");
         }
-        
+
         if (refractoryPeriod < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(refractoryPeriod), "Refractory period must be non-negative.");
         }
-        
+
         // Set parameters
         _membraneDecay = membraneDecay;
         _refractoryPeriod = refractoryPeriod;
     }
-    
+
     /// <summary>
     /// Sets the simulation parameters for the network.
     /// </summary>
@@ -1139,17 +1139,17 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentOutOfRangeException(nameof(timeStep), "Time step must be positive.");
         }
-        
+
         if (simulationSteps <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(simulationSteps), "Simulation steps must be positive.");
         }
-        
+
         // Set parameters
         _timeStep = timeStep;
         _simulationSteps = simulationSteps;
     }
-    
+
     /// <summary>
     /// Sets custom firing thresholds for neurons in a specific layer.
     /// </summary>
@@ -1185,12 +1185,12 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentOutOfRangeException(nameof(layerIndex), "Layer index is out of range.");
         }
-        
+
         if (thresholds.Length != _firingThresholds[layerIndex].Length)
         {
             throw new ArgumentException("Threshold vector length must match layer neuron count.", nameof(thresholds));
         }
-        
+
         // Set thresholds
         for (int i = 0; i < thresholds.Length; i++)
         {

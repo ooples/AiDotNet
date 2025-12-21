@@ -92,12 +92,12 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
             Assert.NotNull(result.Recommendations);
             // The adaptive detector should mention which detector it chose
-            Assert.True(result.Recommendations.Any(r =>
+            Assert.Contains(result.Recommendations, r =>
                 r.Contains("Residual Analysis") ||
                 r.Contains("Learning Curve") ||
                 r.Contains("Hybrid") ||
                 r.Contains("complexity") ||
-                r.Contains("performance")));
+                r.Contains("performance"));
         }
 
         [Fact]
@@ -126,7 +126,6 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             var result = detector.DetectFit(evaluationData);
 
             // Assert
-            Assert.NotNull(result.ConfidenceLevel);
             Assert.True(result.ConfidenceLevel >= 0.0);
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
@@ -159,7 +158,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             // Assert
             Assert.NotNull(result.Recommendations);
             // Should include information about data complexity or performance
-            Assert.True(result.Recommendations.Any(r =>
+            Assert.Contains(result.Recommendations, r =>
                 r.Contains("data complexity") ||
                 r.Contains("Simple") ||
                 r.Contains("Moderate") ||
@@ -167,7 +166,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 r.Contains("model performance") ||
                 r.Contains("Good") ||
                 r.Contains("Poor") ||
-                r.Contains("Detector")));
+                r.Contains("Detector"));
         }
 
         [Fact]
@@ -266,7 +265,6 @@ namespace AiDotNetTests.UnitTests.FitDetectors
 
             // Assert
             Assert.NotNull(result);
-            Assert.NotNull(result.FitType);
             Assert.NotEmpty(result.Recommendations);
         }
 
@@ -282,7 +280,6 @@ namespace AiDotNetTests.UnitTests.FitDetectors
 
             // Assert
             Assert.NotNull(result);
-            Assert.NotNull(result.FitType);
             Assert.NotEmpty(result.Recommendations);
         }
 
@@ -337,7 +334,6 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
             // FitType is an enum (value type) - verify it's a valid defined value
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
-            Assert.NotNull(result.ConfidenceLevel);
             Assert.NotNull(result.Recommendations);
             Assert.NotEmpty(result.Recommendations);
         }

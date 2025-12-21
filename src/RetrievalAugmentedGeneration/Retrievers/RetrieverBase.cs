@@ -44,7 +44,7 @@ public abstract class RetrieverBase<T> : IRetriever<T>
     {
         if (defaultTopK <= 0)
             throw new ArgumentException("DefaultTopK must be greater than zero", nameof(defaultTopK));
-        
+
         _defaultTopK = defaultTopK;
     }
 
@@ -83,7 +83,7 @@ public abstract class RetrieverBase<T> : IRetriever<T>
         ValidateMetadataFilters(metadataFilters);
 
         var results = RetrieveCore(query, topK, metadataFilters);
-        
+
         return PostProcessResults(results, topK);
     }
 

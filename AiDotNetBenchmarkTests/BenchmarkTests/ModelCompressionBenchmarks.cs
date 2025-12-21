@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ModelCompression;
 using AiDotNet.Pruning;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
@@ -50,7 +51,7 @@ public class ModelCompressionBenchmarks
     public void Setup()
     {
         // Using seeded Random for reproducible benchmark data - not used for security purposes
-        var random = new Random(42); // NOSONAR S2245 - benchmarks don't need cryptographic randomness
+        var random = RandomHelper.CreateSeededRandom(42); // NOSONAR S2245 - benchmarks don't need cryptographic randomness
 
         // Initialize weight vector with realistic distribution
         _weights = new Vector<double>(WeightCount);
@@ -277,7 +278,7 @@ public class StructuredSparsityBenchmarks
     public void Setup()
     {
         // Using seeded Random for reproducible benchmark data - not used for security purposes
-        var random = new Random(42); // NOSONAR S2245 - benchmarks don't need cryptographic randomness
+        var random = RandomHelper.CreateSeededRandom(42); // NOSONAR S2245 - benchmarks don't need cryptographic randomness
         _tensor = new Tensor<double>(new[] { 1, TensorSize });
         for (int i = 0; i < TensorSize; i++)
             _tensor[0, i] = random.NextDouble();

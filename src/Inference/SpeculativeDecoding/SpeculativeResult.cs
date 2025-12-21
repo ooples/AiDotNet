@@ -5,7 +5,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// <summary>
 /// Result of speculative decoding generation.
 /// </summary>
-public class SpeculativeResult
+internal class SpeculativeResult
 {
     /// <summary>
     /// All tokens (input + generated).

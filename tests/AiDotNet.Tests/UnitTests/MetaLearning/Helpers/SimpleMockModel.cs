@@ -1,18 +1,20 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
-using AiDotNet.Autodiff;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 
 /// <summary>
 /// Simple mock model for testing that tracks parameter updates.
 /// Implements ISecondOrderGradientComputable for full MAML testing.
+/// Implements ICloneable to support meta-learning model cloning.
 /// </summary>
 public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>>,
-    ISecondOrderGradientComputable<double, Tensor<double>, Tensor<double>>
+    ISecondOrderGradientComputable<double, Tensor<double>, Tensor<double>>,
+    ICloneable
 {
     private Vector<double> _parameters;
     public int TrainCallCount { get; private set; }
@@ -97,6 +99,12 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
         return DeepCopy();
     }
 
+    // ICloneable explicit implementation
+    object ICloneable.Clone()
+    {
+        return DeepCopy();
+    }
+
     // IFeatureAware implementation
     public int InputFeatureCount => 10;
     public int OutputFeatureCount => 1;
@@ -161,8 +169,13 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
         ILossFunction<double> lossFunction,
         double innerLearningRate)
     {
-        // Simple mock implementation for testing - returns zero gradients
+        // Return non-zero gradients to allow meta-learning parameter updates
         // In a real implementation this would compute gradients through the adaptation steps
-        return new Vector<double>(ParameterCount);
+        var gradients = new Vector<double>(ParameterCount);
+        for (int i = 0; i < ParameterCount; i++)
+        {
+            gradients[i] = 0.05 * (i + 1);  // Non-zero values for testing
+        }
+        return gradients;
     }
 }

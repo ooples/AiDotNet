@@ -16,13 +16,13 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// Gets the type of this node (constant, variable, or operation).
     /// </summary>
     public ExpressionNodeType Type { get; private set; }
-    
+
     /// <summary>
     /// Gets the value stored in this node. For constants, this is the actual value.
     /// For variables, this is the index of the variable in the input vector.
     /// </summary>
     public T Value { get; private set; }
-    
+
     /// <summary>
     /// Gets the left child node of this node.
     /// </summary>
@@ -30,7 +30,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <b>For Beginners:</b> In operations like addition (a + b), the left child represents 'a'.
     /// </remarks>
     public ExpressionTree<T, TInput, TOutput>? Left { get; private set; }
-    
+
     /// <summary>
     /// Gets the right child node of this node.
     /// </summary>
@@ -38,7 +38,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <b>For Beginners:</b> In operations like addition (a + b), the right child represents 'b'.
     /// </remarks>
     public ExpressionTree<T, TInput, TOutput>? Right { get; private set; }
-    
+
     /// <summary>
     /// Gets the parent node of this node.
     /// </summary>
@@ -1143,7 +1143,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         {
             ValidateMatrixFeatures(matrix);
             Vector<T> predictions = PredictMatrix(matrix);
-        
+
             // Try to convert the result to TOutput
             if (predictions is TOutput typedResult)
             {
@@ -1153,14 +1153,14 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             {
                 return (TOutput)(object)predictions;
             }
-        
+
             throw new InvalidOperationException($"Cannot convert prediction vector to {typeof(TOutput).Name}.");
         }
         else if (input is Tensor<T> tensor)
         {
             ValidateTensorFeatures(tensor);
             Vector<T> predictions = PredictTensor(tensor);
-        
+
             // Try to convert the result to TOutput
             if (predictions is TOutput typedResult)
             {
@@ -1170,10 +1170,10 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             {
                 return (TOutput)(object)predictions;
             }
-        
+
             throw new InvalidOperationException($"Cannot convert prediction vector to {typeof(TOutput).Name}.");
         }
-    
+
         throw new ArgumentException($"Unsupported input type: {input?.GetType().Name ?? "null"}. Expected Matrix<T>, Vector<T>, or Tensor<T>.");
     }
 
@@ -1242,7 +1242,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         {
             batchSize *= tensor.Shape[i];
         }
-    
+
         Vector<T> predictions = new Vector<T>(batchSize);
         for (int i = 0; i < batchSize; i++)
         {
@@ -1251,17 +1251,17 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             Vector<T> flatTensor = tensor.ToVector();
             int featureSize = tensor.Shape[tensor.Shape.Length - 1];
             int startIndex = i * featureSize;
-        
+
             // Create a vector from the slice
             Vector<T> inputVector = new Vector<T>(featureSize);
             for (int j = 0; j < featureSize; j++)
             {
                 inputVector[j] = flatTensor[startIndex + j];
             }
-        
+
             predictions[i] = Evaluate(inputVector);
         }
-    
+
         return predictions;
     }
 

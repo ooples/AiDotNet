@@ -38,12 +38,12 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
     /// The mixing parameter between L1 and L2 regularization.
     /// </summary>
     private readonly T _l1Ratio;
-    
+
     /// <summary>
     /// The regularization strength parameter.
     /// </summary>
     private readonly T _alpha;
-    
+
     /// <summary>
     /// Initializes a new instance of the ElasticNetLoss class.
     /// </summary>
@@ -55,11 +55,11 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
         {
             throw new ArgumentOutOfRangeException(nameof(l1Ratio), "L1 ratio must be between 0 and 1.");
         }
-        
+
         _l1Ratio = NumOps.FromDouble(l1Ratio);
         _alpha = NumOps.FromDouble(alpha);
     }
-    
+
     /// <summary>
     /// Calculates the Elastic Net Loss between predicted and actual values.
     /// </summary>
@@ -69,26 +69,26 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         // Calculate the Mean Squared Error component
         T mseLoss = StatisticsHelper<T>.CalculateMeanSquaredError(predicted, actual);
-        
+
         // Calculate L1 and L2 regularization terms
         T l1Regularization = NumOps.Zero;
         T l2Regularization = NumOps.Zero;
-        
+
         for (int i = 0; i < predicted.Length; i++)
         {
             l1Regularization = NumOps.Add(l1Regularization, NumOps.Abs(predicted[i]));
             l2Regularization = NumOps.Add(l2Regularization, NumOps.Power(predicted[i], NumOps.FromDouble(2)));
         }
-        
+
         // Scale the regularization terms
         T l1Term = NumOps.Multiply(
-            NumOps.Multiply(_alpha, _l1Ratio), 
+            NumOps.Multiply(_alpha, _l1Ratio),
             l1Regularization
         );
-        
+
         T l2Term = NumOps.Multiply(
             NumOps.Multiply(
                 NumOps.Multiply(_alpha, NumOps.Subtract(NumOps.One, _l1Ratio)),
@@ -96,11 +96,11 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
             ),
             l2Regularization
         );
-        
+
         // Combine all terms
         return NumOps.Add(NumOps.Add(mseLoss, l1Term), l2Term);
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Elastic Net Loss function.
     /// </summary>
@@ -110,38 +110,38 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
             // MSE gradient component: 2*(predicted - actual)/n
             T mseGradient = NumOps.Multiply(
-                NumOps.FromDouble(2), 
+                NumOps.FromDouble(2),
                 NumOps.Divide(
                     NumOps.Subtract(predicted[i], actual[i]),
                     NumOps.FromDouble(predicted.Length)
                 )
             );
-            
+
             // L1 gradient component: a * l1Ratio * sign(predicted)
             T l1Gradient = NumOps.Multiply(
                 NumOps.Multiply(_alpha, _l1Ratio),
                 SignOf(predicted[i])
             );
-            
+
             // L2 gradient component: a * (1-l1Ratio) * predicted
             T l2Gradient = NumOps.Multiply(
                 NumOps.Multiply(_alpha, NumOps.Subtract(NumOps.One, _l1Ratio)),
                 predicted[i]
             );
-            
+
             // Combine all gradient components
             derivative[i] = NumOps.Add(NumOps.Add(mseGradient, l1Gradient), l2Gradient);
         }
-        
+
         return derivative;
     }
-    
+
     /// <summary>
     /// Returns the sign of a value: -1 for negative, 1 for positive, 0 for zero.
     /// </summary>

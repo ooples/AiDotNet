@@ -179,7 +179,7 @@ public class RobustRegression<T> : RegressionBase<T>
     private bool IsConverged(Vector<T> oldCoefficients, Vector<T> newCoefficients, T oldIntercept, T newIntercept)
     {
         T tolerance = NumOps.FromDouble(_options.Tolerance);
-        
+
         for (int i = 0; i < oldCoefficients.Length; i++)
         {
             if (NumOps.GreaterThan(NumOps.Abs(NumOps.Subtract(oldCoefficients[i], newCoefficients[i])), tolerance))
@@ -304,16 +304,16 @@ public class RobustRegression<T> : RegressionBase<T>
     {
         // Create a new vector with enough space for coefficients + intercept
         Vector<T> parameters = new Vector<T>(Coefficients.Length + 1);
-    
+
         // Copy coefficients to the parameters vector
         for (int i = 0; i < Coefficients.Length; i++)
         {
             parameters[i] = Coefficients[i];
         }
-    
+
         // Add the intercept as the last element
         parameters[Coefficients.Length] = Intercept;
-    
+
         return parameters;
     }
 
@@ -339,24 +339,24 @@ public class RobustRegression<T> : RegressionBase<T>
         {
             throw new ArgumentException($"Expected {Coefficients.Length + 1} parameters, but got {parameters.Length}");
         }
-    
+
         // Create a new instance of the model
         var newModel = (RobustRegression<T>)this.Clone();
-    
+
         // Extract coefficients (all elements except the last)
         Vector<T> newCoefficients = new Vector<T>(parameters.Length - 1);
         for (int i = 0; i < parameters.Length - 1; i++)
         {
             newCoefficients[i] = parameters[i];
         }
-    
+
         // Extract intercept (last element)
         T newIntercept = parameters[parameters.Length - 1];
-    
+
         // Set the parameters in the new model
         newModel.Coefficients = newCoefficients;
         newModel.Intercept = newIntercept;
-    
+
         return newModel;
     }
 

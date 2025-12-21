@@ -55,7 +55,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
         _antColonyOptions = options ?? new AntColonyOptimizationOptions<T, TInput, TOutput>();
         _currentPheromoneEvaporationRate = NumOps.Zero;
         _currentPheromoneIntensity = NumOps.Zero;
-        
+
         InitializeAdaptiveParameters();
     }
 
@@ -106,7 +106,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     private void UpdatePheromoneEvaporationRate(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         double currentRate = Convert.ToDouble(_currentPheromoneEvaporationRate);
-    
+
         if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
             currentRate *= _antColonyOptions.PheromoneEvaporationRateIncrease;
@@ -134,7 +134,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     private void UpdatePheromoneIntensity(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         double currentIntensity = Convert.ToDouble(_currentPheromoneIntensity);
-    
+
         if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
             currentIntensity *= _antColonyOptions.PheromoneIntensityIncrease;
@@ -236,11 +236,11 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     private IFullModel<T, TInput, TOutput> ConstructSolution(Matrix<T> pheromones, TInput xTrain)
     {
         var dimensions = InputHelper<T, TInput>.GetInputSize(xTrain);
-        
+
         // Create a base model with InitializeRandomSolution
         var model = InitializeRandomSolution(xTrain);
         var parameters = new Vector<T>(dimensions);
-        
+
         var visited = new bool[dimensions];
         int current = Random.Next(dimensions);
         visited[current] = true;
@@ -251,12 +251,12 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
             if (next == -1) break; // No more unvisited features
 
             var coefficient = NumOps.Multiply(
-                _currentPheromoneIntensity, 
+                _currentPheromoneIntensity,
                 InputHelper<T, TInput>.GetElement(xTrain, current, next)
             );
 
             parameters[next] = coefficient;
-            
+
             visited[next] = true;
             current = next;
         }
@@ -425,7 +425,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
         // Serialize AntColonyOptimizerOptions
         string optionsJson = JsonConvert.SerializeObject(_antColonyOptions);
         writer.Write(optionsJson);
-        
+
         // Serialize adaptive parameters
         writer.Write(Convert.ToDouble(_currentPheromoneEvaporationRate));
         writer.Write(Convert.ToDouble(_currentPheromoneIntensity));
@@ -457,7 +457,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
         string optionsJson = reader.ReadString();
         _antColonyOptions = JsonConvert.DeserializeObject<AntColonyOptimizationOptions<T, TInput, TOutput>>(optionsJson)
             ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-            
+
         // Deserialize adaptive parameters
         _currentPheromoneEvaporationRate = NumOps.FromDouble(reader.ReadDouble());
         _currentPheromoneIntensity = NumOps.FromDouble(reader.ReadDouble());

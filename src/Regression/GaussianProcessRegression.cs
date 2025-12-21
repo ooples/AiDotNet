@@ -38,12 +38,12 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     /// The kernel matrix (also known as the covariance matrix) that represents the similarity between all training points.
     /// </summary>
     private Matrix<T> _kernelMatrix;
-    
+
     /// <summary>
     /// The vector of coefficients used for making predictions.
     /// </summary>
     private Vector<T> _alpha;
-    
+
     /// <summary>
     /// Gets the configuration options specific to Gaussian Process Regression.
     /// </summary>
@@ -277,7 +277,7 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     private T RBFKernel(Vector<T> x1, Vector<T> x2, double lengthScale, double signalVariance)
     {
         T squaredDistance = x1.Subtract(x2).PointwiseMultiply(x1.Subtract(x2)).Sum();
-        return NumOps.Multiply(NumOps.FromDouble(signalVariance), 
+        return NumOps.Multiply(NumOps.FromDouble(signalVariance),
             NumOps.Exp(NumOps.Divide(NumOps.Negate(squaredDistance), NumOps.FromDouble(2 * lengthScale * lengthScale))));
     }
 

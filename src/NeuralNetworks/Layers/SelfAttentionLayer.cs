@@ -135,7 +135,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// The tensor is null before the first forward pass or after a reset.
     /// </remarks>
     private Tensor<T>? _lastInput;
-    
+
     /// <summary>
     /// Stores the output tensor from the most recent forward pass for use in backpropagation.
     /// </summary>
@@ -145,7 +145,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// The tensor is null before the first forward pass or after a reset.
     /// </remarks>
     private Tensor<T>? _lastOutput;
-    
+
     /// <summary>
     /// Stores the attention score tensor from the most recent forward pass for use in backpropagation.
     /// </summary>
@@ -209,7 +209,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// complex relationships but require more computation.
     /// </remarks>
     private int _headCount;
-    
+
     /// <summary>
     /// The dimension of each attention head.
     /// </summary>
@@ -218,7 +218,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// divided by the number of heads. It affects the expressive power of each individual attention head.
     /// </remarks>
     private int _headDimension;
-    
+
     /// <summary>
     /// The dimension of the input and output embeddings.
     /// </summary>
@@ -227,7 +227,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// both input and output to maintain the dimensionality of the sequence representation.
     /// </remarks>
     private int _embeddingDimension;
-    
+
     /// <summary>
     /// The length of the input sequence.
     /// </summary>
@@ -439,7 +439,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Flatten batch and heads for 3D BatchMatMul: [B*H, S, D] @ [B*H, D, S] -> [B*H, S, S]
         var Q_3D = Q.Reshape(batchSize * _headCount, sequenceLength, _headDimension);
         var KT_3D = KT.Reshape(batchSize * _headCount, _headDimension, sequenceLength);
-        
+
         var attentionScores = Engine.BatchMatMul(Q_3D, KT_3D);
 
         // 3. Scale
@@ -451,7 +451,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Note: SoftmaxActivation should use Engine.Softmax which handles 3D tensors
         var softmaxActivation = new SoftmaxActivation<T>();
         var attentionWeights = softmaxActivation.Activate(attentionScores);
-        
+
         // Reshape for caching [B, H, S, S]
         _lastAttentionScores = attentionWeights.Reshape(batchSize, _headCount, sequenceLength, sequenceLength);
 
@@ -526,7 +526,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null || _lastAttentionScores == null)
-        throw new InvalidOperationException("Forward pass must be called before backward pass.");
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
 
@@ -841,13 +841,13 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 parameters[index++] = _valueWeights[i, j];
             }
         }
-    
+
         // Copy output bias
         for (int i = 0; i < biasLen; i++)
         {
             parameters[index++] = _outputBias[i];
         }
-    
+
         return parameters;
     }
 
@@ -1370,5 +1370,13 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                    _keyWeights.Shape.Length >= 2 && _keyWeights.Shape[0] > 0 &&
                    _valueWeights.Shape.Length >= 2 && _valueWeights.Shape[0] > 0;
         }
+    }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        return new Dictionary<string, string>
+        {
+            ["HeadCount"] = _headCount.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
     }
 }

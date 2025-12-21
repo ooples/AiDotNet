@@ -1,5 +1,5 @@
-using AiDotNet.Interfaces;
 using System.Collections.Generic;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -312,8 +312,7 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
             _bankIndicesB = GenerateRandomIndices(rank, bankSizeB);
         }
 
-        // Now that all fields are initialized, update the LoRA layer with bank-selected vectors
-        // This must happen after banks are initialized and indices are set
+        // Now that banks + indices are initialized, sync the underlying LoRA layer to the selected vectors.
         UpdateLoRALayerFromBanks(_loraLayer);
     }
 
@@ -324,43 +323,53 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <param name="outputSize">Output dimension for Bank B.</param>
     private void InitializeBanksIfNeeded(int inputSize, int outputSize)
     {
-        // Initialize Bank A if not exists
-        if (!_globalBankA.ContainsKey(_bankKey))
+        lock (_bankLock)
         {
-            Matrix<T> bankA = new Matrix<T>(inputSize, _bankSizeA);
-            T stddev = NumOps.Sqrt(NumOps.Divide(NumOps.One, NumOps.FromDouble(_bankSizeA)));
-
-            // Initialize with Gaussian random values (similar to standard LoRA A matrix)
-            for (int i = 0; i < inputSize; i++)
+            // Initialize Bank A if not exists
+            if (!_globalBankA.ContainsKey(_bankKey))
             {
-                for (int j = 0; j < _bankSizeA; j++)
+                Matrix<T> bankA = new Matrix<T>(inputSize, _bankSizeA);
+                T stddev = NumOps.Sqrt(NumOps.Divide(NumOps.One, NumOps.FromDouble(_bankSizeA)));
+
+                // Initialize with Gaussian random values (similar to standard LoRA A matrix)
+                for (int i = 0; i < inputSize; i++)
                 {
-                    // Box-Muller transform for Gaussian random numbers
-                    double u1 = Random.NextDouble();
-                    double u2 = Random.NextDouble();
-                    double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                    bankA[i, j] = NumOps.Multiply(NumOps.FromDouble(randStdNormal), stddev);
+                    for (int j = 0; j < _bankSizeA; j++)
+                    {
+                        // Box-Muller transform for Gaussian random numbers
+                        double u1 = Random.NextDouble();
+                        double u2 = Random.NextDouble();
+                        double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+                        bankA[i, j] = NumOps.Multiply(NumOps.FromDouble(randStdNormal), stddev);
+                    }
                 }
+
+                _globalBankA[_bankKey] = bankA;
             }
 
-            _globalBankA[_bankKey] = bankA;
-        }
-
-        // Initialize Bank B if not exists
-        if (!_globalBankB.ContainsKey(_bankKey))
-        {
-            Matrix<T> bankB = new Matrix<T>(_bankSizeB, outputSize);
-
-            // Initialize with zeros (so adapters start with no effect, like standard LoRA B matrix)
-            for (int i = 0; i < _bankSizeB; i++)
+            // Initialize Bank B if not exists
+            if (!_globalBankB.ContainsKey(_bankKey))
             {
-                for (int j = 0; j < outputSize; j++)
-                {
-                    bankB[i, j] = NumOps.Zero;
-                }
-            }
+                Matrix<T> bankB = new Matrix<T>(_bankSizeB, outputSize);
+                T stddev = NumOps.Multiply(
+                    NumOps.Sqrt(NumOps.Divide(NumOps.One, NumOps.FromDouble(_bankSizeB))),
+                    NumOps.FromDouble(0.01));
 
-            _globalBankB[_bankKey] = bankB;
+                // Initialize with small Gaussian random values so both A and B receive gradient signal immediately.
+                for (int i = 0; i < _bankSizeB; i++)
+                {
+                    for (int j = 0; j < outputSize; j++)
+                    {
+                        // Box-Muller transform for Gaussian random numbers
+                        double u1 = Random.NextDouble();
+                        double u2 = Random.NextDouble();
+                        double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+                        bankB[i, j] = NumOps.Multiply(NumOps.FromDouble(randStdNormal), stddev);
+                    }
+                }
+
+                _globalBankB[_bankKey] = bankB;
+            }
         }
     }
 
@@ -413,10 +422,12 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     protected override LoRALayer<T> CreateLoRALayer(int rank, double alpha)
     {
-        // Create a standard LoRA layer - bank-based initialization happens later in constructor
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputShape()[0];
 
+        // Important: this virtual is invoked from the base constructor, before VB-LoRA banks/indices are initialized.
+        // We therefore only construct a standard LoRA layer here and let the derived constructor/Forward() synchronize
+        // it with the vector banks once initialization is complete.
         return new LoRALayer<T>(inputSize, outputSize, rank, alpha);
     }
 
@@ -426,8 +437,13 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <param name="loraLayer">The LoRA layer to update.</param>
     private void UpdateLoRALayerFromBanks(LoRALayer<T> loraLayer)
     {
-        Matrix<T> bankA = _globalBankA[_bankKey];
-        Matrix<T> bankB = _globalBankB[_bankKey];
+        Matrix<T> bankA;
+        Matrix<T> bankB;
+        lock (_bankLock)
+        {
+            bankA = _globalBankA[_bankKey];
+            bankB = _globalBankB[_bankKey];
+        }
 
         // Build matrix A from selected bank columns
         Matrix<T> loraA = new Matrix<T>(bankA.Rows, Rank);
@@ -582,6 +598,9 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     public override ILayer<T> MergeToOriginalLayer()
     {
+        // Ensure the underlying LoRA layer reflects the latest shared bank state before merging.
+        UpdateLoRALayerFromBanks(_loraLayer);
+
         // Get the current LoRA weights from selected bank vectors
         Matrix<T> loraWeights = _loraLayer.MergeWeights();
 

@@ -202,7 +202,7 @@ namespace AiDotNet.Tokenization.Core
 
             return side == "left"
                 ? tokens.Skip(tokens.Count - maxLength).ToList()
-            
+
                 : tokens.Take(maxLength).ToList();
         }
 

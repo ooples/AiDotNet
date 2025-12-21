@@ -413,7 +413,7 @@ public class DDIMSchedulerTests
         {
             double current = scheduler.GetAlphaCumulativeProduct(t);
             Assert.True(current < prev,
-                $"Alpha cumprod at t={t} ({current}) should be less than at t={t-100} ({prev})");
+                $"Alpha cumprod at t={t} ({current}) should be less than at t={t - 100} ({prev})");
             prev = current;
         }
     }
@@ -482,7 +482,7 @@ public class DDIMSchedulerTests
         scheduler.SetTimesteps(20);
 
         var sample = new Vector<double>(new double[64]);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < sample.Length; i++)
         {
             sample[i] = random.NextDouble() * 2 - 1;

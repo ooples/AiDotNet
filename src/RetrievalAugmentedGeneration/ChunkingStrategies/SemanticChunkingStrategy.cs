@@ -41,7 +41,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
                     var chunkText = string.Join(" ", currentChunk);
                     var endPos = position + chunkText.Length;
                     yield return (chunkText, position, endPos);
-                    
+
                     position = endPos - ChunkOverlap;
                     currentChunk.Clear();
                     currentSize = 0;

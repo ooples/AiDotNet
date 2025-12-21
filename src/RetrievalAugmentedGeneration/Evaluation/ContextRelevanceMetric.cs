@@ -40,7 +40,7 @@ public class ContextRelevanceMetric<T> : RAGMetricBase<T>
             }
         }
 
-        return count > 0 
+        return count > 0
             ? NumOps.Divide(totalRelevance, NumOps.FromDouble(count))
             : NumOps.Zero;
     }

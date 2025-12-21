@@ -1,13 +1,13 @@
 // Nullable disabled: This test file intentionally passes null values to test argument validation
 #nullable disable
 
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using Xunit;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 {

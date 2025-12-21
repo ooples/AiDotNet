@@ -24,32 +24,32 @@ public class RadialBasisFunctionInterpolation<T> : I2DInterpolation<T>
     /// The x-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The z-values (heights) at each data point.
     /// </summary>
     private readonly Vector<T> _z;
-    
+
     /// <summary>
     /// The calculated weights for each radial basis function.
     /// </summary>
     private Vector<T> _weights;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// The matrix decomposition method used to solve the linear system.
     /// </summary>
     private readonly IMatrixDecomposition<T>? _decomposition;
-    
+
     /// <summary>
     /// The radial basis function used for interpolation.
     /// </summary>
@@ -78,7 +78,7 @@ public class RadialBasisFunctionInterpolation<T> : I2DInterpolation<T>
     /// - decomposition: Controls how the math equations are solved (most users can leave this as default)
     /// </para>
     /// </remarks>
-    public RadialBasisFunctionInterpolation(Vector<T> x, Vector<T> y, Vector<T> z, 
+    public RadialBasisFunctionInterpolation(Vector<T> x, Vector<T> y, Vector<T> z,
         IRadialBasisFunction<T>? rbf = null, IMatrixDecomposition<T>? decomposition = null)
     {
         if (x.Length != y.Length || x.Length != z.Length)

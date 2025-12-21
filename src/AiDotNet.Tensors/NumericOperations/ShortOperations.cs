@@ -6,7 +6,7 @@ using AiDotNet.Tensors.Operators;
 
 namespace AiDotNet.Tensors.NumericOperations;
 
-    /// <summary>
+/// <summary>
 /// Provides mathematical operations for the <see cref="short"/> data type.
 /// </summary>
 /// <remarks>

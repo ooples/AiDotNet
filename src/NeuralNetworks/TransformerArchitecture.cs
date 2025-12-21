@@ -323,10 +323,10 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
         double temperature = 1.0,
         List<ILayer<T>>? layers = null)
         : base(
-            inputType: inputType, 
-            taskType: taskType, 
+            inputType: inputType,
+            taskType: taskType,
             complexity: complexity,
-            inputSize: inputSize, 
+            inputSize: inputSize,
             outputSize: outputSize,
             layers: layers)
     {

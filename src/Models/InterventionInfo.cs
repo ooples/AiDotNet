@@ -55,7 +55,7 @@ public class InterventionInfo
     /// </para>
     /// </remarks>
     public int StartIndex { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the duration of the intervention in time units or sequence steps.
     /// </summary>

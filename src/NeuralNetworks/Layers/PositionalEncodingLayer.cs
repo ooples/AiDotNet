@@ -42,7 +42,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// will cause an exception when passed through the layer.
     /// </remarks>
     private readonly int maxSequenceLength;
-    
+
     /// <summary>
     /// The size of each embedding vector.
     /// </summary>
@@ -51,7 +51,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// positional encodings will be added.
     /// </remarks>
     private readonly int embeddingSize;
-    
+
     /// <summary>
     /// The pre-computed positional encodings tensor.
     /// </summary>
@@ -90,7 +90,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PositionalEncodingLayer{T}"/> class with the specified maximum sequence length and embedding size.
     /// </summary>
@@ -124,7 +124,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         encodings = new Tensor<T>([maxSequenceLength, embeddingSize]);
         InitializeEncodings();
     }
-    
+
     /// <summary>
     /// Initializes the positional encodings using sine and cosine functions.
     /// </summary>
@@ -171,7 +171,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
             }
         }
     }
-    
+
     /// <summary>
     /// Performs the forward pass of the positional encoding layer.
     /// </summary>
@@ -207,13 +207,13 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         {
             throw new ArgumentException($"Input sequence length {input.Shape[0]} exceeds maximum sequence length {maxSequenceLength}");
         }
-        
+
         var slicedEncodings = encodings.Slice(0, 0, input.Shape[0], embeddingSize);
-        
+
         // Use GPU-accelerated addition
         return Engine.TensorAdd(input, slicedEncodings);
     }
-    
+
     /// <summary>
     /// Performs the backward pass of the positional encoding layer.
     /// </summary>
@@ -336,7 +336,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         // The gradient flows through unchanged
         return outputGradient;
     }
-    
+
     /// <summary>
     /// Updates the parameters of the positional encoding layer using the calculated gradients.
     /// </summary>
@@ -360,7 +360,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     {
         // No parameters to update in this layer
     }
-    
+
     /// <summary>
     /// Gets all trainable parameters from the positional encoding layer as a single vector.
     /// </summary>
@@ -387,7 +387,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         // PositionalEncodingLayer has no trainable parameters
         return Vector<T>.Empty();
     }
-    
+
     /// <summary>
     /// Resets the internal state of the positional encoding layer.
     /// </summary>
@@ -429,4 +429,13 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     }
 
     public override bool SupportsJitCompilation => true;
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        return new Dictionary<string, string>
+        {
+            ["MaxSequenceLength"] = maxSequenceLength.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["EmbeddingSize"] = embeddingSize.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
+    }
 }

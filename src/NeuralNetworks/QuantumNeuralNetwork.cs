@@ -77,8 +77,8 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
 
-    public QuantumNeuralNetwork(NeuralNetworkArchitecture<T> architecture, int numQubits, 
-        INormalizer<T, Tensor<T>, Tensor<T>>? normalizer = null, ILossFunction<T>? lossFunction = null) : 
+    public QuantumNeuralNetwork(NeuralNetworkArchitecture<T> architecture, int numQubits,
+        INormalizer<T, Tensor<T>, Tensor<T>>? normalizer = null, ILossFunction<T>? lossFunction = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _numQubits = numQubits;
@@ -343,7 +343,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
             var realOutputGradient = ExtractRealPart(complexOutputGradient);
             var realLayerGradient = Layers[i].Backward(realOutputGradient);
             var complexLayerGradient = ConvertToComplexTensor(realLayerGradient);
-        
+
             gradients.Insert(0, ClipGradient(realLayerGradient));
             complexOutputGradient = complexLayerGradient;
         }

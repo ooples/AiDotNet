@@ -52,7 +52,7 @@ public class SphericalKernel<T> : IKernelFunction<T>
     /// The default value is 1.0, which provides a balanced range for many applications.
     /// </remarks>
     private readonly T _sigma;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

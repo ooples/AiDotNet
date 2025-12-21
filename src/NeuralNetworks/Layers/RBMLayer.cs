@@ -603,16 +603,16 @@ public class RBMLayer<T> : LayerBase<T>
         // 2. Build graph (mean-field inference: sigmoid(W @ v + b))
         // Reshape input [V] to [V, 1] for matrix multiply
         var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, _visibleUnits, 1);
-        
+
         // W @ v
         var weighted = Autodiff.TensorOperations<T>.MatrixMultiply(weightsNode, inputReshaped);
-        
+
         // Reshape to [H] to match bias
         var weightedFlat = Autodiff.TensorOperations<T>.Reshape(weighted, _hiddenUnits);
-        
+
         // Add bias
         var preActivation = Autodiff.TensorOperations<T>.Add(weightedFlat, biasNode);
-        
+
         // Sigmoid activation (RBM standard)
         var output = Autodiff.TensorOperations<T>.Sigmoid(preActivation);
 
@@ -662,7 +662,7 @@ public class RBMLayer<T> : LayerBase<T>
         // 6. Store gradients
         _weightsGradient = weightsNode.Gradient;
         _hiddenBiasesGradient = biasNode.Gradient;
-        
+
         // Visible biases are not involved in forward pass, so their gradient is zero for discriminative task
         _visibleBiasesGradient = new Tensor<T>(_visibleBiases.Shape);
         _visibleBiasesGradient.Fill(NumOps.Zero);

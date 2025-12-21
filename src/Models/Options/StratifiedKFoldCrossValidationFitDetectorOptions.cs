@@ -70,7 +70,7 @@ public class StratifiedKFoldCrossValidationFitDetectorOptions
     /// </para>
     /// </remarks>
     public double OverfitThreshold { get; set; } = 0.1;
-    
+
     /// <summary>
     /// Gets or sets the threshold for detecting underfitting.
     /// </summary>
@@ -109,7 +109,7 @@ public class StratifiedKFoldCrossValidationFitDetectorOptions
     /// </para>
     /// </remarks>
     public double UnderfitThreshold { get; set; } = 0.6;
-    
+
     /// <summary>
     /// Gets or sets the threshold for detecting high variance.
     /// </summary>
@@ -148,7 +148,7 @@ public class StratifiedKFoldCrossValidationFitDetectorOptions
     /// </para>
     /// </remarks>
     public double HighVarianceThreshold { get; set; } = 0.1;
-    
+
     /// <summary>
     /// Gets or sets the threshold for determining a good fit.
     /// </summary>
@@ -189,7 +189,7 @@ public class StratifiedKFoldCrossValidationFitDetectorOptions
     /// </para>
     /// </remarks>
     public double GoodFitThreshold { get; set; } = 0.8;
-    
+
     /// <summary>
     /// Gets or sets the threshold for determining model stability.
     /// </summary>
@@ -229,7 +229,7 @@ public class StratifiedKFoldCrossValidationFitDetectorOptions
     /// </para>
     /// </remarks>
     public double StabilityThreshold { get; set; } = 0.05;
-    
+
     /// <summary>
     /// Gets or sets the primary metric used for evaluating model fit.
     /// </summary>

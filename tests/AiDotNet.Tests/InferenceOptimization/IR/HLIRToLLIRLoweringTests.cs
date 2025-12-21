@@ -1,8 +1,8 @@
 using AiDotNet.Enums;
 using AiDotNet.InferenceOptimization.IR.Common;
 using AiDotNet.InferenceOptimization.IR.HighLevel;
-using AiDotNet.InferenceOptimization.IR.LowLevel;
 using AiDotNet.InferenceOptimization.IR.Lowering;
+using AiDotNet.InferenceOptimization.IR.LowLevel;
 using Xunit;
 
 namespace AiDotNet.Tests.InferenceOptimization.IR;

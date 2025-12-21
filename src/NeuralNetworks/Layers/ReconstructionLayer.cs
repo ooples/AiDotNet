@@ -40,7 +40,7 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// It applies the hidden activation function to its output.
     /// </remarks>
     private readonly FullyConnectedLayer<T> _fc1;
-    
+
     /// <summary>
     /// The second fully connected layer in the reconstruction sequence.
     /// </summary>
@@ -49,7 +49,7 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// It also applies the hidden activation function to its output.
     /// </remarks>
     private readonly FullyConnectedLayer<T> _fc2;
-    
+
     /// <summary>
     /// The third fully connected layer in the reconstruction sequence.
     /// </summary>
@@ -58,7 +58,7 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// It applies the output activation function, which is often sigmoid for reconstruction tasks.
     /// </remarks>
     private readonly FullyConnectedLayer<T> _fc3;
-    
+
     /// <summary>
     /// Flag indicating whether vector activation functions are used instead of scalar activation functions.
     /// </summary>

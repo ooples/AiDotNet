@@ -400,7 +400,7 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     {
         // Get the total number of nodes in the tree
         int nodeCount = CountNodes(Root);
-    
+
         // For each node, we store:
         // 1. Feature index (as converted double)
         // 2. Split value 
@@ -408,20 +408,20 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         // 4. IsLeaf flag (as converted double: 1.0 for leaf, 0.0 for non-leaf)
         // Plus we need one additional parameter for the node count
         Vector<T> parameters = new(nodeCount * 4 + 1);
-    
+
         // Store the node count as the first parameter
         parameters[0] = NumOps.FromDouble(nodeCount);
-    
+
         // If the tree is empty, return just the node count
         if (Root == null)
         {
             return parameters;
         }
-    
+
         // Traverse the tree and store each node's parameters
         int currentIndex = 1;
         SerializeNodeToVector(Root, parameters, ref currentIndex);
-    
+
         return parameters;
     }
 
@@ -452,39 +452,39 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     {
         // Create a new instance with the same options
         var newModel = CreateNewInstance();
-    
+
         // If the parameter vector is empty or invalid, return the empty model
         if (parameters.Length < 1)
         {
             return newModel;
         }
-    
+
         // Get the node count from the first parameter
         int nodeCount = NumOps.ToInt32(parameters[0]);
-    
+
         // If there are no nodes, return the empty model
         if (nodeCount == 0)
         {
             return newModel;
         }
-    
+
         // Check if the parameter vector has the expected length
         if (parameters.Length != nodeCount * 4 + 1)
         {
             throw new ArgumentException("Invalid parameter vector length");
         }
-    
+
         // Reconstruct the tree from the parameter vector
         int currentIndex = 1;
         ((AsyncDecisionTreeRegressionBase<T>)newModel).Root = DeserializeNodeFromVector(parameters, ref currentIndex);
-    
+
         // Assume the feature importances are already calculated and stored in the parameters
         // or recalculate them based on the reconstructed tree
         if (FeatureImportances.Length > 0)
         {
             ((AsyncDecisionTreeRegressionBase<T>)newModel).FeatureImportances = new Vector<T>(FeatureImportances);
         }
-    
+
         return newModel;
     }
 
@@ -667,19 +667,19 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     {
         // Create a new instance with the same options
         var clone = CreateNewInstance();
-    
+
         // Deep copy the tree structure
         if (Root != null)
         {
             ((AsyncDecisionTreeRegressionBase<T>)clone).Root = DeepCloneNode(Root);
         }
-    
+
         // Copy feature importances
         if (FeatureImportances.Length > 0)
         {
             ((AsyncDecisionTreeRegressionBase<T>)clone).FeatureImportances = new Vector<T>(FeatureImportances);
         }
-    
+
         return clone;
     }
 
@@ -719,7 +719,7 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     {
         if (node == null)
             return 0;
-    
+
         return 1 + CountNodes(node.Left) + CountNodes(node.Right);
     }
 
@@ -736,11 +736,11 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         parameters[currentIndex++] = node.SplitValue;
         parameters[currentIndex++] = node.Prediction;
         parameters[currentIndex++] = NumOps.FromDouble(node.IsLeaf ? 1.0 : 0.0);
-    
+
         // Recursively serialize child nodes
         if (node.Left != null)
             SerializeNodeToVector(node.Left, parameters, ref currentIndex);
-    
+
         if (node.Right != null)
             SerializeNodeToVector(node.Right, parameters, ref currentIndex);
     }
@@ -758,7 +758,7 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         T splitValue = parameters[currentIndex++];
         T prediction = parameters[currentIndex++];
         bool isLeaf = NumOps.ToInt32(parameters[currentIndex++]) == 1;
-    
+
         // Create the node
         var node = new DecisionTreeNode<T>
         {
@@ -767,14 +767,14 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
             Prediction = prediction,
             IsLeaf = isLeaf
         };
-    
+
         // If it's not a leaf node, recursively deserialize child nodes
         if (!isLeaf)
         {
             node.Left = DeserializeNodeFromVector(parameters, ref currentIndex);
             node.Right = DeserializeNodeFromVector(parameters, ref currentIndex);
         }
-    
+
         return node;
     }
 
@@ -787,13 +787,13 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     {
         if (node == null)
             return;
-    
+
         // If it's not a leaf node, add its feature index to the set
         if (!node.IsLeaf)
         {
             activeFeatures.Add(node.FeatureIndex);
         }
-    
+
         // Recursively collect features from child nodes
         CollectActiveFeatures(node.Left, activeFeatures);
         CollectActiveFeatures(node.Right, activeFeatures);
@@ -809,13 +809,13 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     {
         if (node == null)
             return false;
-    
+
         // Check if this node uses the feature
         if (!node.IsLeaf && node.FeatureIndex == featureIndex)
             return true;
-    
+
         // Recursively check child nodes
-        return IsFeatureUsedInSubtree(node.Left, featureIndex) || 
+        return IsFeatureUsedInSubtree(node.Left, featureIndex) ||
                IsFeatureUsedInSubtree(node.Right, featureIndex);
     }
 

@@ -28,12 +28,12 @@ public class WhittakerShannonInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates (values) of the data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
@@ -167,7 +167,7 @@ public class WhittakerShannonInterpolation<T> : IInterpolation<T>
 
         for (int i = 2; i < _x.Length; i++)
         {
-            T currentInterval = _numOps.Subtract(_x[i], _x[i-1]);
+            T currentInterval = _numOps.Subtract(_x[i], _x[i - 1]);
             if (_numOps.GreaterThan(_numOps.Abs(_numOps.Subtract(currentInterval, interval)), tolerance))
             {
                 return false;

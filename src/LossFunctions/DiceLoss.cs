@@ -36,7 +36,7 @@ public class DiceLoss<T> : LossFunctionBase<T>
     public DiceLoss()
     {
     }
-    
+
     /// <summary>
     /// Calculates the Dice loss between predicted and actual values.
     /// </summary>
@@ -46,18 +46,18 @@ public class DiceLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T intersection = NumOps.Zero;
         T sumPredicted = NumOps.Zero;
         T sumActual = NumOps.Zero;
-        
+
         for (int i = 0; i < predicted.Length; i++)
         {
             intersection = NumOps.Add(intersection, NumOps.Multiply(predicted[i], actual[i]));
             sumPredicted = NumOps.Add(sumPredicted, predicted[i]);
             sumActual = NumOps.Add(sumActual, actual[i]);
         }
-        
+
         // Use NumericalStabilityHelper.SafeDiv to prevent division by zero
         T denominator = NumOps.Add(sumPredicted, sumActual);
         T diceCoefficient = NumericalStabilityHelper.SafeDiv(
@@ -65,10 +65,10 @@ public class DiceLoss<T> : LossFunctionBase<T>
             denominator,
             NumericalStabilityHelper.SmallEpsilon
         );
-        
+
         return NumOps.Subtract(NumOps.One, diceCoefficient);
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the Dice loss function.
     /// </summary>
@@ -78,19 +78,19 @@ public class DiceLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         Vector<T> derivative = new Vector<T>(predicted.Length);
         T intersection = NumOps.Zero;
         T sumPredicted = NumOps.Zero;
         T sumActual = NumOps.Zero;
-        
+
         for (int i = 0; i < predicted.Length; i++)
         {
             intersection = NumOps.Add(intersection, NumOps.Multiply(predicted[i], actual[i]));
             sumPredicted = NumOps.Add(sumPredicted, predicted[i]);
             sumActual = NumOps.Add(sumActual, actual[i]);
         }
-        
+
         // Use NumericalStabilityHelper.SafeDiv to prevent division by zero
         T denominator = NumOps.Power(NumOps.Add(sumPredicted, sumActual), NumOps.FromDouble(2));
 
@@ -103,7 +103,7 @@ public class DiceLoss<T> : LossFunctionBase<T>
 
             derivative[i] = NumericalStabilityHelper.SafeDiv(numerator, denominator, NumericalStabilityHelper.SmallEpsilon);
         }
-        
+
         return derivative;
     }
 }

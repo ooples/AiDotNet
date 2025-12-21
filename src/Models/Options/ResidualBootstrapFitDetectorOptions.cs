@@ -73,7 +73,7 @@ public class ResidualBootstrapFitDetectorOptions
     /// </para>
     /// </remarks>
     public int NumBootstrapSamples { get; set; } = 1000;
-    
+
     /// <summary>
     /// Gets or sets the minimum sample size required for bootstrap analysis.
     /// </summary>
@@ -109,7 +109,7 @@ public class ResidualBootstrapFitDetectorOptions
     /// </para>
     /// </remarks>
     public int MinSampleSize { get; set; } = 30;
-    
+
     /// <summary>
     /// Gets or sets the threshold for detecting overfitting in the model.
     /// </summary>
@@ -146,7 +146,7 @@ public class ResidualBootstrapFitDetectorOptions
     /// </para>
     /// </remarks>
     public double OverfitThreshold { get; set; } = 1.96; // ~95% confidence level
-    
+
     /// <summary>
     /// Gets or sets the threshold for detecting underfitting in the model.
     /// </summary>
@@ -183,7 +183,7 @@ public class ResidualBootstrapFitDetectorOptions
     /// </para>
     /// </remarks>
     public double UnderfitThreshold { get; set; } = -1.96; // ~95% confidence level
-    
+
     /// <summary>
     /// Gets or sets the random seed for the bootstrap sampling process.
     /// </summary>

@@ -30,9 +30,9 @@ public static class InputHelper<T, TInput>
         return input switch
         {
             Matrix<T> matrix => matrix.Columns,
-            Tensor<T> tensor => tensor.Shape.Length >= 2 
-                ? (tensor.Shape.Length == 2 
-                    ? tensor.Shape[1] 
+            Tensor<T> tensor => tensor.Shape.Length >= 2
+                ? (tensor.Shape.Length == 2
+                    ? tensor.Shape[1]
                     : tensor.Shape.Skip(1).Aggregate((a, b) => a * b))
                 : tensor.Shape[0],
             _ => throw new ArgumentException("Unsupported input type")
@@ -75,7 +75,7 @@ public static class InputHelper<T, TInput>
             }
             return matrix[row, column];
         }
-    
+
         // Handle Vector<T>
         else if (input is Vector<T> vector)
         {
@@ -88,12 +88,12 @@ public static class InputHelper<T, TInput>
             {
                 return vector[column];
             }
-        
+
             throw new ArgumentOutOfRangeException(
                 $"Invalid indices ({row}, {column}) for vector with length {vector.Length}. " +
                 $"For vectors, either row or column must be 0, and the other index must be within bounds.");
         }
-    
+
         // Handle Tensor<T>
         else if (input is Tensor<T> tensor)
         {
@@ -110,22 +110,22 @@ public static class InputHelper<T, TInput>
                     }
                     return tensor[index];
                 }
-            
+
                 throw new ArgumentException(
                     $"Tensor has {tensor.Shape.Length} dimensions. At least 1 dimension is required to access elements using indices.");
             }
-        
+
             // Handle 2D or higher tensor
-            if (row < 0 || row >= tensor.Shape[0] || column < 0 || 
+            if (row < 0 || row >= tensor.Shape[0] || column < 0 ||
                 (tensor.Shape.Length > 1 && column >= tensor.Shape[1]))
             {
                 throw new ArgumentOutOfRangeException(
                     $"Indices ({row}, {column}) are out of range for tensor with shape {string.Join("x", tensor.Shape)}.");
             }
-        
+
             return tensor[row, column];
         }
-    
+
         throw new ArgumentException(
             $"Unsupported input type: {input.GetType().Name}. " +
             $"The GetElement method only supports Matrix<T>, Vector<T>, and Tensor<T>.");
@@ -580,49 +580,49 @@ public static class InputHelper<T, TInput>
     {
         if (input == null)
             throw new ArgumentNullException(nameof(input), "Input cannot be null.");
-        
+
         if (index < 0)
             throw new ArgumentOutOfRangeException(nameof(index), "Index cannot be negative.");
-        
+
         // Handle Vector<T> input
         if (input is Vector<T> vector)
         {
             if (index >= vector.Length)
                 throw new ArgumentOutOfRangeException(nameof(index), "Index exceeds vector length.");
-            
+
             // Create a new vector with a single element
             var singletonVector = new Vector<T>(1);
             singletonVector[0] = vector[index];
-        
+
             return (TInput)(object)singletonVector;
         }
-    
+
         // Handle Matrix<T> input
         if (input is Matrix<T> matrix)
         {
             if (index >= matrix.Rows)
                 throw new ArgumentOutOfRangeException(nameof(index), "Index exceeds matrix row count.");
-            
+
             // Return a single row as a Vector<T>
             var rowVector = new Vector<T>(matrix.Columns);
             for (int i = 0; i < matrix.Columns; i++)
             {
                 rowVector[i] = matrix[index, i];
             }
-        
+
             return (TInput)(object)rowVector;
         }
-    
+
         // Handle Tensor<T> input
         if (input is Tensor<T> tensor)
         {
             if (index >= tensor.Shape[0])
                 throw new ArgumentOutOfRangeException(nameof(index), "Index exceeds tensor's first dimension.");
-            
+
             // Extract a slice from the tensor
             return (TInput)(object)tensor.Slice(index);
         }
-    
+
         // If input is not one of our supported types
         throw new NotSupportedException($"Input type {typeof(TInput).Name} is not supported. Expected Vector<T>, Matrix<T>, or Tensor<T>.");
     }
@@ -646,38 +646,38 @@ public static class InputHelper<T, TInput>
     {
         if (input == null)
             throw new ArgumentNullException(nameof(input), "Input cannot be null.");
-        
+
         if (featureIndex < 0)
             throw new ArgumentOutOfRangeException(nameof(featureIndex), "Feature index cannot be negative.");
-    
+
         // Handle scalar value case (when TInput is the same as T)
         if (input is T scalarValue && featureIndex == 0)
         {
             return scalarValue;
         }
-    
+
         // Handle Vector<T> input
         if (input is Vector<T> vector)
         {
             if (featureIndex >= vector.Length)
                 throw new ArgumentOutOfRangeException(nameof(featureIndex), "Feature index exceeds vector length.");
-            
+
             return vector[featureIndex];
         }
-    
+
         // Handle Matrix<T> input
         if (input is Matrix<T> matrix)
         {
             if (matrix.Rows == 0)
                 throw new ArgumentException("Matrix has no rows.", nameof(input));
-            
+
             if (featureIndex >= matrix.Columns)
                 throw new ArgumentOutOfRangeException(nameof(featureIndex), "Feature index exceeds matrix column count.");
-            
+
             // Assuming this is a single row matrix or we're getting a feature from the first row
             return matrix[0, featureIndex];
         }
-    
+
         // Handle Tensor<T> input
         if (input is Tensor<T> tensor)
         {
@@ -686,21 +686,21 @@ public static class InputHelper<T, TInput>
             {
                 if (featureIndex >= tensor.Shape[0])
                     throw new ArgumentOutOfRangeException(nameof(featureIndex), "Feature index exceeds tensor dimension.");
-                
+
                 return tensor[featureIndex];
             }
-        
+
             // For higher rank tensors, assume we want the first element along higher dimensions
             if (featureIndex >= tensor.Shape[tensor.Rank - 1])
                 throw new ArgumentOutOfRangeException(nameof(featureIndex), "Feature index exceeds tensor's last dimension.");
-            
+
             // Create index array with all zeros except the last dimension
             int[] indices = new int[tensor.Rank];
             indices[tensor.Rank - 1] = featureIndex;
-        
+
             return tensor[indices];
         }
-    
+
         // If input is not one of our supported types
         throw new NotSupportedException($"Input type {typeof(TInput).Name} is not supported. Expected T, Vector<T>, Matrix<T>, or Tensor<T>.");
     }

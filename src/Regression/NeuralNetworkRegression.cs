@@ -826,23 +826,23 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         var newModel = new NeuralNetworkRegression<T>(_options, Regularization);
-        
+
         // Clear the auto-initialized weights and biases
         newModel._weights.Clear();
         newModel._biases.Clear();
-        
+
         // Deep copy all weight matrices
         foreach (var weight in _weights)
         {
             newModel._weights.Add(weight.Clone());
         }
-        
+
         // Deep copy all bias vectors
         foreach (var bias in _biases)
         {
             newModel._biases.Add(bias.Clone());
         }
-        
+
         return newModel;
     }
 }

@@ -41,15 +41,15 @@ public static class FeatureSelectorHelper<T, TInput>
     /// </para>
     /// </remarks>
     public static Vector<T> ExtractFeatureVector(
-        TInput input, 
-        int featureIndex, 
-        int numSamples, 
+        TInput input,
+        int featureIndex,
+        int numSamples,
         FeatureExtractionStrategy higherDimensionStrategy,
         Dictionary<int, T> dimensionWeights)
     {
         var featureVector = new Vector<T>(numSamples);
         var numOps = MathHelper.GetNumericOperations<T>();
-    
+
         if (input is Matrix<T> matrix)
         {
             return matrix.GetColumn(featureIndex);
@@ -108,7 +108,7 @@ public static class FeatureSelectorHelper<T, TInput>
             found = true;
             return;
         }
-    
+
         // Recursive case: iterate through all values in the current dimension
         for (int i = 0; i < tensor.Shape[dimension]; i++)
         {
@@ -179,14 +179,14 @@ public static class FeatureSelectorHelper<T, TInput>
         {
             throw new InvalidOperationException("Weights must be provided for weighted sum feature extraction");
         }
-    
+
         T sum = _numOps.Zero;
         int[] indices = new int[tensor.Rank];
         indices[0] = sampleIndex;
         indices[1] = featureIndex;
-    
+
         CalculateWeightedSumRecursive(tensor, indices, 2, weights, ref sum);
-    
+
         return sum;
     }
 
@@ -213,11 +213,11 @@ public static class FeatureSelectorHelper<T, TInput>
                     weight = _numOps.Multiply(weight, dimensionWeight);
                 }
             }
-        
+
             sum = _numOps.Add(sum, _numOps.Multiply(tensor[indices], weight));
             return;
         }
-    
+
         // Recursive case: iterate through all values in the current dimension
         for (int i = 0; i < tensor.Shape[dimension]; i++)
         {
@@ -247,14 +247,14 @@ public static class FeatureSelectorHelper<T, TInput>
         int[] indices = new int[tensor.Rank];
         indices[0] = sampleIndex;
         indices[1] = featureIndex;
-    
+
         CalculateMaxRecursive(tensor, indices, 2, ref max, ref found);
-    
+
         if (!found)
         {
             throw new InvalidOperationException("No elements found when calculating max feature");
         }
-    
+
         return max;
     }
 
@@ -330,22 +330,22 @@ public static class FeatureSelectorHelper<T, TInput>
     /// </remarks>
     public static TInput CreateFilteredData(TInput originalData, List<int> selectedFeatureIndices)
     {
-        if (originalData is Matrix<T> matrix)
-        {
-            var selectedColumns = selectedFeatureIndices
-                .Select(i => matrix.GetColumn(i))
-                .ToArray();
+            if (originalData is Matrix<T> matrix)
+            {
+                var selectedColumns = selectedFeatureIndices
+                    .Select(i => matrix.GetColumn(i))
+                    .ToArray();
 
-            return (TInput)(object)Matrix<T>.FromColumns(selectedColumns);
-        }
+                return (TInput)(object)Matrix<T>.FromColumns(selectedColumns);
+            }
         else if (originalData is Tensor<T> tensor)
         {
             // Create a new tensor with only the selected features
             int[] newShape = (int[])tensor.Shape.Clone();
             newShape[1] = selectedFeatureIndices.Count;
-        
+
             var resultTensor = new Tensor<T>(newShape);
-        
+
             // Copy the selected features to the result tensor
             for (int i = 0; i < tensor.Shape[0]; i++) // For each sample
             {
@@ -354,7 +354,7 @@ public static class FeatureSelectorHelper<T, TInput>
                     CopyFeature(tensor, resultTensor, i, selectedFeatureIndices[j], j);
                 }
             }
-        
+
             return (TInput)(object)resultTensor;
         }
         else
@@ -425,7 +425,7 @@ public static class FeatureSelectorHelper<T, TInput>
             count++;
             return;
         }
-    
+
         // Recursive case: iterate through all values in the current dimension
         for (int i = 0; i < tensor.Shape[dimension]; i++)
         {
@@ -457,14 +457,14 @@ public static class FeatureSelectorHelper<T, TInput>
         int[] indices = new int[tensor.Rank];
         indices[0] = sampleIndex;
         indices[1] = featureIndex;
-    
+
         CalculateMeanRecursive(tensor, indices, 2, ref sum, ref count);
-    
+
         if (count == 0)
         {
             throw new InvalidOperationException("No elements found when calculating mean feature");
         }
-    
+
         return _numOps.Divide(sum, _numOps.FromDouble(count));
     }
 
@@ -477,7 +477,7 @@ public static class FeatureSelectorHelper<T, TInput>
     // - CalculateWeightedSum
     // - CalculateWeightedSumRecursive
     // - CopyFeature
-    
+
     // For brevity, I'm not showing all implementations here, but they would be 
     // the same as in the CorrelationFeatureSelector class, just moved to this helper class
 }

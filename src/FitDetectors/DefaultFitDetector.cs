@@ -94,7 +94,7 @@ public class DefaultFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput,
             return FitType.HighVariance;
         if (NumOps.LessThan(training.R2, threshold05) && NumOps.LessThan(validation.R2, threshold05) && NumOps.LessThan(test.R2, threshold05))
             return FitType.HighBias;
-        
+
         return FitType.Unstable;
     }
 
@@ -114,7 +114,7 @@ public class DefaultFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput,
     /// </remarks>
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        return NumOps.Divide(NumOps.Add(NumOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2), 
+        return NumOps.Divide(NumOps.Add(NumOps.Add(evaluationData.TrainingSet.PredictionStats.R2, evaluationData.ValidationSet.PredictionStats.R2),
             evaluationData.TestSet.PredictionStats.R2), NumOps.FromDouble(3));
     }
 

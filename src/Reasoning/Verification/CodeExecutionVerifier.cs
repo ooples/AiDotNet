@@ -1,8 +1,8 @@
-using AiDotNet.Interfaces;
-using AiDotNet.Reasoning.Models;
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using AiDotNet.Interfaces;
+using AiDotNet.Reasoning.Models;
 
 namespace AiDotNet.Reasoning.Verification;
 

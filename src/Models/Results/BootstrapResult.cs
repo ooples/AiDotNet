@@ -65,7 +65,7 @@ namespace AiDotNet.Models.Results
         /// </para>
         /// </remarks>
         public T TrainingR2 { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the R² value for the validation dataset.
         /// </summary>
@@ -97,7 +97,7 @@ namespace AiDotNet.Models.Results
         /// </para>
         /// </remarks>
         public T ValidationR2 { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the R² value for the test dataset.
         /// </summary>

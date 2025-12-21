@@ -56,6 +56,16 @@ public abstract class TensorBase<T>
     public int Rank => Shape.Length;
 
     /// <summary>
+    /// Gets direct access to the underlying data array for high-performance operations.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Warning:</b> This property provides direct access to internal storage.
+    /// Modifications to this array will affect the tensor. Use with caution in
+    /// performance-critical code paths like SIMD operations.</para>
+    /// </remarks>
+    public T[] Data => _data.Data;
+
+    /// <summary>
     /// Initializes a new instance of the TensorBase class with the specified shape.
     /// </summary>
     /// <param name="shape">The shape of the tensor.</param>
@@ -98,6 +108,22 @@ public abstract class TensorBase<T>
             ValidateIndices(indices);
             _data[GetFlatIndex(indices)] = value;
         }
+    }
+
+    /// <summary>
+    /// Gets or sets the value at the specified flat index.
+    /// </summary>
+    /// <param name="flatIndex">The flat (linear) index of the element.</param>
+    /// <returns>The value at the specified flat index.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This indexer allows accessing tensor elements using a single
+    /// index that treats the tensor as a 1D array. The flat index corresponds to
+    /// row-major ordering where the last dimension varies fastest.</para>
+    /// </remarks>
+    public virtual T this[int flatIndex]
+    {
+        get => GetFlat(flatIndex);
+        set => SetFlat(flatIndex, value);
     }
 
     /// <summary>

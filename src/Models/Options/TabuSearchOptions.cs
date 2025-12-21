@@ -77,7 +77,7 @@ public class TabuSearchOptions<T, TInput, TOutput> : GeneticAlgorithmOptimizerOp
     /// </para>
     /// </remarks>
     public int TabuListSize { get; set; } = 10;
-    
+
     /// <summary>
     /// Gets or sets the size of the neighborhood to explore in each iteration.
     /// </summary>
@@ -116,7 +116,7 @@ public class TabuSearchOptions<T, TInput, TOutput> : GeneticAlgorithmOptimizerOp
     /// </para>
     /// </remarks>
     public int NeighborhoodSize { get; set; } = 20;
-    
+
     /// <summary>
     /// Gets or sets the factor for perturbing solutions to generate neighbors.
     /// </summary>
@@ -156,7 +156,7 @@ public class TabuSearchOptions<T, TInput, TOutput> : GeneticAlgorithmOptimizerOp
     /// </para>
     /// </remarks>
     public double PerturbationFactor { get; set; } = 0.1;
-    
+
     /// <summary>
     /// Gets or sets the probability of mutation in the search process.
     /// </summary>
@@ -197,7 +197,7 @@ public class TabuSearchOptions<T, TInput, TOutput> : GeneticAlgorithmOptimizerOp
     /// </para>
     /// </remarks>
     public new double MutationRate { get; set; } = 0.1;
-    
+
     /// <summary>
     /// Gets or sets the minimum ratio of features to consider in the search.
     /// </summary>
@@ -236,7 +236,7 @@ public class TabuSearchOptions<T, TInput, TOutput> : GeneticAlgorithmOptimizerOp
     /// </para>
     /// </remarks>
     public double MinFeatureRatio { get; set; } = 0.1;
-    
+
     /// <summary>
     /// Gets or sets the maximum ratio of features to consider in the search.
     /// </summary>
@@ -276,7 +276,7 @@ public class TabuSearchOptions<T, TInput, TOutput> : GeneticAlgorithmOptimizerOp
     /// </para>
     /// </remarks>
     public double MaxFeatureRatio { get; set; } = 0.9;
-    
+
     /// <summary>
     /// Gets or sets the initial size of the tabu list.
     /// </summary>

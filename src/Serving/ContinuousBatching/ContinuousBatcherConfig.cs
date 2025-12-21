@@ -36,6 +36,34 @@ public class ContinuousBatcherConfig
     public bool EnableSpeculativeDecoding { get; set; } = false;
 
     /// <summary>
+    /// Policy for when speculative decoding should run (default: Auto).
+    /// </summary>
+    public AiDotNet.Configuration.SpeculationPolicy SpeculationPolicy { get; set; } = AiDotNet.Configuration.SpeculationPolicy.Auto;
+
+    /// <summary>
+    /// Number of tokens to draft ahead when speculative decoding is enabled.
+    /// </summary>
+    public int SpeculationDepth { get; set; } = 4;
+
+    /// <summary>
+    /// Speculative decoding method to use (default: Auto).
+    /// </summary>
+    /// <remarks>
+    /// This keeps the public serving surface compact while enabling internal selection of
+    /// classic draft-model speculation vs tree-based alternatives (Medusa/EAGLE).
+    /// </remarks>
+    public AiDotNet.Configuration.SpeculativeMethod SpeculativeMethod { get; set; } = AiDotNet.Configuration.SpeculativeMethod.Auto;
+
+    /// <summary>
+    /// Whether to use tree-based speculation (multiple draft continuations).
+    /// </summary>
+    /// <remarks>
+    /// This is an advanced option; when false the batcher uses classic speculative decoding.
+    /// Some speculative methods may implicitly enable this internally.
+    /// </remarks>
+    public bool UseTreeSpeculation { get; set; } = false;
+
+    /// <summary>
     /// Creates config for a specific model.
     /// </summary>
     public static ContinuousBatcherConfig ForModel(string modelName, int maxBatchSize = 8)

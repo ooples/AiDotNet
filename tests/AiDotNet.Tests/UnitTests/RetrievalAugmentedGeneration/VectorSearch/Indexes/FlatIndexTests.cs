@@ -331,7 +331,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             var index = new FlatIndex<double>(metric);
 
             // Add 100 random vectors
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < 100; i++)
             {
                 var vector = new Vector<double>(Enumerable.Range(0, 10)

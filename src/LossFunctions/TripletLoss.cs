@@ -33,7 +33,7 @@ public class TripletLoss<T> : LossFunctionBase<T>
     /// The margin that enforces separation between positive and negative pairs.
     /// </summary>
     private readonly T _margin;
-    
+
     /// <summary>
     /// Initializes a new instance of the TripletLoss class.
     /// </summary>
@@ -42,7 +42,7 @@ public class TripletLoss<T> : LossFunctionBase<T>
     {
         _margin = NumOps.FromDouble(margin);
     }
-    
+
     /// <summary>
     /// Calculates the Triplet Loss for embedding learning.
     /// </summary>
@@ -59,34 +59,34 @@ public class TripletLoss<T> : LossFunctionBase<T>
         {
             throw new ArgumentException("Anchor, positive, and negative matrices must have the same dimensions.");
         }
-        
+
         var batchSize = anchor.Rows;
         var totalLoss = NumOps.Zero;
-        
+
         for (int i = 0; i < batchSize; i++)
         {
             var anchorSample = anchor.GetRow(i);
             var positiveSample = positive.GetRow(i);
             var negativeSample = negative.GetRow(i);
-            
+
             var positiveDistance = EuclideanDistance(anchorSample, positiveSample);
             var negativeDistance = EuclideanDistance(anchorSample, negativeSample);
-            
+
             // max(0, positive_distance - negative_distance + margin)
             var loss = MathHelper.Max(
-                NumOps.Zero, 
+                NumOps.Zero,
                 NumOps.Add(
-                    NumOps.Subtract(positiveDistance, negativeDistance), 
+                    NumOps.Subtract(positiveDistance, negativeDistance),
                     _margin
                 )
             );
-            
+
             totalLoss = NumOps.Add(totalLoss, loss);
         }
-        
+
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
-    
+
     /// <summary>
     /// Calculates the gradients of the Triplet Loss function for anchor, positive, and negative samples.
     /// </summary>
@@ -103,28 +103,28 @@ public class TripletLoss<T> : LossFunctionBase<T>
         {
             throw new ArgumentException("Anchor, positive, and negative matrices must have the same dimensions.");
         }
-        
+
         var batchSize = anchor.Rows;
         var featureCount = anchor.Columns;
-        
+
         var anchorGradient = new Matrix<T>(batchSize, featureCount);
         var positiveGradient = new Matrix<T>(batchSize, featureCount);
         var negativeGradient = new Matrix<T>(batchSize, featureCount);
-        
+
         for (int i = 0; i < batchSize; i++)
         {
             var anchorSample = anchor.GetRow(i);
             var positiveSample = positive.GetRow(i);
             var negativeSample = negative.GetRow(i);
-            
+
             var positiveDistance = EuclideanDistance(anchorSample, positiveSample);
             var negativeDistance = EuclideanDistance(anchorSample, negativeSample);
-            
+
             var loss = NumOps.Subtract(
-                NumOps.Add(positiveDistance, _margin), 
+                NumOps.Add(positiveDistance, _margin),
                 negativeDistance
             );
-            
+
             if (NumOps.GreaterThan(loss, NumOps.Zero))
             {
                 // Only compute gradients if loss > 0 (the triplet is active)
@@ -132,22 +132,22 @@ public class TripletLoss<T> : LossFunctionBase<T>
                 {
                     var anchorPositiveDiff = NumOps.Subtract(anchorSample[j], positiveSample[j]);
                     var anchorNegativeDiff = NumOps.Subtract(anchorSample[j], negativeSample[j]);
-                    
+
                     // Gradient for anchor: 2*(anchor - positive) - 2*(anchor - negative)
                     anchorGradient[i, j] = NumOps.Multiply(
-                        NumOps.FromDouble(2), 
+                        NumOps.FromDouble(2),
                         NumOps.Subtract(anchorPositiveDiff, anchorNegativeDiff)
                     );
-                    
+
                     // Gradient for positive: -2*(anchor - positive)
                     positiveGradient[i, j] = NumOps.Multiply(
-                        NumOps.FromDouble(-2), 
+                        NumOps.FromDouble(-2),
                         anchorPositiveDiff
                     );
-                    
+
                     // Gradient for negative: 2*(anchor - negative)
                     negativeGradient[i, j] = NumOps.Multiply(
-                        NumOps.FromDouble(2), 
+                        NumOps.FromDouble(2),
                         anchorNegativeDiff
                     );
                 }
@@ -163,10 +163,10 @@ public class TripletLoss<T> : LossFunctionBase<T>
                 }
             }
         }
-        
+
         return (anchorGradient, positiveGradient, negativeGradient);
     }
-    
+
     /// <summary>
     /// This method is not used for Triplet Loss as it requires multiple input vectors.
     /// </summary>
@@ -181,7 +181,7 @@ public class TripletLoss<T> : LossFunctionBase<T>
             "Use the Calculate(Matrix<T>, Matrix<T>, Matrix<T>) method instead."
         );
     }
-    
+
     /// <summary>
     /// This method is not used for Triplet Loss as it requires multiple input vectors.
     /// </summary>
@@ -196,7 +196,7 @@ public class TripletLoss<T> : LossFunctionBase<T>
             "Use the CalculateDerivative(Matrix<T>, Matrix<T>, Matrix<T>) method instead."
         );
     }
-    
+
     /// <summary>
     /// Calculates the Euclidean distance between two vectors.
     /// </summary>
@@ -211,7 +211,7 @@ public class TripletLoss<T> : LossFunctionBase<T>
             T diff = NumOps.Subtract(v1[i], v2[i]);
             sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
         }
-        
+
         return NumOps.Sqrt(sum);
     }
 }

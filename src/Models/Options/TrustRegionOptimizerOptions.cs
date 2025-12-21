@@ -79,7 +79,7 @@ public class TrustRegionOptimizerOptions<T, TInput, TOutput> : GradientBasedOpti
     /// </para>
     /// </remarks>
     public double InitialTrustRegionRadius { get; set; } = 1.0;
-    
+
     /// <summary>
     /// Gets or sets the minimum allowed radius of the trust region.
     /// </summary>
@@ -119,7 +119,7 @@ public class TrustRegionOptimizerOptions<T, TInput, TOutput> : GradientBasedOpti
     /// </para>
     /// </remarks>
     public double MinTrustRegionRadius { get; set; } = 1e-6;
-    
+
     /// <summary>
     /// Gets or sets the maximum allowed radius of the trust region.
     /// </summary>
@@ -160,7 +160,7 @@ public class TrustRegionOptimizerOptions<T, TInput, TOutput> : GradientBasedOpti
     /// </para>
     /// </remarks>
     public double MaxTrustRegionRadius { get; set; } = 10.0;
-    
+
     /// <summary>
     /// Gets or sets the threshold for accepting a step.
     /// </summary>
@@ -202,7 +202,7 @@ public class TrustRegionOptimizerOptions<T, TInput, TOutput> : GradientBasedOpti
     /// </para>
     /// </remarks>
     public double AcceptanceThreshold { get; set; } = 0.1;
-    
+
     /// <summary>
     /// Gets or sets the threshold for considering a step very successful.
     /// </summary>
@@ -244,7 +244,7 @@ public class TrustRegionOptimizerOptions<T, TInput, TOutput> : GradientBasedOpti
     /// </para>
     /// </remarks>
     public double VerySuccessfulThreshold { get; set; } = 0.75;
-    
+
     /// <summary>
     /// Gets or sets the threshold for considering a step unsuccessful.
     /// </summary>

@@ -76,7 +76,7 @@ public class TimeSeriesCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T
     /// It's like setting up a series of tests that respect the time order of your data.
     /// </para>
     /// </remarks>
-    public TimeSeriesCrossValidator(int initialTrainSize, int validationSize, int step, CrossValidationOptions? options = null) 
+    public TimeSeriesCrossValidator(int initialTrainSize, int validationSize, int step, CrossValidationOptions? options = null)
         : base(options ?? new())
     {
         _initialTrainSize = initialTrainSize;
@@ -147,12 +147,12 @@ public class TimeSeriesCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T
     private IEnumerable<(int[] trainIndices, int[] validationIndices)> CreateFolds(TInput X, TOutput y)
     {
         int totalSamples = InputHelper<T, TInput>.GetBatchSize(X);
-        
+
         for (int trainEnd = _initialTrainSize; trainEnd < totalSamples - _validationSize; trainEnd += _step)
         {
             int[] trainIndices = [.. Enumerable.Range(0, trainEnd)];
             int[] validationIndices = [.. Enumerable.Range(trainEnd, _validationSize)];
-            
+
             yield return (trainIndices, validationIndices);
         }
     }

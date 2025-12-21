@@ -23,17 +23,17 @@ public class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     /// The x-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates of the data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The z-values (heights) at each data point.
     /// </summary>
     private readonly Vector<T> _z;
-    
+
     /// <summary>
     /// The power parameter that controls how quickly the influence of points decreases with distance.
     /// </summary>
@@ -41,7 +41,7 @@ public class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     /// Higher values make distant points have less influence on the interpolated value.
     /// </remarks>
     private readonly T _power;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
@@ -120,7 +120,7 @@ public class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
         for (int i = 0; i < _x.Length; i++)
         {
             T distance = CalculateDistance(x, y, _x[i], _y[i]);
-            
+
             if (_numOps.Equals(distance, _numOps.Zero))
             {
                 return _z[i]; // Return exact value if the point coincides with a known point

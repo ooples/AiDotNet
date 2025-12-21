@@ -1,8 +1,8 @@
 
-using AiDotNet.LinearAlgebra;
-using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 using System;
 using System.Linq;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 {
@@ -46,7 +46,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
                 return CreateZeroVector();
 
             var values = new T[_dimension];
-            
+
             var wordHash = GetHash(string.Join(" ", words));
             var bigramHash = words.Length > 1 ? GetHash(string.Join(" ", words.Zip(words.Skip(1), (a, b) => a + "_" + b))) : wordHash;
 
@@ -54,10 +54,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             {
                 var seed1 = (wordHash + i * 31) & 0x7FFFFFFF;
                 var seed2 = (bigramHash + i * 37) & 0x7FFFFFFF;
-                
+
                 var val1 = Math.Cos((double)seed1 * 0.000001);
                 var val2 = Math.Sin((double)seed2 * 0.000001);
-                
+
                 var combined = (val1 * 0.6) + (val2 * 0.4);
                 values[i] = NumOps.FromDouble(combined);
             }

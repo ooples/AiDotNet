@@ -36,7 +36,7 @@ public class MultiplyLayer<T> : LayerBase<T>
     /// during the backward pass for gradient calculation.
     /// </remarks>
     private Tensor<T>[]? _lastInputs;
-    
+
     /// <summary>
     /// The output tensor from the most recent forward pass.
     /// </summary>
@@ -45,7 +45,7 @@ public class MultiplyLayer<T> : LayerBase<T>
     /// during the backward pass for gradient calculation.
     /// </remarks>
     private Tensor<T>? _lastOutput;
-    
+
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
@@ -70,7 +70,7 @@ public class MultiplyLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MultiplyLayer{T}"/> class with the specified input shapes
     /// and a scalar activation function.
@@ -104,7 +104,7 @@ public class MultiplyLayer<T> : LayerBase<T>
     {
         ValidateInputShapes(inputShapes);
     }
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MultiplyLayer{T}"/> class with the specified input shapes
     /// and a vector activation function.
@@ -135,7 +135,7 @@ public class MultiplyLayer<T> : LayerBase<T>
     {
         ValidateInputShapes(inputShapes);
     }
-    
+
     /// <summary>
     /// Validates that the input shapes are appropriate for a multiply layer.
     /// </summary>
@@ -174,7 +174,7 @@ public class MultiplyLayer<T> : LayerBase<T>
             }
         }
     }
-    
+
     /// <summary>
     /// This method is not supported for MultiplyLayer as it requires multiple input tensors.
     /// </summary>
@@ -202,7 +202,7 @@ public class MultiplyLayer<T> : LayerBase<T>
     {
         throw new NotSupportedException("MultiplyLayer requires multiple inputs. Use Forward(params Tensor<T>[] inputs) instead.");
     }
-    
+
     /// <summary>
     /// Performs the forward pass of the multiply layer with multiple input tensors.
     /// </summary>
@@ -248,7 +248,7 @@ public class MultiplyLayer<T> : LayerBase<T>
         _lastOutput = ApplyActivation(result);
         return _lastOutput;
     }
-    
+
     /// <summary>
     /// Performs the backward pass of the multiply layer.
     /// </summary>
@@ -449,7 +449,7 @@ public class MultiplyLayer<T> : LayerBase<T>
     {
         // No parameters to update in this layer
     }
-    
+
     /// <summary>
     /// Gets all trainable parameters from the multiply layer as a single vector.
     /// </summary>
@@ -474,7 +474,7 @@ public class MultiplyLayer<T> : LayerBase<T>
         // MultiplyLayer has no trainable parameters
         return Vector<T>.Empty();
     }
-    
+
     /// <summary>
     /// Resets the internal state of the multiply layer.
     /// </summary>

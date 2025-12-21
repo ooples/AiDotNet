@@ -39,4 +39,18 @@ public class ModelEvaluationInput<T, TInput, TOutput>
     /// This is crucial for correctly interpreting the model's outputs and calculating accurate metrics.
     /// </remarks>
     public NormalizationInfo<T, TInput, TOutput> NormInfo { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets an optional override for the prediction type used when calculating metrics.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// If this is not provided, evaluators may infer the prediction type from the target values or model configuration.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This tells the evaluator what kind of problem you're solving (classification vs regression),
+    /// so it can compute the right metrics by default.
+    /// </para>
+    /// </remarks>
+    public PredictionType? PredictionTypeOverride { get; set; }
 }

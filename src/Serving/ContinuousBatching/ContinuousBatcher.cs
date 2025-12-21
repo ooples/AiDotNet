@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using AiDotNet.Helpers;
 using AiDotNet.Inference;
+using AiDotNet.Inference.SpeculativeDecoding;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Serving.ContinuousBatching;
@@ -33,12 +35,22 @@ namespace AiDotNet.Serving.ContinuousBatching;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-public class ContinuousBatcher<T> : IDisposable
+internal class ContinuousBatcher<T> : IDisposable
 {
     private readonly ContinuousBatcherConfig _config;
     private readonly BatchScheduler<T> _scheduler;
     private readonly KVCache<T>? _kvCache;
     private readonly Func<Tensor<T>, Tensor<T>>? _model;
+    private readonly IDraftModel<T>? _draftModelOverride;
+
+    private SpeculativeDecoder<T>? _speculativeDecoder;
+    private readonly object _speculativeLock = new();
+    private volatile bool _speculationDisabledDueToFailure;
+    private long _speculationDisabledUntilIteration;
+
+    internal bool LastStepUsedSpeculation { get; private set; }
+    internal int LastStepSpeculationTokens { get; private set; }
+    internal string LastStepSpeculationReason { get; private set; } = string.Empty;
 
     private readonly ConcurrentDictionary<long, TaskCompletionSource<GenerationResult<T>>> _pendingResults;
     private readonly ConcurrentQueue<SequenceState<T>> _incomingRequests;
@@ -88,11 +100,13 @@ public class ContinuousBatcher<T> : IDisposable
     public ContinuousBatcher(
         ContinuousBatcherConfig config,
         Func<Tensor<T>, Tensor<T>>? model = null,
-        KVCache<T>? kvCache = null)
+        KVCache<T>? kvCache = null,
+        IDraftModel<T>? draftModel = null)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _model = model;
         _kvCache = kvCache;
+        _draftModelOverride = draftModel;
 
         _scheduler = new BatchScheduler<T>(config.SchedulerConfig);
         _pendingResults = new ConcurrentDictionary<long, TaskCompletionSource<GenerationResult<T>>>();
@@ -202,6 +216,11 @@ public class ContinuousBatcher<T> : IDisposable
         if (batch.Count == 0)
             return 0;
 
+        bool useSpeculation = ShouldUseSpeculativeDecoding(batch, out var speculationReason);
+        LastStepUsedSpeculation = useSpeculation;
+        LastStepSpeculationTokens = 0;
+        LastStepSpeculationReason = speculationReason;
+
         _totalIterations++;
         int tokensGenerated = 0;
 
@@ -220,26 +239,32 @@ public class ContinuousBatcher<T> : IDisposable
         {
             if (seq.Status == SequenceStatus.Generating)
             {
-                int newToken = RunDecodeStep(seq);
-                if (newToken >= 0)
+                var newTokens = useSpeculation ? RunDecodeStepSpeculative(seq) : RunDecodeStep(seq);
+                if (newTokens.Count > 0)
                 {
-                    tokensGenerated++;
-                    _totalTokensGenerated++;
-
-                    // Fire token generated event
-                    TokenGenerated?.Invoke(this, new TokenGeneratedEventArgs<T>
+                    foreach (var newToken in newTokens)
                     {
-                        Sequence = seq,
-                        TokenId = newToken
-                    });
+                        tokensGenerated++;
+                        _totalTokensGenerated++;
+                        if (useSpeculation)
+                            LastStepSpeculationTokens++;
 
-                    // Invoke callback if provided
-                    seq.Request.OnTokenGenerated?.Invoke(newToken);
+                        // Fire token generated event
+                        TokenGenerated?.Invoke(this, new TokenGeneratedEventArgs<T>
+                        {
+                            Sequence = seq,
+                            TokenId = newToken
+                        });
 
-                    // Check for completion
-                    if (seq.ShouldStop(_config.EosTokenId, seq.Request.StopTokenIds))
-                    {
-                        CompleteSequence(seq);
+                        // Invoke callback if provided
+                        seq.Request.OnTokenGenerated?.Invoke(newToken);
+
+                        // Check for completion after each appended token
+                        if (seq.ShouldStop(_config.EosTokenId, seq.Request.StopTokenIds))
+                        {
+                            CompleteSequence(seq);
+                            break;
+                        }
                     }
                 }
             }
@@ -325,9 +350,9 @@ public class ContinuousBatcher<T> : IDisposable
         sequence.Status = SequenceStatus.Generating;
     }
 
-    private int RunDecodeStep(SequenceState<T> sequence)
+    private IReadOnlyList<int> RunDecodeStep(SequenceState<T> sequence)
     {
-        if (_model == null) return -1;
+        if (_model == null) return Array.Empty<int>();
 
         // Create input tensor from last token only (incremental decoding)
         int lastToken = sequence.TokenIds[^1];
@@ -340,7 +365,292 @@ public class ContinuousBatcher<T> : IDisposable
         int nextToken = SampleFromLogits(logits, sequence.Request);
         sequence.AppendToken(nextToken);
 
-        return nextToken;
+        return new[] { nextToken };
+    }
+
+    private IReadOnlyList<int> RunDecodeStepSpeculative(SequenceState<T> sequence)
+    {
+        if (_model == null) return Array.Empty<int>();
+        if (!ShouldSpeculateForThisIteration()) return RunDecodeStep(sequence);
+
+        int remaining = sequence.MaxNewTokens - sequence.GeneratedLength;
+        if (remaining <= 0) return Array.Empty<int>();
+
+        var decoder = EnsureSpeculativeDecoder();
+        if (decoder == null) return RunDecodeStep(sequence);
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T temperature = numOps.FromDouble(sequence.Request.Temperature);
+
+        var inputTokens = new Vector<int>(sequence.TokenIds.ToArray());
+        int maxNew = Math.Min(remaining, Math.Max(1, _config.SpeculationDepth + 1));
+
+        SpeculativeResult result;
+        try
+        {
+            result = decoder.Generate(
+                inputTokens,
+                maxNewTokens: maxNew,
+                temperature: temperature,
+                eosToken: _config.EosTokenId);
+        }
+        catch (Exception ex)
+        {
+            _speculationDisabledDueToFailure = true;
+            InferenceDiagnostics.RecordException(
+                area: "Serving.ContinuousBatching",
+                feature: "SpeculativeDecoding",
+                ex: ex,
+                reason: "Speculative decoder execution failed; falling back to baseline decode.");
+            InferenceDiagnostics.RecordDecision(
+                area: "Serving.ContinuousBatching",
+                feature: "SpeculativeDecoding",
+                enabled: false,
+                reason: "DisabledDueToFailure");
+            return RunDecodeStep(sequence);
+        }
+
+        if (result.NewTokens.Length == 0)
+            return Array.Empty<int>();
+
+        var tokens = new List<int>(result.NewTokens.Length);
+        for (int i = 0; i < result.NewTokens.Length; i++)
+        {
+            int token = result.NewTokens[i];
+            sequence.AppendToken(token);
+            tokens.Add(token);
+
+            // Prevent appending beyond stop conditions (e.g., EOS in the speculative batch).
+            if (sequence.ShouldStop(_config.EosTokenId, sequence.Request.StopTokenIds))
+            {
+                break;
+            }
+        }
+
+        return tokens;
+    }
+
+    private bool ShouldUseSpeculativeDecoding(IReadOnlyCollection<SequenceState<T>> batch, out string reason)
+    {
+        if (_speculationDisabledDueToFailure)
+        {
+            reason = "DisabledDueToFailure";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
+            return false;
+        }
+
+        if (!_config.EnableSpeculativeDecoding)
+        {
+            reason = "DisabledByConfig";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
+            return false;
+        }
+
+        if (_config.SpeculationPolicy == AiDotNet.Configuration.SpeculationPolicy.ForceOff)
+        {
+            reason = "ForceOff";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
+            return false;
+        }
+
+        if (_config.SpeculationPolicy == AiDotNet.Configuration.SpeculationPolicy.ForceOn)
+        {
+            reason = "ForceOn";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: true, reason: reason);
+            return true;
+        }
+
+        if (_config.SpeculationPolicy == AiDotNet.Configuration.SpeculationPolicy.ThroughputFirst)
+        {
+            // Extremely conservative: only speculate when there is no queue pressure and batches are tiny.
+            bool ok = batch.Count == 1 && _scheduler.WaitingCount == 0 && _speculationDisabledUntilIteration <= _totalIterations;
+            reason = ok ? "ThroughputFirst(Enabled)" : "ThroughputFirst(Backoff)";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: ok, reason: reason);
+            return ok;
+        }
+
+        // Auto policy: back off under load and when draft acceptance is too low.
+        if (_speculationDisabledUntilIteration > _totalIterations)
+        {
+            reason = "AutoBackoff(Cooldown)";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
+            return false;
+        }
+
+        int maxBatchForSpeculation = _config.SchedulerConfig.MaxBatchSize / 2;
+        if (_config.SpeculationPolicy == AiDotNet.Configuration.SpeculationPolicy.LatencyFirst)
+        {
+            // Allow more speculation under load, but still avoid it when the queue is growing.
+            maxBatchForSpeculation = Math.Max(1, _config.SchedulerConfig.MaxBatchSize);
+        }
+
+        bool enabled = batch.Count <= Math.Max(1, maxBatchForSpeculation) && _scheduler.WaitingCount == 0;
+        if (!enabled)
+        {
+            reason = _config.SpeculationPolicy == AiDotNet.Configuration.SpeculationPolicy.LatencyFirst
+                ? "LatencyFirst(Backoff:LoadOrQueue)"
+                : "AutoBackoff(LoadOrQueue)";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
+            return false;
+        }
+
+        // If we have enough evidence that the draft model is low-quality, disable speculation for a short cooldown.
+        var decoder = _speculativeDecoder;
+        if (decoder != null && decoder.TotalDraftTokens >= 32 && decoder.AcceptanceRate < 0.25)
+        {
+            _speculationDisabledUntilIteration = _totalIterations + 25;
+            reason = $"AutoBackoff(LowAcceptanceRate={decoder.AcceptanceRate:0.00})";
+            InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
+            return false;
+        }
+
+        reason = "AutoEnabled";
+        InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: true, reason: reason);
+        return true;
+    }
+
+    private bool ShouldSpeculateForThisIteration()
+    {
+        // Defensive: if speculation is enabled but we don't have a model forward, we can't speculate.
+        return !_speculationDisabledDueToFailure &&
+               _model != null &&
+               _config.EnableSpeculativeDecoding &&
+               _config.SpeculationPolicy != AiDotNet.Configuration.SpeculationPolicy.ForceOff;
+    }
+
+    private SpeculativeDecoder<T>? EnsureSpeculativeDecoder()
+    {
+        if (_speculationDisabledDueToFailure)
+            return null;
+
+        if (_speculativeDecoder != null)
+            return _speculativeDecoder;
+
+        lock (_speculativeLock)
+        {
+            if (_speculativeDecoder != null)
+                return _speculativeDecoder;
+
+            if (_speculationDisabledDueToFailure)
+                return null;
+
+            if (_model == null)
+                return null;
+
+            int vocabSize;
+            try
+            {
+                vocabSize = DetectVocabSize();
+            }
+            catch (Exception ex)
+            {
+                _speculationDisabledDueToFailure = true;
+                InferenceDiagnostics.RecordException("Serving.ContinuousBatching", "SpeculativeDecoding", ex, "Vocab size detection failed; disabling speculation.");
+                return null;
+            }
+
+            if (vocabSize <= 0)
+            {
+                _speculationDisabledDueToFailure = true;
+                InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: "DisabledDueToFailure(VocabSizeInvalid)");
+                return null;
+            }
+
+            IDraftModel<T> draft;
+            try
+            {
+                draft = _draftModelOverride ?? new NGramDraftModel<T>(ngramSize: 3, vocabSize: vocabSize, seed: 42);
+            }
+            catch (Exception ex)
+            {
+                _speculationDisabledDueToFailure = true;
+                InferenceDiagnostics.RecordException("Serving.ContinuousBatching", "SpeculativeDecoding", ex, "Draft model init failed; disabling speculation.");
+                return null;
+            }
+
+            Matrix<T> TargetForward(Vector<int> tokens)
+            {
+                // Run the target model over the full sequence and return per-position probabilities.
+                var input = CreateInputTensor(tokens.ToArray());
+                var logits = _model(input);
+
+                int seqLen = logits.Shape.Length > 2 ? logits.Shape[^2] : 1;
+                int localVocabSize = logits.Shape[^1];
+
+                var numOps = MathHelper.GetNumericOperations<T>();
+                var probs = new Matrix<T>(seqLen, localVocabSize);
+                for (int pos = 0; pos < seqLen; pos++)
+                {
+                    // Extract logits for this position
+                    var row = new double[localVocabSize];
+                    double max = double.NegativeInfinity;
+                    for (int v = 0; v < localVocabSize; v++)
+                    {
+                        double val = Convert.ToDouble(logits[logits.Shape.Length > 2 ? new[] { 0, pos, v } : new[] { 0, v }]);
+                        row[v] = val;
+                        if (val > max) max = val;
+                    }
+
+                    // Softmax
+                    double sum = 0.0;
+                    for (int v = 0; v < localVocabSize; v++)
+                    {
+                        row[v] = Math.Exp(row[v] - max);
+                        sum += row[v];
+                    }
+                    if (sum <= 0) sum = 1;
+
+                    for (int v = 0; v < localVocabSize; v++)
+                    {
+                        probs[pos, v] = numOps.FromDouble(row[v] / sum);
+                    }
+                }
+
+                return probs;
+            }
+
+            var config = new SpeculativeDecodingConfig<T>
+            {
+                NumDraftTokens = Math.Max(1, _config.SpeculationDepth),
+                Seed = 42,
+                AdaptiveDraftLength = _config.SpeculationPolicy == AiDotNet.Configuration.SpeculationPolicy.Auto,
+                MinAcceptanceRate = MathHelper.GetNumericOperations<T>().FromDouble(0.5),
+                UseTreeSpeculation = _config.UseTreeSpeculation ||
+                                    _config.SpeculativeMethod == AiDotNet.Configuration.SpeculativeMethod.Medusa ||
+                                    _config.SpeculativeMethod == AiDotNet.Configuration.SpeculativeMethod.Eagle,
+                TreeBranchFactor = _config.SpeculativeMethod == AiDotNet.Configuration.SpeculativeMethod.Medusa ? 4 : 2,
+                MaxTreeDepth = Math.Max(1, _config.SpeculationDepth)
+            };
+
+            try
+            {
+                _speculativeDecoder = new SpeculativeDecoder<T>(draft, TargetForward, config);
+                InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: true, reason: "DecoderInitialized");
+                return _speculativeDecoder;
+            }
+            catch (Exception ex)
+            {
+                _speculationDisabledDueToFailure = true;
+                InferenceDiagnostics.RecordException("Serving.ContinuousBatching", "SpeculativeDecoding", ex, "Decoder init failed; disabling speculation.");
+                return null;
+            }
+        }
+    }
+
+    private int DetectVocabSize()
+    {
+        try
+        {
+            // Probe the model with a minimal input to infer the vocabulary dimension.
+            var probe = CreateInputTensor([0]);
+            var logits = _model!(probe);
+            return logits.Shape.Length >= 1 ? logits.Shape[^1] : 0;
+        }
+        catch
+        {
+            // Let the caller handle vocab detection failure.
+            return 0;
+        }
     }
 
     private Tensor<T> CreateInputTensor(int[] tokenIds)
@@ -410,7 +720,7 @@ public class ContinuousBatcher<T> : IDisposable
         }
 
         // Sample from distribution
-        var random = new Random();
+        var random = RandomHelper.ThreadSafeRandom;
         float r = (float)random.NextDouble();
         float cumSum = 0;
         for (int i = 0; i < vocabSize; i++)

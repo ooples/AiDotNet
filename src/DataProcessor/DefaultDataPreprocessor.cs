@@ -23,17 +23,17 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
     /// Component responsible for scaling data to a standard range.
     /// </summary>
     private readonly INormalizer<T, TInput, TOutput> _normalizer;
-    
+
     /// <summary>
     /// Component responsible for selecting the most relevant features from the dataset.
     /// </summary>
     private readonly IFeatureSelector<T, TInput> _featureSelector;
-    
+
     /// <summary>
     /// Component responsible for identifying and removing outliers from the dataset.
     /// </summary>
     private readonly IOutlierRemoval<T, TInput, TOutput> _outlierRemoval;
-    
+
     /// <summary>
     /// Configuration options for the data preprocessing operations.
     /// </summary>
@@ -56,7 +56,7 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
     /// - The options parameter lets you customize how these tools work together
     /// </para>
     /// </remarks>
-    public DefaultDataPreprocessor(INormalizer<T, TInput, TOutput> normalizer, IFeatureSelector<T, TInput> featureSelector, 
+    public DefaultDataPreprocessor(INormalizer<T, TInput, TOutput> normalizer, IFeatureSelector<T, TInput> featureSelector,
         IOutlierRemoval<T, TInput, TOutput> outlierRemoval, DataProcessorOptions? options = null)
     {
         _normalizer = normalizer;
@@ -91,6 +91,7 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
     public (TInput X, TOutput y, NormalizationInfo<T, TInput, TOutput> normInfo) PreprocessData(TInput X, TOutput y)
     {
         NormalizationInfo<T, TInput, TOutput> normInfo = new();
+        normInfo.Normalizer = _normalizer;
 
         (X, y) = _outlierRemoval.RemoveOutliers(X, y);
 
@@ -135,11 +136,11 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
     /// This separation is crucial because it helps ensure your model can work well with new data it hasn't seen before.
     /// </para>
     /// </remarks>
-    public (TInput XTrain, TOutput yTrain, TInput XValidation, TOutput yValidation, TInput XTest, TOutput yTest) 
+    public (TInput XTrain, TOutput yTrain, TInput XValidation, TOutput yValidation, TInput XTest, TOutput yTest)
         SplitData(TInput X, TOutput y)
     {
         int totalSamples = 0;
-    
+
         // Handle different input types appropriately
         if (X is Matrix<T> xMatrix && y is Vector<T> yVector)
         {
@@ -148,10 +149,13 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
             int validationSize = (int)(totalSamples * _options.ValidationSplitPercentage);
             int testSize = totalSamples - trainSize - validationSize;
 
-            // Shuffle the data
-            var random = RandomHelper.CreateSeededRandom(_options.RandomSeed);
             var indices = Enumerable.Range(0, totalSamples).ToList();
-            indices = [.. indices.OrderBy(x => random.Next())];
+            if (_options.ShuffleBeforeSplit)
+            {
+                // Shuffle the data
+                var random = RandomHelper.CreateSeededRandom(_options.RandomSeed);
+                indices = [.. indices.OrderBy(x => random.Next())];
+            }
 
             // Create matrices and vectors for the split data
             var XTrain = new Matrix<T>(trainSize, xMatrix.Columns);
@@ -182,9 +186,19 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
                 yTest[i] = yVector[indices[i + trainSize + validationSize]];
             }
 
-            return ((TInput)(object)XTrain, (TOutput)(object)yTrain, 
-                    (TInput)(object)XValidation, (TOutput)(object)yValidation, 
-                    (TInput)(object)XTest, (TOutput)(object)yTest);
+            if (XTrain is not TInput xTrainOut ||
+                yTrain is not TOutput yTrainOut ||
+                XValidation is not TInput xValidationOut ||
+                yValidation is not TOutput yValidationOut ||
+                XTest is not TInput xTestOut ||
+                yTest is not TOutput yTestOut)
+            {
+                throw new InvalidOperationException(
+                    $"SplitData produced data of unexpected runtime types. " +
+                    $"Expected X to be {typeof(TInput).Name} and y to be {typeof(TOutput).Name}.");
+            }
+
+            return (xTrainOut, yTrainOut, xValidationOut, yValidationOut, xTestOut, yTestOut);
         }
         else if (X is Tensor<T> xTensor && y is Tensor<T> yTensor)
         {
@@ -193,10 +207,13 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
             int validationSize = (int)(totalSamples * _options.ValidationSplitPercentage);
             int testSize = totalSamples - trainSize - validationSize;
 
-            // Shuffle the data
-            var random = RandomHelper.CreateSeededRandom(_options.RandomSeed);
             var indices = Enumerable.Range(0, totalSamples).ToList();
-            indices = [.. indices.OrderBy(x => random.Next())];
+            if (_options.ShuffleBeforeSplit)
+            {
+                // Shuffle the data
+                var random = RandomHelper.CreateSeededRandom(_options.RandomSeed);
+                indices = [.. indices.OrderBy(x => random.Next())];
+            }
 
             // Create new tensors for the split data
             // Clone the shape for X but change the first dimension (sample count)
@@ -246,9 +263,19 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
                 CopySample(yTensor, yTest, indices[i + trainSize + validationSize], i);
             }
 
-            return ((TInput)(object)XTrain, (TOutput)(object)yTrain, 
-                    (TInput)(object)XValidation, (TOutput)(object)yValidation, 
-                    (TInput)(object)XTest, (TOutput)(object)yTest);
+            if (XTrain is not TInput xTrainOut ||
+                yTrain is not TOutput yTrainOut ||
+                XValidation is not TInput xValidationOut ||
+                yValidation is not TOutput yValidationOut ||
+                XTest is not TInput xTestOut ||
+                yTest is not TOutput yTestOut)
+            {
+                throw new InvalidOperationException(
+                    $"SplitData produced data of unexpected runtime types. " +
+                    $"Expected X to be {typeof(TInput).Name} and y to be {typeof(TOutput).Name}.");
+            }
+
+            return (xTrainOut, yTrainOut, xValidationOut, yValidationOut, xTestOut, yTestOut);
         }
         else
         {
@@ -304,13 +331,13 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
 
         if (sourceIndex < 0 || sourceIndex >= source.Shape[0])
         {
-            throw new ArgumentOutOfRangeException(nameof(sourceIndex), 
+            throw new ArgumentOutOfRangeException(nameof(sourceIndex),
                 $"Source index {sourceIndex} is out of range [0, {source.Shape[0] - 1}]");
         }
 
         if (destIndex < 0 || destIndex >= destination.Shape[0])
         {
-            throw new ArgumentOutOfRangeException(nameof(destIndex), 
+            throw new ArgumentOutOfRangeException(nameof(destIndex),
                 $"Destination index {destIndex} is out of range [0, {destination.Shape[0] - 1}]");
         }
 
@@ -341,11 +368,11 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
     /// </para>
     /// </remarks>
     private void CopySampleRecursive(
-        Tensor<T> source, 
-        Tensor<T> destination, 
-        int sourceIndex, 
-        int destIndex, 
-        int currentDim, 
+        Tensor<T> source,
+        Tensor<T> destination,
+        int sourceIndex,
+        int destIndex,
+        int currentDim,
         int[] indices)
     {
         if (currentDim == source.Rank)
@@ -353,7 +380,7 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
             // We've built complete indices for all dimensions, now copy the value
             indices[0] = sourceIndex; // Set the sample index for source
             T value = source[indices];
-        
+
             indices[0] = destIndex; // Set the sample index for destination
             destination[indices] = value;
         }

@@ -97,7 +97,7 @@ public class CrossEncoderReranker<T> : RerankerBase<T>
     {
         if (scoreFunction == null)
             throw new ArgumentNullException(nameof(scoreFunction));
-        
+
         if (maxPairsToScore <= 0)
             throw new ArgumentException("maxPairsToScore must be greater than zero", nameof(maxPairsToScore));
 
@@ -130,13 +130,13 @@ public class CrossEncoderReranker<T> : RerankerBase<T>
     protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
     {
         var docList = documents.Take(_maxPairsToScore).ToList();
-        
+
         if (docList.Count == 0)
             return Enumerable.Empty<Document<T>>();
 
         // Score each document with the cross-encoder
         var scoredDocs = new List<(Document<T> Doc, T Score)>();
-        
+
         foreach (var doc in docList)
         {
             var score = _scoreFunction(query, doc.Content);

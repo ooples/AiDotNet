@@ -169,17 +169,17 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
         int n = 1024;
         var coeffs = new T[n];
         T twoPi = NumOps.Multiply(NumOps.FromDouble(2), MathHelper.Pi<T>());
-        for (int k = -n/2; k < n/2; k++)
+        for (int k = -n / 2; k < n / 2; k++)
         {
             T x = NumOps.Divide(NumOps.FromDouble(k), NumOps.FromDouble(n));
             if (k == 0)
             {
-                coeffs[k + n/2] = NumOps.FromDouble(Math.Sqrt(0.5));
+                coeffs[k + n / 2] = NumOps.FromDouble(Math.Sqrt(0.5));
             }
             else
             {
                 T sinc = NumOps.Divide(MathHelper.Sin(NumOps.Multiply(twoPi, x)), NumOps.Multiply(twoPi, x));
-                coeffs[k + n/2] = NumOps.Multiply(NumOps.FromDouble(Math.Sqrt(0.5)), sinc);
+                coeffs[k + n / 2] = NumOps.Multiply(NumOps.FromDouble(Math.Sqrt(0.5)), sinc);
             }
         }
 
@@ -214,18 +214,18 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
         int n = 1024;
         var coeffs = new T[n];
         T twoPi = NumOps.Multiply(NumOps.FromDouble(2), MathHelper.Pi<T>());
-        for (int k = -n/2; k < n/2; k++)
+        for (int k = -n / 2; k < n / 2; k++)
         {
             T x = NumOps.Divide(NumOps.FromDouble(k), NumOps.FromDouble(n));
             if (k == 0)
             {
-                coeffs[k + n/2] = NumOps.FromDouble(Math.Sqrt(0.5));
+                coeffs[k + n / 2] = NumOps.FromDouble(Math.Sqrt(0.5));
             }
             else
             {
                 T sinc = NumOps.Divide(MathHelper.Sin(NumOps.Multiply(twoPi, x)), NumOps.Multiply(twoPi, x));
                 T modulation = MathHelper.Cos(NumOps.Multiply(twoPi, x));
-                coeffs[k + n/2] = NumOps.Multiply(NumOps.FromDouble(Math.Sqrt(0.5)), NumOps.Multiply(sinc, modulation));
+                coeffs[k + n / 2] = NumOps.Multiply(NumOps.FromDouble(Math.Sqrt(0.5)), NumOps.Multiply(sinc, modulation));
             }
         }
 

@@ -663,7 +663,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 3. Compute Predictions: input @ weights
         // Input: [B, I, D_in] -> [B, I, 1, D_in]
         var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, batchSize, inputCapsules, 1, inputDim);
-        
+
         // Weights: [I, O, D_in, D_out] -> [1, I, O, D_in, D_out]
         var weightsReshaped = Autodiff.TensorOperations<T>.Reshape(weightsPermuted, 1, inputCapsules, numCapsules, inputDim, capsuleDim);
 
@@ -693,7 +693,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 1/N sums to 1. So it works.
         // But for autodiff, if we want to learn routing, we usually softmax logits.
         // Here we have fixed initial values.
-        
+
         // We'll create a Constant node for initial couplings.
         var couplingsTensor = new Tensor<T>(new int[] { batchSize, inputCapsules, numCapsules });
         couplingsTensor.Fill(NumOps.FromDouble(1.0 / numCapsules));
@@ -705,7 +705,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             // Note: Forward doesn't Softmax at start of loop, only at end of previous.
             // So use 'couplings' directly.
-            
+
             // Reshape couplings to [B, I, O, 1]
             var couplingsBroad = Autodiff.TensorOperations<T>.Reshape(couplings, batchSize, inputCapsules, numCapsules, 1);
 
@@ -735,7 +735,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Use norm + epsilon as denominator to avoid division by zero when norm is zero
             var stableNorm = Autodiff.TensorOperations<T>.Add(norm, epsilon);
             var unitVec = Autodiff.TensorOperations<T>.Divide(withBias, stableNorm);
-            
+
             output = Autodiff.TensorOperations<T>.ElementwiseMultiply(scale, unitVec);
 
             // Update couplings if not last iteration
@@ -745,7 +745,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 var outputBroad = Autodiff.TensorOperations<T>.Reshape(output, batchSize, 1, numCapsules, capsuleDim);
                 var agreementRaw = Autodiff.TensorOperations<T>.ElementwiseMultiply(predictions, outputBroad);
                 var agreement = Autodiff.TensorOperations<T>.Sum(agreementRaw, new int[] { 3 }, keepDims: false);
-                
+
                 // Update and Softmax
                 var rawCouplings = Autodiff.TensorOperations<T>.Add(couplings, agreement);
                 couplings = Autodiff.TensorOperations<T>.Softmax(rawCouplings, axis: 2);
@@ -770,9 +770,9 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             _transformationMatrixGradient = gradPermuted.Transpose(new int[] { 0, 2, 1, 3 });
         }
-        else 
+        else
         {
-             _transformationMatrixGradient = Tensor<T>.CreateDefault(_transformationMatrix.Shape, NumOps.Zero);
+            _transformationMatrixGradient = Tensor<T>.CreateDefault(_transformationMatrix.Shape, NumOps.Zero);
         }
 
         return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");

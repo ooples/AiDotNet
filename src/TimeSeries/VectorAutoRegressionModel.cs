@@ -35,22 +35,22 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     /// Configuration options specific to the VAR model.
     /// </summary>
     private readonly VARModelOptions<T> _varOptions;
-    
+
     /// <summary>
     /// Matrix of coefficients that capture the relationships between variables across time lags.
     /// </summary>
     private Matrix<T> _coefficients;
-    
+
     /// <summary>
     /// Vector of intercept terms for each equation in the VAR model.
     /// </summary>
     private Vector<T> _intercepts;
-    
+
     /// <summary>
     /// Matrix of residuals (errors) from the model fit.
     /// </summary>
     private Matrix<T> _residuals;
-    
+
     /// <summary>
     /// Gets the coefficient matrix of the VAR model.
     /// </summary>
@@ -297,7 +297,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         _residuals = new Matrix<T>(residualsRows, residualsCols);
         for (int i = 0; i < residualsRows; i++)
             for (int j = 0; j < residualsCols; j++)
-                                _residuals[i, j] = NumOps.FromDouble(reader.ReadDouble());
+                _residuals[i, j] = NumOps.FromDouble(reader.ReadDouble());
     }
 
     /// <summary>
@@ -495,15 +495,15 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
             {
                 // Extract the dependent variable for the current equation
                 Vector<T> yi = x.GetColumn(i).Slice(_varOptions.Lag, n - _varOptions.Lag);
-            
+
                 try
                 {
                     // Estimate coefficients for this equation
                     Vector<T> coeffs = EstimateOLS(laggedData, yi);
-                
+
                     // Store intercept
                     _intercepts[i] = coeffs[0];
-                
+
                     // Store coefficients for lagged variables
                     for (int j = 0; j < m * _varOptions.Lag; j++)
                     {
@@ -525,7 +525,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
             _coefficients = new Matrix<T>(_varOptions.OutputDimension, _varOptions.OutputDimension * _varOptions.Lag);
             _intercepts = new Vector<T>(_varOptions.OutputDimension);
             _residuals = new Matrix<T>(0, _varOptions.OutputDimension);
-        
+
             throw new InvalidOperationException("VAR model training failed: " + ex.Message, ex);
         }
     }
@@ -567,7 +567,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         {
             throw new InvalidOperationException("The VAR model must be trained before making predictions.");
         }
-    
+
         // Extract which variable to predict (last element of input)
         int variableIndex;
         if (input.Length > 0)
@@ -578,30 +578,30 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         {
             throw new ArgumentException("Input vector must contain at least one element indicating which variable to predict.", nameof(input));
         }
-    
+
         // Validate variable index
         if (variableIndex < 0 || variableIndex >= _varOptions.OutputDimension)
         {
             throw new ArgumentException($"Variable index {variableIndex} is out of range [0, {_varOptions.OutputDimension - 1}].", nameof(input));
         }
-    
+
         // Verify input length (should contain lagged values for all variables + variable index)
         int expectedLength = _varOptions.OutputDimension * _varOptions.Lag + 1;
         if (input.Length != expectedLength)
         {
             throw new ArgumentException($"Input vector length ({input.Length}) does not match expected length ({expectedLength}).", nameof(input));
         }
-    
+
         // Start with the intercept term
         T prediction = _intercepts[variableIndex];
-    
+
         // Add contributions from lagged variables
         for (int j = 0; j < _varOptions.OutputDimension * _varOptions.Lag; j++)
         {
             // Input vector contains lagged values first, then variable index
             prediction = NumOps.Add(prediction, NumOps.Multiply(_coefficients[variableIndex, j], input[j]));
         }
-    
+
         return prediction;
     }
 
@@ -673,35 +673,35 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         {
             throw new InvalidOperationException("The VAR model must be trained before forecasting.");
         }
-    
+
         // Validate input dimensions
         if (historyMatrix.Columns != _varOptions.OutputDimension)
         {
             throw new ArgumentException($"History matrix columns ({historyMatrix.Columns}) must match the number of variables ({_varOptions.OutputDimension}).");
         }
-    
+
         // Validate steps
         if (steps <= 0)
         {
             throw new ArgumentException("Forecast steps must be positive.", nameof(steps));
         }
-    
+
         // Validate sufficient history
         if (historyMatrix.Rows < _varOptions.Lag)
         {
             throw new ArgumentException($"History matrix must contain at least {_varOptions.Lag} observations. Found {historyMatrix.Rows}.");
         }
-    
+
         // Initialize forecast matrix
         Matrix<T> forecasts = new Matrix<T>(steps, _varOptions.OutputDimension);
-    
+
         // Create a working copy of history that we'll extend with forecasts
         List<Vector<T>> workingHistory = new List<Vector<T>>();
         for (int i = 0; i < historyMatrix.Rows; i++)
         {
             workingHistory.Add(historyMatrix.GetRow(i));
         }
-    
+
         // Generate forecasts iteratively
         for (int step = 0; step < steps; step++)
         {
@@ -711,17 +711,17 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
             {
                 recentHistory.SetRow(i, workingHistory[workingHistory.Count - _varOptions.Lag + i]);
             }
-        
+
             // Generate forecast for current step
             Vector<T> forecast = Predict(recentHistory);
-        
+
             // Store forecast
             forecasts.SetRow(step, forecast);
-        
+
             // Add forecast to working history for next iteration
             workingHistory.Add(forecast);
         }
-    
+
         return forecasts;
     }
 
@@ -763,19 +763,19 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         {
             throw new InvalidOperationException("The VAR model must be trained before performing impulse response analysis.");
         }
-    
+
         // Validate horizon
         if (horizon <= 0)
         {
             throw new ArgumentException("Horizon must be positive.", nameof(horizon));
         }
-    
+
         Dictionary<string, Matrix<T>> impulseResponses = new Dictionary<string, Matrix<T>>();
         int k = _varOptions.OutputDimension;
-    
+
         // Estimate residual covariance matrix
         Matrix<T> residCov = EstimateResidualCovariance();
-    
+
         // Get Cholesky decomposition of residual covariance for orthogonalized impulses
         Matrix<T> cholesky;
         try
@@ -793,7 +793,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
 
             cholesky = Matrix<T>.CreateDiagonal(diagValues);
         }
-    
+
         // For each variable, create a shock and compute responses
         for (int shockVar = 0; shockVar < k; shockVar++)
         {
@@ -803,25 +803,25 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
             {
                 impulse[i] = cholesky[i, shockVar];
             }
-        
+
             // Compute impulse responses for all variables over the horizon
             Matrix<T> responses = new Matrix<T>(horizon + 1, k); // +1 for initial period
-        
+
             // Initial period: direct impact of shock
             for (int i = 0; i < k; i++)
             {
                 responses[0, i] = impulse[i];
             }
-        
+
             // Compute responses for each subsequent period
             Matrix<T> varMatrix = ConstructVARMatrix();
             Matrix<T> currentImpact = Matrix<T>.CreateIdentity(k);
-        
+
             for (int h = 1; h <= horizon; h++)
             {
                 // Calculate impact matrix for period h
                 currentImpact = currentImpact.Multiply(varMatrix);
-            
+
                 // Calculate responses for all variables at horizon h
                 for (int respVar = 0; respVar < k; respVar++)
                 {
@@ -833,11 +833,11 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
                     responses[h, respVar] = response;
                 }
             }
-        
+
             // Store the impulse response matrix for this shock variable
             impulseResponses[$"Variable_{shockVar}"] = responses;
         }
-    
+
         return impulseResponses;
     }
 
@@ -871,16 +871,16 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         {
             throw new InvalidOperationException("No residuals available. The model must be trained first.");
         }
-    
+
         int n = _residuals.Rows;
         int k = _residuals.Columns;
         Matrix<T> covariance = new Matrix<T>(k, k);
-    
+
         // Calculate degrees of freedom adjustment
         int dof = n - _varOptions.Lag * k - 1; // Subtract number of estimated parameters per equation
         if (dof <= 0) dof = 1; // Prevent division by zero
         T dofAdjustment = NumOps.Divide(NumOps.One, NumOps.FromDouble(dof));
-    
+
         // Calculate covariance matrix
         for (int i = 0; i < k; i++)
         {
@@ -891,16 +891,16 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
                 {
                     sum = NumOps.Add(sum, NumOps.Multiply(_residuals[t, i], _residuals[t, j]));
                 }
-            
+
                 // Apply degrees of freedom adjustment
                 T cov = NumOps.Multiply(sum, dofAdjustment);
-            
+
                 // Set both (i,j) and (j,i) elements due to symmetry
                 covariance[i, j] = cov;
                 covariance[j, i] = cov;
             }
         }
-    
+
         return covariance;
     }
 
@@ -931,10 +931,10 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         int k = _varOptions.OutputDimension;
         int p = _varOptions.Lag;
         int kp = k * p;
-    
+
         // Create matrix of size (k*p × k*p)
         Matrix<T> companion = new Matrix<T>(kp, kp);
-    
+
         // Fill in the coefficient blocks
         for (int i = 0; i < k; i++)
         {
@@ -946,13 +946,13 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
                 }
             }
         }
-    
+
         // Fill in the identity blocks
         for (int i = k; i < kp; i++)
         {
             companion[i, i - k] = NumOps.One;
         }
-    
+
         return companion;
     }
 
@@ -986,29 +986,29 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         {
             throw new ArgumentException("Matrix must be square for Cholesky decomposition.");
         }
-    
+
         int n = matrix.Rows;
         Matrix<T> result = new Matrix<T>(n, n);
-    
+
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j <= i; j++)
             {
                 T sum = NumOps.Zero;
-            
+
                 if (j == i) // Diagonal elements
                 {
                     for (int k = 0; k < j; k++)
                     {
                         sum = NumOps.Add(sum, NumOps.Square(result[j, k]));
                     }
-                
+
                     T diagonal = NumOps.Subtract(matrix[j, j], sum);
                     if (NumOps.LessThanOrEquals(diagonal, NumOps.Zero))
                     {
                         throw new ArgumentException("Matrix is not positive definite.");
                     }
-                
+
                     result[j, j] = NumOps.Sqrt(diagonal);
                 }
                 else // Off-diagonal elements
@@ -1017,7 +1017,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
                     {
                         sum = NumOps.Add(sum, NumOps.Multiply(result[i, k], result[j, k]));
                     }
-                
+
                     if (!NumOps.Equals(result[j, j], NumOps.Zero))
                     {
                         result[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], sum), result[j, j]);
@@ -1029,7 +1029,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
                 }
             }
         }
-    
+
         return result;
     }
 
@@ -1103,7 +1103,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     public override void Reset()
     {
         base.Reset();
-    
+
         _coefficients = new Matrix<T>(_varOptions.OutputDimension, _varOptions.OutputDimension * _varOptions.Lag);
         _intercepts = new Vector<T>(_varOptions.OutputDimension);
         _residuals = new Matrix<T>(0, _varOptions.OutputDimension);
@@ -1156,7 +1156,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
             },
             ModelData = this.Serialize()
         };
-    
+
         // Add residual statistics if available
         if (_residuals.Rows > 0)
         {
@@ -1164,14 +1164,14 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
             for (int i = 0; i < _varOptions.OutputDimension; i++)
             {
                 Vector<T> variableResiduals = _residuals.GetColumn(i);
-            
+
                 metadata.AdditionalInfo[$"Variable_{i}_ResidualMean"] = Convert.ToDouble(variableResiduals.Average());
                 metadata.AdditionalInfo[$"Variable_{i}_ResidualStdDev"] = Convert.ToDouble(variableResiduals.StandardDeviation());
                 metadata.AdditionalInfo[$"Variable_{i}_ResidualMin"] = Convert.ToDouble(variableResiduals.Min());
                 metadata.AdditionalInfo[$"Variable_{i}_ResidualMax"] = Convert.ToDouble(variableResiduals.Max());
             }
         }
-    
+
         return metadata;
     }
 }

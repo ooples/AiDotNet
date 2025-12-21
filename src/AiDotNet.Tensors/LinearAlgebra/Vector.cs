@@ -744,17 +744,17 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     {
         if (min >= max)
             throw new ArgumentException("Minimum value must be less than maximum value");
-        
+
         var random = RandomHelper.CreateSecureRandom();
         var vector = new Vector<T>(size);
-    
+
         for (int i = 0; i < size; i++)
         {
             // Generate random value between min and max
             double randomValue = random.NextDouble() * (max - min) + min;
             vector[i] = _numOps.FromDouble(randomValue);
         }
-    
+
         return vector;
     }
 
@@ -981,7 +981,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     {
         if (vectors.Count == 0)
             return new Vector<T>(0);
-            
+
         Vector<T> result = vectors[0];
         for (int i = 1; i < vectors.Count; i++)
         {

@@ -1,7 +1,7 @@
+using System;
+using AiDotNet.LinearAlgebra;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using AiDotNet.LinearAlgebra;
-using System;
 
 namespace AiDotNet.Serialization
 {

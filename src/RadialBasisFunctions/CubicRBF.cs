@@ -33,12 +33,12 @@ public class CubicRBF<T> : IRadialBasisFunction<T>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// The width parameter controlling the scale of the function.
     /// </summary>
     private readonly T _width;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="CubicRBF{T}"/> class with a specified width parameter.
     /// </summary>
@@ -65,7 +65,7 @@ public class CubicRBF<T> : IRadialBasisFunction<T>
         _numOps = MathHelper.GetNumericOperations<T>();
         _width = _numOps.FromDouble(width);
     }
-    
+
     /// <summary>
     /// Computes the value of the Cubic Radial Basis Function for a given radius.
     /// </summary>
@@ -92,7 +92,7 @@ public class CubicRBF<T> : IRadialBasisFunction<T>
         T rOverWidth = _numOps.Divide(r, _width);
         return _numOps.Multiply(rOverWidth, _numOps.Multiply(rOverWidth, rOverWidth));
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Cubic RBF with respect to the radius.
     /// </summary>
@@ -123,7 +123,7 @@ public class CubicRBF<T> : IRadialBasisFunction<T>
         T widthCubed = _numOps.Multiply(_width, _numOps.Multiply(_width, _width));
         return _numOps.Divide(_numOps.Multiply(three, rSquared), widthCubed);
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Cubic RBF with respect to the width parameter.
     /// </summary>
@@ -155,7 +155,7 @@ public class CubicRBF<T> : IRadialBasisFunction<T>
         T widthFourth = _numOps.Multiply(widthSquared, widthSquared);
         T negThree = _numOps.FromDouble(-3.0);
         T numerator = _numOps.Multiply(negThree, rCubed);
-        
+
         return _numOps.Divide(numerator, widthFourth);
     }
 }

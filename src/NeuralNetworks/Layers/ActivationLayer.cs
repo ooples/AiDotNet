@@ -5,7 +5,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para>
 /// Activation functions introduce non-linearity to neural networks. Non-linearity means the output isn't 
 /// simply proportional to the input (like y = 2x). Instead, it can follow curves or more complex patterns.
-/// Without non-linearity, a neural network—no matter how many layers—would behave just like a single layer,
 /// severely limiting what it can learn.
 /// </para>
 /// <para>
@@ -27,7 +26,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// and will be null until Forward() is called at least once.
     /// </remarks>
     private Tensor<T>? _lastInput;
-    
+
     /// <summary>
     /// Indicates whether this layer uses a vector activation function instead of a scalar one.
     /// </summary>

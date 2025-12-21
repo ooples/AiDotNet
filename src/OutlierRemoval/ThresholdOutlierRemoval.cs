@@ -68,11 +68,11 @@ public class ThresholdOutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TI
     {
         // Convert to concrete types
         var (inputMatrix, outputVector) = OutlierRemovalHelper<T, TInput, TOutput>.ConvertToMatrixVector(inputs, outputs);
-        
+
         var cleanedInputs = new List<Vector<T>>();
         var cleanedOutputs = new List<T>();
         var includeRow = new bool[inputMatrix.Rows];
-        
+
         // Initialize all rows as included
         for (int i = 0; i < inputMatrix.Rows; i++)
         {
@@ -108,12 +108,12 @@ public class ThresholdOutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TI
 
         var cleanedInputMatrix = new Matrix<T>(cleanedInputs);
         var cleanedOutputVector = new Vector<T>(cleanedOutputs);
-        
+
         // Convert back to original types
         return OutlierRemovalHelper<T, TInput, TOutput>.ConvertToOriginalTypes(
-            cleanedInputMatrix, 
-            cleanedOutputVector, 
-            typeof(TInput), 
+            cleanedInputMatrix,
+            cleanedOutputVector,
+            typeof(TInput),
             typeof(TOutput));
     }
 }

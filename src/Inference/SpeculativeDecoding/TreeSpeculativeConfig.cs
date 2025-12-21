@@ -3,7 +3,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// <summary>
 /// Configuration for tree-based speculative decoding.
 /// </summary>
-public class TreeSpeculativeConfig
+internal class TreeSpeculativeConfig
 {
     /// <summary>Number of branches per node.</summary>
     public int BranchFactor { get; set; } = 2;

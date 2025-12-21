@@ -43,10 +43,10 @@ public abstract class ChunkingStrategyBase : IChunkingStrategy
     {
         if (chunkSize <= 0)
             throw new ArgumentException("ChunkSize must be greater than zero", nameof(chunkSize));
-        
+
         if (chunkOverlap < 0)
             throw new ArgumentException("ChunkOverlap cannot be negative", nameof(chunkOverlap));
-        
+
         if (chunkOverlap >= chunkSize)
             throw new ArgumentException("ChunkOverlap must be less than ChunkSize", nameof(chunkOverlap));
 
@@ -112,7 +112,7 @@ public abstract class ChunkingStrategyBase : IChunkingStrategy
     {
         if (text == null)
             throw new ArgumentNullException(nameof(text));
-        
+
         if (string.IsNullOrEmpty(text))
             throw new ArgumentException("Text cannot be empty", nameof(text));
     }
@@ -153,10 +153,10 @@ public abstract class ChunkingStrategyBase : IChunkingStrategy
         {
             var remainingLength = textLength - position;
             var currentChunkSize = Math.Min(_chunkSize, remainingLength);
-            
+
             var chunk = text.Substring(position, currentChunkSize);
             var endPosition = position + currentChunkSize;
-            
+
             chunks.Add((chunk, position, endPosition));
 
             // Move to next chunk position with overlap
@@ -195,11 +195,11 @@ public abstract class ChunkingStrategyBase : IChunkingStrategy
     /// </para>
     /// </remarks>
     protected IEnumerable<(string Chunk, int StartPosition, int EndPosition)> SplitOnSentences(
-        string text, 
+        string text,
         char[]? sentenceEndings = null)
     {
         var endings = sentenceEndings ?? new[] { '.', '!', '?' };
-        
+
         var chunks = new List<(string, int, int)>();
         var currentChunk = new System.Text.StringBuilder();
         var chunkStart = 0;
@@ -211,12 +211,12 @@ public abstract class ChunkingStrategyBase : IChunkingStrategy
             position++;
 
             // Check if we're at a sentence boundary
-            var isSentenceEnd = position < text.Length && 
+            var isSentenceEnd = position < text.Length &&
                                endings.Contains(text[position - 1]) &&
                                char.IsWhiteSpace(text[position]);
 
             // Create chunk if we hit sentence end and chunk is large enough, or if chunk is at max size
-            if ((isSentenceEnd && currentChunk.Length >= _chunkSize / 2) || 
+            if ((isSentenceEnd && currentChunk.Length >= _chunkSize / 2) ||
                 currentChunk.Length >= _chunkSize)
             {
                 var chunkText = currentChunk.ToString();

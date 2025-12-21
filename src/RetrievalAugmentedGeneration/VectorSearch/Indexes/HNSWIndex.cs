@@ -1,8 +1,9 @@
-using AiDotNet.Helpers;
-using AiDotNet.LinearAlgebra;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 {
@@ -70,7 +71,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             _efConstruction = efConstruction;
             _efSearch = efSearch;
             _levelMultiplier = 1.0 / Math.Log(maxConnections);
-            _random = new Random(seed);
+            _random = RandomHelper.CreateSeededRandom(seed);
 
             _vectors = new Dictionary<string, Vector<T>>();
             _layers = new List<Dictionary<string, List<string>>>();

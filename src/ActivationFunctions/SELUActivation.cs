@@ -30,7 +30,7 @@ public class SELUActivation<T> : ActivationFunctionBase<T>
     /// This specific value helps maintain the self-normalizing property of SELU networks.
     /// </remarks>
     private readonly T _lambda;
-    
+
     /// <summary>
     /// The alpha parameter for the SELU function, which controls the negative saturation value.
     /// </summary>

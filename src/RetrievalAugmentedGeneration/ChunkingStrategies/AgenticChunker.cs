@@ -78,7 +78,7 @@ public class AgenticChunker : ChunkingStrategyBase
             throw new ArgumentOutOfRangeException(nameof(overlap), "Overlap must be less than max chunk size");
         if (coherenceThreshold < 0 || coherenceThreshold > 1)
             throw new ArgumentOutOfRangeException(nameof(coherenceThreshold), "Coherence threshold must be between 0 and 1");
-            
+
         _maxChunkSize = maxChunkSize;
         _coherenceThreshold = coherenceThreshold;
     }
@@ -93,10 +93,10 @@ public class AgenticChunker : ChunkingStrategyBase
 
         // Detect structural boundaries (paragraphs, sections)
         var boundaries = DetectBoundaries(text);
-        
+
         // Create chunks at natural boundaries
         var chunks = CreateSemanticChunks(text, boundaries);
-        
+
         foreach (var chunk in chunks)
         {
             yield return chunk;
@@ -123,14 +123,14 @@ public class AgenticChunker : ChunkingStrategyBase
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
-            
+
             // Markdown headers or all-caps headers
-            if (trimmed.StartsWith("#") || 
+            if (trimmed.StartsWith("#") ||
                 (trimmed.Length > 3 && trimmed.Length < 100 && trimmed == trimmed.ToUpperInvariant() && !trimmed.All(char.IsDigit)))
             {
                 boundaries.Add(position);
             }
-            
+
             position += line.Length + lineEndingLength;
         }
 
@@ -148,7 +148,7 @@ public class AgenticChunker : ChunkingStrategyBase
 
         // Sort and deduplicate boundaries
         boundaries = boundaries.Distinct().OrderBy(b => b).ToList();
-        
+
         // Add end boundary
         if (boundaries[boundaries.Count - 1] < text.Length)
             boundaries.Add(text.Length);
@@ -157,7 +157,7 @@ public class AgenticChunker : ChunkingStrategyBase
     }
 
     private List<(string Chunk, int StartPosition, int EndPosition)> CreateSemanticChunks(
-        string text, 
+        string text,
         List<int> boundaries)
     {
         var chunks = new List<(string, int, int)>();
@@ -180,16 +180,16 @@ public class AgenticChunker : ChunkingStrategyBase
                     var coherence = CalculateSemanticCoherence(
                         text.Substring(currentChunkStart, currentChunkEnd - currentChunkStart),
                         text.Substring(currentChunkEnd, Math.Min(boundaryPos - currentChunkEnd, 500)));
-                    
+
                     // If coherence is high, allow slight size overflow
-                    if (coherence >= _coherenceThreshold && 
+                    if (coherence >= _coherenceThreshold &&
                         (potentialChunkEnd - currentChunkStart) <= (_maxChunkSize * 1.2))
                     {
                         shouldSplit = false;
                         currentChunkEnd = potentialChunkEnd;
                     }
                 }
-                
+
                 if (shouldSplit)
                 {
                     // Finalize current chunk
@@ -230,7 +230,7 @@ public class AgenticChunker : ChunkingStrategyBase
         if (currentChunkEnd > currentChunkStart)
         {
             var finalChunkLength = currentChunkEnd - currentChunkStart;
-            
+
             // If final chunk exceeds max size, split it recursively
             if (finalChunkLength > _maxChunkSize * 1.2)
             {
@@ -318,14 +318,14 @@ public class AgenticChunker : ChunkingStrategyBase
 
         // Check for discourse markers (transition words) at start of segment2
         var segment2Trimmed = segment2.TrimStart();
-        var discourseMarkers = new[] 
-        { 
+        var discourseMarkers = new[]
+        {
             "however", "therefore", "thus", "furthermore", "moreover", "additionally",
             "consequently", "nevertheless", "meanwhile", "similarly", "likewise",
             "in contrast", "on the other hand", "as a result", "for example", "for instance"
         };
-        
-        var hasTransition = discourseMarkers.Any(marker => 
+
+        var hasTransition = discourseMarkers.Any(marker =>
             segment2Trimmed.StartsWith(marker, StringComparison.OrdinalIgnoreCase));
         var transitionBonus = hasTransition ? 0.15 : 0.0;
 

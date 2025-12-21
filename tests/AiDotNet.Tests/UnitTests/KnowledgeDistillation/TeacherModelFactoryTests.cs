@@ -3,9 +3,9 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation;
 using AiDotNet.KnowledgeDistillation.Teachers;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
@@ -243,7 +243,7 @@ public class TeacherModelFactoryTests
     {
         private readonly int _inputDim;
         private readonly int _outputDim;
-        private readonly Random _random = new Random(42);
+        private readonly Random _random = RandomHelper.CreateSeededRandom(42);
         private readonly HashSet<int> _activeFeatures = new();
 
         public MockFullModel(int inputDim, int outputDim)

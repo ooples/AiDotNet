@@ -459,38 +459,38 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     {
         // Create a new instance with the same options and regularization
         var newModel = new PrincipalComponentRegression<T>(_options, Regularization);
-        
+
         // Copy coefficients and intercept from base class
         if (Coefficients != null)
         {
             newModel.Coefficients = Coefficients.Clone();
         }
         newModel.Intercept = Intercept;
-        
+
         // Copy principal components matrix
         if (_components != null)
         {
             newModel._components = _components.Clone();
         }
-        
+
         // Copy means and standard deviations used for scaling
         if (_xMean != null)
         {
             newModel._xMean = _xMean.Clone();
         }
-        
+
         if (_yMean != null)
         {
             newModel._yMean = _yMean.Clone();
         }
-        
+
         if (_xStd != null)
         {
             newModel._xStd = _xStd.Clone();
         }
-        
+
         newModel._yStd = _yStd;
-        
+
         return newModel;
     }
 }

@@ -26,7 +26,7 @@ public class AdaptiveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// if it's underfitting or overfitting.
     /// </remarks>
     private readonly ResidualAnalysisFitDetector<T, TInput, TOutput> _residualAnalyzer;
-    
+
     /// <summary>
     /// A detector that analyzes learning curves to determine fit.
     /// </summary>
@@ -35,7 +35,7 @@ public class AdaptiveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// more training data to determine if it's underfitting or overfitting.
     /// </remarks>
     private readonly LearningCurveFitDetector<T, TInput, TOutput> _learningCurveDetector;
-    
+
     /// <summary>
     /// A detector that combines multiple detection methods.
     /// </summary>
@@ -44,7 +44,7 @@ public class AdaptiveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// assessment of your model's fit.
     /// </remarks>
     private readonly HybridFitDetector<T, TInput, TOutput> _hybridDetector;
-    
+
     /// <summary>
     /// Configuration options for the adaptive fit detector.
     /// </summary>
@@ -245,7 +245,7 @@ public class AdaptiveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// </remarks>
     private DataComplexity AssessDataComplexity(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        var overallVariance = NumOps.Add(NumOps.Add(evaluationData.TrainingSet.ActualBasicStats.Variance, evaluationData.ValidationSet.ActualBasicStats.Variance), 
+        var overallVariance = NumOps.Add(NumOps.Add(evaluationData.TrainingSet.ActualBasicStats.Variance, evaluationData.ValidationSet.ActualBasicStats.Variance),
             evaluationData.TestSet.ActualBasicStats.Variance);
         var threshold = NumOps.FromDouble(_options.ComplexityThreshold);
 

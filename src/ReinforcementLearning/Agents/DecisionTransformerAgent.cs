@@ -1,13 +1,12 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ActivationFunctions;
-
-using AiDotNet.Enums;
-using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;

@@ -1,8 +1,8 @@
 
-using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
 
@@ -30,7 +30,7 @@ public class SelectiveContextCompressor<T> : ContextCompressorBase<T>
     {
         if (maxSentences <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxSentences), "Max sentences must be positive");
-            
+
         _maxSentences = maxSentences;
         _relevanceThreshold = relevanceThreshold;
     }
@@ -53,7 +53,7 @@ public class SelectiveContextCompressor<T> : ContextCompressorBase<T>
             foreach (var sentence in sentences)
             {
                 var score = CalculateRelevance(query, sentence);
-                if (NumOps.GreaterThan(score, _relevanceThreshold) || 
+                if (NumOps.GreaterThan(score, _relevanceThreshold) ||
                     NumOps.Equals(score, _relevanceThreshold))
                 {
                     scoredSentences.Add((sentence, score));
@@ -89,10 +89,10 @@ public class SelectiveContextCompressor<T> : ContextCompressorBase<T>
         // Simple relevance using word overlap - in production would use embeddings
         var queryWords = query.ToLowerInvariant().Split(new[] { ' ', ',', '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
         var sentenceWords = sentence.ToLowerInvariant().Split(new[] { ' ', ',', '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
-        
+
         var overlap = queryWords.Intersect(sentenceWords).Count();
         var score = overlap > 0 ? (double)overlap / queryWords.Length : 0.0;
-        
+
         return NumOps.FromDouble(score);
     }
 }

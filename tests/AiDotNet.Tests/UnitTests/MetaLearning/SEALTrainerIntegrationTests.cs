@@ -1,358 +1,540 @@
-using AiDotNet.Autodiff;
-using AiDotNet.Data.Loaders;
+using AiDotNet.Data.Structures;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LossFunctions;
-using AiDotNet.MetaLearning.Config;
-using AiDotNet.MetaLearning.Trainers;
+using AiDotNet.MetaLearning;
+using AiDotNet.MetaLearning.Algorithms;
+using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Options;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning;
 
 /// <summary>
-/// Integration tests for SEALTrainer on synthetic few-shot classification tasks.
+/// Integration tests for SEALAlgorithm demonstrating Sample-Efficient Adaptive Learning functionality.
 /// </summary>
+/// <remarks>
+/// These tests verify that the SEAL meta-learning framework operates correctly:
+/// - Parameters are updated through meta-training
+/// - Training completes without errors
+/// - SEAL-specific features work (temperature, entropy regularization, adaptive LR)
+/// - The algorithm adapts to new tasks correctly
+/// </remarks>
 public class SEALTrainerIntegrationTests
 {
-    [Fact]
-    public void SEAL_ImprovesFewShotClassification_OnSyntheticDataset()
+    private SimpleMockModel CreateMockModel() => new SimpleMockModel(50);
+
+    private SEALOptions<double, Tensor<double>, Tensor<double>> CreateDefaultOptions()
     {
-        // Arrange: Create synthetic dataset with class-specific patterns
-        var (datasetX, datasetY) = GenerateSyntheticDataset(
-            numClasses: 10,
-            examplesPerClass: 50,
-            imageSize: 28);
-
-        var dataLoader = new UniformEpisodicDataLoader<double, Matrix<double>, Vector<double>>(
-            datasetX: datasetX,
-            datasetY: datasetY,
-            nWay: 5,
-            kShot: 5,
-            queryShots: 15);
-
-        // Create a simple learning mock model
-        var model = new LearningMockModel(
-            inputSize: 28 * 28,
-            hiddenSize: 64,
-            outputSize: 5);
-
-        var config = new SEALTrainerConfig<double>(
-            selfSupervisedSteps: 10,
-            supervisedSteps: 5,
-            activeLearningK: 10,
-            innerLearningRate: 0.01,
-            metaLearningRate: 0.001,
-            metaBatchSize: 4,
-            numMetaIterations: 50);  // Limited for test speed
-
-        var trainer = new SEALTrainer<double, Matrix<double>, Vector<double>>(
-            metaModel: model,
-            lossFunction: new MeanSquaredErrorLoss<double>(),
-            selfSupervisedLoss: new RotationPredictionLoss<double>(),
-            dataLoader: dataLoader,
-            config: config);
-
-        // Evaluate before meta-training
-        var preTrainingAccuracy = EvaluateAccuracy(trainer, dataLoader, numTasks: 20);
-
-        // Act: Meta-train
-        trainer.Train();
-
-        // Evaluate after meta-training
-        var postTrainingAccuracy = EvaluateAccuracy(trainer, dataLoader, numTasks: 20);
-
-        // Assert: Should show improvement or at least not significantly degrade
-        double improvement = postTrainingAccuracy - preTrainingAccuracy;
-
-        // Very lenient thresholds for mock model with synthetic data
-        // The LearningMockModel uses random gradients so real learning is not expected
-        // We just verify the training process completes and doesn't catastrophically fail
-        Assert.True(improvement > -0.10,  // At least not worse than 10% degradation
-            $"Training should not catastrophically degrade performance. Got {improvement * 100:F1}% change (pre: {preTrainingAccuracy * 100:F1}%, post: {postTrainingAccuracy * 100:F1}%)");
-
-        // Verify accuracies are in reasonable range (not NaN, not 0, not 1)
-        Assert.True(postTrainingAccuracy > 0.0 && postTrainingAccuracy < 1.0,
-            $"Post-training accuracy should be in valid range (0, 1), got {postTrainingAccuracy}");
+        var mockModel = CreateMockModel();
+        return new SEALOptions<double, Tensor<double>, Tensor<double>>(mockModel)
+        {
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 0.001,
+            AdaptationSteps = 5,
+            Temperature = 1.0,
+            EntropyCoefficient = 0.0,
+            WeightDecay = 0.0
+        };
     }
+
+    /// <summary>
+    /// Creates a mock task for testing purposes with varying patterns per seed.
+    /// </summary>
+    private IMetaLearningTask<double, Tensor<double>, Tensor<double>> CreateMockTask(int seed = 0)
+    {
+        var supportInput = new Tensor<double>(new int[] { 25, 10 });  // 5 classes x 5 shots
+        var supportOutput = new Tensor<double>(new int[] { 25 });
+        var queryInput = new Tensor<double>(new int[] { 75, 10 });   // 5 classes x 15 queries
+        var queryOutput = new Tensor<double>(new int[] { 75 });
+
+        // Fill with seeded random data that varies per task
+        var random = new Random(42 + seed);
+        for (int i = 0; i < supportInput.Shape[0]; i++)
+        {
+            for (int j = 0; j < supportInput.Shape[1]; j++)
+            {
+                supportInput[new[] { i, j }] = random.NextDouble() * 2 - 1;
+            }
+            supportOutput[new[] { i }] = i % 5; // Class labels 0-4
+        }
+
+        for (int i = 0; i < queryInput.Shape[0]; i++)
+        {
+            for (int j = 0; j < queryInput.Shape[1]; j++)
+            {
+                queryInput[new[] { i, j }] = random.NextDouble() * 2 - 1;
+            }
+            queryOutput[new[] { i }] = i % 5; // Class labels 0-4
+        }
+
+        return new MetaLearningTask<double, Tensor<double>, Tensor<double>>
+        {
+            SupportSetX = supportInput,
+            SupportSetY = supportOutput,
+            QuerySetX = queryInput,
+            QuerySetY = queryOutput,
+            NumWays = 5,
+            NumShots = 5,
+            NumQueryPerClass = 15,
+            Name = $"test-task-{seed}"
+        };
+    }
+
+    private TaskBatch<double, Tensor<double>, Tensor<double>> CreateTaskBatch(int batchSize)
+    {
+        var tasks = Enumerable.Range(0, batchSize)
+            .Select(i => CreateMockTask(i))
+            .ToArray();
+        return new TaskBatch<double, Tensor<double>, Tensor<double>>(tasks);
+    }
+
+    #region Integration Tests
 
     [Fact]
     public void SEAL_CompletesTraining_WithoutErrors()
     {
         // Arrange
-        var (datasetX, datasetY) = GenerateSyntheticDataset(
-            numClasses: 5,
-            examplesPerClass: 30,
-            imageSize: 16);  // Smaller for faster test
+        var options = CreateDefaultOptions();
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
-        var dataLoader = new UniformEpisodicDataLoader<double, Matrix<double>, Vector<double>>(
-            datasetX: datasetX,
-            datasetY: datasetY,
-            nWay: 3,
-            kShot: 3,
-            queryShots: 9);
-
-        var model = new LearningMockModel(inputSize: 16 * 16, hiddenSize: 32, outputSize: 3);
-
-        var config = new SEALTrainerConfig<double>(
-            selfSupervisedSteps: 3,
-            supervisedSteps: 2,
-            activeLearningK: 5,
-            metaBatchSize: 2,
-            numMetaIterations: 10);
-
-        var trainer = new SEALTrainer<double, Matrix<double>, Vector<double>>(
-            metaModel: model,
-            lossFunction: new MeanSquaredErrorLoss<double>(),
-            selfSupervisedLoss: new RotationPredictionLoss<double>(),
-            dataLoader: dataLoader,
-            config: config);
-
-        // Act
-        var result = trainer.Train();
+        // Act - Train for multiple iterations
+        var losses = new List<double>();
+        for (int i = 0; i < 10; i++)
+        {
+            var taskBatch = CreateTaskBatch(4);
+            var loss = algorithm.MetaTrain(taskBatch);
+            losses.Add(loss);
+        }
 
         // Assert
-        Assert.NotNull(result);
-        Assert.Equal(10, result.LossHistory.Length);
-        Assert.Equal(10, result.AccuracyHistory.Length);
-        Assert.True(result.TrainingTime.TotalMilliseconds > 0);
-
-        // Verify no NaN values in history
-        for (int i = 0; i < result.LossHistory.Length; i++)
-        {
-            Assert.False(double.IsNaN(result.LossHistory[i]), $"Loss at iteration {i} is NaN");
-            Assert.False(double.IsNaN(result.AccuracyHistory[i]), $"Accuracy at iteration {i} is NaN");
-        }
+        Assert.Equal(10, losses.Count);
+        Assert.All(losses, loss => Assert.True(loss >= 0, "Loss should be non-negative"));
+        Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
     }
 
-    /// <summary>
-    /// Evaluates average accuracy across multiple tasks.
-    /// </summary>
-    private double EvaluateAccuracy(
-        SEALTrainer<double, Matrix<double>, Vector<double>> trainer,
-        IEpisodicDataLoader<double, Matrix<double>, Vector<double>> dataLoader,
-        int numTasks)
+    [Fact]
+    public void SEAL_MetaTrain_UpdatesParametersCorrectly()
     {
-        double totalAccuracy = 0.0;
+        // Arrange
+        var options = CreateDefaultOptions();
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
-        for (int i = 0; i < numTasks; i++)
+        // Get initial parameters
+        var metaModel = algorithm.GetMetaModel();
+        var initialParams = metaModel.GetParameters();
+        var initialParamsClone = initialParams.Clone();
+
+        // Act - Meta-train for multiple iterations
+        for (int i = 0; i < 20; i++)
         {
-            var task = dataLoader.GetNextTask();
-            var result = trainer.AdaptAndEvaluate(task);
-            totalAccuracy += result.QueryAccuracy;
+            var taskBatch = CreateTaskBatch(4);
+            algorithm.MetaTrain(taskBatch);
         }
 
-        return totalAccuracy / numTasks;
-    }
-
-    /// <summary>
-    /// Generates a synthetic dataset with class-specific visual patterns.
-    /// </summary>
-    private (Matrix<double> X, Vector<double> Y) GenerateSyntheticDataset(
-        int numClasses,
-        int examplesPerClass,
-        int imageSize)
-    {
-        int totalExamples = numClasses * examplesPerClass;
-        int flattenedSize = imageSize * imageSize;
-
-        var datasetX = new Matrix<double>(totalExamples, flattenedSize);
-        var datasetY = new Vector<double>(totalExamples);
-
-        var random = new Random(42);
-
-        for (int classIdx = 0; classIdx < numClasses; classIdx++)
+        // Assert - Parameters should have changed
+        var finalParams = metaModel.GetParameters();
+        bool paramsChanged = false;
+        for (int i = 0; i < initialParamsClone.Length; i++)
         {
-            for (int exampleIdx = 0; exampleIdx < examplesPerClass; exampleIdx++)
+            if (Math.Abs(finalParams[i] - initialParamsClone[i]) > 1e-10)
             {
-                int idx = classIdx * examplesPerClass + exampleIdx;
-
-                // Generate class-specific pattern
-                double frequency = 0.3 + classIdx * 0.1;
-                double phase = classIdx * Math.PI / numClasses;
-
-                for (int i = 0; i < imageSize; i++)
-                {
-                    for (int j = 0; j < imageSize; j++)
-                    {
-                        // Create sinusoidal pattern unique to this class
-                        double value = Math.Sin(i * frequency + phase) * Math.Cos(j * frequency + phase);
-                        value = (value + 1.0) / 2.0;  // Normalize to [0, 1]
-
-                        // Add random noise
-                        value += (random.NextDouble() - 0.5) * 0.2;
-                        value = Math.Max(0.0, Math.Min(1.0, value));  // Clamp to [0, 1]
-
-                        // Flatten 2D image to 1D
-                        int flatIdx = i * imageSize + j;
-                        datasetX[idx, flatIdx] = value;
-                    }
-                }
-
-                // Class label (integer)
-                datasetY[idx] = classIdx;
+                paramsChanged = true;
+                break;
             }
         }
 
-        return (datasetX, datasetY);
+        Assert.True(paramsChanged, "Meta-training should update model parameters");
     }
-}
 
-/// <summary>
-/// Simple learning mock model that actually learns from training data.
-/// </summary>
-/// <remarks>
-/// <b>Limitation:</b> The Random instance is initialized with a fixed seed (42) for reproducibility.
-/// When DeepCopy() or Clone() is called, the new instance gets a fresh Random with the same seed,
-/// causing all cloned models to produce identical predictions from the same seed state.
-/// This is acceptable for basic testing but does not reflect real prediction diversity across model copies.
-/// </remarks>
-internal class LearningMockModel : AiDotNet.Interfaces.IFullModel<double, Matrix<double>, Vector<double>>
-{
-    private Vector<double> _parameters;
-    private int _inputSize;
-    private int _hiddenSize;
-    private int _outputSize;
-    private Random _random = new Random(42);
-    private double _learningRate = 0.01;
-
-    public LearningMockModel(int inputSize, int hiddenSize, int outputSize)
+    [Fact]
+    public void SEAL_WithEntropyRegularization_CompletesSuccessfully()
     {
-        _inputSize = inputSize;
-        _hiddenSize = hiddenSize;
-        _outputSize = outputSize;
-
-        // Initialize parameters (weights and biases)
-        int totalParams = (inputSize * hiddenSize) + hiddenSize + (hiddenSize * outputSize) + outputSize;
-        _parameters = new Vector<double>(totalParams);
-
-        // Xavier initialization
-        for (int i = 0; i < totalParams; i++)
+        // Arrange - SEAL with entropy regularization for better generalization
+        var mockModel = CreateMockModel();
+        var options = new SEALOptions<double, Tensor<double>, Tensor<double>>(mockModel)
         {
-            _parameters[i] = (_random.NextDouble() - 0.5) * 0.1;
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 0.001,
+            AdaptationSteps = 5,
+            EntropyCoefficient = 0.01
+        };
+
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+
+        // Act
+        var losses = new List<double>();
+        for (int i = 0; i < 10; i++)
+        {
+            var taskBatch = CreateTaskBatch(4);
+            var loss = algorithm.MetaTrain(taskBatch);
+            losses.Add(loss);
         }
+
+        // Assert
+        Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
+        Assert.All(losses, loss => Assert.False(double.IsPositiveInfinity(loss), "Loss should not be infinite"));
     }
 
-    public Vector<double> GetParameters() => _parameters.Clone();
-
-    public void SetParameters(Vector<double> parameters)
+    [Fact]
+    public void SEAL_WithTemperatureScaling_CompletesSuccessfully()
     {
-        if (parameters.Length != _parameters.Length)
+        // Arrange - SEAL with temperature scaling
+        var mockModel = CreateMockModel();
+        var options = new SEALOptions<double, Tensor<double>, Tensor<double>>(mockModel)
         {
-            throw new ArgumentException($"Parameter count mismatch");
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 0.001,
+            AdaptationSteps = 5,
+            Temperature = 1.5
+        };
+
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+
+        // Act
+        var losses = new List<double>();
+        for (int i = 0; i < 10; i++)
+        {
+            var taskBatch = CreateTaskBatch(4);
+            var loss = algorithm.MetaTrain(taskBatch);
+            losses.Add(loss);
         }
-        _parameters = parameters.Clone();
+
+        // Assert
+        Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
+        Assert.All(losses, loss => Assert.True(loss >= 0, "Loss should be non-negative"));
     }
 
-    public int ParameterCount => _parameters.Length;
-
-    public void Train(Matrix<double> input, Vector<double> expectedOutput)
+    [Fact]
+    public void SEAL_WithWeightDecay_CompletesSuccessfully()
     {
-        // Simple gradient descent update
-        // Compute simple gradients and update parameters
-        for (int i = 0; i < _parameters.Length; i++)
+        // Arrange - SEAL with weight decay for regularization
+        var mockModel = CreateMockModel();
+        var options = new SEALOptions<double, Tensor<double>, Tensor<double>>(mockModel)
         {
-            double gradient = (_random.NextDouble() - 0.5) * 0.01;  // Simplified gradient
-            _parameters[i] -= _learningRate * gradient;
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 0.001,
+            AdaptationSteps = 5,
+            WeightDecay = 0.001
+        };
+
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+
+        // Act
+        var losses = new List<double>();
+        for (int i = 0; i < 10; i++)
+        {
+            var taskBatch = CreateTaskBatch(4);
+            var loss = algorithm.MetaTrain(taskBatch);
+            losses.Add(loss);
         }
+
+        // Assert
+        Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
     }
 
-    public Vector<double> Predict(Matrix<double> input)
+    [Fact]
+    public void SEAL_WithAdaptiveLearningRate_CompletesSuccessfully()
     {
-        int numExamples = input.Rows;
-        var output = new Vector<double>(numExamples);
-
-        // Simple forward pass
-        for (int i = 0; i < numExamples; i++)
+        // Arrange - SEAL with adaptive inner learning rates
+        var mockModel = CreateMockModel();
+        var options = new SEALOptions<double, Tensor<double>, Tensor<double>>(mockModel)
         {
-            // Compute simple output (predict class based on parameters)
-            double[] probs = new double[_outputSize];
-            double sum = 0.0;
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 0.001,
+            AdaptationSteps = 5,
+            UseAdaptiveInnerLR = true,
+            AdaptiveLearningRateMode = SEALAdaptiveLearningRateMode.GradientNorm
+        };
 
-            for (int j = 0; j < _outputSize; j++)
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+
+        // Act
+        var losses = new List<double>();
+        for (int i = 0; i < 10; i++)
+        {
+            var taskBatch = CreateTaskBatch(4);
+            var loss = algorithm.MetaTrain(taskBatch);
+            losses.Add(loss);
+        }
+
+        // Assert
+        Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
+    }
+
+    [Fact]
+    public void SEAL_Adapt_ProducesTaskSpecificModel()
+    {
+        // Arrange
+        var options = CreateDefaultOptions();
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+
+        // Meta-train first
+        for (int i = 0; i < 10; i++)
+        {
+            var taskBatch = CreateTaskBatch(4);
+            algorithm.MetaTrain(taskBatch);
+        }
+
+        // Get original meta-model parameters
+        var metaModel = algorithm.GetMetaModel();
+        var metaParams = metaModel.GetParameters().Clone();
+
+        // Act - Adapt to a new task
+        var newTask = CreateMockTask(100);  // Different seed for novel task
+        var adaptedModel = algorithm.Adapt(newTask);
+
+        // Assert - Adapted model should be created
+        Assert.NotNull(adaptedModel);
+
+        // Meta-model parameters should remain unchanged
+        var currentMetaParams = metaModel.GetParameters();
+        bool metaParamsUnchanged = true;
+        for (int i = 0; i < metaParams.Length; i++)
+        {
+            if (Math.Abs(currentMetaParams[i] - metaParams[i]) > 1e-15)
             {
-                probs[j] = Math.Abs(_parameters[j % _parameters.Length]) + _random.NextDouble() * 0.1;
-                sum += probs[j];
+                metaParamsUnchanged = false;
+                break;
             }
-
-            // Normalize to probabilities and select argmax
-            double maxProb = 0.0;
-            int predictedClass = 0;
-            for (int j = 0; j < _outputSize; j++)
-            {
-                double prob = sum > 0 ? probs[j] / sum : 1.0 / _outputSize;
-                if (prob > maxProb)
-                {
-                    maxProb = prob;
-                    predictedClass = j;
-                }
-            }
-            output[i] = predictedClass;
         }
-
-        return output;
+        Assert.True(metaParamsUnchanged, "Adaptation should not modify meta-model parameters");
     }
 
-    public AiDotNet.Models.ModelMetadata<double> GetModelMetadata() => new AiDotNet.Models.ModelMetadata<double>();
-    public void SaveModel(string filePath) { }
-    public void LoadModel(string filePath) { }
-    public byte[] Serialize() => Array.Empty<byte>();
-    public void Deserialize(byte[] data) { }
+    [Fact]
+    public void SEAL_Evaluate_ProducesValidMetrics()
+    {
+        // Arrange
+        var options = CreateDefaultOptions();
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
-    // ICheckpointableModel implementation
-    public void SaveState(Stream stream) { }
-    public void LoadState(Stream stream) { }
-
-    public AiDotNet.Interfaces.IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
-    {
-        var copy = new LearningMockModel(_inputSize, _hiddenSize, _outputSize);
-        copy.SetParameters(_parameters);
-        return copy;
-    }
-    public AiDotNet.Interfaces.IFullModel<double, Matrix<double>, Vector<double>> Clone() => DeepCopy();
-    public AiDotNet.Interfaces.IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
-    {
-        var newModel = new LearningMockModel(_inputSize, _hiddenSize, _outputSize);
-        newModel.SetParameters(parameters);
-        return newModel;
-    }
-    public int InputFeatureCount => _inputSize;
-    public int OutputFeatureCount => _outputSize;
-    public string[] FeatureNames { get; set; } = Array.Empty<string>();
-    public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, InputFeatureCount);
-    public void SetActiveFeatureIndices(IEnumerable<int> indices) { }
-    public bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < InputFeatureCount;
-    public Dictionary<string, double> GetFeatureImportance() => new Dictionary<string, double>();
-    public AiDotNet.Interfaces.ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
-    public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, AiDotNet.Interfaces.ILossFunction<double>? lossFunction = null)
-    {
-        return new Vector<double>(ParameterCount);
-    }
-    public void ApplyGradients(Vector<double> gradients, double learningRate)
-    {
-        for (int i = 0; i < Math.Min(gradients.Length, _parameters.Length); i++)
+        // Meta-train first
+        for (int i = 0; i < 10; i++)
         {
-            _parameters[i] -= learningRate * gradients[i];
+            var taskBatch = CreateTaskBatch(4);
+            algorithm.MetaTrain(taskBatch);
         }
+
+        // Act - Evaluate on a task batch
+        var evalBatch = CreateTaskBatch(10);
+        var evalLoss = algorithm.Evaluate(evalBatch);
+
+        // Assert
+        Assert.True(evalLoss >= 0, "Evaluation loss should be non-negative");
+        Assert.False(double.IsNaN(evalLoss), "Evaluation loss should not be NaN");
+        Assert.False(double.IsPositiveInfinity(evalLoss), "Evaluation loss should not be infinite");
     }
 
-    // IJitCompilable implementation
-    public bool SupportsJitCompilation => true;
-
-    public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
+    [Fact]
+    public void SEAL_LongTraining_TracksLossCorrectly()
     {
-        // Create a computation graph for the learning mock model
-        var inputShape = new int[] { 1, _inputSize };
-        var inputTensor = new Tensor<double>(inputShape);
-        var inputNode = TensorOperations<double>.Variable(inputTensor, "input");
-        inputNodes.Add(inputNode);
+        // Arrange
+        var options = CreateDefaultOptions();
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
-        // Create parameter node
-        var paramTensor = new Tensor<double>(new int[] { _parameters.Length }, _parameters);
-        var paramNode = TensorOperations<double>.Variable(paramTensor, "parameters");
-        inputNodes.Add(paramNode);
+        // Act - Train for many iterations (simulating 50+ meta-iterations requirement)
+        var losses = new List<double>();
+        for (int i = 0; i < 50; i++)
+        {
+            var taskBatch = CreateTaskBatch(4);
+            var loss = algorithm.MetaTrain(taskBatch);
+            losses.Add(loss);
+        }
 
-        // Simple computation: mean of input
-        var meanNode = TensorOperations<double>.Mean(inputNode);
-        return meanNode;
+        // Assert
+        Assert.Equal(50, losses.Count);
+
+        // Check that we have recorded valid losses
+        double firstLoss = losses[0];
+        double lastLoss = losses[losses.Count - 1];
+
+        Assert.True(firstLoss >= 0, "Initial loss should be non-negative");
+        Assert.True(lastLoss >= 0, "Final loss should be non-negative");
+        Assert.True(lastLoss < double.MaxValue, "Loss should not explode");
+        Assert.True(!double.IsNaN(lastLoss), "Loss should not be NaN");
     }
+
+    [Fact]
+    public void SEAL_WithFirstOrderApproximation_CompletesSuccessfully()
+    {
+        // Arrange - SEAL with first-order approximation (FOMAML-style)
+        var mockModel = CreateMockModel();
+        var options = new SEALOptions<double, Tensor<double>, Tensor<double>>(mockModel)
+        {
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 0.001,
+            AdaptationSteps = 5,
+            UseFirstOrder = true
+        };
+
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+
+        // Act
+        var losses = new List<double>();
+        for (int i = 0; i < 10; i++)
+        {
+            var taskBatch = CreateTaskBatch(4);
+            var loss = algorithm.MetaTrain(taskBatch);
+            losses.Add(loss);
+        }
+
+        // Assert
+        Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
+        Assert.All(losses, loss => Assert.True(loss >= 0, "Loss should be non-negative"));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    [InlineData(10)]
+    public void SEAL_WithDifferentAdaptationSteps_CompletesSuccessfully(int adaptationSteps)
+    {
+        // Arrange
+        var mockModel = CreateMockModel();
+        var options = new SEALOptions<double, Tensor<double>, Tensor<double>>(mockModel)
+        {
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 0.001,
+            AdaptationSteps = adaptationSteps
+        };
+
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+
+        // Act
+        var taskBatch = CreateTaskBatch(4);
+        var loss = algorithm.MetaTrain(taskBatch);
+
+        // Assert
+        Assert.True(loss >= 0, $"Loss should be non-negative for adaptation steps={adaptationSteps}");
+        Assert.False(double.IsNaN(loss), $"Loss should not be NaN for adaptation steps={adaptationSteps}");
+    }
+
+    [Theory]
+    [InlineData(0.5)]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public void SEAL_WithDifferentTemperatures_CompletesSuccessfully(double temperature)
+    {
+        // Arrange
+        var mockModel = CreateMockModel();
+        var options = new SEALOptions<double, Tensor<double>, Tensor<double>>(mockModel)
+        {
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 0.001,
+            AdaptationSteps = 5,
+            Temperature = temperature,
+            // MinTemperature must be <= Temperature for validation to pass
+            MinTemperature = Math.Min(temperature, 1.0)
+        };
+
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+
+        // Act
+        var taskBatch = CreateTaskBatch(4);
+        var loss = algorithm.MetaTrain(taskBatch);
+
+        // Assert
+        Assert.True(loss >= 0, $"Loss should be non-negative for temperature={temperature}");
+        Assert.False(double.IsNaN(loss), $"Loss should not be NaN for temperature={temperature}");
+    }
+
+    [Theory]
+    [InlineData(SEALAdaptiveLearningRateMode.GradientNorm)]
+    [InlineData(SEALAdaptiveLearningRateMode.RunningMean)]
+    [InlineData(SEALAdaptiveLearningRateMode.PerLayer)]
+    public void SEAL_WithDifferentAdaptiveLRModes_CompletesSuccessfully(SEALAdaptiveLearningRateMode mode)
+    {
+        // Arrange
+        var mockModel = CreateMockModel();
+        var options = new SEALOptions<double, Tensor<double>, Tensor<double>>(mockModel)
+        {
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 0.001,
+            AdaptationSteps = 5,
+            UseAdaptiveInnerLR = true,
+            AdaptiveLearningRateMode = mode
+        };
+
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+
+        // Act
+        var taskBatch = CreateTaskBatch(4);
+        var loss = algorithm.MetaTrain(taskBatch);
+
+        // Assert
+        Assert.False(double.IsNaN(loss), $"Loss should not be NaN for mode={mode}");
+    }
+
+    [Fact]
+    public void Algorithm_HasCorrectName()
+    {
+        // Arrange
+        var options = CreateDefaultOptions();
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+
+        // Assert
+        Assert.Equal(MetaLearningAlgorithmType.SEAL, algorithm.AlgorithmType);
+    }
+
+    [Fact]
+    public void Algorithm_ExposesCorrectHyperparameters()
+    {
+        // Arrange
+        var mockModel = CreateMockModel();
+        var options = new SEALOptions<double, Tensor<double>, Tensor<double>>(mockModel)
+        {
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = 0.05,
+            OuterLearningRate = 0.002,
+            AdaptationSteps = 8
+        };
+
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
+
+        // Assert
+        Assert.Equal(0.05, algorithm.InnerLearningRate);
+        Assert.Equal(0.002, algorithm.OuterLearningRate);
+        Assert.Equal(8, algorithm.AdaptationSteps);
+    }
+
+    [Fact]
+    public void Options_IsValid_ReturnsTrueForValidOptions()
+    {
+        // Arrange
+        var options = CreateDefaultOptions();
+
+        // Assert
+        Assert.True(options.IsValid());
+    }
+
+    [Fact]
+    public void Options_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        var options = CreateDefaultOptions();
+
+        // Act
+        var clonedOptions = options.Clone() as SEALOptions<double, Tensor<double>, Tensor<double>>;
+
+        // Assert
+        Assert.NotNull(clonedOptions);
+        Assert.Equal(options.InnerLearningRate, clonedOptions.InnerLearningRate);
+        Assert.Equal(options.OuterLearningRate, clonedOptions.OuterLearningRate);
+        Assert.Equal(options.AdaptationSteps, clonedOptions.AdaptationSteps);
+        Assert.Equal(options.Temperature, clonedOptions.Temperature);
+        Assert.Equal(options.EntropyCoefficient, clonedOptions.EntropyCoefficient);
+        Assert.Equal(options.WeightDecay, clonedOptions.WeightDecay);
+    }
+
+    #endregion
 }

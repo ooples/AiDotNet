@@ -1,6 +1,6 @@
+using System.Text.Json;
 using AiDotNet.Interfaces;
 using AiDotNet.PromptEngineering.Tools;
-using System.Text.Json;
 using Xunit;
 
 namespace AiDotNet.Tests.PromptEngineering;

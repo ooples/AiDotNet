@@ -30,7 +30,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations.</typeparam>
-public class SpeculativeDecoder<T>
+internal class SpeculativeDecoder<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -38,12 +38,20 @@ public class SpeculativeDecoder<T>
     private readonly Func<Vector<int>, Matrix<T>> _targetForward;
     private readonly SpeculativeDecodingConfig<T> _config;
     private readonly Random _random;
+    private readonly int _maxDraftTokens;
+    private readonly int _maxTreeDepth;
+    private int _currentDraftTokens;
+    private int _currentMaxTreeDepth;
 
     // Statistics
     private long _totalTokensGenerated;
     private long _totalDraftTokens;
     private long _acceptedDraftTokens;
     private long _totalVerificationCalls;
+
+    // Tree speculation tracking (when enabled)
+    private long _treeTotalNodes;
+    private long _treeAcceptedNodes;
 
     /// <summary>
     /// Gets the configuration.
@@ -53,9 +61,9 @@ public class SpeculativeDecoder<T>
     /// <summary>
     /// Gets the draft acceptance rate.
     /// </summary>
-    public double AcceptanceRate => _totalDraftTokens > 0
-        ? (double)_acceptedDraftTokens / _totalDraftTokens
-        : 0;
+    public double AcceptanceRate => _config.UseTreeSpeculation
+        ? (_treeTotalNodes > 0 ? (double)_treeAcceptedNodes / _treeTotalNodes : 0)
+        : (_totalDraftTokens > 0 ? (double)_acceptedDraftTokens / _totalDraftTokens : 0);
 
     /// <summary>
     /// Gets the average tokens generated per verification call.
@@ -63,6 +71,29 @@ public class SpeculativeDecoder<T>
     public double TokensPerVerification => _totalVerificationCalls > 0
         ? (double)_totalTokensGenerated / _totalVerificationCalls
         : 0;
+
+    /// <summary>
+    /// Gets the total amount of draft work proposed so far.
+    /// </summary>
+    /// <remarks>
+    /// For classic speculation, this counts draft tokens. For tree speculation, this counts explored nodes.
+    /// </remarks>
+    internal long TotalDraftTokens => _config.UseTreeSpeculation ? _treeTotalNodes : _totalDraftTokens;
+
+    /// <summary>
+    /// Gets the current adaptive draft length.
+    /// </summary>
+    internal int CurrentDraftTokens => _currentDraftTokens;
+
+    /// <summary>
+    /// Gets the current adaptive tree depth.
+    /// </summary>
+    internal int CurrentMaxTreeDepth => _currentMaxTreeDepth;
+
+    /// <summary>
+    /// Gets the total number of verification calls performed so far.
+    /// </summary>
+    internal long TotalVerificationCalls => _totalVerificationCalls;
 
     /// <summary>
     /// Creates a speculative decoder.
@@ -79,7 +110,13 @@ public class SpeculativeDecoder<T>
         _draftModel = draftModel ?? throw new ArgumentNullException(nameof(draftModel));
         _targetForward = targetForward ?? throw new ArgumentNullException(nameof(targetForward));
         _config = config ?? new SpeculativeDecodingConfig<T>();
-        _random = _config.Seed.HasValue ? new Random(_config.Seed.Value) : new Random();
+        _maxDraftTokens = Math.Max(1, _config.NumDraftTokens);
+        _maxTreeDepth = Math.Max(1, _config.MaxTreeDepth);
+        _currentDraftTokens = _maxDraftTokens;
+        _currentMaxTreeDepth = _maxTreeDepth;
+        _random = _config.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_config.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -98,6 +135,11 @@ public class SpeculativeDecoder<T>
         int? eosToken = null,
         CancellationToken cancellationToken = default)
     {
+        if (_config.UseTreeSpeculation)
+        {
+            return await GenerateTreeAsync(inputTokens, maxNewTokens, temperature, eosToken, cancellationToken).ConfigureAwait(false);
+        }
+
         var tokens = new List<int>(inputTokens.Length + maxNewTokens);
         for (int i = 0; i < inputTokens.Length; i++)
         {
@@ -112,7 +154,7 @@ public class SpeculativeDecoder<T>
             cancellationToken.ThrowIfCancellationRequested();
 
             // Determine how many draft tokens to generate
-            int numDraft = Math.Min(_config.NumDraftTokens, maxNewTokens - generated);
+            int numDraft = Math.Min(_currentDraftTokens, maxNewTokens - generated);
 
             // Generate draft tokens
             var currentTokens = new Vector<int>(tokens.ToArray());
@@ -238,9 +280,14 @@ public class SpeculativeDecoder<T>
                     BonusToken = true
                 });
             }
+
+            if (_config.AdaptiveDraftLength)
+            {
+                AdjustDraftLength();
+            }
         }
 
-        done:
+    done:
         _totalTokensGenerated += generated;
 
         var resultTokens = new Vector<int>(tokens.ToArray());
@@ -259,6 +306,94 @@ public class SpeculativeDecoder<T>
             TokensPerVerification = TokensPerVerification,
             StepStatistics = stepStats
         };
+    }
+
+    private async Task<SpeculativeResult> GenerateTreeAsync(
+        Vector<int> inputTokens,
+        int maxNewTokens,
+        T temperature,
+        int? eosToken,
+        CancellationToken cancellationToken)
+    {
+        List<Matrix<T>> BatchTargetForward(List<Vector<int>> sequences)
+        {
+            var results = new List<Matrix<T>>(sequences.Count);
+            for (int i = 0; i < sequences.Count; i++)
+            {
+                results.Add(_targetForward(sequences[i]));
+            }
+            return results;
+        }
+
+        var treeConfig = new TreeSpeculativeConfig
+        {
+            BranchFactor = Math.Max(1, _config.TreeBranchFactor),
+            MaxDepth = _currentMaxTreeDepth,
+            Seed = _config.Seed
+        };
+
+        var decoder = new TreeSpeculativeDecoder<T>(_draftModel, BatchTargetForward, treeConfig);
+        var treeResult = await decoder.GenerateAsync(inputTokens, maxNewTokens, temperature, eosToken, cancellationToken).ConfigureAwait(false);
+
+        long nodes = 0;
+        long accepted = 0;
+        var stepStats = new List<StepStatistics>(treeResult.StepStatistics.Count);
+        for (int i = 0; i < treeResult.StepStatistics.Count; i++)
+        {
+            var s = treeResult.StepStatistics[i];
+            nodes += s.TreeNodes;
+            accepted += s.BestPathLength;
+            stepStats.Add(new StepStatistics
+            {
+                DraftTokens = s.TreeNodes,
+                AcceptedTokens = s.BestPathLength,
+                ResampledToken = false,
+                BonusToken = false
+            });
+        }
+
+        _treeTotalNodes += nodes;
+        _treeAcceptedNodes += accepted;
+
+        if (_config.AdaptiveDraftLength)
+        {
+            AdjustDraftLength();
+        }
+
+        return new SpeculativeResult
+        {
+            Tokens = treeResult.Tokens,
+            NewTokens = treeResult.NewTokens,
+            NumGenerated = treeResult.NumGenerated,
+            AcceptanceRate = AcceptanceRate,
+            TokensPerVerification = treeResult.StepStatistics.Count > 0 ? (double)treeResult.NumGenerated / treeResult.StepStatistics.Count : 0,
+            StepStatistics = stepStats
+        };
+    }
+
+    private void AdjustDraftLength()
+    {
+        double minAccept = NumOps.ToDouble(_config.MinAcceptanceRate);
+        double ar = AcceptanceRate;
+        long work = _config.UseTreeSpeculation ? _treeTotalNodes : _totalDraftTokens;
+
+        if (work < 8)
+        {
+            return;
+        }
+
+        if (ar < minAccept)
+        {
+            _currentDraftTokens = Math.Max(1, _currentDraftTokens - 1);
+            _currentMaxTreeDepth = Math.Max(1, _currentMaxTreeDepth - 1);
+            return;
+        }
+
+        if (ar >= minAccept + 0.2)
+        {
+            _currentDraftTokens = Math.Min(_maxDraftTokens, _currentDraftTokens + 1);
+            _currentMaxTreeDepth = Math.Min(_maxTreeDepth, _currentMaxTreeDepth + 1);
+        }
     }
 
     /// <summary>
@@ -282,6 +417,10 @@ public class SpeculativeDecoder<T>
         _totalDraftTokens = 0;
         _acceptedDraftTokens = 0;
         _totalVerificationCalls = 0;
+        _treeTotalNodes = 0;
+        _treeAcceptedNodes = 0;
+        _currentDraftTokens = _maxDraftTokens;
+        _currentMaxTreeDepth = _maxTreeDepth;
         _draftModel.Reset();
     }
 

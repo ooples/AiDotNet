@@ -146,7 +146,7 @@ public class AutocorrelationFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
         var idealDW = NumOps.FromDouble(2.0);
         var maxDeviation = NumOps.FromDouble(2.0); // Maximum possible deviation from ideal (0 or 4)
 
-        var confidenceLevel = NumOps.Subtract(NumOps.One, 
+        var confidenceLevel = NumOps.Subtract(NumOps.One,
             NumOps.Divide(NumOps.Abs(NumOps.Subtract(durbinWatsonStat, idealDW)), maxDeviation));
 
         return confidenceLevel;

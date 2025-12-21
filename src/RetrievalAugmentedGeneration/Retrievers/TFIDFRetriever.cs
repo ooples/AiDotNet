@@ -1,9 +1,9 @@
 
-using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 {
@@ -28,7 +28,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
     {
         private readonly IDocumentStore<T> _documentStore;
         private readonly object _cacheLock = new object();
-        
+
         private Dictionary<string, Dictionary<string, T>>? _cachedTfidf;
         private Dictionary<string, T>? _cachedIdf;
         private int _cachedDocumentCount;
@@ -37,7 +37,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
         {
             if (documentStore == null)
                 throw new ArgumentNullException(nameof(documentStore));
-                
+
             _documentStore = documentStore;
         }
 
@@ -49,7 +49,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             var candidates = _documentStore.GetAll();
             var candidatesList = candidates.ToList();
             var candidatesById = candidatesList.ToDictionary(d => d.Id);
-            
+
             // Use cached TF-IDF or build if cache is stale
             var tfidf = GetOrBuildTFIDF(candidatesList);
 
@@ -101,7 +101,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
         private Dictionary<string, Dictionary<string, T>> GetOrBuildTFIDF(List<Document<T>> documents)
         {
             var currentDocCount = documents.Count;
-            
+
             lock (_cacheLock)
             {
                 // Return cached statistics if document count hasn't changed
@@ -115,7 +115,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 _cachedTfidf = tfidf;
                 _cachedIdf = idf;
                 _cachedDocumentCount = currentDocCount;
-                
+
                 return tfidf;
             }
         }
@@ -132,7 +132,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             {
                 var terms = Tokenize(doc.Content);
                 var termCounts = new Dictionary<string, int>();
-                
+
                 foreach (var term in terms)
                 {
                     if (termCounts.TryGetValue(term, out var count))
@@ -164,13 +164,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             {
                 var termTfidf = new Dictionary<string, T>();
                 var termCounts = docTermFreq[doc.Id];
-                
+
                 if (termCounts.Count == 0)
                 {
                     tfidf[doc.Id] = termTfidf;
                     continue;
                 }
-                
+
                 var maxFreq = termCounts.Values.Max();
 
                 foreach (var termCount in termCounts)

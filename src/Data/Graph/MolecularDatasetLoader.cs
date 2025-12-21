@@ -1,11 +1,12 @@
+using System.IO.Compression;
+using System.Net.Http;
+using System.Text;
 using AiDotNet.Data.Loaders;
 using AiDotNet.Data.Structures;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using System.IO.Compression;
-using System.Net.Http;
-using System.Text;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Graph;
 
@@ -79,15 +80,29 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
     // Atom type mappings for featurization
     private static readonly Dictionary<string, int> AtomTypeMap = new()
     {
-        ["H"] = 0, ["C"] = 1, ["N"] = 2, ["O"] = 3, ["F"] = 4,
-        ["P"] = 5, ["S"] = 6, ["Cl"] = 7, ["Br"] = 8, ["I"] = 9,
-        ["B"] = 10, ["Si"] = 11, ["Se"] = 12, ["Te"] = 13
+        ["H"] = 0,
+        ["C"] = 1,
+        ["N"] = 2,
+        ["O"] = 3,
+        ["F"] = 4,
+        ["P"] = 5,
+        ["S"] = 6,
+        ["Cl"] = 7,
+        ["Br"] = 8,
+        ["I"] = 9,
+        ["B"] = 10,
+        ["Si"] = 11,
+        ["Se"] = 12,
+        ["Te"] = 13
     };
 
     // Bond type mappings
     private static readonly Dictionary<string, int> BondTypeMap = new()
     {
-        ["SINGLE"] = 0, ["DOUBLE"] = 1, ["TRIPLE"] = 2, ["AROMATIC"] = 3
+        ["SINGLE"] = 0,
+        ["DOUBLE"] = 1,
+        ["TRIPLE"] = 2,
+        ["AROMATIC"] = 3
     };
 
     /// <summary>
@@ -1090,7 +1105,9 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
             throw new InvalidOperationException("No graphs loaded");
         }
 
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
         var shuffledGraphs = LoadedGraphs.OrderBy(_ => random.Next()).ToList();
 
         int trainSize = (int)(shuffledGraphs.Count * trainRatio);

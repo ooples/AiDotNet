@@ -49,7 +49,7 @@ public class LocallyPeriodicKernel<T> : IKernelFunction<T>
     /// The default value is 1.0, which provides a balanced approach for many applications.
     /// </remarks>
     private readonly T _lengthScale;
-    
+
     /// <summary>
     /// Defines the length of one complete cycle in the periodic pattern.
     /// </summary>
@@ -65,7 +65,7 @@ public class LocallyPeriodicKernel<T> : IKernelFunction<T>
     /// You'll typically want to set this to match the natural cycle length in your data.
     /// </remarks>
     private readonly T _period;
-    
+
     /// <summary>
     /// Controls the overall strength or magnitude of the kernel output.
     /// </summary>
@@ -79,7 +79,7 @@ public class LocallyPeriodicKernel<T> : IKernelFunction<T>
     /// periodic patterns in your data are very pronounced, or decrease it if they're more subtle.
     /// </remarks>
     private readonly T _amplitude;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

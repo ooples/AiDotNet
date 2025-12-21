@@ -107,7 +107,7 @@ public class FocalLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorB
     /// lower values indicate better performance (0 would be a perfect model).
     /// </para>
     /// </remarks>
-    public FocalLossFitnessCalculator(T? gamma = default, T? alpha = default, DataSetType dataSetType = DataSetType.Validation) 
+    public FocalLossFitnessCalculator(T? gamma = default, T? alpha = default, DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
         _gamma = gamma ?? _numOps.FromDouble(2.0);

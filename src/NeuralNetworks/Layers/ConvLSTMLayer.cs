@@ -570,7 +570,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             // Note: Using axis 1 for time dimension slice
             var xt_raw = Autodiff.TensorOperations<T>.Slice(inputNode, t, 1, 1, axis: 1);
             var xt_NHWC = Autodiff.TensorOperations<T>.Reshape(xt_raw, batchSize, height, width, channels);
-            
+
             // Permute input to NCHW: [Batch, C, H, W]
             var xt = Autodiff.TensorOperations<T>.Permute(xt_NHWC, 0, 3, 1, 2);
 
@@ -622,7 +622,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
 
             // Convert Output back to NHWC for consistency with layer output
             var output_NHWC = Autodiff.TensorOperations<T>.Permute(newH, 0, 2, 3, 1);
-            
+
             // Reshape to [Batch, 1, H, W, C] for concatenation
             var output_step = Autodiff.TensorOperations<T>.Reshape(output_NHWC, batchSize, 1, height, width, _filters);
             outputNodes.Add(output_step);

@@ -91,7 +91,7 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
         return Q.Transpose().Multiply(y);
     }
 
-        /// <summary>
+    /// <summary>
     /// Selects and applies the appropriate decomposition algorithm.
     /// </summary>
     /// <param name="matrix">The matrix to decompose.</param>

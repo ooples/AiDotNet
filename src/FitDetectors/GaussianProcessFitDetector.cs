@@ -242,7 +242,7 @@ public class GaussianProcessFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
         return recommendations;
     }
 
-        /// <summary>
+    /// <summary>
     /// Performs Gaussian Process regression on the model's residuals.
     /// </summary>
     /// <param name="evaluationData">Data containing model predictions and actual values.</param>
@@ -409,7 +409,7 @@ public class GaussianProcessFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
         var choleskyDecomposition = new CholeskyDecomposition<T>(K);
         var L = choleskyDecomposition.L;
         var alpha = choleskyDecomposition.Solve(y);
-    
+
         var dataFit = NumOps.Multiply(NumOps.FromDouble(-0.5), y.DotProduct(alpha));
         var complexity = NumOps.Multiply(NumOps.FromDouble(-1), L.LogDeterminant());
         var normalization = NumOps.Multiply(NumOps.FromDouble(-0.5 * K.Rows), NumOps.Log(NumOps.FromDouble(2 * Math.PI)));

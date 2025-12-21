@@ -18,7 +18,7 @@ public class ResidualBootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<
     /// Configuration options for the residual bootstrap fit detector.
     /// </summary>
     private readonly ResidualBootstrapFitDetectorOptions _options;
-    
+
     /// <summary>
     /// Random number generator used for bootstrap resampling.
     /// </summary>
@@ -137,7 +137,7 @@ public class ResidualBootstrapFitDetector<T, TInput, TOutput> : FitDetectorBase<
         var stdDevBootstrapMSE = StatisticsHelper<T>.CalculateStandardDeviation(bootstrapMSEs);
 
         var zScore = NumOps.Abs(NumOps.Divide(NumOps.Subtract(originalMSE, meanBootstrapMSE), stdDevBootstrapMSE));
-        
+
         return NumOps.Subtract(NumOps.One, NumOps.Divide(zScore, NumOps.FromDouble(3.0))); // Normalize to [0, 1]
     }
 

@@ -3,7 +3,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// <summary>
 /// Statistics for a single decoding step.
 /// </summary>
-public class StepStatistics
+internal class StepStatistics
 {
     /// <summary>Number of draft tokens generated.</summary>
     public int DraftTokens { get; set; }

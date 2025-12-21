@@ -1,6 +1,5 @@
-global using AiDotNet.NeuralNetworks;
 global using AiDotNet.ActivationFunctions;
-
+global using AiDotNet.NeuralNetworks;
 using AiDotNet.Autodiff;
 
 namespace AiDotNet.TimeSeries;
@@ -265,7 +264,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
 
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> linearActivation = new IdentityActivation<T>();
-    
+
         var hiddenLayer = new DenseLayer<T>(inputSize, hiddenSize, activationFunction: reluActivation);
         var outputLayer = new DenseLayer<T>(hiddenSize, outputSize, activationFunction: linearActivation);
 
@@ -604,7 +603,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         return metrics;
     }
 
-        /// <summary>
+    /// <summary>
     /// Serializes the core components of the model to a binary writer.
     /// </summary>
     /// <param name="writer">The binary writer to write the serialized data to.</param>
@@ -739,7 +738,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         {
             singleRowMatrix[0, i] = input[i];
         }
-    
+
         // Use the existing Predict method and return the first (and only) prediction
         Vector<T> prediction = Predict(singleRowMatrix);
         return prediction[0];
@@ -783,7 +782,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
             },
             ModelData = this.Serialize()
         };
-    
+
         return metaData;
     }
 
@@ -820,7 +819,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
             // Clone the neural network if possible, otherwise use null to let constructor create a default
             NeuralNetwork = _nnarimaOptions.NeuralNetwork?.Clone() as INeuralNetwork<T>
         };
-    
+
         // Return a new instance with the copied options
         return new NeuralNetworkARIMAModel<T>(optionsCopy);
     }

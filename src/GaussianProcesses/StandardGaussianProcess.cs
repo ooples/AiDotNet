@@ -29,27 +29,27 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     /// The kernel function that determines how similarity between data points is calculated.
     /// </summary>
     private IKernelFunction<T> _kernel;
-    
+
     /// <summary>
     /// The matrix of input features from the training data.
     /// </summary>
     private Matrix<T> _X;
-    
+
     /// <summary>
     /// The vector of target values from the training data.
     /// </summary>
     private Vector<T> _y;
-    
+
     /// <summary>
     /// The kernel matrix calculated from the training data.
     /// </summary>
     private Matrix<T> _K;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with the generic type T.
     /// </summary>
     private INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// The method used to decompose matrices for solving linear systems.
     /// </summary>
@@ -141,11 +141,11 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     public (T mean, T variance) Predict(Vector<T> x)
     {
         var k = CalculateKernelVector(_X, x);
-    
+
         // Solve _K * alpha = _y
         var alpha = MatrixSolutionHelper.SolveLinearSystem(_K, _y, _decompositionType);
         var mean = k.DotProduct(alpha);
-    
+
         // Solve _K * v = k
         var v = MatrixSolutionHelper.SolveLinearSystem(_K, k, _decompositionType);
         var variance = _numOps.Subtract(_kernel.Calculate(x, x), k.DotProduct(v));

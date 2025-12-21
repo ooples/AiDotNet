@@ -130,7 +130,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// (holidays), sudden changes (changepoints), and other factors that might affect your predictions (regressors).
     /// </para>
     /// </remarks>
-    public ProphetModel(ProphetOptions<T, TInput, TOutput>? options = null) 
+    public ProphetModel(ProphetOptions<T, TInput, TOutput>? options = null)
         : base(options ?? new ProphetOptions<T, TInput, TOutput>())
     {
         _prophetOptions = options ?? new ProphetOptions<T, TInput, TOutput>();
@@ -913,32 +913,32 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         {
             throw new ArgumentNullException(nameof(x), "Input matrix cannot be null");
         }
-    
+
         if (y == null)
         {
             throw new ArgumentNullException(nameof(y), "Target vector cannot be null");
         }
-    
+
         if (x.Rows != y.Length)
         {
             throw new ArgumentException($"Input matrix rows ({x.Rows}) must match target vector length ({y.Length})");
         }
-    
+
         if (x.Rows == 0)
         {
             throw new ArgumentException("Cannot train on empty dataset");
         }
-    
+
         // Initialize model state vector
         int n = y.Length;
         Matrix<T> states = new Matrix<T>(n, GetStateSize());
-        
+
         // Initialize components (trend, seasonal, holiday, changepoint, regressors)
         InitializeComponents(x, y);
-        
+
         // Optimize parameters using the selected optimizer
         OptimizeParameters(x, y);
-        
+
         // Store final state for future reference
         states.SetRow(n - 1, GetCurrentState());
     }
@@ -969,29 +969,29 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         {
             throw new ArgumentNullException(nameof(input), "Input vector cannot be null");
         }
-    
+
         // Check if model has been trained
         if (NumOps.Equals(_trend, NumOps.Zero) && _seasonalComponents.Length == 0)
         {
             throw new InvalidOperationException("Model must be trained before making predictions");
         }
-    
+
         // Check if input has the right dimensions
         int expectedLength = 1 + _prophetOptions.RegressorCount; // Time plus regressors
         if (input.Length < expectedLength)
         {
             throw new ArgumentException($"Input vector length ({input.Length}) is too short. Expected at least {expectedLength} elements.");
         }
-    
+
         // Use the private implementation to make the actual prediction
         T prediction = PredictSingleInternal(input);
-        
+
         // Apply any post-processing logic if needed
         if (_prophetOptions.ApplyTransformation)
         {
             prediction = _prophetOptions.TransformPrediction(prediction);
         }
-        
+
         return prediction;
     }
 
@@ -1020,14 +1020,14 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             ModelType = ModelType.ProphetModel,
             AdditionalInfo = []
         };
-    
+
         // Add basic information
         metadata.AdditionalInfo["ModelName"] = "Prophet Time Series Model";
         metadata.AdditionalInfo["Version"] = "1.0";
-    
+
         // Add trend information
         metadata.AdditionalInfo["TrendValue"] = Convert.ToDouble(_trend);
-    
+
         // Add seasonal information
         metadata.AdditionalInfo["SeasonalPeriodCount"] = _prophetOptions.SeasonalPeriods.Count;
         for (int i = 0; i < _prophetOptions.SeasonalPeriods.Count; i++)
@@ -1036,15 +1036,15 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         }
         metadata.AdditionalInfo["FourierOrder"] = _prophetOptions.FourierOrder;
         metadata.AdditionalInfo["SeasonalComponentsCount"] = _seasonalComponents.Length;
-    
+
         // Add holiday information
         metadata.AdditionalInfo["HolidayCount"] = _prophetOptions.Holidays.Count;
         metadata.AdditionalInfo["HolidayComponentsCount"] = _holidayComponents.Length;
-    
+
         // Add changepoint information
         metadata.AdditionalInfo["ChangepointValue"] = Convert.ToDouble(_changepoint);
         metadata.AdditionalInfo["ChangepointCount"] = _prophetOptions.Changepoints.Count;
-    
+
         // Add regressor information
         metadata.AdditionalInfo["RegressorCount"] = _prophetOptions.RegressorCount;
         if (_prophetOptions.RegressorCount > 0 && _regressors != null)
@@ -1054,19 +1054,19 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
                 metadata.AdditionalInfo[$"RegressorCoefficient_{i}"] = Convert.ToDouble(_regressors[i]);
             }
         }
-    
+
         // Include optimizer information if available
         if (_prophetOptions.Optimizer != null)
         {
             metadata.AdditionalInfo["OptimizerType"] = _prophetOptions.Optimizer.GetType().Name;
         }
-    
+
         // Add model state size
         metadata.AdditionalInfo["StateSize"] = GetStateSize();
-    
+
         // Include serialized model data
         metadata.ModelData = this.Serialize();
-    
+
         return metadata;
     }
 
@@ -1098,20 +1098,20 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             FourierOrder = _prophetOptions.FourierOrder,
             RegressorCount = _prophetOptions.RegressorCount,
             ApplyTransformation = _prophetOptions.ApplyTransformation,
-        
+
             // Copy the optimizer if possible
             Optimizer = _prophetOptions.Optimizer
         };
-    
+
         // Deep copy seasonal periods
         newOptions.SeasonalPeriods = [.. _prophetOptions.SeasonalPeriods];
-    
+
         // Deep copy holidays
         newOptions.Holidays = [.. _prophetOptions.Holidays];
-    
+
         // Deep copy changepoints
         newOptions.Changepoints = [.. _prophetOptions.Changepoints];
-    
+
         // Create a new instance with the copied options
         return new ProphetModel<T, TInput, TOutput>(newOptions);
     }

@@ -1,9 +1,9 @@
-using AiDotNet.Interfaces;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using AiDotNet.Interfaces;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 
 namespace AiDotNet.LanguageModels;
 

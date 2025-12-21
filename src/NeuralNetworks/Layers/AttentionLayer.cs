@@ -340,7 +340,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 2. Compute Attention Scores: Q @ K.T
         // K is [B, S, A]. We need K.T as [B, A, S].
         var KT = K.Transpose(new[] { 0, 2, 1 });
-        
+
         // [B, S, A] @ [B, A, S] -> [B, S, S]
         var attentionScores = Engine.BatchMatMul(Q, KT);
 
@@ -395,13 +395,13 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             return Forward(inputs[0]);
         }
-    
+
         // Case 2: Either cross-attention or masked self-attention
         else if (inputs.Length == 2)
         {
             var primaryInput = inputs[0];
             var secondInput = inputs[1];
-        
+
             // Check if the second input could be a mask (typically has a different shape)
             if (primaryInput.Shape[1] == secondInput.Shape[1] && secondInput.Shape.Length == primaryInput.Shape.Length)
             {
@@ -414,17 +414,17 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 return ForwardMaskedAttention(primaryInput, secondInput);
             }
         }
-    
+
         // Case 3: Masked cross-attention with three inputs
         else if (inputs.Length == 3)
         {
             var queryInput = inputs[0];
             var keyValueInput = inputs[1];
             var attentionMask = inputs[2];
-        
+
             return ForwardCrossAttention(queryInput, keyValueInput, attentionMask);
         }
-    
+
         // Unsupported number of inputs
         else
         {
@@ -629,7 +629,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var qInput = Autodiff.TensorOperations<T>.Variable(_lastQueryInput, "query", true);
         var kInput = Autodiff.TensorOperations<T>.Variable(_lastKeyInput, "key", true);
         var vInput = Autodiff.TensorOperations<T>.Variable(_lastValueInput, "value", true);
-        
+
         var wq = Autodiff.TensorOperations<T>.Variable(_Wq, "Wq", true);
         var wk = Autodiff.TensorOperations<T>.Variable(_Wk, "Wk", true);
         var wv = Autodiff.TensorOperations<T>.Variable(_Wv, "Wv", true);

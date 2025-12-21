@@ -45,7 +45,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// Typical values are around 1e-5 to 1e-3.
     /// </remarks>
     private readonly T _epsilon;
-    
+
     /// <summary>
     /// The momentum for updating running statistics.
     /// </summary>
@@ -55,7 +55,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// statistics (slower updates).
     /// </remarks>
     private readonly T _momentum;
-    
+
     /// <summary>
     /// The scale parameter applied after normalization.
     /// </summary>
@@ -91,7 +91,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// Initialized to ones.
     /// </remarks>
     private Tensor<T> _runningVariance;
-    
+
     /// <summary>
     /// The input from the last forward pass.
     /// </summary>
@@ -99,7 +99,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// Stored for use in the backward pass.
     /// </remarks>
     private Tensor<T>? _lastInput;
-    
+
     /// <summary>
     /// The batch mean from the last forward pass.
     /// </summary>
@@ -308,14 +308,14 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             // Training: Use Engine.BatchNorm to compute batch stats and normalize
             // This is fully GPU accelerated
             var output = Engine.BatchNorm(input, _gamma, _beta, NumOps.ToDouble(_epsilon), out var batchMean, out var batchVariance);
-            
+
             _lastMean = batchMean;
             _lastVariance = batchVariance;
 
             // Update running statistics using Exponential Moving Average (Vectorized)
             // running_mean = momentum * running_mean + (1 - momentum) * batch_mean
             T oneMinusMomentum = NumOps.Subtract(NumOps.One, _momentum);
-            
+
             var momentumRunningMean = Engine.TensorMultiplyScalar(_runningMean, _momentum);
             var scaledBatchMean = Engine.TensorMultiplyScalar(batchMean, oneMinusMomentum);
             _runningMean = Engine.TensorAdd(momentumRunningMean, scaledBatchMean);
@@ -330,19 +330,19 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         {
             // Inference: Use running statistics (Vectorized)
             // output = gamma * (input - runningMean) / sqrt(runningVar + epsilon) + beta
-            
+
             // 1. Normalize: (input - runningMean) / sqrt(runningVar + epsilon)
             // Note: runningMean/Var are [features], input is [batch, features]. 
             // Engine operations typically handle broadcasting for [batch, features] vs [features]
             // If not, we might need explicit broadcasting, but Cpu/Gpu engines usually support basic broadcasting 
             // or we can use a custom inference kernel if needed. 
             // Assuming Engine supports [batch, features] - [features] broadcasting (standard requirement).
-            
+
             // Calculate denominator: sqrt(runningVar + epsilon)
             var epsilonVec = Tensor<T>.CreateDefault(_runningVariance.Shape, _epsilon);
             var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
             var stdDev = Engine.TensorSqrt(variancePlusEps);
-            
+
             // Calculate (input - runningMean)
             // We need to broadcast runningMean to [batch, features].
             // If Engine.TensorSubtract handles this (NumPy style), great.
@@ -354,17 +354,17 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             // but passing running stats as if they were batch stats, IF BatchNorm operation allows overriding mean/var.
             // Engine.BatchNorm signature has 'out mean, out var'. It doesn't take them as input for normalization logic override.
             // It computes them.
-            
+
             // So we must implement inference normalization manually using Engine ops.
             // To broadcast 1D [C] to 2D [B, C], we can rely on the fact that Tensor.Add(Vector) supports it?
             // Tensor.cs has Add(Vector). 
-            
+
             // Better approach: Construct pre-computed scale and shift terms.
             // scale = gamma / stdDev
             // shift = beta - (gamma * runningMean) / stdDev
             // output = input * scale + shift
             // This reduces inference to a linear transformation per feature.
-            
+
             var scale = Engine.TensorDivide(_gamma, stdDev);
             var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
             var shift = Engine.TensorSubtract(_beta, term2);

@@ -197,7 +197,7 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         for (int t = filteredStates.Count - 2; t >= 0; t--)
         {
             var predictedCovariance = _transitionMatrix.Multiply(currentSmoothedCovariance).Multiply(_transitionMatrix.Transpose()).Add(_processNoise);
-        
+
             var smoothingGain = filteredStates[t].OuterProduct(filteredStates[t])
                 .Multiply(_transitionMatrix.Transpose())
                 .Multiply(predictedCovariance.Inverse());
@@ -280,7 +280,7 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         for (int t = 0; t < observations.Rows; t++)
         {
             var diff = observations.GetRow(t).Subtract(_observationMatrix.Multiply(smoothedStates[t]));
-                        _observationNoise = _observationNoise.Add(diff.OuterProduct(diff));
+            _observationNoise = _observationNoise.Add(diff.OuterProduct(diff));
             _observationNoise = _observationNoise.Add(_observationMatrix.Multiply(smoothedCovariances[t]).Multiply(_observationMatrix.Transpose()));
         }
 
@@ -589,10 +589,10 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         // Use the current state to make a prediction
         Vector<T> currentState = _initialState;
         currentState = _transitionMatrix.Multiply(currentState);
-    
+
         // Transform the state to the observation space
         Vector<T> observation = _observationMatrix.Multiply(currentState);
-    
+
         // Return the first element of the observation vector
         // (assuming the target variable is the first or only element)
         return observation[0];
@@ -651,7 +651,7 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
             },
             ModelData = this.Serialize()
         };
-    
+
         return metadata;
     }
 
@@ -689,7 +689,7 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
             MaxIterations = _maxIterations,
             Tolerance = _tolerance
         };
-    
+
         // Create and return a new instance with the same options
         return new StateSpaceModel<T>(options);
     }

@@ -18,7 +18,7 @@ public class InvalidDataValueException : AiDotNetException
     /// <summary>
     /// Creates a new instance of the InvalidDataValueException class.
     /// </summary>
-    public InvalidDataValueException() : base() 
+    public InvalidDataValueException() : base()
     {
         Component = "Unknown";
         Operation = "Unknown";
@@ -28,7 +28,7 @@ public class InvalidDataValueException : AiDotNetException
     /// Creates a new instance of the InvalidDataValueException class with a specified error message.
     /// </summary>
     /// <param name="message">The message that describes the error.</param>
-    public InvalidDataValueException(string message) : base(message) 
+    public InvalidDataValueException(string message) : base(message)
     {
         Component = "Unknown";
         Operation = "Unknown";
@@ -40,8 +40,8 @@ public class InvalidDataValueException : AiDotNetException
     /// </summary>
     /// <param name="message">The message that describes the error.</param>
     /// <param name="innerException">The exception that is the cause of the current exception.</param>
-    public InvalidDataValueException(string message, Exception innerException) 
-        : base(message, innerException) 
+    public InvalidDataValueException(string message, Exception innerException)
+        : base(message, innerException)
     {
         Component = "Unknown";
         Operation = "Unknown";

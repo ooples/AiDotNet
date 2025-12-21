@@ -44,12 +44,12 @@ public class WendlandRBF<T> : IRadialBasisFunction<T>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// The smoothness parameter controlling the order of the Wendland function.
     /// </summary>
     private readonly int _k;
-    
+
     /// <summary>
     /// The support radius beyond which the function becomes zero.
     /// </summary>
@@ -123,7 +123,7 @@ public class WendlandRBF<T> : IRadialBasisFunction<T>
     public T Compute(T r)
     {
         T normalizedR = _numOps.Divide(r, _supportRadius);
-        
+
         if (_numOps.GreaterThanOrEquals(normalizedR, _numOps.One))
         {
             return _numOps.Zero;
@@ -185,7 +185,7 @@ public class WendlandRBF<T> : IRadialBasisFunction<T>
     public T ComputeDerivative(T r)
     {
         T normalizedR = _numOps.Divide(r, _supportRadius);
-    
+
         if (_numOps.GreaterThanOrEquals(normalizedR, _numOps.One) || _numOps.Equals(normalizedR, _numOps.Zero))
         {
             return _numOps.Zero;
@@ -199,14 +199,14 @@ public class WendlandRBF<T> : IRadialBasisFunction<T>
                 // d/dr[(1-r)^2] = -2(1-r)
                 T factor = _numOps.FromDouble(-2.0);
                 return _numOps.Multiply(factor, oneMinusR);
-            
+
             case 1:
                 // d/dr[(1-r)^4 * (1+4r)] = (1-r)^3 * (-4-20r)
                 T term1 = _numOps.Power(oneMinusR, _numOps.FromDouble(3));
                 T term2 = _numOps.FromDouble(-4);
                 T term3 = _numOps.Multiply(_numOps.FromDouble(-20), normalizedR);
                 return _numOps.Multiply(term1, _numOps.Add(term2, term3));
-            
+
             case 2:
                 // d/dr[(1-r)^6 * (3+18r+35r^2)] = (1-r)^5 * (-18-180r-210r^2)
                 T term1_k2 = _numOps.Power(oneMinusR, _numOps.FromDouble(5));
@@ -214,7 +214,7 @@ public class WendlandRBF<T> : IRadialBasisFunction<T>
                 T term3_k2 = _numOps.Multiply(_numOps.FromDouble(-180), normalizedR);
                 T term4_k2 = _numOps.Multiply(_numOps.FromDouble(-210), _numOps.Power(normalizedR, _numOps.FromDouble(2)));
                 return _numOps.Multiply(term1_k2, _numOps.Add(_numOps.Add(term2_k2, term3_k2), term4_k2));
-            
+
             default:
                 throw new ArgumentException("Unsupported k value. Supported values are 0, 1, and 2.");
         }
@@ -252,7 +252,7 @@ public class WendlandRBF<T> : IRadialBasisFunction<T>
     public T ComputeWidthDerivative(T r)
     {
         T normalizedR = _numOps.Divide(r, _supportRadius);
-    
+
         if (_numOps.GreaterThanOrEquals(normalizedR, _numOps.One))
         {
             return _numOps.Zero;
@@ -260,16 +260,16 @@ public class WendlandRBF<T> : IRadialBasisFunction<T>
 
         // For width derivative, we need to compute d/ds[f(r/s)]
         // This equals -r/s^2 * f'(r/s) where f' is the derivative of f
-    
+
         // First, compute r/s^2
         T rOverSigmaSquared = _numOps.Divide(r, _numOps.Power(_supportRadius, _numOps.FromDouble(2)));
-    
+
         // Then compute the derivative at r/s
         T derivativeValue = ComputeDerivative(r);
-    
+
         // Multiply by -1
         T negativeOne = _numOps.FromDouble(-1);
-    
+
         // Return -r/s^2 * f'(r/s)
         return _numOps.Multiply(negativeOne, _numOps.Multiply(rOverSigmaSquared, derivativeValue));
     }

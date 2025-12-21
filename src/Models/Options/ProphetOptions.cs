@@ -115,7 +115,7 @@ public class ProphetOptions<T, TInput, TOutput> : TimeSeriesRegressionOptions<T>
     /// seasonality components to your model.
     /// </para>
     /// </remarks>
-    public List<int> SeasonalPeriods { get; set; } = new List<int> {  };
+    public List<int> SeasonalPeriods { get; set; } = new List<int> { };
 
     /// <summary>
     /// Gets or sets the list of holiday dates that have special effects on the time series.

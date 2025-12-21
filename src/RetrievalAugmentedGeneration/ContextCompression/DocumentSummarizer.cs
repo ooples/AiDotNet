@@ -31,7 +31,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
         {
             if (numericOperations == null)
                 throw new ArgumentNullException(nameof(numericOperations));
-                
+
             _maxSummaryLength = maxSummaryLength > 0
                 ? maxSummaryLength
                 : throw new ArgumentOutOfRangeException(nameof(maxSummaryLength));
@@ -175,7 +175,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
 
             var importance = (uniqueTokens * 0.5) + (Math.Min(length, 200) / 200.0 * 0.5);
             importance *= positionScore;
-            
+
             // Boost sentences containing query terms
             if (queryTerms != null && queryTerms.Count > 0)
             {

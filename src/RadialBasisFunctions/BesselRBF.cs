@@ -31,12 +31,12 @@ public class BesselRBF<T> : IRadialBasisFunction<T>
     /// The width parameter (epsilon) controlling how quickly the function decreases with distance.
     /// </summary>
     private readonly T _epsilon;
-    
+
     /// <summary>
     /// The order parameter (nu) of the Bessel function.
     /// </summary>
     private readonly T _nu;
-    
+
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
@@ -100,7 +100,7 @@ public class BesselRBF<T> : IRadialBasisFunction<T>
     public T Compute(T r)
     {
         T epsilonR = _numOps.Multiply(_epsilon, r);
-        
+
         // Handle the case when epsilonR is very close to zero
         if (MathHelper.AlmostEqual(epsilonR, _numOps.Zero))
         {
@@ -156,19 +156,19 @@ public class BesselRBF<T> : IRadialBasisFunction<T>
         }
 
         T epsilonR = _numOps.Multiply(_epsilon, r);
-    
+
         // The derivative of J_nu(epsilon*r)/(epsilon*r)^nu with respect to r is:
         // epsilon * [J_(nu-1)(epsilon*r) - (nu/r)*J_nu(epsilon*r)] / (epsilon*r)^nu
-    
+
         T besselNu = MathHelper.BesselJ(_nu, epsilonR);
         T besselNuMinus1 = MathHelper.BesselJ(_numOps.Subtract(_nu, _numOps.One), epsilonR);
-    
+
         T term1 = besselNuMinus1;
         T term2 = _numOps.Multiply(_numOps.Divide(_nu, r), besselNu);
         T numerator = _numOps.Multiply(_epsilon, _numOps.Subtract(term1, term2));
-    
+
         T denominator = _numOps.Power(epsilonR, _nu);
-    
+
         return _numOps.Divide(numerator, denominator);
     }
 
@@ -216,24 +216,24 @@ public class BesselRBF<T> : IRadialBasisFunction<T>
         }
 
         T epsilonR = _numOps.Multiply(_epsilon, r);
-    
+
         // The derivative of J_nu(epsilon*r)/(epsilon*r)^nu with respect to epsilon is:
         // r * [J_(nu-1)(epsilon*r) - (nu/epsilon)*J_nu(epsilon*r)] / (epsilon*r)^nu - (nu/epsilon) * J_nu(epsilon*r)/(epsilon*r)^nu
         // = r * J_(nu-1)(epsilon*r)/(epsilon*r)^nu - (nu*r/epsilon) * J_nu(epsilon*r)/(epsilon*r)^nu - (nu/epsilon) * J_nu(epsilon*r)/(epsilon*r)^nu
         // = r * J_(nu-1)(epsilon*r)/(epsilon*r)^nu - (nu*(r+1)/epsilon) * J_nu(epsilon*r)/(epsilon*r)^nu
-    
+
         T besselNu = MathHelper.BesselJ(_nu, epsilonR);
         T besselNuMinus1 = MathHelper.BesselJ(_numOps.Subtract(_nu, _numOps.One), epsilonR);
-    
+
         T term1 = _numOps.Multiply(r, besselNuMinus1);
-    
+
         T rPlusOne = _numOps.Add(r, _numOps.One);
         T nuRPlusOne = _numOps.Multiply(_nu, rPlusOne);
         T term2 = _numOps.Multiply(_numOps.Divide(nuRPlusOne, _epsilon), besselNu);
-    
+
         T numerator = _numOps.Subtract(term1, term2);
         T denominator = _numOps.Power(epsilonR, _nu);
-    
+
         return _numOps.Divide(numerator, denominator);
     }
 }

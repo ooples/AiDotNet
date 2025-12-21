@@ -98,7 +98,7 @@ public class ContextCoverageMetric<T> : RAGMetricBase<T>
         var sourceWords = GetWords(sourceText);
 
         var coveredWords = groundTruthWords.Intersect(sourceWords).Count();
-        
+
         return NumOps.Divide(NumOps.FromDouble(coveredWords), NumOps.FromDouble(groundTruthWords.Count));
     }
 
@@ -121,7 +121,7 @@ public class ContextCoverageMetric<T> : RAGMetricBase<T>
             }
         }
 
-        var avgRelevance = countWithScores > 0 
+        var avgRelevance = countWithScores > 0
             ? NumOps.Divide(sumRelevance, NumOps.FromDouble(countWithScores))
             : NumOps.FromDouble(0.5);
 
@@ -135,13 +135,13 @@ public class ContextCoverageMetric<T> : RAGMetricBase<T>
             totalWords += docWords.Count;
         }
 
-        var diversityScore = totalWords == 0 
-            ? NumOps.Zero 
+        var diversityScore = totalWords == 0
+            ? NumOps.Zero
             : NumOps.Divide(NumOps.FromDouble(allWords.Count), NumOps.FromDouble(totalWords));
 
         var weightedRelevance = NumOps.Multiply(avgRelevance, NumOps.FromDouble(0.7));
         var weightedDiversity = NumOps.Multiply(diversityScore, NumOps.FromDouble(0.3));
-        
+
         return NumOps.Add(weightedRelevance, weightedDiversity);
     }
 }

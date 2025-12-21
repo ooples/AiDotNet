@@ -1,7 +1,7 @@
+using System.Linq;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System.Linq;
 namespace AiDotNet.Tools;
 /// <summary>
 /// A specialized tool that suggests optimal hyperparameter values and ranges for machine learning models

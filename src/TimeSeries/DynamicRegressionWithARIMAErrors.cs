@@ -55,7 +55,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// - Which matrix decomposition to use for solving linear systems
     /// </remarks>
     private DynamicRegressionWithARIMAErrorsOptions<T> _arimaOptions;
-    
+
     /// <summary>
     /// Regularization method to prevent overfitting in the regression component.
     /// </summary>
@@ -71,7 +71,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// - ElasticNet: A combination of L1 and L2 regularization
     /// </remarks>
     private IRegularization<T, Matrix<T>, Vector<T>> _regularization;
-    
+
     /// <summary>
     /// Coefficients for the regression component, representing the impact of external variables.
     /// </summary>
@@ -87,7 +87,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// between external factors and what you're predicting.
     /// </remarks>
     private Vector<T> _regressionCoefficients;
-    
+
     /// <summary>
     /// Coefficients for the autoregressive (AR) component of the model.
     /// </summary>
@@ -102,7 +102,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// These coefficients are applied to the regression residuals (errors), not to the original time series.
     /// </remarks>
     private Vector<T> _arCoefficients;
-    
+
     /// <summary>
     /// Coefficients for the moving average (MA) component of the model.
     /// </summary>
@@ -116,7 +116,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// This helps the model correct for systematic errors in its predictions.
     /// </remarks>
     private Vector<T> _maCoefficients;
-    
+
     /// <summary>
     /// Values needed to reverse differencing when making predictions.
     /// </summary>
@@ -131,7 +131,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// This field stores the original values needed to convert predictions back to the original scale.
     /// </remarks>
     private Vector<T> _differenced;
-    
+
     /// <summary>
     /// The constant term (intercept) in the regression equation.
     /// </summary>
@@ -490,7 +490,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
                 sum = NumOps.Add(sum, NumOps.Multiply(_maCoefficients[j - 1], v[k - j]));
             }
             _maCoefficients[k - 1] = NumOps.Divide(NumOps.Subtract(autocorrelations[k], sum), v[0]);
-        
+
             for (int j = 1; j <= k; j++)
             {
                 v[j] = NumOps.Subtract(v[j], NumOps.Multiply(_maCoefficients[k - 1], v[k - j]));
@@ -1222,7 +1222,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
             Regularization = _arimaOptions.Regularization,
             DecompositionType = _arimaOptions.DecompositionType
         };
-    
+
         return new DynamicRegressionWithARIMAErrors<T>(optionsClone);
     }
 
@@ -1252,35 +1252,35 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (DynamicRegressionWithARIMAErrors<T>)CreateInstance();
-    
+
         // Copy regression coefficients
         for (int i = 0; i < _regressionCoefficients.Length; i++)
         {
             clone._regressionCoefficients[i] = _regressionCoefficients[i];
         }
-    
+
         // Copy AR coefficients
         for (int i = 0; i < _arCoefficients.Length; i++)
         {
             clone._arCoefficients[i] = _arCoefficients[i];
         }
-    
+
         // Copy MA coefficients
         for (int i = 0; i < _maCoefficients.Length; i++)
         {
             clone._maCoefficients[i] = _maCoefficients[i];
         }
-    
+
         // Copy differenced values
         clone._differenced = new Vector<T>(_differenced.Length);
         for (int i = 0; i < _differenced.Length; i++)
         {
             clone._differenced[i] = _differenced[i];
         }
-    
+
         // Copy intercept
         clone._intercept = _intercept;
-    
+
         return clone;
     }
 
@@ -1320,80 +1320,80 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         {
             throw new ArgumentException("Forecast horizon must be greater than zero.", nameof(horizon));
         }
-    
-        if (exogenousVariables == null || exogenousVariables.Rows != horizon || 
+
+        if (exogenousVariables == null || exogenousVariables.Rows != horizon ||
             exogenousVariables.Columns != _regressionCoefficients.Length)
         {
             throw new ArgumentException($"Exogenous variables matrix must have {horizon} rows and {_regressionCoefficients.Length} columns.");
         }
-    
+
         // Step 1: Apply differencing to history if needed
         Vector<T> diffHistory = history;
         if (_arimaOptions.DifferenceOrder > 0)
         {
             diffHistory = DifferenceTimeSeries(history, _arimaOptions.DifferenceOrder);
         }
-    
+
         // Step 2: Generate forecasts in the differenced space
         Vector<T> diffForecasts = new Vector<T>(horizon);
-    
+
         // Combined history and forecasts to simplify access to lags
         Vector<T> combinedDiff = new Vector<T>(diffHistory.Length + horizon);
         for (int i = 0; i < diffHistory.Length; i++)
         {
             combinedDiff[i] = diffHistory[i];
         }
-    
+
         // Compute past prediction errors for MA component
         Vector<T> errors = new Vector<T>(diffHistory.Length + horizon);
         for (int t = Math.Max(_arimaOptions.AROrder, _arimaOptions.MAOrder); t < diffHistory.Length; t++)
         {
             // Use available history to compute errors
             T prediction = _intercept;
-        
+
             // Regression component for historical period (simple approximation)
             // In a real implementation, you would need historical exogenous variables
-        
+
             // AR component
             for (int i = 0; i < _arimaOptions.AROrder && t - i - 1 >= 0; i++)
             {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], 
+                prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i],
                     NumOps.Subtract(diffHistory[t - i - 1], _intercept)));
             }
-        
+
             // MA component
             for (int i = 0; i < _arimaOptions.MAOrder && t - i - 1 >= 0; i++)
             {
                 prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[i], errors[t - i - 1]));
             }
-        
+
             // Compute error
             errors[t] = NumOps.Subtract(diffHistory[t], prediction);
         }
-    
+
         // Generate forecasts
         for (int t = 0; t < horizon; t++)
         {
             // Start with intercept
             T prediction = _intercept;
-        
+
             // Add regression component
             for (int i = 0; i < _regressionCoefficients.Length; i++)
             {
                 prediction = NumOps.Add(prediction, NumOps.Multiply(exogenousVariables[t, i], _regressionCoefficients[i]));
             }
-        
+
             // Add AR component
             for (int i = 0; i < _arimaOptions.AROrder; i++)
             {
                 int histIndex = diffHistory.Length - i - 1 + t;
                 if (histIndex >= 0 && histIndex < combinedDiff.Length)
                 {
-                    prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], 
+                    prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i],
                         NumOps.Subtract(combinedDiff[histIndex], _intercept)));
                 }
             }
-        
+
             // Add MA component
             for (int i = 0; i < _arimaOptions.MAOrder; i++)
             {
@@ -1403,10 +1403,10 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
                     prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[i], errors[errorIndex]));
                 }
             }
-        
+
             // Store forecast
             diffForecasts[t] = prediction;
-        
+
             // Update combined series and errors for next steps
             int currentIndex = diffHistory.Length + t;
             if (currentIndex < combinedDiff.Length)
@@ -1415,7 +1415,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
                 errors[currentIndex] = NumOps.Zero; // No error for forecasts
             }
         }
-    
+
         // Step 3: Convert forecasts back to original scale if needed
         Vector<T> finalForecasts;
         if (_arimaOptions.DifferenceOrder > 0)
@@ -1426,7 +1426,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         {
             finalForecasts = diffForecasts;
         }
-    
+
         return finalForecasts;
     }
 
@@ -1557,17 +1557,17 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
                 $"Input vector length ({input.Length}) must match the number of external regressors ({_regressionCoefficients.Length}).",
                 nameof(input));
         }
-    
+
         // Create a matrix with a single row
         Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
         for (int i = 0; i < input.Length; i++)
         {
             singleRowMatrix[0, i] = input[i];
         }
-    
+
         // Use the existing Predict method
         Vector<T> predictions = Predict(singleRowMatrix);
-    
+
         // Return the single prediction
         return predictions[0];
     }

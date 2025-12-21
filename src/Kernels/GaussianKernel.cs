@@ -42,7 +42,7 @@ public class GaussianKernel<T> : IKernelFunction<T>
     /// Adjusting sigma lets you control how "picky" your similarity measure is about distance.
     /// </remarks>
     private readonly double _sigma;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

@@ -44,7 +44,7 @@ public class CategoricalCrossEntropyLossFitnessCalculator<T, TInput, TOutput> : 
     /// better performance (0 would be a perfect model). This tells the system that smaller numbers are better.
     /// </para>
     /// </remarks>
-    public CategoricalCrossEntropyLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) 
+    public CategoricalCrossEntropyLossFitnessCalculator(DataSetType dataSetType = DataSetType.Validation)
         : base(false, dataSetType)
     {
     }

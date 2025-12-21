@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Scheduling;
+using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.Extensions.Logging;
 
 namespace AiDotNet.Serving.Services;

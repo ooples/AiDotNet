@@ -285,7 +285,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        
+
         // Global pooling reduces spatial dimensions (height=1, width=2)
         var axes = new int[] { 1, 2 };
 

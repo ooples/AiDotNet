@@ -31,7 +31,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     AutoML,
-    
+
     /// <summary>
     /// A basic model that finds the relationship between a single input variable and an output variable.
     /// </summary>
@@ -43,7 +43,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     SimpleRegression,
-    
+
     /// <summary>
     /// A model that finds the relationship between multiple input variables and a single output variable.
     /// </summary>
@@ -55,7 +55,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     MultipleRegression,
-    
+
     /// <summary>
     /// A model that predicts multiple output variables based on multiple input variables.
     /// </summary>
@@ -67,7 +67,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     MultivariateRegression,
-    
+
     /// <summary>
     /// A model that captures non-linear relationships using polynomial functions.
     /// </summary>
@@ -80,7 +80,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     PolynomialRegression,
-    
+
     /// <summary>
     /// A regression model that gives different importance to different data points.
     /// </summary>
@@ -92,7 +92,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     WeightedRegression,
-    
+
     /// <summary>
     /// An ensemble model that combines multiple decision trees to improve prediction accuracy.
     /// </summary>
@@ -105,7 +105,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     RandomForest,
-    
+
     /// <summary>
     /// A tree-based model that makes decisions by splitting data based on feature values.
     /// </summary>
@@ -118,7 +118,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     DecisionTree,
-    
+
     /// <summary>
     /// An ensemble technique that builds models sequentially, with each new model correcting errors from previous ones.
     /// </summary>
@@ -131,7 +131,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     GradientBoosting,
-    
+
     /// <summary>
     /// A boosting algorithm specifically designed for regression problems.
     /// </summary>
@@ -144,7 +144,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     AdaBoostR2,
-    
+
     /// <summary>
     /// A variation of Random Forest that introduces more randomness in how trees are built.
     /// </summary>
@@ -157,7 +157,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     ExtremelyRandomizedTrees,
-    
+
     /// <summary>
     /// An extension of Random Forest that predicts a range of possible values rather than a single value.
     /// </summary>
@@ -170,7 +170,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     QuantileRegressionForests,
-    
+
     /// <summary>
     /// A decision tree that uses statistical tests to make splitting decisions.
     /// </summary>
@@ -184,7 +184,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     ConditionalInferenceTree,
-    
+
     /// <summary>
     /// A tree model that uses linear regression at its leaf nodes.
     /// </summary>
@@ -198,7 +198,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     M5ModelTree,
-    
+
     /// <summary>
     /// A model that captures complex, non-linear relationships in data.
     /// </summary>
@@ -211,7 +211,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     NonLinearRegression,
-    
+
     /// <summary>
     /// A powerful algorithm that finds patterns by mapping data to higher-dimensional spaces.
     /// </summary>
@@ -225,7 +225,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     SupportVectorRegression,
-    
+
     /// <summary>
     /// Combines ridge regression with kernel methods to handle non-linear relationships.
     /// </summary>
@@ -238,7 +238,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     KernelRidgeRegression,
-    
+
     /// <summary>
     /// A probabilistic model that provides uncertainty estimates along with predictions.
     /// </summary>
@@ -251,7 +251,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     GaussianProcessRegression,
-    
+
     /// <summary>
     /// A non-parametric regression technique that preserves the order of data points.
     /// </summary>
@@ -264,7 +264,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     IsotonicRegression,
-    
+
     /// <summary>
     /// Predicts specific percentiles of the output distribution rather than just the mean.
     /// </summary>
@@ -291,7 +291,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     RadialBasisFunctionRegression,
-    
+
     /// <summary>
     /// A model that gives more weight to nearby data points when making predictions.
     /// </summary>
@@ -304,7 +304,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     LocallyWeightedRegression,
-    
+
     /// <summary>
     /// A model that uses piecewise polynomial functions to create smooth curves through data points.
     /// </summary>
@@ -317,7 +317,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     SplineRegression,
-    
+
     /// <summary>
     /// A model that predicts based on the average of the k closest data points.
     /// </summary>
@@ -331,7 +331,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     KNearestNeighbors,
-    
+
     /// <summary>
     /// A model that discovers mathematical formulas that best describe relationships in data.
     /// </summary>
@@ -345,7 +345,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     SymbolicRegression,
-    
+
     /// <summary>
     /// A probabilistic approach that updates predictions as new data becomes available.
     /// </summary>
@@ -358,7 +358,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     BayesianRegression,
-    
+
     /// <summary>
     /// A tree-like structure that represents mathematical expressions.
     /// </summary>
@@ -371,7 +371,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     ExpressionTree,
-    
+
     /// <summary>
     /// A mathematical representation of data as points in multi-dimensional space.
     /// </summary>
@@ -385,7 +385,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     Vector,
-    
+
     /// <summary>
     /// A model that uses principles inspired by natural evolution to find optimal solutions.
     /// </summary>
@@ -399,7 +399,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     GeneticAlgorithmRegression,
-    
+
     /// <summary>
     /// A regression technique that accounts for errors in both input and output variables.
     /// </summary>
@@ -413,7 +413,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     OrthogonalRegression,
-    
+
     /// <summary>
     /// A regression method that is less sensitive to outliers in the data.
     /// </summary>
@@ -426,7 +426,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     RobustRegression,
-    
+
     /// <summary>
     /// A model specifically designed for data that changes over time.
     /// </summary>
@@ -440,7 +440,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     TimeSeriesRegression,
-    
+
     /// <summary>
     /// A flexible model that combines multiple simple functions to capture complex patterns.
     /// </summary>
@@ -454,7 +454,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     GeneralizedAdditiveModelRegression,
-    
+
     /// <summary>
     /// A technique that handles correlated input variables by projecting them onto new dimensions.
     /// </summary>
@@ -467,7 +467,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     PartialLeastSquaresRegression,
-    
+
     /// <summary>
     /// A dimension reduction technique combined with regression to handle many correlated variables.
     /// </summary>
@@ -481,7 +481,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     PrincipalComponentRegression,
-    
+
     /// <summary>
     /// A method that automatically selects the most important variables for prediction.
     /// </summary>
@@ -494,7 +494,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     StepwiseRegression,
-    
+
     /// <summary>
     /// A regression model for count data (non-negative integers).
     /// </summary>
@@ -507,7 +507,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     PoissonRegression,
-    
+
     /// <summary>
     /// A model for predicting categorical outcomes with more than two possible values.
     /// </summary>
@@ -535,7 +535,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     LogisticRegression,
-    
+
     /// <summary>
     /// A model for count data with extra variation (overdispersion).
     /// </summary>
@@ -549,7 +549,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     NegativeBinomialRegression,
-    
+
     /// <summary>
     /// A flexible model inspired by the human brain's structure that can capture complex patterns.
     /// </summary>
@@ -563,7 +563,7 @@ public enum ModelType
     /// </para>
     /// </remarks>
     NeuralNetworkRegression,
-    
+
     /// <summary>
     /// A specific type of neural network with multiple layers of neurons.
     /// </summary>

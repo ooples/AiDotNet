@@ -80,7 +80,7 @@ public class HanningWindow<T> : IWindowFunction<T>
         for (int n = 0; n < windowSize; n++)
         {
             T nT = _numOps.FromDouble(n);
-            window[n] = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Subtract(_numOps.One, 
+            window[n] = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Subtract(_numOps.One,
                 MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(2 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1))))));
         }
 

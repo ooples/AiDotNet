@@ -1,8 +1,9 @@
+using System.Diagnostics;
+using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Reasoning.Benchmarks.Models;
-using System.Diagnostics;
-using System.Text.RegularExpressions;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Reasoning.Benchmarks;
 
@@ -190,7 +191,7 @@ public class MATHBenchmark<T> : IBenchmark<T>
 
         if (count.HasValue && count.Value < problems.Count)
         {
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             problems = problems.OrderBy(_ => random.Next()).Take(count.Value).ToList();
         }
 

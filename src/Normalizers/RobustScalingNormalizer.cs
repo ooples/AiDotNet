@@ -111,7 +111,7 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
             T q3 = StatisticsHelper<T>.CalculateQuantile(vector, NumOps.FromDouble(0.75));
             T iqr = NumOps.Subtract(q3, q1);
             if (NumOps.Equals(iqr, NumOps.Zero)) iqr = NumOps.One;
-            
+
             var normalizedVector = vector.Subtract(median).Divide(iqr);
             var parameters = new NormalizationParameters<T> { Median = median, IQR = iqr, Method = NormalizationMethod.RobustScaling };
             return ((TOutput)(object)normalizedVector, parameters);
@@ -120,26 +120,26 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
         {
             // Flatten tensor to apply robust scaling normalization
             var flattenedTensor = tensor.ToVector();
-            
+
             T median = StatisticsHelper<T>.CalculateMedian(flattenedTensor);
             T q1 = StatisticsHelper<T>.CalculateQuantile(flattenedTensor, NumOps.FromDouble(0.25));
             T q3 = StatisticsHelper<T>.CalculateQuantile(flattenedTensor, NumOps.FromDouble(0.75));
             T iqr = NumOps.Subtract(q3, q1);
             if (NumOps.Equals(iqr, NumOps.Zero)) iqr = NumOps.One;
-            
+
             var normalizedVector = flattenedTensor.Subtract(median).Divide(iqr);
-            
+
             // Convert back to tensor with the same shape
             var normalizedTensor = Tensor<T>.FromVector(normalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 normalizedTensor = normalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             var parameters = new NormalizationParameters<T> { Median = median, IQR = iqr, Method = NormalizationMethod.RobustScaling };
             return ((TOutput)(object)normalizedTensor, parameters);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -181,7 +181,7 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
         {
             var normalizedMatrix = Matrix<T>.CreateZeros(matrix.Rows, matrix.Columns);
             var parametersList = new List<NormalizationParameters<T>>();
-            
+
             for (int i = 0; i < matrix.Columns; i++)
             {
                 var column = matrix.GetColumn(i);
@@ -199,7 +199,7 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
                         $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
                 }
             }
-            
+
             return ((TInput)(object)normalizedMatrix, parametersList);
         }
         else if (data is Tensor<T> tensor && tensor.Shape.Length == 2)
@@ -208,7 +208,7 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
             var rows = tensor.Shape[0];
             var cols = tensor.Shape[1];
             var newMatrix = new Matrix<T>(rows, cols);
-            
+
             for (int i = 0; i < rows; i++)
             {
                 for (int j = 0; j < cols; j++)
@@ -216,11 +216,11 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
                     newMatrix[i, j] = tensor[i, j];
                 }
             }
-            
+
             // Normalize each column separately
             var normalizedColumns = new List<Vector<T>>();
             var parametersList = new List<NormalizationParameters<T>>();
-            
+
             for (int i = 0; i < cols; i++)
             {
                 var column = newMatrix.GetColumn(i);
@@ -238,14 +238,14 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
                         $"Expected Vector<{typeof(T).Name}> but got {normalizedColumn?.GetType().Name}.");
                 }
             }
-            
+
             // Convert back to tensor
             var normalizedMatrix = Matrix<T>.FromColumnVectors(normalizedColumns);
             var normalizedTensor = new Tensor<T>(new[] { normalizedMatrix.Rows, normalizedMatrix.Columns }, normalizedMatrix);
-            
+
             return ((TInput)(object)normalizedTensor, parametersList);
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TInput).Name}. " +
             $"Supported types are Matrix<{typeof(T).Name}> and 2D Tensor<{typeof(T).Name}>.");
@@ -292,19 +292,19 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
         {
             // Flatten tensor for denormalization
             var flattenedTensor = tensor.ToVector();
-            
+
             var denormalizedVector = flattenedTensor.Multiply(parameters.IQR).Add(parameters.Median);
-            
+
             // Convert back to tensor with the same shape
             var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             return (TOutput)(object)denormalizedTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported data type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -348,29 +348,29 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
     {
         if (coefficients is Vector<T> vector)
         {
-            var denormalizedCoefficients = vector.PointwiseMultiply(Vector<T>.FromArray(xParams.Select(p => 
+            var denormalizedCoefficients = vector.PointwiseMultiply(Vector<T>.FromArray(xParams.Select(p =>
                 NumOps.Divide(yParams.IQR, p.IQR)).ToArray()));
-                
+
             return (TOutput)(object)denormalizedCoefficients;
         }
         else if (coefficients is Tensor<T> tensor)
         {
             // Flatten tensor for denormalization
             var flattenedTensor = tensor.ToVector();
-            
-            var denormalizedVector = flattenedTensor.PointwiseMultiply(Vector<T>.FromArray(xParams.Select(p => 
+
+            var denormalizedVector = flattenedTensor.PointwiseMultiply(Vector<T>.FromArray(xParams.Select(p =>
                 NumOps.Divide(yParams.IQR, p.IQR)).ToArray()));
-            
+
             // Convert back to tensor with the same shape
             var denormalizedTensor = Tensor<T>.FromVector(denormalizedVector);
             if (tensor.Shape.Length > 1)
             {
                 denormalizedTensor = denormalizedTensor.Reshape(tensor.Shape);
             }
-            
+
             return (TOutput)(object)denormalizedTensor;
         }
-        
+
         throw new InvalidOperationException(
             $"Unsupported coefficients type {typeof(TOutput).Name}. " +
             $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
@@ -409,7 +409,7 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
     /// This makes the model properly calibrated for use with the original, unnormalized data.
     /// </para>
     /// </remarks>
-    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, 
+    public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients,
         List<NormalizationParameters<T>> xParams, NormalizationParameters<T> yParams)
     {
         // Extract vector from coefficients
@@ -428,7 +428,7 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
                 $"Unsupported coefficients type {typeof(TOutput).Name}. " +
                 $"Supported types are Vector<{typeof(T).Name}> and Tensor<{typeof(T).Name}>.");
         }
-        
+
         // Calculate denormalized intercept
         T denormalizedIntercept = yParams.Median;
         for (int i = 0; i < coefficientsVector.Length; i++)

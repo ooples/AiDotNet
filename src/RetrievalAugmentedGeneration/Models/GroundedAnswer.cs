@@ -171,7 +171,7 @@ public class GroundedAnswer<T>
     /// <param name="sourceDocuments">The source documents used to generate the answer.</param>
     /// <param name="citations">The extracted citations.</param>
     /// <param name="confidenceScore">The confidence score.</param>
-    public GroundedAnswer(string query, string answer, IReadOnlyList<Document<T>> sourceDocuments, 
+    public GroundedAnswer(string query, string answer, IReadOnlyList<Document<T>> sourceDocuments,
         IReadOnlyList<string> citations, double confidenceScore)
     {
         Query = query ?? throw new ArgumentNullException(nameof(query));

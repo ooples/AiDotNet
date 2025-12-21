@@ -324,7 +324,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
 
             if (i > 0)
             {
-                delta = _weights[i].Transpose().Multiply(delta).Transform((d, index) => 
+                delta = _weights[i].Transpose().Multiply(delta).Transform((d, index) =>
                     NumOps.Multiply(d, ApplyActivationDerivative(zs[i - 1], false)[index]));
             }
         }

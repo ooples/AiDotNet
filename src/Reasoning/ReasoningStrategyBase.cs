@@ -1,6 +1,6 @@
+using System.Diagnostics;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
-using System.Diagnostics;
 
 namespace AiDotNet.Reasoning;
 

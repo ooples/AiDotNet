@@ -41,12 +41,12 @@ public class SphericalRBF<T> : IRadialBasisFunction<T>
     /// The shape parameter (epsilon) controlling the support radius of the function.
     /// </summary>
     private readonly T _epsilon;
-    
+
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SphericalRBF{T}"/> class with a specified support radius.
     /// </summary>
@@ -76,7 +76,7 @@ public class SphericalRBF<T> : IRadialBasisFunction<T>
         _numOps = MathHelper.GetNumericOperations<T>();
         _epsilon = _numOps.FromDouble(epsilon);
     }
-    
+
     /// <summary>
     /// Computes the value of the Spherical Radial Basis Function for a given radius.
     /// </summary>
@@ -116,7 +116,7 @@ public class SphericalRBF<T> : IRadialBasisFunction<T>
         T term2 = _numOps.Multiply(_numOps.FromDouble(0.5), rCubedDividedByEpsilonCubed);
         return _numOps.Subtract(_numOps.One, _numOps.Subtract(term1, term2));
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Spherical RBF with respect to the radius.
     /// </summary>
@@ -151,23 +151,23 @@ public class SphericalRBF<T> : IRadialBasisFunction<T>
         {
             return _numOps.Zero;
         }
-        
+
         // Calculate r/e
         T rDividedByEpsilon = _numOps.Divide(r, _epsilon);
-        
+
         // Calculate (r/e)²
         T rDividedByEpsilonSquared = _numOps.Multiply(rDividedByEpsilon, rDividedByEpsilon);
-        
+
         // Calculate (r/e)² - 1
         T term = _numOps.Subtract(rDividedByEpsilonSquared, _numOps.One);
-        
+
         // Calculate 1.5/e
         T factor = _numOps.Divide(_numOps.FromDouble(1.5), _epsilon);
-        
+
         // Return (1.5/e)[(r/e)² - 1]
         return _numOps.Multiply(factor, term);
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Spherical RBF with respect to the shape parameter epsilon.
     /// </summary>
@@ -207,22 +207,22 @@ public class SphericalRBF<T> : IRadialBasisFunction<T>
             // For practical purposes, we return 0 for r > e
             return _numOps.Zero;
         }
-        
+
         // Calculate r/e
         T rDividedByEpsilon = _numOps.Divide(r, _epsilon);
-        
+
         // Calculate (r/e)²
         T rDividedByEpsilonSquared = _numOps.Multiply(rDividedByEpsilon, rDividedByEpsilon);
-        
+
         // Calculate 1 - (r/e)²
         T term = _numOps.Subtract(_numOps.One, rDividedByEpsilonSquared);
-        
+
         // Calculate 1.5r/e²
         T factor = _numOps.Divide(
             _numOps.Multiply(_numOps.FromDouble(1.5), r),
             _numOps.Multiply(_epsilon, _epsilon)
         );
-        
+
         // Return (1.5r/e²)[1 - (r/e)²]
         return _numOps.Multiply(factor, term);
     }

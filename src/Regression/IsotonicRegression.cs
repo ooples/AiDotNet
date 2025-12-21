@@ -35,7 +35,7 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     /// The sorted input values from the training data.
     /// </summary>
     private Vector<T> _xValues;
-    
+
     /// <summary>
     /// The target values corresponding to the sorted input values.
     /// </summary>
@@ -107,13 +107,13 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidateInputs(x, y);
-        
+
         // Apply regularization to the input matrix
         var regularizedX = Regularization.Regularize(x);
-        
+
         _xValues = regularizedX.GetColumn(0); // Isotonic regression typically works with 1D input
         _yValues = y;
-        
+
         OptimizeModel(regularizedX, _yValues);
     }
 

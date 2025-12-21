@@ -21,12 +21,12 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
     /// The x-coordinates of the known data points.
     /// </summary>
     private readonly Vector<T> _x;
-    
+
     /// <summary>
     /// The y-coordinates (values) of the known data points.
     /// </summary>
     private readonly Vector<T> _y;
-    
+
     /// <summary>
     /// The degree of the spline polynomial. Default is 3 for cubic splines.
     /// </summary>
@@ -36,7 +36,7 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
     /// are the most commonly used as they provide a good balance between smoothness and simplicity.
     /// </remarks>
     private readonly int _degree;
-    
+
     /// <summary>
     /// Optional matrix decomposition method for solving the spline system.
     /// </summary>
@@ -45,7 +45,7 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
     /// are solved internally. Most users can leave this as the default (null).
     /// </remarks>
     private readonly IMatrixDecomposition<T>? _decomposition;
-    
+
     /// <summary>
     /// The calculated coefficients for the spline polynomials.
     /// </summary>
@@ -54,7 +54,7 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
     /// of data points. They're calculated automatically when you create the interpolator.
     /// </remarks>
     private readonly Vector<T>[] _coefficients;
-    
+
     /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>

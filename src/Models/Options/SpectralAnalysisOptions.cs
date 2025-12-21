@@ -81,7 +81,7 @@ public class SpectralAnalysisOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int NFFT { get; set; } = 512;
-    
+
     /// <summary>
     /// Gets or sets whether to apply a window function to the signal before spectral analysis.
     /// </summary>
@@ -124,7 +124,7 @@ public class SpectralAnalysisOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public bool UseWindowFunction { get; set; } = true;
-    
+
     /// <summary>
     /// Gets or sets the window function to apply to the signal before spectral analysis.
     /// </summary>
@@ -170,7 +170,7 @@ public class SpectralAnalysisOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public IWindowFunction<T> WindowFunction { get; set; } = new HanningWindow<T>();
-    
+
     /// <summary>
     /// Gets or sets the percentage of overlap between adjacent segments in spectrograms or short-time Fourier transforms.
     /// </summary>

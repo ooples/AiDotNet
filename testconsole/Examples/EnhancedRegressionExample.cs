@@ -1,18 +1,19 @@
 ﻿using AiDotNet;
+using AiDotNet.Data.Loaders;
 using AiDotNet.DataProcessor;
 using AiDotNet.Enums;
 using AiDotNet.FeatureSelectors;
 using AiDotNet.FitnessCalculators;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Normalizers;
 using AiDotNet.Optimizers;
 using AiDotNet.OutlierRemoval;
 using AiDotNet.Regression;
-using AiDotNet.Data.Loaders;
 using AiDotNet.Regularization;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 public class EnhancedRegressionExample
 {
@@ -137,7 +138,7 @@ public class EnhancedRegressionExample
             var testPrices = new Vector<double>(testSize);
 
             // Simple random split (you can use your framework's DataPreprocessor instead)
-            Random random = new Random(42);
+            Random random = RandomHelper.CreateSeededRandom(42);
             var indices = Enumerable.Range(0, features.Rows).OrderBy(_ => random.Next()).ToArray();
 
             for (int i = 0; i < trainingSize; i++)
@@ -323,7 +324,7 @@ public class EnhancedRegressionExample
     private (Matrix<double> Features, Vector<double> Prices, string[] FeatureNames, int[] ZipCodes) LoadRealEstateData()
     {
         // Generate synthetic dataset for real estate properties
-        Random random = new Random(123);  // For reproducibility
+        Random random = RandomHelper.CreateSeededRandom(123);  // For reproducibility
 
         // Define features names
         string[] featureNames = { "SquareFeet", "Bedrooms", "Bathrooms", "PropertyAge", "GarageSize",

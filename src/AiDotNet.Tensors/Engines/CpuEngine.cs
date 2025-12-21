@@ -4140,7 +4140,7 @@ public class CpuEngine : IEngine
         // Validate kernel in_channels matches input in_channels
         if (kernelInChannels != inChannels)
             throw new ArgumentException($"Weight's input channels ({kernelInChannels}) must match input tensor's in_channels ({inChannels}).");
-        
+
         // Ensure output shape derived from input/kernel/stride matches weights
         int expectedOutputH = (inputHeight - kernelHeight) / strideH + 1;
         int expectedOutputW = (inputWidth - kernelWidth) / strideW + 1;
@@ -4183,7 +4183,7 @@ public class CpuEngine : IEngine
                                 }
                             }
                         }
-                        
+
                         // Add bias if provided
                         if (biasData != null)
                         {
@@ -4490,7 +4490,7 @@ public class CpuEngine : IEngine
         const double eps = 1e-10;
 
         // Add Gumbel noise: -log(-log(U)) where U ~ Uniform(0, 1)
-        var random = new Random();
+        var random = RandomHelper.ThreadSafeRandom;
         var perturbedData = new T[inputData.Length];
         for (int i = 0; i < inputData.Length; i++)
         {
@@ -7273,7 +7273,7 @@ public class CpuEngine : IEngine
         if (shape == null) throw new ArgumentNullException(nameof(shape));
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        var random = new Random();
+        var random = RandomHelper.ThreadSafeRandom;
         var result = new Tensor<T>(shape);
         int totalElements = shape.Aggregate(1, (a, b) => a * b);
 

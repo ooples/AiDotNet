@@ -1,6 +1,6 @@
-using AiDotNet.Interfaces;
 using System.Text;
 using System.Text.Json;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.PromptEngineering.Tools;
 

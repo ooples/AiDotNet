@@ -91,7 +91,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
         Options = options ?? throw new ArgumentNullException(nameof(options));
         NumOps = MathHelper.GetNumericOperations<T>();
         Random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
-        
+
         // Ensure required properties are provided
         if (options.LossFunction is null)
             throw new ArgumentNullException(nameof(options), "LossFunction must be provided in options.");
@@ -99,7 +99,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
             throw new ArgumentNullException(nameof(options), "LearningRate must be provided in options.");
         if (options.DiscountFactor is null)
             throw new ArgumentNullException(nameof(options), "DiscountFactor must be provided in options.");
-        
+
         LossFunction = options.LossFunction;
         LearningRate = options.LearningRate;
         DiscountFactor = options.DiscountFactor;

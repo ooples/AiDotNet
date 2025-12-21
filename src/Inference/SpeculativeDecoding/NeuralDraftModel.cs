@@ -13,7 +13,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class NeuralDraftModel<T> : IDraftModel<T>
+internal class NeuralDraftModel<T> : IDraftModel<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -44,7 +44,9 @@ public class NeuralDraftModel<T> : IDraftModel<T>
         _forwardFunc = forwardFunc ?? throw new ArgumentNullException(nameof(forwardFunc));
         _vocabSize = vocabSize;
         _maxDraftTokens = maxDraftTokens;
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc/>

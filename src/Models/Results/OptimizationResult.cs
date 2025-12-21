@@ -69,7 +69,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public IFullModel<T, TInput, TOutput>? BestSolution { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the intercept term of the best solution.
     /// </summary>
@@ -98,7 +98,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public T BestIntercept { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the fitness score of the best solution.
     /// </summary>
@@ -131,7 +131,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public T BestFitnessScore { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the number of iterations performed during optimization.
     /// </summary>
@@ -161,7 +161,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public int Iterations { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the history of fitness scores during optimization.
     /// </summary>
@@ -191,7 +191,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public Vector<T> FitnessHistory { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the list of feature vectors selected for the model.
     /// </summary>
@@ -252,7 +252,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public DatasetResult TrainingResult { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the detailed results for the validation dataset.
     /// </summary>
@@ -282,7 +282,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public DatasetResult ValidationResult { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the detailed results for the test dataset.
     /// </summary>
@@ -556,7 +556,7 @@ public class OptimizationResult<T, TInput, TOutput>
         /// </para>
         /// </remarks>
         public TInput X { get; set; }
-    
+
         /// <summary>
         /// Gets or sets the target values for the dataset.
         /// </summary>
@@ -579,7 +579,7 @@ public class OptimizationResult<T, TInput, TOutput>
         /// </para>
         /// </remarks>
         public TOutput Y { get; set; }
-    
+
         /// <summary>
         /// Gets or sets the model's predictions for the dataset.
         /// </summary>
@@ -603,7 +603,7 @@ public class OptimizationResult<T, TInput, TOutput>
         /// </para>
         /// </remarks>
         public TOutput Predictions { get; set; }
-    
+
         /// <summary>
         /// Gets or sets the error statistics for the model's predictions.
         /// </summary>
@@ -632,7 +632,7 @@ public class OptimizationResult<T, TInput, TOutput>
         /// </para>
         /// </remarks>
         public ErrorStats<T> ErrorStats { get; set; }
-    
+
         /// <summary>
         /// Gets or sets the prediction quality statistics for the model.
         /// </summary>
@@ -662,7 +662,7 @@ public class OptimizationResult<T, TInput, TOutput>
         /// </para>
         /// </remarks>
         public PredictionStats<T> PredictionStats { get; set; }
-    
+
         /// <summary>
         /// Gets or sets the basic descriptive statistics for the actual target values.
         /// </summary>

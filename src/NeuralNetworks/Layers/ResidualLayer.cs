@@ -135,7 +135,7 @@ public class ResidualLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public ResidualLayer(int[] inputShape, ILayer<T>? innerLayer = null, IActivationFunction<T>? activation = null)
-        : base(inputShape, inputShape, activation?? new IdentityActivation<T>())
+        : base(inputShape, inputShape, activation ?? new IdentityActivation<T>())
     {
         _innerLayer = innerLayer;
         ValidateInnerLayer();

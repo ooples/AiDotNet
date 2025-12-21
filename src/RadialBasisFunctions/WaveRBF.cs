@@ -39,12 +39,12 @@ public class WaveRBF<T> : IRadialBasisFunction<T>
     /// The shape parameter (epsilon) controlling the frequency of oscillations.
     /// </summary>
     private readonly T _epsilon;
-    
+
     /// <summary>
     /// The numeric operations provider for type T, used for mathematical calculations.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="WaveRBF{T}"/> class with a specified shape parameter.
     /// </summary>
@@ -74,7 +74,7 @@ public class WaveRBF<T> : IRadialBasisFunction<T>
         _numOps = MathHelper.GetNumericOperations<T>();
         _epsilon = _numOps.FromDouble(epsilon);
     }
-    
+
     /// <summary>
     /// Computes the value of the Wave Radial Basis Function for a given radius.
     /// </summary>
@@ -107,7 +107,7 @@ public class WaveRBF<T> : IRadialBasisFunction<T>
     public T Compute(T r)
     {
         T epsilonR = _numOps.Multiply(_epsilon, r);
-        
+
         // Handle the case when epsilonR is very close to zero
         if (MathHelper.AlmostEqual(epsilonR, _numOps.Zero))
         {
@@ -116,7 +116,7 @@ public class WaveRBF<T> : IRadialBasisFunction<T>
         T sinEpsilonR = MathHelper.Sin(epsilonR);
         return _numOps.Divide(sinEpsilonR, epsilonR);
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Wave RBF with respect to the radius.
     /// </summary>
@@ -147,33 +147,33 @@ public class WaveRBF<T> : IRadialBasisFunction<T>
     public T ComputeDerivative(T r)
     {
         T epsilonR = _numOps.Multiply(_epsilon, r);
-        
+
         // Handle the case when epsilonR is very close to zero
         if (MathHelper.AlmostEqual(epsilonR, _numOps.Zero))
         {
             // For er ? 0, the derivative approaches 0
             return _numOps.Zero;
         }
-        
+
         // Calculate cos(er)
         T cosEpsilonR = MathHelper.Cos(epsilonR);
-        
+
         // Calculate sin(er)
         T sinEpsilonR = MathHelper.Sin(epsilonR);
-        
+
         // Calculate e·r·cos(er)
         T epsilonRCosEpsilonR = _numOps.Multiply(epsilonR, cosEpsilonR);
-        
+
         // Calculate e·r·cos(er) + sin(er)
         T numerator = _numOps.Add(epsilonRCosEpsilonR, sinEpsilonR);
-        
+
         // Calculate (er)²
         T epsilonRSquared = _numOps.Multiply(epsilonR, epsilonR);
-        
+
         // Return (e·r·cos(er) + sin(er))/(er)²
         return _numOps.Divide(numerator, epsilonRSquared);
     }
-    
+
     /// <summary>
     /// Computes the derivative of the Wave RBF with respect to the shape parameter epsilon.
     /// </summary>
@@ -206,7 +206,7 @@ public class WaveRBF<T> : IRadialBasisFunction<T>
     {
         T epsilonR = _numOps.Multiply(_epsilon, r);
         T rSquared = _numOps.Multiply(r, r);
-        
+
         // Handle the case when epsilonR is very close to zero
         if (MathHelper.AlmostEqual(epsilonR, _numOps.Zero))
         {
@@ -217,25 +217,25 @@ public class WaveRBF<T> : IRadialBasisFunction<T>
             );
             return negativeRSquaredDivThree;
         }
-        
+
         // Calculate cos(er)
         T cosEpsilonR = MathHelper.Cos(epsilonR);
-        
+
         // Calculate sin(er)
         T sinEpsilonR = MathHelper.Sin(epsilonR);
-        
+
         // Calculate r²·cos(er)
         T rSquaredCosEpsilonR = _numOps.Multiply(rSquared, cosEpsilonR);
-        
+
         // Calculate sin(er)/e
         T sinEpsilonRDivEpsilon = _numOps.Divide(sinEpsilonR, _epsilon);
-        
+
         // Calculate r²·cos(er) + sin(er)/e
         T numerator = _numOps.Add(rSquaredCosEpsilonR, sinEpsilonRDivEpsilon);
-        
+
         // Calculate (er)²
         T epsilonRSquared = _numOps.Multiply(epsilonR, epsilonR);
-        
+
         // Return (r²·cos(er) + sin(er)/e)/(er)²
         return _numOps.Divide(numerator, epsilonRSquared);
     }

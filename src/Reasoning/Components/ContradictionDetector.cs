@@ -1,9 +1,10 @@
+using System.Text.RegularExpressions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
+using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System.Text.RegularExpressions;
 
 namespace AiDotNet.Reasoning.Components;
 
@@ -98,7 +99,7 @@ internal class ContradictionDetector<T> : IContradictionDetector<T>
         // Also do some spot checks for non-adjacent steps if chain is long
         if (chain.Steps.Count > 10)
         {
-            var random = new Random(42); // Deterministic for reproducibility
+            var random = RandomHelper.CreateSeededRandom(42); // Deterministic for reproducibility
 
             for (int attempt = 0; attempt < 5; attempt++)
             {

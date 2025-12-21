@@ -1350,7 +1350,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Permute(ComputationNode<T> a, params int[] axes)
     {
         var result = a.Value.Transpose(axes);
-        
+
         void BackwardFunction(Tensor<T> gradient)
         {
             if (a.RequiresGradient)
@@ -8184,7 +8184,7 @@ public static class TensorOperations<T>
 
         void BackwardFunction(Tensor<T> gradient)
         {
-            if (! (emissions.RequiresGradient || transitions.RequiresGradient || (startScores?.RequiresGradient ?? false) || (endScores?.RequiresGradient ?? false)))
+            if (!(emissions.RequiresGradient || transitions.RequiresGradient || (startScores?.RequiresGradient ?? false) || (endScores?.RequiresGradient ?? false)))
                 return;
 
             double gradScale = Convert.ToDouble(gradient[0]);

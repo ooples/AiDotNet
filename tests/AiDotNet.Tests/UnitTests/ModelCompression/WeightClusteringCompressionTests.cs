@@ -1,6 +1,6 @@
 using System;
-using AiDotNet.ModelCompression;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.ModelCompression;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.ModelCompression
@@ -269,7 +269,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             var compression = new WeightClusteringCompression<double>(
                 numClusters: 256, randomSeed: 42);
             var weights = new double[10000];
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < weights.Length; i++)
             {
                 weights[i] = random.NextDouble() * 10.0;

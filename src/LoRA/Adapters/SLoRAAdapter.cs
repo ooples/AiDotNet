@@ -1,6 +1,6 @@
-using AiDotNet.Interfaces;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 

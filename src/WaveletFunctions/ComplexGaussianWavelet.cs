@@ -333,7 +333,7 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
 
         for (int i = 0; i < length; i++)
         {
-                        T x = NumOps.Divide(NumOps.FromDouble(i - length / 2), sigma);
+            T x = NumOps.Divide(NumOps.FromDouble(i - length / 2), sigma);
             T gaussianValue = NumOps.Exp(NumOps.Negate(NumOps.Divide(NumOps.Multiply(x, x), NumOps.FromDouble(2))));
             T sinValue = MathHelper.Sin(x);
             T cosValue = MathHelper.Cos(x);

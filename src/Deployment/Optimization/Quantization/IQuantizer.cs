@@ -1,7 +1,7 @@
-using AiDotNet.Enums;
 using System.Collections.Generic;
-using AiDotNet.Interfaces;
 using AiDotNet.Deployment.Export;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.Deployment.Optimization.Quantization;
 

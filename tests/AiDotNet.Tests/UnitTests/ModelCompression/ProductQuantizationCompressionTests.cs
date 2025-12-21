@@ -1,6 +1,6 @@
 using System;
-using AiDotNet.ModelCompression;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.ModelCompression;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.ModelCompression

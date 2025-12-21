@@ -47,7 +47,7 @@ public class ELUActivation<T> : ActivationFunctionBase<T>
     {
         _alpha = NumOps.FromDouble(alpha);
     }
-    
+
     /// <summary>
     /// Determines if the activation function supports operations on individual scalar values.
     /// </summary>
@@ -60,7 +60,7 @@ public class ELUActivation<T> : ActivationFunctionBase<T>
     /// </para>
     /// </remarks>
     protected override bool SupportsScalarOperations() => true;
-    
+
     /// <summary>
     /// Applies the ELU activation function to a scalar input value.
     /// </summary>
@@ -85,7 +85,7 @@ public class ELUActivation<T> : ActivationFunctionBase<T>
             return NumOps.Multiply(_alpha, NumOps.Subtract(NumOps.Exp(x), NumOps.One));
         }
     }
-    
+
     /// <summary>
     /// Applies the ELU activation function to each element of an input vector.
     /// </summary>
@@ -95,7 +95,7 @@ public class ELUActivation<T> : ActivationFunctionBase<T>
     {
         return input.Transform(x => Activate(x));
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the ELU activation function for a scalar input value.
     /// </summary>
@@ -123,7 +123,7 @@ public class ELUActivation<T> : ActivationFunctionBase<T>
             return NumOps.Add(Activate(x), _alpha);
         }
     }
-    
+
     /// <summary>
     /// Calculates the derivative of the ELU activation function for each element of an input vector.
     /// </summary>
@@ -133,12 +133,12 @@ public class ELUActivation<T> : ActivationFunctionBase<T>
     {
         int n = input.Length;
         Matrix<T> jacobian = new Matrix<T>(n, n);
-        
+
         for (int i = 0; i < n; i++)
         {
             // Set diagonal elements to the derivative at that point
             jacobian[i, i] = Derivative(input[i]);
-            
+
             // Off-diagonal elements are zero for element-wise activation functions
             for (int j = 0; j < n; j++)
             {
@@ -148,7 +148,7 @@ public class ELUActivation<T> : ActivationFunctionBase<T>
                 }
             }
         }
-        
+
         return jacobian;
     }
 

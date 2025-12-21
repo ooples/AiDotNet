@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Runtime.CompilerServices;
+using AiDotNet.Inference.Quantization;
 
 namespace AiDotNet.Inference.PagedAttention;
 
@@ -23,7 +25,7 @@ namespace AiDotNet.Inference.PagedAttention;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-public class PagedAttentionKernel<T>
+internal class PagedAttentionKernel<T>
 {
     private readonly PagedKVCache<T> _kvCache;
     private readonly PagedAttentionConfig _config;
@@ -300,15 +302,22 @@ public class PagedAttentionKernel<T>
         int position,
         int layer)
     {
-        // Ensure capacity
-        if (!_kvCache.HasCapacityFor(sequenceId, 1))
+        // Ensure logical length and capacity for this position.
+        int requiredLength = position + 1;
+        int currentLength = _kvCache.GetSequenceLength(sequenceId);
+        if (requiredLength > currentLength)
         {
-            _kvCache.ExtendSequence(sequenceId, 1);
+            int additionalTokens = requiredLength - currentLength;
+            if (!_kvCache.ExtendSequence(sequenceId, additionalTokens))
+            {
+                throw new InvalidOperationException(
+                    $"Failed to extend PagedKVCache sequence {sequenceId} to length {requiredLength}.");
+            }
         }
 
         // Convert and write
-        var keyT = ConvertSpan(key);
-        var valueT = ConvertSpan(value);
+        var keyT = ConvertArray(key);
+        var valueT = ConvertArray(value);
 
         _kvCache.WriteKey(sequenceId, position, layer, keyT);
         _kvCache.WriteValue(sequenceId, position, layer, valueT);
@@ -343,27 +352,94 @@ public class PagedAttentionKernel<T>
         int projDim = numHeads * headDim;
         float scale = 1.0f / MathF.Sqrt(headDim);
 
-        // Project Q, K, V
-        var query = new float[projDim];
-        var key = new float[projDim];
-        var value = new float[projDim];
+        var pool = ArrayPool<float>.Shared;
+        var queryBuf = pool.Rent(projDim);
+        var keyBuf = pool.Rent(projDim);
+        var valueBuf = pool.Rent(projDim);
+        var attnBuf = pool.Rent(projDim);
 
-        // Q = hidden @ wQ
-        MatVecMul(hiddenStates, wQ, query.AsSpan(), hiddenDim, projDim);
-        // K = hidden @ wK
-        MatVecMul(hiddenStates, wK, key.AsSpan(), hiddenDim, projDim);
-        // V = hidden @ wV
-        MatVecMul(hiddenStates, wV, value.AsSpan(), hiddenDim, projDim);
+        try
+        {
+            var query = queryBuf.AsSpan(0, projDim);
+            var key = keyBuf.AsSpan(0, projDim);
+            var value = valueBuf.AsSpan(0, projDim);
+            var attnOutput = attnBuf.AsSpan(0, projDim);
 
-        // Update cache with new K, V
-        UpdateCache(key.AsSpan(), value.AsSpan(), sequenceId, position, layer);
+            // Q = hidden @ wQ
+            MatVecMul(hiddenStates, wQ, query, hiddenDim, projDim);
+            // K = hidden @ wK
+            MatVecMul(hiddenStates, wK, key, hiddenDim, projDim);
+            // V = hidden @ wV
+            MatVecMul(hiddenStates, wV, value, hiddenDim, projDim);
 
-        // Compute attention
-        var attnOutput = new float[projDim];
-        ComputeTiledPagedAttention(query.AsSpan(), sequenceId, layer, attnOutput.AsSpan(), scale);
+            // Update cache with new K, V
+            UpdateCache(key, value, sequenceId, position, layer);
 
-        // Project output: out = attn @ wO
-        MatVecMul(attnOutput.AsSpan(), wO, output, projDim, hiddenDim);
+            // Compute attention
+            ComputeTiledPagedAttention(query, sequenceId, layer, attnOutput, scale);
+
+            // Project output: out = attn @ wO
+            MatVecMul(attnOutput, wO, output, projDim, hiddenDim);
+        }
+        finally
+        {
+            pool.Return(queryBuf);
+            pool.Return(keyBuf);
+            pool.Return(valueBuf);
+            pool.Return(attnBuf);
+        }
+    }
+
+    public void ForwardQuantized(
+        ReadOnlySpan<float> hiddenStates,
+        in Int8WeightOnlyQuantization.QuantizedWeights wQ,
+        in Int8WeightOnlyQuantization.QuantizedWeights wK,
+        in Int8WeightOnlyQuantization.QuantizedWeights wV,
+        in Int8WeightOnlyQuantization.QuantizedWeights wO,
+        long sequenceId,
+        int position,
+        int layer,
+        Span<float> output)
+    {
+        int hiddenDim = hiddenStates.Length;
+        int numHeads = _config.NumHeads;
+        int headDim = _config.HeadDimension;
+        int projDim = numHeads * headDim;
+        float scale = 1.0f / MathF.Sqrt(headDim);
+
+        if (wQ.Cols != hiddenDim || wK.Cols != hiddenDim || wV.Cols != hiddenDim || wO.Cols != projDim)
+        {
+            throw new ArgumentException("Quantized weight dimensions do not match expected shapes.");
+        }
+
+        var pool = ArrayPool<float>.Shared;
+        var queryBuf = pool.Rent(projDim);
+        var keyBuf = pool.Rent(projDim);
+        var valueBuf = pool.Rent(projDim);
+        var attnBuf = pool.Rent(projDim);
+
+        try
+        {
+            var query = queryBuf.AsSpan(0, projDim);
+            var key = keyBuf.AsSpan(0, projDim);
+            var value = valueBuf.AsSpan(0, projDim);
+            var attnOutput = attnBuf.AsSpan(0, projDim);
+
+            MatVecMulInt8(hiddenStates, wQ, query);
+            MatVecMulInt8(hiddenStates, wK, key);
+            MatVecMulInt8(hiddenStates, wV, value);
+
+            UpdateCache(key, value, sequenceId, position, layer);
+            ComputeTiledPagedAttention(query, sequenceId, layer, attnOutput, scale);
+            MatVecMulInt8(attnOutput, wO, output);
+        }
+        finally
+        {
+            pool.Return(queryBuf);
+            pool.Return(keyBuf);
+            pool.Return(valueBuf);
+            pool.Return(attnBuf);
+        }
     }
 
     private static void MatVecMul(ReadOnlySpan<float> vec, ReadOnlySpan<float> mat, Span<float> output, int inDim, int outDim)
@@ -378,6 +454,32 @@ public class PagedAttentionKernel<T>
                 sum += vec[j] * mat[rowOffset + j];
             }
             output[i] = sum;
+        }
+    }
+
+    private static void MatVecMulInt8(ReadOnlySpan<float> vec, in Int8WeightOnlyQuantization.QuantizedWeights mat, Span<float> output)
+    {
+        int rows = mat.Rows;
+        int cols = mat.Cols;
+
+        if (vec.Length != cols)
+            throw new ArgumentException("Input vector length must match quantized matrix column count.", nameof(vec));
+        if (output.Length < rows)
+            throw new ArgumentException("Output span too small for quantized matvec.", nameof(output));
+
+        var weights = mat.Weights;
+        var scales = mat.Scales;
+
+        for (int r = 0; r < rows; r++)
+        {
+            int baseIdx = r * cols;
+            float sum = 0f;
+            for (int c = 0; c < cols; c++)
+            {
+                sum += weights[baseIdx + c] * vec[c];
+            }
+
+            output[r] = sum * scales[r];
         }
     }
 
@@ -405,15 +507,13 @@ public class PagedAttentionKernel<T>
         return (T)Convert.ChangeType(value, typeof(T))!;
     }
 
-    private static ReadOnlySpan<T> ConvertSpan(ReadOnlySpan<float> source)
+    private static T[] ConvertArray(ReadOnlySpan<float> source)
     {
         if (typeof(T) == typeof(float))
         {
-            // Safe: We've verified T == float at runtime
-            // Reinterpret the array using object cast
-            var floatArray = source.ToArray();
-            var tArray = (T[])(object)floatArray;
-            return new ReadOnlySpan<T>(tArray);
+            // Safe: runtime-verified T == float.
+            // Return a rooted array so GC cannot collect it while spans are in use.
+            return (T[])(object)source.ToArray();
         }
 
         var result = new T[source.Length];
@@ -428,7 +528,7 @@ public class PagedAttentionKernel<T>
 /// <summary>
 /// Configuration for paged attention kernel.
 /// </summary>
-public class PagedAttentionConfig
+internal class PagedAttentionConfig
 {
     /// <summary>Number of attention heads.</summary>
     public int NumHeads { get; set; } = 32;
@@ -453,7 +553,7 @@ public class PagedAttentionConfig
 /// Integrates PagedAttention with ContinuousBatcher for high-throughput serving.
 /// </summary>
 /// <typeparam name="T">Numeric type.</typeparam>
-public class PagedAttentionServer<T> : IDisposable
+internal class PagedAttentionServer<T> : IDisposable
 {
     private readonly PagedKVCache<T> _kvCache;
     private readonly PagedAttentionKernel<T> _kernel;

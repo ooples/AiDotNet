@@ -110,7 +110,7 @@ public class ResidualAnalysisFitDetector<T, TInput, TOutput> : FitDetectorBase<T
     protected override FitType DetermineFitType(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
         // Check for autocorrelation using Durbin-Watson statistic
-        if (NumOps.LessThan(evaluationData.TestSet.ErrorStats.DurbinWatsonStatistic, NumOps.FromDouble(1.5)) || 
+        if (NumOps.LessThan(evaluationData.TestSet.ErrorStats.DurbinWatsonStatistic, NumOps.FromDouble(1.5)) ||
             NumOps.GreaterThan(evaluationData.TestSet.ErrorStats.DurbinWatsonStatistic, NumOps.FromDouble(2.5)))
         {
             return FitType.Unstable;
