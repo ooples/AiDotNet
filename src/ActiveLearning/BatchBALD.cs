@@ -379,13 +379,16 @@ public class BatchBALD<T> : IActiveLearningStrategy<T>
         {
             var value = _numOps.ToDouble(predictions[i]);
 
+            // Simulate MC Dropout: randomly zero neurons and scale survivors
             if (random.NextDouble() < dropoutRate)
             {
-                value *= 1.0 / (1.0 - dropoutRate);
+                // Drop this neuron (set to zero)
+                value = 0.0;
             }
             else
             {
-                value += (random.NextDouble() - 0.5) * 0.1;
+                // Scale up surviving values to maintain expected value (inverted dropout)
+                value *= 1.0 / (1.0 - dropoutRate);
             }
 
             noisyPredictions[i] = _numOps.FromDouble(value);

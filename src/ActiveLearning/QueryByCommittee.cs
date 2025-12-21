@@ -97,7 +97,14 @@ public class QueryByCommittee<T> : IActiveLearningStrategy<T>
         var numSamples = unlabeledPool.Shape[0];
         batchSize = Math.Min(batchSize, numSamples);
 
-        return SelectTopScoring(scores, batchSize);
+        if (_useBatchDiversity)
+        {
+            return SelectWithDiversity(scores, unlabeledPool, batchSize);
+        }
+        else
+        {
+            return SelectTopScoring(scores, batchSize);
+        }
     }
 
     /// <inheritdoc />
@@ -315,6 +322,84 @@ public class QueryByCommittee<T> : IActiveLearningStrategy<T>
             .Take(batchSize)
             .Select(x => x.Index)
             .ToArray();
+    }
+
+    /// <summary>
+    /// Selects samples considering both committee disagreement score and diversity.
+    /// </summary>
+    private int[] SelectWithDiversity(Vector<T> scores, Tensor<T> pool, int batchSize)
+    {
+        var selected = new List<int>();
+        var remaining = new HashSet<int>(Enumerable.Range(0, scores.Length));
+        var featureSize = pool.Length / pool.Shape[0];
+
+        while (selected.Count < batchSize && remaining.Count > 0)
+        {
+            var best = -1;
+            var bestCombinedScore = _numOps.MinValue;
+
+            foreach (var idx in remaining)
+            {
+                var disagreementScore = scores[idx];
+                var diversityScore = selected.Count == 0
+                    ? _numOps.One
+                    : ComputeMinDistanceToSelected(pool, idx, selected, featureSize);
+
+                var combinedScore = _numOps.Multiply(disagreementScore, diversityScore);
+
+                if (_numOps.GreaterThan(combinedScore, bestCombinedScore))
+                {
+                    bestCombinedScore = combinedScore;
+                    best = idx;
+                }
+            }
+
+            if (best >= 0)
+            {
+                selected.Add(best);
+                remaining.Remove(best);
+            }
+        }
+
+        return [.. selected];
+    }
+
+    /// <summary>
+    /// Computes minimum distance from a sample to already selected samples.
+    /// </summary>
+    private T ComputeMinDistanceToSelected(Tensor<T> pool, int sampleIdx, List<int> selected, int featureSize)
+    {
+        var minDist = _numOps.MaxValue;
+
+        foreach (var selIdx in selected)
+        {
+            var dist = ComputeEuclideanDistance(pool, sampleIdx, selIdx, featureSize);
+            if (_numOps.LessThan(dist, minDist))
+            {
+                minDist = dist;
+            }
+        }
+
+        return minDist;
+    }
+
+    /// <summary>
+    /// Computes Euclidean distance between two samples.
+    /// </summary>
+    private T ComputeEuclideanDistance(Tensor<T> pool, int idx1, int idx2, int featureSize)
+    {
+        var sumSquared = _numOps.Zero;
+        var start1 = idx1 * featureSize;
+        var start2 = idx2 * featureSize;
+
+        for (int i = 0; i < featureSize; i++)
+        {
+            var diff = _numOps.Subtract(pool[start1 + i], pool[start2 + i]);
+            var squared = _numOps.Multiply(diff, diff);
+            sumSquared = _numOps.Add(sumSquared, squared);
+        }
+
+        return _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(sumSquared)));
     }
 
     /// <summary>

@@ -394,29 +394,59 @@ public async Task CombinedALCL<T>(
 
 ## API Reference
 
-### IActiveLearningStrategy<T>
+### IQueryStrategy<T, TInput, TOutput>
 
 ```csharp
-public interface IActiveLearningStrategy<T>
+public interface IQueryStrategy<T, TInput, TOutput>
 {
+    /// <summary>
+    /// Gets the name of this query strategy.
+    /// </summary>
     string Name { get; }
-    bool UseBatchDiversity { get; set; }
-    int[] SelectSamples(IFullModel<T, Tensor<T>, Tensor<T>> model, Tensor<T> unlabeledPool, int batchSize);
-    Dictionary<string, T> GetSelectionStatistics();
+
+    /// <summary>
+    /// Scores unlabeled examples by informativeness.
+    /// </summary>
+    Vector<T> ScoreExamples(
+        IFullModel<T, TInput, TOutput> model,
+        IDataset<T, TInput, TOutput> unlabeledData,
+        IDataset<T, TInput, TOutput>? labeledData = null);
+
+    /// <summary>
+    /// Selects the top-k most informative examples.
+    /// </summary>
+    Vector<int> SelectBatch(
+        IFullModel<T, TInput, TOutput> model,
+        IDataset<T, TInput, TOutput> unlabeledData,
+        int k,
+        IDataset<T, TInput, TOutput>? labeledData = null);
 }
 ```
 
-### IContinualLearningStrategy<T>
+### IContinualLearningStrategy<T, TInput, TOutput>
 
 ```csharp
-public interface IContinualLearningStrategy<T>
+public interface IContinualLearningStrategy<T, TInput, TOutput>
 {
-    double Lambda { get; set; }
-    void BeforeTask(INeuralNetwork<T> network, int taskId);
-    void AfterTask(INeuralNetwork<T> network, (Tensor<T> inputs, Tensor<T> targets) taskData, int taskId);
-    T ComputeLoss(INeuralNetwork<T> network);
-    Vector<T> ModifyGradients(INeuralNetwork<T> network, Vector<T> gradients);
-    void Reset();
+    /// <summary>
+    /// Initializes the strategy for a new task.
+    /// </summary>
+    void PrepareForTask(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> taskData);
+
+    /// <summary>
+    /// Computes the regularization loss to prevent forgetting.
+    /// </summary>
+    T ComputeRegularizationLoss(IFullModel<T, TInput, TOutput> model);
+
+    /// <summary>
+    /// Adjusts the gradients to prevent forgetting previous tasks.
+    /// </summary>
+    Vector<T> AdjustGradients(Vector<T> gradients);
+
+    /// <summary>
+    /// Finalizes learning after completing a task.
+    /// </summary>
+    void FinalizeTask(IFullModel<T, TInput, TOutput> model);
 }
 ```
 

@@ -276,7 +276,7 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
 
         // Compute average distance to estimate bandwidth
         var avgDist = ComputeAverageNearestNeighborDistance(pool, numSamples, featureSize, k: 5);
-        var bandwidth = _numOps.ToDouble(avgDist);
+        var bandwidth = Math.Max(_numOps.ToDouble(avgDist), 1e-10);
 
         for (int i = 0; i < numSamples; i++)
         {
@@ -325,17 +325,19 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
             // If no higher density point, set delta to max distance
             if (!foundHigher)
             {
+                var maxDist = _numOps.Zero;
                 for (int j = 0; j < numSamples; j++)
                 {
                     if (i != j)
                     {
                         var dist = ComputeDistance(pool, i, j, featureSize);
-                        if (_numOps.GreaterThan(dist, minDistToHigherDensity))
+                        if (_numOps.GreaterThan(dist, maxDist))
                         {
-                            minDistToHigherDensity = dist;
+                            maxDist = dist;
                         }
                     }
                 }
+                minDistToHigherDensity = maxDist;
             }
 
             deltas[i] = minDistToHigherDensity;

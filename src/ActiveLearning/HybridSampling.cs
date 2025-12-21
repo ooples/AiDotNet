@@ -215,7 +215,7 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
     }
 
     /// <summary>
-    /// Combines scores using product (geometric mean-like).
+    /// Combines scores using product (weighted geometric mean).
     /// </summary>
     private Vector<T> CombineProduct(List<Vector<T>> allScores, int numSamples)
     {
@@ -228,14 +228,17 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
             result[i] = _numOps.One;
         }
 
-        foreach (var scores in allScores)
+        for (int s = 0; s < _strategies.Count; s++)
         {
+            var scores = allScores[s];
+            var weight = _strategies[s].Weight;
             var normalized = NormalizeScores(scores);
             for (int i = 0; i < numSamples; i++)
             {
-                // Add epsilon to avoid zero products
+                // Add epsilon to avoid zero products, then apply weight as exponent
                 var value = _numOps.Add(normalized[i], epsilon);
-                result[i] = _numOps.Multiply(result[i], value);
+                var weightedValue = _numOps.FromDouble(Math.Pow(_numOps.ToDouble(value), weight));
+                result[i] = _numOps.Multiply(result[i], weightedValue);
             }
         }
 
@@ -245,6 +248,9 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
     /// <summary>
     /// Combines scores using rank fusion (Borda count).
     /// </summary>
+    /// <remarks>
+    /// Uses average rank for tied samples to ensure consistent results.
+    /// </remarks>
     private Vector<T> CombineRankFusion(List<Vector<T>> allScores, int numSamples)
     {
         var result = new Vector<T>(numSamples);
@@ -254,17 +260,45 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
             var scores = allScores[s];
             var weight = _strategies[s].Weight;
 
-            // Compute ranks
-            var indexedScores = new List<(int Index, T Score)>();
+            // Compute ranks with proper tie handling
+            var indexedScores = new List<(int Index, double Score)>();
             for (int i = 0; i < numSamples; i++)
             {
-                indexedScores.Add((i, scores[i]));
+                indexedScores.Add((i, _numOps.ToDouble(scores[i])));
             }
 
-            var ranked = indexedScores
-                .OrderByDescending(x => _numOps.ToDouble(x.Score))
-                .Select((x, rank) => (x.Index, Rank: numSamples - rank))
-                .ToDictionary(x => x.Index, x => x.Rank);
+            // Sort by score descending
+            var sorted = indexedScores.OrderByDescending(x => x.Score).ToList();
+
+            // Assign average ranks for tied samples
+            var ranked = new Dictionary<int, double>();
+            int pos = 0;
+            while (pos < sorted.Count)
+            {
+                // Find all samples with the same score (tie group)
+                var currentScore = sorted[pos].Score;
+                var tieStart = pos;
+                while (pos < sorted.Count && Math.Abs(sorted[pos].Score - currentScore) < 1e-10)
+                {
+                    pos++;
+                }
+                var tieEnd = pos;
+
+                // Calculate average rank for this tie group
+                // Ranks go from numSamples (highest) down to 1 (lowest)
+                double sumRanks = 0;
+                for (int r = tieStart; r < tieEnd; r++)
+                {
+                    sumRanks += numSamples - r;
+                }
+                double avgRank = sumRanks / (tieEnd - tieStart);
+
+                // Assign average rank to all tied samples
+                for (int r = tieStart; r < tieEnd; r++)
+                {
+                    ranked[sorted[r].Index] = avgRank;
+                }
+            }
 
             // Add weighted ranks
             for (int i = 0; i < numSamples; i++)

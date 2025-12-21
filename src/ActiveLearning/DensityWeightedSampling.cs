@@ -49,6 +49,11 @@ public class DensityWeightedSampling<T> : IActiveLearningStrategy<T>
     /// <param name="kNeighbors">Number of neighbors for density estimation (default: 10).</param>
     public DensityWeightedSampling(double beta = 1.0, int kNeighbors = 10)
     {
+        if (kNeighbors < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(kNeighbors), "kNeighbors must be at least 1.");
+        }
+
         _numOps = MathHelper.GetNumericOperations<T>();
         _beta = beta;
         _kNeighbors = kNeighbors;

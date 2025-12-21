@@ -182,16 +182,16 @@ public class BALD<T> : IActiveLearningStrategy<T>
         {
             var value = _numOps.ToDouble(predictions[i]);
 
-            // Simulate dropout effect: randomly scale values
+            // Simulate MC Dropout: randomly zero neurons and scale survivors
             if (random.NextDouble() < dropoutRate)
             {
-                // Scale up remaining values (dropout inverted scaling)
-                value *= 1.0 / (1.0 - dropoutRate);
+                // Drop this neuron (set to zero)
+                value = 0.0;
             }
             else
             {
-                // Add small noise for variation
-                value += (random.NextDouble() - 0.5) * 0.1;
+                // Scale up surviving values to maintain expected value (inverted dropout)
+                value *= 1.0 / (1.0 - dropoutRate);
             }
 
             noisyPredictions[i] = _numOps.FromDouble(value);
