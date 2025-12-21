@@ -161,15 +161,91 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
     }
 
     /// <summary>
-    /// Computes an approximation of the gradient using finite differences.
+    /// Computes the gradient of the loss with respect to the input.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When the target model implements <see cref="IInputGradientComputable{T}"/>, this method uses
+    /// analytic gradient computation via backpropagation, which is more accurate and efficient.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method calculates how changing each input dimension
+    /// affects the model's loss. With analytic gradients, we use the model's internal
+    /// backpropagation; otherwise, we approximate by testing small changes.</para>
+    /// </remarks>
     private Vector<T> ComputeGradient(Vector<T> input, int trueLabel, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
+    {
+        // Determine which class to compute gradient for
+        var targetClass = Options.IsTargeted ? Options.TargetClass : trueLabel;
+
+        // Check if the model supports analytic gradients
+        if (targetModel is IInputGradientComputable<T> gradientComputable)
+        {
+            return ComputeAnalyticGradient(input, targetClass, targetModel, gradientComputable);
+        }
+
+        // Fallback to finite differences
+        return ComputeFiniteDifferenceGradient(input, targetClass, targetModel);
+    }
+
+    /// <summary>
+    /// Computes the gradient analytically using the model's backpropagation capabilities.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For cross-entropy loss with softmax output, the gradient of the loss with respect to
+    /// the logits is: ∂L/∂z = p - one_hot(target_class)
+    /// where p is the softmax probabilities.
+    /// </para>
+    /// <para>
+    /// This is then backpropagated through the model to get ∂L/∂x (the input gradient).
+    /// </para>
+    /// </remarks>
+    private Vector<T> ComputeAnalyticGradient(
+        Vector<T> input,
+        int targetClass,
+        IPredictiveModel<T, Vector<T>, Vector<T>> targetModel,
+        IInputGradientComputable<T> gradientComputable)
+    {
+        // Get the model's output
+        var output = targetModel.Predict(input);
+
+        // Compute softmax probabilities
+        var probabilities = Softmax(output);
+
+        // Compute gradient of cross-entropy loss w.r.t. logits: ∂L/∂z = p - one_hot(target)
+        // This is the standard gradient for cross-entropy loss with softmax
+        var outputGradient = new Vector<T>(output.Length);
+        for (int i = 0; i < output.Length; i++)
+        {
+            if (i == targetClass)
+            {
+                // ∂L/∂z[target] = p[target] - 1
+                outputGradient[i] = NumOps.Subtract(probabilities[i], NumOps.One);
+            }
+            else
+            {
+                // ∂L/∂z[i] = p[i]
+                outputGradient[i] = probabilities[i];
+            }
+        }
+
+        // Backpropagate to get input gradient
+        return gradientComputable.ComputeInputGradient(input, outputGradient);
+    }
+
+    /// <summary>
+    /// Computes the gradient using finite-difference approximation as a fallback.
+    /// </summary>
+    private Vector<T> ComputeFiniteDifferenceGradient(
+        Vector<T> input,
+        int targetClass,
+        IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
     {
         var gradient = new Vector<T>(input.Length);
         var delta = NumOps.FromDouble(0.001);
 
         var originalOutput = targetModel.Predict(input);
-        var originalLoss = ComputeLoss(originalOutput, Options.IsTargeted ? Options.TargetClass : trueLabel);
+        var originalLoss = ComputeLoss(originalOutput, targetClass);
 
         for (int i = 0; i < input.Length; i++)
         {
@@ -177,7 +253,7 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
             perturbedInput[i] = NumOps.Add(perturbedInput[i], delta);
 
             var perturbedOutput = targetModel.Predict(perturbedInput);
-            var perturbedLoss = ComputeLoss(perturbedOutput, Options.IsTargeted ? Options.TargetClass : trueLabel);
+            var perturbedLoss = ComputeLoss(perturbedOutput, targetClass);
 
             gradient[i] = NumOps.Divide(NumOps.Subtract(perturbedLoss, originalLoss), delta);
         }

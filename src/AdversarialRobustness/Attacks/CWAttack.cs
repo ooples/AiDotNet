@@ -123,6 +123,16 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     /// <summary>
     /// Computes the objective function and its gradient.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When the target model implements <see cref="IInputGradientComputable{T}"/>, this method uses
+    /// analytic gradient computation via backpropagation, which is more accurate and efficient
+    /// than finite-difference approximation.
+    /// </para>
+    /// <para>
+    /// Falls back to finite-difference approximation for models that don't support analytic gradients.
+    /// </para>
+    /// </remarks>
     private (double objective, double[] gradient) ComputeObjectiveAndGradient(
         double[] w,
         Vector<T> original,
@@ -133,9 +143,150 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     {
         var objective = ComputeObjective(w, original, output, trueLabel, c);
 
-        // Approximate gradient in w-space using finite differences.
+        // Check if the model supports analytic gradients
+        if (targetModel is IInputGradientComputable<T> gradientComputable)
+        {
+            return (objective, ComputeAnalyticGradient(w, original, output, trueLabel, c, gradientComputable));
+        }
+
+        // Fallback: approximate gradient in w-space using finite differences
+        return (objective, ComputeFiniteDifferenceGradient(w, original, trueLabel, c, targetModel));
+    }
+
+    /// <summary>
+    /// Computes the gradient analytically using the model's backpropagation capabilities.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The C&amp;W objective is: L = ||δ||² + c * f(x_adv)
+    /// where δ = x_adv - x_orig and f is the attack loss.
+    /// </para>
+    /// <para>
+    /// The gradient in w-space uses the chain rule:
+    /// dL/dw = dL/dx_adv * dx_adv/dw
+    /// where dx_adv/dw = (1 - tanh²(w))/2 due to the tanh parameterization.
+    /// </para>
+    /// </remarks>
+    private double[] ComputeAnalyticGradient(
+        double[] w,
+        Vector<T> original,
+        Vector<T> output,
+        int trueLabel,
+        double c,
+        IInputGradientComputable<T> gradientComputable)
+    {
+        var n = w.Length;
+        var gradient = new double[n];
+
+        // Compute adversarial example and intermediate values
+        var adversarial = new Vector<T>(n);
+        var tanhW = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            tanhW[i] = Math.Tanh(w[i]);
+            adversarial[i] = NumOps.FromDouble((tanhW[i] + 1.0) / 2.0);
+        }
+
+        // Compute gradient of L2 perturbation term: d(||x_adv - x_orig||²)/dx_adv = 2 * (x_adv - x_orig)
+        var perturbation = CalculatePerturbation(original, adversarial);
+        var perturbGrad = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            perturbGrad[i] = NumOps.Multiply(NumOps.FromDouble(2.0), perturbation[i]);
+        }
+
+        // Compute gradient of attack loss term: df/dx_adv
+        var outputGradient = ComputeAttackLossGradient(output, trueLabel);
+        var inputGradient = gradientComputable.ComputeInputGradient(adversarial, outputGradient);
+
+        // Combine gradients: dL/dx_adv = perturbGrad + c * inputGradient
+        for (int i = 0; i < n; i++)
+        {
+            var dLdx = NumOps.ToDouble(perturbGrad[i]) + c * NumOps.ToDouble(inputGradient[i]);
+
+            // Chain rule: dx_adv/dw = d[(tanh(w)+1)/2]/dw = (1 - tanh²(w))/2
+            var dxdw = (1.0 - tanhW[i] * tanhW[i]) / 2.0;
+            gradient[i] = dLdx * dxdw;
+        }
+
+        return gradient;
+    }
+
+    /// <summary>
+    /// Computes the gradient of the attack loss with respect to the model output.
+    /// </summary>
+    /// <remarks>
+    /// For untargeted attacks: maximize max_other - true_logit, so gradient is -1 at true class, +1 at max other.
+    /// For targeted attacks: maximize target_logit - max_other, so gradient is +1 at target, -1 at max other.
+    /// </remarks>
+    private Vector<T> ComputeAttackLossGradient(Vector<T> output, int trueLabel)
+    {
+        var gradient = new Vector<T>(output.Length);
+        var trueLogit = NumOps.ToDouble(output[trueLabel]);
+
+        // Find the maximum logit that isn't the true class
+        var maxOtherLogit = double.NegativeInfinity;
+        var maxOtherIndex = -1;
+        for (int i = 0; i < output.Length; i++)
+        {
+            if (i == trueLabel)
+                continue;
+
+            var logit = NumOps.ToDouble(output[i]);
+            if (logit > maxOtherLogit)
+            {
+                maxOtherLogit = logit;
+                maxOtherIndex = i;
+            }
+        }
+
+        if (Options.IsTargeted)
+        {
+            var targetIndex = MathHelper.Clamp(Options.TargetClass, 0, output.Length - 1);
+            var targetLogit = NumOps.ToDouble(output[targetIndex]);
+
+            // Loss = max(0, max_other - target), derivative is non-zero only when loss > 0
+            if (maxOtherLogit > targetLogit)
+            {
+                gradient[maxOtherIndex] = NumOps.FromDouble(1.0);
+                gradient[targetIndex] = NumOps.FromDouble(-1.0);
+            }
+        }
+        else
+        {
+            // Loss = max(0, max_other - true), derivative is non-zero only when loss > 0
+            if (maxOtherLogit > trueLogit && maxOtherIndex >= 0)
+            {
+                gradient[maxOtherIndex] = NumOps.FromDouble(1.0);
+                gradient[trueLabel] = NumOps.FromDouble(-1.0);
+            }
+        }
+
+        return gradient;
+    }
+
+    /// <summary>
+    /// Computes the gradient using finite-difference approximation as a fallback.
+    /// </summary>
+    private double[] ComputeFiniteDifferenceGradient(
+        double[] w,
+        Vector<T> original,
+        int trueLabel,
+        double c,
+        IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
+    {
         var gradient = new double[w.Length];
         const double delta = 0.001;
+
+        // Compute base objective
+        var baseAdv = new Vector<T>(w.Length);
+        for (int i = 0; i < w.Length; i++)
+        {
+            var tanhW = Math.Tanh(w[i]);
+            baseAdv[i] = NumOps.FromDouble((tanhW + 1.0) / 2.0);
+        }
+        var baseOutput = targetModel.Predict(baseAdv);
+        var baseObjective = ComputeObjective(w, original, baseOutput, trueLabel, c);
 
         for (int i = 0; i < w.Length; i++)
         {
@@ -151,10 +302,10 @@ public class CWAttack<T> : AdversarialAttackBase<T>
 
             var outputPerturbed = targetModel.Predict(advPerturbed);
             var perturbedObjective = ComputeObjective(wPerturbed, original, outputPerturbed, trueLabel, c);
-            gradient[i] = (perturbedObjective - objective) / delta;
+            gradient[i] = (perturbedObjective - baseObjective) / delta;
         }
 
-        return (objective, gradient);
+        return gradient;
     }
 
     /// <summary>

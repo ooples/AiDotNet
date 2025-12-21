@@ -17,11 +17,10 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 /// best result. This makes it very thorough and hard to defend against - if your model can
 /// resist AutoAttack, it's genuinely robust!</para>
 /// <para>
-/// AutoAttack typically includes:
-/// - APGD-CE (Auto PGD with Cross-Entropy loss)
-/// - APGD-DLR (Auto PGD with DLR loss)
-/// - FAB (Fast Adaptive Boundary)
-/// - Square Attack
+/// This implementation includes:
+/// - PGD (Projected Gradient Descent)
+/// - C&amp;W (Carlini &amp; Wagner)
+/// - FGSM (Fast Gradient Sign Method)
 /// </para>
 /// <para>
 /// Original paper: "Reliable evaluation of adversarial robustness with an ensemble of diverse
