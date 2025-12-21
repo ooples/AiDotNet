@@ -177,14 +177,75 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
     public Vector<T> ComputeDensityWeights(IDataset<T, TInput, TOutput> pool)
     {
         // Density weighting: prefer points in dense regions to represent them
-        // Weight = average similarity to k nearest neighbors
+        // Weight = average inverse distance to k nearest neighbors
+        // Higher density (smaller avg distance to neighbors) = higher weight
+        if (pool.Count == 0)
+        {
+            return new Vector<T>(0);
+        }
+
         var weights = new T[pool.Count];
         int k = Math.Min(5, pool.Count - 1);
 
-        // Extract features (would need model, so simplified version)
+        if (k == 0)
+        {
+            // Only one sample, give it weight 1
+            weights[0] = NumOps.One;
+            return new Vector<T>(weights);
+        }
+
+        // Extract features for all samples
+        var features = new List<Vector<T>>();
         for (int i = 0; i < pool.Count; i++)
         {
-            weights[i] = NumOps.One; // Simplified: equal weights
+            features.Add(GetFeatureRepresentation(pool.GetInput(i)));
+        }
+
+        // Compute density for each sample based on k-nearest neighbors
+        for (int i = 0; i < pool.Count; i++)
+        {
+            // Compute distances to all other points
+            var distances = new List<(int Index, T Distance)>();
+            for (int j = 0; j < pool.Count; j++)
+            {
+                if (i != j)
+                {
+                    var dist = ComputeDistance(features[i], features[j]);
+                    distances.Add((j, dist));
+                }
+            }
+
+            // Sort by distance and take k nearest
+            distances.Sort((a, b) => NumOps.Compare(a.Distance, b.Distance));
+            var kNearest = distances.Take(k).ToList();
+
+            // Compute average distance to k nearest neighbors
+            T avgDistance = NumOps.Zero;
+            foreach (var (_, distance) in kNearest)
+            {
+                avgDistance = NumOps.Add(avgDistance, distance);
+            }
+            avgDistance = NumOps.Divide(avgDistance, NumOps.FromDouble(k));
+
+            // Density weight = 1 / (avgDistance + epsilon) for stability
+            // Higher density (smaller distance) = higher weight
+            var epsilon = NumOps.FromDouble(1e-6);
+            weights[i] = NumOps.Divide(NumOps.One, NumOps.Add(avgDistance, epsilon));
+        }
+
+        // Normalize weights to sum to 1
+        T totalWeight = NumOps.Zero;
+        foreach (var w in weights)
+        {
+            totalWeight = NumOps.Add(totalWeight, w);
+        }
+
+        if (NumOps.Compare(totalWeight, NumOps.Zero) > 0)
+        {
+            for (int i = 0; i < weights.Length; i++)
+            {
+                weights[i] = NumOps.Divide(weights[i], totalWeight);
+            }
         }
 
         return new Vector<T>(weights);
