@@ -1,9 +1,59 @@
+using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.ContinualLearning.Config;
 using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.ContinualLearning.Results;
+using AiDotNet.ContinualLearning.Strategies;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.ContinualLearning.Trainers;
+
+/// <summary>
+/// Configuration options for the EWC trainer.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options control how the EWC trainer operates.
+/// EWC protects important parameters by adding a regularization penalty when they change.</para>
+/// </remarks>
+public class EWCTrainerOptions<T>
+{
+    /// <summary>
+    /// Weight for the regularization loss relative to task loss.
+    /// Default: 1.0 (equal weighting).
+    /// </summary>
+    public double? RegularizationWeight { get; set; }
+
+    /// <summary>
+    /// Whether to use experience replay alongside EWC regularization.
+    /// Default: true.
+    /// </summary>
+    public bool? UseExperienceReplay { get; set; }
+
+    /// <summary>
+    /// Fraction of learning rate to use for replay samples.
+    /// Default: 0.5 (half the main learning rate).
+    /// </summary>
+    public double? ReplayLearningRateFactor { get; set; }
+
+    /// <summary>
+    /// Whether to compute validation metrics after each epoch.
+    /// Default: true if validation data is provided.
+    /// </summary>
+    public bool? ComputeValidationMetrics { get; set; }
+
+    /// <summary>
+    /// Gradient clipping threshold. Gradients with L2 norm above this will be clipped.
+    /// Default: null (no clipping).
+    /// </summary>
+    public double? GradientClipThreshold { get; set; }
+
+    /// <summary>
+    /// Whether to accumulate Fisher Information across tasks (online EWC).
+    /// Default: true.
+    /// </summary>
+    public bool? OnlineEWC { get; set; }
+}
 
 /// <summary>
 /// Continual learning trainer using Elastic Weight Consolidation (EWC).
@@ -15,13 +65,27 @@ namespace AiDotNet.ContinualLearning.Trainers;
 /// <para><b>For Beginners:</b> This trainer implements continual learning using EWC,
 /// which prevents catastrophic forgetting by protecting important parameters from previous tasks.</para>
 ///
-/// <para><b>Usage Example:</b>
+/// <para><b>How EWC Works:</b></para>
+/// <list type="number">
+/// <item><description>After learning a task, compute the Fisher Information Matrix (FIM)</description></item>
+/// <item><description>FIM measures how important each parameter is for the task</description></item>
+/// <item><description>When learning new tasks, add a penalty for changing important parameters</description></item>
+/// <item><description>L_total = L_task + λ * Σ F_i * (θ_i - θ*_i)²</description></item>
+/// </list>
+///
+/// <para><b>Online vs Offline EWC:</b></para>
+/// <list type="bullet">
+/// <item><description><b>Offline:</b> Stores FIM for each task separately (higher memory)</description></item>
+/// <item><description><b>Online:</b> Maintains running average of FIM (constant memory)</description></item>
+/// </list>
+///
+/// <para><b>Usage Example:</b></para>
 /// <code>
 /// var model = new MyNeuralNetwork();
-/// var lossFunction = new CrossEntropyLoss();
+/// var lossFunction = new CrossEntropyLoss&lt;double&gt;();
 /// var config = new ContinualLearnerConfig&lt;double&gt;();
-/// var ewcStrategy = new ElasticWeightConsolidation&lt;double, Matrix, Vector&gt;(lossFunction, 1000);
-/// var trainer = new EWCTrainer(model, lossFunction, config, ewcStrategy);
+/// var ewcStrategy = new ElasticWeightConsolidation&lt;double, Matrix, Vector&gt;(lossFunction);
+/// var trainer = new EWCTrainer&lt;double, Matrix, Vector&gt;(model, lossFunction, config, ewcStrategy);
 ///
 /// // Learn tasks sequentially
 /// var task1Result = trainer.LearnTask(task1Data);
@@ -30,58 +94,95 @@ namespace AiDotNet.ContinualLearning.Trainers;
 /// // Evaluate on all tasks
 /// var evalResult = trainer.EvaluateAllTasks();
 /// </code>
-/// </para>
+///
+/// <para><b>Reference:</b> Kirkpatrick et al. "Overcoming catastrophic forgetting in neural networks" (PNAS 2017)</para>
 /// </remarks>
 public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOutput>
 {
     [ThreadStatic]
     private static Random? _random;
-    private static Random ThreadRandom => _random ??= new Random();
+    private static Random ThreadRandom => _random ??= RandomHelper.CreateSecureRandom();
+
+    private readonly EWCTrainerOptions<T> _options;
+    private readonly ElasticWeightConsolidation<T, TInput, TOutput>? _ewcStrategy;
 
     /// <summary>
-    /// Initializes a new EWC trainer.
+    /// Gets the EWC-specific strategy if available.
     /// </summary>
+    public ElasticWeightConsolidation<T, TInput, TOutput>? EWCStrategy => _ewcStrategy;
+
+    /// <summary>
+    /// Initializes a new EWC trainer with default options.
+    /// </summary>
+    /// <param name="model">The model to train.</param>
+    /// <param name="lossFunction">The loss function for training.</param>
+    /// <param name="config">Configuration for continual learning.</param>
+    /// <param name="strategy">The EWC strategy (must be ElasticWeightConsolidation or compatible).</param>
     public EWCTrainer(
         IFullModel<T, TInput, TOutput> model,
         ILossFunction<T> lossFunction,
         IContinualLearnerConfig<T> config,
         IContinualLearningStrategy<T, TInput, TOutput> strategy)
-        : base(model, lossFunction, config, strategy)
+        : this(model, lossFunction, config, strategy, null)
     {
     }
 
-    /// <inheritdoc/>
-    public override ContinualLearningResult<T> LearnTask(IDataset<T, TInput, TOutput> taskData)
+    /// <summary>
+    /// Initializes a new EWC trainer with custom options.
+    /// </summary>
+    /// <param name="model">The model to train.</param>
+    /// <param name="lossFunction">The loss function for training.</param>
+    /// <param name="config">Configuration for continual learning.</param>
+    /// <param name="strategy">The EWC strategy (must be ElasticWeightConsolidation or compatible).</param>
+    /// <param name="options">Training options for EWC.</param>
+    public EWCTrainer(
+        IFullModel<T, TInput, TOutput> model,
+        ILossFunction<T> lossFunction,
+        IContinualLearnerConfig<T> config,
+        IContinualLearningStrategy<T, TInput, TOutput> strategy,
+        EWCTrainerOptions<T>? options)
+        : base(model, lossFunction, config, strategy)
     {
-        if (taskData == null)
-            throw new ArgumentNullException(nameof(taskData));
+        _options = options ?? new EWCTrainerOptions<T>();
+        _ewcStrategy = strategy as ElasticWeightConsolidation<T, TInput, TOutput>;
+    }
 
-        var startTime = System.Diagnostics.Stopwatch.StartNew();
-
-        // Prepare strategy for the new task
-        Strategy.PrepareForTask(Model, taskData);
-
-        // Store test set for later evaluation
-        _taskTestSets.Add(taskData);
-
-        // Store initial accuracy on this task before training (for forward transfer calculation)
-        var initialResult = EvaluateTaskInternal(taskData);
-        _initialAccuracies[_tasksLearned] = initialResult.Accuracy;
+    /// <inheritdoc/>
+    protected override ContinualLearningResult<T> TrainOnTask(
+        IDataset<T, TInput, TOutput> taskData,
+        IDataset<T, TInput, TOutput>? validationData,
+        int earlyStoppingPatience)
+    {
+        var taskId = _tasksLearned;
+        var batchSize = Configuration.BatchSize ?? 32;
+        var numSamples = taskData.Count;
+        var epochsPerTask = Configuration.EpochsPerTask ?? 10;
 
         var lossHistory = new List<T>();
         var regLossHistory = new List<T>();
-        var batchSize = Configuration.BatchSize;
-        var numSamples = taskData.Count;
+        var validationLossHistory = new List<T>();
 
-        // Training loop
-        for (int epoch = 0; epoch < Configuration.EpochsPerTask; epoch++)
+        var useReplay = _options.UseExperienceReplay ?? true;
+        var replayLrFactor = _options.ReplayLearningRateFactor ?? 0.5;
+        var regWeight = _options.RegularizationWeight ?? 1.0;
+        var gradientClip = _options.GradientClipThreshold;
+        var computeValidation = _options.ComputeValidationMetrics ?? (validationData != null);
+        var learningRate = Configuration.LearningRate ?? NumOps.FromDouble(0.001);
+
+        T bestValidationLoss = NumOps.FromDouble(double.MaxValue);
+        int epochsWithoutImprovement = 0;
+        long totalGradientUpdates = 0;
+
+        for (int epoch = 0; epoch < epochsPerTask; epoch++)
         {
             T epochTaskLoss = NumOps.Zero;
             T epochRegLoss = NumOps.Zero;
-            int sampleCount = 0;
+            int batchCount = 0;
 
             // Shuffle indices for this epoch
-            var indices = Enumerable.Range(0, numSamples).OrderBy(_ => ThreadRandom.Next()).ToList();
+            var indices = Enumerable.Range(0, numSamples)
+                .OrderBy(_ => ThreadRandom.Next())
+                .ToList();
 
             // Iterate through batches
             for (int batchStart = 0; batchStart < numSamples; batchStart += batchSize)
@@ -105,144 +206,181 @@ public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                     // Accumulate gradients
                     if (batchGradients == null)
                     {
-                        batchGradients = sampleGradients;
+                        batchGradients = CloneVector(sampleGradients);
                     }
                     else
                     {
-                        for (int j = 0; j < batchGradients.Length; j++)
-                        {
-                            batchGradients[j] = NumOps.Add(batchGradients[j], sampleGradients[j]);
-                        }
+                        AccumulateGradients(batchGradients, sampleGradients);
                     }
 
-                    // Estimate sample loss from gradient norm (proxy for loss magnitude)
-                    T gradientNorm = ComputeGradientNorm(sampleGradients);
-                    batchLoss = NumOps.Add(batchLoss, gradientNorm);
+                    // Compute sample loss - convert TOutput to Vector<T>
+                    var prediction = Model.Predict(input);
+                    var predictionVector = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
+                    var targetVector = ConversionsHelper.ConvertToVector<T, TOutput>(target);
+                    var sampleLoss = LossFunction.CalculateLoss(predictionVector, targetVector);
+                    batchLoss = NumOps.Add(batchLoss, sampleLoss);
                 }
 
                 if (batchGradients == null)
                     continue;
 
                 // Average gradients over batch
-                var batchSizeT = NumOps.FromDouble(actualBatchSize);
-                for (int j = 0; j < batchGradients.Length; j++)
-                {
-                    batchGradients[j] = NumOps.Divide(batchGradients[j], batchSizeT);
-                }
+                AverageGradients(batchGradients, actualBatchSize);
 
                 // Compute regularization loss from EWC
                 var regLoss = Strategy.ComputeRegularizationLoss(Model);
 
-                // Adjust gradients using strategy (EWC doesn't modify gradients, but other strategies might)
+                // Scale regularization loss by weight
+                regLoss = NumOps.Multiply(regLoss, NumOps.FromDouble(regWeight));
+
+                // Apply gradient clipping if configured
+                if (gradientClip.HasValue)
+                {
+                    ClipGradients(batchGradients, gradientClip.Value);
+                }
+
+                // Adjust gradients using strategy (EWC adds regularization gradients)
                 var adjustedGradients = Strategy.AdjustGradients(batchGradients);
 
                 // Apply gradients to update model
-                Model.ApplyGradients(adjustedGradients, Configuration.LearningRate);
+                Model.ApplyGradients(adjustedGradients, learningRate);
+                totalGradientUpdates++;
 
                 // Track losses
-                batchLoss = NumOps.Divide(batchLoss, batchSizeT);
+                batchLoss = NumOps.Divide(batchLoss, NumOps.FromDouble(actualBatchSize));
                 epochTaskLoss = NumOps.Add(epochTaskLoss, batchLoss);
                 epochRegLoss = NumOps.Add(epochRegLoss, regLoss);
-                sampleCount++;
+                batchCount++;
             }
 
-            // Mix in experience replay samples (if we have previous task examples)
-            if (MemoryBuffer.Count > 0)
+            // Experience replay
+            if (useReplay && MemoryBuffer.Count > 0)
             {
                 int replaySamples = Math.Min(batchSize, MemoryBuffer.Count);
                 var replayBatch = MemoryBuffer.SampleBatch(replaySamples);
 
                 if (replayBatch.Count > 0)
                 {
-                    Vector<T>? replayGradients = null;
-
-                    foreach (var dataPoint in replayBatch)
-                    {
-                        var sampleGradients = Model.ComputeGradients(dataPoint.Input, dataPoint.Output, LossFunction);
-
-                        if (replayGradients == null)
-                        {
-                            replayGradients = sampleGradients;
-                        }
-                        else
-                        {
-                            for (int j = 0; j < replayGradients.Length; j++)
-                            {
-                                replayGradients[j] = NumOps.Add(replayGradients[j], sampleGradients[j]);
-                            }
-                        }
-                    }
-
+                    var replayGradients = ComputeReplayGradients(replayBatch);
                     if (replayGradients != null)
                     {
-                        // Average replay gradients
-                        var replayBatchSizeT = NumOps.FromDouble(replayBatch.Count);
-                        for (int j = 0; j < replayGradients.Length; j++)
-                        {
-                            replayGradients[j] = NumOps.Divide(replayGradients[j], replayBatchSizeT);
-                        }
-
-                        // Scale replay gradients (use half the learning rate for replay)
-                        var replayLr = NumOps.Divide(Configuration.LearningRate, NumOps.FromDouble(2.0));
+                        var replayLr = NumOps.Multiply(
+                            learningRate,
+                            NumOps.FromDouble(replayLrFactor));
                         var adjustedReplayGradients = Strategy.AdjustGradients(replayGradients);
                         Model.ApplyGradients(adjustedReplayGradients, replayLr);
+                        totalGradientUpdates++;
                     }
                 }
             }
 
             // Average epoch losses
-            if (sampleCount > 0)
+            if (batchCount > 0)
             {
-                var sampleCountT = NumOps.FromDouble(sampleCount);
-                epochTaskLoss = NumOps.Divide(epochTaskLoss, sampleCountT);
-                epochRegLoss = NumOps.Divide(epochRegLoss, sampleCountT);
+                epochTaskLoss = NumOps.Divide(epochTaskLoss, NumOps.FromDouble(batchCount));
+                epochRegLoss = NumOps.Divide(epochRegLoss, NumOps.FromDouble(batchCount));
             }
 
             var totalEpochLoss = NumOps.Add(epochTaskLoss, epochRegLoss);
             lossHistory.Add(totalEpochLoss);
             regLossHistory.Add(epochRegLoss);
-        }
 
-        // Finalize the task (e.g., compute and store Fisher Information)
-        Strategy.FinalizeTask(Model);
-
-        // Store examples in replay buffer
-        int samplesPerTask = Configuration.MemorySize / Math.Max(1, _tasksLearned + 1);
-        MemoryBuffer.AddTaskExamples(taskData, samplesPerTask);
-
-        // Evaluate final performance on this task
-        var finalResult = EvaluateTaskInternal(taskData);
-        var finalLoss = lossHistory.Count > 0 ? lossHistory[lossHistory.Count - 1] : NumOps.Zero;
-        var finalAccuracy = finalResult.Accuracy;
-
-        // Compute average accuracy on previous tasks
-        T avgPrevAccuracy = NumOps.Zero;
-        if (_tasksLearned > 0)
-        {
-            for (int i = 0; i < _tasksLearned; i++)
+            // Compute validation metrics if requested
+            T? validationLoss = default;
+            if (computeValidation && validationData != null)
             {
-                var result = EvaluateTask(i, _taskTestSets[i]);
-                avgPrevAccuracy = NumOps.Add(avgPrevAccuracy, result.Accuracy);
+                var valResult = EvaluateOnDataset(validationData);
+                validationLoss = valResult.Loss;
+                validationLossHistory.Add(valResult.Loss);
+
+                // Early stopping check
+                if (NumOps.Compare(valResult.Loss, bestValidationLoss) < 0)
+                {
+                    bestValidationLoss = valResult.Loss;
+                    epochsWithoutImprovement = 0;
+                }
+                else
+                {
+                    epochsWithoutImprovement++;
+                    if (epochsWithoutImprovement >= earlyStoppingPatience)
+                    {
+                        // Raise epoch completed event before breaking
+                        OnEpochCompleted(taskId, epoch, epochsPerTask, totalEpochLoss, validationLoss);
+                        break;
+                    }
+                }
             }
-            avgPrevAccuracy = NumOps.Divide(avgPrevAccuracy, NumOps.FromDouble(_tasksLearned));
+
+            // Raise epoch completed event
+            OnEpochCompleted(taskId, epoch, epochsPerTask, totalEpochLoss, validationLoss);
         }
 
-        _tasksLearned++;
-        startTime.Stop();
+        // Compute final metrics
+        var finalTrainingResult = EvaluateOnDataset(taskData);
+        var finalValidationResult = validationData != null
+            ? EvaluateOnDataset(validationData)
+            : (Accuracy: NumOps.Zero, Loss: NumOps.Zero);
 
         return new ContinualLearningResult<T>(
-            taskId: _tasksLearned - 1,
-            trainingLoss: finalLoss,
-            trainingAccuracy: finalAccuracy,
-            averagePreviousTaskAccuracy: avgPrevAccuracy,
-            trainingTime: startTime.Elapsed,
+            taskId: taskId,
+            trainingLoss: lossHistory.Count > 0 ? lossHistory[^1] : NumOps.Zero,
+            trainingAccuracy: finalTrainingResult.Accuracy,
+            averagePreviousTaskAccuracy: ComputeAveragePreviousTaskAccuracy(),
+            trainingTime: TimeSpan.Zero, // Will be set by base class
             lossHistory: new Vector<T>(lossHistory.ToArray()),
-            regularizationLossHistory: new Vector<T>(regLossHistory.ToArray()));
+            regularizationLossHistory: new Vector<T>(regLossHistory.ToArray()))
+        {
+            ValidationLoss = validationData != null ? finalValidationResult.Loss : default,
+            ValidationAccuracy = validationData != null ? finalValidationResult.Accuracy : default,
+            GradientUpdates = (int)totalGradientUpdates,
+            EffectiveLearningRate = learningRate
+        };
     }
 
-    /// <summary>
-    /// Computes the L2 norm of a gradient vector (used as proxy for loss magnitude).
-    /// </summary>
+    #region Helper Methods
+
+    private Vector<T> CloneVector(Vector<T> source)
+    {
+        var result = new Vector<T>(source.Length);
+        for (int i = 0; i < source.Length; i++)
+        {
+            result[i] = source[i];
+        }
+        return result;
+    }
+
+    private void AccumulateGradients(Vector<T> target, Vector<T> source)
+    {
+        for (int i = 0; i < target.Length; i++)
+        {
+            target[i] = NumOps.Add(target[i], source[i]);
+        }
+    }
+
+    private void AverageGradients(Vector<T> gradients, int count)
+    {
+        var divisor = NumOps.FromDouble(count);
+        for (int i = 0; i < gradients.Length; i++)
+        {
+            gradients[i] = NumOps.Divide(gradients[i], divisor);
+        }
+    }
+
+    private void ClipGradients(Vector<T> gradients, double threshold)
+    {
+        T norm = ComputeGradientNorm(gradients);
+        double normValue = NumOps.ToDouble(norm);
+
+        if (normValue > threshold)
+        {
+            var scale = NumOps.FromDouble(threshold / normValue);
+            for (int i = 0; i < gradients.Length; i++)
+            {
+                gradients[i] = NumOps.Multiply(gradients[i], scale);
+            }
+        }
+    }
+
     private T ComputeGradientNorm(Vector<T> gradients)
     {
         T sum = NumOps.Zero;
@@ -253,53 +391,33 @@ public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
         return NumOps.Sqrt(sum);
     }
 
-    /// <summary>
-    /// Internal evaluation method that works on any dataset.
-    /// </summary>
-    private TaskEvaluationResult<T> EvaluateTaskInternal(IDataset<T, TInput, TOutput> testData)
+    private Vector<T>? ComputeReplayGradients(
+        IReadOnlyList<Memory.DataPoint<T, TInput, TOutput>> replayBatch)
     {
-        if (testData.Count == 0)
+        Vector<T>? replayGradients = null;
+
+        foreach (var dataPoint in replayBatch)
         {
-            return new TaskEvaluationResult<T>(0, NumOps.Zero, NumOps.Zero);
-        }
+            var sampleGradients = Model.ComputeGradients(
+                dataPoint.Input, dataPoint.Output, LossFunction);
 
-        int correctCount = 0;
-        T totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < testData.Count; i++)
-        {
-            var input = testData.GetInput(i);
-            var target = testData.GetOutput(i);
-            var prediction = Model.Predict(input);
-
-            // Compute loss using gradient norm as proxy
-            var gradients = Model.ComputeGradients(input, target, LossFunction);
-            var sampleLoss = ComputeGradientNorm(gradients);
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
-
-            // Check if prediction is correct (using gradient magnitude as proxy - lower is better)
-            // A correct prediction typically has very small gradients
-            if (Convert.ToDouble(sampleLoss) < 0.1)
+            if (replayGradients == null)
             {
-                correctCount++;
+                replayGradients = CloneVector(sampleGradients);
+            }
+            else
+            {
+                AccumulateGradients(replayGradients, sampleGradients);
             }
         }
 
-        var accuracy = NumOps.FromDouble((double)correctCount / testData.Count);
-        var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(testData.Count));
+        if (replayGradients != null)
+        {
+            AverageGradients(replayGradients, replayBatch.Count);
+        }
 
-        return new TaskEvaluationResult<T>(0, accuracy, avgLoss);
+        return replayGradients;
     }
 
-    /// <inheritdoc/>
-    public override TaskEvaluationResult<T> EvaluateTask(int taskId, IDataset<T, TInput, TOutput> testData)
-    {
-        if (taskId < 0 || taskId >= _tasksLearned)
-            throw new ArgumentException($"Invalid task ID: {taskId}", nameof(taskId));
-        if (testData == null)
-            throw new ArgumentNullException(nameof(testData));
-
-        var result = EvaluateTaskInternal(testData);
-        return new TaskEvaluationResult<T>(taskId, result.Accuracy, result.Loss);
-    }
+    #endregion
 }
