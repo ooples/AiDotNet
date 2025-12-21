@@ -238,18 +238,32 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
         artifacts.ExpectedCalibrationError = ece.Compute(confidence, predictions, labels);
 
         var scores = new Vector<T>(batch);
+        var validCount = 0;
         for (int i = 0; i < batch; i++)
         {
             var label = labels[i];
             if (label < 0 || label >= numClasses)
             {
-                return;
+                System.Diagnostics.Debug.WriteLine(
+                    $"Warning: Conformal classification skipped an invalid label at index {i}: {label}. Valid range is [0, {numClasses - 1}].");
+                continue;
             }
 
-            scores[i] = flatCalibrated[i * numClasses + label];
+            scores[validCount++] = flatCalibrated[i * numClasses + label];
         }
 
-        var threshold = ComputeConformalClassificationThreshold(scores, result.UncertaintyQuantificationOptions?.ConformalConfidenceLevel ?? 0.9);
+        if (validCount == 0)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                "Warning: Conformal classification threshold could not be computed because no valid labels were provided.");
+            return;
+        }
+
+        var validScores = validCount == scores.Length
+            ? scores
+            : scores.Subvector(0, validCount);
+
+        var threshold = ComputeConformalClassificationThreshold(validScores, result.UncertaintyQuantificationOptions?.ConformalConfidenceLevel ?? 0.9);
 
         artifacts.HasConformalClassification = true;
         artifacts.ConformalClassificationThreshold = threshold;
