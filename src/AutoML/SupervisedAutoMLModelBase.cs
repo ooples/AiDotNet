@@ -211,10 +211,18 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
     {
         var cvOptions = CrossValidationOptions!;
         int numFolds = cvOptions.NumberOfFolds;
-        var foldScores = new List<double>();
 
         // Get row count based on input type
         int totalRows = GetRowCount(trainInputs);
+
+        if (numFolds > totalRows)
+        {
+            throw new ArgumentException(
+                $"Number of folds ({numFolds}) cannot exceed the number of training samples ({totalRows}).",
+                nameof(CrossValidationOptions));
+        }
+
+        var foldScores = new List<double>();
 
         // Create fold indices
         var allIndices = Enumerable.Range(0, totalRows).ToArray();

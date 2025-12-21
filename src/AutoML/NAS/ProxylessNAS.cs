@@ -97,7 +97,7 @@ namespace AiDotNet.AutoML.NAS
 
                 for (int col = 0; col < alpha.Columns; col++)
                 {
-                    cumulative += Convert.ToDouble(probabilities[row, col]);
+                    cumulative += _ops.ToDouble(probabilities[row, col]);
                     if (rand <= cumulative)
                     {
                         selectedPath = col;
