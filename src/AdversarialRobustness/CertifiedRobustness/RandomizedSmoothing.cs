@@ -99,9 +99,14 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
             }
         }
 
-        // Compute certified radius using concentration inequalities
+        // Compute certified radius using the lower confidence bound on pA
+        // Per Cohen et al. (2019), we must use the lower bound to provide guaranteed certification:
+        // R = σ * Φ⁻¹(pA_lower) where pA_lower is the Clopper-Pearson lower bound
+        // Using the point estimate pA would overestimate the certified radius
         var pA = (double)topCount / options.NumSamples;
-        var certifiedRadius = ComputeCertifiedRadius(pA, sigma);
+        var pA_lower = ComputeLowerBound(pA, options.NumSamples, options.ConfidenceLevel);
+        var pA_upper = ComputeUpperBound(pA, options.NumSamples, options.ConfidenceLevel);
+        var certifiedRadius = ComputeCertifiedRadius(pA_lower, sigma);
 
         var result = new CertifiedPrediction<T>
         {
@@ -109,8 +114,8 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
             CertifiedRadius = NumOps.FromDouble(certifiedRadius),
             IsCertified = certifiedRadius > 0,
             Confidence = pA,
-            LowerBound = ComputeLowerBound(pA, options.NumSamples, options.ConfidenceLevel),
-            UpperBound = ComputeUpperBound(pA, options.NumSamples, options.ConfidenceLevel)
+            LowerBound = pA_lower,
+            UpperBound = pA_upper
         };
 
         result.CertificationDetails["SampleCount"] = options.NumSamples;
