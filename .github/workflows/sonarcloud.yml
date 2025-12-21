@@ -229,15 +229,15 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Serving|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.TimeSeries|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Tokenization|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.TransferLearning'
-          - name: AiDotNet.Tests - Unit - 13 InferenceOptimization
+          - name: AiDotNet.Tests - Other - 13 InferenceOptimization
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
             filter: Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.InferenceOptimization
-          - name: AiDotNet.Tests - Unit - 14 PromptEngineering
+          - name: AiDotNet.Tests - Other - 14 PromptEngineering
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
             filter: Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.PromptEngineering
-          - name: AiDotNet.Tests - Unit - 15 Recovery/Concurrency
+          - name: AiDotNet.Tests - Other - 15 Recovery/Concurrency
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.Recovery|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.Concurrency'
@@ -278,15 +278,26 @@ jobs:
       - name: Run tests (sharded) with coverage
         shell: powershell
         run: |
-          $results = "TestResults\\${{ matrix.shard.name }}".Replace(":", "").Replace("/", "-").Replace("\\", "-")
+          # Sanitize shard name: remove/replace all characters invalid in file paths
+          $shardName = "${{ matrix.shard.name }}"
+          $sanitizedShardName = $shardName -replace '[\\/:*?"<>|\s-]+', '_'
+          $results = Join-Path "TestResults" $sanitizedShardName
           New-Item -Path $results -ItemType Directory -Force | Out-Null
-          dotnet test ${{ matrix.shard.project }} -c Release --framework ${{ matrix.shard.framework }} --no-build --no-restore --filter "${{ matrix.shard.filter }}" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results.trx" --results-directory $results
+          dotnet test ${{ matrix.shard.project }} -c Release --framework ${{ matrix.shard.framework }} --no-restore --filter "${{ matrix.shard.filter }}" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results.trx" --results-directory $results
+
+      - name: Set artifact name
+        if: always()
+        shell: powershell
+        run: |
+          # Create sanitized artifact name from shard name
+          $slug = "${{ matrix.shard.name }}" -replace '[\\/:*?"<>|\s-]+', '_'
+          echo "ARTIFACT_NAME=coverage-${{ github.sha }}-$slug" >> $env:GITHUB_ENV
 
       - name: Upload coverage + test results
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
-          name: coverage-${{ github.sha }}-${{ matrix.shard.name }}
+          name: ${{ env.ARTIFACT_NAME }}
           path: |
             TestResults/**/coverage.opencover.xml
             TestResults/**/*.trx

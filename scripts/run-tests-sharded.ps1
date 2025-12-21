@@ -79,7 +79,7 @@ function Invoke-DotNetTest {
     [Parameter(Mandatory = $true)][string]$RepoRoot,
     [Parameter(Mandatory = $true)][string]$Configuration,
     [Parameter(Mandatory = $true)][string]$Framework,
-    [Parameter(Mandatory = $true)][switch]$UseRunSettings
+    [switch]$UseRunSettings
   )
 
   $projectPath = Join-Path $RepoRoot $Shard.Project
@@ -179,10 +179,9 @@ try {
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 10 NN/Optimizers/RAG" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks|$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.Optimizers|$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.RAG"))
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 11 Regularization/RL/RAG2" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.Regularization|$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.ReinforcementLearning|$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.RetrievalAugmentedGeneration"))
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 12 Serving/TimeSeries/Token/Transfer" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.Serving|$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.TimeSeries|$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.Tokenization|$categoryFilter&FullyQualifiedName~AiDotNet.Tests.UnitTests.TransferLearning"))
-  $shards.Add((New-TestShard -Name "AiDotNet.Tests - Other - InferenceOptimization" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.InferenceOptimization"))
-  $shards.Add((New-TestShard -Name "AiDotNet.Tests - Other - PromptEngineering" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.PromptEngineering"))
-  $shards.Add((New-TestShard -Name "AiDotNet.Tests - Other - Concurrency" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.Concurrency"))
-  $shards.Add((New-TestShard -Name "AiDotNet.Tests - Other - Recovery" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.Recovery"))
+  $shards.Add((New-TestShard -Name "AiDotNet.Tests - Other - 13 InferenceOptimization" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.InferenceOptimization"))
+  $shards.Add((New-TestShard -Name "AiDotNet.Tests - Other - 14 PromptEngineering" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.PromptEngineering"))
+  $shards.Add((New-TestShard -Name "AiDotNet.Tests - Other - 15 Recovery/Concurrency" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.Concurrency|$categoryFilter&FullyQualifiedName~AiDotNet.Tests.Recovery"))
 
   if ($IncludeIntegration) {
     $shards.Add((New-TestShard -Name "AiDotNet.Tests - Integration" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "FullyQualifiedName~AiDotNet.Tests.IntegrationTests"))
@@ -204,8 +203,13 @@ try {
 
   # Remove redundant leading/trailing '&' when categoryFilter is empty.
   foreach ($s in $shards) {
-    $s.Filter = ($s.Filter -replace "^[&]+", "") -replace "[&]+$", ""
-    $s.Filter = ($s.Filter -replace "&&+", "&")
+    if ($null -ne $s.Filter) {
+      $s.Filter = ($s.Filter -replace "^[&]+", "") -replace "[&]+$", ""
+      $s.Filter = ($s.Filter -replace "&&+", "&").Trim()
+      if ([string]::IsNullOrWhiteSpace($s.Filter)) {
+        $s.Filter = $null
+      }
+    }
   }
 
   Write-Host "Running $($shards.Count) shard(s) with MaxParallel=$MaxParallel ..."
@@ -233,12 +237,19 @@ try {
     Write-Warning "PowerShell 7+ is recommended for parallel sharding. Running shards sequentially (install 'pwsh' for parallel runs)."
     $results = @()
     foreach ($shard in $shards) {
-      $results += Invoke-DotNetTest -Shard $shard -RepoRoot $repoRoot -Configuration $Configuration -Framework $Framework -UseRunSettings:$UseRunSettings
+      if ($UseRunSettings) {
+        $results += Invoke-DotNetTest -Shard $shard -RepoRoot $repoRoot -Configuration $Configuration -Framework $Framework -UseRunSettings
+      } else {
+        $results += Invoke-DotNetTest -Shard $shard -RepoRoot $repoRoot -Configuration $Configuration -Framework $Framework
+      }
     }
   } else {
+    # Note: ForEach-Object -Parallel runs in separate runspaces where functions like
+    # Invoke-DotNetTest are not available. The code below intentionally duplicates
+    # the test invocation logic from Invoke-DotNetTest for parallel execution.
     $results = $shards | ForEach-Object -Parallel {
       $projectPath = Join-Path $using:repoRoot $_.Project
-      $resultsDir = Join-Path $using:repoRoot ("TestResults\\LocalShards\\" + ($_.Name -replace "[:/\\\\]", "-"))
+      $resultsDir = Join-Path $using:repoRoot ("TestResults\LocalShards\" + ($_.Name -replace "[:/\\]", "-"))
       New-Item -Path $resultsDir -ItemType Directory -Force | Out-Null
 
       $args = @(
@@ -252,7 +263,7 @@ try {
       )
 
       if ($using:UseRunSettings) {
-        $runsettings = Join-Path $using:repoRoot "tests\\local.runsettings"
+        $runsettings = Join-Path $using:repoRoot "tests\local.runsettings"
         if (Test-Path $runsettings) {
           $args += @("--settings", $runsettings)
         }
