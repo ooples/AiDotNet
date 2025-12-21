@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.Data.Loaders;
+using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -48,6 +49,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         var builder = new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
+            .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu })
             .ConfigureUncertaintyQuantification(new UncertaintyQuantificationOptions
             {
                 Method = UncertaintyQuantificationMethod.MonteCarloDropout,
@@ -121,6 +123,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         var builder = new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
+            .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu })
             .ConfigureUncertaintyQuantification(new UncertaintyQuantificationOptions
             {
                 Method = UncertaintyQuantificationMethod.MonteCarloDropout,
@@ -232,6 +235,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
+            .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu })
             .ConfigureUncertaintyQuantification(
                 new UncertaintyQuantificationOptions
                 {
@@ -290,6 +294,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
+            .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu })
             .ConfigureUncertaintyQuantification(
                 new UncertaintyQuantificationOptions
                 {
@@ -356,6 +361,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
+            .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu })
             .ConfigureUncertaintyQuantification(
                 new UncertaintyQuantificationOptions
                 {
@@ -402,6 +408,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
+            .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu })
             .ConfigureUncertaintyQuantification(
                 new UncertaintyQuantificationOptions
                 {
@@ -463,6 +470,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
+            .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu })
             .ConfigureUncertaintyQuantification(
                 new UncertaintyQuantificationOptions
                 {
@@ -509,6 +517,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
+            .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu })
             .ConfigureUncertaintyQuantification(
                 new UncertaintyQuantificationOptions
                 {
@@ -571,6 +580,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
+            .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu })
             .ConfigureUncertaintyQuantification(
                 new UncertaintyQuantificationOptions
                 {
@@ -621,6 +631,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
+            .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu })
             .ConfigureUncertaintyQuantification(
                 new UncertaintyQuantificationOptions
                 {
@@ -675,6 +686,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             .ConfigureDataLoader(DataLoaders.FromTensors(x, y))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
+            .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu })
             .ConfigureUncertaintyQuantification(new UncertaintyQuantificationOptions
             {
                 Method = UncertaintyQuantificationMethod.DeepEnsemble,
@@ -722,6 +734,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             .ConfigureDataLoader(DataLoaders.FromTensors(x, y))
             .ConfigureModel(bayesianModel)
             .ConfigureOptimizer(optimizer)
+            .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu })
             .ConfigureUncertaintyQuantification(new UncertaintyQuantificationOptions
             {
                 Method = UncertaintyQuantificationMethod.BayesianNeuralNetwork
@@ -759,6 +772,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
+            .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu })
             .ConfigureUncertaintyQuantification(new UncertaintyQuantificationOptions
             {
                 Method = UncertaintyQuantificationMethod.MonteCarloDropout,
