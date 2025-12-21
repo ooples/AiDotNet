@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Helpers;
+
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
@@ -233,7 +235,7 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
         Vector<T> v = new Vector<T>(n);
 
         // Initialize with random unit vector
-        Random rand = new();
+        var rand = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < n; i++)
         {
             v[i] = NumOps.FromDouble(rand.NextDouble());

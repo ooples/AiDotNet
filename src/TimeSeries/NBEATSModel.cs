@@ -678,7 +678,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         var sliceNode = TensorOperations<T>.Constant(sliceTensor, "forecast_slice");
 
         // output[0] = slice @ aggregatedForecast
-        var outputNode = TensorOperations<T>.MatrixMultiply(sliceNode, aggregatedForecast);
+        var outputNode = TensorOperations<T>.MatrixVectorMultiply(sliceNode, aggregatedForecast);
 
         return outputNode;
     }

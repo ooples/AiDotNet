@@ -189,10 +189,11 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     private (List<Vector<T>>, List<Matrix<T>>) KalmanSmoother(List<Vector<T>> filteredStates, List<Vector<T>> predictedStates)
     {
         var smoothedStates = new List<Vector<T>>(filteredStates);
-        var smoothedCovariances = new List<Matrix<T>>();
+        var smoothedCovariances = new List<Matrix<T>>(filteredStates.Count);
 
         var currentSmoothedState = filteredStates[filteredStates.Count - 1];
-        var currentSmoothedCovariance = Matrix<T>.CreateIdentity(_stateSize);
+        var finalCovariance = Matrix<T>.CreateIdentity(_stateSize);
+        var currentSmoothedCovariance = finalCovariance;
 
         for (int t = filteredStates.Count - 2; t >= 0; t--)
         {
@@ -215,6 +216,7 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
             smoothedCovariances.Insert(0, currentSmoothedCovariance);
         }
 
+        smoothedCovariances.Add(finalCovariance);
         return (smoothedStates, smoothedCovariances);
     }
 
@@ -522,8 +524,31 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
             throw new ArgumentException("Input matrix rows must match output vector length.");
         }
 
-        // Combine x and y into a single matrix of observations
-        Matrix<T> observations = x.AddColumn(y);
+        // Build observation matrix based on configured ObservationSize.
+        // For the default univariate case (ObservationSize = 1), the observation is the target series (y).
+        Matrix<T> observations;
+        if (_observationSize == 1)
+        {
+            observations = new Matrix<T>(y.Length, 1);
+            for (int i = 0; i < y.Length; i++)
+            {
+                observations[i, 0] = y[i];
+            }
+        }
+        else if (_observationSize == x.Columns + 1)
+        {
+            observations = x.AddColumn(y);
+        }
+        else if (_observationSize == x.Columns)
+        {
+            observations = x;
+        }
+        else
+        {
+            throw new ArgumentException(
+                $"ObservationSize ({_observationSize}) does not match the provided input columns ({x.Columns}).",
+                nameof(x));
+        }
 
         // Initialize parameters if needed
         _previousTransitionMatrix = _transitionMatrix.Clone();
@@ -759,7 +784,7 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         var transitionNode = TensorOperations<T>.Constant(transitionTensor, "transition_matrix");
 
         // State transition: new_state = T @ state
-        var newStateNode = TensorOperations<T>.MatrixMultiply(transitionNode, stateInputNode);
+        var newStateNode = TensorOperations<T>.MatrixVectorMultiply(transitionNode, stateInputNode);
 
         // Convert observation matrix to tensor
         var observationData = new T[_observationSize * _stateSize];
@@ -774,7 +799,7 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         var observationNode = TensorOperations<T>.Constant(observationTensor, "observation_matrix");
 
         // Observation: output = H @ new_state
-        var outputNode = TensorOperations<T>.MatrixMultiply(observationNode, newStateNode);
+        var outputNode = TensorOperations<T>.MatrixVectorMultiply(observationNode, newStateNode);
 
         return outputNode;
     }

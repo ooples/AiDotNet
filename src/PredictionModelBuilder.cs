@@ -9,6 +9,7 @@ global using AiDotNet.FeatureSelectors;
 global using AiDotNet.FitDetectors;
 global using AiDotNet.FitnessCalculators;
 global using AiDotNet.Helpers;
+global using AiDotNet.Tensors.Helpers;
 global using AiDotNet.KnowledgeDistillation;
 global using AiDotNet.LanguageModels;
 global using AiDotNet.LossFunctions;
@@ -31,7 +32,6 @@ global using AiDotNet.Tokenization.Configuration;
 global using AiDotNet.Tokenization.HuggingFace;
 global using AiDotNet.Tokenization.Interfaces;
 global using AiDotNet.Tools;
-global using AiDotNet.Tensors.Helpers;
 global using AiDotNet.UncertaintyQuantification.Layers;
 global using AiDotNet.LinearAlgebra;
 
@@ -166,6 +166,14 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
     private AutoMLOptions<T, TInput, TOutput>? _autoMLOptions;
 
+    // Federated learning configuration (facade-first: orchestration is internal)
+    private FederatedLearningOptions? _federatedLearningOptions;
+    private IAggregationStrategy<IFullModel<T, TInput, TOutput>>? _federatedAggregationStrategy;
+    private IClientSelectionStrategy? _federatedClientSelectionStrategy;
+    private IFederatedServerOptimizer<T>? _federatedServerOptimizer;
+    private IFederatedHeterogeneityCorrection<T>? _federatedHeterogeneityCorrection;
+    private IHomomorphicEncryptionProvider<T>? _federatedHomomorphicEncryptionProvider;
+
     // Deployment configuration fields
     private QuantizationConfig? _quantizationConfig;
     private CompressionConfig? _compressionConfig;
@@ -177,6 +185,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     private GpuAccelerationConfig? _gpuAccelerationConfig;
     private ReasoningConfig? _reasoningConfig;
     private ProfilingConfig? _profilingConfig;
+    private BenchmarkingOptions? _benchmarkingOptions;
 
     // Tokenization configuration
     private ITokenizer? _tokenizer;
@@ -317,6 +326,31 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm)
     {
         _optimizer = optimizationAlgorithm;
+        return this;
+    }
+
+    /// <summary>
+    /// Enables federated learning training using the provided options.
+    /// </summary>
+    /// <param name="options">Federated learning configuration options.</param>
+    /// <param name="aggregationStrategy">Optional aggregation strategy override (null uses defaults based on options).</param>
+    /// <param name="clientSelectionStrategy">Optional client selection strategy override (null uses defaults based on options).</param>
+    /// <param name="serverOptimizer">Optional server-side optimizer override (null uses defaults based on options).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFederatedLearning(
+        FederatedLearningOptions options,
+        IAggregationStrategy<IFullModel<T, TInput, TOutput>>? aggregationStrategy = null,
+        IClientSelectionStrategy? clientSelectionStrategy = null,
+        IFederatedServerOptimizer<T>? serverOptimizer = null,
+        IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
+        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null)
+    {
+        _federatedLearningOptions = options ?? throw new ArgumentNullException(nameof(options));
+        _federatedAggregationStrategy = aggregationStrategy;
+        _federatedClientSelectionStrategy = clientSelectionStrategy;
+        _federatedServerOptimizer = serverOptimizer;
+        _federatedHeterogeneityCorrection = heterogeneityCorrection;
+        _federatedHomomorphicEncryptionProvider = homomorphicEncryptionProvider;
         return this;
     }
 
@@ -757,13 +791,17 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </remarks>
     public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync()
     {
+        PredictionModelResult<T, TInput, TOutput> result;
+
         // RL TRAINING PATH - check if RL options are configured with an environment
         if (_rlOptions?.Environment is not null)
         {
             // Use episodes from options (default: 1000)
             int episodes = _rlOptions.Episodes;
             bool verbose = _rlOptions.LogFrequency > 0;
-            return await BuildRLInternalAsync(episodes, verbose);
+            result = await BuildRLInternalAsync(episodes, verbose);
+            await RunBenchmarksIfConfiguredAsync(result).ConfigureAwait(false);
+            return result;
         }
 
         // DATA LOADER PATH - check if data loader is configured and provides input/output data
@@ -780,13 +818,17 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             var labels = inputOutputLoader.Labels;
 
             // Delegate to the internal supervised training method
-            return await BuildSupervisedInternalAsync(features, labels);
+            result = await BuildSupervisedInternalAsync(features, labels);
+            await RunBenchmarksIfConfiguredAsync(result).ConfigureAwait(false);
+            return result;
         }
 
         // META-LEARNING PATH - check if meta-learner is configured
         if (_metaLearner is not null)
         {
-            return BuildMetaLearningInternalAsync();
+            result = BuildMetaLearningInternalAsync();
+            await RunBenchmarksIfConfiguredAsync(result).ConfigureAwait(false);
+            return result;
         }
 
         // No training path configured
@@ -796,6 +838,16 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             "- ConfigureDataLoader() for supervised learning\n" +
             "- ConfigureMetaLearning() for meta-learning\n" +
             "For supervised learning, configure a data loader via ConfigureDataLoader() and then call BuildAsync().");
+    }
+
+    private Task RunBenchmarksIfConfiguredAsync(PredictionModelResult<T, TInput, TOutput> result)
+    {
+        if (_benchmarkingOptions is null || _benchmarkingOptions.Suites is null || _benchmarkingOptions.Suites.Length == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        return result.EvaluateBenchmarksAsync(_benchmarkingOptions);
     }
 
     /// <summary>
@@ -830,6 +882,19 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         int? modelVersion = null;
         string? dataVersionHash = null;
         var trainingStartTime = DateTime.UtcNow;
+
+        // If a federated-aware data loader is configured, prefer its natural client partitions (e.g., LEAF users).
+        // This keeps federated simulations faithful to benchmark/client boundaries and avoids leaking partitioning
+        // concerns into the public facade API.
+        List<(int ClientId, int StartRow, int SampleCount)>? federatedClientRanges = null;
+        if (_federatedLearningOptions != null &&
+            _dataLoader is IFederatedClientDataLoader<T, TInput, TOutput> federatedClientDataLoader)
+        {
+            var aggregated = BuildAggregatedDatasetFromClientData(federatedClientDataLoader.ClientData);
+            x = aggregated.X;
+            y = aggregated.Y;
+            federatedClientRanges = aggregated.ClientRanges;
+        }
 
         // Convert and validate inputs
         var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
@@ -1011,51 +1076,92 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             }
             else
             {
-                // Switch on strategy to create appropriate model/optimizer pair
-                (model, finalOptimizer) = _distributedStrategy switch
-                {
-                    DistributedStrategy.DDP => (
-                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.DDPModel<T, TInput, TOutput>(_model, shardingConfig),
-                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.DDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                    ),
-                    DistributedStrategy.FSDP => (
-                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.FSDPModel<T, TInput, TOutput>(_model, shardingConfig),
-                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.FSDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                    ),
-                    DistributedStrategy.ZeRO1 => (
-                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.ZeRO1Model<T, TInput, TOutput>(_model, shardingConfig),
-                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.ZeRO1Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                    ),
-                    DistributedStrategy.ZeRO2 => (
-                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.ZeRO2Model<T, TInput, TOutput>(_model, shardingConfig),
-                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.ZeRO2Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                    ),
-                    DistributedStrategy.ZeRO3 => (
-                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.ZeRO3Model<T, TInput, TOutput>(_model, shardingConfig),
-                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.ZeRO3Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                    ),
-                    DistributedStrategy.PipelineParallel => (
-                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(_model, shardingConfig),
-                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.PipelineParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                    ),
-                    DistributedStrategy.TensorParallel => (
-                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.TensorParallelModel<T, TInput, TOutput>(_model, shardingConfig),
-                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.TensorParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                    ),
-                    DistributedStrategy.Hybrid => (
-                        (IFullModel<T, TInput, TOutput>)new DistributedTraining.HybridShardedModel<T, TInput, TOutput>(_model, shardingConfig),
-                        (IOptimizer<T, TInput, TOutput>)new DistributedTraining.HybridShardedOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
-                    ),
-                    _ => throw new InvalidOperationException($"Unsupported distributed strategy: {_distributedStrategy}")
-                };
+                 // Switch on strategy to create appropriate model/optimizer pair
+                 (model, finalOptimizer) = _distributedStrategy switch
+                 {
+                     DistributedStrategy.DDP => CreateDistributedPair(
+                         new DistributedTraining.DDPModel<T, TInput, TOutput>(_model, shardingConfig),
+                         new DistributedTraining.DDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                     DistributedStrategy.FSDP => CreateDistributedPair(
+                         new DistributedTraining.FSDPModel<T, TInput, TOutput>(_model, shardingConfig),
+                         new DistributedTraining.FSDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                     DistributedStrategy.ZeRO1 => CreateDistributedPair(
+                         new DistributedTraining.ZeRO1Model<T, TInput, TOutput>(_model, shardingConfig),
+                         new DistributedTraining.ZeRO1Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                     DistributedStrategy.ZeRO2 => CreateDistributedPair(
+                         new DistributedTraining.ZeRO2Model<T, TInput, TOutput>(_model, shardingConfig),
+                         new DistributedTraining.ZeRO2Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                     DistributedStrategy.ZeRO3 => CreateDistributedPair(
+                         new DistributedTraining.ZeRO3Model<T, TInput, TOutput>(_model, shardingConfig),
+                         new DistributedTraining.ZeRO3Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                     DistributedStrategy.PipelineParallel => CreateDistributedPair(
+                         new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(_model, shardingConfig),
+                         new DistributedTraining.PipelineParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                     DistributedStrategy.TensorParallel => CreateDistributedPair(
+                         new DistributedTraining.TensorParallelModel<T, TInput, TOutput>(_model, shardingConfig),
+                         new DistributedTraining.TensorParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                     DistributedStrategy.Hybrid => CreateDistributedPair(
+                         new DistributedTraining.HybridShardedModel<T, TInput, TOutput>(_model, shardingConfig),
+                         new DistributedTraining.HybridShardedOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                     _ => throw new InvalidOperationException($"Unsupported distributed strategy: {_distributedStrategy}")
+                 };
+             }
+        }
+
+        bool usePartitionedFederatedData = _federatedLearningOptions != null && federatedClientRanges != null;
+        int expectedFederatedSampleCount = 0;
+        if (usePartitionedFederatedData)
+        {
+            foreach (var range in federatedClientRanges!)
+            {
+                expectedFederatedSampleCount += range.SampleCount;
             }
         }
 
         // Preprocess the data
         var (preprocessedX, preprocessedY, normInfo) = dataPreprocessor.PreprocessData(x, y);
 
-        // Split the data
-        var (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
+        if (usePartitionedFederatedData)
+        {
+            var preprocessedMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(preprocessedX);
+            var preprocessedVector = ConversionsHelper.ConvertToVector<T, TOutput>(preprocessedY);
+
+            if (preprocessedMatrix.Rows != preprocessedVector.Length)
+            {
+                throw new InvalidOperationException(
+                    "Federated learning with partitioned client data requires preprocessing to preserve X/y row alignment. " +
+                    $"Got X rows={preprocessedMatrix.Rows} and y length={preprocessedVector.Length}.");
+            }
+
+            if (preprocessedMatrix.Rows != expectedFederatedSampleCount)
+            {
+                throw new InvalidOperationException(
+                    "Federated learning with partitioned client data requires preprocessing to preserve the total number of samples and row ordering. " +
+                    $"Expected {expectedFederatedSampleCount} samples from the data loader partitions but preprocessing produced {preprocessedMatrix.Rows}. " +
+                    "If you are using outlier removal, filtering, or other preprocessing that drops/reorders rows, disable it for partitioned federated learning or " +
+                    "apply preprocessing at the per-client level before aggregating client datasets.");
+            }
+        }
+
+        TInput XTrain;
+        TOutput yTrain;
+        TInput XVal = default!;
+        TOutput yVal = default!;
+        TInput XTest = default!;
+        TOutput yTest = default!;
+
+        if (usePartitionedFederatedData)
+        {
+            // For natural per-client datasets (e.g., LEAF), avoid re-splitting at the sample level so that we can
+            // preserve the client boundaries through preprocessing.
+            XTrain = preprocessedX;
+            yTrain = preprocessedY;
+        }
+        else
+        {
+            // Standard supervised learning path: split into train/validation/test.
+            (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
+        }
 
         // Perform cross-validation on training data BEFORE final model training (if configured)
         // This follows industry standard patterns from H2O and caret where CV is integrated into model building
@@ -1280,27 +1386,96 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             : null;
 
         OptimizationResult<T, TInput, TOutput> optimizationResult;
+        FederatedLearningMetadata? federatedLearningMetadata = null;
         var optimizationInputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest);
 
-        // Check if knowledge distillation is configured
-        if (_knowledgeDistillationOptions != null)
+        // FEDERATED LEARNING PATH (facade-first: orchestration stays internal)
+        if (_federatedLearningOptions != null)
         {
-            // KNOWLEDGE DISTILLATION PATH
-            optimizationResult = await PerformKnowledgeDistillationAsync(
-                model,
-                finalOptimizer,
-                XTrain,
-                yTrain,
-                XVal,
-                yVal,
-                XTest,
-                yTest);
+            if (_knowledgeDistillationOptions != null)
+            {
+                throw new InvalidOperationException("Federated learning cannot be combined with knowledge distillation in the same Build() call.");
+            }
+
+            if (_distributedBackend != null || _distributedConfiguration != null)
+            {
+                throw new InvalidOperationException("Federated learning is not currently compatible with distributed training configuration. Use either federated learning or distributed training per build.");
+            }
+
+            var flOptions = _federatedLearningOptions;
+
+            Dictionary<int, FederatedClientDataset<TInput, TOutput>> clientPartitions;
+            int effectiveClientCount;
+
+            if (usePartitionedFederatedData)
+            {
+                clientPartitions = CreateFederatedClientPartitionsFromClientRanges(
+                    XTrain,
+                    yTrain,
+                    federatedClientRanges!);
+
+                effectiveClientCount = clientPartitions.Count;
+
+                if (effectiveClientCount <= 0)
+                {
+                    throw new InvalidOperationException("Federated client data resolved from the data loader is empty.");
+                }
+
+                if (flOptions.NumberOfClients != effectiveClientCount)
+                {
+                    Console.WriteLine(
+                        $"[AiDotNet] Warning: FederatedLearningOptions.NumberOfClients={flOptions.NumberOfClients} does not match the data loader client count {effectiveClientCount}. Using the data loader client count.");
+                }
+            }
+            else
+            {
+                clientPartitions = CreateFederatedClientPartitions(XTrain, yTrain, flOptions.NumberOfClients, flOptions.RandomSeed);
+                effectiveClientCount = clientPartitions.Count;
+            }
+
+            var trainer = new AiDotNet.FederatedLearning.Trainers.InMemoryFederatedTrainer<T, TInput, TOutput>(
+                optimizerPrototype: finalOptimizer,
+                learningRateOverride: flOptions.LearningRate,
+                randomSeed: flOptions.RandomSeed,
+                convergenceThreshold: flOptions.ConvergenceThreshold,
+                minRoundsBeforeConvergence: flOptions.MinRoundsBeforeConvergence,
+                federatedLearningOptions: flOptions,
+                clientSelectionStrategy: _federatedClientSelectionStrategy,
+                serverOptimizer: _federatedServerOptimizer,
+                heterogeneityCorrection: _federatedHeterogeneityCorrection,
+                homomorphicEncryptionProvider: _federatedHomomorphicEncryptionProvider);
+
+            var aggregationStrategy = _federatedAggregationStrategy ?? CreateDefaultFederatedAggregationStrategy(flOptions);
+            trainer.SetAggregationStrategy(aggregationStrategy);
+            trainer.Initialize(model, effectiveClientCount);
+
+            federatedLearningMetadata = trainer.Train(
+                clientData: clientPartitions,
+                rounds: flOptions.MaxRounds,
+                clientSelectionFraction: flOptions.ClientSelectionFraction,
+                localEpochs: flOptions.LocalEpochs);
+
+            optimizationResult = new OptimizationResult<T, TInput, TOutput>
+            {
+                BestSolution = trainer.GetGlobalModel(),
+                Iterations = federatedLearningMetadata.RoundsCompleted
+            };
         }
         else
         {
             // REGULAR TRAINING PATH
-            // Optimize the final model on the full training set (using distributed optimizer if configured)
-            optimizationResult = finalOptimizer.Optimize(optimizationInputData);
+            // Optimize the final model on the full training set (optionally using knowledge distillation)
+            optimizationResult = _knowledgeDistillationOptions != null
+                ? await PerformKnowledgeDistillationAsync(
+                    model,
+                    finalOptimizer,
+                    XTrain,
+                    yTrain,
+                    XVal,
+                    yVal,
+                    XTest,
+                    yTest)
+                : finalOptimizer.Optimize(optimizationInputData);
         }
 
         var trainingEndTime = DateTime.UtcNow;
@@ -1562,6 +1737,11 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);
         TryComputeAndAttachUncertaintyCalibrationArtifacts(finalResult);
+
+        if (federatedLearningMetadata != null)
+        {
+            finalResult.GetModelMetadata().SetProperty(FederatedLearningMetadata.MetadataKey, federatedLearningMetadata);
+        }
 
         return finalResult;
     }
@@ -2852,6 +3032,24 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     }
 
     /// <summary>
+    /// Configures benchmarking to run standardized benchmark suites and attach a structured report to the built model.
+    /// </summary>
+    /// <param name="options">Benchmarking options (suites, sampling, failure policy). If null, sensible defaults are used.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This integrates benchmarking into the facade flow: users select suites via enums and receive a structured report,
+    /// without wiring benchmark implementations manually.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like running a standardized test after building your model to see how it performs.</para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureBenchmarking(BenchmarkingOptions? options = null)
+    {
+        _benchmarkingOptions = options ?? new BenchmarkingOptions();
+        return this;
+    }
+
+    /// <summary>
     /// Configures performance profiling for training and inference operations.
     /// </summary>
     /// <param name="config">The profiling configuration, or null to use industry-standard defaults.</param>
@@ -4037,15 +4235,61 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         {
             reasoningTrace.AppendLine("STEP 4: Analyzing feature importance...\n");
 
-            // Build feature analysis input with mock correlations
+            // Build feature analysis input using lightweight statistics (correlation-based proxies).
+            var numOps = MathHelper.GetNumericOperations<T>();
             var features = new Newtonsoft.Json.Linq.JObject();
             for (int col = 0; col < Math.Min(nFeatures, 20); col++)  // Limit to first 20 features
             {
+                int missingCount = 0;
+                int count = 0;
+                double sumX = 0.0;
+                double sumY = 0.0;
+                double sumXX = 0.0;
+                double sumYY = 0.0;
+                double sumXY = 0.0;
+
+                for (int row = 0; row < nSamples; row++)
+                {
+                    double xValue = numOps.ToDouble(convertedX[row, col]);
+                    double yValue = numOps.ToDouble(convertedY[row]);
+
+                    if (double.IsNaN(xValue) || double.IsInfinity(xValue) || double.IsNaN(yValue) || double.IsInfinity(yValue))
+                    {
+                        missingCount++;
+                        continue;
+                    }
+
+                    count++;
+                    sumX += xValue;
+                    sumY += yValue;
+                    sumXX += xValue * xValue;
+                    sumYY += yValue * yValue;
+                    sumXY += xValue * yValue;
+                }
+
+                double correlation = 0.0;
+                if (count >= 2)
+                {
+                    double cov = sumXY - (sumX * sumY / count);
+                    double varX = sumXX - (sumX * sumX / count);
+                    double varY = sumYY - (sumY * sumY / count);
+
+                    if (varX > 0.0 && varY > 0.0)
+                    {
+                        correlation = cov / Math.Sqrt(varX * varY);
+                        if (correlation > 1.0) correlation = 1.0;
+                        if (correlation < -1.0) correlation = -1.0;
+                    }
+                }
+
+                double missingPct = nSamples > 0 ? (double)missingCount / nSamples : 0.0;
+                double importance = Math.Abs(correlation);
+
                 features[$"feature_{col}"] = new Newtonsoft.Json.Linq.JObject
                 {
-                    ["target_correlation"] = 0.5,  // Placeholder
-                    ["importance_score"] = 0.1,  // Placeholder
-                    ["missing_pct"] = 0.0,
+                    ["target_correlation"] = correlation,
+                    ["importance_score"] = importance,
+                    ["missing_pct"] = missingPct,
                     ["correlations"] = new Newtonsoft.Json.Linq.JObject()
                 };
             }
@@ -4769,6 +5013,380 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             Console.WriteLine("[AiDotNet] To use GPU acceleration, target net8.0 or higher");
         }
 #endif
+    }
+
+    private static (TInput X, TOutput Y, List<(int ClientId, int StartRow, int SampleCount)> ClientRanges)
+        BuildAggregatedDatasetFromClientData(IReadOnlyDictionary<int, FederatedClientDataset<TInput, TOutput>> clientData)
+    {
+        if (clientData is null)
+        {
+            throw new ArgumentNullException(nameof(clientData));
+        }
+
+        if (clientData.Count == 0)
+        {
+            throw new ArgumentException("Federated client data cannot be empty.", nameof(clientData));
+        }
+
+        var orderedClients = clientData.OrderBy(kvp => kvp.Key).ToList();
+
+        int featureCount = -1;
+        foreach (var dataset in orderedClients.Select(kvp => kvp.Value))
+        {
+            if (dataset is null)
+            {
+                throw new ArgumentException("Federated client data cannot contain null datasets.", nameof(clientData));
+            }
+
+            if (dataset.SampleCount <= 0)
+            {
+                continue;
+            }
+
+            var featuresMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(dataset.Features);
+            featureCount = featuresMatrix.Columns;
+            break;
+        }
+
+        if (featureCount < 0)
+        {
+            featureCount = 0;
+        }
+
+        int totalSamples = 0;
+        foreach (var kvp in orderedClients)
+        {
+            var dataset = kvp.Value;
+            if (dataset is null)
+            {
+                throw new ArgumentException("Federated client data cannot contain null datasets.", nameof(clientData));
+            }
+
+            if (dataset.SampleCount < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(clientData), "Federated client datasets must have non-negative SampleCount values.");
+            }
+
+            totalSamples += dataset.SampleCount;
+        }
+
+        if (totalSamples == 0)
+        {
+            throw new ArgumentException(
+                "Federated client data contains no samples. At least one client must provide SampleCount > 0.",
+                nameof(clientData));
+        }
+
+        var aggregatedMatrix = new Matrix<T>(totalSamples, featureCount);
+        var aggregatedVector = new Vector<T>(totalSamples);
+        var ranges = new List<(int ClientId, int StartRow, int SampleCount)>(orderedClients.Count);
+
+        int row = 0;
+        foreach (var kvp in orderedClients)
+        {
+            int clientId = kvp.Key;
+            var dataset = kvp.Value;
+
+            if (dataset is null)
+            {
+                throw new ArgumentException("Federated client data cannot contain null datasets.", nameof(clientData));
+            }
+
+            int sampleCount = dataset.SampleCount;
+            if (sampleCount < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(clientData), "Federated client datasets must have non-negative SampleCount values.");
+            }
+
+            ranges.Add((clientId, row, sampleCount));
+
+            if (sampleCount == 0)
+            {
+                continue;
+            }
+
+            var featuresMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(dataset.Features);
+            var labelsVector = ConversionsHelper.ConvertToVector<T, TOutput>(dataset.Labels);
+
+            if (featuresMatrix.Rows != sampleCount || labelsVector.Length != sampleCount)
+            {
+                throw new InvalidOperationException(
+                    $"Federated client dataset for clientId={clientId} has inconsistent dimensions. " +
+                    $"Expected SampleCount={sampleCount}, got X rows={featuresMatrix.Rows} and y length={labelsVector.Length}.");
+            }
+
+            if (featuresMatrix.Columns != featureCount)
+            {
+                throw new InvalidOperationException(
+                    $"Federated client dataset for clientId={clientId} has inconsistent feature count. " +
+                    $"Expected {featureCount} but found {featuresMatrix.Columns}.");
+            }
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                aggregatedMatrix.SetRow(row, featuresMatrix.GetRow(i));
+                aggregatedVector[row] = labelsVector[i];
+                row++;
+            }
+        }
+
+        if (row != totalSamples)
+        {
+            throw new InvalidOperationException("Aggregated federated dataset construction produced an unexpected sample count.");
+        }
+
+        return (ConvertMatrixToInputType(aggregatedMatrix), ConvertVectorToOutputType(aggregatedVector), ranges);
+    }
+
+    private static Dictionary<int, FederatedClientDataset<TInput, TOutput>> CreateFederatedClientPartitionsFromClientRanges(
+        TInput xAll,
+        TOutput yAll,
+        IReadOnlyList<(int ClientId, int StartRow, int SampleCount)> clientRanges)
+    {
+        if (clientRanges is null)
+        {
+            throw new ArgumentNullException(nameof(clientRanges));
+        }
+
+        if (clientRanges.Count == 0)
+        {
+            throw new ArgumentException("Federated client ranges cannot be empty.", nameof(clientRanges));
+        }
+
+        var xMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(xAll);
+        var yVector = ConversionsHelper.ConvertToVector<T, TOutput>(yAll);
+
+        if (xMatrix.Rows != yVector.Length)
+        {
+            throw new ArgumentException("Federated client range partitioning requires X row count to match y length.");
+        }
+
+        int expectedTotal = 0;
+        foreach (var range in clientRanges)
+        {
+            expectedTotal += range.SampleCount;
+        }
+
+        if (expectedTotal != xMatrix.Rows)
+        {
+            throw new InvalidOperationException(
+                "Federated client range partitioning requires preprocessing to preserve the total number of samples. " +
+                $"Expected {expectedTotal} samples from client partitions but preprocessing produced {xMatrix.Rows}.");
+        }
+
+        var partitions = new Dictionary<int, FederatedClientDataset<TInput, TOutput>>(clientRanges.Count);
+
+        foreach (var (clientId, startRow, sampleCount) in clientRanges)
+        {
+            if (sampleCount < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(clientRanges), "SampleCount must be non-negative.");
+            }
+
+            if (startRow < 0 || startRow + sampleCount > xMatrix.Rows)
+            {
+                throw new ArgumentOutOfRangeException(nameof(clientRanges), "Client range is outside the dataset bounds.");
+            }
+
+            var xClientMatrix = new Matrix<T>(sampleCount, xMatrix.Columns);
+            var yClientVector = new Vector<T>(sampleCount);
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                int sourceRow = startRow + i;
+                xClientMatrix.SetRow(i, xMatrix.GetRow(sourceRow));
+                yClientVector[i] = yVector[sourceRow];
+            }
+
+            var xClient = ConvertMatrixToInputType(xClientMatrix);
+            var yClient = ConvertVectorToOutputType(yClientVector);
+
+            partitions[clientId] = new FederatedClientDataset<TInput, TOutput>(xClient, yClient, sampleCount);
+        }
+
+        return partitions;
+    }
+
+    private static Dictionary<int, FederatedClientDataset<TInput, TOutput>> CreateFederatedClientPartitions(
+        TInput xTrain,
+        TOutput yTrain,
+        int numberOfClients,
+        int? randomSeed)
+    {
+        if (numberOfClients <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numberOfClients), "Number of clients must be positive.");
+        }
+
+        var xMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(xTrain);
+        var yVector = ConversionsHelper.ConvertToVector<T, TOutput>(yTrain);
+
+        if (xMatrix.Rows != yVector.Length)
+        {
+            throw new ArgumentException("Federated partitioning requires X row count to match y length.");
+        }
+
+        if (numberOfClients > xMatrix.Rows)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numberOfClients),
+                "NumberOfClients must not exceed the number of training samples when creating federated partitions.");
+	        }
+	
+	        var indices = Enumerable.Range(0, xMatrix.Rows).ToList();
+	        var rng = randomSeed.HasValue
+	            ? RandomHelper.CreateSeededRandom(randomSeed.Value)
+	            : RandomHelper.CreateSecureRandom();
+	        ShuffleInPlace(indices, rng);
+	
+	        var clientIndices = new List<int>[numberOfClients];
+        for (int i = 0; i < numberOfClients; i++)
+        {
+            clientIndices[i] = new List<int>();
+        }
+
+        for (int i = 0; i < indices.Count; i++)
+        {
+            int clientId = i % numberOfClients;
+            clientIndices[clientId].Add(indices[i]);
+        }
+
+        var partitions = new Dictionary<int, FederatedClientDataset<TInput, TOutput>>(numberOfClients);
+        for (int clientId = 0; clientId < numberOfClients; clientId++)
+        {
+            var rows = clientIndices[clientId];
+            rows.Sort();
+
+            var xClientMatrix = xMatrix.GetRows(rows);
+            var yClientVector = new Vector<T>(rows.Count);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                yClientVector[i] = yVector[rows[i]];
+            }
+
+            var xClient = ConvertMatrixToInputType(xClientMatrix);
+            var yClient = ConvertVectorToOutputType(yClientVector);
+
+            partitions[clientId] = new FederatedClientDataset<TInput, TOutput>(xClient, yClient, rows.Count);
+        }
+
+        return partitions;
+    }
+
+    private static void ShuffleInPlace<TItem>(IList<TItem> list, Random random)
+    {
+        for (int i = list.Count - 1; i > 0; i--)
+        {
+            int j = random.Next(i + 1);
+            (list[i], list[j]) = (list[j], list[i]);
+        }
+    }
+
+    private static TInput ConvertMatrixToInputType(Matrix<T> matrix)
+    {
+        if (matrix is TInput typedMatrix)
+        {
+            return typedMatrix;
+        }
+
+        if (typeof(TInput) == typeof(Tensor<T>))
+        {
+            var tensor = Tensor<T>.FromRowMatrix(matrix);
+            if (tensor is TInput typedTensor)
+            {
+                return typedTensor;
+            }
+        }
+
+        throw new InvalidOperationException($"Federated learning currently supports TInput of Matrix<T> or Tensor<T>. Got {typeof(TInput).Name}.");
+    }
+
+    private static TOutput ConvertVectorToOutputType(Vector<T> vector)
+    {
+        if (vector is TOutput typedVector)
+        {
+            return typedVector;
+        }
+
+        if (typeof(TOutput) == typeof(Tensor<T>))
+        {
+            var tensor = Tensor<T>.FromVector(vector);
+            if (tensor is TOutput typedTensor)
+            {
+                return typedTensor;
+            }
+        }
+
+        throw new InvalidOperationException($"Federated learning currently supports TOutput of Vector<T> or Tensor<T>. Got {typeof(TOutput).Name}.");
+    }
+
+    private static IAggregationStrategy<IFullModel<T, TInput, TOutput>> CreateDefaultFederatedAggregationStrategy(FederatedLearningOptions options)
+    {
+        switch (options.AggregationStrategy)
+        {
+            case FederatedAggregationStrategy.FedAvg:
+                return new AiDotNet.FederatedLearning.Aggregators.FedAvgFullModelAggregationStrategy<T, TInput, TOutput>();
+
+            case FederatedAggregationStrategy.FedProx:
+                return new AiDotNet.FederatedLearning.Aggregators.FedProxFullModelAggregationStrategy<T, TInput, TOutput>(options.ProximalMu);
+
+            case FederatedAggregationStrategy.FedBN:
+                return new AiDotNet.FederatedLearning.Aggregators.FedBNFullModelAggregationStrategy<T, TInput, TOutput>();
+
+            case FederatedAggregationStrategy.Median:
+                return new AiDotNet.FederatedLearning.Aggregators.MedianFullModelAggregationStrategy<T, TInput, TOutput>();
+
+            case FederatedAggregationStrategy.TrimmedMean:
+            {
+                var robust = options.RobustAggregation ?? new RobustAggregationOptions();
+                return new AiDotNet.FederatedLearning.Aggregators.TrimmedMeanFullModelAggregationStrategy<T, TInput, TOutput>(robust.TrimFraction);
+            }
+
+            case FederatedAggregationStrategy.WinsorizedMean:
+            {
+                var robust = options.RobustAggregation ?? new RobustAggregationOptions();
+                return new AiDotNet.FederatedLearning.Aggregators.WinsorizedMeanFullModelAggregationStrategy<T, TInput, TOutput>(robust.TrimFraction);
+            }
+
+            case FederatedAggregationStrategy.Rfa:
+            {
+                var robust = options.RobustAggregation ?? new RobustAggregationOptions();
+                return AiDotNet.FederatedLearning.Aggregators.RfaFullModelAggregationStrategy<T, TInput, TOutput>.FromOptions(robust);
+            }
+
+            case FederatedAggregationStrategy.Krum:
+            {
+                var robust = options.RobustAggregation ?? new RobustAggregationOptions();
+                return new AiDotNet.FederatedLearning.Aggregators.KrumFullModelAggregationStrategy<T, TInput, TOutput>(robust.ByzantineClientCount);
+            }
+
+            case FederatedAggregationStrategy.MultiKrum:
+            {
+                var robust = options.RobustAggregation ?? new RobustAggregationOptions();
+                return new AiDotNet.FederatedLearning.Aggregators.MultiKrumFullModelAggregationStrategy<T, TInput, TOutput>(
+                    robust.ByzantineClientCount,
+                    robust.MultiKrumSelectionCount,
+                    robust.UseClientWeightsWhenAveragingSelectedUpdates);
+            }
+
+            case FederatedAggregationStrategy.Bulyan:
+            {
+                var robust = options.RobustAggregation ?? new RobustAggregationOptions();
+                return new AiDotNet.FederatedLearning.Aggregators.BulyanFullModelAggregationStrategy<T, TInput, TOutput>(
+                    robust.ByzantineClientCount,
+                    robust.UseClientWeightsWhenAveragingSelectedUpdates);
+            }
+
+            default:
+                throw new InvalidOperationException($"Unsupported federated aggregation strategy '{options.AggregationStrategy}'.");
+        }
+    }
+
+    private static (IFullModel<T, TInput, TOutput> Model, IOptimizer<T, TInput, TOutput> Optimizer) CreateDistributedPair(
+        IFullModel<T, TInput, TOutput> distributedModel,
+        IOptimizer<T, TInput, TOutput> distributedOptimizer)
+    {
+        return (distributedModel, distributedOptimizer);
     }
 
     /// <summary>

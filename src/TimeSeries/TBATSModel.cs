@@ -225,7 +225,7 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         {
             int start = Math.Max(0, i - windowSize + 1);
             int end = i + 1;
-            _level[i] = StatisticsHelper<T>.CalculateMedian(y.Slice(start, end));
+            _level[i] = StatisticsHelper<T>.CalculateMedian(y.Slice(start, end - start));
         }
 
         // Initialize trend using robust slope estimation
@@ -233,7 +233,7 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         for (int i = windowSize; i < n; i++)
         {
             Vector<T> x = Vector<T>.Range(0, windowSize);
-            Vector<T> yWindow = y.Slice(i - windowSize, i);
+            Vector<T> yWindow = y.Slice(i - windowSize, windowSize);
             Vector<T> coefficients = RobustLinearRegression(x, yWindow);
             _trend[i] = coefficients[1]; // Slope
         }

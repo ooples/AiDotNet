@@ -530,6 +530,21 @@ public class ProphetOptions<T, TInput, TOutput> : TimeSeriesRegressionOptions<T>
     public bool DailySeasonality { get; set; } = false;
 
     /// <summary>
+    /// Gets or sets a value indicating whether the model should attempt to optimize its parameters during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the model may run an additional optimization pass to refine parameter values beyond
+    /// the initial component estimates derived from the data.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// Turning this on tells the model to spend extra time trying to find better settings for trend,
+    /// seasonality, and other components. This can improve accuracy, but training may take longer.
+    /// </para>
+    /// </remarks>
+    public bool OptimizeParameters { get; set; } = false;
+
+    /// <summary>
     /// Gets or sets the optimizer to use for parameter fitting.
     /// </summary>
     /// <value>The optimizer instance, defaulting to null (uses the default optimizer).</value>

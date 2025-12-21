@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -91,19 +92,19 @@ public class InferenceController : ControllerBase
             double[][] predictions;
             int batchSize = request.Features.Length;
 
-            switch (modelInfo.NumericType.ToLower())
+            switch (modelInfo.NumericType)
             {
-                case "double":
+                case NumericType.Double:
                     predictions = await PredictWithType<double>(modelName, request.Features);
                     break;
-                case "single":
+                case NumericType.Float:
                     predictions = await PredictWithType<float>(modelName, request.Features);
                     break;
-                case "decimal":
+                case NumericType.Decimal:
                     predictions = await PredictWithType<decimal>(modelName, request.Features);
                     break;
                 default:
-                    return BadRequest(new { error = $"Unsupported numeric type: {modelInfo.NumericType}" });
+                    return BadRequest(new { error = "Unsupported numeric type." });
             }
 
             sw.Stop();
@@ -125,12 +126,12 @@ public class InferenceController : ControllerBase
         catch (InvalidOperationException ex)
         {
             _logger.LogError(ex, "Invalid operation during prediction for model '{ModelName}'", modelName);
-            return StatusCode(500, new { error = $"Model operation error: {ex.Message}" });
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Model operation error." });
         }
         catch (NotSupportedException ex)
         {
             _logger.LogError(ex, "Unsupported operation for model '{ModelName}'", modelName);
-            return StatusCode(500, new { error = $"Unsupported operation: {ex.Message}" });
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Unsupported operation." });
         }
         catch (ArgumentException ex)
         {
@@ -138,15 +139,18 @@ public class InferenceController : ControllerBase
 
             if (ex.Message.Contains("maximum allowed when batching is disabled", StringComparison.OrdinalIgnoreCase))
             {
-                return StatusCode(StatusCodes.Status413PayloadTooLarge, new { error = ex.Message });
+                return StatusCode(StatusCodes.Status413PayloadTooLarge, new
+                {
+                    error = "Request batch size exceeds the allowed maximum when batching is disabled. Reduce the batch size or enable batching."
+                });
             }
 
-            return BadRequest(new { error = $"Invalid input: {ex.Message}" });
+            return BadRequest(new { error = "Invalid input." });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error during prediction for model '{ModelName}'", modelName);
-            return StatusCode(500, new { error = $"An unexpected error occurred during prediction: {ex.Message}" });
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "An unexpected error occurred during prediction." });
         }
     }
 
@@ -366,20 +370,12 @@ public class InferenceController : ControllerBase
             _logger.LogDebug("Received speculative decoding request for model '{ModelName}'", modelName);
 
             // Validate request
-            if (request.InputTokens == null || request.InputTokens.Length == 0)
+            var validationError = request.Validate();
+            if (validationError != null)
             {
                 return BadRequest(new SpeculativeDecodingResponse
                 {
-                    Error = "InputTokens array is required and cannot be empty",
-                    RequestId = request.RequestId
-                });
-            }
-
-            if (request.MaxNewTokens <= 0)
-            {
-                return BadRequest(new SpeculativeDecodingResponse
-                {
-                    Error = "MaxNewTokens must be greater than 0",
+                    Error = validationError,
                     RequestId = request.RequestId
                 });
             }
@@ -412,15 +408,7 @@ public class InferenceController : ControllerBase
 
             return StatusCode(501, new SpeculativeDecodingResponse
             {
-                Error = "Speculative decoding is not yet implemented for REST API serving. " +
-                        "This feature requires transformer/LLM model architecture support.\n\n" +
-                        "Current status:\n" +
-                        "- SpeculativeDecoder<T> class is available for programmatic use\n" +
-                        "- TreeSpeculativeDecoder<T> supports tree-based speculation\n" +
-                        "- REST API integration planned for LLM serving release\n\n" +
-                        "For programmatic speculative decoding, see:\n" +
-                        "- AiDotNet.Inference.SpeculativeDecoding.SpeculativeDecoder<T>\n" +
-                        "- AiDotNet.Inference.SpeculativeDecoding.TreeSpeculativeDecoder<T>",
+                Error = "Speculative decoding is not available via the REST API in the current version.",
                 RequestId = request.RequestId,
                 ProcessingTimeMs = sw.ElapsedMilliseconds
             });
@@ -431,7 +419,7 @@ public class InferenceController : ControllerBase
             sw.Stop();
             return StatusCode(500, new SpeculativeDecodingResponse
             {
-                Error = $"An unexpected error occurred: {ex.Message}",
+                Error = "An unexpected error occurred during speculative decoding.",
                 RequestId = request.RequestId,
                 ProcessingTimeMs = sw.ElapsedMilliseconds
             });
@@ -473,55 +461,13 @@ public class InferenceController : ControllerBase
             _logger.LogDebug("Received LoRA fine-tuning request for model '{ModelName}'", request.ModelName);
 
             // Validate request
-            if (string.IsNullOrWhiteSpace(request.ModelName))
+            var validationError = request.Validate();
+            if (validationError != null)
             {
                 return BadRequest(new LoRAFineTuneResponse
                 {
                     Success = false,
-                    Error = "ModelName is required",
-                    RequestId = request.RequestId
-                });
-            }
-
-            if (request.TrainingFeatures == null || request.TrainingFeatures.Length == 0)
-            {
-                return BadRequest(new LoRAFineTuneResponse
-                {
-                    Success = false,
-                    Error = "TrainingFeatures array is required and cannot be empty",
-                    RequestId = request.RequestId,
-                    ModelName = request.ModelName
-                });
-            }
-
-            if (request.TrainingLabels == null || request.TrainingLabels.Length == 0)
-            {
-                return BadRequest(new LoRAFineTuneResponse
-                {
-                    Success = false,
-                    Error = "TrainingLabels array is required and cannot be empty",
-                    RequestId = request.RequestId,
-                    ModelName = request.ModelName
-                });
-            }
-
-            if (request.TrainingFeatures.Length != request.TrainingLabels.Length)
-            {
-                return BadRequest(new LoRAFineTuneResponse
-                {
-                    Success = false,
-                    Error = "TrainingFeatures and TrainingLabels must have the same length",
-                    RequestId = request.RequestId,
-                    ModelName = request.ModelName
-                });
-            }
-
-            if (request.Rank <= 0)
-            {
-                return BadRequest(new LoRAFineTuneResponse
-                {
-                    Success = false,
-                    Error = "Rank must be greater than 0",
+                    Error = validationError,
                     RequestId = request.RequestId,
                     ModelName = request.ModelName
                 });
@@ -561,17 +507,7 @@ public class InferenceController : ControllerBase
             return StatusCode(501, new LoRAFineTuneResponse
             {
                 Success = false,
-                Error = "LoRA fine-tuning is not yet implemented for REST API serving. " +
-                        "This feature requires training API support in the serving layer.\n\n" +
-                        "Current status:\n" +
-                        "- 30+ LoRA adapter types available (Standard, QLoRA, DoRA, etc.)\n" +
-                        "- ILoRAConfiguration for selective layer adaptation\n" +
-                        "- PredictionModelBuilder.ConfigureLoRA() for programmatic use\n" +
-                        "- REST API fine-tuning planned for future release\n\n" +
-                        "For programmatic LoRA fine-tuning, see:\n" +
-                        "- AiDotNet.LoRA.Adapters namespace\n" +
-                        "- AiDotNet.Interfaces.ILoRAAdapter<T>\n" +
-                        "- PredictionModelBuilder<T, TInput, TOutput>.ConfigureLoRA()",
+                Error = "LoRA fine-tuning is not available via the REST API in the current version.",
                 RequestId = request.RequestId,
                 ModelName = request.ModelName,
                 ProcessingTimeMs = sw.ElapsedMilliseconds
@@ -584,7 +520,7 @@ public class InferenceController : ControllerBase
             return StatusCode(500, new LoRAFineTuneResponse
             {
                 Success = false,
-                Error = $"An unexpected error occurred: {ex.Message}",
+                Error = "An unexpected error occurred during LoRA fine-tuning.",
                 RequestId = request.RequestId,
                 ModelName = request.ModelName,
                 ProcessingTimeMs = sw.ElapsedMilliseconds

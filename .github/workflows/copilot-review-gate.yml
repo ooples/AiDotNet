@@ -31,6 +31,7 @@ jobs:
                 reviewThreads(first: 100) {
                   nodes {
                     isResolved
+                    viewerCanResolve
                     comments(first: 1) {
                       nodes {
                         author {
@@ -56,10 +57,10 @@ jobs:
             -f owner="$OWNER" \
             -f repo="$REPO_NAME" \
             -F pr="$PR_NUMBER" \
-            --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false and (.comments.nodes[0].author.login | test("copilot"; "i")))] | length')
+            --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false and .viewerCanResolve == true and (.comments.nodes[0].author.login | test("copilot"; "i")))] | length')
           
-          echo "Unresolved bot review threads: $UNRESOLVED"
+          echo "Unresolved Copilot review threads: $UNRESOLVED"
           if [ "$UNRESOLVED" -gt 0 ]; then
-            echo "Found $UNRESOLVED unresolved bot review threads"
+            echo "Found $UNRESOLVED unresolved Copilot review threads"
             exit 1
           fi

@@ -1729,7 +1729,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         var coeffTensor = VectorToTensor(Coefficients);
         var coeffNode = new ComputationNode<T>(coeffTensor);
 
-        // Create placeholder input node
+        // Create an input node representing a single batch
         // Expected shape: (batch_size, features)
         var inputShape = new int[] { 1, FeatureCount }; // Batch size 1, FeatureCount features
         var inputTensor = new Tensor<T>(inputShape);
