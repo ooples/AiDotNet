@@ -209,7 +209,7 @@ Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.co
 
       - name: Comment on PR
         if: steps.check-commits.outputs.needs_fix == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             await github.rest.issues.createComment({
@@ -312,7 +312,7 @@ The PR branch has been force-pushed with the fixed commits. If you had local cha
 
       - name: Comment on PR
         if: steps.check-needs-fix.outputs.needs_fix == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const newSubject = `${{ steps.check-needs-fix.outputs.new_subject }}`;
