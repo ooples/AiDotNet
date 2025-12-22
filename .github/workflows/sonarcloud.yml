@@ -283,7 +283,7 @@ jobs:
           $sanitizedShardName = $shardName -replace '[\\/:*?"<>|\s-]+', '_'
           $results = Join-Path "TestResults" $sanitizedShardName
           New-Item -Path $results -ItemType Directory -Force | Out-Null
-          dotnet test ${{ matrix.shard.project }} -c Release --framework ${{ matrix.shard.framework }} --no-restore --filter "${{ matrix.shard.filter }}" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results.trx" --results-directory $results
+          dotnet test ${{ matrix.shard.project }} -c Release --framework ${{ matrix.shard.framework }} --no-restore --no-build --filter "${{ matrix.shard.filter }}" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results.trx" --results-directory $results
 
       - name: Set artifact name
         if: always()
