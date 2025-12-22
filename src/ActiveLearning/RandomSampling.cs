@@ -39,7 +39,7 @@ public class RandomSampling<T> : IActiveLearningStrategy<T>
     public RandomSampling(int? seed = null)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         _useBatchDiversity = false;
         _lastMinScore = _numOps.Zero;
         _lastMaxScore = _numOps.Zero;
