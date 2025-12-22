@@ -272,10 +272,7 @@ public class GroupRelativePolicyOptimization<T, TInput, TOutput> : FineTuningBas
                 : 1.0;
 
             // Avoid division by zero
-            if (stdReward < 1e-8)
-            {
-                stdReward = 1.0;
-            }
+            stdReward = stdReward < 1e-8 ? 1.0 : stdReward;
 
             // Compute GRPO loss for each response in the group
             for (int g = 0; g < groupSize; g++)
