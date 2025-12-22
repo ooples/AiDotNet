@@ -1,5 +1,7 @@
 namespace AiDotNet.JitCompiler;
 
+using System.Globalization;
+
 /// <summary>
 /// Statistics about the compilation cache.
 /// </summary>
@@ -28,8 +30,10 @@ public class CacheStats
     /// </summary>
     public override string ToString()
     {
+        var estimatedKb = (EstimatedMemoryBytes / 1024.0).ToString("F2", CultureInfo.InvariantCulture);
+
         return $"Cache Stats:\n" +
                $"  Cached graphs: {CachedGraphCount}\n" +
-               $"  Estimated memory: {EstimatedMemoryBytes / 1024.0:F2} KB";
+               $"  Estimated memory: {estimatedKb} KB";
     }
 }

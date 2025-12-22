@@ -1,6 +1,7 @@
 global using AiDotNet.ActivationFunctions;
 global using AiDotNet.NeuralNetworks;
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.TimeSeries;
 
@@ -45,6 +46,15 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// </para>
     /// </remarks>
     private readonly NeuralNetworkARIMAOptions<T> _nnarimaOptions;
+
+    /// <summary>
+    /// Gets whether parameter optimization succeeded during the most recent training run.
+    /// </summary>
+    /// <remarks>
+    /// When <see cref="NeuralNetworkARIMAOptions{T}.OptimizeParameters"/> is disabled or optimization fails,
+    /// this value is <see langword="false"/>.
+    /// </remarks>
+    public bool IsOptimized { get; private set; }
 
     /// <summary>
     /// Coefficients for the Autoregressive (AR) component of the model.
@@ -255,7 +265,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     private NeuralNetwork<T> CreateDefaultNeuralNetwork()
     {
         // Define input and output dimensions
-        int inputSize = _nnarimaOptions.LaggedPredictions + _nnarimaOptions.ExogenousVariables;
+        int inputSize = Math.Max(1, _nnarimaOptions.LaggedPredictions + _nnarimaOptions.ExogenousVariables + 1);
         int hiddenSize = 10;
         int outputSize = 1;
 
@@ -272,6 +282,8 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
             InputType.OneDimensional,           // Input type
             NeuralNetworkTaskType.Regression,   // Task type
             NetworkComplexity.Simple,           // Network complexity,
+            inputSize: inputSize,
+            outputSize: outputSize,
             layers: new List<ILayer<T>>         // Default layers
             {
                 inputLayer,
@@ -313,9 +325,35 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         _maParameters = new Vector<T>(q);
 
         // Initialize with small random values
-        Random rand = new();
+        var rand = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < p; i++) _arParameters[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
         for (int i = 0; i < q; i++) _maParameters[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
+
+        SyncModelParametersFromState();
+    }
+
+    private void SyncModelParametersFromState()
+    {
+        var nnParameters = _neuralNetwork.GetParameters();
+        var combined = new Vector<T>(_arParameters.Length + _maParameters.Length + nnParameters.Length);
+
+        int index = 0;
+        for (int i = 0; i < _arParameters.Length; i++)
+        {
+            combined[index++] = _arParameters[i];
+        }
+
+        for (int i = 0; i < _maParameters.Length; i++)
+        {
+            combined[index++] = _maParameters[i];
+        }
+
+        for (int i = 0; i < nnParameters.Length; i++)
+        {
+            combined[index++] = nnParameters[i];
+        }
+
+        base.ApplyParameters(combined);
     }
 
     /// <summary>
@@ -373,6 +411,11 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void UpdateModelParameters(Vector<T> optimizedParameters)
     {
+        if (optimizedParameters.Length == 0)
+        {
+            return;
+        }
+
         int paramIndex = 0;
 
         // Update AR parameters
@@ -392,6 +435,8 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
 
         // Update neural network parameters
         _neuralNetwork.UpdateParameters(optimizedParameters.Slice(paramIndex, nnParamsLength));
+
+        SyncModelParametersFromState();
     }
 
     /// <summary>
@@ -707,8 +752,79 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         _y = y;
 
         InitializeParameters();
-        OptimizeParameters(x, _y);
+
+        IsOptimized = false;
+        if (_nnarimaOptions.OptimizeParameters)
+        {
+            try
+            {
+                OptimizeParameters(x, _y);
+                IsOptimized = true;
+            }
+            catch (InvalidOperationException ex)
+            {
+                System.Diagnostics.Trace.TraceWarning($"[NeuralNetworkARIMAModel] Parameter optimization failed; using initial estimates. {ex}");
+            }
+            catch (ArgumentException ex)
+            {
+                System.Diagnostics.Trace.TraceWarning($"[NeuralNetworkARIMAModel] Parameter optimization failed; using initial estimates. {ex}");
+            }
+            catch (ArithmeticException ex)
+            {
+                System.Diagnostics.Trace.TraceWarning($"[NeuralNetworkARIMAModel] Parameter optimization failed; using initial estimates. {ex}");
+            }
+        }
+
         ComputeResiduals(x, _y);
+    }
+
+    protected override void ApplyParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
+        }
+
+        int p = _nnarimaOptions.AROrder;
+        int q = _nnarimaOptions.MAOrder;
+        int nnParamCount = _neuralNetwork.ParameterCount;
+        int expectedLength = p + q + nnParamCount;
+
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}.", nameof(parameters));
+        }
+
+        if (_arParameters.Length != p)
+        {
+            _arParameters = new Vector<T>(p);
+        }
+
+        if (_maParameters.Length != q)
+        {
+            _maParameters = new Vector<T>(q);
+        }
+
+        int paramIndex = 0;
+
+        for (int i = 0; i < p; i++)
+        {
+            _arParameters[i] = parameters[paramIndex++];
+        }
+
+        for (int i = 0; i < q; i++)
+        {
+            _maParameters[i] = parameters[paramIndex++];
+        }
+
+        _neuralNetwork.UpdateParameters(parameters.Slice(paramIndex, nnParamCount));
+
+        base.ApplyParameters(parameters);
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        ApplyParameters(parameters);
     }
 
     /// <summary>
@@ -879,7 +995,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         var arWeightsNode = TensorOperations<T>.Constant(arWeightsTensor, "ar_weights");
 
         // AR contribution = weights @ lags
-        var resultNode = TensorOperations<T>.MatrixMultiply(arWeightsNode, lagInputNode);
+        var resultNode = TensorOperations<T>.MatrixVectorMultiply(arWeightsNode, lagInputNode);
 
         // Add constant for average MA contribution (approximation)
         if (_maParameters != null && _maParameters.Length > 0)

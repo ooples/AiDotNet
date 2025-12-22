@@ -1,3 +1,4 @@
+using AiDotNet.FederatedLearning.Benchmarks.Leaf;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Data.Loaders;
@@ -391,6 +392,31 @@ public static class DataLoaders
         Vector<T> labels)
     {
         return new InMemoryDataLoader<T, Tensor<T>, Vector<T>>(features, labels);
+    }
+
+    #endregion
+
+    #region Federated Benchmark Methods
+
+    /// <summary>
+    /// Creates a LEAF federated data loader from LEAF benchmark JSON files.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="trainFilePath">Path to the LEAF train split JSON file.</param>
+    /// <param name="testFilePath">Optional path to the LEAF test split JSON file.</param>
+    /// <param name="options">Optional LEAF load options (subset, validation).</param>
+    /// <returns>A configured LEAF data loader ready for federated learning.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> LEAF is a standard federated learning benchmark suite where each "user" is treated as one client.
+    /// This loader keeps that per-client split intact so federated learning simulations match the benchmark.
+    /// </para>
+    /// </remarks>
+    public static LeafFederatedDataLoader<T> FromLeafFederatedJsonFiles<T>(
+        string trainFilePath,
+        string? testFilePath = null,
+        LeafFederatedDatasetLoadOptions? options = null)
+    {
+        return new LeafFederatedDataLoader<T>(trainFilePath, testFilePath, options);
     }
 
     #endregion

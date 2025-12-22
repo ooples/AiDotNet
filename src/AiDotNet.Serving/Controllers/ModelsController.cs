@@ -1,6 +1,8 @@
 using AiDotNet.Models.Results;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
+using AiDotNet.Serving.Security;
+using AiDotNet.Serving.Security.Attestation;
 using AiDotNet.Serving.Services;
 using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.AspNetCore.Mvc;
@@ -20,6 +22,10 @@ public class ModelsController : ControllerBase
     private readonly IModelRepository _modelRepository;
     private readonly ILogger<ModelsController> _logger;
     private readonly ServingOptions _servingOptions;
+    private readonly ITierResolver _tierResolver;
+    private readonly ITierPolicyProvider _tierPolicyProvider;
+    private readonly IModelArtifactService _artifactService;
+    private readonly IAttestationVerifier _attestationVerifier;
 
     /// <summary>
     /// Initializes a new instance of the ModelsController.
@@ -27,14 +33,26 @@ public class ModelsController : ControllerBase
     /// <param name="modelRepository">The model repository service</param>
     /// <param name="logger">Logger for diagnostics</param>
     /// <param name="servingOptions">Configuration options for the serving framework</param>
+    /// <param name="tierResolver">Resolves the subscription tier for the current request</param>
+    /// <param name="tierPolicyProvider">Provides tier policies for artifact/key access</param>
+    /// <param name="artifactService">Artifact service for tier-aware download and key release</param>
+    /// <param name="attestationVerifier">Verifies attestation evidence for key release</param>
     public ModelsController(
         IModelRepository modelRepository,
         ILogger<ModelsController> logger,
-        IOptions<ServingOptions> servingOptions)
+        IOptions<ServingOptions> servingOptions,
+        ITierResolver tierResolver,
+        ITierPolicyProvider tierPolicyProvider,
+        IModelArtifactService artifactService,
+        IAttestationVerifier attestationVerifier)
     {
         _modelRepository = modelRepository ?? throw new ArgumentNullException(nameof(modelRepository));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _servingOptions = servingOptions?.Value ?? throw new ArgumentNullException(nameof(servingOptions));
+        _tierResolver = tierResolver ?? throw new ArgumentNullException(nameof(tierResolver));
+        _tierPolicyProvider = tierPolicyProvider ?? throw new ArgumentNullException(nameof(tierPolicyProvider));
+        _artifactService = artifactService ?? throw new ArgumentNullException(nameof(artifactService));
+        _attestationVerifier = attestationVerifier ?? throw new ArgumentNullException(nameof(attestationVerifier));
     }
 
     /// <summary>
@@ -134,12 +152,11 @@ public class ModelsController : ControllerBase
             ModelInfo? loadedModelInfo;
             try
             {
-                var numericType = ParseNumericType(request.NumericType);
-                loadedModelInfo = numericType switch
+                loadedModelInfo = request.NumericType switch
                 {
-                    NumericType.Float => LoadTypedModel<float>(request.Name, candidatePath),
-                    NumericType.Decimal => LoadTypedModel<decimal>(request.Name, candidatePath),
-                    _ => LoadTypedModel<double>(request.Name, candidatePath)
+                    NumericType.Float => LoadTypedModel<float>(request.Name, candidatePath, NumericType.Float),
+                    NumericType.Decimal => LoadTypedModel<decimal>(request.Name, candidatePath, NumericType.Decimal),
+                    _ => LoadTypedModel<double>(request.Name, candidatePath, NumericType.Double)
                 };
             }
             catch (Exception ex)
@@ -149,7 +166,7 @@ public class ModelsController : ControllerBase
                 return BadRequest(new LoadModelResponse
                 {
                     Success = false,
-                    Error = $"Failed to load model: {ex.Message}"
+                    Error = "Failed to load model."
                 });
             }
 
@@ -186,7 +203,7 @@ public class ModelsController : ControllerBase
             return StatusCode(500, new LoadModelResponse
             {
                 Success = false,
-                Error = $"File I/O error: {ex.Message}"
+                Error = "File I/O error while loading model."
             });
         }
         catch (InvalidOperationException ex)
@@ -195,7 +212,7 @@ public class ModelsController : ControllerBase
             return StatusCode(500, new LoadModelResponse
             {
                 Success = false,
-                Error = $"Model operation error: {ex.Message}"
+                Error = "Model operation error while loading model."
             });
         }
         catch (Exception ex)
@@ -204,7 +221,7 @@ public class ModelsController : ControllerBase
             return StatusCode(500, new LoadModelResponse
             {
                 Success = false,
-                Error = $"An unexpected error occurred: {ex.Message}"
+                Error = "An unexpected error occurred while loading model."
             });
         }
     }
@@ -269,26 +286,105 @@ public class ModelsController : ControllerBase
             return NotFound(new { error = $"Model '{modelName}' not found" });
         }
 
+        _artifactService.RemoveProtectedArtifact(modelName);
+
         _logger.LogInformation("Model '{ModelName}' unloaded successfully", modelName);
         return Ok(new { message = $"Model '{modelName}' unloaded successfully" });
     }
 
     /// <summary>
-    /// Parses a numeric type string to the NumericType enum.
+    /// Downloads the model artifact for the specified model, subject to tier enforcement.
     /// </summary>
-    private static NumericType ParseNumericType(string numericType)
+    /// <remarks>
+    /// <b>For Beginners:</b> Option A (Free) keeps the model on the server. Higher tiers may download an artifact.
+    /// Enterprise (Option C) receives an encrypted artifact and must request a decryption key using attestation.
+    /// </remarks>
+    [HttpGet("{modelName}/artifact")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult DownloadModelArtifact(string modelName)
     {
-        if (string.IsNullOrWhiteSpace(numericType))
+        var tier = _tierResolver.ResolveTier(HttpContext);
+        var policy = _tierPolicyProvider.GetPolicy(tier);
+
+        if (!policy.AllowArtifactDownload)
         {
-            return NumericType.Double;
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Model artifact download is not available for this tier." });
         }
 
-        return numericType.ToLowerInvariant() switch
+        try
         {
-            "float" or "single" => NumericType.Float,
-            "decimal" => NumericType.Decimal,
-            _ => NumericType.Double
-        };
+            if (policy.ArtifactIsEncrypted)
+            {
+                var protectedArtifact = _artifactService.GetOrCreateEncryptedArtifact(modelName);
+                Response.Headers["X-AiDotNet-Artifact-Encrypted"] = "true";
+                Response.Headers["X-AiDotNet-Artifact-Algorithm"] = protectedArtifact.Algorithm;
+                Response.Headers["X-AiDotNet-Artifact-KeyId"] = protectedArtifact.KeyId;
+                return PhysicalFile(protectedArtifact.EncryptedPath, "application/octet-stream", $"{modelName}.aidn.enc");
+            }
+
+            var path = _artifactService.GetPlainArtifactPath(modelName);
+            Response.Headers["X-AiDotNet-Artifact-Encrypted"] = "false";
+            return PhysicalFile(path, "application/octet-stream", Path.GetFileName(path));
+        }
+        catch (FileNotFoundException)
+        {
+            return NotFound(new { error = $"Model '{modelName}' not found" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to download model artifact for '{ModelName}'", modelName);
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to download model artifact." });
+        }
+    }
+
+    /// <summary>
+    /// Releases the decryption key for an encrypted model artifact (Enterprise / Option C) after attestation verification.
+    /// </summary>
+    [HttpPost("{modelName}/artifact/key")]
+    [ProducesResponseType(typeof(ModelArtifactKeyResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ReleaseModelArtifactKey(string modelName, [FromBody] AttestationEvidence? evidence)
+    {
+        var tier = _tierResolver.ResolveTier(HttpContext);
+        var policy = _tierPolicyProvider.GetPolicy(tier);
+
+        if (!policy.AllowKeyRelease)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Model artifact key release is not available for this tier." });
+        }
+
+        if (policy.RequireAttestationForKeyRelease)
+        {
+            if (evidence == null)
+            {
+                return BadRequest(new { error = "Attestation evidence is required for key release." });
+            }
+
+            var attestation = await _attestationVerifier.VerifyAsync(evidence, HttpContext.RequestAborted);
+            if (!attestation.IsSuccess)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { error = attestation.FailureReason ?? "Attestation failed." });
+            }
+        }
+
+        try
+        {
+            var protectedArtifact = _artifactService.GetOrCreateEncryptedArtifact(modelName);
+            var response = _artifactService.CreateKeyResponse(protectedArtifact);
+            return Ok(response);
+        }
+        catch (FileNotFoundException)
+        {
+            return NotFound(new { error = $"Model '{modelName}' not found" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to release model artifact key for '{ModelName}'", modelName);
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to release model artifact key." });
+        }
     }
 
     /// <summary>
@@ -299,7 +395,7 @@ public class ModelsController : ControllerBase
     /// in a ServableModelWrapper for serving. The facade pattern is maintained -
     /// all configuration (LoRA, inference opts, etc.) is preserved.
     /// </remarks>
-    private ModelInfo LoadTypedModel<T>(string name, string path)
+    private ModelInfo LoadTypedModel<T>(string name, string path, NumericType numericType)
     {
         // Load the serialized PredictionModelResult using internal constructor
         // This is accessible via InternalsVisibleTo
@@ -390,7 +486,7 @@ public class ModelsController : ControllerBase
         {
             Name = name,
             SourcePath = path,
-            NumericType = typeof(T).Name,
+            NumericType = numericType,
             InputDimension = inputDim,
             OutputDimension = outputDim,
             LoadedAt = DateTime.UtcNow

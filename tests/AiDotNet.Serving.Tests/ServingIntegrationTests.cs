@@ -1,26 +1,24 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
+using AiDotNet.Serving.Security;
+using AiDotNet.Serving.Security.ApiKeys;
 using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace AiDotNet.Serving.Tests;
-
-/// <summary>
-/// Collection definition for serving integration tests to ensure proper test isolation.
-/// This ensures all tests in this collection run sequentially and clean up the singleton repository.
-/// </summary>
-[CollectionDefinition("ServingIntegrationTests")]
-public class ServingIntegrationTestCollection : ICollectionFixture<WebApplicationFactory<Program>>
-{
-}
 
 /// <summary>
 /// Integration tests for the AiDotNet Serving API.
@@ -30,6 +28,11 @@ public class ServingIntegrationTestCollection : ICollectionFixture<WebApplicatio
 [Collection("ServingIntegrationTests")]
 public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Program>>, IAsyncLifetime
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) }
+    };
+
     private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
 
@@ -88,7 +91,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         // Assert
         response.EnsureSuccessStatusCode();
-        var models = await response.Content.ReadFromJsonAsync<List<ModelInfo>>();
+        var models = await response.Content.ReadFromJsonAsync<List<ModelInfo>>(JsonOptions);
         Assert.NotNull(models);
         Assert.Empty(models);
     }
@@ -111,11 +114,11 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         // Assert
         response.EnsureSuccessStatusCode();
-        var models = await response.Content.ReadFromJsonAsync<List<ModelInfo>>();
+        var models = await response.Content.ReadFromJsonAsync<List<ModelInfo>>(JsonOptions);
         Assert.NotNull(models);
         Assert.Single(models);
         Assert.Equal("test-model-1", models[0].Name);
-        Assert.Equal("double", models[0].NumericType);
+        Assert.Equal(NumericType.Double, models[0].NumericType);
         Assert.Equal(3, models[0].InputDimension);
         Assert.Equal(1, models[0].OutputDimension);
 
@@ -141,7 +144,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         // Assert
         response.EnsureSuccessStatusCode();
-        var modelInfo = await response.Content.ReadFromJsonAsync<ModelInfo>();
+        var modelInfo = await response.Content.ReadFromJsonAsync<ModelInfo>(JsonOptions);
         Assert.NotNull(modelInfo);
         Assert.Equal("test-model-2", modelInfo.Name);
 
@@ -209,11 +212,11 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/inference/predict/test-model-4", request);
+        var response = await _client.PostAsJsonAsync("/api/inference/predict/test-model-4", request, JsonOptions);
 
         // Assert
         response.EnsureSuccessStatusCode();
-        var result = await response.Content.ReadFromJsonAsync<PredictionResponse>();
+        var result = await response.Content.ReadFromJsonAsync<PredictionResponse>(JsonOptions);
         Assert.NotNull(result);
         Assert.Equal("test-request-1", result.RequestId);
         Assert.NotNull(result.Predictions);
@@ -275,7 +278,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         // Assert
         response.EnsureSuccessStatusCode();
-        var result = await response.Content.ReadFromJsonAsync<PredictionResponse>();
+        var result = await response.Content.ReadFromJsonAsync<PredictionResponse>(JsonOptions);
         Assert.NotNull(result);
         Assert.Equal("test-request-variant", result.RequestId);
         Assert.NotNull(result.Predictions);
@@ -316,7 +319,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         // Using 90 seconds to allow for slow CI environments
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
         var tasks = requests.Select(req =>
-            _client.PostAsJsonAsync("/api/inference/predict/batch-test-model", req, cts.Token)
+            _client.PostAsJsonAsync("/api/inference/predict/batch-test-model", req, JsonOptions, cts.Token)
         ).ToArray();
 
         var responses = await Task.WhenAll(tasks);
@@ -351,7 +354,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         // since the batch requests may have consumed most of the CTS timeout
         var statsResponse = await _client.GetAsync("/api/inference/stats");
         statsResponse.EnsureSuccessStatusCode();
-        var stats = await statsResponse.Content.ReadFromJsonAsync<Dictionary<string, object>>();
+        var stats = await statsResponse.Content.ReadFromJsonAsync<Dictionary<string, object>>(JsonOptions);
 
         Assert.NotNull(stats);
         Assert.True(stats.TryGetValue("totalRequests", out var totalRequestsObj));
@@ -379,7 +382,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/inference/predict/non-existent-model", request);
+        var response = await _client.PostAsJsonAsync("/api/inference/predict/non-existent-model", request, JsonOptions);
 
         // Assert
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
@@ -404,13 +407,242 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/inference/predict/test-model-5", request);
+        var response = await _client.PostAsJsonAsync("/api/inference/predict/test-model-5", request, JsonOptions);
 
         // Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         // Cleanup
         repository.UnloadModel("test-model-5");
+    }
+
+    [Fact]
+    public async Task DownloadModelArtifact_FreeTier_ReturnsForbidden()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IModelRepository>();
+        var servingOptions = scope.ServiceProvider.GetRequiredService<IOptions<ServingOptions>>().Value;
+
+        var modelsRoot = Path.GetFullPath(servingOptions.ModelDirectory);
+        Directory.CreateDirectory(modelsRoot);
+
+        var artifactPath = Path.Combine(modelsRoot, "artifact-free.bin");
+        File.WriteAllBytes(artifactPath, new byte[] { 1, 2, 3, 4 });
+
+        var modelName = "artifact-model-free";
+        repository.LoadModel(modelName, CreateSimpleTestModel(modelName), sourcePath: artifactPath);
+
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/models/{modelName}/artifact");
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+
+        repository.UnloadModel(modelName);
+        File.Delete(artifactPath);
+    }
+
+    [Fact]
+    public async Task DownloadModelArtifact_ProTier_ReturnsEncryptedArtifact_AndKeyReleaseSucceeds()
+    {
+        var proApiKey = await CreateApiKeyAsync(SubscriptionTier.Pro);
+
+        using var scope = _factory.Services.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IModelRepository>();
+        var servingOptions = scope.ServiceProvider.GetRequiredService<IOptions<ServingOptions>>().Value;
+
+        var modelsRoot = Path.GetFullPath(servingOptions.ModelDirectory);
+        Directory.CreateDirectory(modelsRoot);
+
+        var artifactPath = Path.Combine(modelsRoot, "artifact-pro.bin");
+        var expected = new byte[] { 10, 20, 30, 40, 50 };
+        File.WriteAllBytes(artifactPath, expected);
+
+        var modelName = "artifact-model-pro";
+        repository.LoadModel(modelName, CreateSimpleTestModel(modelName), sourcePath: artifactPath);
+
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/models/{modelName}/artifact");
+        request.Headers.Add("X-AiDotNet-ApiKey", proApiKey);
+
+        var response = await _client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+
+        Assert.True(response.Headers.TryGetValues("X-AiDotNet-Artifact-Encrypted", out var encryptedHeader));
+        Assert.Equal("true", encryptedHeader!.First());
+
+        var encryptedBytes = await response.Content.ReadAsByteArrayAsync();
+        Assert.NotEmpty(encryptedBytes);
+
+        var keyRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/models/{modelName}/artifact/key");
+        keyRequest.Headers.Add("X-AiDotNet-ApiKey", proApiKey);
+        keyRequest.Content = new StringContent("null", Encoding.UTF8, "application/json");
+
+        var keyResponse = await _client.SendAsync(keyRequest);
+        keyResponse.EnsureSuccessStatusCode();
+
+        var keyPayload = await keyResponse.Content.ReadFromJsonAsync<ModelArtifactKeyResponse>(JsonOptions);
+        Assert.NotNull(keyPayload);
+        Assert.False(string.IsNullOrWhiteSpace(keyPayload!.KeyId));
+        Assert.False(string.IsNullOrWhiteSpace(keyPayload.KeyBase64));
+        Assert.False(string.IsNullOrWhiteSpace(keyPayload.NonceBase64));
+
+        var decryptedBytes = DecryptAesGcmArtifact(modelName, encryptedBytes, keyPayload);
+        Assert.Equal(expected, decryptedBytes);
+
+        repository.UnloadModel(modelName);
+        File.Delete(artifactPath);
+    }
+
+    [Fact]
+    public async Task DownloadModelArtifact_EnterpriseTier_ReturnsEncryptedArtifact_AndKeyReleaseSucceeds()
+    {
+        var enterpriseApiKey = await CreateApiKeyAsync(SubscriptionTier.Enterprise);
+
+        using var scope = _factory.Services.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IModelRepository>();
+        var servingOptions = scope.ServiceProvider.GetRequiredService<IOptions<ServingOptions>>().Value;
+
+        var modelsRoot = Path.GetFullPath(servingOptions.ModelDirectory);
+        Directory.CreateDirectory(modelsRoot);
+
+        var artifactPath = Path.Combine(modelsRoot, "artifact-ent.bin");
+        var expected = Enumerable.Range(0, 128).Select(i => (byte)i).ToArray();
+        File.WriteAllBytes(artifactPath, expected);
+
+        var modelName = "artifact-model-ent";
+        repository.LoadModel(modelName, CreateSimpleTestModel(modelName), sourcePath: artifactPath);
+
+        var artifactRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/models/{modelName}/artifact");
+        artifactRequest.Headers.Add("X-AiDotNet-ApiKey", enterpriseApiKey);
+        var artifactResponse = await _client.SendAsync(artifactRequest);
+
+        artifactResponse.EnsureSuccessStatusCode();
+        Assert.True(artifactResponse.Headers.TryGetValues("X-AiDotNet-Artifact-Encrypted", out var encryptedHeader));
+        Assert.Equal("true", encryptedHeader!.First());
+
+        var encryptedBytes = await artifactResponse.Content.ReadAsByteArrayAsync();
+        Assert.NotEmpty(encryptedBytes);
+
+        var keyRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/models/{modelName}/artifact/key");
+        keyRequest.Headers.Add("X-AiDotNet-ApiKey", enterpriseApiKey);
+        keyRequest.Content = JsonContent.Create(new AttestationEvidence
+        {
+            Platform = "Windows",
+            TeeType = "Test",
+            Nonce = "nonce",
+            AttestationToken = "token"
+        });
+
+        var keyResponse = await _client.SendAsync(keyRequest);
+        keyResponse.EnsureSuccessStatusCode();
+
+        var keyPayload = await keyResponse.Content.ReadFromJsonAsync<ModelArtifactKeyResponse>(JsonOptions);
+        Assert.NotNull(keyPayload);
+        Assert.False(string.IsNullOrWhiteSpace(keyPayload!.KeyId));
+        Assert.False(string.IsNullOrWhiteSpace(keyPayload.KeyBase64));
+        Assert.False(string.IsNullOrWhiteSpace(keyPayload.NonceBase64));
+
+        var decryptedBytes = DecryptAesGcmArtifact(modelName, encryptedBytes, keyPayload);
+        Assert.Equal(expected, decryptedBytes);
+
+        repository.UnloadModel(modelName);
+        File.Delete(artifactPath);
+
+        var protectedDir = Path.Combine(modelsRoot, ".protected");
+        var protectedPath = Path.Combine(protectedDir, $"{modelName}.aidn.enc");
+        if (File.Exists(protectedPath))
+        {
+            File.Delete(protectedPath);
+        }
+    }
+
+    private async Task<string> CreateApiKeyAsync(SubscriptionTier tier)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var apiKeys = scope.ServiceProvider.GetRequiredService<IApiKeyService>();
+
+        var created = await apiKeys.CreateAsync(new ApiKeyCreateRequest
+        {
+            Name = $"serving-tests-{tier}-{Guid.NewGuid():N}",
+            Tier = tier
+        });
+
+        return created.ApiKey;
+    }
+
+    private static byte[] DecryptAesGcmArtifact(string aadText, byte[] protectedFileBytes, ModelArtifactKeyResponse keyResponse)
+    {
+        if (string.IsNullOrWhiteSpace(aadText))
+        {
+            throw new ArgumentException("AAD text is required.", nameof(aadText));
+        }
+
+        if (protectedFileBytes == null)
+        {
+            throw new ArgumentNullException(nameof(protectedFileBytes));
+        }
+
+        if (keyResponse == null)
+        {
+            throw new ArgumentNullException(nameof(keyResponse));
+        }
+
+        var key = Convert.FromBase64String(keyResponse.KeyBase64);
+        var expectedNonce = Convert.FromBase64String(keyResponse.NonceBase64);
+        var aad = Encoding.UTF8.GetBytes(aadText);
+
+        const int magicLen = 4;
+        const int versionLen = 1;
+        const int nonceLen = 12;
+        const int tagLen = 16;
+        var minLen = magicLen + versionLen + nonceLen + tagLen;
+
+        if (protectedFileBytes.Length < minLen)
+        {
+            throw new InvalidOperationException("Protected artifact is too small.");
+        }
+
+        var magic = protectedFileBytes.AsSpan(0, magicLen);
+        if (!magic.SequenceEqual("AIDN"u8))
+        {
+            throw new InvalidOperationException("Protected artifact has an invalid magic header.");
+        }
+
+        var version = protectedFileBytes[magicLen];
+        if (version != 1)
+        {
+            throw new InvalidOperationException($"Unsupported protected artifact version: {version}.");
+        }
+
+        var offset = magicLen + versionLen;
+        var nonce = protectedFileBytes.AsSpan(offset, nonceLen).ToArray();
+        offset += nonceLen;
+
+        if (expectedNonce.Length == nonceLen)
+        {
+            Assert.Equal(expectedNonce, nonce);
+        }
+
+        var tag = protectedFileBytes.AsSpan(offset, tagLen).ToArray();
+        offset += tagLen;
+
+        var ciphertext = protectedFileBytes.AsSpan(offset).ToArray();
+        var plaintext = new byte[ciphertext.Length];
+
+        try
+        {
+            using var aes = new AesGcm(key, tagLen);
+            aes.Decrypt(nonce, ciphertext, tag, plaintext, aad);
+            return plaintext;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+            CryptographicOperations.ZeroMemory(expectedNonce);
+            CryptographicOperations.ZeroMemory(aad);
+            CryptographicOperations.ZeroMemory(nonce);
+            CryptographicOperations.ZeroMemory(tag);
+            CryptographicOperations.ZeroMemory(ciphertext);
+        }
     }
 
     /// <summary>

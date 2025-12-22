@@ -882,7 +882,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <returns>The gradient adjusted for momentum.</returns>
     protected virtual Vector<T> ApplyMomentum(Vector<T> gradient)
     {
-        if (_previousGradient == null)
+        if (_previousGradient == null || _previousGradient.Length == 0 || _previousGradient.Length != gradient.Length)
         {
             _previousGradient = gradient;
             return gradient;

@@ -1,6 +1,9 @@
 global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
 using AiDotNet.Agents;
+using AiDotNet.Benchmarking;
+using AiDotNet.Benchmarking.Models;
+using AiDotNet.Configuration;
 using AiDotNet.Data.Structures;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.Deployment.Export;
@@ -9,6 +12,7 @@ using AiDotNet.Deployment.Mobile.CoreML;
 using AiDotNet.Deployment.Mobile.TensorFlowLite;
 using AiDotNet.Deployment.Runtime;
 using AiDotNet.Deployment.TensorRT;
+using AiDotNet.Diagnostics;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Inference;
@@ -97,7 +101,25 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// or you'll get an InvalidOperationException.
     /// </para>
     /// </remarks>
+    [JsonIgnore]
     internal IFullModel<T, TInput, TOutput>? Model { get; private set; }
+
+    /// <summary>
+    /// Gets the serialized model payload for the facade-hidden <see cref="Model"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is stored separately from the <see cref="Model"/> instance so we can persist models using
+    /// their own binary serializer (<see cref="IModelSerializer"/>), while keeping the public-facing
+    /// surface area of the result object stable and IP-conscious.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is the saved "snapshot" of the model itself. When loading, we recreate
+    /// the model object and then restore it from these bytes.
+    /// </para>
+    /// </remarks>
+    [JsonProperty]
+    internal byte[] SerializedModelData { get; private set; } = [];
 
     /// <summary>
     /// Gets or sets the results of the optimization process that created the model.
@@ -127,6 +149,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// to understand how well the model is likely to perform on new data.
     /// </para>
     /// </remarks>
+    [JsonProperty]
     internal OptimizationResult<T, TInput, TOutput> OptimizationResult { get; private set; } = new();
 
     /// <summary>
@@ -159,6 +182,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// need to be scaled back to the original units.
     /// </para>
     /// </remarks>
+    [JsonProperty]
     internal NormalizationInfo<T, TInput, TOutput> NormalizationInfo { get; private set; } = new();
 
     /// <summary>
@@ -189,6 +213,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// based on features like "square_footage", "num_bedrooms", and "location_score".
     /// </para>
     /// </remarks>
+    [JsonProperty]
     internal ModelMetadata<T> ModelMetaData { get; private set; } = new();
 
     /// <summary>
@@ -372,6 +397,27 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// <para><b>For Beginners:</b> If you enabled AutoML, this tells you how the automatic search went.</para>
     /// </remarks>
     public AutoMLRunSummary? AutoMLSummary { get; internal set; }
+
+    /// <summary>
+    /// Gets the most recent benchmark report produced for this model, if available.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is populated when benchmarking is enabled through the facade (for example,
+    /// <c>PredictionModelBuilder.ConfigureBenchmarking(...)</c>) or when
+    /// <see cref="EvaluateBenchmarksAsync"/> is called.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the "report card" from running standardized benchmark suites.</para>
+    /// </remarks>
+    public BenchmarkReport? BenchmarkReport { get; internal set; }
+
+    /// <summary>
+    /// Gets the profiling report captured during training and/or inference, if profiling was enabled.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This helps you see where time was spent during model build and prediction.</para>
+    /// </remarks>
+    public ProfileReport? ProfilingReport { get; internal set; }
 
     /// <summary>
     /// Gets or sets the LoRA configuration for parameter-efficient fine-tuning.
@@ -1011,7 +1057,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
             MetaLearner = options.MetaLearner;
             MetaTrainingResult = options.MetaTrainingResult;
 
-            // Create placeholder OptimizationResult and NormalizationInfo for consistency
+            // Create default OptimizationResult and NormalizationInfo for consistency
             OptimizationResult = options.OptimizationResult ?? new OptimizationResult<T, TInput, TOutput>();
             NormalizationInfo = options.NormalizationInfo ?? new NormalizationInfo<T, TInput, TOutput>();
         }
@@ -1084,6 +1130,10 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         FewShotExampleSelector = options.FewShotExampleSelector;
         PromptAnalyzer = options.PromptAnalyzer;
         PromptCompressor = options.PromptCompressor;
+
+        // Diagnostics / benchmarking
+        ProfilingReport = options.ProfilingReport;
+        BenchmarkReport = options.BenchmarkReport;
 
         // Training Infrastructure
         ExperimentRun = options.ExperimentRun;
@@ -1162,6 +1212,49 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     public ModelMetadata<T> GetModelMetadata()
     {
         return ModelMetaData;
+    }
+
+    /// <summary>
+    /// Gets federated learning training metadata if this model was produced via federated learning.
+    /// </summary>
+    /// <returns>The federated learning metadata, or null if not available.</returns>
+    public FederatedLearningMetadata? GetFederatedLearningMetadata()
+    {
+        var metadata = GetModelMetadata();
+        if (metadata.Properties != null &&
+            metadata.Properties.TryGetValue(FederatedLearningMetadata.MetadataKey, out var value))
+        {
+            return value as FederatedLearningMetadata;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Runs benchmark suites against this model using the unified benchmark runner.
+    /// </summary>
+    /// <param name="options">Benchmarking options (suites, sample size, failure policy).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A structured benchmark report.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method is facade-first: users select benchmark suites via enums and receive a structured report.
+    /// It avoids requiring users to manually wire up benchmark implementations.
+    /// </para>
+    /// </remarks>
+    public async Task<BenchmarkReport> EvaluateBenchmarksAsync(
+        BenchmarkingOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        var effectiveOptions = options ?? new BenchmarkingOptions();
+        var report = await BenchmarkRunner.RunAsync(this, effectiveOptions, cancellationToken).ConfigureAwait(false);
+
+        if (effectiveOptions.AttachReportToResult)
+        {
+            BenchmarkReport = report;
+        }
+
+        return report;
     }
 
     /// <summary>
@@ -2587,6 +2680,16 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     {
         try
         {
+            var modelToSerialize = Model ?? OptimizationResult?.BestSolution;
+            if (modelToSerialize != null)
+            {
+                // Persist a model-owned snapshot so deserialization can restore state without relying on JSON for model internals.
+                SerializedModelData = modelToSerialize.Serialize();
+
+                // Refresh metadata for consistency and to keep ModelMetaData aligned with the persisted snapshot.
+                ModelMetaData = modelToSerialize.GetModelMetadata();
+            }
+
             // Create JSON settings with custom converters and safe type binding
             // Use TypeNameHandling.Auto instead of All to minimize type info exposure
             // Auto only emits type info when actual type differs from declared type
@@ -2594,7 +2697,9 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
             {
                 TypeNameHandling = TypeNameHandling.Auto,
                 SerializationBinder = new SafeSerializationBinder(),
-                Formatting = Formatting.Indented
+                Converters = JsonConverterRegistry.GetAllConverters(),
+                Formatting = Formatting.Indented,
+                ContractResolver = new PredictionModelResultContractResolver()
             };
 
             // Serialize the object to JSON bytes
@@ -2658,7 +2763,9 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
             var settings = new JsonSerializerSettings
             {
                 TypeNameHandling = TypeNameHandling.Auto,
-                SerializationBinder = new SafeSerializationBinder()
+                SerializationBinder = new SafeSerializationBinder(),
+                Converters = JsonConverterRegistry.GetAllConverters(),
+                ContractResolver = new PredictionModelResultContractResolver()
             };
 
             // Deserialize the object
@@ -2666,13 +2773,17 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
 
             if (deserializedObject != null)
             {
-                Model = deserializedObject.Model;
                 OptimizationResult = deserializedObject.OptimizationResult;
                 NormalizationInfo = deserializedObject.NormalizationInfo;
                 ModelMetaData = deserializedObject.ModelMetaData;
                 BiasDetector = deserializedObject.BiasDetector;
                 FairnessEvaluator = deserializedObject.FairnessEvaluator;
                 InferenceOptimizationConfig = deserializedObject.InferenceOptimizationConfig;
+                SerializedModelData = deserializedObject.SerializedModelData;
+
+                // Model is intentionally facade-hidden and is not serialized directly.
+                // Prefer preserving the existing instance (e.g., builder-supplied), otherwise use the deserialized skeleton.
+                Model ??= deserializedObject.Model ?? deserializedObject.OptimizationResult?.BestSolution;
 
                 // Preserve RAG components and all configuration properties
                 RagRetriever = deserializedObject.RagRetriever;
@@ -2691,6 +2802,20 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
                 _inferenceOptimizer = null;
                 _inferenceOptimizedNeuralModel = null;
                 _inferenceOptimizationsInitialized = false;
+
+                // Restore the model's internal state from the model-owned serialized payload when available.
+                // Fall back to metadata.ModelData for older payloads that stored the snapshot there.
+                var modelBytes = SerializedModelData;
+                if (modelBytes == null || modelBytes.Length == 0)
+                {
+                    modelBytes = ModelMetaData?.ModelData ?? [];
+                }
+
+                if (Model != null && modelBytes.Length > 0)
+                {
+                    Model.Deserialize(modelBytes);
+                    OptimizationResult.BestSolution = Model;
+                }
             }
             else
             {
@@ -2853,7 +2978,9 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         var settings = new JsonSerializerSettings
         {
             TypeNameHandling = TypeNameHandling.Auto,
-            SerializationBinder = new SafeSerializationBinder()
+            SerializationBinder = new SafeSerializationBinder(),
+            Converters = JsonConverterRegistry.GetAllConverters(),
+            ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor
         };
         var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);
         return deserializedObject?.ModelMetaData ?? new();
@@ -3526,6 +3653,53 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
                 "No prompt chain configured. Use ConfigurePromptChain() in PredictionModelBuilder.");
 
         return PromptChain.RunAsync(input, cancellationToken);
+    }
+
+    /// <summary>
+    /// Evaluates a reasoning benchmark using the configured facade (prompt chain or agent reasoning).
+    /// </summary>
+    /// <typeparam name="TScore">The numeric score type used by the benchmark (for example, double).</typeparam>
+    /// <param name="benchmark">The benchmark to evaluate.</param>
+    /// <param name="sampleSize">Optional number of problems to evaluate (null for all).</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The benchmark evaluation result.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method hides the benchmark wiring so users don't have to manually provide a
+    /// <c>Func&lt;string, Task&lt;string&gt;&gt;</c>. The default evaluation path is:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Use <see cref="PromptChain"/> (via <see cref="RunChainAsync"/>) when configured.</description></item>
+    /// <item><description>Otherwise, use agent reasoning (via <see cref="QuickReasonAsync"/>) when configured.</description></item>
+    /// </list>
+    /// </remarks>
+    public Task<AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult<TScore>> EvaluateBenchmarkAsync<TScore>(
+        IBenchmark<TScore> benchmark,
+        int? sampleSize = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (benchmark is null)
+        {
+            throw new ArgumentNullException(nameof(benchmark));
+        }
+
+        Func<string, Task<string>> evaluateFunction;
+
+        if (PromptChain != null)
+        {
+            evaluateFunction = problem => RunChainAsync(problem, cancellationToken);
+        }
+        else if (AgentConfig != null && AgentConfig.IsEnabled)
+        {
+            evaluateFunction = problem => QuickReasonAsync(problem, cancellationToken);
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "Benchmark evaluation requires either a prompt chain (ConfigurePromptChain) or agent assistance (ConfigureAgentAssistance).");
+        }
+
+        return benchmark.EvaluateAsync(evaluateFunction, sampleSize, cancellationToken);
     }
 
     /// <summary>

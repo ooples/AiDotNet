@@ -36,6 +36,15 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     private ProphetOptions<T, TInput, TOutput> _prophetOptions;
 
     /// <summary>
+    /// Gets whether parameter optimization succeeded during the most recent training run.
+    /// </summary>
+    /// <remarks>
+    /// When <see cref="ProphetOptions{T, TInput, TOutput}.OptimizeParameters"/> is disabled or optimization fails,
+    /// this value is <see langword="false"/>.
+    /// </remarks>
+    public bool IsOptimized { get; private set; }
+
+    /// <summary>
     /// Represents the overall trend component of the time series.
     /// </summary>
     /// <remarks>
@@ -420,15 +429,19 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     {
         int n = x.Rows;
         int p = x.Columns;
+        int regressorCount = Math.Max(0, _prophetOptions.RegressorCount);
 
-        // Initialize parameters
-        Vector<T> initialParameters = new Vector<T>(p + 2); // +2 for trend and changepoint
-        for (int i = 0; i < p; i++)
+        if (regressorCount > 0 && regressorCount > Math.Max(0, p - 1))
         {
-            initialParameters[i] = _regressors[i];
+            throw new ArgumentException(
+                $"RegressorCount ({regressorCount}) exceeds available input columns ({p}). The input matrix must include time plus regressors.",
+                nameof(x));
         }
-        initialParameters[p] = NumOps.FromDouble(_prophetOptions.InitialTrendValue);
-        initialParameters[p + 1] = NumOps.FromDouble(_prophetOptions.InitialChangepointValue);
+
+        if (_regressors == null || _regressors.Length != regressorCount)
+        {
+            _regressors = new Vector<T>(regressorCount);
+        }
 
         // Use the user-defined optimizer if provided, otherwise use LFGSOptimizer as default
         var optimizer = _prophetOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>(this);
@@ -437,20 +450,21 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         var inputData = new OptimizationInputData<T, Matrix<T>, Vector<T>>()
         {
             XTrain = x,
-            YTrain = y
+            YTrain = y,
+            XValidation = x,
+            YValidation = y,
+            XTest = x,
+            YTest = y
         };
 
         // Run optimization
         var result = optimizer.Optimize(inputData);
 
-        // Update model parameters with optimized values
-        Vector<T> optimizedParameters = result.BestSolution?.GetParameters() ?? Vector<T>.Empty();
-        for (int i = 0; i < p; i++)
+        var optimizedParameters = result.BestSolution?.GetParameters();
+        if (optimizedParameters != null && optimizedParameters.Length > 0)
         {
-            _regressors[i] = optimizedParameters[i];
+            ApplyParameters(optimizedParameters);
         }
-        _trend = optimizedParameters[p];
-        _changepoint = optimizedParameters[p + 1];
     }
 
     /// <summary>
@@ -905,6 +919,12 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// best fit your data. If anything goes wrong during this process, it provides clear
     /// error messages to help you understand and fix the issue.
     /// </para>
+    /// <para>
+    /// If <see cref="ProphetOptions{T, TInput, TOutput}.OptimizeParameters"/> is enabled, the model will attempt
+    /// parameter optimization. If optimization fails, training continues using the initial parameter estimates,
+    /// a warning is emitted via <see cref="System.Diagnostics.Trace"/>, and <see cref="IsOptimized"/> remains
+    /// <see langword="false"/>.
+    /// </para>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
@@ -936,11 +956,78 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         // Initialize components (trend, seasonal, holiday, changepoint, regressors)
         InitializeComponents(x, y);
 
-        // Optimize parameters using the selected optimizer
-        OptimizeParameters(x, y);
+        SyncModelParametersFromState();
+
+        IsOptimized = false;
+        if (_prophetOptions.OptimizeParameters)
+        {
+            try
+            {
+                OptimizeParameters(x, y);
+                IsOptimized = true;
+            }
+            catch (InvalidOperationException ex)
+            {
+                System.Diagnostics.Trace.TraceWarning($"[ProphetModel] Parameter optimization failed; using initial estimates. {ex}");
+            }
+            catch (ArgumentException ex)
+            {
+                System.Diagnostics.Trace.TraceWarning($"[ProphetModel] Parameter optimization failed; using initial estimates. {ex}");
+            }
+            catch (ArithmeticException ex)
+            {
+                System.Diagnostics.Trace.TraceWarning($"[ProphetModel] Parameter optimization failed; using initial estimates. {ex}");
+            }
+        }
 
         // Store final state for future reference
         states.SetRow(n - 1, GetCurrentState());
+    }
+
+    private void SyncModelParametersFromState()
+    {
+        base.ApplyParameters(GetCurrentState());
+    }
+
+    protected override void ApplyParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
+        }
+
+        int expectedLength = GetStateSize();
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}.", nameof(parameters));
+        }
+
+        int index = 0;
+        _trend = parameters[index++];
+
+        for (int i = 0; i < _seasonalComponents.Length; i++)
+        {
+            _seasonalComponents[i] = parameters[index++];
+        }
+
+        for (int i = 0; i < _holidayComponents.Length; i++)
+        {
+            _holidayComponents[i] = parameters[index++];
+        }
+
+        _changepoint = parameters[index++];
+
+        for (int i = 0; i < _regressors.Length; i++)
+        {
+            _regressors[i] = parameters[index++];
+        }
+
+        base.ApplyParameters(parameters);
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        ApplyParameters(parameters);
     }
 
     /// <summary>
@@ -971,7 +1058,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         }
 
         // Check if model has been trained
-        if (NumOps.Equals(_trend, NumOps.Zero) && _seasonalComponents.Length == 0)
+        if (!IsTrained)
         {
             throw new InvalidOperationException("Model must be trained before making predictions");
         }
@@ -1130,7 +1217,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// This provides faster inference while maintaining good accuracy.
     /// </para>
     /// </remarks>
-    public override bool SupportsJitCompilation => _seasonalComponents != null && _seasonalComponents.Length > 0;
+    public override bool SupportsJitCompilation => base.SupportsJitCompilation;
 
     /// <summary>
     /// Exports the ProphetModel as a computation graph for JIT compilation.
@@ -1164,9 +1251,9 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             throw new ArgumentNullException(nameof(inputNodes), "Input nodes list cannot be null.");
         }
 
-        if (_seasonalComponents == null || _seasonalComponents.Length == 0)
+        if (!IsTrained)
         {
-            throw new InvalidOperationException("Cannot export computation graph: Model components are not initialized.");
+            throw new InvalidOperationException("Cannot export computation graph: Model must be trained first.");
         }
 
         // Create input node for time index (normalized)

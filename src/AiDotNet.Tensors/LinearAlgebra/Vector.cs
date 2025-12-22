@@ -718,7 +718,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     public static Vector<T> CreateRandom(int size)
     {
         Vector<T> vector = new(size);
-        Random random = new();
+        var random = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < size; i++)
         {
             vector[i] = _numOps.FromDouble(random.NextDouble());

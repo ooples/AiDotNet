@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using AiDotNet.Autodiff;
 
 namespace AiDotNet.Tests.UnitTests.JitCompiler;
