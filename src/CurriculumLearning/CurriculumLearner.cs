@@ -120,7 +120,7 @@ public class CurriculumLearner<T, TInput, TOutput> : ICurriculumLearner<T, TInpu
         _scheduler = scheduler ?? CreateSchedulerFromConfig(config);
         _phaseHistory = new List<CurriculumPhaseResult<T>>();
         _random = config.RandomSeed.HasValue
-            ? new Random(config.RandomSeed.Value)
+            ? RandomHelper.CreateSeededRandom(config.RandomSeed.Value)
             : RandomHelper.CreateSecureRandom();
 
         _isTraining = false;

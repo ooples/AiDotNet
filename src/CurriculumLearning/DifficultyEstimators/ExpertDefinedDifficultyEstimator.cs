@@ -197,7 +197,7 @@ public class ExpertDefinedDifficultyEstimator<T, TInput, TOutput> : DifficultyEs
         int totalSamples,
         int? seed = null)
     {
-        var random = seed.HasValue ? new Random(seed.Value) : RandomHelper.Shared;
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.Shared;
         var difficulties = new T[totalSamples];
         var numOps = MathHelper.GetNumericOperations<T>();
 

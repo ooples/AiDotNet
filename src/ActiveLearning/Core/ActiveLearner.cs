@@ -111,7 +111,7 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
 
         _stopwatch = new Stopwatch();
         _learningCurvePoints = new List<LearningCurvePoint<T>>();
-        _random = _config.Seed.HasValue ? new Random(_config.Seed.Value) : RandomHelper.Shared;
+        _random = _config.Seed.HasValue ? RandomHelper.CreateSeededRandom(_config.Seed.Value) : RandomHelper.Shared;
 
         _labeledPool = null!;
         _unlabeledPool = null!;
