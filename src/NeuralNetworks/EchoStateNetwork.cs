@@ -463,8 +463,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _outputVectorActivation = outputVectorActivation;
 
         // Initialize collections for training
-        _collectedStates = [];
-        _collectedTargets = [];
+        _collectedStates = new List<Vector<T>>();
+        _collectedTargets = new List<Vector<T>>();
 
         // Initialize weights with random values
         InitializeWeights();
@@ -544,8 +544,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _outputScalarActivation = outputScalarActivation;
 
         // Initialize collections for training
-        _collectedStates = [];
-        _collectedTargets = [];
+        _collectedStates = new List<Vector<T>>();
+        _collectedTargets = new List<Vector<T>>();
 
         // Initialize weights with random values
         InitializeWeights();

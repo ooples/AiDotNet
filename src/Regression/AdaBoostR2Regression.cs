@@ -95,7 +95,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
         : base(options, regularization)
     {
         _options = options;
-        _ensemble = [];
+        _ensemble = new List<(DecisionTreeRegression<T> Tree, T Weight)>();
         _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 

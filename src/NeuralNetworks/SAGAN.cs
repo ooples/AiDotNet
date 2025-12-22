@@ -43,8 +43,8 @@ public class SAGAN<T> : NeuralNetworkBase<T>
     private T _beta2Power;
     private double _currentLearningRate;
     private double _initialLearningRate;
-    private List<T> _generatorLosses = [];
-    private List<T> _discriminatorLosses = [];
+    private List<T> _generatorLosses = new List<T>();
+    private List<T> _discriminatorLosses = new List<T>();
 
     /// <summary>
     /// Gets the generator network with self-attention layers.

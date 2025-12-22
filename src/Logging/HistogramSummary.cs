@@ -10,8 +10,8 @@ internal class HistogramSummary
     public double Num { get; set; }
     public double Sum { get; set; }
     public double SumSquares { get; set; }
-    public List<double> BucketLimits { get; } = [];
-    public List<double> BucketCounts { get; } = [];
+    public List<double> BucketLimits { get; } = new List<double>();
+    public List<double> BucketCounts { get; } = new List<double>();
 
     public byte[] ToBytes()
     {

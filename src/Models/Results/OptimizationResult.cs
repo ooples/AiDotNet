@@ -446,7 +446,7 @@ public class OptimizationResult<T, TInput, TOutput>
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         FitnessHistory = Vector<T>.Empty();
-        SelectedFeatures = [];
+        SelectedFeatures = new List<Vector<T>>();
         TrainingResult = new DatasetResult();
         ValidationResult = new DatasetResult();
         TestResult = new DatasetResult();

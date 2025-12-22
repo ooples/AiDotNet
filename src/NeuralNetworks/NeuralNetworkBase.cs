@@ -114,7 +114,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <b>For Beginners:</b> When data flows through the network, we need to remember what values went into each layer.
     /// This is necessary for the learning process (backpropagation).
     /// </remarks>
-    protected Dictionary<int, Tensor<T>> _layerInputs = [];
+    protected Dictionary<int, Tensor<T>> _layerInputs = new Dictionary<int, Tensor<T>>();
 
     /// <summary>
     /// Stores the output values from each layer during forward pass.
@@ -123,7 +123,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <b>For Beginners:</b> Similar to layer inputs, we also need to remember what values came out of each layer
     /// during the learning process.
     /// </remarks>
-    protected Dictionary<int, Tensor<T>> _layerOutputs = [];
+    protected Dictionary<int, Tensor<T>> _layerOutputs = new Dictionary<int, Tensor<T>>();
 
     /// <summary>
     /// Gets the thread-safe random number generator for initialization.
@@ -221,7 +221,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected NeuralNetworkBase(NeuralNetworkArchitecture<T> architecture, ILossFunction<T> lossFunction, double maxGradNorm = 1.0)
     {
         Architecture = architecture;
-        _layers = [];
+        _layers = new List<ILayer<T>>();
         NumOps = MathHelper.GetNumericOperations<T>();
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);
         LossFunction = lossFunction;
@@ -846,7 +846,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     public virtual Vector<T> GetParameterGradients()
     {
         // Collect gradients from all layers
-        List<Vector<T>> allGradients = [];
+        List<Vector<T>> allGradients = new List<Vector<T>>();
 
         foreach (var layer in Layers)
         {
@@ -1821,7 +1821,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         // Initialize the hash set if it doesn't exist
-        _explicitlySetActiveFeatures ??= [];
+        _explicitlySetActiveFeatures ??= new HashSet<int>();
 
         // Clear existing explicitly set features
         _explicitlySetActiveFeatures.Clear();

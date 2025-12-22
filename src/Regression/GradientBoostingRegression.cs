@@ -110,7 +110,7 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
         : base(options, regularization)
     {
         _options = options ?? new();
-        _trees = [];
+        _trees = new List<DecisionTreeRegression<T>>();
         _initialPrediction = NumOps.Zero;
     }
 

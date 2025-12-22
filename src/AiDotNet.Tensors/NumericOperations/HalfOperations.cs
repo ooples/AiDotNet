@@ -148,6 +148,8 @@ public class HalfOperations : INumericOperations<Half>
     /// </summary>
     public bool Equals(Half a, Half b) => a == b;
 
+    public int Compare(Half a, Half b) => a.CompareTo(b);
+
     /// <summary>
     /// Raises a Half value to a power.
     /// </summary>

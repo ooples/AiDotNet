@@ -150,8 +150,8 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         ModelEvaluator = Options.ModelEvaluator;
         FitDetector = Options.FitDetector;
         FitnessCalculator = Options.FitnessCalculator;
-        FitnessList = [];
-        IterationHistoryList = [];
+        FitnessList = new List<T>();
+        IterationHistoryList = new List<OptimizationIterationInfo<T>>();
         ModelCache = Options.ModelCache;
         CurrentLearningRate = NumOps.Zero;
         CurrentMomentum = NumOps.Zero;

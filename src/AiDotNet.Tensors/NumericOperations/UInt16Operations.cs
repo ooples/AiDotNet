@@ -388,6 +388,8 @@ public class UInt16Operations : INumericOperations<ushort>
     /// </remarks>
     public bool Equals(ushort a, ushort b) => a == b;
 
+    public int Compare(ushort a, ushort b) => a.CompareTo(b);
+
     /// <summary>
     /// Raises a value to the specified power.
     /// </summary>

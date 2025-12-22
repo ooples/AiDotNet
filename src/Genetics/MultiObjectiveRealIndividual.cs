@@ -5,7 +5,7 @@ namespace AiDotNet.Genetics;
 /// </summary>
 public class MultiObjectiveRealIndividual : RealValuedIndividual, IMultiObjectiveIndividual<double>
 {
-    private List<double> _objectiveValues = [];
+    private List<double> _objectiveValues = new List<double>();
     private int _rank;
     private double _crowdingDistance;
 
@@ -26,7 +26,7 @@ public class MultiObjectiveRealIndividual : RealValuedIndividual, IMultiObjectiv
 
     public void SetObjectiveValues(ICollection<double> values)
     {
-        _objectiveValues = [];
+        _objectiveValues = new List<double>();
     }
 
     public int GetRank()

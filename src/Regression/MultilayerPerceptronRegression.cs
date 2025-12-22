@@ -151,8 +151,8 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
             Beta2 = 0.999,
             Epsilon = 1e-8
         });
-        _weights = [];
-        _biases = [];
+        _weights = new List<Matrix<T>>();
+        _biases = new List<Vector<T>>();
 
         InitializeNetwork();
     }
@@ -736,7 +736,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
 
         // Deserialize MultilayerPerceptronRegression specific data
         int layerCount = reader.ReadInt32();
-        _options.LayerSizes = [];
+        _options.LayerSizes = new List<int>();
         for (int i = 0; i < layerCount; i++)
         {
             _options.LayerSizes.Add(reader.ReadInt32());

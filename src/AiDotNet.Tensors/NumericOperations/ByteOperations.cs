@@ -363,6 +363,8 @@ public class ByteOperations : INumericOperations<byte>
     /// </remarks>
     public bool Equals(byte a, byte b) => a == b;
 
+    public int Compare(byte a, byte b) => a.CompareTo(b);
+
     /// <summary>
     /// Raises a byte value to the specified power.
     /// </summary>

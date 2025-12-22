@@ -71,7 +71,7 @@ public class ModelMetadata<T>
     /// It complements the AdditionalInfo property by providing a dedicated space for model-specific properties.
     /// Use <see cref="SetProperty"/> and <see cref="RemoveProperty"/> methods to modify the properties.
     /// </remarks>
-    public Dictionary<string, object> Properties { get; private set; } = [];
+    public Dictionary<string, object> Properties { get; private set; } = new Dictionary<string, object>();
 
     /// <summary>
     /// Adds or updates a custom property in the Properties dictionary.
@@ -245,7 +245,7 @@ public class ModelMetadata<T>
     /// - It allows for future extensibility as needs change
     /// </para>
     /// </remarks>
-    public Dictionary<string, object> AdditionalInfo { get; set; } = [];
+    public Dictionary<string, object> AdditionalInfo { get; set; } = new Dictionary<string, object>();
 
     /// <summary>
     /// Gets or sets the serialized model data.
@@ -275,7 +275,7 @@ public class ModelMetadata<T>
     /// load the file and deserialize the model data to recreate the working model.
     /// </para>
     /// </remarks>
-    public byte[] ModelData { get; set; } = [];
+    public byte[] ModelData { get; set; } = Array.Empty<byte>();
 
     /// <summary>
     /// Gets or sets the importance of each feature in the model.
@@ -304,5 +304,5 @@ public class ModelMetadata<T>
     /// while 'roof color' has a low value, indicating that location strongly influences the prediction but roof color doesn't.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> FeatureImportance { get; set; } = [];
+    public Dictionary<string, T> FeatureImportance { get; set; } = new Dictionary<string, T>();
 }

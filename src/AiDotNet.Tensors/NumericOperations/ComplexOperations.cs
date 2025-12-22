@@ -481,6 +481,8 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// </remarks>
     public bool Equals(Complex<T> a, Complex<T> b) => a == b;
 
+    public int Compare(Complex<T> a, Complex<T> b) => _ops.Compare(a.Magnitude, b.Magnitude);
+
     /// <summary>
     /// Raises a complex number to a complex power.
     /// </summary>

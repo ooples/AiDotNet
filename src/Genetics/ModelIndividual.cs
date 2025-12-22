@@ -34,7 +34,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     IFullModel<T, TInput, TOutput>
     where TGene : class
 {
-    private List<TGene> _genes = [];
+    private List<TGene> _genes = new List<TGene>();
     private T _fitness;
     private IFullModel<T, TInput, TOutput> _innerModel;
     private readonly Func<ICollection<TGene>, IFullModel<T, TInput, TOutput>> _modelFactory;

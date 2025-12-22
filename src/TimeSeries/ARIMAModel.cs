@@ -206,7 +206,7 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     public override Dictionary<string, T> EvaluateModel(Matrix<T> xTest, Vector<T> yTest)
     {
         Vector<T> predictions = Predict(xTest);
-        Dictionary<string, T> metrics = [];
+        Dictionary<string, T> metrics = new Dictionary<string, T>();
 
         // Calculate MSE
         T mse = StatisticsHelper<T>.CalculateMeanSquaredError(predictions, yTest);

@@ -576,24 +576,24 @@ public class LSTMLayer<T> : LayerBase<T>
         _sigmoidActivation = recurrentActivation ?? new SigmoidActivation<T>();
         _tanhActivation = activation ?? new TanhActivation<T>();
 
-        Gradients = [];
+        Gradients = new Dictionary<string, Tensor<T>>();
 
         // Initialize weights
-        _weightsFi = new Tensor<T>([_hiddenSize, _inputSize]);
-        _weightsIi = new Tensor<T>([_hiddenSize, _inputSize]);
-        _weightsCi = new Tensor<T>([_hiddenSize, _inputSize]);
-        _weightsOi = new Tensor<T>([_hiddenSize, _inputSize]);
+        _weightsFi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
+        _weightsIi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
+        _weightsCi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
+        _weightsOi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
 
-        _weightsFh = new Tensor<T>([_hiddenSize, _hiddenSize]);
-        _weightsIh = new Tensor<T>([_hiddenSize, _hiddenSize]);
-        _weightsCh = new Tensor<T>([_hiddenSize, _hiddenSize]);
-        _weightsOh = new Tensor<T>([_hiddenSize, _hiddenSize]);
+        _weightsFh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
+        _weightsIh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
+        _weightsCh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
+        _weightsOh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
 
         // Initialize biases
-        _biasF = new Tensor<T>([_hiddenSize]);
-        _biasI = new Tensor<T>([_hiddenSize]);
-        _biasC = new Tensor<T>([_hiddenSize]);
-        _biasO = new Tensor<T>([_hiddenSize]);
+        _biasF = new Tensor<T>(new int[] { _hiddenSize });
+        _biasI = new Tensor<T>(new int[] { _hiddenSize });
+        _biasC = new Tensor<T>(new int[] { _hiddenSize });
+        _biasO = new Tensor<T>(new int[] { _hiddenSize });
 
         InitializeWeights();
     }
@@ -641,24 +641,24 @@ public class LSTMLayer<T> : LayerBase<T>
         _sigmoidVectorActivation = recurrentActivation ?? new SigmoidActivation<T>();
         _tanhVectorActivation = activation ?? new TanhActivation<T>();
 
-        Gradients = [];
+        Gradients = new Dictionary<string, Tensor<T>>();
 
         // Initialize weights
-        _weightsFi = new Tensor<T>([_hiddenSize, _inputSize]);
-        _weightsIi = new Tensor<T>([_hiddenSize, _inputSize]);
-        _weightsCi = new Tensor<T>([_hiddenSize, _inputSize]);
-        _weightsOi = new Tensor<T>([_hiddenSize, _inputSize]);
+        _weightsFi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
+        _weightsIi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
+        _weightsCi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
+        _weightsOi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
 
-        _weightsFh = new Tensor<T>([_hiddenSize, _hiddenSize]);
-        _weightsIh = new Tensor<T>([_hiddenSize, _hiddenSize]);
-        _weightsCh = new Tensor<T>([_hiddenSize, _hiddenSize]);
-        _weightsOh = new Tensor<T>([_hiddenSize, _hiddenSize]);
+        _weightsFh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
+        _weightsIh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
+        _weightsCh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
+        _weightsOh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
 
         // Initialize biases
-        _biasF = new Tensor<T>([_hiddenSize]);
-        _biasI = new Tensor<T>([_hiddenSize]);
-        _biasC = new Tensor<T>([_hiddenSize]);
-        _biasO = new Tensor<T>([_hiddenSize]);
+        _biasF = new Tensor<T>(new int[] { _hiddenSize });
+        _biasI = new Tensor<T>(new int[] { _hiddenSize });
+        _biasC = new Tensor<T>(new int[] { _hiddenSize });
+        _biasO = new Tensor<T>(new int[] { _hiddenSize });
 
         InitializeWeights();
     }
@@ -829,13 +829,13 @@ public class LSTMLayer<T> : LayerBase<T>
         int batchSize = input.Shape[0];
         int timeSteps = input.Shape[1];
 
-        var output = new Tensor<T>([batchSize, timeSteps, _hiddenSize]);
+        var output = new Tensor<T>(new int[] { batchSize, timeSteps, _hiddenSize });
 
-        _cachedHiddenStates = new Tensor<T>([batchSize, timeSteps, _hiddenSize]);
-        _cachedCellStates = new Tensor<T>([batchSize, timeSteps, _hiddenSize]);
+        _cachedHiddenStates = new Tensor<T>(new int[] { batchSize, timeSteps, _hiddenSize });
+        _cachedCellStates = new Tensor<T>(new int[] { batchSize, timeSteps, _hiddenSize });
 
-        var currentH = new Tensor<T>([batchSize, _hiddenSize]);
-        var currentC = new Tensor<T>([batchSize, _hiddenSize]);
+        var currentH = new Tensor<T>(new int[] { batchSize, _hiddenSize });
+        var currentC = new Tensor<T>(new int[] { batchSize, _hiddenSize });
 
         // Pre-transpose weights for efficiency
         var WfiT = Engine.TensorTranspose(_weightsFi);
@@ -970,16 +970,16 @@ public class LSTMLayer<T> : LayerBase<T>
         var dBiasC = new Tensor<T>(_biasC.Shape);
         var dBiasO = new Tensor<T>(_biasO.Shape);
 
-        var dNextH = new Tensor<T>([batchSize, _hiddenSize]);
-        var dNextC = new Tensor<T>([batchSize, _hiddenSize]);
+        var dNextH = new Tensor<T>(new int[] { batchSize, _hiddenSize });
+        var dNextC = new Tensor<T>(new int[] { batchSize, _hiddenSize });
 
         for (int t = timeSteps - 1; t >= 0; t--)
         {
             var dh = outputGradient.GetSlice(t).Add(dNextH);
             var xt = _lastInput.GetSlice(t);
             // Use cached states
-            var prevH = t > 0 ? _cachedHiddenStates.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
-            var prevC = t > 0 ? _cachedCellStates.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
+            var prevH = t > 0 ? _cachedHiddenStates.GetSlice(t - 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
+            var prevC = t > 0 ? _cachedCellStates.GetSlice(t - 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
 
             var (dxt, dprevH, dprevC, dWfi, dWii, dWci, dWoi, dWfh, dWih, dWch, dWoh, dbf, dbi, dbc, dbo) =
                 BackwardStep(dh, dNextC, xt, prevH, prevC);
@@ -1063,8 +1063,8 @@ public class LSTMLayer<T> : LayerBase<T>
         {
             // Get input and states for this time step
             var xt = _lastInput.GetSlice(t);
-            var prevH = t > 0 ? _lastHiddenState.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
-            var prevC = t > 0 ? _lastCellState.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
+            var prevH = t > 0 ? _lastHiddenState.GetSlice(t - 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
+            var prevC = t > 0 ? _lastCellState.GetSlice(t - 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
             var gradSlice = outputGradient.GetSlice(t);
 
             // Convert parameters to computation nodes with gradient tracking
@@ -1225,15 +1225,15 @@ public class LSTMLayer<T> : LayerBase<T>
         BackwardStep(Tensor<T> dh, Tensor<T> dc_next, Tensor<T> x, Tensor<T> prev_h, Tensor<T> prev_c)
     {
         // Forward pass calculations (needed for backward pass)
-        var concat = Tensor<T>.Concatenate([x, prev_h], 1);
+        var concat = Tensor<T>.Concatenate(new[] { x, prev_h }, 1);
         var f = ActivateTensorConditional(_sigmoidVectorActivation, _sigmoidActivation,
-            concat.Multiply(Tensor<T>.Concatenate([_weightsFi, _weightsFh], 0)).Add(_biasF));
+            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsFi, _weightsFh }, 0)).Add(_biasF));
         var i = ActivateTensorConditional(_sigmoidVectorActivation, _sigmoidActivation,
-            concat.Multiply(Tensor<T>.Concatenate([_weightsIi, _weightsIh], 0)).Add(_biasI));
+            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsIi, _weightsIh }, 0)).Add(_biasI));
         var c_bar = ActivateTensorConditional(_tanhVectorActivation, _tanhActivation,
-            concat.Multiply(Tensor<T>.Concatenate([_weightsCi, _weightsCh], 0)).Add(_biasC));
+            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsCi, _weightsCh }, 0)).Add(_biasC));
         var o = ActivateTensorConditional(_sigmoidVectorActivation, _sigmoidActivation,
-            concat.Multiply(Tensor<T>.Concatenate([_weightsOi, _weightsOh], 0)).Add(_biasO));
+            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsOi, _weightsOh }, 0)).Add(_biasO));
         var c = f.PointwiseMultiply(prev_c).Add(i.PointwiseMultiply(c_bar));
         var h = o.PointwiseMultiply(ActivateTensor(_tanhActivation, c));
 
@@ -1543,40 +1543,40 @@ public class LSTMLayer<T> : LayerBase<T>
         int idx = 0;
 
         // Use Tensor.FromVector for production-grade parameter setting
-        _weightsFi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), [_hiddenSize, _inputSize]);
+        _weightsFi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), new int[] { _hiddenSize, _inputSize });
         idx += inputWeightSize;
 
-        _weightsIi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), [_hiddenSize, _inputSize]);
+        _weightsIi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), new int[] { _hiddenSize, _inputSize });
         idx += inputWeightSize;
 
-        _weightsCi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), [_hiddenSize, _inputSize]);
+        _weightsCi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), new int[] { _hiddenSize, _inputSize });
         idx += inputWeightSize;
 
-        _weightsOi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), [_hiddenSize, _inputSize]);
+        _weightsOi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), new int[] { _hiddenSize, _inputSize });
         idx += inputWeightSize;
 
-        _weightsFh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), [_hiddenSize, _hiddenSize]);
+        _weightsFh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), new int[] { _hiddenSize, _hiddenSize });
         idx += hiddenWeightSize;
 
-        _weightsIh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), [_hiddenSize, _hiddenSize]);
+        _weightsIh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), new int[] { _hiddenSize, _hiddenSize });
         idx += hiddenWeightSize;
 
-        _weightsCh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), [_hiddenSize, _hiddenSize]);
+        _weightsCh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), new int[] { _hiddenSize, _hiddenSize });
         idx += hiddenWeightSize;
 
-        _weightsOh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), [_hiddenSize, _hiddenSize]);
+        _weightsOh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), new int[] { _hiddenSize, _hiddenSize });
         idx += hiddenWeightSize;
 
-        _biasF = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), [_hiddenSize]);
+        _biasF = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), new int[] { _hiddenSize });
         idx += biasSize;
 
-        _biasI = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), [_hiddenSize]);
+        _biasI = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), new int[] { _hiddenSize });
         idx += biasSize;
 
-        _biasC = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), [_hiddenSize]);
+        _biasC = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), new int[] { _hiddenSize });
         idx += biasSize;
 
-        _biasO = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), [_hiddenSize]);
+        _biasO = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), new int[] { _hiddenSize });
     }
 
     /// <summary>
