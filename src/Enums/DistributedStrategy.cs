@@ -12,6 +12,16 @@ namespace AiDotNet.Enums;
 public enum DistributedStrategy
 {
     /// <summary>
+    /// No distributed training - Single device training (default).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Use when:</b> Training on a single GPU or CPU.</para>
+    /// <para><b>Memory:</b> Full model on one device.</para>
+    /// <para><b>Communication:</b> None.</para>
+    /// </remarks>
+    None = 0,
+
+    /// <summary>
     /// Distributed Data Parallel (DDP) - Most common strategy.
     /// Parameters are replicated on each GPU, gradients are averaged.
     /// </summary>

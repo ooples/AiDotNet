@@ -1,6 +1,7 @@
-#if !NET5_0_OR_GREATER
 using System;
+using AiDotNet.Tensors.Helpers;
 
+#if !NET5_0_OR_GREATER
 namespace System
 {
     /// <summary>
@@ -84,16 +85,12 @@ namespace System
 
         public static int Clamp(int value, int min, int max)
         {
-            if (value < min) return min;
-            if (value > max) return max;
-            return value;
+            return MathHelper.Clamp(value, min, max);
         }
 
         public static long Clamp(long value, long min, long max)
         {
-            if (value < min) return min;
-            if (value > max) return max;
-            return value;
+            return MathHelper.Clamp(value, min, max);
         }
 #else
         // For NET5+, delegate int/long to Math.Clamp; generic T uses custom implementation
@@ -106,12 +103,12 @@ namespace System
 
         public static int Clamp(int value, int min, int max)
         {
-            return Math.Clamp(value, min, max);
+            return MathHelper.Clamp(value, min, max);
         }
 
         public static long Clamp(long value, long min, long max)
         {
-            return Math.Clamp(value, min, max);
+            return MathHelper.Clamp(value, min, max);
         }
 #endif
     }

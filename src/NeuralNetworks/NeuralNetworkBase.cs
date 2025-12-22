@@ -16,7 +16,7 @@ namespace AiDotNet.NeuralNetworks;
 /// This class provides the foundation for building different types of neural networks.
 /// </para>
 /// </remarks>
-public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IDisposable
+public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IInputGradientComputable<T>, IDisposable
 {
     /// <summary>
     /// The internal collection of layers that make up this neural network.
@@ -1211,6 +1211,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         // The final gradient is with respect to the network input
         return currentGradient;
+    }
+
+    /// <inheritdoc/>
+    public virtual Vector<T> ComputeInputGradient(Vector<T> input, Vector<T> outputGradient)
+    {
+        // Convert vectors to tensors and use the existing tensor-based implementation
+        var inputTensor = Tensor<T>.FromVector(input);
+        var gradientTensor = Tensor<T>.FromVector(outputGradient);
+
+        // Run forward pass to cache layer activations
+        Predict(inputTensor);
+
+        // Compute input gradient using backpropagation
+        var resultTensor = BackwardWithInputGradient(gradientTensor);
+
+        return resultTensor.ToVector();
+    }
+
+    /// <inheritdoc/>
+    public virtual Tensor<T> ComputeInputGradient(Tensor<T> input, Tensor<T> outputGradient)
+    {
+        // Run forward pass to cache layer activations
+        Predict(input);
+
+        // Compute input gradient using backpropagation
+        return BackwardWithInputGradient(outputGradient);
     }
 
     /// <summary>

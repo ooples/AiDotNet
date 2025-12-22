@@ -1,3 +1,5 @@
+using AiDotNet.AdversarialRobustness.Documentation;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -200,6 +202,49 @@ public interface IModelRegistry<T, TInput, TOutput>
     /// <param name="version">The version number.</param>
     /// <returns>File path or URI where the model is stored.</returns>
     string GetModelStoragePath(string modelName, int version);
+
+    /// <summary>
+    /// Attaches a Model Card to a registered model version.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A Model Card is like a nutrition label for AI models.
+    /// It documents the model's intended use, limitations, performance metrics, and ethical considerations.
+    /// Attaching a Model Card helps maintain transparency and responsible AI practices.</para>
+    /// </remarks>
+    /// <param name="modelName">The name of the model.</param>
+    /// <param name="version">The version to attach the Model Card to.</param>
+    /// <param name="modelCard">The Model Card to attach.</param>
+    void AttachModelCard(string modelName, int version, ModelCard modelCard);
+
+    /// <summary>
+    /// Gets the Model Card for a registered model version.
+    /// </summary>
+    /// <param name="modelName">The name of the model.</param>
+    /// <param name="version">The version number.</param>
+    /// <returns>The Model Card if one exists, null otherwise.</returns>
+    ModelCard? GetModelCard(string modelName, int version);
+
+    /// <summary>
+    /// Generates a Model Card from the registered model's metadata and evaluation results.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This automatically creates a Model Card from the model's
+    /// existing metadata. It fills in performance metrics, robustness information, and other
+    /// details that are already tracked in the registry.</para>
+    /// </remarks>
+    /// <param name="modelName">The name of the model.</param>
+    /// <param name="version">The version to generate a Model Card for.</param>
+    /// <param name="developers">Optional developers or organization to attribute the model to.</param>
+    /// <returns>A generated Model Card populated with available information.</returns>
+    ModelCard GenerateModelCard(string modelName, int version, string? developers = null);
+
+    /// <summary>
+    /// Saves the Model Card for a model version to a file.
+    /// </summary>
+    /// <param name="modelName">The name of the model.</param>
+    /// <param name="version">The version number.</param>
+    /// <param name="filePath">The file path to save the Model Card to.</param>
+    void SaveModelCard(string modelName, int version, string filePath);
 }
 
 /// <summary>
