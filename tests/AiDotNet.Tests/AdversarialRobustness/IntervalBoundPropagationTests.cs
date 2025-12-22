@@ -1,5 +1,7 @@
 using AiDotNet.AdversarialRobustness.CertifiedRobustness;
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -21,7 +23,7 @@ public class IntervalBoundPropagationTests
     public void Constructor_Default_CreatesInstance()
     {
         // Act
-        var ibp = new IntervalBoundPropagation<double>();
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
 
         // Assert
         Assert.NotNull(ibp);
@@ -42,7 +44,7 @@ public class IntervalBoundPropagationTests
         };
 
         // Act
-        var ibp = new IntervalBoundPropagation<double>(options);
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
 
         // Assert
         Assert.NotNull(ibp);
@@ -57,7 +59,7 @@ public class IntervalBoundPropagationTests
     public void Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new IntervalBoundPropagation<double>(null!));
+        Assert.Throws<ArgumentNullException>(() => new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(null!));
     }
 
     #endregion
@@ -68,8 +70,8 @@ public class IntervalBoundPropagationTests
     public void CertifyPrediction_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
-        var ibp = new IntervalBoundPropagation<double>();
-        var mockModel = new MockPredictiveModel(3, 2);
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
+        var mockModel = new MockFullModel(3, 2);
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => ibp.CertifyPrediction(null!, mockModel));
@@ -79,7 +81,7 @@ public class IntervalBoundPropagationTests
     public void CertifyPrediction_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
-        var ibp = new IntervalBoundPropagation<double>();
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
 
         // Act & Assert
@@ -95,8 +97,8 @@ public class IntervalBoundPropagationTests
             NoiseSigma = 0.01,
             NumSamples = 50
         };
-        var ibp = new IntervalBoundPropagation<double>(options);
-        var mockModel = new MockPredictiveModel(3, 2);
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
+        var mockModel = new MockFullModel(3, 2);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
 
         // Act
@@ -118,8 +120,8 @@ public class IntervalBoundPropagationTests
             NoiseSigma = 0.001, // Very small perturbation
             NumSamples = 100
         };
-        var ibp = new IntervalBoundPropagation<double>(options);
-        var mockModel = new MockPredictiveModelWithMargin(3, 2, 1.0); // Large margin
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
+        var mockModel = new MockFullModelWithMargin(3, 2, 1.0); // Large margin
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
 
         // Act
@@ -140,8 +142,8 @@ public class IntervalBoundPropagationTests
             NoiseSigma = 0.05,
             NumSamples = 50
         };
-        var ibp = new IntervalBoundPropagation<double>(options);
-        var mockModel = new MockPredictiveModel(3, 2);
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
+        var mockModel = new MockFullModel(3, 2);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
 
         // Act
@@ -160,8 +162,8 @@ public class IntervalBoundPropagationTests
     public void CertifyBatch_WithNullInputs_ThrowsArgumentNullException()
     {
         // Arrange
-        var ibp = new IntervalBoundPropagation<double>();
-        var mockModel = new MockPredictiveModel(3, 2);
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
+        var mockModel = new MockFullModel(3, 2);
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => ibp.CertifyBatch(null!, mockModel));
@@ -171,8 +173,8 @@ public class IntervalBoundPropagationTests
     public void CertifyBatch_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
-        var ibp = new IntervalBoundPropagation<double>();
-        var inputs = new Matrix<double>(2, 3);
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
+        var inputs = new Vector<double>[] { new Vector<double>(3), new Vector<double>(3) };
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => ibp.CertifyBatch(inputs, null!));
@@ -187,17 +189,14 @@ public class IntervalBoundPropagationTests
             NoiseSigma = 0.01,
             NumSamples = 20
         };
-        var ibp = new IntervalBoundPropagation<double>(options);
-        var mockModel = new MockPredictiveModel(3, 2);
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
+        var mockModel = new MockFullModel(3, 2);
 
         // Create batch of 5 samples
-        var inputs = new Matrix<double>(5, 3);
+        var inputs = new Vector<double>[5];
         for (int i = 0; i < 5; i++)
         {
-            for (int j = 0; j < 3; j++)
-            {
-                inputs[i, j] = 0.1 * (i + 1) + 0.05 * j;
-            }
+            inputs[i] = new Vector<double>(new[] { 0.1 * (i + 1), 0.1 * (i + 1) + 0.05, 0.1 * (i + 1) + 0.1 });
         }
 
         // Act
@@ -220,8 +219,8 @@ public class IntervalBoundPropagationTests
     public void ComputeCertifiedRadius_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
-        var ibp = new IntervalBoundPropagation<double>();
-        var mockModel = new MockPredictiveModel(3, 2);
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
+        var mockModel = new MockFullModel(3, 2);
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => ibp.ComputeCertifiedRadius(null!, mockModel));
@@ -231,7 +230,7 @@ public class IntervalBoundPropagationTests
     public void ComputeCertifiedRadius_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
-        var ibp = new IntervalBoundPropagation<double>();
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
 
         // Act & Assert
@@ -247,8 +246,8 @@ public class IntervalBoundPropagationTests
             NoiseSigma = 0.05,
             NumSamples = 50
         };
-        var ibp = new IntervalBoundPropagation<double>(options);
-        var mockModel = new MockPredictiveModelWithMargin(3, 2, 0.5);
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
+        var mockModel = new MockFullModelWithMargin(3, 2, 0.5);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
 
         // Act
@@ -270,11 +269,11 @@ public class IntervalBoundPropagationTests
 
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
 
-        var ibp1 = new IntervalBoundPropagation<double>(options);
-        var smallMarginModel = new MockPredictiveModelWithMargin(3, 2, 0.1);
+        var ibp1 = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
+        var smallMarginModel = new MockFullModelWithMargin(3, 2, 0.1);
 
-        var ibp2 = new IntervalBoundPropagation<double>(options);
-        var largeMarginModel = new MockPredictiveModelWithMargin(3, 2, 1.0);
+        var ibp2 = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
+        var largeMarginModel = new MockFullModelWithMargin(3, 2, 1.0);
 
         // Act
         var smallRadius = ibp1.ComputeCertifiedRadius(input, smallMarginModel);
@@ -293,9 +292,9 @@ public class IntervalBoundPropagationTests
     public void EvaluateCertifiedAccuracy_WithNullTestData_ThrowsArgumentNullException()
     {
         // Arrange
-        var ibp = new IntervalBoundPropagation<double>();
-        var mockModel = new MockPredictiveModel(3, 2);
-        var labels = new Vector<int>(new[] { 0, 1, 0 });
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
+        var mockModel = new MockFullModel(3, 2);
+        var labels = new Vector<double>[] { new Vector<double>(new[] { 1.0, 0.0 }), new Vector<double>(new[] { 0.0, 1.0 }), new Vector<double>(new[] { 1.0, 0.0 }) };
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
@@ -306,9 +305,9 @@ public class IntervalBoundPropagationTests
     public void EvaluateCertifiedAccuracy_WithNullLabels_ThrowsArgumentNullException()
     {
         // Arrange
-        var ibp = new IntervalBoundPropagation<double>();
-        var mockModel = new MockPredictiveModel(3, 2);
-        var testData = new Matrix<double>(3, 3);
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
+        var mockModel = new MockFullModel(3, 2);
+        var testData = new Vector<double>[] { new Vector<double>(3), new Vector<double>(3), new Vector<double>(3) };
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
@@ -319,9 +318,9 @@ public class IntervalBoundPropagationTests
     public void EvaluateCertifiedAccuracy_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
-        var ibp = new IntervalBoundPropagation<double>();
-        var testData = new Matrix<double>(3, 3);
-        var labels = new Vector<int>(new[] { 0, 1, 0 });
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
+        var testData = new Vector<double>[] { new Vector<double>(3), new Vector<double>(3), new Vector<double>(3) };
+        var labels = new Vector<double>[] { new Vector<double>(new[] { 1.0, 0.0 }), new Vector<double>(new[] { 0.0, 1.0 }), new Vector<double>(new[] { 1.0, 0.0 }) };
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
@@ -332,10 +331,14 @@ public class IntervalBoundPropagationTests
     public void EvaluateCertifiedAccuracy_WithMismatchedDimensions_ThrowsArgumentException()
     {
         // Arrange
-        var ibp = new IntervalBoundPropagation<double>();
-        var mockModel = new MockPredictiveModel(3, 2);
-        var testData = new Matrix<double>(5, 3);
-        var labels = new Vector<int>(new[] { 0, 1, 0 }); // Only 3 labels for 5 samples
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
+        var mockModel = new MockFullModel(3, 2);
+        var testData = new Vector<double>[5];
+        for (int i = 0; i < 5; i++)
+        {
+            testData[i] = new Vector<double>(3);
+        }
+        var labels = new Vector<double>[] { new Vector<double>(new[] { 1.0, 0.0 }), new Vector<double>(new[] { 0.0, 1.0 }), new Vector<double>(new[] { 1.0, 0.0 }) }; // Only 3 labels for 5 samples
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
@@ -351,21 +354,22 @@ public class IntervalBoundPropagationTests
             NoiseSigma = 0.01,
             NumSamples = 20
         };
-        var ibp = new IntervalBoundPropagation<double>(options);
-        var mockModel = new MockPredictiveModelWithMargin(3, 2, 0.5);
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
+        var mockModel = new MockFullModelWithMargin(3, 2, 0.5);
 
         // Create test data
-        var testData = new Matrix<double>(4, 3);
+        var testData = new Vector<double>[4];
         for (int i = 0; i < 4; i++)
         {
-            for (int j = 0; j < 3; j++)
-            {
-                testData[i, j] = 0.5;
-            }
+            testData[i] = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
         }
 
-        // Labels matching the model's predictions
-        var labels = new Vector<int>(new[] { 0, 0, 0, 0 });
+        // Labels matching the model's predictions (class 0 wins with margin)
+        var labels = new Vector<double>[4];
+        for (int i = 0; i < 4; i++)
+        {
+            labels[i] = new Vector<double>(new[] { 1.0, 0.0 });
+        }
 
         // Act
         var metrics = ibp.EvaluateCertifiedAccuracy(testData, labels, mockModel, 0.01);
@@ -392,7 +396,7 @@ public class IntervalBoundPropagationTests
             NumSamples = 100,
             ConfidenceLevel = 0.99
         };
-        var ibp = new IntervalBoundPropagation<double>(options);
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
 
         // Act
         var bytes = ibp.Serialize();
@@ -406,7 +410,7 @@ public class IntervalBoundPropagationTests
     public void Deserialize_WithNullData_ThrowsArgumentNullException()
     {
         // Arrange
-        var ibp = new IntervalBoundPropagation<double>();
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => ibp.Deserialize(null!));
@@ -426,11 +430,11 @@ public class IntervalBoundPropagationTests
             BatchSize = 32,
             RandomSeed = 42
         };
-        var ibp = new IntervalBoundPropagation<double>(options);
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
 
         // Act
         var bytes = ibp.Serialize();
-        var ibp2 = new IntervalBoundPropagation<double>();
+        var ibp2 = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
         ibp2.Deserialize(bytes);
         var restoredOptions = ibp2.GetOptions();
 
@@ -452,7 +456,7 @@ public class IntervalBoundPropagationTests
     public void SaveModel_WithNullPath_ThrowsArgumentException()
     {
         // Arrange
-        var ibp = new IntervalBoundPropagation<double>();
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() => ibp.SaveModel(null!));
@@ -462,7 +466,7 @@ public class IntervalBoundPropagationTests
     public void SaveModel_WithEmptyPath_ThrowsArgumentException()
     {
         // Arrange
-        var ibp = new IntervalBoundPropagation<double>();
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() => ibp.SaveModel(string.Empty));
@@ -472,7 +476,7 @@ public class IntervalBoundPropagationTests
     public void LoadModel_WithNullPath_ThrowsArgumentException()
     {
         // Arrange
-        var ibp = new IntervalBoundPropagation<double>();
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() => ibp.LoadModel(null!));
@@ -482,7 +486,7 @@ public class IntervalBoundPropagationTests
     public void LoadModel_WithNonExistentFile_ThrowsFileNotFoundException()
     {
         // Arrange
-        var ibp = new IntervalBoundPropagation<double>();
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
 
         // Act & Assert
         Assert.Throws<FileNotFoundException>(() => ibp.LoadModel("nonexistent_ibp_model_12345.json"));
@@ -501,11 +505,11 @@ public class IntervalBoundPropagationTests
                 NumSamples = 150,
                 ConfidenceLevel = 0.95
             };
-            var ibp = new IntervalBoundPropagation<double>(options);
+            var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
 
             // Act
             ibp.SaveModel(tempPath);
-            var ibp2 = new IntervalBoundPropagation<double>();
+            var ibp2 = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
             ibp2.LoadModel(tempPath);
             var loadedOptions = ibp2.GetOptions();
 
@@ -536,7 +540,7 @@ public class IntervalBoundPropagationTests
             NoiseSigma = 0.5,
             NumSamples = 200
         };
-        var ibp = new IntervalBoundPropagation<double>(options);
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
 
         // Act
         ibp.Reset();
@@ -559,8 +563,8 @@ public class IntervalBoundPropagationTests
             NoiseSigma = 0.01f,
             NumSamples = 20
         };
-        var ibp = new IntervalBoundPropagation<float>(options);
-        var mockModel = new MockPredictiveModelFloat(3, 2);
+        var ibp = new IntervalBoundPropagation<float, Vector<float>, Vector<float>>(options);
+        var mockModel = new MockFullModelFloat(3, 2);
         var input = new Vector<float>(new[] { 0.5f, 0.5f, 0.5f });
 
         // Act
@@ -576,18 +580,22 @@ public class IntervalBoundPropagationTests
     #region Mock Models
 
     /// <summary>
-    /// Simple mock predictive model for testing.
+    /// Simple mock full model for testing.
     /// </summary>
-    private class MockPredictiveModel : IPredictiveModel<double, Vector<double>, Vector<double>>
+    private class MockFullModel : IFullModel<double, Vector<double>, Vector<double>>
     {
         private readonly int _inputDim;
         private readonly int _outputDim;
+        private List<int> _activeFeatures;
 
-        public MockPredictiveModel(int inputDim, int outputDim)
+        public MockFullModel(int inputDim, int outputDim)
         {
             _inputDim = inputDim;
             _outputDim = outputDim;
+            _activeFeatures = Enumerable.Range(0, inputDim).ToList();
         }
+
+        public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
 
         public Vector<double> Predict(Vector<double> input)
         {
@@ -603,28 +611,49 @@ public class IntervalBoundPropagationTests
             return output;
         }
 
+        public void Train(Vector<double> input, Vector<double> expectedOutput) { }
         public ModelMetadata<double> GetModelMetadata() => new ModelMetadata<double>();
         public byte[] Serialize() => Array.Empty<byte>();
         public void Deserialize(byte[] data) { }
         public void SaveModel(string filePath) { }
         public void LoadModel(string filePath) { }
+        public void SaveState(Stream stream) { }
+        public void LoadState(Stream stream) { }
+        public IFullModel<double, Vector<double>, Vector<double>> Clone() => new MockFullModel(_inputDim, _outputDim);
+        public IFullModel<double, Vector<double>, Vector<double>> DeepCopy() => new MockFullModel(_inputDim, _outputDim);
+        public Vector<double> ComputeGradients(Vector<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null) => new Vector<double>(_inputDim);
+        public void ApplyGradients(Vector<double> gradients, double learningRate) { }
+        public Vector<double> GetParameters() => new Vector<double>(_inputDim * _outputDim);
+        public void SetParameters(Vector<double> parameters) { }
+        public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters) => new MockFullModel(_inputDim, _outputDim);
+        public int ParameterCount => _inputDim * _outputDim;
+        public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
+        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => _activeFeatures = featureIndices.ToList();
+        public bool IsFeatureUsed(int featureIndex) => _activeFeatures.Contains(featureIndex);
+        public Dictionary<string, double> GetFeatureImportance() => Enumerable.Range(0, _inputDim).ToDictionary(i => $"Feature{i}", i => 1.0 / _inputDim);
+        public bool SupportsJitCompilation => false;
+        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes) => throw new NotSupportedException();
     }
 
     /// <summary>
     /// Mock model with configurable margin between class scores.
     /// </summary>
-    private class MockPredictiveModelWithMargin : IPredictiveModel<double, Vector<double>, Vector<double>>
+    private class MockFullModelWithMargin : IFullModel<double, Vector<double>, Vector<double>>
     {
         private readonly int _inputDim;
         private readonly int _outputDim;
         private readonly double _margin;
+        private List<int> _activeFeatures;
 
-        public MockPredictiveModelWithMargin(int inputDim, int outputDim, double margin)
+        public MockFullModelWithMargin(int inputDim, int outputDim, double margin)
         {
             _inputDim = inputDim;
             _outputDim = outputDim;
             _margin = margin;
+            _activeFeatures = Enumerable.Range(0, inputDim).ToList();
         }
+
+        public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
 
         public Vector<double> Predict(Vector<double> input)
         {
@@ -638,26 +667,47 @@ public class IntervalBoundPropagationTests
             return output;
         }
 
+        public void Train(Vector<double> input, Vector<double> expectedOutput) { }
         public ModelMetadata<double> GetModelMetadata() => new ModelMetadata<double>();
         public byte[] Serialize() => Array.Empty<byte>();
         public void Deserialize(byte[] data) { }
         public void SaveModel(string filePath) { }
         public void LoadModel(string filePath) { }
+        public void SaveState(Stream stream) { }
+        public void LoadState(Stream stream) { }
+        public IFullModel<double, Vector<double>, Vector<double>> Clone() => new MockFullModelWithMargin(_inputDim, _outputDim, _margin);
+        public IFullModel<double, Vector<double>, Vector<double>> DeepCopy() => new MockFullModelWithMargin(_inputDim, _outputDim, _margin);
+        public Vector<double> ComputeGradients(Vector<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null) => new Vector<double>(_inputDim);
+        public void ApplyGradients(Vector<double> gradients, double learningRate) { }
+        public Vector<double> GetParameters() => new Vector<double>(_inputDim * _outputDim);
+        public void SetParameters(Vector<double> parameters) { }
+        public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters) => new MockFullModelWithMargin(_inputDim, _outputDim, _margin);
+        public int ParameterCount => _inputDim * _outputDim;
+        public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
+        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => _activeFeatures = featureIndices.ToList();
+        public bool IsFeatureUsed(int featureIndex) => _activeFeatures.Contains(featureIndex);
+        public Dictionary<string, double> GetFeatureImportance() => Enumerable.Range(0, _inputDim).ToDictionary(i => $"Feature{i}", i => 1.0 / _inputDim);
+        public bool SupportsJitCompilation => false;
+        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes) => throw new NotSupportedException();
     }
 
     /// <summary>
     /// Float version of mock model.
     /// </summary>
-    private class MockPredictiveModelFloat : IPredictiveModel<float, Vector<float>, Vector<float>>
+    private class MockFullModelFloat : IFullModel<float, Vector<float>, Vector<float>>
     {
         private readonly int _inputDim;
         private readonly int _outputDim;
+        private List<int> _activeFeatures;
 
-        public MockPredictiveModelFloat(int inputDim, int outputDim)
+        public MockFullModelFloat(int inputDim, int outputDim)
         {
             _inputDim = inputDim;
             _outputDim = outputDim;
+            _activeFeatures = Enumerable.Range(0, inputDim).ToList();
         }
+
+        public ILossFunction<float> DefaultLossFunction => new MeanSquaredErrorLoss<float>();
 
         public Vector<float> Predict(Vector<float> input)
         {
@@ -672,11 +722,28 @@ public class IntervalBoundPropagationTests
             return output;
         }
 
+        public void Train(Vector<float> input, Vector<float> expectedOutput) { }
         public ModelMetadata<float> GetModelMetadata() => new ModelMetadata<float>();
         public byte[] Serialize() => Array.Empty<byte>();
         public void Deserialize(byte[] data) { }
         public void SaveModel(string filePath) { }
         public void LoadModel(string filePath) { }
+        public void SaveState(Stream stream) { }
+        public void LoadState(Stream stream) { }
+        public IFullModel<float, Vector<float>, Vector<float>> Clone() => new MockFullModelFloat(_inputDim, _outputDim);
+        public IFullModel<float, Vector<float>, Vector<float>> DeepCopy() => new MockFullModelFloat(_inputDim, _outputDim);
+        public Vector<float> ComputeGradients(Vector<float> input, Vector<float> target, ILossFunction<float>? lossFunction = null) => new Vector<float>(_inputDim);
+        public void ApplyGradients(Vector<float> gradients, float learningRate) { }
+        public Vector<float> GetParameters() => new Vector<float>(_inputDim * _outputDim);
+        public void SetParameters(Vector<float> parameters) { }
+        public IFullModel<float, Vector<float>, Vector<float>> WithParameters(Vector<float> parameters) => new MockFullModelFloat(_inputDim, _outputDim);
+        public int ParameterCount => _inputDim * _outputDim;
+        public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
+        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => _activeFeatures = featureIndices.ToList();
+        public bool IsFeatureUsed(int featureIndex) => _activeFeatures.Contains(featureIndex);
+        public Dictionary<string, float> GetFeatureImportance() => Enumerable.Range(0, _inputDim).ToDictionary(i => $"Feature{i}", i => 1.0f / _inputDim);
+        public bool SupportsJitCompilation => false;
+        public ComputationNode<float> ExportComputationGraph(List<ComputationNode<float>> inputNodes) => throw new NotSupportedException();
     }
 
     #endregion

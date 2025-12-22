@@ -1,6 +1,8 @@
 using AiDotNet.AdversarialRobustness.Attacks;
 using AiDotNet.AdversarialRobustness.Defenses;
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -18,14 +20,20 @@ public class AdversarialTrainingTests
     /// <summary>
     /// Mock predictive model for testing adversarial training.
     /// </summary>
-    private class MockClassificationModel : IPredictiveModel<double, Vector<double>, Vector<double>>
+    private class MockClassificationModel : IFullModel<double, Vector<double>, Vector<double>>
     {
         private readonly int _numClasses;
+        private readonly int _inputDim;
+        private List<int> _activeFeatures;
 
-        public MockClassificationModel(int numClasses = 3)
+        public MockClassificationModel(int numClasses = 3, int inputDim = 4)
         {
             _numClasses = numClasses;
+            _inputDim = inputDim;
+            _activeFeatures = Enumerable.Range(0, inputDim).ToList();
         }
+
+        public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
 
         public Vector<double> Predict(Vector<double> input)
         {
@@ -45,11 +53,63 @@ public class AdversarialTrainingTests
             return output;
         }
 
+        public void Train(Vector<double> input, Vector<double> expectedOutput) { }
         public ModelMetadata<double> GetModelMetadata() => new();
         public byte[] Serialize() => Array.Empty<byte>();
         public void Deserialize(byte[] data) { }
         public void SaveModel(string filePath) { }
         public void LoadModel(string filePath) { }
+        public void SaveState(Stream stream) { }
+        public void LoadState(Stream stream) { }
+        public IFullModel<double, Vector<double>, Vector<double>> Clone() => new MockClassificationModel(_numClasses, _inputDim);
+        public IFullModel<double, Vector<double>, Vector<double>> DeepCopy() => new MockClassificationModel(_numClasses, _inputDim);
+        public Vector<double> ComputeGradients(Vector<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null) => new Vector<double>(_inputDim);
+        public void ApplyGradients(Vector<double> gradients, double learningRate) { }
+        public Vector<double> GetParameters() => new Vector<double>(_inputDim * _numClasses);
+        public void SetParameters(Vector<double> parameters) { }
+        public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters) => new MockClassificationModel(_numClasses, _inputDim);
+        public int ParameterCount => _inputDim * _numClasses;
+        public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
+        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => _activeFeatures = featureIndices.ToList();
+        public bool IsFeatureUsed(int featureIndex) => _activeFeatures.Contains(featureIndex);
+        public Dictionary<string, double> GetFeatureImportance() => Enumerable.Range(0, _inputDim).ToDictionary(i => $"Feature{i}", i => 1.0 / _inputDim);
+        public bool SupportsJitCompilation => false;
+        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes) => throw new NotSupportedException();
+    }
+
+    /// <summary>
+    /// Helper method to create one-hot encoded labels.
+    /// </summary>
+    private static Vector<double> OneHotLabel(int classIndex, int numClasses = 3)
+    {
+        var label = new Vector<double>(numClasses);
+        label[classIndex] = 1.0;
+        return label;
+    }
+
+    /// <summary>
+    /// Helper method to create array of one-hot labels from class indices.
+    /// </summary>
+    private static Vector<double>[] CreateLabels(int[] classIndices, int numClasses = 3)
+    {
+        return classIndices.Select(i => OneHotLabel(i, numClasses)).ToArray();
+    }
+
+    /// <summary>
+    /// Helper method to create array of input vectors from a matrix-like structure.
+    /// </summary>
+    private static Vector<double>[] CreateInputs(int rows, int cols, double value = 0.5)
+    {
+        var inputs = new Vector<double>[rows];
+        for (int i = 0; i < rows; i++)
+        {
+            inputs[i] = new Vector<double>(cols);
+            for (int j = 0; j < cols; j++)
+            {
+                inputs[i][j] = value;
+            }
+        }
+        return inputs;
     }
 
     #endregion
@@ -65,7 +125,7 @@ public class AdversarialTrainingTests
             UsePreprocessing = true
         };
 
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
 
         Assert.NotNull(defense);
         Assert.Equal(0.1, defense.GetOptions().Epsilon);
@@ -74,14 +134,14 @@ public class AdversarialTrainingTests
     [Fact]
     public void Constructor_WithNullOptions_ThrowsException()
     {
-        Assert.Throws<ArgumentNullException>(() => new AdversarialTraining<double>(null!));
+        Assert.Throws<ArgumentNullException>(() => new AdversarialTraining<double, Vector<double>, Vector<double>>(null!));
     }
 
     [Fact]
     public void Constructor_WithDefaultOptions_Initializes()
     {
         var options = new AdversarialDefenseOptions<double>();
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
 
         Assert.NotNull(defense);
         Assert.Equal(0.5, defense.GetOptions().AdversarialRatio);
@@ -96,9 +156,9 @@ public class AdversarialTrainingTests
     public void ApplyDefense_WithNullModel_ThrowsException()
     {
         var options = new AdversarialDefenseOptions<double>();
-        var defense = new AdversarialTraining<double>(options);
-        var data = new Matrix<double>(3, 4);
-        var labels = new Vector<int>(new[] { 0, 1, 2 });
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
+        var data = CreateInputs(3, 4);
+        var labels = CreateLabels(new[] { 0, 1, 2 });
 
         Assert.Throws<ArgumentNullException>(() => defense.ApplyDefense(data, labels, null!));
     }
@@ -110,10 +170,10 @@ public class AdversarialTrainingTests
         {
             UsePreprocessing = false
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
-        var data = new Matrix<double>(3, 4);
-        var labels = new Vector<int>(new[] { 0, 1, 2 });
+        var data = CreateInputs(3, 4);
+        var labels = CreateLabels(new[] { 0, 1, 2 });
 
         var defendedModel = defense.ApplyDefense(data, labels, model);
 
@@ -127,10 +187,10 @@ public class AdversarialTrainingTests
         {
             UsePreprocessing = true
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
-        var data = new Matrix<double>(3, 4);
-        var labels = new Vector<int>(new[] { 0, 1, 2 });
+        var data = CreateInputs(3, 4);
+        var labels = CreateLabels(new[] { 0, 1, 2 });
 
         var defendedModel = defense.ApplyDefense(data, labels, model);
 
@@ -145,10 +205,10 @@ public class AdversarialTrainingTests
             UsePreprocessing = true,
             PreprocessingMethod = "JPEG"
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
-        var data = new Matrix<double>(3, 4);
-        var labels = new Vector<int>(new[] { 0, 1, 2 });
+        var data = CreateInputs(3, 4);
+        var labels = CreateLabels(new[] { 0, 1, 2 });
 
         var defendedModel = defense.ApplyDefense(data, labels, model);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5, 0.5 });
@@ -170,7 +230,7 @@ public class AdversarialTrainingTests
         {
             UsePreprocessing = false
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.6, 0.7 });
 
         var preprocessed = defense.PreprocessInput(input);
@@ -186,7 +246,7 @@ public class AdversarialTrainingTests
             UsePreprocessing = true,
             PreprocessingMethod = "JPEG"
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.55, 0.66, 0.77 });
 
         var preprocessed = defense.PreprocessInput(input);
@@ -208,7 +268,7 @@ public class AdversarialTrainingTests
             UsePreprocessing = true,
             PreprocessingMethod = "bit_depth_reduction"
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.55, 0.66, 0.77 });
 
         var preprocessed = defense.PreprocessInput(input);
@@ -225,7 +285,7 @@ public class AdversarialTrainingTests
             UsePreprocessing = true,
             PreprocessingMethod = "denoising"
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.6, 0.7 });
 
         var preprocessed = defense.PreprocessInput(input);
@@ -242,7 +302,7 @@ public class AdversarialTrainingTests
             UsePreprocessing = true,
             PreprocessingMethod = "unknown_method"
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.6, 0.7 });
 
         var preprocessed = defense.PreprocessInput(input);
@@ -258,10 +318,10 @@ public class AdversarialTrainingTests
     public void EvaluateRobustness_WithNullModel_ThrowsException()
     {
         var options = new AdversarialDefenseOptions<double>();
-        var defense = new AdversarialTraining<double>(options);
-        var testData = new Matrix<double>(3, 4);
-        var labels = new Vector<int>(new[] { 0, 1, 2 });
-        var attack = new FGSMAttack<double>(new AdversarialAttackOptions<double>());
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
+        var testData = CreateInputs(3, 4);
+        var labels = CreateLabels(new[] { 0, 1, 2 });
+        var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
         Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(null!, testData, labels, attack));
     }
@@ -270,10 +330,10 @@ public class AdversarialTrainingTests
     public void EvaluateRobustness_WithNullTestData_ThrowsException()
     {
         var options = new AdversarialDefenseOptions<double>();
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
-        var labels = new Vector<int>(new[] { 0, 1, 2 });
-        var attack = new FGSMAttack<double>(new AdversarialAttackOptions<double>());
+        var labels = CreateLabels(new[] { 0, 1, 2 });
+        var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
         Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, null!, labels, attack));
     }
@@ -282,10 +342,10 @@ public class AdversarialTrainingTests
     public void EvaluateRobustness_WithNullLabels_ThrowsException()
     {
         var options = new AdversarialDefenseOptions<double>();
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
-        var testData = new Matrix<double>(3, 4);
-        var attack = new FGSMAttack<double>(new AdversarialAttackOptions<double>());
+        var testData = CreateInputs(3, 4);
+        var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
         Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, testData, null!, attack));
     }
@@ -294,10 +354,10 @@ public class AdversarialTrainingTests
     public void EvaluateRobustness_WithNullAttack_ThrowsException()
     {
         var options = new AdversarialDefenseOptions<double>();
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
-        var testData = new Matrix<double>(3, 4);
-        var labels = new Vector<int>(new[] { 0, 1, 2 });
+        var testData = CreateInputs(3, 4);
+        var labels = CreateLabels(new[] { 0, 1, 2 });
 
         Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, testData, labels, null!));
     }
@@ -306,11 +366,11 @@ public class AdversarialTrainingTests
     public void EvaluateRobustness_MismatchedRowsAndLabels_ThrowsException()
     {
         var options = new AdversarialDefenseOptions<double>();
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
-        var testData = new Matrix<double>(3, 4);
-        var labels = new Vector<int>(new[] { 0, 1 }); // Only 2 labels for 3 rows
-        var attack = new FGSMAttack<double>(new AdversarialAttackOptions<double>());
+        var testData = CreateInputs(3, 4);
+        var labels = CreateLabels(new[] { 0, 1 }); // Only 2 labels for 3 rows
+        var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
         Assert.Throws<ArgumentException>(() => defense.EvaluateRobustness(model, testData, labels, attack));
     }
@@ -319,22 +379,15 @@ public class AdversarialTrainingTests
     public void EvaluateRobustness_ReturnsValidMetrics()
     {
         var options = new AdversarialDefenseOptions<double>();
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
-        var testData = new Matrix<double>(3, 4);
-        for (int i = 0; i < 3; i++)
-        {
-            for (int j = 0; j < 4; j++)
-            {
-                testData[i, j] = 0.5;
-            }
-        }
-        var labels = new Vector<int>(new[] { 0, 0, 0 });
+        var testData = CreateInputs(3, 4, 0.5);
+        var labels = CreateLabels(new[] { 0, 0, 0 });
         var attackOptions = new AdversarialAttackOptions<double>
         {
             Epsilon = 0.1
         };
-        var attack = new FGSMAttack<double>(attackOptions);
+        var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(attackOptions);
 
         var metrics = defense.EvaluateRobustness(model, testData, labels, attack);
 
@@ -349,22 +402,15 @@ public class AdversarialTrainingTests
     public void EvaluateRobustness_CalculatesAveragePerturbationSize()
     {
         var options = new AdversarialDefenseOptions<double>();
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
-        var testData = new Matrix<double>(2, 4);
-        for (int i = 0; i < 2; i++)
-        {
-            for (int j = 0; j < 4; j++)
-            {
-                testData[i, j] = 0.5;
-            }
-        }
-        var labels = new Vector<int>(new[] { 0, 0 });
+        var testData = CreateInputs(2, 4, 0.5);
+        var labels = CreateLabels(new[] { 0, 0 });
         var attackOptions = new AdversarialAttackOptions<double>
         {
             Epsilon = 0.1
         };
-        var attack = new FGSMAttack<double>(attackOptions);
+        var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(attackOptions);
 
         var metrics = defense.EvaluateRobustness(model, testData, labels, attack);
 
@@ -383,7 +429,7 @@ public class AdversarialTrainingTests
             Epsilon = 0.2,
             AdversarialRatio = 0.6
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
 
         var bytes = defense.Serialize();
 
@@ -400,10 +446,10 @@ public class AdversarialTrainingTests
             AdversarialRatio = 0.7,
             TrainingEpochs = 50
         };
-        var original = new AdversarialTraining<double>(originalOptions);
+        var original = new AdversarialTraining<double, Vector<double>, Vector<double>>(originalOptions);
         var bytes = original.Serialize();
 
-        var restored = new AdversarialTraining<double>(new AdversarialDefenseOptions<double>());
+        var restored = new AdversarialTraining<double, Vector<double>, Vector<double>>(new AdversarialDefenseOptions<double>());
         restored.Deserialize(bytes);
 
         Assert.Equal(0.25, restored.GetOptions().Epsilon);
@@ -414,7 +460,7 @@ public class AdversarialTrainingTests
     [Fact]
     public void Deserialize_NullData_ThrowsException()
     {
-        var defense = new AdversarialTraining<double>(new AdversarialDefenseOptions<double>());
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(new AdversarialDefenseOptions<double>());
 
         Assert.Throws<ArgumentNullException>(() => defense.Deserialize(null!));
     }
@@ -430,10 +476,10 @@ public class AdversarialTrainingTests
                 Epsilon = 0.15,
                 TrainingEpochs = 80
             };
-            var original = new AdversarialTraining<double>(originalOptions);
+            var original = new AdversarialTraining<double, Vector<double>, Vector<double>>(originalOptions);
             original.SaveModel(tempPath);
 
-            var loaded = new AdversarialTraining<double>(new AdversarialDefenseOptions<double>());
+            var loaded = new AdversarialTraining<double, Vector<double>, Vector<double>>(new AdversarialDefenseOptions<double>());
             loaded.LoadModel(tempPath);
 
             Assert.Equal(0.15, loaded.GetOptions().Epsilon);
@@ -455,7 +501,7 @@ public class AdversarialTrainingTests
     [Fact]
     public void Reset_DoesNotThrow()
     {
-        var defense = new AdversarialTraining<double>(new AdversarialDefenseOptions<double>());
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(new AdversarialDefenseOptions<double>());
 
         var exception = Record.Exception(() => defense.Reset());
 
@@ -475,7 +521,7 @@ public class AdversarialTrainingTests
             UsePreprocessing = true,
             PreprocessingMethod = "bit_depth_reduction"
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
 
         var retrievedOptions = defense.GetOptions();
 
@@ -495,10 +541,10 @@ public class AdversarialTrainingTests
         {
             UsePreprocessing = true
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
-        var data = new Matrix<double>(3, 4);
-        var labels = new Vector<int>(new[] { 0, 1, 2 });
+        var data = CreateInputs(3, 4);
+        var labels = CreateLabels(new[] { 0, 1, 2 });
 
         var defendedModel = defense.ApplyDefense(data, labels, model);
         var metadata = defendedModel.GetModelMetadata();
@@ -513,10 +559,10 @@ public class AdversarialTrainingTests
         {
             UsePreprocessing = true
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
-        var data = new Matrix<double>(3, 4);
-        var labels = new Vector<int>(new[] { 0, 1, 2 });
+        var data = CreateInputs(3, 4);
+        var labels = CreateLabels(new[] { 0, 1, 2 });
 
         var defendedModel = defense.ApplyDefense(data, labels, model);
         var bytes = defendedModel.Serialize();
@@ -531,10 +577,10 @@ public class AdversarialTrainingTests
         {
             UsePreprocessing = true
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
-        var data = new Matrix<double>(3, 4);
-        var labels = new Vector<int>(new[] { 0, 1, 2 });
+        var data = CreateInputs(3, 4);
+        var labels = CreateLabels(new[] { 0, 1, 2 });
 
         var defendedModel = defense.ApplyDefense(data, labels, model);
 
@@ -550,10 +596,10 @@ public class AdversarialTrainingTests
         {
             UsePreprocessing = true
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
-        var data = new Matrix<double>(3, 4);
-        var labels = new Vector<int>(new[] { 0, 1, 2 });
+        var data = CreateInputs(3, 4);
+        var labels = CreateLabels(new[] { 0, 1, 2 });
         var tempPath = Path.Combine(Path.GetTempPath(), $"defended_model_{Guid.NewGuid()}.json");
 
         try
@@ -580,10 +626,10 @@ public class AdversarialTrainingTests
         {
             UsePreprocessing = true
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
-        var data = new Matrix<double>(3, 4);
-        var labels = new Vector<int>(new[] { 0, 1, 2 });
+        var data = CreateInputs(3, 4);
+        var labels = CreateLabels(new[] { 0, 1, 2 });
 
         var defendedModel = defense.ApplyDefense(data, labels, model);
 
@@ -601,11 +647,11 @@ public class AdversarialTrainingTests
     public void EvaluateRobustness_EmptyTestData_ReturnsZeroMetrics()
     {
         var options = new AdversarialDefenseOptions<double>();
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
-        var testData = new Matrix<double>(0, 4);
-        var labels = new Vector<int>(0);
-        var attack = new FGSMAttack<double>(new AdversarialAttackOptions<double>());
+        var testData = Array.Empty<Vector<double>>();
+        var labels = Array.Empty<Vector<double>>();
+        var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
         var metrics = defense.EvaluateRobustness(model, testData, labels, attack);
 
@@ -621,7 +667,7 @@ public class AdversarialTrainingTests
             UsePreprocessing = true,
             PreprocessingMethod = "JPEG"
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 1.5, -0.5, 2.0 }); // Out of [0,1] range
 
         var preprocessed = defense.PreprocessInput(input);
@@ -640,7 +686,7 @@ public class AdversarialTrainingTests
             UsePreprocessing = true,
             PreprocessingMethod = "bit_depth_reduction"
         };
-        var defense = new AdversarialTraining<double>(options);
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 1.5, -0.5, 2.0 });
 
         var preprocessed = defense.PreprocessInput(input);

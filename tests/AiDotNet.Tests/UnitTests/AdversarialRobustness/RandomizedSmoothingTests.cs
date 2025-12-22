@@ -1,5 +1,7 @@
 using AiDotNet.AdversarialRobustness.CertifiedRobustness;
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -21,18 +23,24 @@ public class RandomizedSmoothingTests
     /// <summary>
     /// Mock predictive model that returns deterministic predictions based on input.
     /// </summary>
-    private class MockPredictiveModel : IPredictiveModel<double, Vector<double>, Vector<double>>
+    private class MockPredictiveModel : IFullModel<double, Vector<double>, Vector<double>>
     {
         private readonly int _numClasses;
         private readonly int _dominantClass;
         private readonly double _dominantProbability;
+        private readonly int _inputDim;
+        private List<int> _activeFeatures;
 
-        public MockPredictiveModel(int numClasses = 3, int dominantClass = 0, double dominantProbability = 0.8)
+        public MockPredictiveModel(int numClasses = 3, int dominantClass = 0, double dominantProbability = 0.8, int inputDim = 3)
         {
             _numClasses = numClasses;
             _dominantClass = dominantClass;
             _dominantProbability = dominantProbability;
+            _inputDim = inputDim;
+            _activeFeatures = Enumerable.Range(0, inputDim).ToList();
         }
+
+        public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
 
         public Vector<double> Predict(Vector<double> input)
         {
@@ -48,11 +56,63 @@ public class RandomizedSmoothingTests
             return output;
         }
 
+        public void Train(Vector<double> input, Vector<double> expectedOutput) { }
         public ModelMetadata<double> GetModelMetadata() => new();
         public byte[] Serialize() => Array.Empty<byte>();
         public void Deserialize(byte[] data) { }
         public void SaveModel(string filePath) { }
         public void LoadModel(string filePath) { }
+        public void SaveState(Stream stream) { }
+        public void LoadState(Stream stream) { }
+        public IFullModel<double, Vector<double>, Vector<double>> Clone() => new MockPredictiveModel(_numClasses, _dominantClass, _dominantProbability, _inputDim);
+        public IFullModel<double, Vector<double>, Vector<double>> DeepCopy() => new MockPredictiveModel(_numClasses, _dominantClass, _dominantProbability, _inputDim);
+        public Vector<double> ComputeGradients(Vector<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null) => new Vector<double>(_inputDim);
+        public void ApplyGradients(Vector<double> gradients, double learningRate) { }
+        public Vector<double> GetParameters() => new Vector<double>(_inputDim * _numClasses);
+        public void SetParameters(Vector<double> parameters) { }
+        public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters) => new MockPredictiveModel(_numClasses, _dominantClass, _dominantProbability, _inputDim);
+        public int ParameterCount => _inputDim * _numClasses;
+        public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
+        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => _activeFeatures = featureIndices.ToList();
+        public bool IsFeatureUsed(int featureIndex) => _activeFeatures.Contains(featureIndex);
+        public Dictionary<string, double> GetFeatureImportance() => Enumerable.Range(0, _inputDim).ToDictionary(i => $"Feature{i}", i => 1.0 / _inputDim);
+        public bool SupportsJitCompilation => false;
+        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes) => throw new NotSupportedException();
+    }
+
+    /// <summary>
+    /// Helper method to create array of input vectors from a matrix-like structure.
+    /// </summary>
+    private static Vector<double>[] CreateInputs(int rows, int cols, double value = 0.5)
+    {
+        var inputs = new Vector<double>[rows];
+        for (int i = 0; i < rows; i++)
+        {
+            inputs[i] = new Vector<double>(cols);
+            for (int j = 0; j < cols; j++)
+            {
+                inputs[i][j] = value;
+            }
+        }
+        return inputs;
+    }
+
+    /// <summary>
+    /// Helper method to create one-hot encoded labels.
+    /// </summary>
+    private static Vector<double> OneHotLabel(int classIndex, int numClasses = 3)
+    {
+        var label = new Vector<double>(numClasses);
+        label[classIndex] = 1.0;
+        return label;
+    }
+
+    /// <summary>
+    /// Helper method to create array of one-hot labels from class indices.
+    /// </summary>
+    private static Vector<double>[] CreateLabels(int[] classIndices, int numClasses = 3)
+    {
+        return classIndices.Select(i => OneHotLabel(i, numClasses)).ToArray();
     }
 
     #endregion
@@ -71,7 +131,7 @@ public class RandomizedSmoothingTests
         };
 
         // Act
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
         // Assert
         Assert.NotNull(smoothing);
@@ -82,7 +142,7 @@ public class RandomizedSmoothingTests
     public void Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new RandomizedSmoothing<double>(null!));
+        Assert.Throws<ArgumentNullException>(() => new RandomizedSmoothing<double, Vector<double>, Vector<double>>(null!));
     }
 
     [Fact]
@@ -100,10 +160,10 @@ public class RandomizedSmoothingTests
         var model = new MockPredictiveModel();
 
         // Act
-        var smoothing1 = new RandomizedSmoothing<double>(options);
+        var smoothing1 = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var result1 = smoothing1.CertifyPrediction(input, model);
 
-        var smoothing2 = new RandomizedSmoothing<double>(options);
+        var smoothing2 = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var result2 = smoothing2.CertifyPrediction(input, model);
 
         // Assert - same seed should produce same results
@@ -120,7 +180,7 @@ public class RandomizedSmoothingTests
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 100 };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var model = new MockPredictiveModel();
 
         // Act & Assert
@@ -132,7 +192,7 @@ public class RandomizedSmoothingTests
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 100 };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
 
         // Act & Assert
@@ -150,7 +210,7 @@ public class RandomizedSmoothingTests
             ConfidenceLevel = 0.95,
             RandomSeed = 42
         };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
         var model = new MockPredictiveModel(numClasses: 3, dominantClass: 0, dominantProbability: 0.99);
 
@@ -175,7 +235,7 @@ public class RandomizedSmoothingTests
             ConfidenceLevel = 0.95,
             RandomSeed = 42
         };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
         var model = new MockPredictiveModel();
 
@@ -201,7 +261,7 @@ public class RandomizedSmoothingTests
             ConfidenceLevel = 0.95,
             RandomSeed = 42
         };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
         var model = new MockPredictiveModel();
 
@@ -229,7 +289,7 @@ public class RandomizedSmoothingTests
             ConfidenceLevel = 0.95,
             RandomSeed = 42
         };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
         var model = new MockPredictiveModel(numClasses: 3, dominantClass: 0, dominantProbability: 0.99);
 
@@ -251,7 +311,7 @@ public class RandomizedSmoothingTests
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 50 };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var model = new MockPredictiveModel();
 
         // Act & Assert
@@ -269,15 +329,8 @@ public class RandomizedSmoothingTests
             ConfidenceLevel = 0.95,
             RandomSeed = 42
         };
-        var smoothing = new RandomizedSmoothing<double>(options);
-        var inputs = new Matrix<double>(5, 3); // 5 samples, 3 features
-        for (int i = 0; i < 5; i++)
-        {
-            for (int j = 0; j < 3; j++)
-            {
-                inputs[i, j] = 0.5;
-            }
-        }
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
+        var inputs = CreateInputs(5, 3, 0.5); // 5 samples, 3 features
         var model = new MockPredictiveModel();
 
         // Act
@@ -307,7 +360,7 @@ public class RandomizedSmoothingTests
             ConfidenceLevel = 0.95,
             RandomSeed = 42
         };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
         var model = new MockPredictiveModel();
 
@@ -327,8 +380,8 @@ public class RandomizedSmoothingTests
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 50 };
-        var smoothing = new RandomizedSmoothing<double>(options);
-        var labels = new Vector<int>(new[] { 0, 1, 0 });
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
+        var labels = CreateLabels(new[] { 0, 1, 0 });
         var model = new MockPredictiveModel();
 
         // Act & Assert
@@ -341,8 +394,8 @@ public class RandomizedSmoothingTests
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 50 };
-        var smoothing = new RandomizedSmoothing<double>(options);
-        var testData = new Matrix<double>(3, 3);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
+        var testData = CreateInputs(3, 3);
         var model = new MockPredictiveModel();
 
         // Act & Assert
@@ -355,9 +408,9 @@ public class RandomizedSmoothingTests
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 50 };
-        var smoothing = new RandomizedSmoothing<double>(options);
-        var testData = new Matrix<double>(3, 3);
-        var labels = new Vector<int>(new[] { 0, 1, 0 });
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
+        var testData = CreateInputs(3, 3);
+        var labels = CreateLabels(new[] { 0, 1, 0 });
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
@@ -369,9 +422,9 @@ public class RandomizedSmoothingTests
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 50 };
-        var smoothing = new RandomizedSmoothing<double>(options);
-        var testData = new Matrix<double>(5, 3); // 5 samples
-        var labels = new Vector<int>(new[] { 0, 1, 0 }); // Only 3 labels
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
+        var testData = CreateInputs(5, 3); // 5 samples
+        var labels = CreateLabels(new[] { 0, 1, 0 }); // Only 3 labels
         var model = new MockPredictiveModel();
 
         // Act & Assert
@@ -390,20 +443,13 @@ public class RandomizedSmoothingTests
             ConfidenceLevel = 0.95,
             RandomSeed = 42
         };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
         // Create test data with 3 samples
-        var testData = new Matrix<double>(3, 3);
-        for (int i = 0; i < 3; i++)
-        {
-            for (int j = 0; j < 3; j++)
-            {
-                testData[i, j] = 0.5;
-            }
-        }
+        var testData = CreateInputs(3, 3, 0.5);
 
         // Model always predicts class 0
-        var labels = new Vector<int>(new[] { 0, 0, 0 });
+        var labels = CreateLabels(new[] { 0, 0, 0 });
         var model = new MockPredictiveModel(numClasses: 3, dominantClass: 0);
 
         // Act
@@ -429,18 +475,10 @@ public class RandomizedSmoothingTests
             ConfidenceLevel = 0.95,
             RandomSeed = 42
         };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
-        var testData = new Matrix<double>(5, 3);
-        for (int i = 0; i < 5; i++)
-        {
-            for (int j = 0; j < 3; j++)
-            {
-                testData[i, j] = 0.5;
-            }
-        }
-
-        var labels = new Vector<int>(new[] { 0, 0, 0, 0, 0 });
+        var testData = CreateInputs(5, 3, 0.5);
+        var labels = CreateLabels(new[] { 0, 0, 0, 0, 0 });
         var model = new MockPredictiveModel(numClasses: 3, dominantClass: 0);
 
         // Act
@@ -466,7 +504,7 @@ public class RandomizedSmoothingTests
             NumSamples = 100,
             ConfidenceLevel = 0.95
         };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
         // Act
         var bytes = smoothing.Serialize();
@@ -481,7 +519,7 @@ public class RandomizedSmoothingTests
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 100 };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => smoothing.Deserialize(null!));
@@ -497,7 +535,7 @@ public class RandomizedSmoothingTests
             NumSamples = 200,
             ConfidenceLevel = 0.99
         };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
         // Act
         var bytes = smoothing.Serialize();
@@ -524,7 +562,7 @@ public class RandomizedSmoothingTests
             NumSamples = 100,
             ConfidenceLevel = 0.95
         };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
         // Act
         var returnedOptions = smoothing.GetOptions();
@@ -540,7 +578,7 @@ public class RandomizedSmoothingTests
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double> { NoiseSigma = 0.5, NumSamples = 100 };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
         // Act & Assert - Reset should not throw
         var exception = Record.Exception(() => smoothing.Reset());
@@ -562,19 +600,11 @@ public class RandomizedSmoothingTests
             ConfidenceLevel = 0.95,
             RandomSeed = 42
         };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
         // Create 3 test samples (odd count)
-        var testData = new Matrix<double>(3, 3);
-        for (int i = 0; i < 3; i++)
-        {
-            for (int j = 0; j < 3; j++)
-            {
-                testData[i, j] = 0.5;
-            }
-        }
-
-        var labels = new Vector<int>(new[] { 0, 0, 0 });
+        var testData = CreateInputs(3, 3, 0.5);
+        var labels = CreateLabels(new[] { 0, 0, 0 });
         var model = new MockPredictiveModel(numClasses: 3, dominantClass: 0);
 
         // Act
@@ -596,19 +626,11 @@ public class RandomizedSmoothingTests
             ConfidenceLevel = 0.95,
             RandomSeed = 42
         };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
         // Create 4 test samples (even count)
-        var testData = new Matrix<double>(4, 3);
-        for (int i = 0; i < 4; i++)
-        {
-            for (int j = 0; j < 3; j++)
-            {
-                testData[i, j] = 0.5;
-            }
-        }
-
-        var labels = new Vector<int>(new[] { 0, 0, 0, 0 });
+        var testData = CreateInputs(4, 3, 0.5);
+        var labels = CreateLabels(new[] { 0, 0, 0, 0 });
         var model = new MockPredictiveModel(numClasses: 3, dominantClass: 0);
 
         // Act
@@ -633,20 +655,13 @@ public class RandomizedSmoothingTests
             ConfidenceLevel = 0.95,
             RandomSeed = 42
         };
-        var smoothing = new RandomizedSmoothing<double>(options);
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var model = new MockPredictiveModel(numClasses: 3, dominantClass: 0, dominantProbability: 0.95);
 
         // Create test data
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
-        var testData = new Matrix<double>(3, 3);
-        for (int i = 0; i < 3; i++)
-        {
-            for (int j = 0; j < 3; j++)
-            {
-                testData[i, j] = 0.5;
-            }
-        }
-        var labels = new Vector<int>(new[] { 0, 0, 0 });
+        var testData = CreateInputs(3, 3, 0.5);
+        var labels = CreateLabels(new[] { 0, 0, 0 });
 
         // Act - Full workflow
         var singleResult = smoothing.CertifyPrediction(input, model);
