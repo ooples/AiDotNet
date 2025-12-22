@@ -126,7 +126,7 @@ public class GroupRelativePolicyOptimization<T, TInput, TOutput> : FineTuningBas
                 }
 
                 var (batchLoss, avgReward, avgKL) = await ComputeGRPOLossAndUpdateAsync(
-                    policyModel, batch, groupSize, klCoeff, clipRange, cancellationToken);
+                    policyModel, batch, groupSize, klCoeff, clipRange, Options.LearningRate, cancellationToken);
                 currentStep++;
 
                 UpdateMetrics(batchLoss, currentStep);
@@ -209,6 +209,7 @@ public class GroupRelativePolicyOptimization<T, TInput, TOutput> : FineTuningBas
         int groupSize,
         double klCoeff,
         double clipRange,
+        double learningRate,
         CancellationToken cancellationToken)
     {
         if (_referenceModel == null)
@@ -219,7 +220,9 @@ public class GroupRelativePolicyOptimization<T, TInput, TOutput> : FineTuningBas
         double totalLoss = 0.0;
         double totalReward = 0.0;
         double totalKL = 0.0;
+        double totalGroupVariance = 0.0;
         int sampleCount = 0;
+        int groupCount = 0;
 
         for (int i = 0; i < batch.Count; i++)
         {
@@ -234,23 +237,18 @@ public class GroupRelativePolicyOptimization<T, TInput, TOutput> : FineTuningBas
             var groupRewards = new List<double>();
             var groupLogProbs = new List<double>();
             var groupRefLogProbs = new List<double>();
+            var groupResponses = new List<TOutput>();
 
             for (int g = 0; g < groupSize; g++)
             {
                 // Generate response - use batch outputs if available for diversity,
                 // otherwise fall back to model prediction (note: deterministic prediction
                 // produces identical responses; proper GRPO requires temperature sampling)
-                TOutput response;
-                if (batch.HasPairwisePreferenceData && g < 2)
-                {
-                    // Use chosen/rejected outputs for first two responses to ensure diversity
-                    response = g == 0 ? batch.ChosenOutputs[i] : batch.RejectedOutputs[i];
-                }
-                else
-                {
-                    // Fall back to model prediction (may be identical without temperature)
-                    response = policyModel.Predict(input);
-                }
+                TOutput response = batch.HasPairwisePreferenceData && g < 2
+                    ? (g == 0 ? batch.ChosenOutputs[i] : batch.RejectedOutputs[i])
+                    : policyModel.Predict(input);
+
+                groupResponses.Add(response);
 
                 // Compute reward
                 double reward = _rewardFunction != null
@@ -301,13 +299,23 @@ public class GroupRelativePolicyOptimization<T, TInput, TOutput> : FineTuningBas
                 var loss = -surrogateObjective + klCoeff * kl;
                 totalLoss += loss;
 
+                // Compute and apply gradients to update model parameters
+                // Weight by advantage to encourage good responses and discourage bad ones
+                var scaledLearningRate = learningRate * advantage;
+                var gradients = policyModel.ComputeGradients(input, groupResponses[g]);
+                policyModel.ApplyGradients(gradients, NumOps.FromDouble(scaledLearningRate));
+
                 totalReward += groupRewards[g];
                 sampleCount++;
             }
 
-            // Track group variance for metrics
-            CurrentMetrics.GroupRewardVariance = stdReward * stdReward;
+            // Accumulate group variance
+            totalGroupVariance += stdReward * stdReward;
+            groupCount++;
         }
+
+        // Set average group variance for metrics
+        CurrentMetrics.GroupRewardVariance = groupCount > 0 ? totalGroupVariance / groupCount : 0.0;
 
         var avgLoss = sampleCount > 0 ? totalLoss / sampleCount : 0.0;
         var avgReward = sampleCount > 0 ? totalReward / sampleCount : 0.0;

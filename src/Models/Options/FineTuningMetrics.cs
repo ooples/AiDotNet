@@ -279,12 +279,12 @@ public class FineTuningMetrics<T>
             $"Training Time: {TrainingTimeSeconds:F1}s"
         };
 
-        if (WinRate > 0)
+        if (WinRate > double.Epsilon)
         {
             lines.Add($"Win Rate: {WinRate:P1}");
         }
 
-        if (PreferenceAccuracy > 0)
+        if (PreferenceAccuracy > double.Epsilon)
         {
             lines.Add($"Preference Accuracy: {PreferenceAccuracy:P1}");
         }
@@ -295,7 +295,7 @@ public class FineTuningMetrics<T>
             lines.Add($"KL Divergence: {KLDivergence:F4}");
         }
 
-        if (HarmlessnessScore > 0 || HelpfulnessScore > 0)
+        if (HarmlessnessScore > double.Epsilon || HelpfulnessScore > double.Epsilon)
         {
             lines.Add($"Harmlessness: {HarmlessnessScore:P1}");
             lines.Add($"Helpfulness: {HelpfulnessScore:P1}");

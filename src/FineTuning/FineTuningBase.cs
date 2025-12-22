@@ -260,18 +260,10 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
     /// </summary>
     /// <param name="x">The input value.</param>
     /// <returns>The sigmoid output.</returns>
-    protected static double Sigmoid(double x)
-    {
-        if (x >= 0)
-        {
-            return 1.0 / (1.0 + Math.Exp(-x));
-        }
-        else
-        {
-            var exp = Math.Exp(x);
-            return exp / (1.0 + exp);
-        }
-    }
+    protected static double Sigmoid(double x) =>
+        x >= 0
+            ? 1.0 / (1.0 + Math.Exp(-x))
+            : Math.Exp(x) / (1.0 + Math.Exp(x));
 
     /// <summary>
     /// Applies the log sigmoid function.

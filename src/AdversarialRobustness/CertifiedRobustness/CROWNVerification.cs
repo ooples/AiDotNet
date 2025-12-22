@@ -295,7 +295,7 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
 
         var settings = new JsonSerializerSettings
         {
-            TypeNameHandling = TypeNameHandling.Auto,
+            TypeNameHandling = TypeNameHandling.None,
             SerializationBinder = new SafeSerializationBinder()
         };
 

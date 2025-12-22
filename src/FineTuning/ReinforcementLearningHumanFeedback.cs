@@ -241,19 +241,11 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
             var output = policyModel.Predict(input);
 
             // Compute reward
-            double reward;
-            if (_rewardFunction != null)
-            {
-                reward = _rewardFunction(input, output);
-            }
-            else if (batch.HasRLData && i < batch.Rewards.Length)
-            {
-                reward = batch.Rewards[i];
-            }
-            else
-            {
-                reward = 0.0;
-            }
+            double reward = _rewardFunction != null
+                ? _rewardFunction(input, output)
+                : (batch.HasRLData && i < batch.Rewards.Length)
+                    ? batch.Rewards[i]
+                    : 0.0;
 
             // Compute log probabilities
             var logProb = ComputeLogProbability(policyModel, input, output);
@@ -282,6 +274,7 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
             experience.Add(new PPOExperience
             {
                 InputIndex = i,
+                Output = output,
                 Reward = reward,
                 LogProb = logProb,
                 RefLogProb = refLogProb,
@@ -355,13 +348,12 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
                 break;
             }
 
-            // Recompute current log probability from the updated policy model
-            // This is essential for PPO - we compare old policy (exp.LogProb) vs current policy
+            // Recompute current log probability of the SAME ACTION (exp.Output) under the updated policy
+            // This is essential for PPO - we compare probability of the same action under old vs current policy
             var input = batch.Inputs[exp.InputIndex];
-            var currentOutput = policyModel.Predict(input);
-            var currentLogProb = ComputeLogProbability(policyModel, input, currentOutput);
+            var currentLogProb = ComputeLogProbability(policyModel, input, exp.Output);
 
-            // Probability ratio between current and old policy
+            // Probability ratio between current and old policy for the SAME action
             var logRatio = currentLogProb - exp.LogProb;
             var ratio = Math.Exp(logRatio);
 
@@ -377,9 +369,22 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
 
             totalPolicyLoss += policyLoss;
 
+            // Compute and apply gradients to update policy model
+            // Scale learning rate by advantage to encourage good actions and discourage bad ones
+            var scaledLearningRate = Options.LearningRate * Math.Sign(exp.Advantage);
+            var gradients = policyModel.ComputeGradients(input, exp.Output);
+            policyModel.ApplyGradients(gradients, NumOps.FromDouble(scaledLearningRate));
+
             // Value loss (simplified - would use actual value predictions)
             var valueLoss = Math.Pow(exp.Value - exp.Reward, 2);
             totalValueLoss += valueLoss;
+
+            // Update value model if available
+            if (_valueModel != null)
+            {
+                var valueGradients = _valueModel.ComputeGradients(input, exp.Output);
+                _valueModel.ApplyGradients(valueGradients, NumOps.FromDouble(Options.LearningRate * valueCoeff));
+            }
 
             // Entropy bonus (simplified - would compute actual entropy)
             var entropyLoss = -0.01; // Placeholder
@@ -412,6 +417,7 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
     private struct PPOExperience
     {
         public int InputIndex;
+        public TOutput Output;
         public double Reward;
         public double LogProb;
         public double RefLogProb;

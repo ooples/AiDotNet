@@ -206,8 +206,13 @@ public class ConstitutionalAIFineTuning<T, TInput, TOutput> : FineTuningBase<T, 
                     break;
                 }
 
+                if (i >= batch.Inputs.Length)
+                {
+                    break; // No corresponding input for remaining revisions
+                }
+
                 var (original, _, revised) = batch.CritiqueRevisions[i];
-                var input = batch.Inputs[Math.Min(i, batch.Inputs.Length - 1)];
+                var input = batch.Inputs[i];
 
                 // Train to prefer revised over original (like DPO)
                 var piRevisedLogProb = ComputeLogProbability(policyModel, input, revised);

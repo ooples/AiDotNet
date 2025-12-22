@@ -171,9 +171,14 @@ public class KahnemanTverskyOptimization<T, TInput, TOutput> : FineTuningBase<T,
 
                 var isDesirable = evaluationData.DesirabilityLabels[i];
                 var input = evaluationData.Inputs[i];
+
+                // Skip if corresponding output array doesn't have this index
+                if (isDesirable && i >= evaluationData.ChosenOutputs.Length) continue;
+                if (!isDesirable && i >= evaluationData.RejectedOutputs.Length) continue;
+
                 var output = isDesirable
-                    ? evaluationData.ChosenOutputs[Math.Min(i, evaluationData.ChosenOutputs.Length - 1)]
-                    : evaluationData.RejectedOutputs[Math.Min(i, evaluationData.RejectedOutputs.Length - 1)];
+                    ? evaluationData.ChosenOutputs[i]
+                    : evaluationData.RejectedOutputs[i];
 
                 var logProb = ComputeLogProbability(model, input, output);
 
@@ -297,9 +302,68 @@ public class KahnemanTverskyOptimization<T, TInput, TOutput> : FineTuningBase<T,
                 // KTO undesirable loss: -weight * (1 - sigmoid(beta * (log_ratio - KL)))
                 var loss = -undesirableWeight * (1 - Sigmoid(beta * (logRatio - klEstimate)));
 
-                // Compute and apply gradients with negative weight for undesirable outputs
+                // Compute and apply gradients for undesirable outputs
+                // Weight is already incorporated in the loss computation
                 var gradients = policyModel.ComputeGradients(input, rejected);
-                policyModel.ApplyGradients(gradients, NumOps.FromDouble(-learningRate * undesirableWeight));
+                policyModel.ApplyGradients(gradients, NumOps.FromDouble(learningRate));
+
+                totalLoss += loss;
+                count++;
+            }
+        }
+        else if (batch.HasUnpairedPreferenceData)
+        {
+            // Handle unpaired preference data with DesirabilityLabels
+            double klEstimate = ComputeBatchKLEstimate(policyModel, batch);
+
+            for (int i = 0; i < batch.DesirabilityLabels.Length; i++)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                if (i >= batch.Inputs.Length) break;
+
+                var isDesirable = batch.DesirabilityLabels[i];
+                var input = batch.Inputs[i];
+
+                // Get the appropriate output based on desirability
+                TOutput output;
+                if (isDesirable)
+                {
+                    if (i >= batch.ChosenOutputs.Length) continue;
+                    output = batch.ChosenOutputs[i];
+                }
+                else
+                {
+                    if (i >= batch.RejectedOutputs.Length) continue;
+                    output = batch.RejectedOutputs[i];
+                }
+
+                var piLogProb = ComputeLogProbability(policyModel, input, output);
+                var refLogProb = ComputeLogProbability(_referenceModel, input, output);
+                var logRatio = piLogProb - refLogProb;
+
+                double loss;
+                if (isDesirable)
+                {
+                    // KTO desirable loss: -weight * sigmoid(beta * (log_ratio - KL))
+                    loss = -desirableWeight * Sigmoid(beta * (logRatio - klEstimate));
+
+                    var gradients = policyModel.ComputeGradients(input, output);
+                    policyModel.ApplyGradients(gradients, NumOps.FromDouble(learningRate));
+                }
+                else
+                {
+                    // KTO undesirable loss: -weight * (1 - sigmoid(beta * (log_ratio - KL)))
+                    loss = -undesirableWeight * (1 - Sigmoid(beta * (logRatio - klEstimate)));
+
+                    // Compute and apply gradients for undesirable outputs
+                    // Weight is already incorporated in the loss computation
+                    var gradients = policyModel.ComputeGradients(input, output);
+                    policyModel.ApplyGradients(gradients, NumOps.FromDouble(learningRate));
+                }
 
                 totalLoss += loss;
                 count++;
