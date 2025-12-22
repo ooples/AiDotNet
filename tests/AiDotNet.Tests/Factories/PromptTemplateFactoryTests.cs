@@ -42,6 +42,8 @@ namespace AiDotNet.Tests.Factories
 
             Assert.Contains("Hello", prompt);
             Assert.Contains("Hola", prompt);
+            Assert.DoesNotContain("Goodbye", prompt);
+            Assert.DoesNotContain("Adios", prompt);
             Assert.Contains("Good morning", prompt);
         }
     }
