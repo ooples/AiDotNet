@@ -1,8 +1,8 @@
 using AiDotNet.Benchmarking.Models;
 using AiDotNet.Configuration;
 using AiDotNet.Data.Loaders;
-using AiDotNet.Evaluation;
 using AiDotNet.Enums;
+using AiDotNet.Evaluation;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;

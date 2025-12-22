@@ -11,9 +11,9 @@ global using AiDotNet.FeatureSelectors;
 global using AiDotNet.FitDetectors;
 global using AiDotNet.FitnessCalculators;
 global using AiDotNet.Helpers;
-global using AiDotNet.Tensors.Helpers;
 global using AiDotNet.KnowledgeDistillation;
 global using AiDotNet.LanguageModels;
+global using AiDotNet.LinearAlgebra;
 global using AiDotNet.LossFunctions;
 global using AiDotNet.MetaLearning;
 global using AiDotNet.MixedPrecision;
@@ -30,13 +30,12 @@ global using AiDotNet.PromptEngineering.Templates;
 global using AiDotNet.Reasoning.Models;
 global using AiDotNet.Regularization;
 global using AiDotNet.RetrievalAugmentedGeneration.Graph;
+global using AiDotNet.Tensors.Helpers;
 global using AiDotNet.Tokenization.Configuration;
 global using AiDotNet.Tokenization.HuggingFace;
 global using AiDotNet.Tokenization.Interfaces;
 global using AiDotNet.Tools;
 global using AiDotNet.UncertaintyQuantification.Layers;
-global using AiDotNet.LinearAlgebra;
-
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.Policies;
 using AiDotNet.AutoML.SearchSpace;
@@ -1081,36 +1080,36 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             }
             else
             {
-                 // Switch on strategy to create appropriate model/optimizer pair
-                 (model, finalOptimizer) = _distributedStrategy switch
-                 {
-                     DistributedStrategy.DDP => CreateDistributedPair(
-                         new DistributedTraining.DDPModel<T, TInput, TOutput>(_model, shardingConfig),
-                         new DistributedTraining.DDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
-                     DistributedStrategy.FSDP => CreateDistributedPair(
-                         new DistributedTraining.FSDPModel<T, TInput, TOutput>(_model, shardingConfig),
-                         new DistributedTraining.FSDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
-                     DistributedStrategy.ZeRO1 => CreateDistributedPair(
-                         new DistributedTraining.ZeRO1Model<T, TInput, TOutput>(_model, shardingConfig),
-                         new DistributedTraining.ZeRO1Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
-                     DistributedStrategy.ZeRO2 => CreateDistributedPair(
-                         new DistributedTraining.ZeRO2Model<T, TInput, TOutput>(_model, shardingConfig),
-                         new DistributedTraining.ZeRO2Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
-                     DistributedStrategy.ZeRO3 => CreateDistributedPair(
-                         new DistributedTraining.ZeRO3Model<T, TInput, TOutput>(_model, shardingConfig),
-                         new DistributedTraining.ZeRO3Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
-                     DistributedStrategy.PipelineParallel => CreateDistributedPair(
-                         new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(_model, shardingConfig),
-                         new DistributedTraining.PipelineParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
-                     DistributedStrategy.TensorParallel => CreateDistributedPair(
-                         new DistributedTraining.TensorParallelModel<T, TInput, TOutput>(_model, shardingConfig),
-                         new DistributedTraining.TensorParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
-                     DistributedStrategy.Hybrid => CreateDistributedPair(
-                         new DistributedTraining.HybridShardedModel<T, TInput, TOutput>(_model, shardingConfig),
-                         new DistributedTraining.HybridShardedOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
-                     _ => throw new InvalidOperationException($"Unsupported distributed strategy: {_distributedStrategy}")
-                 };
-             }
+                // Switch on strategy to create appropriate model/optimizer pair
+                (model, finalOptimizer) = _distributedStrategy switch
+                {
+                    DistributedStrategy.DDP => CreateDistributedPair(
+                        new DistributedTraining.DDPModel<T, TInput, TOutput>(_model, shardingConfig),
+                        new DistributedTraining.DDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                    DistributedStrategy.FSDP => CreateDistributedPair(
+                        new DistributedTraining.FSDPModel<T, TInput, TOutput>(_model, shardingConfig),
+                        new DistributedTraining.FSDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                    DistributedStrategy.ZeRO1 => CreateDistributedPair(
+                        new DistributedTraining.ZeRO1Model<T, TInput, TOutput>(_model, shardingConfig),
+                        new DistributedTraining.ZeRO1Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                    DistributedStrategy.ZeRO2 => CreateDistributedPair(
+                        new DistributedTraining.ZeRO2Model<T, TInput, TOutput>(_model, shardingConfig),
+                        new DistributedTraining.ZeRO2Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                    DistributedStrategy.ZeRO3 => CreateDistributedPair(
+                        new DistributedTraining.ZeRO3Model<T, TInput, TOutput>(_model, shardingConfig),
+                        new DistributedTraining.ZeRO3Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                    DistributedStrategy.PipelineParallel => CreateDistributedPair(
+                        new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(_model, shardingConfig),
+                        new DistributedTraining.PipelineParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                    DistributedStrategy.TensorParallel => CreateDistributedPair(
+                        new DistributedTraining.TensorParallelModel<T, TInput, TOutput>(_model, shardingConfig),
+                        new DistributedTraining.TensorParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                    DistributedStrategy.Hybrid => CreateDistributedPair(
+                        new DistributedTraining.HybridShardedModel<T, TInput, TOutput>(_model, shardingConfig),
+                        new DistributedTraining.HybridShardedOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
+                    _ => throw new InvalidOperationException($"Unsupported distributed strategy: {_distributedStrategy}")
+                };
+            }
         }
 
         bool usePartitionedFederatedData = _federatedLearningOptions != null && federatedClientRanges != null;
@@ -5132,15 +5131,15 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             throw new ArgumentOutOfRangeException(
                 nameof(numberOfClients),
                 "NumberOfClients must not exceed the number of training samples when creating federated partitions.");
-	        }
-	
-	        var indices = Enumerable.Range(0, xMatrix.Rows).ToList();
-	        var rng = randomSeed.HasValue
-	            ? RandomHelper.CreateSeededRandom(randomSeed.Value)
-	            : RandomHelper.CreateSecureRandom();
-	        ShuffleInPlace(indices, rng);
-	
-	        var clientIndices = new List<int>[numberOfClients];
+        }
+
+        var indices = Enumerable.Range(0, xMatrix.Rows).ToList();
+        var rng = randomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(randomSeed.Value)
+            : RandomHelper.CreateSecureRandom();
+        ShuffleInPlace(indices, rng);
+
+        var clientIndices = new List<int>[numberOfClients];
         for (int i = 0; i < numberOfClients; i++)
         {
             clientIndices[i] = new List<int>();

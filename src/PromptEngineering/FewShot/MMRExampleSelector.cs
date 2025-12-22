@@ -40,15 +40,43 @@ namespace AiDotNet.PromptEngineering.FewShot;
 /// </remarks>
 public class MMRExampleSelector<T> : FewShotExampleSelectorBase<T>
 {
-    private readonly Func<string, double[]> _embeddingFunction;
-    private readonly Dictionary<FewShotExample, double[]> _exampleEmbeddings;
-    private readonly double _lambda;
+    private readonly Func<string, Vector<T>> _embeddingFunction;
+    private readonly Dictionary<FewShotExample, Vector<T>> _exampleEmbeddings;
+    private readonly T _lambda;
+
+    /// <summary>
+    /// Initializes a new instance of the MMRExampleSelector class.
+    /// </summary>
+    /// <param name="embeddingModel">Embedding model used to convert text to embedding vectors.</param>
+    public MMRExampleSelector(IEmbeddingModel<T> embeddingModel)
+        : this(embeddingModel is null ? throw new ArgumentNullException(nameof(embeddingModel)) : embeddingModel.Embed, NumOps.FromDouble(0.7))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the MMRExampleSelector class.
+    /// </summary>
+    /// <param name="embeddingModel">Embedding model used to convert text to embedding vectors.</param>
+    /// <param name="lambda">Balance between relevance (1.0) and diversity (0.0).</param>
+    public MMRExampleSelector(IEmbeddingModel<T> embeddingModel, T lambda)
+        : this(embeddingModel is null ? throw new ArgumentNullException(nameof(embeddingModel)) : embeddingModel.Embed, lambda)
+    {
+    }
 
     /// <summary>
     /// Initializes a new instance of the MMRExampleSelector class.
     /// </summary>
     /// <param name="embeddingFunction">Function to convert text to embedding vectors.</param>
-    /// <param name="lambda">Balance between relevance (1.0) and diversity (0.0). Default is 0.7.</param>
+    public MMRExampleSelector(Func<string, Vector<T>> embeddingFunction)
+        : this(embeddingFunction, NumOps.FromDouble(0.7))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the MMRExampleSelector class.
+    /// </summary>
+    /// <param name="embeddingFunction">Function to convert text to embedding vectors.</param>
+    /// <param name="lambda">Balance between relevance (1.0) and diversity (0.0).</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Lambda controls the relevance/diversity tradeoff.
     ///
@@ -60,17 +88,17 @@ public class MMRExampleSelector<T> : FewShotExampleSelectorBase<T>
     /// Experiment to find the best value for your use case.
     /// </para>
     /// </remarks>
-    public MMRExampleSelector(Func<string, double[]> embeddingFunction, double lambda = 0.7)
+    public MMRExampleSelector(Func<string, Vector<T>> embeddingFunction, T lambda)
     {
         _embeddingFunction = embeddingFunction ?? throw new ArgumentNullException(nameof(embeddingFunction));
-        _lambda = Math.Max(0, Math.Min(1, lambda));
-        _exampleEmbeddings = new Dictionary<FewShotExample, double[]>();
+        _lambda = ClampToUnitInterval(lambda);
+        _exampleEmbeddings = new Dictionary<FewShotExample, Vector<T>>();
     }
 
     /// <summary>
     /// Gets the lambda value used for MMR scoring.
     /// </summary>
-    public double Lambda => _lambda;
+    public T Lambda => _lambda;
 
     /// <summary>
     /// Called when an example is added. Pre-computes the embedding.
@@ -95,21 +123,23 @@ public class MMRExampleSelector<T> : FewShotExampleSelectorBase<T>
     {
         var queryEmbedding = _embeddingFunction(query);
         var selected = new List<FewShotExample>();
-        var selectedEmbeddings = new List<double[]>();
+        var selectedEmbeddings = new List<Vector<T>>();
         var remaining = new HashSet<FewShotExample>(Examples);
 
         // Pre-calculate relevance scores
-        var relevanceScores = new Dictionary<FewShotExample, double>();
+        var relevanceScores = new Dictionary<FewShotExample, T>();
         foreach (var example in Examples)
         {
             relevanceScores[example] = CosineSimilarity(queryEmbedding, _exampleEmbeddings[example]);
         }
 
         // Iteratively select examples using MMR
+        var oneMinusLambda = NumOps.Subtract(NumOps.One, _lambda);
         while (selected.Count < count && remaining.Count > 0)
         {
             FewShotExample? bestCandidate = null;
-            double bestScore = double.MinValue;
+            T bestScore = NumOps.Zero;
+            bool hasBestScore = false;
 
             foreach (var candidate in remaining)
             {
@@ -117,20 +147,26 @@ public class MMRExampleSelector<T> : FewShotExampleSelectorBase<T>
                 var relevance = relevanceScores[candidate];
 
                 // Calculate max similarity to already-selected examples
-                double maxSimilarityToSelected = 0;
+                T maxSimilarityToSelected = NumOps.Zero;
                 foreach (var selectedEmbedding in selectedEmbeddings)
                 {
                     var similarity = CosineSimilarity(candidateEmbedding, selectedEmbedding);
-                    maxSimilarityToSelected = Math.Max(maxSimilarityToSelected, similarity);
+                    if (NumOps.GreaterThan(similarity, maxSimilarityToSelected))
+                    {
+                        maxSimilarityToSelected = similarity;
+                    }
                 }
 
                 // MMR score: lambda * relevance - (1 - lambda) * maxSimilarityToSelected
-                var mmrScore = _lambda * relevance - (1 - _lambda) * maxSimilarityToSelected;
+                var mmrScore = NumOps.Subtract(
+                    NumOps.Multiply(_lambda, relevance),
+                    NumOps.Multiply(oneMinusLambda, maxSimilarityToSelected));
 
-                if (mmrScore > bestScore)
+                if (!hasBestScore || NumOps.GreaterThan(mmrScore, bestScore))
                 {
                     bestScore = mmrScore;
                     bestCandidate = candidate;
+                    hasBestScore = true;
                 }
             }
 
@@ -147,30 +183,5 @@ public class MMRExampleSelector<T> : FewShotExampleSelectorBase<T>
         }
 
         return selected.AsReadOnly();
-    }
-
-    /// <summary>
-    /// Calculates cosine similarity between two vectors.
-    /// </summary>
-    private static double CosineSimilarity(double[] a, double[] b)
-    {
-        if (a.Length != b.Length)
-        {
-            throw new ArgumentException("Vectors must have the same length.");
-        }
-
-        double dotProduct = 0;
-        double magnitudeA = 0;
-        double magnitudeB = 0;
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            dotProduct += a[i] * b[i];
-            magnitudeA += a[i] * a[i];
-            magnitudeB += b[i] * b[i];
-        }
-
-        double magnitude = Math.Sqrt(magnitudeA) * Math.Sqrt(magnitudeB);
-        return magnitude > 0 ? dotProduct / magnitude : 0;
     }
 }

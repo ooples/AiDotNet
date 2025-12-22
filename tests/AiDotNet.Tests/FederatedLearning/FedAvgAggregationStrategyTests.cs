@@ -1,9 +1,9 @@
 namespace AiDotNet.Tests.FederatedLearning;
 
-using Xunit;
-using AiDotNet.FederatedLearning.Aggregators;
 using System;
 using System.Collections.Generic;
+using AiDotNet.FederatedLearning.Aggregators;
+using Xunit;
 
 /// <summary>
 /// Unit tests for FedAvg (Federated Averaging) aggregation strategy.

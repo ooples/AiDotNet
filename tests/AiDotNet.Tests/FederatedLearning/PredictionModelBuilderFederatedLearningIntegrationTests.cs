@@ -1,10 +1,10 @@
+using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Regression;
-using AiDotNet.Data.Loaders;
 using Xunit;
 
 namespace AiDotNet.Tests.FederatedLearning;
