@@ -239,6 +239,15 @@ public abstract class TrainingMonitorBase<T> : ITrainingMonitor<T>
         public DateTime StartTime { get; set; }
 
         /// <summary>
+        /// High-resolution start timestamp captured with <see cref="System.Diagnostics.Stopwatch"/>.
+        /// </summary>
+        /// <remarks>
+        /// <b>For Beginners:</b> <see cref="DateTime.UtcNow"/> can have low timer resolution on some platforms.
+        /// This timestamp helps compute elapsed time more reliably for speed statistics.
+        /// </remarks>
+        public long StartTimestamp { get; set; }
+
+        /// <summary>
         /// When the session ended (if ended).
         /// </summary>
         public DateTime? EndTime { get; set; }
