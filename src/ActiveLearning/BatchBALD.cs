@@ -373,7 +373,7 @@ public class BatchBALD<T> : IActiveLearningStrategy<T>
     /// </summary>
     private Tensor<T> AddDropoutNoise(Tensor<T> predictions, double dropoutRate, int seed)
     {
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         var noisyPredictions = new Tensor<T>(predictions.Shape);
 
         for (int i = 0; i < predictions.Length; i++)
