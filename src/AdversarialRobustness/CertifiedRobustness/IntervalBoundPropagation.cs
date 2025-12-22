@@ -565,26 +565,35 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
     }
 
     /// <summary>
-    /// Applies sigmoid activation to a single value.
+    /// Applies sigmoid activation to a single value using numerically stable computation.
     /// </summary>
     private T ApplySigmoid(T x)
     {
-        T negX = NumOps.Negate(x);
-        T expNegX = NumOps.Exp(negX);
-        T onePlusExp = NumOps.Add(NumOps.One, expNegX);
-        return NumOps.Divide(NumOps.One, onePlusExp);
+        // Numerically stable sigmoid: avoid overflow for large |x|
+        // For x >= 0: 1/(1+exp(-x)) - exp(-x) is small, no overflow
+        // For x < 0: exp(x)/(1+exp(x)) - exp(x) is small, no overflow
+        if (NumOps.GreaterThanOrEquals(x, NumOps.Zero))
+        {
+            T expNegX = NumOps.Exp(NumOps.Negate(x));
+            return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegX));
+        }
+        else
+        {
+            T expX = NumOps.Exp(x);
+            return NumOps.Divide(expX, NumOps.Add(NumOps.One, expX));
+        }
     }
 
     /// <summary>
-    /// Applies tanh activation to a single value.
+    /// Applies tanh activation to a single value using numerically stable computation.
     /// </summary>
     private T ApplyTanh(T x)
     {
-        T expX = NumOps.Exp(x);
-        T expNegX = NumOps.Exp(NumOps.Negate(x));
-        T numerator = NumOps.Subtract(expX, expNegX);
-        T denominator = NumOps.Add(expX, expNegX);
-        return NumOps.Divide(numerator, denominator);
+        // Numerically stable tanh using identity: tanh(x) = 2*sigmoid(2x) - 1
+        T twoX = NumOps.Add(x, x);
+        T sigmoid2x = ApplySigmoid(twoX);
+        T two = NumOps.Add(NumOps.One, NumOps.One);
+        return NumOps.Subtract(NumOps.Multiply(two, sigmoid2x), NumOps.One);
     }
 
     /// <summary>
@@ -671,6 +680,16 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
     /// </summary>
     private int GetPredictedClass(Vector<T> output)
     {
+        if (output == null)
+        {
+            throw new ArgumentNullException(nameof(output));
+        }
+
+        if (output.Length == 0)
+        {
+            throw new ArgumentException("Output vector cannot be empty.", nameof(output));
+        }
+
         int predictedClass = 0;
         T maxValue = output[0];
 
