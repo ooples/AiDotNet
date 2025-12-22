@@ -46,7 +46,8 @@ namespace AiDotNet.ContinualLearning.Config;
 /// </remarks>
 public class ContinualLearnerConfig<T> : IContinualLearnerConfig<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static INumericOperations<T>? _numOps;
+    private static INumericOperations<T> NumOps => _numOps ??= MathHelper.GetNumericOperations<T>();
 
     #region Core Training Parameters
 
