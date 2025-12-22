@@ -7,7 +7,6 @@ using AiDotNet.MixedPrecision;
 using AiDotNet.Models;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
-using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.PromptEngineering.FewShot;
 using AiDotNet.Reasoning.Models;
