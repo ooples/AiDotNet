@@ -44,8 +44,10 @@ namespace AiDotNet.PromptEngineering.FewShot;
 /// </remarks>
 public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
 {
-    private readonly Func<string, double[]> _embeddingFunction;
-    private readonly Dictionary<FewShotExample, double[]> _exampleEmbeddings;
+    private const int MaxSelectionCyclesPerCluster = 10;
+
+    private readonly Func<string, Vector<T>> _embeddingFunction;
+    private readonly Dictionary<FewShotExample, Vector<T>> _exampleEmbeddings;
     private readonly int _clusterCount;
     private readonly Random _random;
     private List<List<FewShotExample>> _clusters;
@@ -69,11 +71,22 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
     /// For 1000 examples, try 30-50 clusters.
     /// </para>
     /// </remarks>
-    public ClusterBasedExampleSelector(Func<string, double[]> embeddingFunction, int clusterCount = 5, int? seed = null)
+    public ClusterBasedExampleSelector(IEmbeddingModel<T> embeddingModel, int clusterCount = 5, int? seed = null)
+        : this(embeddingModel is null ? throw new ArgumentNullException(nameof(embeddingModel)) : embeddingModel.Embed, clusterCount, seed)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the ClusterBasedExampleSelector class.
+    /// </summary>
+    /// <param name="embeddingFunction">Function to convert text to embedding vectors.</param>
+    /// <param name="clusterCount">Number of clusters to create.</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    public ClusterBasedExampleSelector(Func<string, Vector<T>> embeddingFunction, int clusterCount = 5, int? seed = null)
     {
         _embeddingFunction = embeddingFunction ?? throw new ArgumentNullException(nameof(embeddingFunction));
         _clusterCount = Math.Max(1, clusterCount);
-        _exampleEmbeddings = new Dictionary<FewShotExample, double[]>();
+        _exampleEmbeddings = new Dictionary<FewShotExample, Vector<T>>();
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         _clusters = new List<List<FewShotExample>>();
         _clustersDirty = true;
@@ -107,7 +120,6 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
     /// </summary>
     protected override IReadOnlyList<FewShotExample> SelectExamplesCore(string query, int count)
     {
-        // Rebuild clusters if needed
         if (_clustersDirty)
         {
             RebuildClusters();
@@ -115,15 +127,14 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
         }
 
         var queryEmbedding = _embeddingFunction(query);
-        var selected = new List<FewShotExample>();
+        var selected = new List<FewShotExample>(count);
 
-        // First pass: select one example from each cluster (round-robin)
-        // Sort clusters by relevance to query
         var clustersByRelevance = _clusters
-            .Select((cluster, index) => new { Cluster = cluster, Index = index })
-            .Where(c => c.Cluster.Count > 0)
-            .OrderByDescending(c => GetClusterRelevance(c.Cluster, queryEmbedding))
+            .Where(cluster => cluster.Count > 0)
+            .Select(cluster => new { Cluster = cluster, Relevance = GetClusterRelevance(cluster, queryEmbedding) })
             .ToList();
+
+        clustersByRelevance.Sort((a, b) => CompareDescending(a.Relevance, b.Relevance));
 
         foreach (var clusterInfo in clustersByRelevance)
         {
@@ -132,33 +143,56 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
                 break;
             }
 
-            // Select the most relevant example from this cluster
-            var bestExample = clusterInfo.Cluster
-                .OrderByDescending(ex => CosineSimilarity(queryEmbedding, _exampleEmbeddings[ex]))
-                .First();
-
-            selected.Add(bestExample);
+            var bestExample = GetMostRelevantExample(clusterInfo.Cluster, queryEmbedding, selected);
+            if (bestExample is not null)
+            {
+                selected.Add(bestExample);
+            }
         }
 
         // Second pass: if we need more, cycle through clusters again
         int cycleIndex = 0;
-        while (selected.Count < count && cycleIndex < clustersByRelevance.Count * 10)
+        while (selected.Count < count && clustersByRelevance.Count > 0 && cycleIndex < clustersByRelevance.Count * MaxSelectionCyclesPerCluster)
         {
             var clusterInfo = clustersByRelevance[cycleIndex % clustersByRelevance.Count];
-            var remaining = clusterInfo.Cluster.Where(ex => !selected.Contains(ex)).ToList();
-
-            if (remaining.Count > 0)
+            var nextBest = GetMostRelevantExample(clusterInfo.Cluster, queryEmbedding, selected);
+            if (nextBest is not null)
             {
-                var nextBest = remaining
-                    .OrderByDescending(ex => CosineSimilarity(queryEmbedding, _exampleEmbeddings[ex]))
-                    .First();
                 selected.Add(nextBest);
             }
 
             cycleIndex++;
         }
 
-        return selected.Take(count).ToList().AsReadOnly();
+        return selected.AsReadOnly();
+    }
+
+    private FewShotExample? GetMostRelevantExample(
+        List<FewShotExample> cluster,
+        Vector<T> queryEmbedding,
+        List<FewShotExample> excluded)
+    {
+        FewShotExample? best = null;
+        T bestScore = NumOps.Zero;
+        bool hasBestScore = false;
+
+        foreach (var example in cluster)
+        {
+            if (excluded.Contains(example))
+            {
+                continue;
+            }
+
+            var score = CosineSimilarity(queryEmbedding, _exampleEmbeddings[example]);
+            if (!hasBestScore || NumOps.GreaterThan(score, bestScore))
+            {
+                best = example;
+                bestScore = score;
+                hasBestScore = true;
+            }
+        }
+
+        return best;
     }
 
     /// <summary>
@@ -221,45 +255,58 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
     /// <summary>
     /// Initializes cluster centroids using k-means++ algorithm.
     /// </summary>
-    private List<double[]> InitializeCentroids(List<double[]> embeddings, int k, int dimension)
+    private List<Vector<T>> InitializeCentroids(List<Vector<T>> embeddings, int k, int dimension)
     {
-        var centroids = new List<double[]>();
+        var centroids = new List<Vector<T>>();
 
         // First centroid: random
         var firstIndex = _random.Next(embeddings.Count);
-        centroids.Add((double[])embeddings[firstIndex].Clone());
+        centroids.Add(new Vector<T>(embeddings[firstIndex]));
 
         // Remaining centroids: k-means++ selection
         while (centroids.Count < k)
         {
-            var distances = new double[embeddings.Count];
-            double totalDistance = 0;
+            var distances = new T[embeddings.Count];
+            T totalDistance = NumOps.Zero;
 
             for (int i = 0; i < embeddings.Count; i++)
             {
-                var minDist = centroids.Min(c => EuclideanDistanceSquared(embeddings[i], c));
+                var minDist = centroids.Count == 0
+                    ? NumOps.Zero
+                    : centroids
+                        .Select(centroid => EuclideanDistanceSquared(embeddings[i], centroid))
+                        .Aggregate((currentMin, dist) => NumOps.LessThan(dist, currentMin) ? dist : currentMin);
+
                 distances[i] = minDist;
-                totalDistance += minDist;
+                totalDistance = NumOps.Add(totalDistance, minDist);
+            }
+
+            if (NumOps.Equals(totalDistance, NumOps.Zero))
+            {
+                var randomIndex = _random.Next(embeddings.Count);
+                centroids.Add(new Vector<T>(embeddings[randomIndex]));
+                continue;
             }
 
             // Select next centroid with probability proportional to distance squared
-            var threshold = _random.NextDouble() * totalDistance;
-            double cumulative = 0;
+            var threshold = NumOps.Multiply(NumOps.FromDouble(_random.NextDouble()), totalDistance);
+            T cumulative = NumOps.Zero;
+            bool selected = false;
+
             for (int i = 0; i < embeddings.Count; i++)
             {
-                cumulative += distances[i];
-                if (cumulative >= threshold)
+                cumulative = NumOps.Add(cumulative, distances[i]);
+                if (NumOps.GreaterThanOrEquals(cumulative, threshold))
                 {
-                    centroids.Add((double[])embeddings[i].Clone());
+                    centroids.Add(new Vector<T>(embeddings[i]));
+                    selected = true;
                     break;
                 }
             }
 
-            // Fallback: if we didn't select one, pick random
-            if (centroids.Count < k && centroids.Count == centroids.Distinct().Count())
+            if (!selected)
             {
-                var randomIndex = _random.Next(embeddings.Count);
-                centroids.Add((double[])embeddings[randomIndex].Clone());
+                centroids.Add(new Vector<T>(embeddings[embeddings.Count - 1]));
             }
         }
 
@@ -269,18 +316,20 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
     /// <summary>
     /// Finds the nearest centroid for an embedding.
     /// </summary>
-    private int FindNearestCentroid(double[] embedding, List<double[]> centroids)
+    private int FindNearestCentroid(Vector<T> embedding, List<Vector<T>> centroids)
     {
         int nearest = 0;
-        double minDistance = double.MaxValue;
+        T minDistance = NumOps.Zero;
+        bool hasMinDistance = false;
 
         for (int i = 0; i < centroids.Count; i++)
         {
             var distance = EuclideanDistanceSquared(embedding, centroids[i]);
-            if (distance < minDistance)
+            if (!hasMinDistance || NumOps.LessThan(distance, minDistance))
             {
                 minDistance = distance;
                 nearest = i;
+                hasMinDistance = true;
             }
         }
 
@@ -290,15 +339,15 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
     /// <summary>
     /// Updates centroids based on current assignments.
     /// </summary>
-    private List<double[]> UpdateCentroids(List<double[]> embeddings, int[] assignments, int k, int dimension)
+    private List<Vector<T>> UpdateCentroids(List<Vector<T>> embeddings, int[] assignments, int k, int dimension)
     {
-        var newCentroids = new List<double[]>();
+        var newCentroids = new List<T[]>();
         var counts = new int[k];
 
         // Initialize new centroids
         for (int i = 0; i < k; i++)
         {
-            newCentroids.Add(new double[dimension]);
+            newCentroids.Add(new T[dimension]);
         }
 
         // Sum up embeddings for each cluster
@@ -308,7 +357,7 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
             counts[cluster]++;
             for (int d = 0; d < dimension; d++)
             {
-                newCentroids[cluster][d] += embeddings[i][d];
+                newCentroids[cluster][d] = NumOps.Add(newCentroids[cluster][d], embeddings[i][d]);
             }
         }
 
@@ -317,65 +366,33 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
         {
             if (counts[i] > 0)
             {
+                var countValue = NumOps.FromDouble(counts[i]);
                 for (int d = 0; d < dimension; d++)
                 {
-                    newCentroids[i][d] /= counts[i];
+                    newCentroids[i][d] = NumOps.Divide(newCentroids[i][d], countValue);
                 }
             }
         }
 
-        return newCentroids;
+        return newCentroids.Select(arr => new Vector<T>(arr)).ToList();
     }
 
     /// <summary>
     /// Gets the average relevance of a cluster to the query.
     /// </summary>
-    private double GetClusterRelevance(List<FewShotExample> cluster, double[] queryEmbedding)
+    private T GetClusterRelevance(List<FewShotExample> cluster, Vector<T> queryEmbedding)
     {
         if (cluster.Count == 0)
         {
-            return 0;
+            return NumOps.Zero;
         }
 
-        return cluster.Average(ex => CosineSimilarity(queryEmbedding, _exampleEmbeddings[ex]));
-    }
-
-    /// <summary>
-    /// Calculates squared Euclidean distance between two vectors.
-    /// </summary>
-    private static double EuclideanDistanceSquared(double[] a, double[] b)
-    {
-        double sum = 0;
-        for (int i = 0; i < a.Length; i++)
+        T sum = NumOps.Zero;
+        foreach (var example in cluster)
         {
-            var diff = a[i] - b[i];
-            sum += diff * diff;
-        }
-        return sum;
-    }
-
-    /// <summary>
-    /// Calculates cosine similarity between two vectors.
-    /// </summary>
-    private static double CosineSimilarity(double[] a, double[] b)
-    {
-        if (a.Length != b.Length)
-        {
-            throw new ArgumentException("Vectors must have the same length.");
+            sum = NumOps.Add(sum, CosineSimilarity(queryEmbedding, _exampleEmbeddings[example]));
         }
 
-        double dotProduct = 0;
-        double magnitudeA = 0;
-        double magnitudeB = 0;
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            dotProduct += a[i] * b[i];
-            magnitudeA += a[i] * a[i];
-            magnitudeB += b[i] * b[i];
-        }
-
-        double magnitude = Math.Sqrt(magnitudeA) * Math.Sqrt(magnitudeB);
-        return magnitude > 0 ? dotProduct / magnitude : 0;
+        return NumOps.Divide(sum, NumOps.FromDouble(cluster.Count));
     }
 }
