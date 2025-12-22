@@ -84,7 +84,7 @@ public class ExperienceReplay<T> : IContinualLearningStrategy<T>
         _replayRatio = replayRatio;
         _strategy = strategy;
         _lambda = lambda;
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         _totalSamplesSeen = 0;
     }
 
