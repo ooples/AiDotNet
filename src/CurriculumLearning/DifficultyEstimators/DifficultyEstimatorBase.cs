@@ -1,6 +1,6 @@
+using AiDotNet.Interfaces;
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.CurriculumLearning.Interfaces;
-using AiDotNet.Interfaces;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.CurriculumLearning.DifficultyEstimators;

@@ -1,7 +1,7 @@
+using AiDotNet.Interfaces;
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.Helpers;
-using AiDotNet.Interfaces;
 
 namespace AiDotNet.ContinualLearning.Memory;
 

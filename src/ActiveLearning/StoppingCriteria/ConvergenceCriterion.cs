@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Helpers;
 

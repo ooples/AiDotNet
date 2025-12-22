@@ -1,5 +1,5 @@
-using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Interfaces;
+using AiDotNet.ActiveLearning.Interfaces;
 
 namespace AiDotNet.CurriculumLearning.Interfaces;
 

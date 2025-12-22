@@ -1,5 +1,6 @@
 using AiDotNet.CurriculumLearning.Interfaces;
 using AiDotNet.Interfaces;
+using AiDotNet.ActiveLearning.Interfaces;
 
 namespace AiDotNet.CurriculumLearning.Schedulers;
 

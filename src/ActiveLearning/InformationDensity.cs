@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ActiveLearning.Interfaces;
 
 namespace AiDotNet.ActiveLearning;
 

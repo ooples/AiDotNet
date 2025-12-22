@@ -1,6 +1,6 @@
+using AiDotNet.Interfaces;
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.ContinualLearning.Results;
-using AiDotNet.Interfaces;
 
 namespace AiDotNet.ContinualLearning.Interfaces;
 
