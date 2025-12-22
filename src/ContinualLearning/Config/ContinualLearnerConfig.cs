@@ -9,9 +9,7 @@ namespace AiDotNet.ContinualLearning.Config;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para><b>For Beginners:</b> This class provides all settings needed for continual learning.
-/// All properties are nullable - when null, industry-standard defaults are applied automatically.
-/// This "zero-config" approach means you can get started quickly while still having full
-/// control when needed.</para>
+/// All properties have industry-standard defaults set in the constructor.</para>
 ///
 /// <para><b>Usage Example:</b>
 /// <code>
@@ -46,243 +44,160 @@ namespace AiDotNet.ContinualLearning.Config;
 /// </remarks>
 public class ContinualLearnerConfig<T> : IContinualLearnerConfig<T>
 {
-    private static INumericOperations<T>? _numOps;
-    private static INumericOperations<T> NumOps => _numOps ??= MathHelper.GetNumericOperations<T>();
-
-    #region Backing Fields for Proper Nullable Semantics
-    // Note: For unconstrained generic T, T? does NOT create Nullable<T> for value types.
-    // Using object? backing fields allows proper null tracking regardless of T being value or reference type.
-    private object? _learningRate;
-    private object? _ewcLambda;
-    private object? _onlineEwcGamma;
-    private object? _distillationTemperature;
-    private object? _distillationWeight;
-    private object? _gemMemoryStrength;
-    private object? _agemMargin;
-    private object? _siC;
-    private object? _siXi;
-    private object? _masLambda;
-    private object? _packNetPruneRatio;
-    private object? _pnnLateralScaling;
-    private object? _biCValidationFraction;
-    private object? _hatSparsity;
-    private object? _hatSmax;
-    private object? _gradientClipNorm;
-    private object? _weightDecay;
-    #endregion
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     #region Core Training Parameters
 
     /// <inheritdoc/>
-    public T? LearningRate
-    {
-        get => _learningRate is T val ? val : default;
-        set => _learningRate = value;
-    }
+    public T LearningRate { get; set; }
 
     /// <inheritdoc/>
-    public int? EpochsPerTask { get; set; }
+    public int EpochsPerTask { get; set; }
 
     /// <inheritdoc/>
-    public int? BatchSize { get; set; }
+    public int BatchSize { get; set; }
 
     #endregion
 
     #region Memory Parameters
 
     /// <inheritdoc/>
-    public int? MemorySize { get; set; }
+    public int MemorySize { get; set; }
 
     /// <inheritdoc/>
-    public int? SamplesPerTask { get; set; }
+    public int SamplesPerTask { get; set; }
 
     /// <inheritdoc/>
-    public MemorySamplingStrategy? MemoryStrategy { get; set; }
+    public MemorySamplingStrategy MemoryStrategy { get; set; }
 
     /// <inheritdoc/>
-    public bool? UsePrioritizedReplay { get; set; }
+    public bool UsePrioritizedReplay { get; set; }
 
     #endregion
 
     #region EWC-Specific Parameters
 
     /// <inheritdoc/>
-    public T? EwcLambda
-    {
-        get => _ewcLambda is T val ? val : default;
-        set => _ewcLambda = value;
-    }
+    public T EwcLambda { get; set; }
 
     /// <inheritdoc/>
-    public int? FisherSamples { get; set; }
+    public int FisherSamples { get; set; }
 
     /// <inheritdoc/>
-    public bool? UseEmpiricalFisher { get; set; }
+    public bool UseEmpiricalFisher { get; set; }
 
     /// <inheritdoc/>
-    public bool? NormalizeFisher { get; set; }
+    public bool NormalizeFisher { get; set; }
 
     #endregion
 
     #region Online-EWC Parameters
 
     /// <inheritdoc/>
-    public T? OnlineEwcGamma
-    {
-        get => _onlineEwcGamma is T val ? val : default;
-        set => _onlineEwcGamma = value;
-    }
+    public T OnlineEwcGamma { get; set; }
 
     #endregion
 
     #region LwF-Specific Parameters
 
     /// <inheritdoc/>
-    public T? DistillationTemperature
-    {
-        get => _distillationTemperature is T val ? val : default;
-        set => _distillationTemperature = value;
-    }
+    public T DistillationTemperature { get; set; }
 
     /// <inheritdoc/>
-    public T? DistillationWeight
-    {
-        get => _distillationWeight is T val ? val : default;
-        set => _distillationWeight = value;
-    }
+    public T DistillationWeight { get; set; }
 
     /// <inheritdoc/>
-    public bool? UseSoftTargets { get; set; }
+    public bool UseSoftTargets { get; set; }
 
     #endregion
 
     #region GEM-Specific Parameters
 
     /// <inheritdoc/>
-    public T? GemMemoryStrength
-    {
-        get => _gemMemoryStrength is T val ? val : default;
-        set => _gemMemoryStrength = value;
-    }
+    public T GemMemoryStrength { get; set; }
 
     /// <inheritdoc/>
-    public T? AGemMargin
-    {
-        get => _agemMargin is T val ? val : default;
-        set => _agemMargin = value;
-    }
+    public T AGemMargin { get; set; }
 
     /// <inheritdoc/>
-    public int? AGemReferenceGradients { get; set; }
+    public int AGemReferenceGradients { get; set; }
 
     #endregion
 
     #region SI-Specific Parameters
 
     /// <inheritdoc/>
-    public T? SiC
-    {
-        get => _siC is T val ? val : default;
-        set => _siC = value;
-    }
+    public T SiC { get; set; }
 
     /// <inheritdoc/>
-    public T? SiXi
-    {
-        get => _siXi is T val ? val : default;
-        set => _siXi = value;
-    }
+    public T SiXi { get; set; }
 
     #endregion
 
     #region MAS-Specific Parameters
 
     /// <inheritdoc/>
-    public T? MasLambda
-    {
-        get => _masLambda is T val ? val : default;
-        set => _masLambda = value;
-    }
+    public T MasLambda { get; set; }
 
     #endregion
 
     #region PackNet-Specific Parameters
 
     /// <inheritdoc/>
-    public T? PackNetPruneRatio
-    {
-        get => _packNetPruneRatio is T val ? val : default;
-        set => _packNetPruneRatio = value;
-    }
+    public T PackNetPruneRatio { get; set; }
 
     /// <inheritdoc/>
-    public int? PackNetRetrainEpochs { get; set; }
+    public int PackNetRetrainEpochs { get; set; }
 
     #endregion
 
     #region Progressive Neural Networks Parameters
 
     /// <inheritdoc/>
-    public bool? PnnUseLateralConnections { get; set; }
+    public bool PnnUseLateralConnections { get; set; }
 
     /// <inheritdoc/>
-    public T? PnnLateralScaling
-    {
-        get => _pnnLateralScaling is T val ? val : default;
-        set => _pnnLateralScaling = value;
-    }
+    public T PnnLateralScaling { get; set; }
 
     #endregion
 
     #region iCaRL-Specific Parameters
 
     /// <inheritdoc/>
-    public int? ICarlExemplarsPerClass { get; set; }
+    public int ICarlExemplarsPerClass { get; set; }
 
     /// <inheritdoc/>
-    public bool? ICarlUseHerding { get; set; }
+    public bool ICarlUseHerding { get; set; }
 
     #endregion
 
     #region BiC-Specific Parameters
 
     /// <inheritdoc/>
-    public T? BiCValidationFraction
-    {
-        get => _biCValidationFraction is T val ? val : default;
-        set => _biCValidationFraction = value;
-    }
+    public T BiCValidationFraction { get; set; }
 
     #endregion
 
     #region HAT-Specific Parameters
 
     /// <inheritdoc/>
-    public T? HatSparsity
-    {
-        get => _hatSparsity is T val ? val : default;
-        set => _hatSparsity = value;
-    }
+    public T HatSparsity { get; set; }
 
     /// <inheritdoc/>
-    public T? HatSmax
-    {
-        get => _hatSmax is T val ? val : default;
-        set => _hatSmax = value;
-    }
+    public T HatSmax { get; set; }
 
     #endregion
 
     #region Evaluation Parameters
 
     /// <inheritdoc/>
-    public bool? ComputeBackwardTransfer { get; set; }
+    public bool ComputeBackwardTransfer { get; set; }
 
     /// <inheritdoc/>
-    public bool? ComputeForwardTransfer { get; set; }
+    public bool ComputeForwardTransfer { get; set; }
 
     /// <inheritdoc/>
-    public int? EvaluationFrequency { get; set; }
+    public int EvaluationFrequency { get; set; }
 
     #endregion
 
@@ -292,316 +207,142 @@ public class ContinualLearnerConfig<T> : IContinualLearnerConfig<T>
     public int? RandomSeed { get; set; }
 
     /// <inheritdoc/>
-    public int? MaxTasks { get; set; }
+    public int MaxTasks { get; set; }
 
     /// <inheritdoc/>
-    public bool? UseGradientClipping { get; set; }
+    public bool UseGradientClipping { get; set; }
 
     /// <inheritdoc/>
-    public T? GradientClipNorm
-    {
-        get => _gradientClipNorm is T val ? val : default;
-        set => _gradientClipNorm = value;
-    }
+    public T GradientClipNorm { get; set; }
 
     /// <inheritdoc/>
-    public bool? UseWeightDecay { get; set; }
+    public bool UseWeightDecay { get; set; }
 
     /// <inheritdoc/>
-    public T? WeightDecay
-    {
-        get => _weightDecay is T val ? val : default;
-        set => _weightDecay = value;
-    }
+    public T WeightDecay { get; set; }
 
     #endregion
 
-    #region Effective Value Getters (apply defaults when null)
-
     /// <summary>
-    /// Gets the effective learning rate (applies default if null).
+    /// Initializes a new instance with industry-standard default values.
     /// </summary>
-    public T GetEffectiveLearningRate() =>
-        _learningRate is T val ? val : NumOps.FromDouble(0.001);
+    public ContinualLearnerConfig()
+    {
+        // Core Training Parameters
+        LearningRate = NumOps.FromDouble(0.001);
+        EpochsPerTask = 10;
+        BatchSize = 32;
 
-    /// <summary>
-    /// Gets the effective epochs per task (applies default if null).
-    /// </summary>
-    public int GetEffectiveEpochsPerTask() =>
-        EpochsPerTask ?? 10;
+        // Memory Parameters
+        MemorySize = 1000;
+        SamplesPerTask = 100; // Default, can be auto-calculated
+        MemoryStrategy = MemorySamplingStrategy.Reservoir;
+        UsePrioritizedReplay = false;
 
-    /// <summary>
-    /// Gets the effective batch size (applies default if null).
-    /// </summary>
-    public int GetEffectiveBatchSize() =>
-        BatchSize ?? 32;
+        // EWC-Specific Parameters
+        EwcLambda = NumOps.FromDouble(1000.0);
+        FisherSamples = 200;
+        UseEmpiricalFisher = true;
+        NormalizeFisher = true;
 
-    /// <summary>
-    /// Gets the effective memory size (applies default if null).
-    /// </summary>
-    public int GetEffectiveMemorySize() =>
-        MemorySize ?? 1000;
+        // Online-EWC Parameters
+        OnlineEwcGamma = NumOps.FromDouble(0.95);
 
-    /// <summary>
-    /// Gets the effective samples per task (applies default if null).
-    /// </summary>
-    public int GetEffectiveSamplesPerTask(int numTasks) =>
-        SamplesPerTask ?? Math.Max(1, GetEffectiveMemorySize() / Math.Max(1, numTasks));
+        // LwF-Specific Parameters
+        DistillationTemperature = NumOps.FromDouble(2.0);
+        DistillationWeight = NumOps.One;
+        UseSoftTargets = true;
 
-    /// <summary>
-    /// Gets the effective memory strategy (applies default if null).
-    /// </summary>
-    public MemorySamplingStrategy GetEffectiveMemoryStrategy() =>
-        MemoryStrategy ?? MemorySamplingStrategy.Reservoir;
+        // GEM-Specific Parameters
+        GemMemoryStrength = NumOps.FromDouble(0.5);
+        AGemMargin = NumOps.Zero;
+        AGemReferenceGradients = 256;
 
-    /// <summary>
-    /// Gets whether to use prioritized replay (applies default if null).
-    /// </summary>
-    public bool GetEffectiveUsePrioritizedReplay() =>
-        UsePrioritizedReplay ?? false;
+        // SI-Specific Parameters
+        SiC = NumOps.FromDouble(0.1);
+        SiXi = NumOps.FromDouble(0.1);
 
-    /// <summary>
-    /// Gets the effective EWC lambda (applies default if null).
-    /// </summary>
-    public T GetEffectiveEwcLambda() =>
-        _ewcLambda is T val ? val : NumOps.FromDouble(1000.0);
+        // MAS-Specific Parameters
+        MasLambda = NumOps.One;
 
-    /// <summary>
-    /// Gets the effective Fisher samples (applies default if null).
-    /// </summary>
-    public int GetEffectiveFisherSamples() =>
-        FisherSamples ?? 200;
+        // PackNet-Specific Parameters
+        PackNetPruneRatio = NumOps.FromDouble(0.75);
+        PackNetRetrainEpochs = 5;
 
-    /// <summary>
-    /// Gets whether to use empirical Fisher (applies default if null).
-    /// </summary>
-    public bool GetEffectiveUseEmpiricalFisher() =>
-        UseEmpiricalFisher ?? true;
+        // Progressive Neural Networks Parameters
+        PnnUseLateralConnections = true;
+        PnnLateralScaling = NumOps.One;
 
-    /// <summary>
-    /// Gets whether to normalize Fisher (applies default if null).
-    /// </summary>
-    public bool GetEffectiveNormalizeFisher() =>
-        NormalizeFisher ?? true;
+        // iCaRL-Specific Parameters
+        ICarlExemplarsPerClass = 20;
+        ICarlUseHerding = true;
 
-    /// <summary>
-    /// Gets the effective Online-EWC gamma (applies default if null).
-    /// </summary>
-    public T GetEffectiveOnlineEwcGamma() =>
-        _onlineEwcGamma is T val ? val : NumOps.FromDouble(0.95);
+        // BiC-Specific Parameters
+        BiCValidationFraction = NumOps.FromDouble(0.1);
 
-    /// <summary>
-    /// Gets the effective distillation temperature (applies default if null).
-    /// </summary>
-    public T GetEffectiveDistillationTemperature() =>
-        _distillationTemperature is T val ? val : NumOps.FromDouble(2.0);
+        // HAT-Specific Parameters
+        HatSparsity = NumOps.FromDouble(0.01);
+        HatSmax = NumOps.FromDouble(400.0);
 
-    /// <summary>
-    /// Gets the effective distillation weight (applies default if null).
-    /// </summary>
-    public T GetEffectiveDistillationWeight() =>
-        _distillationWeight is T val ? val : NumOps.FromDouble(1.0);
+        // Evaluation Parameters
+        ComputeBackwardTransfer = true;
+        ComputeForwardTransfer = true;
+        EvaluationFrequency = 1;
 
-    /// <summary>
-    /// Gets whether to use soft targets (applies default if null).
-    /// </summary>
-    public bool GetEffectiveUseSoftTargets() =>
-        UseSoftTargets ?? true;
-
-    /// <summary>
-    /// Gets the effective GEM memory strength (applies default if null).
-    /// </summary>
-    public T GetEffectiveGemMemoryStrength() =>
-        _gemMemoryStrength is T val ? val : NumOps.FromDouble(0.5);
-
-    /// <summary>
-    /// Gets the effective A-GEM margin (applies default if null).
-    /// </summary>
-    public T GetEffectiveAGemMargin() =>
-        _agemMargin is T val ? val : NumOps.FromDouble(0.0);
-
-    /// <summary>
-    /// Gets the effective A-GEM reference gradients (applies default if null).
-    /// </summary>
-    public int GetEffectiveAGemReferenceGradients() =>
-        AGemReferenceGradients ?? 256;
-
-    /// <summary>
-    /// Gets the effective SI c parameter (applies default if null).
-    /// </summary>
-    public T GetEffectiveSiC() =>
-        _siC is T val ? val : NumOps.FromDouble(0.1);
-
-    /// <summary>
-    /// Gets the effective SI xi parameter (applies default if null).
-    /// </summary>
-    public T GetEffectiveSiXi() =>
-        _siXi is T val ? val : NumOps.FromDouble(0.1);
-
-    /// <summary>
-    /// Gets the effective MAS lambda (applies default if null).
-    /// </summary>
-    public T GetEffectiveMasLambda() =>
-        _masLambda is T val ? val : NumOps.FromDouble(1.0);
-
-    /// <summary>
-    /// Gets the effective PackNet prune ratio (applies default if null).
-    /// </summary>
-    public T GetEffectivePackNetPruneRatio() =>
-        _packNetPruneRatio is T val ? val : NumOps.FromDouble(0.75);
-
-    /// <summary>
-    /// Gets the effective PackNet retrain epochs (applies default if null).
-    /// </summary>
-    public int GetEffectivePackNetRetrainEpochs() =>
-        PackNetRetrainEpochs ?? 5;
-
-    /// <summary>
-    /// Gets whether to use PNN lateral connections (applies default if null).
-    /// </summary>
-    public bool GetEffectivePnnUseLateralConnections() =>
-        PnnUseLateralConnections ?? true;
-
-    /// <summary>
-    /// Gets the effective PNN lateral scaling (applies default if null).
-    /// </summary>
-    public T GetEffectivePnnLateralScaling() =>
-        _pnnLateralScaling is T val ? val : NumOps.FromDouble(1.0);
-
-    /// <summary>
-    /// Gets the effective iCaRL exemplars per class (applies default if null).
-    /// </summary>
-    public int GetEffectiveICarlExemplarsPerClass() =>
-        ICarlExemplarsPerClass ?? 20;
-
-    /// <summary>
-    /// Gets whether to use iCaRL herding (applies default if null).
-    /// </summary>
-    public bool GetEffectiveICarlUseHerding() =>
-        ICarlUseHerding ?? true;
-
-    /// <summary>
-    /// Gets the effective BiC validation fraction (applies default if null).
-    /// </summary>
-    public T GetEffectiveBiCValidationFraction() =>
-        _biCValidationFraction is T val ? val : NumOps.FromDouble(0.1);
-
-    /// <summary>
-    /// Gets the effective HAT sparsity (applies default if null).
-    /// </summary>
-    public T GetEffectiveHatSparsity() =>
-        _hatSparsity is T val ? val : NumOps.FromDouble(0.01);
-
-    /// <summary>
-    /// Gets the effective HAT smax (applies default if null).
-    /// </summary>
-    public T GetEffectiveHatSmax() =>
-        _hatSmax is T val ? val : NumOps.FromDouble(400.0);
-
-    /// <summary>
-    /// Gets whether to compute backward transfer (applies default if null).
-    /// </summary>
-    public bool GetEffectiveComputeBackwardTransfer() =>
-        ComputeBackwardTransfer ?? true;
-
-    /// <summary>
-    /// Gets whether to compute forward transfer (applies default if null).
-    /// </summary>
-    public bool GetEffectiveComputeForwardTransfer() =>
-        ComputeForwardTransfer ?? true;
-
-    /// <summary>
-    /// Gets the effective evaluation frequency (applies default if null).
-    /// </summary>
-    public int GetEffectiveEvaluationFrequency() =>
-        EvaluationFrequency ?? 1;
-
-    /// <summary>
-    /// Gets the effective max tasks (applies default if null).
-    /// </summary>
-    public int GetEffectiveMaxTasks() =>
-        MaxTasks ?? 100;
-
-    /// <summary>
-    /// Gets whether to use gradient clipping (applies default if null).
-    /// </summary>
-    public bool GetEffectiveUseGradientClipping() =>
-        UseGradientClipping ?? false;
-
-    /// <summary>
-    /// Gets the effective gradient clip norm (applies default if null).
-    /// </summary>
-    public T GetEffectiveGradientClipNorm() =>
-        _gradientClipNorm is T val ? val : NumOps.FromDouble(1.0);
-
-    /// <summary>
-    /// Gets whether to use weight decay (applies default if null).
-    /// </summary>
-    public bool GetEffectiveUseWeightDecay() =>
-        UseWeightDecay ?? false;
-
-    /// <summary>
-    /// Gets the effective weight decay (applies default if null).
-    /// </summary>
-    public T GetEffectiveWeightDecay() =>
-        _weightDecay is T val ? val : NumOps.FromDouble(0.0001);
-
-    #endregion
+        // Advanced Parameters
+        RandomSeed = null;
+        MaxTasks = 100;
+        UseGradientClipping = false;
+        GradientClipNorm = NumOps.One;
+        UseWeightDecay = false;
+        WeightDecay = NumOps.FromDouble(0.0001);
+    }
 
     /// <inheritdoc/>
     public bool IsValid()
     {
-        // Validate learning rate if specified (check backing field for proper null semantics)
-        if (_learningRate != null && Convert.ToDouble(_learningRate) <= 0)
+        // Validate learning rate
+        if (NumOps.Compare(LearningRate, NumOps.Zero) <= 0)
             return false;
 
-        // Validate epochs if specified
-        if (EpochsPerTask.HasValue && EpochsPerTask.Value <= 0)
+        // Validate epochs
+        if (EpochsPerTask <= 0)
             return false;
 
-        // Validate batch size if specified
-        if (BatchSize.HasValue && BatchSize.Value <= 0)
+        // Validate batch size
+        if (BatchSize <= 0)
             return false;
 
-        // Validate memory size if specified
-        if (MemorySize.HasValue && MemorySize.Value < 0)
+        // Validate memory size
+        if (MemorySize < 0)
             return false;
 
-        // Validate EWC lambda if specified (check backing field for proper null semantics)
-        if (_ewcLambda != null && Convert.ToDouble(_ewcLambda) < 0)
+        // Validate EWC lambda
+        if (NumOps.Compare(EwcLambda, NumOps.Zero) < 0)
             return false;
 
-        // Validate Fisher samples if specified
-        if (FisherSamples.HasValue && FisherSamples.Value <= 0)
+        // Validate Fisher samples
+        if (FisherSamples <= 0)
             return false;
 
-        // Validate distillation temperature if specified (check backing field for proper null semantics)
-        if (_distillationTemperature != null && Convert.ToDouble(_distillationTemperature) <= 0)
+        // Validate distillation temperature
+        if (NumOps.Compare(DistillationTemperature, NumOps.Zero) <= 0)
             return false;
 
-        // Validate GEM memory strength if specified (check backing field for proper null semantics)
-        if (_gemMemoryStrength != null)
-        {
-            var gemStrength = Convert.ToDouble(_gemMemoryStrength);
-            if (gemStrength < 0 || gemStrength > 1)
-                return false;
-        }
+        // Validate GEM memory strength (0-1)
+        if (NumOps.Compare(GemMemoryStrength, NumOps.Zero) < 0 ||
+            NumOps.Compare(GemMemoryStrength, NumOps.One) > 0)
+            return false;
 
-        // Validate PackNet prune ratio if specified (check backing field for proper null semantics)
-        if (_packNetPruneRatio != null)
-        {
-            var pruneRatio = Convert.ToDouble(_packNetPruneRatio);
-            if (pruneRatio <= 0 || pruneRatio >= 1)
-                return false;
-        }
+        // Validate PackNet prune ratio (0-1 exclusive)
+        if (NumOps.Compare(PackNetPruneRatio, NumOps.Zero) <= 0 ||
+            NumOps.Compare(PackNetPruneRatio, NumOps.One) >= 0)
+            return false;
 
-        // Validate BiC validation fraction if specified (check backing field for proper null semantics)
-        if (_biCValidationFraction != null)
-        {
-            var valFraction = Convert.ToDouble(_biCValidationFraction);
-            if (valFraction <= 0 || valFraction >= 1)
-                return false;
-        }
+        // Validate BiC validation fraction (0-1 exclusive)
+        if (NumOps.Compare(BiCValidationFraction, NumOps.Zero) <= 0 ||
+            NumOps.Compare(BiCValidationFraction, NumOps.One) >= 0)
+            return false;
 
         return true;
     }
@@ -609,39 +350,58 @@ public class ContinualLearnerConfig<T> : IContinualLearnerConfig<T>
     /// <summary>
     /// Creates a configuration optimized for EWC strategy.
     /// </summary>
-    public static ContinualLearnerConfig<T> ForEwc(T? lambda = default, int? fisherSamples = null)
+    /// <param name="lambda">EWC regularization strength. Use NumOps.FromDouble() to convert from double.</param>
+    /// <param name="fisherSamples">Optional number of samples for Fisher Information computation.</param>
+    public static ContinualLearnerConfig<T> ForEwc(T lambda, int? fisherSamples = null)
     {
-        var config = new ContinualLearnerConfig<T>();
-        if (lambda != null)
-            config.EwcLambda = lambda;
+        var config = new ContinualLearnerConfig<T>
+        {
+            EwcLambda = lambda
+        };
         if (fisherSamples.HasValue)
-            config.FisherSamples = fisherSamples;
+            config.FisherSamples = fisherSamples.Value;
         return config;
+    }
+
+    /// <summary>
+    /// Creates a configuration optimized for LwF strategy with default distillation weight.
+    /// </summary>
+    /// <param name="temperature">Distillation temperature. Use NumOps.FromDouble() to convert from double.</param>
+    public static ContinualLearnerConfig<T> ForLwf(T temperature)
+    {
+        return new ContinualLearnerConfig<T>
+        {
+            DistillationTemperature = temperature
+        };
     }
 
     /// <summary>
     /// Creates a configuration optimized for LwF strategy.
     /// </summary>
-    public static ContinualLearnerConfig<T> ForLwf(T? temperature = default, T? weight = default)
+    /// <param name="temperature">Distillation temperature. Use NumOps.FromDouble() to convert from double.</param>
+    /// <param name="weight">Distillation weight.</param>
+    public static ContinualLearnerConfig<T> ForLwf(T temperature, T weight)
     {
-        var config = new ContinualLearnerConfig<T>();
-        if (temperature != null)
-            config.DistillationTemperature = temperature;
-        if (weight != null)
-            config.DistillationWeight = weight;
-        return config;
+        return new ContinualLearnerConfig<T>
+        {
+            DistillationTemperature = temperature,
+            DistillationWeight = weight
+        };
     }
 
     /// <summary>
     /// Creates a configuration optimized for GEM strategy.
     /// </summary>
-    public static ContinualLearnerConfig<T> ForGem(T? memoryStrength = default, int? memorySize = null)
+    /// <param name="memoryStrength">GEM memory strength. Use NumOps.FromDouble() to convert from double.</param>
+    /// <param name="memorySize">Optional memory buffer size.</param>
+    public static ContinualLearnerConfig<T> ForGem(T memoryStrength, int? memorySize = null)
     {
-        var config = new ContinualLearnerConfig<T>();
-        if (memoryStrength != null)
-            config.GemMemoryStrength = memoryStrength;
+        var config = new ContinualLearnerConfig<T>
+        {
+            GemMemoryStrength = memoryStrength
+        };
         if (memorySize.HasValue)
-            config.MemorySize = memorySize;
+            config.MemorySize = memorySize.Value;
         return config;
     }
 
@@ -655,11 +415,11 @@ public class ContinualLearnerConfig<T> : IContinualLearnerConfig<T>
     {
         var config = new ContinualLearnerConfig<T>();
         if (memorySize.HasValue)
-            config.MemorySize = memorySize;
+            config.MemorySize = memorySize.Value;
         if (strategy.HasValue)
-            config.MemoryStrategy = strategy;
+            config.MemoryStrategy = strategy.Value;
         if (prioritized.HasValue)
-            config.UsePrioritizedReplay = prioritized;
+            config.UsePrioritizedReplay = prioritized.Value;
         return config;
     }
 }

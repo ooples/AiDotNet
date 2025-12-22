@@ -203,7 +203,7 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
         }
 
         MemoryBuffer = new ExperienceReplayBuffer<T, TInput, TOutput>(
-            config.MemorySize ?? 1000,
+            config.MemorySize,
             MemorySamplingStrategy.ClassBalanced,
             ReplaySamplingStrategy.TaskBalanced,
             config.RandomSeed);
@@ -280,7 +280,7 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
             }
 
             // Store examples in memory buffer
-            var memorySize = Configuration.MemorySize ?? 1000;
+            var memorySize = Configuration.MemorySize;
             if (memorySize > 0)
             {
                 int samplesPerTask = Math.Max(1, memorySize / (_tasksLearned + 1));

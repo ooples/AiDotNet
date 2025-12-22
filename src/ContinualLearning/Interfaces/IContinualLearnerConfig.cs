@@ -6,8 +6,7 @@ namespace AiDotNet.ContinualLearning.Interfaces;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para><b>For Beginners:</b> This interface defines the settings needed for continual learning,
-/// such as learning rates, memory constraints, and regularization parameters. All properties
-/// are nullable - when null, industry-standard defaults are applied automatically.</para>
+/// such as learning rates, memory constraints, and regularization parameters.</para>
 ///
 /// <para><b>Continual Learning</b> is the ability to learn new tasks sequentially without
 /// forgetting previously learned knowledge. This is challenging because neural networks
@@ -38,7 +37,7 @@ public interface IContinualLearnerConfig<T>
     /// Lower values (e.g., 0.0001) mean slower but more stable learning.
     /// Higher values (e.g., 0.01) mean faster but potentially unstable learning.</para>
     /// </remarks>
-    T? LearningRate { get; }
+    T LearningRate { get; }
 
     /// <summary>
     /// Number of training epochs per task. Default: 10.
@@ -47,7 +46,7 @@ public interface IContinualLearnerConfig<T>
     /// <para><b>For Beginners:</b> One epoch means the model sees all training data once.
     /// More epochs can improve learning but may also cause overfitting.</para>
     /// </remarks>
-    int? EpochsPerTask { get; }
+    int EpochsPerTask { get; }
 
     /// <summary>
     /// Batch size for training. Default: 32.
@@ -56,7 +55,7 @@ public interface IContinualLearnerConfig<T>
     /// <para><b>For Beginners:</b> Number of samples processed together before updating weights.
     /// Larger batches are more stable but use more memory. Common values: 16, 32, 64, 128.</para>
     /// </remarks>
-    int? BatchSize { get; }
+    int BatchSize { get; }
 
     #endregion
 
@@ -69,22 +68,22 @@ public interface IContinualLearnerConfig<T>
     /// <para><b>For Beginners:</b> How many old examples to keep for experience replay.
     /// More examples reduce forgetting but use more memory.</para>
     /// </remarks>
-    int? MemorySize { get; }
+    int MemorySize { get; }
 
     /// <summary>
     /// Number of samples per task to store in memory. Default: auto-calculated based on MemorySize.
     /// </summary>
-    int? SamplesPerTask { get; }
+    int SamplesPerTask { get; }
 
     /// <summary>
     /// Memory sampling strategy. Default: Reservoir.
     /// </summary>
-    MemorySamplingStrategy? MemoryStrategy { get; }
+    MemorySamplingStrategy MemoryStrategy { get; }
 
     /// <summary>
     /// Use prioritized experience replay based on sample importance. Default: false.
     /// </summary>
-    bool? UsePrioritizedReplay { get; }
+    bool UsePrioritizedReplay { get; }
 
     #endregion
 
@@ -98,22 +97,22 @@ public interface IContinualLearnerConfig<T>
     /// Higher values (e.g., 5000) prevent more forgetting but may reduce plasticity.</para>
     /// <para><b>Reference:</b> Kirkpatrick et al. "Overcoming catastrophic forgetting in neural networks" (2017)</para>
     /// </remarks>
-    T? EwcLambda { get; }
+    T EwcLambda { get; }
 
     /// <summary>
     /// Number of samples for Fisher Information computation. Default: 200.
     /// </summary>
-    int? FisherSamples { get; }
+    int FisherSamples { get; }
 
     /// <summary>
     /// Use empirical Fisher (gradient squared) vs true Fisher. Default: true.
     /// </summary>
-    bool? UseEmpiricalFisher { get; }
+    bool UseEmpiricalFisher { get; }
 
     /// <summary>
     /// Normalize Fisher Information matrix. Default: true.
     /// </summary>
-    bool? NormalizeFisher { get; }
+    bool NormalizeFisher { get; }
 
     #endregion
 
@@ -127,7 +126,7 @@ public interface IContinualLearnerConfig<T>
     /// Higher values (closer to 1) maintain more memory of old tasks.</para>
     /// <para><b>Reference:</b> Schwarz et al. "Progress & Compress" (2018)</para>
     /// </remarks>
-    T? OnlineEwcGamma { get; }
+    T OnlineEwcGamma { get; }
 
     #endregion
 
@@ -141,17 +140,17 @@ public interface IContinualLearnerConfig<T>
     /// capturing more information about relative class similarities.</para>
     /// <para><b>Reference:</b> Li and Hoiem "Learning without Forgetting" (2017)</para>
     /// </remarks>
-    T? DistillationTemperature { get; }
+    T DistillationTemperature { get; }
 
     /// <summary>
     /// Weight for distillation loss vs task loss. Default: 1.0.
     /// </summary>
-    T? DistillationWeight { get; }
+    T DistillationWeight { get; }
 
     /// <summary>
     /// Use soft targets from teacher model. Default: true.
     /// </summary>
-    bool? UseSoftTargets { get; }
+    bool UseSoftTargets { get; }
 
     #endregion
 
@@ -165,7 +164,7 @@ public interface IContinualLearnerConfig<T>
     /// Higher values more strictly prevent any increase in loss on old tasks.</para>
     /// <para><b>Reference:</b> Lopez-Paz and Ranzato "Gradient Episodic Memory for Continual Learning" (2017)</para>
     /// </remarks>
-    T? GemMemoryStrength { get; }
+    T GemMemoryStrength { get; }
 
     /// <summary>
     /// Margin for A-GEM (Averaged GEM). Default: 0.0.
@@ -173,12 +172,12 @@ public interface IContinualLearnerConfig<T>
     /// <remarks>
     /// <para><b>Reference:</b> Chaudhry et al. "Efficient Lifelong Learning with A-GEM" (2019)</para>
     /// </remarks>
-    T? AGemMargin { get; }
+    T AGemMargin { get; }
 
     /// <summary>
     /// Number of reference gradients for A-GEM. Default: 256.
     /// </summary>
-    int? AGemReferenceGradients { get; }
+    int AGemReferenceGradients { get; }
 
     #endregion
 
@@ -190,12 +189,12 @@ public interface IContinualLearnerConfig<T>
     /// <remarks>
     /// <para><b>Reference:</b> Zenke et al. "Continual Learning Through Synaptic Intelligence" (2017)</para>
     /// </remarks>
-    T? SiC { get; }
+    T SiC { get; }
 
     /// <summary>
     /// SI dampening factor (xi). Default: 0.1.
     /// </summary>
-    T? SiXi { get; }
+    T SiXi { get; }
 
     #endregion
 
@@ -207,7 +206,7 @@ public interface IContinualLearnerConfig<T>
     /// <remarks>
     /// <para><b>Reference:</b> Aljundi et al. "Memory Aware Synapses" (2018)</para>
     /// </remarks>
-    T? MasLambda { get; }
+    T MasLambda { get; }
 
     #endregion
 
@@ -220,12 +219,12 @@ public interface IContinualLearnerConfig<T>
     /// <para>Fraction of weights to prune after each task, freeing capacity for new tasks.</para>
     /// <para><b>Reference:</b> Mallya and Lazebnik "PackNet" (2018)</para>
     /// </remarks>
-    T? PackNetPruneRatio { get; }
+    T PackNetPruneRatio { get; }
 
     /// <summary>
     /// Retrain epochs after pruning. Default: 5.
     /// </summary>
-    int? PackNetRetrainEpochs { get; }
+    int PackNetRetrainEpochs { get; }
 
     #endregion
 
@@ -237,12 +236,12 @@ public interface IContinualLearnerConfig<T>
     /// <remarks>
     /// <para><b>Reference:</b> Rusu et al. "Progressive Neural Networks" (2016)</para>
     /// </remarks>
-    bool? PnnUseLateralConnections { get; }
+    bool PnnUseLateralConnections { get; }
 
     /// <summary>
     /// Lateral connection scaling factor. Default: 1.0.
     /// </summary>
-    T? PnnLateralScaling { get; }
+    T PnnLateralScaling { get; }
 
     #endregion
 
@@ -254,12 +253,12 @@ public interface IContinualLearnerConfig<T>
     /// <remarks>
     /// <para><b>Reference:</b> Rebuffi et al. "iCaRL: Incremental Classifier and Representation Learning" (2017)</para>
     /// </remarks>
-    int? ICarlExemplarsPerClass { get; }
+    int ICarlExemplarsPerClass { get; }
 
     /// <summary>
     /// Use herding for exemplar selection. Default: true.
     /// </summary>
-    bool? ICarlUseHerding { get; }
+    bool ICarlUseHerding { get; }
 
     #endregion
 
@@ -271,7 +270,7 @@ public interface IContinualLearnerConfig<T>
     /// <remarks>
     /// <para><b>Reference:</b> Wu et al. "Large Scale Incremental Learning" (2019)</para>
     /// </remarks>
-    T? BiCValidationFraction { get; }
+    T BiCValidationFraction { get; }
 
     #endregion
 
@@ -283,12 +282,12 @@ public interface IContinualLearnerConfig<T>
     /// <remarks>
     /// <para><b>Reference:</b> Serra et al. "Overcoming Catastrophic Forgetting with Hard Attention to the Task" (2018)</para>
     /// </remarks>
-    T? HatSparsity { get; }
+    T HatSparsity { get; }
 
     /// <summary>
     /// Smax value for gradient-based attention. Default: 400.
     /// </summary>
-    T? HatSmax { get; }
+    T HatSmax { get; }
 
     #endregion
 
@@ -297,17 +296,17 @@ public interface IContinualLearnerConfig<T>
     /// <summary>
     /// Compute backward transfer metric. Default: true.
     /// </summary>
-    bool? ComputeBackwardTransfer { get; }
+    bool ComputeBackwardTransfer { get; }
 
     /// <summary>
     /// Compute forward transfer metric. Default: true.
     /// </summary>
-    bool? ComputeForwardTransfer { get; }
+    bool ComputeForwardTransfer { get; }
 
     /// <summary>
     /// Evaluation frequency (every N epochs). Default: 1.
     /// </summary>
-    int? EvaluationFrequency { get; }
+    int EvaluationFrequency { get; }
 
     #endregion
 
@@ -321,27 +320,27 @@ public interface IContinualLearnerConfig<T>
     /// <summary>
     /// Maximum number of tasks to support. Default: 100.
     /// </summary>
-    int? MaxTasks { get; }
+    int MaxTasks { get; }
 
     /// <summary>
     /// Enable gradient clipping. Default: false.
     /// </summary>
-    bool? UseGradientClipping { get; }
+    bool UseGradientClipping { get; }
 
     /// <summary>
     /// Gradient clipping max norm. Default: 1.0.
     /// </summary>
-    T? GradientClipNorm { get; }
+    T GradientClipNorm { get; }
 
     /// <summary>
     /// Enable weight decay regularization. Default: false.
     /// </summary>
-    bool? UseWeightDecay { get; }
+    bool UseWeightDecay { get; }
 
     /// <summary>
     /// Weight decay coefficient. Default: 0.0001.
     /// </summary>
-    T? WeightDecay { get; }
+    T WeightDecay { get; }
 
     #endregion
 
@@ -350,56 +349,4 @@ public interface IContinualLearnerConfig<T>
     /// </summary>
     /// <returns>True if the configuration is valid; otherwise, false.</returns>
     bool IsValid();
-}
-
-/// <summary>
-/// Memory sampling strategies for experience replay.
-/// </summary>
-public enum MemorySamplingStrategy
-{
-    /// <summary>
-    /// Reservoir sampling - uniform random selection.
-    /// Each item has equal probability of being selected.
-    /// </summary>
-    Reservoir,
-
-    /// <summary>
-    /// Random uniform sampling from the dataset.
-    /// Simple but effective for homogeneous data.
-    /// </summary>
-    Random,
-
-    /// <summary>
-    /// Ring buffer - FIFO replacement.
-    /// </summary>
-    RingBuffer,
-
-    /// <summary>
-    /// Class-balanced sampling ensures equal representation of each class.
-    /// Best for imbalanced datasets to prevent bias toward majority classes.
-    /// </summary>
-    ClassBalanced,
-
-    /// <summary>
-    /// Herding-based selection picks examples closest to class means.
-    /// From iCaRL paper - provides exemplars that well represent the class distribution.
-    /// </summary>
-    Herding,
-
-    /// <summary>
-    /// K-Center coreset selection maximizes coverage of the feature space.
-    /// Picks examples that minimize maximum distance to any unselected point.
-    /// </summary>
-    KCenter,
-
-    /// <summary>
-    /// Boundary-focused sampling selects examples near decision boundaries.
-    /// Prioritizes hard-to-classify examples for better discrimination.
-    /// </summary>
-    Boundary,
-
-    /// <summary>
-    /// Gradient-based sample selection.
-    /// </summary>
-    GradientBased
 }

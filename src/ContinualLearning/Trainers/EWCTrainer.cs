@@ -154,9 +154,9 @@ public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
         int earlyStoppingPatience)
     {
         var taskId = _tasksLearned;
-        var batchSize = Configuration.BatchSize ?? 32;
+        var batchSize = Configuration.BatchSize;
         var numSamples = taskData.Count;
-        var epochsPerTask = Configuration.EpochsPerTask ?? 10;
+        var epochsPerTask = Configuration.EpochsPerTask;
 
         var lossHistory = new List<T>();
         var regLossHistory = new List<T>();

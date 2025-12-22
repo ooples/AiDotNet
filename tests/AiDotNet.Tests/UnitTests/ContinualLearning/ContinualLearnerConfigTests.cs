@@ -91,55 +91,43 @@ public class ContinualLearnerConfigTests
     }
 
     [Fact]
-    public void GetEffectiveLearningRate_NullValue_ReturnsDefault()
+    public void Constructor_SetsDefaultLearningRate()
     {
-        // Arrange
+        // Arrange & Act
         var config = new ContinualLearnerConfig<double>();
 
-        // Act
-        var effectiveLR = config.GetEffectiveLearningRate();
-
-        // Assert
-        Assert.Equal(0.001, effectiveLR);
+        // Assert - default is 0.001 (industry standard for Adam optimizer)
+        Assert.Equal(0.001, config.LearningRate);
     }
 
     [Fact]
-    public void GetEffectiveBatchSize_NullValue_ReturnsDefault()
+    public void Constructor_SetsDefaultBatchSize()
     {
-        // Arrange
+        // Arrange & Act
         var config = new ContinualLearnerConfig<double>();
 
-        // Act
-        var effectiveBatchSize = config.GetEffectiveBatchSize();
-
-        // Assert
-        Assert.Equal(32, effectiveBatchSize);
+        // Assert - default is 32 (balance of speed and gradient noise)
+        Assert.Equal(32, config.BatchSize);
     }
 
     [Fact]
-    public void GetEffectiveEpochsPerTask_NullValue_ReturnsDefault()
+    public void Constructor_SetsDefaultEpochsPerTask()
     {
-        // Arrange
+        // Arrange & Act
         var config = new ContinualLearnerConfig<double>();
 
-        // Act
-        var effectiveEpochs = config.GetEffectiveEpochsPerTask();
-
-        // Assert
-        Assert.Equal(10, effectiveEpochs);
+        // Assert - default is 10
+        Assert.Equal(10, config.EpochsPerTask);
     }
 
     [Fact]
-    public void GetEffectiveEwcLambda_NullValue_ReturnsDefault()
+    public void Constructor_SetsDefaultEwcLambda()
     {
-        // Arrange
+        // Arrange & Act
         var config = new ContinualLearnerConfig<double>();
 
-        // Act
-        var effectiveLambda = config.GetEffectiveEwcLambda();
-
-        // Assert
-        Assert.Equal(1000.0, effectiveLambda);
+        // Assert - default is 1000.0 (based on Kirkpatrick et al. 2017)
+        Assert.Equal(1000.0, config.EwcLambda);
     }
 
     [Fact]
