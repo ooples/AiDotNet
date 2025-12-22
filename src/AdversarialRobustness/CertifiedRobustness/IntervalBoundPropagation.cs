@@ -519,15 +519,12 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
                     T alpha = NumOps.FromDouble(0.01);
                     outputLower[i] = PropagateLeakyReLU(lower[i], alpha);
                     outputUpper[i] = PropagateLeakyReLU(upper[i], alpha);
-                    // Handle crossing zero
+                    // Handle crossing zero - ensure proper ordering when bounds straddle zero
                     if (NumOps.LessThan(lower[i], NumOps.Zero) &&
-                        NumOps.GreaterThan(upper[i], NumOps.Zero))
+                        NumOps.GreaterThan(upper[i], NumOps.Zero) &&
+                        NumOps.GreaterThan(outputLower[i], outputUpper[i]))
                     {
-                        // Ensure proper ordering
-                        if (NumOps.GreaterThan(outputLower[i], outputUpper[i]))
-                        {
-                            (outputLower[i], outputUpper[i]) = (outputUpper[i], outputLower[i]);
-                        }
+                        (outputLower[i], outputUpper[i]) = (outputUpper[i], outputLower[i]);
                     }
                     break;
 
@@ -678,14 +675,12 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
 
         for (int i = 0; i < upperBounds.Length; i++)
         {
-            if (i != predictedClass)
+            // If any other class's upper bound >= predicted class's lower bound,
+            // we cannot certify robustness
+            if (i != predictedClass &&
+                NumOps.GreaterThanOrEquals(upperBounds[i], predictedLower))
             {
-                // If any other class's upper bound >= predicted class's lower bound,
-                // we cannot certify robustness
-                if (NumOps.GreaterThanOrEquals(upperBounds[i], predictedLower))
-                {
-                    return false;
-                }
+                return false;
             }
         }
 
@@ -741,12 +736,10 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
 
         for (int i = 0; i < upperBounds.Length; i++)
         {
-            if (i != predictedClass)
+            if (i != predictedClass &&
+                NumOps.GreaterThan(upperBounds[i], maxOtherUpper))
             {
-                if (NumOps.GreaterThan(upperBounds[i], maxOtherUpper))
-                {
-                    maxOtherUpper = upperBounds[i];
-                }
+                maxOtherUpper = upperBounds[i];
             }
         }
 

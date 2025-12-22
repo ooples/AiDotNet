@@ -139,16 +139,10 @@ public class FGSMAttack<T> : AdversarialAttackBase<T>
         var outputGradient = new Vector<T>(output.Length);
         for (int i = 0; i < output.Length; i++)
         {
-            if (i == targetClass)
-            {
-                // ∂L/∂z[target] = p[target] - 1
-                outputGradient[i] = NumOps.Subtract(probabilities[i], NumOps.One);
-            }
-            else
-            {
-                // ∂L/∂z[i] = p[i]
-                outputGradient[i] = probabilities[i];
-            }
+            // Gradient: ∂L/∂z[target] = p[target] - 1, ∂L/∂z[i] = p[i] for i != target
+            outputGradient[i] = i == targetClass
+                ? NumOps.Subtract(probabilities[i], NumOps.One)
+                : probabilities[i];
         }
 
         // Backpropagate to get input gradient
@@ -238,10 +232,19 @@ public class FGSMAttack<T> : AdversarialAttackBase<T>
             sum += expVal;
         }
 
-        // Normalize
+        // Edge case: if sum is zero or negative (shouldn't happen with valid inputs),
+        // fall back to uniform distribution to avoid NaN/Infinity values
         if (sum <= 0.0)
+        {
+            var uniform = NumOps.FromDouble(1.0 / logits.Length);
+            for (int i = 0; i < probabilities.Length; i++)
+            {
+                probabilities[i] = uniform;
+            }
             return probabilities;
+        }
 
+        // Normalize to get valid probability distribution
         for (int i = 0; i < probabilities.Length; i++)
         {
             probabilities[i] = NumOps.FromDouble(NumOps.ToDouble(probabilities[i]) / sum);

@@ -112,6 +112,7 @@ public class ModelCardTests
 
         Assert.Equal(2, card.OutOfScopeUses.Count);
         Assert.Contains("Medical diagnosis", card.OutOfScopeUses);
+        Assert.Contains("Legal advice", card.OutOfScopeUses);
     }
 
     [Fact]
@@ -301,17 +302,9 @@ public class ModelCardTests
         var card = new ModelCard();
         var result = card.Generate();
 
-        // TrainingData section should show "Not specified"
-        var lines = result.Split('\n');
-        var foundSection = false;
-        foreach (var line in lines)
-        {
-            if (line.Contains("## Training Data"))
-            {
-                foundSection = true;
-            }
-        }
-        Assert.True(foundSection);
+        // TrainingData section should exist and show "Not specified"
+        Assert.Contains("## Training Data", result);
+        Assert.Contains("Not specified", result);
     }
 
     [Fact]

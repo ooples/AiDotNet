@@ -34,8 +34,8 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(100);
 
     private SafetyFilterOptions<T> options;
-    private List<string> jailbreakPatterns;
-    private Dictionary<string, List<string>> harmfulContentPatterns;
+    private readonly List<string> jailbreakPatterns;
+    private readonly Dictionary<string, List<string>> harmfulContentPatterns;
 
     /// <summary>
     /// Initializes a new instance of the safety filter.
@@ -309,7 +309,10 @@ public class SafetyFilter<T> : ISafetyFilter<T>
         if (matchedPatterns > 0)
         {
             result.JailbreakDetected = true;
-            result.ConfidenceScore = Math.Min(1.0, (double)matchedPatterns / totalPatterns * 2.0);
+            // Guard against division by zero when totalPatterns is 0
+            result.ConfidenceScore = totalPatterns > 0
+                ? Math.Min(1.0, (double)matchedPatterns / totalPatterns * 2.0)
+                : 1.0; // If no patterns but somehow matched, max confidence
             result.Severity = result.ConfidenceScore;
             result.JailbreakType = matchedPatterns > 2 ? "Sophisticated" : "Basic";
             result.RecommendedActions = new[] { "Block", "Log", "Alert" };
@@ -371,7 +374,10 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 
             if (matchCount > 0)
             {
-                var categoryScore = Math.Min(1.0, (double)matchCount / patterns.Count);
+                // Guard against division by zero when patterns.Count is 0
+                var categoryScore = patterns.Count > 0
+                    ? Math.Min(1.0, (double)matchCount / patterns.Count)
+                    : 1.0; // If no patterns but somehow matched, max score
                 result.CategoryScores[category] = categoryScore;
                 result.HarmScore = Math.Max(result.HarmScore, categoryScore);
             }

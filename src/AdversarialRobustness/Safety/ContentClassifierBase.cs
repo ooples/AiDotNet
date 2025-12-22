@@ -44,7 +44,7 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
     protected ContentClassifierBase(double threshold = 0.5, string[]? categories = null)
     {
         DetectionThreshold = NumOps.FromDouble(threshold);
-        SupportedCategories = categories ?? GetDefaultCategories();
+        SupportedCategories = categories ?? DefaultCategories;
     }
 
     /// <inheritdoc/>
@@ -124,11 +124,16 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
             return vector;
         }
 
-        // Count character frequencies (normalized)
-        foreach (char c in text)
+        // Count character frequencies using LINQ for clarity
+        // Group characters by their index position and count occurrences
+        var charCounts = text
+            .Select(c => Math.Min((int)c, VectorSize - 1))
+            .GroupBy(index => index)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        foreach (var kvp in charCounts)
         {
-            int index = Math.Min((int)c, VectorSize - 1);
-            vector[index] = NumOps.Add(vector[index], NumOps.One);
+            vector[kvp.Key] = NumOps.FromDouble(kvp.Value);
         }
 
         // Normalize
@@ -204,21 +209,21 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
     }
 
     /// <summary>
-    /// Gets the default categories for content classification.
+    /// The default categories for content classification.
     /// </summary>
-    /// <returns>Array of default category names.</returns>
-    protected virtual string[] GetDefaultCategories()
+    /// <remarks>
+    /// Used as a static constant to avoid virtual calls in constructor.
+    /// Subclasses can provide their own categories via the constructor parameter.
+    /// </remarks>
+    protected static readonly string[] DefaultCategories = new[]
     {
-        return new[]
-        {
-            "Safe",
-            "Toxic",
-            "Violence",
-            "HateSpeech",
-            "AdultContent",
-            "Harassment",
-            "SelfHarm",
-            "PrivateInformation"
-        };
-    }
+        "Safe",
+        "Toxic",
+        "Violence",
+        "HateSpeech",
+        "AdultContent",
+        "Harassment",
+        "SelfHarm",
+        "PrivateInformation"
+    };
 }

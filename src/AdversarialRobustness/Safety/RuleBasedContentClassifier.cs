@@ -64,6 +64,17 @@ public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>Important:</b> Vector classification is limited for rule-based pattern matching.
+    /// This classifier uses regex patterns that match text content. When classifying vectors,
+    /// the original text content is not recoverable, so pattern matching cannot detect
+    /// harmful content effectively.
+    /// </para>
+    /// <para>
+    /// For reliable harmful content detection, use <see cref="ClassifyText(string)"/> instead.
+    /// </para>
+    /// </remarks>
     public override ContentClassificationResult<T> Classify(Vector<T> content)
     {
         if (content == null)
@@ -71,9 +82,19 @@ public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
             throw new ArgumentNullException(nameof(content));
         }
 
-        // Convert vector back to text for pattern matching
-        string text = VectorToText(content);
-        return ClassifyTextInternal(text);
+        // Rule-based pattern matching requires original text, not numeric vector representations.
+        // Vector classification cannot effectively detect harmful content since regex patterns
+        // are designed to match text strings (e.g., "kill", "hate"), not numeric values.
+        // Return a "safe" result with zero confidence to indicate no meaningful classification was possible.
+        return new ContentClassificationResult<T>
+        {
+            IsHarmful = false,
+            OverallConfidence = NumOps.Zero, // Zero confidence indicates no detection was possible
+            PrimaryCategory = "Unknown",
+            DetectedCategories = Array.Empty<string>(),
+            RecommendedAction = "Review",
+            CategoryScores = new Dictionary<string, T>()
+        };
     }
 
     /// <inheritdoc/>
@@ -203,9 +224,9 @@ public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
     /// <param name="category">The category to clear.</param>
     public void ClearCategory(string category)
     {
-        if (_categoryPatterns.ContainsKey(category))
+        if (_categoryPatterns.TryGetValue(category, out var patterns))
         {
-            _categoryPatterns[category].Clear();
+            patterns.Clear();
         }
     }
 
@@ -247,23 +268,6 @@ public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
         }
 
         return CreateResultFromScores(categoryScores);
-    }
-
-    private static string VectorToText(Vector<T> vector)
-    {
-        // Simple conversion for rule-based classifier
-        var sb = new StringBuilder();
-        for (int i = 0; i < vector.Length; i++)
-        {
-            double val = NumOps.ToDouble(vector[i]);
-            if (val > 0)
-            {
-                sb.Append(val.ToString("F2"));
-                sb.Append(' ');
-            }
-        }
-
-        return sb.ToString();
     }
 
     private void InitializeDefaultPatterns()

@@ -1223,8 +1223,6 @@ public static class StatisticsHelper<T>
         // Use bisection method for robustness
         // Bisection is guaranteed to converge for monotonic functions like CDF
         double p = _numOps.ToDouble(probability);
-        double a = _numOps.ToDouble(alpha);
-        double b = _numOps.ToDouble(beta);
 
         double lo = 0.0;
         double hi = 1.0;
@@ -1294,33 +1292,21 @@ public static class StatisticsHelper<T>
         T alpha = _numOps.Subtract(_numOps.One, confidence);
         T alphaHalf = _numOps.Divide(alpha, _numOps.FromDouble(2));
 
-        T lower, upper;
-
         // Lower bound: use Beta distribution with parameters (successes, trials - successes + 1)
-        if (successes == 0)
-        {
-            lower = _numOps.Zero;
-        }
-        else
-        {
-            // Lower bound is the alpha/2 quantile of Beta(successes, trials - successes + 1)
-            lower = CalculateInverseBetaCDF(alphaHalf,
+        // When successes is 0, lower bound is 0; otherwise use inverse Beta CDF
+        T lower = successes == 0
+            ? _numOps.Zero
+            : CalculateInverseBetaCDF(alphaHalf,
                 _numOps.FromDouble(successes),
                 _numOps.FromDouble(trials - successes + 1));
-        }
 
         // Upper bound: use Beta distribution with parameters (successes + 1, trials - successes)
-        if (successes == trials)
-        {
-            upper = _numOps.One;
-        }
-        else
-        {
-            // Upper bound is the (1 - alpha/2) quantile of Beta(successes + 1, trials - successes)
-            upper = CalculateInverseBetaCDF(_numOps.Subtract(_numOps.One, alphaHalf),
+        // When successes equals trials, upper bound is 1; otherwise use inverse Beta CDF
+        T upper = successes == trials
+            ? _numOps.One
+            : CalculateInverseBetaCDF(_numOps.Subtract(_numOps.One, alphaHalf),
                 _numOps.FromDouble(successes + 1),
                 _numOps.FromDouble(trials - successes));
-        }
 
         return (lower, upper);
     }

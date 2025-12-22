@@ -135,12 +135,14 @@ public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         }
 
-        // Validate path doesn't contain directory traversal attempts
-        var fullPath = Path.GetFullPath(filePath);
-        if (fullPath.Contains(".."))
+        // Validate path doesn't contain directory traversal attempts BEFORE normalization
+        // Path.GetFullPath normalizes and resolves ".." sequences, so we must check the original input
+        if (filePath.Contains(".."))
         {
             throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(filePath));
         }
+
+        var fullPath = Path.GetFullPath(filePath);
 
         // Ensure parent directory exists
         var directory = Path.GetDirectoryName(fullPath);
@@ -161,12 +163,14 @@ public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         }
 
-        // Validate path doesn't contain directory traversal attempts
-        var fullPath = Path.GetFullPath(filePath);
-        if (fullPath.Contains(".."))
+        // Validate path doesn't contain directory traversal attempts BEFORE normalization
+        // Path.GetFullPath normalizes and resolves ".." sequences, so we must check the original input
+        if (filePath.Contains(".."))
         {
             throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(filePath));
         }
+
+        var fullPath = Path.GetFullPath(filePath);
 
         if (!File.Exists(fullPath))
         {

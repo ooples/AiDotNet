@@ -630,15 +630,8 @@ public class CROWNVerification<T> : ICertifiedDefense<T>
                     sumLower = NumOps.Add(sumLower, NumOps.Multiply(aL, w));
                 }
 
-                // For upper bound coefficient
-                if (NumOps.GreaterThanOrEquals(aU, NumOps.Zero))
-                {
-                    sumUpper = NumOps.Add(sumUpper, NumOps.Multiply(aU, w));
-                }
-                else
-                {
-                    sumUpper = NumOps.Add(sumUpper, NumOps.Multiply(aU, w));
-                }
+                // For upper bound coefficient - always accumulate regardless of sign
+                sumUpper = NumOps.Add(sumUpper, NumOps.Multiply(aU, w));
             }
 
             newAlphaLower[j] = sumLower;
@@ -1004,12 +997,11 @@ public class CROWNVerification<T> : ICertifiedDefense<T>
 
         for (int i = 0; i < upperBounds.Length; i++)
         {
-            if (i != predictedClass)
+            // Check if any other class's upper bound >= predicted class's lower bound
+            if (i != predictedClass &&
+                NumOps.GreaterThanOrEquals(upperBounds[i], predictedLower))
             {
-                if (NumOps.GreaterThanOrEquals(upperBounds[i], predictedLower))
-                {
-                    return false;
-                }
+                return false;
             }
         }
 
@@ -1053,12 +1045,11 @@ public class CROWNVerification<T> : ICertifiedDefense<T>
 
         for (int i = 0; i < upperBounds.Length; i++)
         {
-            if (i != predictedClass)
+            // Find the maximum upper bound of all other classes
+            if (i != predictedClass &&
+                NumOps.GreaterThan(upperBounds[i], maxOtherUpper))
             {
-                if (NumOps.GreaterThan(upperBounds[i], maxOtherUpper))
-                {
-                    maxOtherUpper = upperBounds[i];
-                }
+                maxOtherUpper = upperBounds[i];
             }
         }
 
