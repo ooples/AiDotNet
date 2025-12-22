@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
@@ -6,27 +7,29 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.AdversarialRobustness.Attacks;
 
 /// <summary>
-/// Implements the Carlini &amp; Wagner (C&amp;W) attack.
+/// Implements the Carlini and Wagner (C and W) attack.
 /// </summary>
 /// <remarks>
 /// <para>
-/// C&amp;W is an optimization-based attack that formulates adversarial example generation as
+/// C and W is an optimization-based attack that formulates adversarial example generation as
 /// an optimization problem, typically producing stronger attacks than gradient-based methods.
 /// </para>
-/// <para><b>For Beginners:</b> C&amp;W is one of the most sophisticated attacks. Instead of
+/// <para><b>For Beginners:</b> C and W is one of the most sophisticated attacks. Instead of
 /// following gradients, it treats creating adversarial examples as a carefully crafted
 /// optimization problem. It's slower than FGSM or PGD but often finds adversarial examples
 /// that are more subtle and harder to defend against.</para>
 /// <para>
 /// Original paper: "Towards Evaluating the Robustness of Neural Networks"
-/// by Carlini &amp; Wagner (2017)
+/// by Carlini and Wagner (2017)
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
-public class CWAttack<T> : AdversarialAttackBase<T>
+/// <typeparam name="TInput">The input data type for the model.</typeparam>
+/// <typeparam name="TOutput">The output data type for the model.</typeparam>
+public class CWAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOutput>
 {
     /// <summary>
-    /// Initializes a new instance of the C&amp;W attack.
+    /// Initializes a new instance of the C and W attack.
     /// </summary>
     /// <param name="options">The configuration options for the attack.</param>
     public CWAttack(AdversarialAttackOptions<T> options) : base(options)
@@ -34,12 +37,12 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     }
 
     /// <summary>
-    /// Generates an adversarial example using the C&amp;W L2 attack.
+    /// Generates an adversarial example using the C and W L2 attack.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The C&amp;W attack solves:
-    /// minimize ||δ||_2 + c * f(x + δ)
+    /// The C and W attack solves:
+    /// minimize ||delta||_2 + c * f(x + delta)
     /// where f measures how well the attack succeeds.
     /// </para>
     /// <para><b>For Beginners:</b> This method tries to find the smallest possible change
@@ -50,7 +53,7 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     /// <param name="trueLabel">The correct label for the input.</param>
     /// <param name="targetModel">The model to attack.</param>
     /// <returns>The adversarial example.</returns>
-    public override Vector<T> GenerateAdversarialExample(Vector<T> input, int trueLabel, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
+    public override TInput GenerateAdversarialExample(TInput input, TOutput trueLabel, IFullModel<T, TInput, TOutput> targetModel)
     {
         if (input == null)
         {
@@ -62,17 +65,24 @@ public class CWAttack<T> : AdversarialAttackBase<T>
             throw new ArgumentNullException(nameof(targetModel));
         }
 
+        // Convert to vector representation
+        var vectorInput = ConversionsHelper.ConvertToVector<T, TInput>(input);
+        var vectorLabel = ConversionsHelper.ConvertToVector<T, TOutput>(trueLabel);
+
         var c = 1.0; // Confidence parameter
         var learningRate = 0.01;
-        var bestAdversarial = CloneInput(input);
+        var bestAdversarial = CloneVector(vectorInput);
         var bestPerturbation = double.PositiveInfinity;
 
+        // Extract class index from label vector
+        var trueLabelIndex = GetClassIndex(vectorLabel);
+
         // Initialize perturbation variable (in tanh space for box constraints)
-        var w = new double[input.Length];
-        for (int i = 0; i < input.Length; i++)
+        var w = new double[vectorInput.Length];
+        for (int i = 0; i < vectorInput.Length; i++)
         {
-            // Initialize w such that tanh(w) ≈ x
-            var x = NumOps.ToDouble(input[i]);
+            // Initialize w such that tanh(w) approximately equals x
+            var x = NumOps.ToDouble(vectorInput[i]);
             var twoXMinusOne = 2.0 * x - 1.0;
             w[i] = MathHelper.Atanh(MathHelper.Clamp(twoXMinusOne, -0.9999, 0.9999));
         }
@@ -81,16 +91,13 @@ public class CWAttack<T> : AdversarialAttackBase<T>
         for (int iteration = 0; iteration < Options.Iterations; iteration++)
         {
             // Convert from tanh space to valid input range [0, 1]
-            var adversarial = new Vector<T>(input.Length);
-            for (int i = 0; i < input.Length; i++)
-            {
-                var tanhW = Math.Tanh(w[i]);
-                adversarial[i] = NumOps.FromDouble((tanhW + 1.0) / 2.0);
-            }
+            var adversarial = TanhSpaceToInputSpace(w);
 
             // Compute objective and gradient
-            var output = targetModel.Predict(adversarial);
-            var (_, gradient) = ComputeObjectiveAndGradient(w, input, output, trueLabel, c, targetModel);
+            var modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(adversarial, input);
+            var output = targetModel.Predict(modelInput);
+            var outputVector = ConversionsHelper.ConvertToVector<T, TOutput>(output);
+            var (_, gradient) = ComputeObjectiveAndGradient(w, vectorInput, outputVector, trueLabelIndex, c, input, targetModel);
 
             // Update w using gradient descent
             for (int i = 0; i < w.Length; i++)
@@ -99,25 +106,39 @@ public class CWAttack<T> : AdversarialAttackBase<T>
             }
 
             // Track best solution
-            var perturbationNorm = NumOps.ToDouble(ComputeL2Norm(CalculatePerturbation(input, adversarial)));
-            if (IsSuccessfulAttack(output, trueLabel) && perturbationNorm < bestPerturbation)
+            var perturbation = Engine.Subtract<T>(adversarial, vectorInput);
+            var perturbationNorm = NumOps.ToDouble(ComputeL2Norm(perturbation));
+            if (IsSuccessfulAttack(outputVector, trueLabelIndex) && perturbationNorm < bestPerturbation)
             {
-                bestAdversarial = CloneInput(adversarial);
+                bestAdversarial = CloneVector(adversarial);
                 bestPerturbation = perturbationNorm;
             }
         }
 
-        return bestAdversarial;
+        return ConversionsHelper.ConvertVectorToInput<T, TInput>(bestAdversarial, input);
     }
 
-    private static Vector<T> CloneInput(Vector<T> input)
+    /// <summary>
+    /// Converts from tanh space (w) to valid input space [0, 1].
+    /// </summary>
+    private Vector<T> TanhSpaceToInputSpace(double[] w)
     {
-        var clone = new Vector<T>(input.Length);
-        for (int i = 0; i < input.Length; i++)
+        var result = new Vector<T>(w.Length);
+        for (int i = 0; i < w.Length; i++)
         {
-            clone[i] = input[i];
+            var tanhW = Math.Tanh(w[i]);
+            result[i] = NumOps.FromDouble((tanhW + 1.0) / 2.0);
         }
-        return clone;
+        return result;
+    }
+
+    /// <summary>
+    /// Clones a vector using vectorized operations.
+    /// </summary>
+    private Vector<T> CloneVector(Vector<T> input)
+    {
+        var zeros = Engine.FillZero<T>(input.Length);
+        return Engine.Add<T>(input, zeros);
     }
 
     /// <summary>
@@ -139,7 +160,8 @@ public class CWAttack<T> : AdversarialAttackBase<T>
         Vector<T> output,
         int trueLabel,
         double c,
-        IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
+        TInput referenceInput,
+        IFullModel<T, TInput, TOutput> targetModel)
     {
         var objective = ComputeObjective(w, original, output, trueLabel, c);
 
@@ -150,7 +172,7 @@ public class CWAttack<T> : AdversarialAttackBase<T>
         }
 
         // Fallback: approximate gradient in w-space using finite differences
-        return (objective, ComputeFiniteDifferenceGradient(w, original, trueLabel, c, targetModel));
+        return (objective, ComputeFiniteDifferenceGradient(w, original, trueLabel, c, referenceInput, targetModel));
     }
 
     /// <summary>
@@ -158,13 +180,13 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The C&amp;W objective is: L = ||δ||² + c * f(x_adv)
-    /// where δ = x_adv - x_orig and f is the attack loss.
+    /// The C and W objective is: L = ||delta||^2 + c * f(x_adv)
+    /// where delta = x_adv - x_orig and f is the attack loss.
     /// </para>
     /// <para>
     /// The gradient in w-space uses the chain rule:
     /// dL/dw = dL/dx_adv * dx_adv/dw
-    /// where dx_adv/dw = (1 - tanh²(w))/2 due to the tanh parameterization.
+    /// where dx_adv/dw = (1 - tanh^2(w))/2 due to the tanh parameterization.
     /// </para>
     /// </remarks>
     private double[] ComputeAnalyticGradient(
@@ -187,24 +209,24 @@ public class CWAttack<T> : AdversarialAttackBase<T>
             adversarial[i] = NumOps.FromDouble((tanhW[i] + 1.0) / 2.0);
         }
 
-        // Compute gradient of L2 perturbation term: d(||x_adv - x_orig||²)/dx_adv = 2 * (x_adv - x_orig)
-        var perturbation = CalculatePerturbation(original, adversarial);
-        var perturbGrad = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            perturbGrad[i] = NumOps.Multiply(NumOps.FromDouble(2.0), perturbation[i]);
-        }
+        // Compute gradient of L2 perturbation term using vectorized operations:
+        // d(||x_adv - x_orig||^2)/dx_adv = 2 * (x_adv - x_orig)
+        var perturbation = Engine.Subtract<T>(adversarial, original);
+        var two = NumOps.FromDouble(2.0);
+        var perturbGrad = Engine.Multiply<T>(perturbation, two);
 
         // Compute gradient of attack loss term: df/dx_adv
         var outputGradient = ComputeAttackLossGradient(output, trueLabel);
         var inputGradient = gradientComputable.ComputeInputGradient(adversarial, outputGradient);
 
         // Combine gradients: dL/dx_adv = perturbGrad + c * inputGradient
+        var scaledInputGrad = Engine.Multiply<T>(inputGradient, NumOps.FromDouble(c));
+        var totalGrad = Engine.Add<T>(perturbGrad, scaledInputGrad);
+
+        // Apply chain rule: dx_adv/dw = (1 - tanh^2(w))/2
         for (int i = 0; i < n; i++)
         {
-            var dLdx = NumOps.ToDouble(perturbGrad[i]) + c * NumOps.ToDouble(inputGradient[i]);
-
-            // Chain rule: dx_adv/dw = d[(tanh(w)+1)/2]/dw = (1 - tanh²(w))/2
+            var dLdx = NumOps.ToDouble(totalGrad[i]);
             var dxdw = (1.0 - tanhW[i] * tanhW[i]) / 2.0;
             gradient[i] = dLdx * dxdw;
         }
@@ -221,7 +243,7 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     /// </remarks>
     private Vector<T> ComputeAttackLossGradient(Vector<T> output, int trueLabel)
     {
-        var gradient = new Vector<T>(output.Length);
+        var gradient = Engine.FillZero<T>(output.Length);
         var trueLogit = NumOps.ToDouble(output[trueLabel]);
 
         // Find the maximum logit that isn't the true class
@@ -273,35 +295,30 @@ public class CWAttack<T> : AdversarialAttackBase<T>
         Vector<T> original,
         int trueLabel,
         double c,
-        IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
+        TInput referenceInput,
+        IFullModel<T, TInput, TOutput> targetModel)
     {
         var gradient = new double[w.Length];
         const double delta = 0.001;
 
         // Compute base objective
-        var baseAdv = new Vector<T>(w.Length);
-        for (int i = 0; i < w.Length; i++)
-        {
-            var tanhW = Math.Tanh(w[i]);
-            baseAdv[i] = NumOps.FromDouble((tanhW + 1.0) / 2.0);
-        }
-        var baseOutput = targetModel.Predict(baseAdv);
-        var baseObjective = ComputeObjective(w, original, baseOutput, trueLabel, c);
+        var baseAdv = TanhSpaceToInputSpace(w);
+        var baseModelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(baseAdv, referenceInput);
+        var baseOutput = targetModel.Predict(baseModelInput);
+        var baseOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(baseOutput);
+        var baseObjective = ComputeObjective(w, original, baseOutputVector, trueLabel, c);
 
         for (int i = 0; i < w.Length; i++)
         {
             var wPerturbed = (double[])w.Clone();
             wPerturbed[i] += delta;
 
-            var advPerturbed = new Vector<T>(wPerturbed.Length);
-            for (int j = 0; j < wPerturbed.Length; j++)
-            {
-                var tanhW = Math.Tanh(wPerturbed[j]);
-                advPerturbed[j] = NumOps.FromDouble((tanhW + 1.0) / 2.0);
-            }
+            var advPerturbed = TanhSpaceToInputSpace(wPerturbed);
 
-            var outputPerturbed = targetModel.Predict(advPerturbed);
-            var perturbedObjective = ComputeObjective(wPerturbed, original, outputPerturbed, trueLabel, c);
+            var perturbedModelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(advPerturbed, referenceInput);
+            var outputPerturbed = targetModel.Predict(perturbedModelInput);
+            var outputPerturbedVector = ConversionsHelper.ConvertToVector<T, TOutput>(outputPerturbed);
+            var perturbedObjective = ComputeObjective(wPerturbed, original, outputPerturbedVector, trueLabel, c);
             gradient[i] = (perturbedObjective - baseObjective) / delta;
         }
 
@@ -313,14 +330,10 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     /// </summary>
     private double ComputeObjective(double[] w, Vector<T> original, Vector<T> output, int trueLabel, double c)
     {
-        var adversarial = new Vector<T>(w.Length);
-        for (int i = 0; i < w.Length; i++)
-        {
-            var tanhW = Math.Tanh(w[i]);
-            adversarial[i] = NumOps.FromDouble((tanhW + 1.0) / 2.0);
-        }
+        var adversarial = TanhSpaceToInputSpace(w);
 
-        var perturbation = CalculatePerturbation(original, adversarial);
+        // Use vectorized subtraction for perturbation
+        var perturbation = Engine.Subtract<T>(adversarial, original);
         var l2Distance = NumOps.ToDouble(ComputeL2Norm(perturbation));
         var l2DistanceSquared = l2Distance * l2Distance;
 
@@ -329,7 +342,7 @@ public class CWAttack<T> : AdversarialAttackBase<T>
     }
 
     /// <summary>
-    /// Computes the attack loss for C&amp;W.
+    /// Computes the attack loss for C and W.
     /// </summary>
     private double ComputeAttackLoss(Vector<T> output, int trueLabel)
     {
@@ -377,5 +390,55 @@ public class CWAttack<T> : AdversarialAttackBase<T>
         return Options.IsTargeted
             ? predictedClass == Options.TargetClass
             : predictedClass != trueLabel;
+    }
+
+    /// <summary>
+    /// Gets the class index from a label vector (argmax for one-hot or probability vectors).
+    /// </summary>
+    private int GetClassIndex(Vector<T> label)
+    {
+        if (label == null || label.Length == 0)
+        {
+            return 0;
+        }
+
+        int maxIndex = 0;
+        T maxValue = label[0];
+        for (int i = 1; i < label.Length; i++)
+        {
+            if (NumOps.GreaterThan(label[i], maxValue))
+            {
+                maxValue = label[i];
+                maxIndex = i;
+            }
+        }
+        return maxIndex;
+    }
+
+    /// <inheritdoc/>
+    public override TInput CalculatePerturbation(TInput original, TInput adversarial)
+    {
+        if (original == null)
+        {
+            throw new ArgumentNullException(nameof(original));
+        }
+
+        if (adversarial == null)
+        {
+            throw new ArgumentNullException(nameof(adversarial));
+        }
+
+        var originalVector = ConversionsHelper.ConvertToVector<T, TInput>(original);
+        var adversarialVector = ConversionsHelper.ConvertToVector<T, TInput>(adversarial);
+
+        if (originalVector.Length != adversarialVector.Length)
+        {
+            throw new ArgumentException("Original and adversarial examples must have the same length.");
+        }
+
+        // Use vectorized subtraction
+        var perturbation = Engine.Subtract<T>(adversarialVector, originalVector);
+
+        return ConversionsHelper.ConvertVectorToInput<T, TInput>(perturbation, original);
     }
 }

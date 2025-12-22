@@ -26,7 +26,9 @@ using AiDotNet.Tensors.LinearAlgebra;
 /// - They give confidence bounds for predictions
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface ICertifiedDefense<T> : IModelSerializer
+/// <typeparam name="TInput">The input data type for the model (e.g., Vector&lt;T&gt;, string).</typeparam>
+/// <typeparam name="TOutput">The output data type for the model (e.g., Vector&lt;T&gt;, int).</typeparam>
+public interface ICertifiedDefense<T, TInput, TOutput> : IModelSerializer
 {
     /// <summary>
     /// Computes a certified prediction with robustness guarantees.
@@ -48,7 +50,7 @@ public interface ICertifiedDefense<T> : IModelSerializer
     /// <param name="input">The input to make a certified prediction for.</param>
     /// <param name="model">The model to certify.</param>
     /// <returns>Certified prediction result with robustness radius.</returns>
-    CertifiedPrediction<T> CertifyPrediction(Vector<T> input, IPredictiveModel<T, Vector<T>, Vector<T>> model);
+    CertifiedPrediction<T> CertifyPrediction(TInput input, IFullModel<T, TInput, TOutput> model);
 
     /// <summary>
     /// Computes certified predictions for a batch of inputs.
@@ -60,7 +62,7 @@ public interface ICertifiedDefense<T> : IModelSerializer
     /// <param name="inputs">The batch of inputs to certify.</param>
     /// <param name="model">The model to certify.</param>
     /// <returns>Batch of certified prediction results.</returns>
-    CertifiedPrediction<T>[] CertifyBatch(Matrix<T> inputs, IPredictiveModel<T, Vector<T>, Vector<T>> model);
+    CertifiedPrediction<T>[] CertifyBatch(TInput[] inputs, IFullModel<T, TInput, TOutput> model);
 
     /// <summary>
     /// Computes the maximum perturbation radius that can be certified for an input.
@@ -76,7 +78,7 @@ public interface ICertifiedDefense<T> : IModelSerializer
     /// <param name="input">The input to analyze.</param>
     /// <param name="model">The model being certified.</param>
     /// <returns>The maximum certified robustness radius.</returns>
-    T ComputeCertifiedRadius(Vector<T> input, IPredictiveModel<T, Vector<T>, Vector<T>> model);
+    T ComputeCertifiedRadius(TInput input, IFullModel<T, TInput, TOutput> model);
 
     /// <summary>
     /// Evaluates certified accuracy on a dataset.
@@ -92,9 +94,9 @@ public interface ICertifiedDefense<T> : IModelSerializer
     /// <param name="radius">The perturbation radius to certify.</param>
     /// <returns>Certified accuracy metrics.</returns>
     CertifiedAccuracyMetrics<T> EvaluateCertifiedAccuracy(
-        Matrix<T> testData,
-        Vector<int> labels,
-        IPredictiveModel<T, Vector<T>, Vector<T>> model,
+        TInput[] testData,
+        TOutput[] labels,
+        IFullModel<T, TInput, TOutput> model,
         T radius);
 
     /// <summary>

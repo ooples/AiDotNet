@@ -1,6 +1,6 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
-using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AdversarialRobustness.Attacks;
@@ -21,7 +21,9 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
-public class FGSMAttack<T> : AdversarialAttackBase<T>
+/// <typeparam name="TInput">The input data type for the model.</typeparam>
+/// <typeparam name="TOutput">The output data type for the model.</typeparam>
+public class FGSMAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the FGSM attack.
@@ -37,7 +39,7 @@ public class FGSMAttack<T> : AdversarialAttackBase<T>
     /// <remarks>
     /// <para>
     /// The FGSM attack computes:
-    /// x_adv = x + epsilon * sign(∇_x Loss(x, y_true))
+    /// x_adv = x + epsilon * sign(gradient_x Loss(x, y_true))
     /// </para>
     /// <para><b>For Beginners:</b> This method:
     /// 1. Calculates how the model's error changes when you modify the input
@@ -49,7 +51,7 @@ public class FGSMAttack<T> : AdversarialAttackBase<T>
     /// <param name="trueLabel">The correct label for the input.</param>
     /// <param name="targetModel">The model to attack.</param>
     /// <returns>The adversarial example.</returns>
-    public override Vector<T> GenerateAdversarialExample(Vector<T> input, int trueLabel, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
+    public override TInput GenerateAdversarialExample(TInput input, TOutput trueLabel, IFullModel<T, TInput, TOutput> targetModel)
     {
         if (input == null)
         {
@@ -61,25 +63,36 @@ public class FGSMAttack<T> : AdversarialAttackBase<T>
             throw new ArgumentNullException(nameof(targetModel));
         }
 
+        // Convert to vector representation for gradient-based operations
+        var vectorInput = ConversionsHelper.ConvertToVector<T, TInput>(input);
+        var vectorLabel = ConversionsHelper.ConvertToVector<T, TOutput>(trueLabel);
+
         var epsilon = NumOps.FromDouble(Options.Epsilon);
 
-        // Compute gradient approximation using finite differences
-        var gradient = ComputeGradient(input, trueLabel, targetModel);
+        // Extract class index from label vector (argmax for one-hot or probability vectors)
+        var trueLabelIndex = GetClassIndex(vectorLabel);
 
-        // Apply FGSM perturbation
-        var adversarial = new Vector<T>(input.Length);
-        for (int i = 0; i < input.Length; i++)
+        // Compute gradient using vectorized operations
+        var gradient = ComputeGradient(vectorInput, trueLabelIndex, input, targetModel);
+
+        // Apply FGSM perturbation using vectorized operations:
+        // perturbation = epsilon * sign(gradient)
+        var signedGradient = SignVector(gradient);
+        var perturbation = Engine.Multiply<T>(signedGradient, epsilon);
+
+        // For targeted attacks, negate the perturbation (move towards target class)
+        if (Options.IsTargeted)
         {
-            var perturbation = NumOps.Multiply(epsilon, Sign(gradient[i]));
-
-            // For targeted attacks, move towards the target class; for untargeted, move away from the true class
-            adversarial[i] = NumOps.Add(input[i], Options.IsTargeted ? NumOps.Negate(perturbation) : perturbation);
-
-            // Clip to valid range (typically [0, 1] for images)
-            adversarial[i] = MathHelper.Clamp(adversarial[i], NumOps.Zero, NumOps.One);
+            perturbation = Engine.Negate<T>(perturbation);
         }
 
-        return adversarial;
+        // adversarial = input + perturbation
+        var adversarial = Engine.Add<T>(vectorInput, perturbation);
+
+        // Clip to valid range [0, 1] using vectorized clamp
+        adversarial = Engine.Clamp<T>(adversarial, NumOps.Zero, NumOps.One);
+
+        return ConversionsHelper.ConvertVectorToInput<T, TInput>(adversarial, input);
     }
 
     /// <summary>
@@ -94,7 +107,7 @@ public class FGSMAttack<T> : AdversarialAttackBase<T>
     /// affects the model's loss. With analytic gradients, we use the model's internal
     /// backpropagation; otherwise, we approximate by testing small changes.</para>
     /// </remarks>
-    private Vector<T> ComputeGradient(Vector<T> input, int trueLabel, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
+    private Vector<T> ComputeGradient(Vector<T> vectorInput, int trueLabel, TInput referenceInput, IFullModel<T, TInput, TOutput> targetModel)
     {
         // Determine which class to compute gradient for
         var targetClass = Options.IsTargeted ? Options.TargetClass : trueLabel;
@@ -102,11 +115,11 @@ public class FGSMAttack<T> : AdversarialAttackBase<T>
         // Check if the model supports analytic gradients
         if (targetModel is IInputGradientComputable<T> gradientComputable)
         {
-            return ComputeAnalyticGradient(input, targetClass, targetModel, gradientComputable);
+            return ComputeAnalyticGradient(vectorInput, targetClass, referenceInput, targetModel, gradientComputable);
         }
 
         // Fallback to finite differences
-        return ComputeFiniteDifferenceGradient(input, targetClass, targetModel);
+        return ComputeFiniteDifferenceGradient(vectorInput, targetClass, referenceInput, targetModel);
     }
 
     /// <summary>
@@ -115,71 +128,77 @@ public class FGSMAttack<T> : AdversarialAttackBase<T>
     /// <remarks>
     /// <para>
     /// For cross-entropy loss with softmax output, the gradient of the loss with respect to
-    /// the logits is: ∂L/∂z = p - one_hot(target_class)
+    /// the logits is: dL/dz = p - one_hot(target_class)
     /// where p is the softmax probabilities.
     /// </para>
     /// <para>
-    /// This is then backpropagated through the model to get ∂L/∂x (the input gradient).
+    /// This is then backpropagated through the model to get dL/dx (the input gradient).
     /// </para>
     /// </remarks>
     private Vector<T> ComputeAnalyticGradient(
-        Vector<T> input,
+        Vector<T> vectorInput,
         int targetClass,
-        IPredictiveModel<T, Vector<T>, Vector<T>> targetModel,
+        TInput referenceInput,
+        IFullModel<T, TInput, TOutput> targetModel,
         IInputGradientComputable<T> gradientComputable)
     {
         // Get the model's output
-        var output = targetModel.Predict(input);
+        var modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(vectorInput, referenceInput);
+        var output = targetModel.Predict(modelInput);
+        var outputVector = ConversionsHelper.ConvertToVector<T, TOutput>(output);
 
-        // Compute softmax probabilities
-        var probabilities = Softmax(output);
+        // Compute softmax probabilities using vectorized Engine operation
+        var probabilities = Engine.Softmax<T>(outputVector);
 
-        // Compute gradient of cross-entropy loss w.r.t. logits: ∂L/∂z = p - one_hot(target)
-        // This is the standard gradient for cross-entropy loss with softmax
-        var outputGradient = new Vector<T>(output.Length);
-        for (int i = 0; i < output.Length; i++)
-        {
-            // Gradient: ∂L/∂z[target] = p[target] - 1, ∂L/∂z[i] = p[i] for i != target
-            outputGradient[i] = i == targetClass
-                ? NumOps.Subtract(probabilities[i], NumOps.One)
-                : probabilities[i];
-        }
+        // Compute gradient of cross-entropy loss w.r.t. logits: dL/dz = p - one_hot(target)
+        // Create one-hot vector for target class
+        var oneHot = Engine.FillZero<T>(outputVector.Length);
+        oneHot[targetClass] = NumOps.One;
+
+        // outputGradient = probabilities - oneHot
+        var outputGradient = Engine.Subtract<T>(probabilities, oneHot);
 
         // Backpropagate to get input gradient
-        return gradientComputable.ComputeInputGradient(input, outputGradient);
+        return gradientComputable.ComputeInputGradient(vectorInput, outputGradient);
     }
 
     /// <summary>
     /// Computes the gradient using finite-difference approximation as a fallback.
     /// </summary>
     private Vector<T> ComputeFiniteDifferenceGradient(
-        Vector<T> input,
+        Vector<T> vectorInput,
         int targetClass,
-        IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
+        TInput referenceInput,
+        IFullModel<T, TInput, TOutput> targetModel)
     {
-        var gradient = new Vector<T>(input.Length);
+        var gradient = new Vector<T>(vectorInput.Length);
         var delta = NumOps.FromDouble(0.001); // Small perturbation for finite differences
 
         // Get the original prediction and loss
-        var originalOutput = targetModel.Predict(input);
-        var originalLoss = ComputeLoss(originalOutput, targetClass);
+        var modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(vectorInput, referenceInput);
+        var originalOutput = targetModel.Predict(modelInput);
+        var originalOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(originalOutput);
+        var originalLoss = ComputeLoss(originalOutputVector, targetClass);
 
-        // Compute gradient for each dimension
-        for (int i = 0; i < input.Length; i++)
+        // Create a delta vector for each dimension and compute gradients
+        // Note: Finite differences inherently requires per-dimension evaluation
+        // but we use vectorized operations within each evaluation
+        for (int i = 0; i < vectorInput.Length; i++)
         {
-            // Perturb the input slightly in dimension i
-            var perturbedInput = new Vector<T>(input.Length);
-            for (int j = 0; j < input.Length; j++)
-            {
-                perturbedInput[j] = input[j];
-            }
-            perturbedInput[i] = NumOps.Add(perturbedInput[i], delta);
+            // Create perturbation vector with delta in dimension i
+            var perturbationDelta = Engine.FillZero<T>(vectorInput.Length);
+            perturbationDelta[i] = delta;
 
-            // Compute the loss with the perturbed input (use same targetClass for consistency)
-            var perturbedOutput = targetModel.Predict(perturbedInput);
-            var perturbedLoss = ComputeLoss(perturbedOutput, targetClass);
+            // perturbedVector = vectorInput + perturbationDelta
+            var perturbedVector = Engine.Add<T>(vectorInput, perturbationDelta);
 
-            // Approximate gradient using finite difference
+            // Compute the loss with the perturbed input
+            var perturbedModelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(perturbedVector, referenceInput);
+            var perturbedOutput = targetModel.Predict(perturbedModelInput);
+            var perturbedOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(perturbedOutput);
+            var perturbedLoss = ComputeLoss(perturbedOutputVector, targetClass);
+
+            // Approximate gradient using finite difference: (f(x+h) - f(x)) / h
             gradient[i] = NumOps.Divide(NumOps.Subtract(perturbedLoss, originalLoss), delta);
         }
 
@@ -195,13 +214,15 @@ public class FGSMAttack<T> : AdversarialAttackBase<T>
     /// </remarks>
     private T ComputeLoss(Vector<T> output, int targetClass)
     {
-        // Apply softmax to get probabilities
-        var probabilities = Softmax(output);
+        // Apply softmax to get probabilities using vectorized Engine operation
+        var probabilities = Engine.Softmax<T>(output);
 
         // Compute negative log-likelihood (cross-entropy loss)
         if (targetClass >= 0 && targetClass < probabilities.Length)
         {
-            var prob = Math.Max(NumOps.ToDouble(probabilities[targetClass]), 1e-10); // Avoid log(0)
+            // Use Engine.Log for the target probability, clamped to avoid log(0)
+            var targetProb = probabilities[targetClass];
+            var prob = Math.Max(NumOps.ToDouble(targetProb), 1e-10);
             return NumOps.FromDouble(-Math.Log(prob));
         }
 
@@ -209,47 +230,55 @@ public class FGSMAttack<T> : AdversarialAttackBase<T>
     }
 
     /// <summary>
-    /// Applies the softmax function to convert logits to probabilities.
+    /// Gets the class index from a label vector (argmax for one-hot or probability vectors).
     /// </summary>
-    private Vector<T> Softmax(Vector<T> logits)
+    /// <param name="label">The label vector.</param>
+    /// <returns>The index of the maximum value (class index).</returns>
+    private int GetClassIndex(Vector<T> label)
     {
-        var probabilities = new Vector<T>(logits.Length);
-        double maxLogit = NumOps.ToDouble(logits[0]);
-
-        // Find max for numerical stability
-        for (int i = 1; i < logits.Length; i++)
+        if (label == null || label.Length == 0)
         {
-            maxLogit = Math.Max(maxLogit, NumOps.ToDouble(logits[i]));
+            return 0;
         }
 
-        // Compute exp(logit - max)
-        double sum = 0.0;
-        for (int i = 0; i < logits.Length; i++)
+        // Find argmax - this is inherently a sequential operation
+        int maxIndex = 0;
+        T maxValue = label[0];
+        for (int i = 1; i < label.Length; i++)
         {
-            var shifted = NumOps.ToDouble(logits[i]) - maxLogit;
-            var expVal = Math.Exp(shifted);
-            probabilities[i] = NumOps.FromDouble(expVal);
-            sum += expVal;
-        }
-
-        // Edge case: if sum is zero or negative (shouldn't happen with valid inputs),
-        // fall back to uniform distribution to avoid NaN/Infinity values
-        if (sum <= 0.0)
-        {
-            var uniform = NumOps.FromDouble(1.0 / logits.Length);
-            for (int i = 0; i < probabilities.Length; i++)
+            if (NumOps.GreaterThan(label[i], maxValue))
             {
-                probabilities[i] = uniform;
+                maxValue = label[i];
+                maxIndex = i;
             }
-            return probabilities;
         }
+        return maxIndex;
+    }
 
-        // Normalize to get valid probability distribution
-        for (int i = 0; i < probabilities.Length; i++)
+    /// <inheritdoc/>
+    public override TInput CalculatePerturbation(TInput original, TInput adversarial)
+    {
+        if (original == null)
         {
-            probabilities[i] = NumOps.FromDouble(NumOps.ToDouble(probabilities[i]) / sum);
+            throw new ArgumentNullException(nameof(original));
         }
 
-        return probabilities;
+        if (adversarial == null)
+        {
+            throw new ArgumentNullException(nameof(adversarial));
+        }
+
+        var originalVector = ConversionsHelper.ConvertToVector<T, TInput>(original);
+        var adversarialVector = ConversionsHelper.ConvertToVector<T, TInput>(adversarial);
+
+        if (originalVector.Length != adversarialVector.Length)
+        {
+            throw new ArgumentException("Original and adversarial examples must have the same length.");
+        }
+
+        // Use vectorized subtraction: perturbation = adversarial - original
+        var perturbation = Engine.Subtract<T>(adversarialVector, originalVector);
+
+        return ConversionsHelper.ConvertVectorToInput<T, TInput>(perturbation, original);
     }
 }

@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
@@ -27,8 +28,15 @@ namespace AiDotNet.AdversarialRobustness.CertifiedRobustness;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
-public class RandomizedSmoothing<T> : ICertifiedDefense<T>
+/// <typeparam name="TInput">The input data type for the model.</typeparam>
+/// <typeparam name="TOutput">The output data type for the model.</typeparam>
+public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInput, TOutput>
 {
+    /// <summary>
+    /// Gets the global execution engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private CertifiedDefenseOptions<T> options;
@@ -57,7 +65,7 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
     }
 
     /// <inheritdoc/>
-    public CertifiedPrediction<T> CertifyPrediction(Vector<T> input, IPredictiveModel<T, Vector<T>, Vector<T>> model)
+    public CertifiedPrediction<T> CertifyPrediction(TInput input, IFullModel<T, TInput, TOutput> model)
     {
         if (input == null)
         {
@@ -71,14 +79,19 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
 
         var sigma = NumOps.FromDouble(options.NoiseSigma);
 
+        // Convert input to vector for noise operations
+        var vectorInput = ConversionsHelper.ConvertToVector<T, TInput>(input);
+
         // Sample predictions with Gaussian noise
         var classCounts = new Dictionary<int, int>();
 
         for (int i = 0; i < options.NumSamples; i++)
         {
-            var noisyInput = AddGaussianNoise(input, sigma);
+            var noisyVector = AddGaussianNoise(vectorInput, sigma);
+            var noisyInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(noisyVector, input);
             var output = model.Predict(noisyInput);
-            var sampledClass = ArgMax(output);
+            var outputVector = ConversionsHelper.ConvertToVector<T, TOutput>(output);
+            var sampledClass = ArgMax(outputVector);
 
             if (!classCounts.ContainsKey(sampledClass))
             {
@@ -126,24 +139,24 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
     }
 
     /// <inheritdoc/>
-    public CertifiedPrediction<T>[] CertifyBatch(Matrix<T> inputs, IPredictiveModel<T, Vector<T>, Vector<T>> model)
+    public CertifiedPrediction<T>[] CertifyBatch(TInput[] inputs, IFullModel<T, TInput, TOutput> model)
     {
         if (inputs == null)
         {
             throw new ArgumentNullException(nameof(inputs));
         }
 
-        var results = new CertifiedPrediction<T>[inputs.Rows];
-        for (int i = 0; i < inputs.Rows; i++)
+        var results = new CertifiedPrediction<T>[inputs.Length];
+        for (int i = 0; i < inputs.Length; i++)
         {
-            results[i] = CertifyPrediction(inputs.GetRow(i), model);
+            results[i] = CertifyPrediction(inputs[i], model);
         }
 
         return results;
     }
 
     /// <inheritdoc/>
-    public T ComputeCertifiedRadius(Vector<T> input, IPredictiveModel<T, Vector<T>, Vector<T>> model)
+    public T ComputeCertifiedRadius(TInput input, IFullModel<T, TInput, TOutput> model)
     {
         var prediction = CertifyPrediction(input, model);
         return prediction.CertifiedRadius;
@@ -151,9 +164,9 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
 
     /// <inheritdoc/>
     public CertifiedAccuracyMetrics<T> EvaluateCertifiedAccuracy(
-        Matrix<T> testData,
-        Vector<int> labels,
-        IPredictiveModel<T, Vector<T>, Vector<T>> model,
+        TInput[] testData,
+        TOutput[] labels,
+        IFullModel<T, TInput, TOutput> model,
         T radius)
     {
         if (testData == null)
@@ -171,9 +184,9 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
             throw new ArgumentNullException(nameof(model));
         }
 
-        if (testData.Rows != labels.Length)
+        if (testData.Length != labels.Length)
         {
-            throw new ArgumentException("Number of labels must match number of test rows.", nameof(labels));
+            throw new ArgumentException("Number of labels must match number of test samples.", nameof(labels));
         }
 
         var metrics = new CertifiedAccuracyMetrics<T>();
@@ -181,15 +194,18 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
         int certified = 0;
         var certifiedRadii = new List<double>();
 
-        for (int i = 0; i < testData.Rows; i++)
+        for (int i = 0; i < testData.Length; i++)
         {
-            var input = testData.GetRow(i);
+            var input = testData[i];
             var label = labels[i];
+            var labelVector = ConversionsHelper.ConvertToVector<T, TOutput>(label);
+            var trueClass = ArgMax(labelVector);
 
             // Clean accuracy
             var cleanOutput = model.Predict(input);
-            var cleanPrediction = ArgMax(cleanOutput);
-            if (cleanPrediction == label)
+            var cleanOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(cleanOutput);
+            var cleanPrediction = ArgMax(cleanOutputVector);
+            if (cleanPrediction == trueClass)
             {
                 cleanCorrect++;
             }
@@ -197,7 +213,7 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
             // Certified prediction
             var certResult = CertifyPrediction(input, model);
 
-            if (certResult.PredictedClass == label && NumOps.GreaterThanOrEquals(certResult.CertifiedRadius, radius))
+            if (certResult.PredictedClass == trueClass && NumOps.GreaterThanOrEquals(certResult.CertifiedRadius, radius))
             {
                 certified++;
             }
@@ -208,10 +224,10 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
             }
         }
 
-        metrics.CleanAccuracy = (double)cleanCorrect / testData.Rows;
-        metrics.CertifiedAccuracy = (double)certified / testData.Rows;
+        metrics.CleanAccuracy = (double)cleanCorrect / testData.Length;
+        metrics.CertifiedAccuracy = (double)certified / testData.Length;
         metrics.CertificationRadius = radius;
-        metrics.CertificationRate = (double)certifiedRadii.Count / testData.Rows;
+        metrics.CertificationRate = (double)certifiedRadii.Count / testData.Length;
 
         if (certifiedRadii.Count > 0)
         {
@@ -268,22 +284,18 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
 
     private Vector<T> AddGaussianNoise(Vector<T> input, T sigma)
     {
-        var noisy = new Vector<T>(input.Length);
+        // Generate Gaussian noise using Engine
+        var noise = Engine.GenerateGaussianNoise<T>(
+            input.Length,
+            NumOps.Zero,
+            sigma,
+            random.Next());
 
-        for (int i = 0; i < input.Length; i++)
-        {
-            // Box-Muller transform for Gaussian noise
-            // Use 1.0 - u1 to avoid Math.Log(0) when u1 = 0, since NextDouble() can return 0
-            // but never returns 1.0, so 1.0 - u1 is in range (0, 1]
-            var u1 = 1.0 - random.NextDouble();
-            var u2 = random.NextDouble();
-            var randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            var noise = NumOps.Multiply(NumOps.FromDouble(randStdNormal), sigma);
+        // Add noise to input: noisy = input + noise
+        var noisy = Engine.Add<T>(input, noise);
 
-            noisy[i] = Clip01(NumOps.Add(input[i], noise)); // Clip to valid range
-        }
-
-        return noisy;
+        // Clip to valid range [0, 1]
+        return Engine.Clamp<T>(noisy, NumOps.Zero, NumOps.One);
     }
 
     private double ComputeCertifiedRadius(double pA, T sigma)
@@ -341,10 +353,5 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
         }
 
         return maxIndex;
-    }
-
-    private static T Clip01(T value)
-    {
-        return MathHelper.Clamp(value, NumOps.Zero, NumOps.One);
     }
 }

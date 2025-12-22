@@ -26,7 +26,9 @@ using AiDotNet.Tensors.LinearAlgebra;
 /// - They demonstrate potential security risks
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface IAdversarialAttack<T> : IModelSerializer
+/// <typeparam name="TInput">The input data type for the model (e.g., Vector&lt;T&gt;, string).</typeparam>
+/// <typeparam name="TOutput">The output data type for the model (e.g., Vector&lt;T&gt;, int).</typeparam>
+public interface IAdversarialAttack<T, TInput, TOutput> : IModelSerializer
 {
     /// <summary>
     /// Generates adversarial examples from clean input data.
@@ -49,7 +51,7 @@ public interface IAdversarialAttack<T> : IModelSerializer
     /// <param name="trueLabel">The correct label for the input.</param>
     /// <param name="targetModel">The model to attack.</param>
     /// <returns>The generated adversarial example.</returns>
-    Vector<T> GenerateAdversarialExample(Vector<T> input, int trueLabel, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel);
+    TInput GenerateAdversarialExample(TInput input, TOutput trueLabel, IFullModel<T, TInput, TOutput> targetModel);
 
     /// <summary>
     /// Generates a batch of adversarial examples from multiple clean inputs.
@@ -63,7 +65,7 @@ public interface IAdversarialAttack<T> : IModelSerializer
     /// <param name="trueLabels">The correct labels for each input.</param>
     /// <param name="targetModel">The model to attack.</param>
     /// <returns>The batch of generated adversarial examples.</returns>
-    Matrix<T> GenerateAdversarialBatch(Matrix<T> inputs, Vector<int> trueLabels, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel);
+    TInput[] GenerateAdversarialBatch(TInput[] inputs, TOutput[] trueLabels, IFullModel<T, TInput, TOutput> targetModel);
 
     /// <summary>
     /// Calculates the perturbation added to create an adversarial example.
@@ -72,11 +74,14 @@ public interface IAdversarialAttack<T> : IModelSerializer
     /// <b>For Beginners:</b> This shows you what changes were made to fool the model.
     /// By comparing the original input with the adversarial example, you can see exactly
     /// what the attack changed. This helps understand how the attack works.
+    ///
+    /// Note: For non-vector inputs (e.g., strings), this returns a representation of the difference
+    /// that is appropriate for the input type.
     /// </remarks>
     /// <param name="original">The original clean input.</param>
     /// <param name="adversarial">The generated adversarial example.</param>
-    /// <returns>The perturbation vector (difference between adversarial and original).</returns>
-    Vector<T> CalculatePerturbation(Vector<T> original, Vector<T> adversarial);
+    /// <returns>The perturbation representation (difference between adversarial and original).</returns>
+    TInput CalculatePerturbation(TInput original, TInput adversarial);
 
     /// <summary>
     /// Gets the configuration options for the adversarial attack.

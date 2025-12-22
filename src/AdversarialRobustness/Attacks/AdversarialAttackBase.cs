@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
@@ -11,8 +12,18 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 /// Base class for adversarial attack implementations.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
-public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
+/// <typeparam name="TInput">The input data type for the model.</typeparam>
+/// <typeparam name="TOutput">The output data type for the model.</typeparam>
+public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAttack<T, TInput, TOutput>
 {
+    /// <summary>
+    /// Gets the global execution engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
+    /// Numeric operations for type T.
+    /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
@@ -36,10 +47,10 @@ public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
     }
 
     /// <inheritdoc/>
-    public abstract Vector<T> GenerateAdversarialExample(Vector<T> input, int trueLabel, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel);
+    public abstract TInput GenerateAdversarialExample(TInput input, TOutput trueLabel, IFullModel<T, TInput, TOutput> targetModel);
 
     /// <inheritdoc/>
-    public virtual Matrix<T> GenerateAdversarialBatch(Matrix<T> inputs, Vector<int> trueLabels, IPredictiveModel<T, Vector<T>, Vector<T>> targetModel)
+    public virtual TInput[] GenerateAdversarialBatch(TInput[] inputs, TOutput[] trueLabels, IFullModel<T, TInput, TOutput> targetModel)
     {
         if (inputs == null)
         {
@@ -51,47 +62,22 @@ public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
             throw new ArgumentNullException(nameof(trueLabels));
         }
 
-        if (inputs.Rows != trueLabels.Length)
+        if (inputs.Length != trueLabels.Length)
         {
-            throw new ArgumentException("Number of labels must match number of input rows.", nameof(trueLabels));
+            throw new ArgumentException("Number of labels must match number of inputs.", nameof(trueLabels));
         }
 
-        var adversarialExamples = new Matrix<T>(inputs.Rows, inputs.Columns);
-        for (int i = 0; i < inputs.Rows; i++)
+        var adversarialExamples = new TInput[inputs.Length];
+        for (int i = 0; i < inputs.Length; i++)
         {
-            var adversarial = GenerateAdversarialExample(inputs.GetRow(i), trueLabels[i], targetModel);
-            adversarialExamples.SetRow(i, adversarial);
+            adversarialExamples[i] = GenerateAdversarialExample(inputs[i], trueLabels[i], targetModel);
         }
 
         return adversarialExamples;
     }
 
     /// <inheritdoc/>
-    public virtual Vector<T> CalculatePerturbation(Vector<T> original, Vector<T> adversarial)
-    {
-        if (original == null)
-        {
-            throw new ArgumentNullException(nameof(original));
-        }
-
-        if (adversarial == null)
-        {
-            throw new ArgumentNullException(nameof(adversarial));
-        }
-
-        if (original.Length != adversarial.Length)
-        {
-            throw new ArgumentException("Original and adversarial examples must have the same length.");
-        }
-
-        var perturbation = new Vector<T>(original.Length);
-        for (int i = 0; i < original.Length; i++)
-        {
-            perturbation[i] = NumOps.Subtract(adversarial[i], original[i]);
-        }
-
-        return perturbation;
-    }
+    public abstract TInput CalculatePerturbation(TInput original, TInput adversarial);
 
     /// <inheritdoc/>
     public virtual AdversarialAttackOptions<T> GetOptions()
@@ -182,61 +168,49 @@ public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
     }
 
     /// <summary>
-    /// Returns the sign of a value (-1, 0, or 1).
+    /// Returns the sign of each element in a vector (-1, 0, or 1) using vectorized operations.
     /// </summary>
-    protected static T Sign(T value)
+    protected Vector<T> SignVector(Vector<T> vector)
     {
-        if (NumOps.GreaterThan(value, NumOps.Zero)) return NumOps.One;
-        if (NumOps.LessThan(value, NumOps.Zero)) return NumOps.Negate(NumOps.One);
-        return NumOps.Zero;
+        return Engine.Sign<T>(vector);
     }
 
     /// <summary>
-    /// Computes the L-infinity norm of a vector.
+    /// Computes the L-infinity norm of a vector (maximum absolute value).
     /// </summary>
-    protected static T ComputeLInfinityNorm(Vector<T> vector)
+    protected T ComputeLInfinityNorm(Vector<T> vector)
     {
+        var absVector = Engine.Abs<T>(vector);
+        // Find max of absolute values
         T maxValue = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
+        for (int i = 0; i < absVector.Length; i++)
         {
-            var absValue = NumOps.Abs(vector[i]);
-            if (NumOps.GreaterThan(absValue, maxValue))
+            if (NumOps.GreaterThan(absVector[i], maxValue))
             {
-                maxValue = absValue;
+                maxValue = absVector[i];
             }
         }
         return maxValue;
     }
 
     /// <summary>
-    /// Computes the L2 norm of a vector.
+    /// Computes the L2 norm of a vector using vectorized operations.
     /// </summary>
-    protected static T ComputeL2Norm(Vector<T> vector)
+    protected T ComputeL2Norm(Vector<T> vector)
     {
-        double sumSquares = 0.0;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            var d = NumOps.ToDouble(vector[i]);
-            sumSquares += d * d;
-        }
-        return NumOps.FromDouble(Math.Sqrt(sumSquares));
+        return Engine.Norm<T>(vector);
     }
 
     /// <summary>
-    /// Projects perturbation to satisfy L-infinity constraint.
+    /// Projects perturbation to satisfy L-infinity constraint using vectorized operations.
     /// </summary>
     protected Vector<T> ProjectLInfinity(Vector<T> perturbation, T epsilon)
     {
-        var projected = new Vector<T>(perturbation.Length);
-        for (int i = 0; i < perturbation.Length; i++)
-        {
-            projected[i] = MathHelper.Clamp(perturbation[i], NumOps.Negate(epsilon), epsilon);
-        }
-        return projected;
+        return Engine.Clamp<T>(perturbation, NumOps.Negate(epsilon), epsilon);
     }
 
     /// <summary>
-    /// Projects perturbation to satisfy L2 constraint.
+    /// Projects perturbation to satisfy L2 constraint using vectorized operations.
     /// </summary>
     protected Vector<T> ProjectL2(Vector<T> perturbation, T epsilon)
     {
@@ -246,12 +220,7 @@ public abstract class AdversarialAttackBase<T> : IAdversarialAttack<T>
             return perturbation;
         }
 
-        var projected = new Vector<T>(perturbation.Length);
         var scale = NumOps.Divide(epsilon, norm);
-        for (int i = 0; i < perturbation.Length; i++)
-        {
-            projected[i] = NumOps.Multiply(perturbation[i], scale);
-        }
-        return projected;
+        return Engine.Multiply<T>(perturbation, scale);
     }
 }

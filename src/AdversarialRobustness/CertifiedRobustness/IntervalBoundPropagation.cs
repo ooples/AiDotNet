@@ -1,8 +1,10 @@
 using System.Text;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Serialization;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
@@ -38,8 +40,15 @@ namespace AiDotNet.AdversarialRobustness.CertifiedRobustness;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
-public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
+/// <typeparam name="TInput">The input data type for the model.</typeparam>
+/// <typeparam name="TOutput">The output data type for the model.</typeparam>
+public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T, TInput, TOutput>
 {
+    /// <summary>
+    /// Gets the global execution engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private CertifiedDefenseOptions<T> _options;
@@ -67,8 +76,8 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
 
     /// <inheritdoc/>
     public CertifiedPrediction<T> CertifyPrediction(
-        Vector<T> input,
-        IPredictiveModel<T, Vector<T>, Vector<T>> model)
+        TInput input,
+        IFullModel<T, TInput, TOutput> model)
     {
         if (input == null)
         {
@@ -80,21 +89,25 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
             throw new ArgumentNullException(nameof(model));
         }
 
+        // Convert input to vector for bound computations
+        var vectorInput = ConversionsHelper.ConvertToVector<T, TInput>(input);
+
         // Get the perturbation radius from options
         T epsilon = NumOps.FromDouble(_options.NoiseSigma); // Reusing NoiseSigma as perturbation radius
 
         // Compute interval bounds through the network
-        var (lowerBounds, upperBounds) = ComputeOutputBounds(input, model, epsilon);
+        var (lowerBounds, upperBounds) = ComputeOutputBounds(vectorInput, input, model, epsilon);
 
         // Get the clean prediction
         var cleanOutput = model.Predict(input);
-        int predictedClass = GetPredictedClass(cleanOutput);
+        var cleanOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(cleanOutput);
+        int predictedClass = GetPredictedClass(cleanOutputVector);
 
         // Check if the prediction is certifiably robust
         bool isCertified = CheckCertification(lowerBounds, upperBounds, predictedClass);
 
         // Compute the certified radius
-        T certifiedRadius = ComputeCertifiedRadiusInternal(input, model, predictedClass);
+        T certifiedRadius = ComputeCertifiedRadiusInternal(vectorInput, input, model, predictedClass);
 
         // Compute confidence as the margin between the predicted class and runner-up
         double confidence = ComputeConfidence(lowerBounds, upperBounds, predictedClass);
@@ -116,8 +129,8 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
 
     /// <inheritdoc/>
     public CertifiedPrediction<T>[] CertifyBatch(
-        Matrix<T> inputs,
-        IPredictiveModel<T, Vector<T>, Vector<T>> model)
+        TInput[] inputs,
+        IFullModel<T, TInput, TOutput> model)
     {
         if (inputs == null)
         {
@@ -129,11 +142,11 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
             throw new ArgumentNullException(nameof(model));
         }
 
-        var results = new CertifiedPrediction<T>[inputs.Rows];
+        var results = new CertifiedPrediction<T>[inputs.Length];
 
-        for (int i = 0; i < inputs.Rows; i++)
+        for (int i = 0; i < inputs.Length; i++)
         {
-            results[i] = CertifyPrediction(inputs.GetRow(i), model);
+            results[i] = CertifyPrediction(inputs[i], model);
         }
 
         return results;
@@ -141,8 +154,8 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
 
     /// <inheritdoc/>
     public T ComputeCertifiedRadius(
-        Vector<T> input,
-        IPredictiveModel<T, Vector<T>, Vector<T>> model)
+        TInput input,
+        IFullModel<T, TInput, TOutput> model)
     {
         if (input == null)
         {
@@ -154,18 +167,22 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
             throw new ArgumentNullException(nameof(model));
         }
 
+        // Convert input to vector
+        var vectorInput = ConversionsHelper.ConvertToVector<T, TInput>(input);
+
         // Get the clean prediction
         var cleanOutput = model.Predict(input);
-        int predictedClass = GetPredictedClass(cleanOutput);
+        var cleanOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(cleanOutput);
+        int predictedClass = GetPredictedClass(cleanOutputVector);
 
-        return ComputeCertifiedRadiusInternal(input, model, predictedClass);
+        return ComputeCertifiedRadiusInternal(vectorInput, input, model, predictedClass);
     }
 
     /// <inheritdoc/>
     public CertifiedAccuracyMetrics<T> EvaluateCertifiedAccuracy(
-        Matrix<T> testData,
-        Vector<int> labels,
-        IPredictiveModel<T, Vector<T>, Vector<T>> model,
+        TInput[] testData,
+        TOutput[] labels,
+        IFullModel<T, TInput, TOutput> model,
         T radius)
     {
         if (testData == null)
@@ -183,23 +200,27 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
             throw new ArgumentNullException(nameof(model));
         }
 
-        if (testData.Rows != labels.Length)
+        if (testData.Length != labels.Length)
         {
             throw new ArgumentException("Number of samples must match number of labels.");
         }
 
-        int totalSamples = testData.Rows;
+        int totalSamples = testData.Length;
         int correctPredictions = 0;
         int certifiedCorrect = 0;
         T totalCertifiedRadius = NumOps.Zero;
 
         for (int i = 0; i < totalSamples; i++)
         {
-            var input = testData.GetRow(i);
+            var input = testData[i];
+            var label = labels[i];
+            var labelVector = ConversionsHelper.ConvertToVector<T, TOutput>(label);
+            var trueClass = GetPredictedClass(labelVector);
+
             var certification = CertifyPrediction(input, model);
 
             // Check if prediction is correct
-            if (certification.PredictedClass == labels[i])
+            if (certification.PredictedClass == trueClass)
             {
                 correctPredictions++;
 
@@ -333,24 +354,20 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
     /// <summary>
     /// Computes interval bounds for the neural network output.
     /// </summary>
-    /// <param name="input">The center input.</param>
+    /// <param name="vectorInput">The input as a vector.</param>
+    /// <param name="referenceInput">The original input for type conversion.</param>
     /// <param name="model">The model to analyze.</param>
     /// <param name="epsilon">The perturbation radius.</param>
     /// <returns>Tuple of lower and upper bound vectors.</returns>
     private (Vector<T> lower, Vector<T> upper) ComputeOutputBounds(
-        Vector<T> input,
-        IPredictiveModel<T, Vector<T>, Vector<T>> model,
+        Vector<T> vectorInput,
+        TInput referenceInput,
+        IFullModel<T, TInput, TOutput> model,
         T epsilon)
     {
-        // Initialize input bounds: [x - ε, x + ε]
-        var inputLower = new Vector<T>(input.Length);
-        var inputUpper = new Vector<T>(input.Length);
-
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputLower[i] = NumOps.Subtract(input[i], epsilon);
-            inputUpper[i] = NumOps.Add(input[i], epsilon);
-        }
+        // Initialize input bounds: [x - ε, x + ε] using vectorized operations
+        var inputLower = Engine.Subtract<T>(vectorInput, Engine.Fill<T>(vectorInput.Length, epsilon));
+        var inputUpper = Engine.Add<T>(vectorInput, Engine.Fill<T>(vectorInput.Length, epsilon));
 
         // Try to get layer-wise access if available
         if (model is INeuralNetworkModel<T> nnModel)
@@ -363,7 +380,7 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
         }
 
         // Fallback: Use sampling-based approximation
-        return ApproximateBoundsWithSampling(input, model, epsilon);
+        return ApproximateBoundsWithSampling(vectorInput, referenceInput, model, epsilon);
     }
 
     /// <summary>
@@ -587,22 +604,24 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
     /// Approximates output bounds using sampling when layer access is not available.
     /// </summary>
     private (Vector<T> lower, Vector<T> upper) ApproximateBoundsWithSampling(
-        Vector<T> input,
-        IPredictiveModel<T, Vector<T>, Vector<T>> model,
+        Vector<T> vectorInput,
+        TInput referenceInput,
+        IFullModel<T, TInput, TOutput> model,
         T epsilon)
     {
         // Get a clean prediction to determine output dimension
-        var cleanOutput = model.Predict(input);
-        int outputDim = cleanOutput.Length;
+        var cleanOutput = model.Predict(referenceInput);
+        var cleanOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(cleanOutput);
+        int outputDim = cleanOutputVector.Length;
 
         var lowerBounds = new Vector<T>(outputDim);
         var upperBounds = new Vector<T>(outputDim);
 
-        // Initialize with extreme values
+        // Initialize with clean output values
         for (int i = 0; i < outputDim; i++)
         {
-            lowerBounds[i] = cleanOutput[i];
-            upperBounds[i] = cleanOutput[i];
+            lowerBounds[i] = cleanOutputVector[i];
+            upperBounds[i] = cleanOutputVector[i];
         }
 
         // Sample points to approximate bounds
@@ -613,28 +632,34 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
 
         for (int s = 0; s < numSamples; s++)
         {
-            // Generate a random perturbation within the epsilon ball
-            var perturbedInput = new Vector<T>(input.Length);
-            for (int i = 0; i < input.Length; i++)
-            {
-                // Random perturbation in [-epsilon, epsilon]
-                double delta = (random.NextDouble() * 2 - 1) * NumOps.ToDouble(epsilon);
-                perturbedInput[i] = NumOps.Add(input[i], NumOps.FromDouble(delta));
-            }
+            // Generate a random perturbation within the epsilon ball using Engine
+            var noise = Engine.GenerateGaussianNoise<T>(
+                vectorInput.Length,
+                NumOps.Zero,
+                epsilon,
+                random.Next());
 
-            // Get output for perturbed input
+            // Clip perturbation to L-infinity ball
+            noise = Engine.Clamp<T>(noise, NumOps.Negate(epsilon), epsilon);
+
+            // Add perturbation to input
+            var perturbedVector = Engine.Add<T>(vectorInput, noise);
+
+            // Convert back to TInput and get prediction
+            var perturbedInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(perturbedVector, referenceInput);
             var perturbedOutput = model.Predict(perturbedInput);
+            var perturbedOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(perturbedOutput);
 
             // Update bounds
             for (int i = 0; i < outputDim; i++)
             {
-                if (NumOps.LessThan(perturbedOutput[i], lowerBounds[i]))
+                if (NumOps.LessThan(perturbedOutputVector[i], lowerBounds[i]))
                 {
-                    lowerBounds[i] = perturbedOutput[i];
+                    lowerBounds[i] = perturbedOutputVector[i];
                 }
-                if (NumOps.GreaterThan(perturbedOutput[i], upperBounds[i]))
+                if (NumOps.GreaterThan(perturbedOutputVector[i], upperBounds[i]))
                 {
-                    upperBounds[i] = perturbedOutput[i];
+                    upperBounds[i] = perturbedOutputVector[i];
                 }
             }
         }
@@ -691,8 +716,9 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
     /// Computes the certified radius using binary search.
     /// </summary>
     private T ComputeCertifiedRadiusInternal(
-        Vector<T> input,
-        IPredictiveModel<T, Vector<T>, Vector<T>> model,
+        Vector<T> vectorInput,
+        TInput referenceInput,
+        IFullModel<T, TInput, TOutput> model,
         int predictedClass)
     {
         T minRadius = NumOps.Zero;
@@ -709,7 +735,7 @@ public class IntervalBoundPropagation<T> : ICertifiedDefense<T>
                 NumOps.Add(minRadius, maxRadius),
                 NumOps.FromDouble(2.0));
 
-            var (lowerBounds, upperBounds) = ComputeOutputBounds(input, model, midRadius);
+            var (lowerBounds, upperBounds) = ComputeOutputBounds(vectorInput, referenceInput, model, midRadius);
 
             if (CheckCertification(lowerBounds, upperBounds, predictedClass))
             {

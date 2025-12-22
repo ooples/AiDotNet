@@ -140,6 +140,8 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;
     private AiDotNet.Models.Options.SafetyFilterConfiguration<T>? _safetyFilterConfiguration;
+    private AdversarialRobustnessConfiguration<T, TInput, TOutput>? _adversarialRobustnessConfiguration;
+    private FineTuningConfiguration<T, TInput, TOutput>? _fineTuningConfiguration;
     private ILoRAConfiguration<T>? _loraConfiguration;
     private IRetriever<T>? _ragRetriever;
     private IReranker<T>? _ragReranker;
@@ -2331,9 +2333,134 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </summary>
     /// <param name="configuration">Safety filter configuration.</param>
     /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>Obsolete:</b> Use <see cref="ConfigureAdversarialRobustness"/> instead, which provides
+    /// a unified configuration for safety filtering, adversarial attacks/defenses, and certified robustness.</para>
+    /// </remarks>
+    [Obsolete("Use ConfigureAdversarialRobustness instead for unified safety and robustness configuration.")]
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureSafetyFilter(AiDotNet.Models.Options.SafetyFilterConfiguration<T> configuration)
     {
         _safetyFilterConfiguration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        return this;
+    }
+
+    /// <summary>
+    /// Configures adversarial robustness and AI safety features for the model.
+    /// </summary>
+    /// <param name="configuration">The adversarial robustness configuration.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This unified configuration replaces the previous <see cref="ConfigureSafetyFilter"/> method
+    /// and provides comprehensive control over all aspects of adversarial robustness and AI safety:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><term>Safety Filtering</term><description>Input validation and output filtering for harmful content</description></item>
+    /// <item><term>Adversarial Attacks</term><description>FGSM, PGD, CW, AutoAttack for robustness testing</description></item>
+    /// <item><term>Adversarial Defenses</term><description>Adversarial training, input preprocessing, ensemble methods</description></item>
+    /// <item><term>Certified Robustness</term><description>Randomized smoothing, IBP, CROWN for provable guarantees</description></item>
+    /// <item><term>Content Moderation</term><description>Prompt injection detection, PII filtering for LLMs</description></item>
+    /// <item><term>Red Teaming</term><description>Automated adversarial prompt generation for evaluation</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> This is your one-stop configuration for making your model safe and robust.
+    /// You can use factory methods like <c>AdversarialRobustnessConfiguration.BasicSafety()</c> for common setups,
+    /// or customize individual options for your specific needs.</para>
+    /// <example>
+    /// <code>
+    /// // Basic safety filtering
+    /// builder.ConfigureAdversarialRobustness(AdversarialRobustnessConfiguration&lt;double, Vector&lt;double&gt;, int&gt;.BasicSafety());
+    ///
+    /// // Comprehensive robustness with certified guarantees
+    /// builder.ConfigureAdversarialRobustness(AdversarialRobustnessConfiguration&lt;double, Vector&lt;double&gt;, int&gt;.Comprehensive());
+    ///
+    /// // LLM safety with content moderation
+    /// builder.ConfigureAdversarialRobustness(AdversarialRobustnessConfiguration&lt;double, string, string&gt;.ForLLM());
+    ///
+    /// // Custom configuration
+    /// builder.ConfigureAdversarialRobustness(new AdversarialRobustnessConfiguration&lt;double, Vector&lt;double&gt;, int&gt;
+    /// {
+    ///     Enabled = true,
+    ///     Options = new AdversarialRobustnessOptions&lt;double&gt;
+    ///     {
+    ///         EnableSafetyFiltering = true,
+    ///         EnableAdversarialTraining = true,
+    ///         EnableCertifiedRobustness = true
+    ///     },
+    ///     UseCertifiedInference = true
+    /// });
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAdversarialRobustness(
+        AdversarialRobustnessConfiguration<T, TInput, TOutput> configuration)
+    {
+        _adversarialRobustnessConfiguration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        return this;
+    }
+
+    /// <summary>
+    /// Configures fine-tuning for the model using preference learning, RLHF, or other alignment methods.
+    /// </summary>
+    /// <param name="configuration">The fine-tuning configuration.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This configuration enables post-training fine-tuning using various alignment techniques:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><term>Supervised Fine-Tuning (SFT)</term><description>Traditional fine-tuning on labeled examples</description></item>
+    /// <item><term>Direct Preference Optimization (DPO)</term><description>Learn from human preferences without reward models</description></item>
+    /// <item><term>Simple Preference Optimization (SimPO)</term><description>Reference-free, length-normalized preference learning</description></item>
+    /// <item><term>Group Relative Policy Optimization (GRPO)</term><description>Memory-efficient RL without critic models</description></item>
+    /// <item><term>Odds Ratio Preference Optimization (ORPO)</term><description>Combined SFT + preference in one step</description></item>
+    /// <item><term>Identity Preference Optimization (IPO)</term><description>Regularized preference optimization</description></item>
+    /// <item><term>Kahneman-Tversky Optimization (KTO)</term><description>Utility-maximizing preference learning</description></item>
+    /// <item><term>Contrastive Preference Optimization (CPO)</term><description>Contrastive learning for preferences</description></item>
+    /// <item><term>Constitutional AI (CAI)</term><description>Self-improvement with constitutional principles</description></item>
+    /// <item><term>Reinforcement Learning from Human Feedback (RLHF)</term><description>Classic PPO-based alignment</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> Fine-tuning helps align your model with human preferences.
+    /// Use factory methods like <c>FineTuningConfiguration.ForDPO(data)</c> for quick setup.
+    /// DPO and SimPO are simpler (no reward model needed), while RLHF and GRPO provide more control.</para>
+    /// <example>
+    /// <code>
+    /// // DPO fine-tuning with preference pairs
+    /// var preferenceData = new FineTuningData&lt;double, string, string&gt;
+    /// {
+    ///     Inputs = prompts,
+    ///     ChosenOutputs = preferredResponses,
+    ///     RejectedOutputs = rejectedResponses
+    /// };
+    /// builder.ConfigureFineTuning(FineTuningConfiguration&lt;double, string, string&gt;.ForDPO(preferenceData));
+    ///
+    /// // GRPO for RL-based alignment
+    /// var rlData = new FineTuningData&lt;double, string, string&gt;
+    /// {
+    ///     Inputs = prompts,
+    ///     Rewards = rewardScores
+    /// };
+    /// builder.ConfigureFineTuning(FineTuningConfiguration&lt;double, string, string&gt;.ForGRPO(rlData));
+    ///
+    /// // Custom fine-tuning configuration
+    /// builder.ConfigureFineTuning(new FineTuningConfiguration&lt;double, Vector&lt;double&gt;, int&gt;
+    /// {
+    ///     Enabled = true,
+    ///     Options = new FineTuningOptions&lt;double&gt;
+    ///     {
+    ///         MethodType = FineTuningMethodType.SimPO,
+    ///         LearningRate = 1e-5,
+    ///         Epochs = 3,
+    ///         SimPOGamma = 1.0
+    ///     },
+    ///     TrainingData = myPreferenceData
+    /// });
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFineTuning(
+        FineTuningConfiguration<T, TInput, TOutput> configuration)
+    {
+        _fineTuningConfiguration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         return this;
     }
 

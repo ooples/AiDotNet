@@ -26,7 +26,9 @@ using AiDotNet.Tensors.LinearAlgebra;
 /// - They help models generalize better to unusual inputs
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface IAdversarialDefense<T> : IModelSerializer
+/// <typeparam name="TInput">The input data type for the model (e.g., Vector&lt;T&gt;, string).</typeparam>
+/// <typeparam name="TOutput">The output data type for the model (e.g., Vector&lt;T&gt;, int).</typeparam>
+public interface IAdversarialDefense<T, TInput, TOutput> : IModelSerializer
 {
     /// <summary>
     /// Trains or hardens a model to be more resistant to adversarial attacks.
@@ -48,7 +50,7 @@ public interface IAdversarialDefense<T> : IModelSerializer
     /// <param name="labels">The labels for the training data.</param>
     /// <param name="model">The model to harden against attacks.</param>
     /// <returns>The defended/hardened model.</returns>
-    IPredictiveModel<T, Vector<T>, Vector<T>> ApplyDefense(Matrix<T> trainingData, Vector<int> labels, IPredictiveModel<T, Vector<T>, Vector<T>> model);
+    IFullModel<T, TInput, TOutput> ApplyDefense(TInput[] trainingData, TOutput[] labels, IFullModel<T, TInput, TOutput> model);
 
     /// <summary>
     /// Preprocesses input data to remove or reduce adversarial perturbations.
@@ -60,7 +62,7 @@ public interface IAdversarialDefense<T> : IModelSerializer
     /// </remarks>
     /// <param name="input">The potentially adversarial input.</param>
     /// <returns>The cleaned/defended input.</returns>
-    Vector<T> PreprocessInput(Vector<T> input);
+    TInput PreprocessInput(TInput input);
 
     /// <summary>
     /// Evaluates the robustness of a defended model against attacks.
@@ -75,10 +77,10 @@ public interface IAdversarialDefense<T> : IModelSerializer
     /// <param name="attack">The attack to test against.</param>
     /// <returns>Robustness metrics including clean accuracy and adversarial accuracy.</returns>
     RobustnessMetrics<T> EvaluateRobustness(
-        IPredictiveModel<T, Vector<T>, Vector<T>> model,
-        Matrix<T> testData,
-        Vector<int> labels,
-        IAdversarialAttack<T> attack);
+        IFullModel<T, TInput, TOutput> model,
+        TInput[] testData,
+        TOutput[] labels,
+        IAdversarialAttack<T, TInput, TOutput> attack);
 
     /// <summary>
     /// Gets the configuration options for the adversarial defense.
