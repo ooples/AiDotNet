@@ -116,7 +116,7 @@ public class ConstitutionalAIFineTuning<T, TInput, TOutput> : FineTuningBase<T, 
                 }
 
                 var batchLoss = await ComputeCAILossAndUpdateAsync(
-                    policyModel, batch, beta, critiqueIterations, cancellationToken);
+                    policyModel, batch, beta, critiqueIterations, Options.LearningRate, cancellationToken);
                 currentStep++;
 
                 UpdateMetrics(batchLoss, currentStep);
@@ -179,13 +179,14 @@ public class ConstitutionalAIFineTuning<T, TInput, TOutput> : FineTuningBase<T, 
     }
 
     /// <summary>
-    /// Computes the CAI loss for a batch.
+    /// Computes the CAI loss for a batch and updates model parameters.
     /// </summary>
     private async Task<double> ComputeCAILossAndUpdateAsync(
         IFullModel<T, TInput, TOutput> policyModel,
         FineTuningData<T, TInput, TOutput> batch,
         double beta,
         int critiqueIterations,
+        double learningRate,
         CancellationToken cancellationToken)
     {
         if (_referenceModel == null)
@@ -220,6 +221,10 @@ public class ConstitutionalAIFineTuning<T, TInput, TOutput> : FineTuningBase<T, 
                 var margin = beta * (revisedLogRatio - originalLogRatio);
                 var loss = -LogSigmoid(margin);
 
+                // Compute and apply gradients to update model parameters
+                var gradients = policyModel.ComputeGradients(input, revised);
+                policyModel.ApplyGradients(gradients, NumOps.FromDouble(learningRate));
+
                 totalLoss += loss;
             }
 
@@ -242,6 +247,10 @@ public class ConstitutionalAIFineTuning<T, TInput, TOutput> : FineTuningBase<T, 
             // SFT-style loss on target outputs (which should be constitutionally aligned)
             var logProb = ComputeLogProbability(policyModel, input, targetOutput);
             var loss = -logProb;
+
+            // Compute and apply gradients to update model parameters
+            var gradients = policyModel.ComputeGradients(input, targetOutput);
+            policyModel.ApplyGradients(gradients, NumOps.FromDouble(learningRate));
 
             totalLoss += loss;
         }

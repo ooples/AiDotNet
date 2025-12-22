@@ -119,7 +119,7 @@ public class KahnemanTverskyOptimization<T, TInput, TOutput> : FineTuningBase<T,
                 }
 
                 var batchLoss = await ComputeKTOLossAndUpdateAsync(
-                    policyModel, batch, beta, desirableWeight, undesirableWeight, cancellationToken);
+                    policyModel, batch, beta, desirableWeight, undesirableWeight, Options.LearningRate, cancellationToken);
                 currentStep++;
 
                 UpdateMetrics(batchLoss, currentStep);
@@ -236,6 +236,7 @@ public class KahnemanTverskyOptimization<T, TInput, TOutput> : FineTuningBase<T,
         double beta,
         double desirableWeight,
         double undesirableWeight,
+        double learningRate,
         CancellationToken cancellationToken)
     {
         if (_referenceModel == null)
@@ -269,6 +270,11 @@ public class KahnemanTverskyOptimization<T, TInput, TOutput> : FineTuningBase<T,
 
                 // KTO desirable loss: -weight * sigmoid(beta * (log_ratio - KL))
                 var loss = -desirableWeight * Sigmoid(beta * (logRatio - klEstimate));
+
+                // Compute and apply gradients to update model parameters
+                var gradients = policyModel.ComputeGradients(input, chosen);
+                policyModel.ApplyGradients(gradients, NumOps.FromDouble(learningRate));
+
                 totalLoss += loss;
                 count++;
             }
@@ -290,6 +296,11 @@ public class KahnemanTverskyOptimization<T, TInput, TOutput> : FineTuningBase<T,
 
                 // KTO undesirable loss: -weight * (1 - sigmoid(beta * (log_ratio - KL)))
                 var loss = -undesirableWeight * (1 - Sigmoid(beta * (logRatio - klEstimate)));
+
+                // Compute and apply gradients with negative weight for undesirable outputs
+                var gradients = policyModel.ComputeGradients(input, rejected);
+                policyModel.ApplyGradients(gradients, NumOps.FromDouble(-learningRate * undesirableWeight));
+
                 totalLoss += loss;
                 count++;
             }

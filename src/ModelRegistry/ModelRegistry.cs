@@ -663,10 +663,18 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
     /// <summary>
     /// Saves the Model Card for a model version to a file.
     /// </summary>
+    /// <remarks>
+    /// The filePath must resolve to a location within the registry directory
+    /// to prevent path traversal attacks.
+    /// </remarks>
     public override void SaveModelCard(string modelName, int version, string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        // Validate path is within registry directory to prevent path traversal
+        var resolvedPath = Path.GetFullPath(filePath);
+        ValidatePathWithinDirectory(resolvedPath, RegistryDirectory);
 
         var modelCard = GetModelCard(modelName, version);
         if (modelCard == null)
@@ -675,7 +683,7 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
             modelCard = GenerateModelCard(modelName, version);
         }
 
-        modelCard.SaveToFile(filePath);
+        modelCard.SaveToFile(resolvedPath);
     }
 
     private string GetModelCardPath(string modelName, int version)

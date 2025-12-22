@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 
@@ -147,7 +148,7 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
                 for (int ppoEpoch = 0; ppoEpoch < ppoEpochs; ppoEpoch++)
                 {
                     batchLoss = await ComputePPOLossAndUpdateAsync(
-                        policyModel, experience, clipRange, klCoeff, valueCoeff, entropyCoeff, cancellationToken);
+                        policyModel, batch, experience, clipRange, klCoeff, valueCoeff, entropyCoeff, cancellationToken);
                 }
 
                 currentStep++;
@@ -265,8 +266,14 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
             if (_valueModel != null)
             {
                 // Use value model to estimate state value
+                // Convert the value model's output to a scalar value estimate
                 var valueOutput = _valueModel.Predict(input);
-                value = ComputeLogProbability(_valueModel, input, valueOutput);
+                var valueVector = ConversionsHelper.ConvertToVector<T, TOutput>(valueOutput);
+                if (valueVector.Length > 0)
+                {
+                    // Use mean of output vector as scalar value estimate
+                    value = NumOps.ToDouble(valueVector.Average());
+                }
             }
 
             // KL divergence from reference
@@ -329,6 +336,7 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
     /// </summary>
     private async Task<double> ComputePPOLossAndUpdateAsync(
         IFullModel<T, TInput, TOutput> policyModel,
+        FineTuningData<T, TInput, TOutput> batch,
         List<PPOExperience> experience,
         double clipRange,
         double klCoeff,
@@ -347,10 +355,13 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
                 break;
             }
 
-            // Compute current log probability (would recompute from model in real implementation)
-            var currentLogProb = exp.LogProb; // Simplified - should recompute
+            // Recompute current log probability from the updated policy model
+            // This is essential for PPO - we compare old policy (exp.LogProb) vs current policy
+            var input = batch.Inputs[exp.InputIndex];
+            var currentOutput = policyModel.Predict(input);
+            var currentLogProb = ComputeLogProbability(policyModel, input, currentOutput);
 
-            // Probability ratio
+            // Probability ratio between current and old policy
             var logRatio = currentLogProb - exp.LogProb;
             var ratio = Math.Exp(logRatio);
 

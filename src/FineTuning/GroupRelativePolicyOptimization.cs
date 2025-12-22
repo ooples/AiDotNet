@@ -237,8 +237,20 @@ public class GroupRelativePolicyOptimization<T, TInput, TOutput> : FineTuningBas
 
             for (int g = 0; g < groupSize; g++)
             {
-                // In a real implementation, we would sample with temperature
-                var response = policyModel.Predict(input);
+                // Generate response - use batch outputs if available for diversity,
+                // otherwise fall back to model prediction (note: deterministic prediction
+                // produces identical responses; proper GRPO requires temperature sampling)
+                TOutput response;
+                if (batch.HasPairwisePreferenceData && g < 2)
+                {
+                    // Use chosen/rejected outputs for first two responses to ensure diversity
+                    response = g == 0 ? batch.ChosenOutputs[i] : batch.RejectedOutputs[i];
+                }
+                else
+                {
+                    // Fall back to model prediction (may be identical without temperature)
+                    response = policyModel.Predict(input);
+                }
 
                 // Compute reward
                 double reward = _rewardFunction != null

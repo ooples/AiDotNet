@@ -191,11 +191,31 @@ public class FineTuningData<T, TInput, TOutput>
     {
         return new FineTuningData<T, TInput, TOutput>
         {
+            // Core data
             Inputs = indices.Select(i => Inputs[i]).ToArray(),
             Outputs = Outputs.Length > 0 ? indices.Select(i => Outputs[i]).ToArray() : Array.Empty<TOutput>(),
+
+            // Preference data
             ChosenOutputs = ChosenOutputs.Length > 0 ? indices.Select(i => ChosenOutputs[i]).ToArray() : Array.Empty<TOutput>(),
             RejectedOutputs = RejectedOutputs.Length > 0 ? indices.Select(i => RejectedOutputs[i]).ToArray() : Array.Empty<TOutput>(),
+            DesirabilityLabels = DesirabilityLabels.Length > 0 ? indices.Select(i => DesirabilityLabels[i]).ToArray() : Array.Empty<bool>(),
+
+            // Ranking data
+            RankedOutputs = RankedOutputs.Length > 0 ? indices.Select(i => RankedOutputs[i]).ToArray() : Array.Empty<TOutput[]>(),
+
+            // RL data
             Rewards = Rewards.Length > 0 ? indices.Select(i => Rewards[i]).ToArray() : Array.Empty<double>(),
+            Advantages = Advantages.Length > 0 ? indices.Select(i => Advantages[i]).ToArray() : Array.Empty<double>(),
+            Values = Values.Length > 0 ? indices.Select(i => Values[i]).ToArray() : Array.Empty<double>(),
+
+            // Constitutional AI data
+            CritiqueRevisions = CritiqueRevisions.Length > 0 ? indices.Select(i => CritiqueRevisions[i]).ToArray() : Array.Empty<(TOutput, string, TOutput)>(),
+
+            // Distillation data
+            TeacherOutputs = TeacherOutputs.Length > 0 ? indices.Select(i => TeacherOutputs[i]).ToArray() : Array.Empty<TOutput>(),
+            TeacherConfidences = TeacherConfidences.Length > 0 ? indices.Select(i => TeacherConfidences[i]).ToArray() : Array.Empty<double>(),
+
+            // Metadata
             SampleWeights = SampleWeights.Length > 0 ? indices.Select(i => SampleWeights[i]).ToArray() : Array.Empty<double>(),
             SampleIds = SampleIds.Length > 0 ? indices.Select(i => SampleIds[i]).ToArray() : Array.Empty<string>()
         };

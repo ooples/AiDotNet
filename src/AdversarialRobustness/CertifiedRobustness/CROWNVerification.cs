@@ -566,20 +566,14 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
         // Take the tighter of CROWN and IBP bounds
         for (int i = 0; i < outputDim; i++)
         {
-            if (NumOps.GreaterThan(outputLower[i], ibpLower[i]))
-            {
-                // CROWN lower is tighter
-            }
-            else
+            // Use the tighter lower bound (maximum of CROWN and IBP)
+            if (NumOps.LessThanOrEquals(outputLower[i], ibpLower[i]))
             {
                 outputLower[i] = ibpLower[i];
             }
 
-            if (NumOps.LessThan(outputUpper[i], ibpUpper[i]))
-            {
-                // CROWN upper is tighter
-            }
-            else
+            // Use the tighter upper bound (minimum of CROWN and IBP)
+            if (NumOps.GreaterThanOrEquals(outputUpper[i], ibpUpper[i]))
             {
                 outputUpper[i] = ibpUpper[i];
             }

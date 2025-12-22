@@ -295,8 +295,7 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
 
         var settings = new JsonSerializerSettings
         {
-            TypeNameHandling = TypeNameHandling.Auto,
-            SerializationBinder = new SafeSerializationBinder()
+            TypeNameHandling = TypeNameHandling.None
         };
 
         var deserialized = JsonConvert.DeserializeObject<SerializationData>(json, settings);
@@ -546,10 +545,10 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
                     break;
 
                 case ActivationFunction.Softmax:
-                    // Softmax is handled specially - for now, pass through
-                    // Proper softmax bound propagation requires considering all elements together
-                    outputLower[i] = lower[i];
-                    outputUpper[i] = upper[i];
+                    // Softmax outputs are always in [0, 1] range
+                    // Use conservative bounds since proper softmax IBP requires joint computation
+                    outputLower[i] = NumOps.Zero;
+                    outputUpper[i] = NumOps.One;
                     break;
 
                 case ActivationFunction.Linear:
