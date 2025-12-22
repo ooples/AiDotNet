@@ -221,16 +221,9 @@ public class RandomizedSmoothing<T> : ICertifiedDefense<T>
             // Proper median calculation: for even-sized lists, average the two middle elements
             var count = certifiedRadii.Count;
             var mid = count / 2;
-            if (count % 2 == 0)
-            {
-                // Even count: average of middle two elements
-                metrics.MedianCertifiedRadius = NumOps.FromDouble((certifiedRadii[mid - 1] + certifiedRadii[mid]) / 2.0);
-            }
-            else
-            {
-                // Odd count: middle element
-                metrics.MedianCertifiedRadius = NumOps.FromDouble(certifiedRadii[mid]);
-            }
+            metrics.MedianCertifiedRadius = count % 2 == 0
+                ? NumOps.FromDouble((certifiedRadii[mid - 1] + certifiedRadii[mid]) / 2.0) // Even: average two middle
+                : NumOps.FromDouble(certifiedRadii[mid]); // Odd: middle element
         }
 
         return metrics;

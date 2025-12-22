@@ -235,16 +235,10 @@ public class PGDAttack<T> : AdversarialAttackBase<T>
         var outputGradient = new Vector<T>(output.Length);
         for (int i = 0; i < output.Length; i++)
         {
-            if (i == targetClass)
-            {
-                // ∂L/∂z[target] = p[target] - 1
-                outputGradient[i] = NumOps.Subtract(probabilities[i], NumOps.One);
-            }
-            else
-            {
-                // ∂L/∂z[i] = p[i]
-                outputGradient[i] = probabilities[i];
-            }
+            // Gradient: ∂L/∂z[target] = p[target] - 1, ∂L/∂z[i] = p[i] for i != target
+            outputGradient[i] = i == targetClass
+                ? NumOps.Subtract(probabilities[i], NumOps.One)
+                : probabilities[i];
         }
 
         // Backpropagate to get input gradient
