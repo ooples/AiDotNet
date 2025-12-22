@@ -271,23 +271,11 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
 
             for (int i = 0; i < embeddings.Count; i++)
             {
-                T minDist = NumOps.Zero;
-                bool hasMinDist = false;
-
-                foreach (var centroid in centroids)
-                {
-                    var dist = EuclideanDistanceSquared(embeddings[i], centroid);
-                    if (!hasMinDist || NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        hasMinDist = true;
-                    }
-                }
-
-                if (!hasMinDist)
-                {
-                    minDist = NumOps.Zero;
-                }
+                var minDist = centroids.Count == 0
+                    ? NumOps.Zero
+                    : centroids
+                        .Select(centroid => EuclideanDistanceSquared(embeddings[i], centroid))
+                        .Aggregate((currentMin, dist) => NumOps.LessThan(dist, currentMin) ? dist : currentMin);
 
                 distances[i] = minDist;
                 totalDistance = NumOps.Add(totalDistance, minDist);
