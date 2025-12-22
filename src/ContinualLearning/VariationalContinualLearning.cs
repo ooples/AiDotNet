@@ -71,7 +71,7 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
         _lambda = lambda;
         _initialLogVar = initialLogVar;
         _taskCount = 0;
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc />

@@ -169,9 +169,8 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
         }
 
         // Random sampling
-        var random = new Random();
         var indices = Enumerable.Range(0, batchSize)
-            .OrderBy(_ => random.Next())
+            .OrderBy(_ => RandomHelper.Shared.Next())
             .Take(samplesToKeep)
             .ToArray();
 

@@ -68,7 +68,7 @@ public class GenerativeReplay<T> : IContinualLearningStrategy<T>
         _replayRatio = replayRatio;
         _lambda = lambda;
         _taskCount = 0;
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc />
