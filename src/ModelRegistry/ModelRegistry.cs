@@ -681,7 +681,9 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
     private string GetModelCardPath(string modelName, int version)
     {
         var modelDir = GetModelDirectoryPath(modelName);
-        return Path.Combine(modelDir, $"v{version}_modelcard.json");
+        var path = Path.Combine(modelDir, $"v{version}_modelcard.json");
+        ValidatePathWithinDirectory(path, RegistryDirectory);
+        return path;
     }
 
     #region Private Helper Methods

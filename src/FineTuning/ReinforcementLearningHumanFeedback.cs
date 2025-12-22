@@ -209,15 +209,9 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
             var input = evaluationData.Inputs[i];
             var output = model.Predict(input);
 
-            double reward;
-            if (_rewardFunction != null)
-            {
-                reward = _rewardFunction(input, output);
-            }
-            else
-            {
-                reward = evaluationData.Rewards[i];
-            }
+            double reward = _rewardFunction != null
+                ? _rewardFunction(input, output)
+                : evaluationData.Rewards[i];
 
             rewards.Add(reward);
             totalReward += reward;

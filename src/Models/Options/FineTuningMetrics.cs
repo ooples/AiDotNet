@@ -289,7 +289,7 @@ public class FineTuningMetrics<T>
             lines.Add($"Preference Accuracy: {PreferenceAccuracy:P1}");
         }
 
-        if (AverageReward != 0)
+        if (Math.Abs(AverageReward) > double.Epsilon)
         {
             lines.Add($"Average Reward: {AverageReward:F3}");
             lines.Add($"KL Divergence: {KLDivergence:F4}");

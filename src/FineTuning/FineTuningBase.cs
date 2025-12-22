@@ -280,14 +280,9 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
     /// <returns>The log sigmoid output.</returns>
     protected static double LogSigmoid(double x)
     {
-        if (x >= 0)
-        {
-            return -Math.Log(1.0 + Math.Exp(-x));
-        }
-        else
-        {
-            return x - Math.Log(1.0 + Math.Exp(x));
-        }
+        return x >= 0
+            ? -Math.Log(1.0 + Math.Exp(-x))
+            : x - Math.Log(1.0 + Math.Exp(x));
     }
 
     /// <summary>

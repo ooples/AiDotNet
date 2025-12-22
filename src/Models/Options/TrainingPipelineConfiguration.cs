@@ -913,7 +913,7 @@ public class TrainingPipelineConfiguration<T, TInput, TOutput>
             FineTuningMethod = FineTuningMethodType.SFT,
             UseLoRA = true,
             LoRARank = rank,
-            LoRAAlpha = rank * 2,
+            LoRAAlpha = rank * 2.0,
             LoRADropout = 0.05,
             FreezeBaseModel = true
         };
@@ -943,7 +943,7 @@ public class TrainingPipelineConfiguration<T, TInput, TOutput>
             UseQLoRA = true,
             LoRARank = rank,
             QLoRABits = bits,
-            LoRAAlpha = rank * 2,
+            LoRAAlpha = rank * 2.0,
             FreezeBaseModel = true
         };
         configure?.Invoke(stage);
@@ -1576,6 +1576,7 @@ public class TrainingPipelineConfiguration<T, TInput, TOutput>
                 stage.TrainingData = data;
                 stage.Epochs = 2;
                 stage.BatchSize = 8;
+                stage.LearningRate = 2e-5 * learningRateMultiplier;
             });
         }
 
@@ -2057,7 +2058,6 @@ public class TrainingPipelineConfiguration<T, TInput, TOutput>
         // Check for incompatible stage sequences
         for (int i = 1; i < Stages.Count; i++)
         {
-            var prev = Stages[i - 1];
             var curr = Stages[i];
 
             // PPO requires a reward model to have been trained

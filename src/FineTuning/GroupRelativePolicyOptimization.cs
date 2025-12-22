@@ -183,15 +183,9 @@ public class GroupRelativePolicyOptimization<T, TInput, TOutput> : FineTuningBas
             var input = evaluationData.Inputs[i];
             var output = model.Predict(input);
 
-            double reward;
-            if (_rewardFunction != null)
-            {
-                reward = _rewardFunction(input, output);
-            }
-            else
-            {
-                reward = evaluationData.Rewards[i];
-            }
+            double reward = _rewardFunction != null
+                ? _rewardFunction(input, output)
+                : evaluationData.Rewards[i];
 
             rewards.Add(reward);
             totalReward += reward;
@@ -237,7 +231,6 @@ public class GroupRelativePolicyOptimization<T, TInput, TOutput> : FineTuningBas
             var input = batch.Inputs[i];
 
             // Generate group of responses
-            var groupResponses = new List<TOutput>();
             var groupRewards = new List<double>();
             var groupLogProbs = new List<double>();
             var groupRefLogProbs = new List<double>();
@@ -246,22 +239,13 @@ public class GroupRelativePolicyOptimization<T, TInput, TOutput> : FineTuningBas
             {
                 // In a real implementation, we would sample with temperature
                 var response = policyModel.Predict(input);
-                groupResponses.Add(response);
 
                 // Compute reward
-                double reward;
-                if (_rewardFunction != null)
-                {
-                    reward = _rewardFunction(input, response);
-                }
-                else if (batch.HasRLData && i < batch.Rewards.Length)
-                {
-                    reward = batch.Rewards[i];
-                }
-                else
-                {
-                    reward = 0.0;
-                }
+                double reward = _rewardFunction != null
+                    ? _rewardFunction(input, response)
+                    : (batch.HasRLData && i < batch.Rewards.Length)
+                        ? batch.Rewards[i]
+                        : 0.0;
                 groupRewards.Add(reward);
 
                 // Compute log probabilities
