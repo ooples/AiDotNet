@@ -108,7 +108,7 @@ public class DiversityExampleSelector<T> : FewShotExampleSelectorBase<T>
     /// </summary>
     protected override void OnExampleAdded(FewShotExample example)
     {
-        _exampleEmbeddings[example] = new Vector<T>(_embeddingFunction(example.Input));
+        _exampleEmbeddings[example] = _embeddingFunction(example.Input);
     }
 
     /// <summary>
