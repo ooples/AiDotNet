@@ -143,10 +143,14 @@ public abstract class FewShotExampleSelectorBase<T> : IFewShotExampleSelector<T>
     protected static T ClampToUnitInterval(T value)
     {
         if (NumOps.LessThan(value, NumOps.Zero))
+        {
             return NumOps.Zero;
+        }
 
         if (NumOps.GreaterThan(value, NumOps.One))
+        {
             return NumOps.One;
+        }
 
         return value;
     }
@@ -157,7 +161,9 @@ public abstract class FewShotExampleSelectorBase<T> : IFewShotExampleSelector<T>
     protected static T CosineSimilarity(Vector<T> a, Vector<T> b)
     {
         if (a.Length != b.Length)
+        {
             throw new ArgumentException("Vectors must have the same length.");
+        }
 
         T dotProduct = NumOps.Zero;
         T magnitudeA = NumOps.Zero;
@@ -180,7 +186,9 @@ public abstract class FewShotExampleSelectorBase<T> : IFewShotExampleSelector<T>
     protected static T EuclideanDistanceSquared(Vector<T> a, Vector<T> b)
     {
         if (a.Length != b.Length)
+        {
             throw new ArgumentException("Vectors must have the same length.");
+        }
 
         T sum = NumOps.Zero;
         for (int i = 0; i < a.Length; i++)
@@ -198,10 +206,14 @@ public abstract class FewShotExampleSelectorBase<T> : IFewShotExampleSelector<T>
     protected static int CompareDescending(T left, T right)
     {
         if (NumOps.GreaterThan(left, right))
+        {
             return -1;
+        }
 
         if (NumOps.LessThan(left, right))
+        {
             return 1;
+        }
 
         return 0;
     }
