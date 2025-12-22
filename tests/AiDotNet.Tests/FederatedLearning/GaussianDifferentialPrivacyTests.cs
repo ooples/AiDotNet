@@ -1,10 +1,10 @@
 namespace AiDotNet.Tests.FederatedLearning;
 
-using Xunit;
-using AiDotNet.FederatedLearning.Privacy;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.FederatedLearning.Privacy;
+using Xunit;
 
 /// <summary>
 /// Unit tests for Gaussian Differential Privacy mechanism.

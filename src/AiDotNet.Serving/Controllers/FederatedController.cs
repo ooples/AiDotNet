@@ -1,8 +1,8 @@
-using AiDotNet.Serving.Models.Federated;
 using AiDotNet.Serving.Models;
-using AiDotNet.Serving.Services.Federated;
+using AiDotNet.Serving.Models.Federated;
 using AiDotNet.Serving.Security;
 using AiDotNet.Serving.Security.Attestation;
+using AiDotNet.Serving.Services.Federated;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AiDotNet.Serving.Controllers;

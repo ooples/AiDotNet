@@ -1,16 +1,16 @@
+using AiDotNet.FederatedLearning.Cryptography;
+using AiDotNet.FederatedLearning.Heterogeneity;
+using AiDotNet.FederatedLearning.Infrastructure;
+using AiDotNet.FederatedLearning.Privacy;
+using AiDotNet.FederatedLearning.Privacy.Accounting;
+using AiDotNet.FederatedLearning.Selection;
+using AiDotNet.FederatedLearning.ServerOptimizers;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
-using AiDotNet.FederatedLearning.Privacy;
-using AiDotNet.FederatedLearning.Privacy.Accounting;
-using AiDotNet.FederatedLearning.Selection;
-using AiDotNet.FederatedLearning.Infrastructure;
-using AiDotNet.FederatedLearning.ServerOptimizers;
-using AiDotNet.FederatedLearning.Heterogeneity;
-using AiDotNet.FederatedLearning.Cryptography;
 
 namespace AiDotNet.FederatedLearning.Trainers;
 
@@ -391,7 +391,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 {
                     parameters = dpMechanism!.ApplyPrivacy(parameters, dpEpsilon, dpDelta);
                 }
- 
+
                 var parametersForAggregation = parameters;
                 if (useHomomorphicEncryption)
                 {

@@ -39,7 +39,7 @@ public class SecureAggregationTests
         var aggregatedSum = secureAggregation.AggregateSumSecurely(maskedUpdates);
 
         Assert.Equal(2, aggregatedSum["a"].Length);
-        Assert.Equal(1, aggregatedSum["b"].Length);
+        Assert.Single(aggregatedSum["b"]);
 
         Assert.Equal(update1["a"][0] + update2["a"][0] + update3["a"][0], aggregatedSum["a"][0], precision: 10);
         Assert.Equal(update1["a"][1] + update2["a"][1] + update3["a"][1], aggregatedSum["a"][1], precision: 10);

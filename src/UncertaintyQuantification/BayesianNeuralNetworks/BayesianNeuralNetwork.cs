@@ -1,8 +1,8 @@
 using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NeuralNetworks;
 using AiDotNet.Models.Results;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.UncertaintyQuantification.Interfaces;
 
 namespace AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;

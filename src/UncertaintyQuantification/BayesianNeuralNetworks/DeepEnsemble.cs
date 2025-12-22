@@ -1,7 +1,7 @@
-using AiDotNet.UncertaintyQuantification.Interfaces;
-using AiDotNet.Models.Results;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Results;
+using AiDotNet.UncertaintyQuantification.Interfaces;
 
 namespace AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
 

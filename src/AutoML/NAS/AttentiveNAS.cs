@@ -16,11 +16,11 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "AttentiveNAS: Improving Neural Architecture Search via Attentive Sampling" (CVPR 2021)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
-        public class AttentiveNAS<T> : NasAutoMLModelBase<T>
-        {
-            private readonly INumericOperations<T> _ops;
-            private readonly SearchSpaceBase<T> _nasSearchSpace;
-            private readonly Random _random;
+    public class AttentiveNAS<T> : NasAutoMLModelBase<T>
+    {
+        private readonly INumericOperations<T> _ops;
+        private readonly SearchSpaceBase<T> _nasSearchSpace;
+        private readonly Random _random;
 
         // Super-network with elastic dimensions
         private readonly List<int> _elasticDepths;
