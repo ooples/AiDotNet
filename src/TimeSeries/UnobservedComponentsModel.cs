@@ -278,8 +278,8 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         _cycle = new Vector<T>(_ucOptions.MaxIterations);
         _irregular = new Vector<T>(_ucOptions.MaxIterations);
         _fft = new FastFourierTransform<T>();
-        _filteredState = [];
-        _filteredCovariance = [];
+        _filteredState = new List<Vector<T>>();
+        _filteredCovariance = new List<Matrix<T>>();
         _stateCovariance = Matrix<T>.Empty();
         _state = new Vector<T>(_ucOptions.MaxIterations);
         _stateTransition = Matrix<T>.Empty();
@@ -1777,8 +1777,8 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         _observationNoise = NumOps.Zero;
 
         // Clear filtered results
-        _filteredState = [];
-        _filteredCovariance = [];
+        _filteredState = new List<Vector<T>>();
+        _filteredCovariance = new List<Matrix<T>>();
     }
 
     /// <summary>

@@ -448,7 +448,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     {
         // Extract patterns from the input tensor
         // Each row of the input tensor is treated as a separate pattern
-        List<Vector<T>> patterns = [];
+        List<Vector<T>> patterns = new List<Vector<T>>();
 
         for (int i = 0; i < input.Shape[0]; i++)
         {

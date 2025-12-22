@@ -91,7 +91,7 @@ public class NormalizationInfo<T, TInput, TOutput>
     /// - The normalizer uses these parameters to perform the scaling
     /// </para>
     /// </remarks>
-    public List<NormalizationParameters<T>> XParams { get; set; } = [];
+    public List<NormalizationParameters<T>> XParams { get; set; } = new List<NormalizationParameters<T>>();
 
     /// <summary>
     /// Gets or sets the normalization parameters for the target variable.

@@ -396,6 +396,8 @@ public class UIntOperations : INumericOperations<uint>
     /// </remarks>
     public bool Equals(uint a, uint b) => a == b;
 
+    public int Compare(uint a, uint b) => a.CompareTo(b);
+
     /// <summary>
     /// Raises a value to the specified power.
     /// </summary>

@@ -96,12 +96,12 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// List of recent generator losses for tracking training progress.
     /// </summary>
-    private readonly List<T> _generatorLosses = [];
+    private readonly List<T> _generatorLosses = new List<T>();
 
     /// <summary>
     /// List of recent discriminator losses for tracking training progress.
     /// </summary>
-    private readonly List<T> _discriminatorLosses = [];
+    private readonly List<T> _discriminatorLosses = new List<T>();
 
     /// <summary>
     /// The size of the latent code c.

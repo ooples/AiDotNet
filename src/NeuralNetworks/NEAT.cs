@@ -700,7 +700,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
             var activations = ActivateGenome(bestGenome, inputVector);
 
             // Create output tensor
-            var output = new Tensor<T>([Architecture.OutputSize]);
+            var output = new Tensor<T>(new int[] { Architecture.OutputSize });
             for (int i = 0; i < Architecture.OutputSize; i++)
             {
                 output[i] = activations[Architecture.InputSize + i];
@@ -872,7 +872,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
 
             if (!incomingConnections.ContainsKey(conn.ToNode))
             {
-                incomingConnections[conn.ToNode] = [];
+                incomingConnections[conn.ToNode] = new List<Connection<T>>();
             }
 
             incomingConnections[conn.ToNode].Add(conn);

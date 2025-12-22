@@ -190,7 +190,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         _epochs = epochs;
         _batchSize = batchSize;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _rbmLayers = [];
+        _rbmLayers = new List<RBMLayer<T>>();
 
         InitializeLayers();
     }
@@ -647,7 +647,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private int[] GetGradientShape()
     {
-        List<int> shape = [];
+        List<int> shape = new List<int>();
         foreach (var layer in Layers)
         {
             var layerGradients = layer.GetParameterGradients();

@@ -93,7 +93,7 @@ public class DecisionTreeNode<T>
     /// after answering all the previous questions. The decision tree uses these samples to make decisions
     /// about how to structure itself or what prediction to make.
     /// </remarks>
-    public List<Sample<T>> Samples { get; set; } = [];
+    public List<Sample<T>> Samples { get; set; } = new List<Sample<T>>();
 
     /// <summary>
     /// Gets or sets the number of samples that went to the left child after splitting.
@@ -121,7 +121,7 @@ public class DecisionTreeNode<T>
     /// For instance, if predicting house prices, these would be the actual prices of houses in your training data that
     /// matched all the conditions to reach this node.
     /// </remarks>
-    public List<T> SampleValues { get; set; } = [];
+    public List<T> SampleValues { get; set; } = new List<T>();
 
     /// <summary>
     /// Gets or sets the linear regression model for this node (used in some advanced tree variants).

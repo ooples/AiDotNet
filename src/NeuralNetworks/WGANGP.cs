@@ -35,8 +35,8 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class WGANGP<T> : NeuralNetworkBase<T>
 {
-    private readonly List<T> _criticLosses = [];
-    private readonly List<T> _generatorLosses = [];
+    private readonly List<T> _criticLosses = new List<T>();
+    private readonly List<T> _generatorLosses = new List<T>();
 
     /// <summary>
     /// The optimizer for the generator network.

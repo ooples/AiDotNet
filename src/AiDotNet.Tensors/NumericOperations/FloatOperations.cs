@@ -391,6 +391,8 @@ public class FloatOperations : INumericOperations<float>
     /// </remarks>
     public bool Equals(float a, float b) => a == b;
 
+    public int Compare(float a, float b) => a.CompareTo(b);
+
     /// <summary>
     /// Raises a floating-point number to the specified power.
     /// </summary>

@@ -164,9 +164,9 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         _scalarActivation = null;
         _membraneDecay = NumOps.FromDouble(0.9); // Default decay constant
         _refractoryPeriod = 5; // Default refractory period
-        _firingThresholds = [];
-        _refractoryCounters = [];
-        _membranePotentials = [];
+        _firingThresholds = new List<Vector<T>>();
+        _refractoryCounters = new List<int[]>();
+        _membranePotentials = new List<Vector<T>>();
 
         InitializeLayers();
         InitializeNeuronStates();
@@ -189,9 +189,9 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         _vectorActivation = null;
         _membraneDecay = NumOps.FromDouble(0.9); // Default decay constant
         _refractoryPeriod = 5; // Default refractory period
-        _firingThresholds = [];
-        _refractoryCounters = [];
-        _membranePotentials = [];
+        _firingThresholds = new List<Vector<T>>();
+        _refractoryCounters = new List<int[]>();
+        _membranePotentials = new List<Vector<T>>();
 
         InitializeLayers();
         InitializeNeuronStates();
@@ -238,9 +238,9 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void InitializeNeuronStates()
     {
-        _membranePotentials = [];
-        _refractoryCounters = [];
-        _firingThresholds = [];
+        _membranePotentials = new List<Vector<T>>();
+        _refractoryCounters = new List<int[]>();
+        _firingThresholds = new List<Vector<T>>();
 
         // Initialize states for each layer
         foreach (var layer in Layers)
@@ -471,7 +471,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         Vector<T> expectedOutputVector = expectedOutput.ToVector();
 
         // Storage for spike history of all layers
-        List<List<Vector<T>>> layerSpikeHistory = [];
+        List<List<Vector<T>>> layerSpikeHistory = new List<List<Vector<T>>>();
         for (int i = 0; i < Layers.Count; i++)
         {
             layerSpikeHistory.Add(new List<Vector<T>>(_simulationSteps));

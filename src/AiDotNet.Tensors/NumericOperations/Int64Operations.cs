@@ -411,6 +411,8 @@ public class Int64Operations : INumericOperations<long>
     /// </remarks>
     public bool Equals(long a, long b) => a == b;
 
+    public int Compare(long a, long b) => a.CompareTo(b);
+
     /// <summary>
     /// Raises a long integer to the specified power.
     /// </summary>

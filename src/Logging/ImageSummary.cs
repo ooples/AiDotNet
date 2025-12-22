@@ -8,7 +8,7 @@ internal class ImageSummary
     public int Height { get; set; }
     public int Width { get; set; }
     public int Colorspace { get; set; }
-    public byte[] EncodedData { get; set; } = [];
+    public byte[] EncodedData { get; set; } = Array.Empty<byte>();
 
     public byte[] ToBytes()
     {

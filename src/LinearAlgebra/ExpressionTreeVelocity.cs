@@ -44,7 +44,7 @@ public class ExpressionTreeVelocity<T>
     /// </remarks>
     public ExpressionTreeVelocity()
     {
-        NodeValueChanges = [];
-        StructureChanges = [];
+        NodeValueChanges = new Dictionary<int, T>();
+        StructureChanges = new List<NodeModification>();
     }
 }

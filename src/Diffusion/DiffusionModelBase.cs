@@ -61,7 +61,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     /// <summary>
     /// Active feature indices used by the model.
     /// </summary>
-    private HashSet<int> _activeFeatureIndices = [];
+    private HashSet<int> _activeFeatureIndices = new HashSet<int>();
 
     /// <summary>
     /// The learning rate converted to type T for training computations.

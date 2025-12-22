@@ -18,7 +18,7 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 public class FusedElementwiseChainOp : IROp
 {
     /// <summary>Gets or sets the list of operation names in the chain.</summary>
-    public List<string> OperationNames { get; set; } = [];
+    public List<string> OperationNames { get; set; } = new List<string>();
 
     /// <summary>Validates the operation chain.</summary>
     public override bool Validate()

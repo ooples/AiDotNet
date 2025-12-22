@@ -377,6 +377,8 @@ public class ShortOperations : INumericOperations<short>
     /// </remarks>
     public bool Equals(short a, short b) => a == b;
 
+    public int Compare(short a, short b) => a.CompareTo(b);
+
     /// <summary>
     /// Raises a value to the specified power.
     /// </summary>

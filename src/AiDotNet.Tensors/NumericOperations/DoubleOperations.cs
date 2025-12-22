@@ -502,6 +502,27 @@ public class DoubleOperations : INumericOperations<double>
     public bool LessThanOrEquals(double a, double b) => a <= b;
 
     /// <summary>
+    /// Compares two double values and returns an integer that indicates their relative order.
+    /// </summary>
+    /// <param name="a">The first value to compare.</param>
+    /// <param name="b">The second value to compare.</param>
+    /// <returns>
+    /// A value less than zero if a is less than b;
+    /// zero if a equals b;
+    /// a value greater than zero if a is greater than b.
+    /// </returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method compares two numbers and tells you their order:
+    /// - Returns -1 if the first number is smaller
+    /// - Returns 0 if both numbers are equal
+    /// - Returns 1 if the first number is larger
+    ///
+    /// This is commonly used for sorting or determining the relative position of values.
+    /// </para>
+    /// </remarks>
+    public int Compare(double a, double b) => a.CompareTo(b);
+
+    /// <summary>
     /// Converts a double value to a 32-bit integer by rounding to the nearest integer.
     /// </summary>
     /// <param name="value">The double value to convert.</param>

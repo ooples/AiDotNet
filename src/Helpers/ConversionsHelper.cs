@@ -69,16 +69,17 @@ public static class ConversionsHelper
     /// Converts an output of generic type to a Vector.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
-    /// <typeparam name="TOutput">The type of the output data (must be either Vector&lt;T&gt; or Tensor&lt;T&gt;).</typeparam>
+    /// <typeparam name="TOutput">The type of the output data (can be Vector&lt;T&gt;, Tensor&lt;T&gt;, T[], or T scalar).</typeparam>
     /// <param name="output">The output data to convert.</param>
     /// <returns>A Vector&lt;T&gt; representation of the output data.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the output cannot be converted to a Vector&lt;T&gt;.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method takes data in various formats and converts it to a vector format.
     /// A vector is essentially a list of numbers arranged in a specific order.</para>
-    /// 
+    ///
     /// <para>If your data is already a vector, it simply returns it. If it's a tensor (which can have multiple
-    /// dimensions), it flattens it into a one-dimensional vector.</para>
+    /// dimensions), it flattens it into a one-dimensional vector. If it's an array, it wraps it in a Vector.
+    /// For scalar values (single numbers), it creates a 2-element vector for binary classification.</para>
     /// </remarks>
     public static Vector<T> ConvertToVector<T, TOutput>(TOutput output)
     {
@@ -97,8 +98,34 @@ public static class ConversionsHelper
             // Use the built-in Flatten method to convert tensor to vector
             return tensor.ToVector();
         }
+        else if (output is T[] array)
+        {
+            // Wrap array in a Vector
+            return new Vector<T>(array);
+        }
+        else if (output is T scalar)
+        {
+            // For scalar output (binary classification), create 2-element vector
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var one = numOps.FromDouble(1.0);
+            var zero = numOps.FromDouble(0.0);
 
-        throw new InvalidOperationException($"Cannot convert {typeof(TOutput).Name} to Vector<{typeof(T).Name}>. Expected Vector<T> or Tensor<T>.");
+            // Validate scalar is a valid probability in [0, 1]
+            if (numOps.LessThan(scalar, zero) || numOps.GreaterThan(scalar, one))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(output),
+                    scalar,
+                    $"Scalar output must be a probability in [0, 1] for binary classification conversion. " +
+                    $"Consider using Vector<T> or T[] for non-probability outputs.");
+            }
+
+            // Return [P(class 0), P(class 1)] for binary classification
+            var complement = numOps.Subtract(one, scalar);
+            return new Vector<T>(new[] { complement, scalar });
+        }
+
+        throw new InvalidOperationException($"Cannot convert {typeof(TOutput).Name} to Vector<{typeof(T).Name}>. Expected Vector<T>, Tensor<T>, T[], or T scalar.");
     }
 
     /// <summary>

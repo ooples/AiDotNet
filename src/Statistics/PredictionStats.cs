@@ -516,7 +516,7 @@ public class PredictionStats<T>
         SimultaneousPredictionInterval = (Lower: _numOps.Zero, Upper: _numOps.Zero);
         JackknifeInterval = (Lower: _numOps.Zero, Upper: _numOps.Zero);
         PercentileInterval = (Lower: _numOps.Zero, Upper: _numOps.Zero);
-        QuantileIntervals = [];
+        QuantileIntervals = new List<(T Quantile, T Lower, T Upper)>();
         PredictionIntervalCoverage = _numOps.Zero;
         MeanPredictionError = _numOps.Zero;
         MedianPredictionError = _numOps.Zero;
@@ -527,7 +527,7 @@ public class PredictionStats<T>
         KendallTau = _numOps.Zero;
         DynamicTimeWarping = _numOps.Zero;
         ExplainedVarianceScore = _numOps.Zero;
-        LearningCurve = [];
+        LearningCurve = new List<T>();
         Accuracy = _numOps.Zero;
         Precision = _numOps.Zero;
         Recall = _numOps.Zero;
@@ -606,7 +606,7 @@ public class PredictionStats<T>
         CredibleInterval = StatisticsHelper<T>.CalculateCredibleIntervals(predicted, confidenceLevel, BestDistributionFit.DistributionType);
         ToleranceInterval = StatisticsHelper<T>.CalculateToleranceInterval(actual, predicted, confidenceLevel);
         ForecastInterval = StatisticsHelper<T>.CalculateForecastInterval(actual, predicted, confidenceLevel);
-        QuantileIntervals = StatisticsHelper<T>.CalculateQuantileIntervals(actual, predicted, [_numOps.FromDouble(0.25), _numOps.FromDouble(0.5), _numOps.FromDouble(0.75)]);
+        QuantileIntervals = StatisticsHelper<T>.CalculateQuantileIntervals(actual, predicted, new T[] { _numOps.FromDouble(0.25), _numOps.FromDouble(0.5), _numOps.FromDouble(0.75) });
         BootstrapInterval = StatisticsHelper<T>.CalculateBootstrapInterval(actual, predicted, confidenceLevel);
         SimultaneousPredictionInterval = StatisticsHelper<T>.CalculateSimultaneousPredictionInterval(actual, predicted, confidenceLevel);
         JackknifeInterval = StatisticsHelper<T>.CalculateJackknifeInterval(actual, predicted);
