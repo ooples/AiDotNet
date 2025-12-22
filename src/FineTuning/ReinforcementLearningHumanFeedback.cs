@@ -369,25 +369,18 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
 
             totalPolicyLoss += policyLoss;
 
-            // Compute and apply gradients to update policy model
-            // Scale learning rate by advantage to encourage good actions and discourage bad ones
-            var scaledLearningRate = Options.LearningRate * Math.Sign(exp.Advantage);
+            // Compute and apply gradients scaled by capped advantage
+            var cappedAdvantage = Math.Max(-1.0, Math.Min(1.0, exp.Advantage));
+            var scaledLearningRate = Options.LearningRate * cappedAdvantage;
             var gradients = policyModel.ComputeGradients(input, exp.Output);
             policyModel.ApplyGradients(gradients, NumOps.FromDouble(scaledLearningRate));
 
-            // Value loss (simplified - would use actual value predictions)
+            // Value loss: MSE between predicted value and observed reward
             var valueLoss = Math.Pow(exp.Value - exp.Reward, 2);
             totalValueLoss += valueLoss;
 
-            // Update value model if available
-            if (_valueModel != null)
-            {
-                var valueGradients = _valueModel.ComputeGradients(input, exp.Output);
-                _valueModel.ApplyGradients(valueGradients, NumOps.FromDouble(Options.LearningRate * valueCoeff));
-            }
-
-            // Entropy bonus (simplified - would compute actual entropy)
-            var entropyLoss = -0.01; // Placeholder
+            // Entropy loss from policy distribution
+            var entropyLoss = ComputeEntropyLoss(policyModel, input);
             totalEntropyLoss += entropyLoss;
         }
 
@@ -409,6 +402,49 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
         var totalLoss = avgPolicyLoss + valueCoeff * avgValueLoss + entropyCoeff * avgEntropyLoss;
 
         return await Task.FromResult(totalLoss);
+    }
+
+    /// <summary>
+    /// Computes entropy loss to encourage exploration.
+    /// </summary>
+    /// <param name="model">The policy model.</param>
+    /// <param name="input">The input state.</param>
+    /// <returns>The negative entropy (as a loss to minimize).</returns>
+    private double ComputeEntropyLoss(IFullModel<T, TInput, TOutput> model, TInput input)
+    {
+        var output = model.Predict(input);
+        var outputVector = ConversionsHelper.ConvertToVector<T, TOutput>(output);
+
+        if (outputVector.Length == 0)
+        {
+            return 0.0;
+        }
+
+        // Convert to probabilities using softmax
+        var maxVal = outputVector.Max();
+        var expValues = new double[outputVector.Length];
+        double sumExp = 0.0;
+
+        for (int i = 0; i < outputVector.Length; i++)
+        {
+            var val = NumOps.ToDouble(outputVector[i]) - NumOps.ToDouble(maxVal);
+            expValues[i] = Math.Exp(val);
+            sumExp += expValues[i];
+        }
+
+        // Compute entropy: -sum(p * log(p))
+        double entropy = 0.0;
+        for (int i = 0; i < expValues.Length; i++)
+        {
+            var prob = expValues[i] / sumExp;
+            if (prob > 1e-10)
+            {
+                entropy -= prob * Math.Log(prob);
+            }
+        }
+
+        // Return negative entropy as loss (we want to maximize entropy)
+        return -entropy;
     }
 
     /// <summary>

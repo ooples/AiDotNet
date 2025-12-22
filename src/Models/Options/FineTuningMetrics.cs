@@ -279,23 +279,25 @@ public class FineTuningMetrics<T>
             $"Training Time: {TrainingTimeSeconds:F1}s"
         };
 
-        if (WinRate > double.Epsilon)
+        const double displayThreshold = 1e-9;
+
+        if (WinRate > displayThreshold)
         {
             lines.Add($"Win Rate: {WinRate:P1}");
         }
 
-        if (PreferenceAccuracy > double.Epsilon)
+        if (PreferenceAccuracy > displayThreshold)
         {
             lines.Add($"Preference Accuracy: {PreferenceAccuracy:P1}");
         }
 
-        if (Math.Abs(AverageReward) > double.Epsilon)
+        if (Math.Abs(AverageReward) > displayThreshold)
         {
             lines.Add($"Average Reward: {AverageReward:F3}");
             lines.Add($"KL Divergence: {KLDivergence:F4}");
         }
 
-        if (HarmlessnessScore > double.Epsilon || HelpfulnessScore > double.Epsilon)
+        if (HarmlessnessScore > displayThreshold || HelpfulnessScore > displayThreshold)
         {
             lines.Add($"Harmlessness: {HarmlessnessScore:P1}");
             lines.Add($"Helpfulness: {HelpfulnessScore:P1}");

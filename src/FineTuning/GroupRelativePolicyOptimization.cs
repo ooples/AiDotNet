@@ -296,9 +296,9 @@ public class GroupRelativePolicyOptimization<T, TInput, TOutput> : FineTuningBas
                 var loss = -surrogateObjective + klCoeff * kl;
                 totalLoss += loss;
 
-                // Compute and apply gradients to update model parameters
-                // Weight by advantage to encourage good responses and discourage bad ones
-                var scaledLearningRate = learningRate * advantage;
+                // Compute and apply gradients scaled by capped advantage
+                var cappedAdvantage = Math.Max(-1.0, Math.Min(1.0, advantage));
+                var scaledLearningRate = learningRate * cappedAdvantage;
                 var gradients = policyModel.ComputeGradients(input, groupResponses[g]);
                 policyModel.ApplyGradients(gradients, NumOps.FromDouble(scaledLearningRate));
 
