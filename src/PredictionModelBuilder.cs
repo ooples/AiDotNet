@@ -141,7 +141,6 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;
-    private AiDotNet.Models.Options.SafetyFilterConfiguration<T>? _safetyFilterConfiguration;
     private AdversarialRobustnessConfiguration<T, TInput, TOutput>? _adversarialRobustnessConfiguration;
     private FineTuningConfiguration<T, TInput, TOutput>? _fineTuningConfiguration;
     private ILoRAConfiguration<T>? _loraConfiguration;
@@ -1711,7 +1710,6 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             DeploymentConfiguration = deploymentConfig,
             JitCompiledFunction = jitCompiledFunction,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
-            SafetyFilterConfiguration = _safetyFilterConfiguration,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
             GraphStore = _graphStore,
@@ -1851,7 +1849,6 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             LoRAConfiguration = _loraConfiguration,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
-            SafetyFilterConfiguration = _safetyFilterConfiguration,
             RagRetriever = _ragRetriever,
             RagReranker = _ragReranker,
             RagGenerator = _ragGenerator,
@@ -2163,7 +2160,6 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
-            SafetyFilterConfiguration = _safetyFilterConfiguration,
             RagRetriever = _ragRetriever,
             RagReranker = _ragReranker,
             RagGenerator = _ragGenerator,
@@ -2337,30 +2333,13 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     }
 
     /// <summary>
-    /// Configures the safety filter used to validate inputs and filter outputs during inference.
-    /// </summary>
-    /// <param name="configuration">Safety filter configuration.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>Obsolete:</b> Use <see cref="ConfigureAdversarialRobustness"/> instead, which provides
-    /// a unified configuration for safety filtering, adversarial attacks/defenses, and certified robustness.</para>
-    /// </remarks>
-    [Obsolete("Use ConfigureAdversarialRobustness instead for unified safety and robustness configuration.")]
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureSafetyFilter(AiDotNet.Models.Options.SafetyFilterConfiguration<T> configuration)
-    {
-        _safetyFilterConfiguration = configuration ?? throw new ArgumentNullException(nameof(configuration));
-        return this;
-    }
-
-    /// <summary>
     /// Configures adversarial robustness and AI safety features for the model.
     /// </summary>
-    /// <param name="configuration">The adversarial robustness configuration.</param>
+    /// <param name="configuration">The adversarial robustness configuration. When null, uses industry-standard defaults.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <para>
-    /// This unified configuration replaces the previous <see cref="ConfigureSafetyFilter"/> method
-    /// and provides comprehensive control over all aspects of adversarial robustness and AI safety:
+    /// This unified configuration provides comprehensive control over all aspects of adversarial robustness and AI safety:
     /// </para>
     /// <list type="bullet">
     /// <item><term>Safety Filtering</term><description>Input validation and output filtering for harmful content</description></item>
@@ -2371,10 +2350,14 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <item><term>Red Teaming</term><description>Automated adversarial prompt generation for evaluation</description></item>
     /// </list>
     /// <para><b>For Beginners:</b> This is your one-stop configuration for making your model safe and robust.
+    /// When called with no parameters (null), industry-standard defaults are applied automatically.
     /// You can use factory methods like <c>AdversarialRobustnessConfiguration.BasicSafety()</c> for common setups,
     /// or customize individual options for your specific needs.</para>
     /// <example>
     /// <code>
+    /// // Use industry-standard defaults
+    /// builder.ConfigureAdversarialRobustness();
+    ///
     /// // Basic safety filtering
     /// builder.ConfigureAdversarialRobustness(AdversarialRobustnessConfiguration&lt;double, Vector&lt;double&gt;, int&gt;.BasicSafety());
     ///
@@ -2400,16 +2383,16 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </example>
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAdversarialRobustness(
-        AdversarialRobustnessConfiguration<T, TInput, TOutput> configuration)
+        AdversarialRobustnessConfiguration<T, TInput, TOutput>? configuration = null)
     {
-        _adversarialRobustnessConfiguration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _adversarialRobustnessConfiguration = configuration ?? new AdversarialRobustnessConfiguration<T, TInput, TOutput>();
         return this;
     }
 
     /// <summary>
     /// Configures fine-tuning for the model using preference learning, RLHF, or other alignment methods.
     /// </summary>
-    /// <param name="configuration">The fine-tuning configuration.</param>
+    /// <param name="configuration">The fine-tuning configuration including training data. When null, uses industry-standard defaults.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <para>
@@ -2428,10 +2411,15 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <item><term>Reinforcement Learning from Human Feedback (RLHF)</term><description>Classic PPO-based alignment</description></item>
     /// </list>
     /// <para><b>For Beginners:</b> Fine-tuning helps align your model with human preferences.
+    /// When called with no parameters (null), industry-standard defaults are applied automatically.
+    /// Training data should be set in the configuration's TrainingData property.
     /// Use factory methods like <c>FineTuningConfiguration.ForDPO(data)</c> for quick setup.
     /// DPO and SimPO are simpler (no reward model needed), while RLHF and GRPO provide more control.</para>
     /// <example>
     /// <code>
+    /// // Use industry-standard defaults (training data set separately)
+    /// builder.ConfigureFineTuning();
+    ///
     /// // DPO fine-tuning with preference pairs
     /// var preferenceData = new FineTuningData&lt;double, string, string&gt;
     /// {
@@ -2466,9 +2454,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </example>
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFineTuning(
-        FineTuningConfiguration<T, TInput, TOutput> configuration)
+        FineTuningConfiguration<T, TInput, TOutput>? configuration = null)
     {
-        _fineTuningConfiguration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _fineTuningConfiguration = configuration ?? new FineTuningConfiguration<T, TInput, TOutput>();
         return this;
     }
 
@@ -2542,45 +2530,6 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     {
         _trainingPipelineConfiguration = configuration;
         return this;
-    }
-
-    /// <summary>
-    /// Configures a training pipeline with automatic stage selection based on the provided data.
-    /// </summary>
-    /// <param name="trainingData">The training data to analyze for automatic pipeline construction.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para>
-    /// This is a convenience overload that creates a TrainingPipelineConfiguration using the
-    /// Auto() factory method. The system analyzes your data characteristics and automatically
-    /// constructs an appropriate multi-stage pipeline.
-    /// </para>
-    /// <para>
-    /// <b>Automatic Pipeline Selection:</b>
-    /// <list type="bullet">
-    /// <item><term>SFT data present</term><description>Starts with SFT stage</description></item>
-    /// <item><term>Preference pairs</term><description>Adds DPO stage after SFT</description></item>
-    /// <item><term>Unpaired preferences</term><description>Adds KTO stage</description></item>
-    /// <item><term>Reward data</term><description>Adds GRPO/RLHF stage</description></item>
-    /// <item><term>Critique revisions</term><description>Adds Constitutional AI stage</description></item>
-    /// </list>
-    /// </para>
-    /// <example>
-    /// <code>
-    /// // Quick setup - let the system choose the pipeline
-    /// builder.ConfigureTrainingPipeline(myTrainingData);
-    /// </code>
-    /// </example>
-    /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingPipeline(
-        FineTuningData<T, TInput, TOutput> trainingData)
-    {
-        if (trainingData == null)
-        {
-            throw new ArgumentNullException(nameof(trainingData));
-        }
-
-        return ConfigureTrainingPipeline(TrainingPipelineConfiguration<T, TInput, TOutput>.Auto(trainingData));
     }
 
     /// <summary>
