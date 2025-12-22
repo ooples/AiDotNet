@@ -43,9 +43,37 @@ namespace AiDotNet.PromptEngineering.FewShot;
 /// </remarks>
 public class DiversityExampleSelector<T> : FewShotExampleSelectorBase<T>
 {
-    private readonly Func<string, double[]> _embeddingFunction;
-    private readonly Dictionary<FewShotExample, double[]> _exampleEmbeddings;
-    private readonly double _diversityThreshold;
+    private readonly Func<string, Vector<T>> _embeddingFunction;
+    private readonly Dictionary<FewShotExample, Vector<T>> _exampleEmbeddings;
+    private readonly T _diversityThreshold;
+
+    /// <summary>
+    /// Initializes a new instance of the DiversityExampleSelector class.
+    /// </summary>
+    /// <param name="embeddingModel">Embedding model used to convert text to embedding vectors.</param>
+    public DiversityExampleSelector(IEmbeddingModel<T> embeddingModel)
+        : this(embeddingModel is null ? throw new ArgumentNullException(nameof(embeddingModel)) : embeddingModel.Embed, NumOps.FromDouble(0.3))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the DiversityExampleSelector class.
+    /// </summary>
+    /// <param name="embeddingModel">Embedding model used to convert text to embedding vectors.</param>
+    /// <param name="diversityThreshold">Minimum dissimilarity required between selected examples (0.0 to 1.0).</param>
+    public DiversityExampleSelector(IEmbeddingModel<T> embeddingModel, T diversityThreshold)
+        : this(embeddingModel is null ? throw new ArgumentNullException(nameof(embeddingModel)) : embeddingModel.Embed, diversityThreshold)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the DiversityExampleSelector class.
+    /// </summary>
+    /// <param name="embeddingFunction">Function to convert text to embedding vectors.</param>
+    public DiversityExampleSelector(Func<string, Vector<T>> embeddingFunction)
+        : this(embeddingFunction, NumOps.FromDouble(0.3))
+    {
+    }
 
     /// <summary>
     /// Initializes a new instance of the DiversityExampleSelector class.
@@ -63,24 +91,24 @@ public class DiversityExampleSelector<T> : FewShotExampleSelectorBase<T>
     /// Higher values = more diversity but may be harder to satisfy.
     /// </para>
     /// </remarks>
-    public DiversityExampleSelector(Func<string, double[]> embeddingFunction, double diversityThreshold = 0.3)
+    public DiversityExampleSelector(Func<string, Vector<T>> embeddingFunction, T diversityThreshold)
     {
         _embeddingFunction = embeddingFunction ?? throw new ArgumentNullException(nameof(embeddingFunction));
-        _diversityThreshold = Math.Max(0, Math.Min(1, diversityThreshold));
-        _exampleEmbeddings = new Dictionary<FewShotExample, double[]>();
+        _diversityThreshold = ClampToUnitInterval(diversityThreshold);
+        _exampleEmbeddings = new Dictionary<FewShotExample, Vector<T>>();
     }
 
     /// <summary>
     /// Gets the diversity threshold used for selection.
     /// </summary>
-    public double DiversityThreshold => _diversityThreshold;
+    public T DiversityThreshold => _diversityThreshold;
 
     /// <summary>
     /// Called when an example is added. Pre-computes the embedding.
     /// </summary>
     protected override void OnExampleAdded(FewShotExample example)
     {
-        _exampleEmbeddings[example] = _embeddingFunction(example.Input);
+        _exampleEmbeddings[example] = new Vector<T>(_embeddingFunction(example.Input));
     }
 
     /// <summary>
@@ -114,31 +142,39 @@ public class DiversityExampleSelector<T> : FewShotExampleSelectorBase<T>
         while (selected.Count < count && remaining.Count > 0)
         {
             FewShotExample? bestCandidate = null;
-            double bestMinDissimilarity = -1;
+            T bestMinDissimilarity = default!;
+            bool hasBestMinDissimilarity = false;
 
             foreach (var candidate in remaining)
             {
                 var candidateEmbedding = _exampleEmbeddings[candidate];
 
                 // Calculate minimum dissimilarity to all selected examples
-                double minDissimilarity = double.MaxValue;
+                T minDissimilarity = default!;
+                bool hasMinDissimilarity = false;
                 foreach (var selectedExample in selected)
                 {
                     var selectedEmbedding = _exampleEmbeddings[selectedExample];
                     var similarity = CosineSimilarity(candidateEmbedding, selectedEmbedding);
-                    var dissimilarity = 1 - similarity;
-                    minDissimilarity = Math.Min(minDissimilarity, dissimilarity);
+                    var dissimilarity = NumOps.Subtract(NumOps.One, similarity);
+
+                    if (!hasMinDissimilarity || NumOps.LessThan(dissimilarity, minDissimilarity))
+                    {
+                        minDissimilarity = dissimilarity;
+                        hasMinDissimilarity = true;
+                    }
                 }
 
                 // Select the candidate with the highest minimum dissimilarity
-                if (minDissimilarity > bestMinDissimilarity)
+                if (!hasBestMinDissimilarity || NumOps.GreaterThan(minDissimilarity, bestMinDissimilarity))
                 {
                     bestMinDissimilarity = minDissimilarity;
                     bestCandidate = candidate;
+                    hasBestMinDissimilarity = true;
                 }
             }
 
-            if (bestCandidate is not null && bestMinDissimilarity >= _diversityThreshold)
+            if (bestCandidate is not null && NumOps.GreaterThanOrEquals(bestMinDissimilarity, _diversityThreshold))
             {
                 selected.Add(bestCandidate);
                 remaining.Remove(bestCandidate);
@@ -156,30 +192,5 @@ public class DiversityExampleSelector<T> : FewShotExampleSelectorBase<T>
         }
 
         return selected.AsReadOnly();
-    }
-
-    /// <summary>
-    /// Calculates cosine similarity between two vectors.
-    /// </summary>
-    private static double CosineSimilarity(double[] a, double[] b)
-    {
-        if (a.Length != b.Length)
-        {
-            throw new ArgumentException("Vectors must have the same length.");
-        }
-
-        double dotProduct = 0;
-        double magnitudeA = 0;
-        double magnitudeB = 0;
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            dotProduct += a[i] * b[i];
-            magnitudeA += a[i] * a[i];
-            magnitudeB += b[i] * b[i];
-        }
-
-        double magnitude = Math.Sqrt(magnitudeA) * Math.Sqrt(magnitudeB);
-        return magnitude > 0 ? dotProduct / magnitude : 0;
     }
 }

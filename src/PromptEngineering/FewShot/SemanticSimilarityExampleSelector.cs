@@ -40,8 +40,17 @@ namespace AiDotNet.PromptEngineering.FewShot;
 /// </remarks>
 public class SemanticSimilarityExampleSelector<T> : FewShotExampleSelectorBase<T>
 {
-    private readonly Func<string, double[]> _embeddingFunction;
-    private readonly Dictionary<FewShotExample, double[]> _exampleEmbeddings;
+    private readonly Func<string, Vector<T>> _embeddingFunction;
+    private readonly Dictionary<FewShotExample, Vector<T>> _exampleEmbeddings;
+
+    /// <summary>
+    /// Initializes a new instance of the SemanticSimilarityExampleSelector class.
+    /// </summary>
+    /// <param name="embeddingModel">Embedding model used to convert text to embedding vectors.</param>
+    public SemanticSimilarityExampleSelector(IEmbeddingModel<T> embeddingModel)
+        : this(embeddingModel is null ? throw new ArgumentNullException(nameof(embeddingModel)) : embeddingModel.Embed)
+    {
+    }
 
     /// <summary>
     /// Initializes a new instance of the SemanticSimilarityExampleSelector class.
@@ -55,13 +64,13 @@ public class SemanticSimilarityExampleSelector<T> : FewShotExampleSelectorBase<T
     /// - Sentence Transformers
     /// - Local embedding models
     ///
-    /// The function takes a string and returns an array of numbers (the embedding).
+    /// The function takes a string and returns a vector of numbers (the embedding).
     /// </para>
     /// </remarks>
-    public SemanticSimilarityExampleSelector(Func<string, double[]> embeddingFunction)
+    public SemanticSimilarityExampleSelector(Func<string, Vector<T>> embeddingFunction)
     {
         _embeddingFunction = embeddingFunction ?? throw new ArgumentNullException(nameof(embeddingFunction));
-        _exampleEmbeddings = new Dictionary<FewShotExample, double[]>();
+        _exampleEmbeddings = new Dictionary<FewShotExample, Vector<T>>();
     }
 
     /// <summary>
@@ -69,7 +78,7 @@ public class SemanticSimilarityExampleSelector<T> : FewShotExampleSelectorBase<T
     /// </summary>
     protected override void OnExampleAdded(FewShotExample example)
     {
-        _exampleEmbeddings[example] = _embeddingFunction(example.Input);
+        _exampleEmbeddings[example] = new Vector<T>(_embeddingFunction(example.Input));
     }
 
     /// <summary>
@@ -87,42 +96,20 @@ public class SemanticSimilarityExampleSelector<T> : FewShotExampleSelectorBase<T
     {
         var queryEmbedding = _embeddingFunction(query);
 
-        var scoredExamples = Examples
-            .Select(example => new
-            {
-                Example = example,
-                Score = CosineSimilarity(queryEmbedding, _exampleEmbeddings[example])
-            })
-            .OrderByDescending(x => x.Score)
-            .Take(count)
-            .Select(x => x.Example)
-            .ToList();
-
-        return scoredExamples.AsReadOnly();
-    }
-
-    /// <summary>
-    /// Calculates cosine similarity between two vectors.
-    /// </summary>
-    private static double CosineSimilarity(double[] a, double[] b)
-    {
-        if (a.Length != b.Length)
+        var scoredExamples = new List<(FewShotExample Example, T Score)>(Examples.Count);
+        foreach (var example in Examples)
         {
-            throw new ArgumentException("Vectors must have the same length.");
+            scoredExamples.Add((example, CosineSimilarity(queryEmbedding, _exampleEmbeddings[example])));
         }
 
-        double dotProduct = 0;
-        double magnitudeA = 0;
-        double magnitudeB = 0;
+        scoredExamples.Sort((a, b) => CompareDescending(a.Score, b.Score));
 
-        for (int i = 0; i < a.Length; i++)
+        var selected = new List<FewShotExample>(count);
+        for (int i = 0; i < Math.Min(count, scoredExamples.Count); i++)
         {
-            dotProduct += a[i] * b[i];
-            magnitudeA += a[i] * a[i];
-            magnitudeB += b[i] * b[i];
+            selected.Add(scoredExamples[i].Example);
         }
 
-        double magnitude = Math.Sqrt(magnitudeA) * Math.Sqrt(magnitudeB);
-        return magnitude > 0 ? dotProduct / magnitude : 0;
+        return selected.AsReadOnly();
     }
 }
