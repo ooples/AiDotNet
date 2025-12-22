@@ -1,4 +1,4 @@
-using System.Text.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Interfaces;
 
@@ -130,7 +130,7 @@ public interface IFunctionTool
     /// get_current_weather(location="Paris, France", unit="celsius")
     /// </para>
     /// </remarks>
-    JsonDocument ParameterSchema { get; }
+    JObject ParameterSchema { get; }
 
     /// <summary>
     /// Executes the function with the provided arguments.
@@ -155,10 +155,10 @@ public interface IFunctionTool
     ///
     /// Example implementation:
     /// ```csharp
-    /// public string Execute(JsonDocument arguments)
+    /// public string Execute(JObject arguments)
     /// {
-    ///     var location = arguments.RootElement.GetProperty("location").GetString();
-    ///     var unit = arguments.RootElement.GetProperty("unit").GetString() ?? "fahrenheit";
+    ///     var location = arguments.Value<string>("location") ?? "";
+    ///     var unit = arguments.Value<string>("unit") ?? "fahrenheit";
     ///
     ///     // Call weather API
     ///     var weather = WeatherAPI.GetCurrent(location, unit);
@@ -174,7 +174,7 @@ public interface IFunctionTool
     /// - The LLM can handle error messages and try alternatives
     /// </para>
     /// </remarks>
-    string Execute(JsonDocument arguments);
+    string Execute(JObject arguments);
 
     /// <summary>
     /// Validates that the provided arguments match the parameter schema.
@@ -207,5 +207,5 @@ public interface IFunctionTool
     /// - Ensure data quality
     /// </para>
     /// </remarks>
-    bool ValidateArguments(JsonDocument arguments);
+    bool ValidateArguments(JObject arguments);
 }

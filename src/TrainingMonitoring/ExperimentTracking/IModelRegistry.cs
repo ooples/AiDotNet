@@ -1,3 +1,5 @@
+using AiDotNet.AdversarialRobustness.Documentation;
+
 namespace AiDotNet.TrainingMonitoring.ExperimentTracking;
 
 /// <summary>
@@ -341,6 +343,16 @@ public class ModelVersion
     /// Gets or sets model metadata.
     /// </summary>
     public Dictionary<string, object> Metadata { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the Model Card for this model version.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A Model Card documents the model's intended use,
+    /// limitations, performance metrics, and ethical considerations for transparent
+    /// and responsible AI practices.</para>
+    /// </remarks>
+    public ModelCard? ModelCard { get; set; }
 
     /// <summary>
     /// Gets the model URI.

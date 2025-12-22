@@ -79,6 +79,21 @@ public class DataSetStats<T, TInput, TOutput>
     public UncertaintyStats<T> UncertaintyStats { get; set; } = UncertaintyStats<T>.Empty();
 
     /// <summary>
+    /// Gets or sets adversarial robustness diagnostics for the dataset.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is populated when adversarial robustness evaluation is enabled. It contains metrics such as
+    /// clean accuracy, adversarial accuracy, certified accuracy, and attack success rates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores information about how well the model resists adversarial attacks.
+    /// Adversarial attacks are specially crafted inputs designed to fool machine learning models.
+    /// High adversarial accuracy means the model is robust against such attacks.
+    /// </para>
+    /// </remarks>
+    public RobustnessStats<T> RobustnessStats { get; set; } = RobustnessStats<T>.Empty();
+
+    /// <summary>
     /// Gets or sets the predicted values.
     /// </summary>
     /// <value>The predicted values of type TOutput.</value>

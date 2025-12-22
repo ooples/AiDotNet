@@ -554,6 +554,21 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     public InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
     // ============================================================================
+    // Safety & Robustness Properties
+    // ============================================================================
+
+    /// <summary>
+    /// Gets or sets the safety filter configuration used to validate inputs and filter outputs during inference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When null, safety filtering defaults to enabled with standard options.
+    /// Set <see cref="SafetyFilterConfiguration{T}.Enabled"/> to false to opt out.
+    /// </para>
+    /// </remarks>
+    public SafetyFilterConfiguration<T>? SafetyFilterConfiguration { get; set; }
+
+    // ============================================================================
     // Tokenization Properties
     // ============================================================================
 

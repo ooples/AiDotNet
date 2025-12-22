@@ -1,5 +1,6 @@
 // Polyfills for .NET Framework 4.7.1 to support modern C# features
 
+using AiDotNet.Tensors.Helpers;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
@@ -167,11 +168,7 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Log2(double value)
         {
-#if NET5_0_OR_GREATER
-            return Math.Log2(value);
-#else
-            return Math.Log(value) / Math.Log(2.0);
-#endif
+            return MathHelper.Log2(value);
         }
 
         /// <summary>
@@ -184,13 +181,7 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int Clamp(int value, int min, int max)
         {
-#if NET5_0_OR_GREATER
-            return Math.Clamp(value, min, max);
-#else
-            if (value < min) return min;
-            if (value > max) return max;
-            return value;
-#endif
+            return MathHelper.Clamp(value, min, max);
         }
 
         /// <summary>
@@ -203,13 +194,7 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float Clamp(float value, float min, float max)
         {
-#if NET5_0_OR_GREATER
-            return Math.Clamp(value, min, max);
-#else
-            if (value < min) return min;
-            if (value > max) return max;
-            return value;
-#endif
+            return MathHelper.Clamp(value, min, max);
         }
 
         /// <summary>
@@ -222,13 +207,7 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Clamp(double value, double min, double max)
         {
-#if NET5_0_OR_GREATER
-            return Math.Clamp(value, min, max);
-#else
-            if (value < min) return min;
-            if (value > max) return max;
-            return value;
-#endif
+            return MathHelper.Clamp(value, min, max);
         }
     }
 

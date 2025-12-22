@@ -1,6 +1,6 @@
-using System.Text.Json;
 using AiDotNet.Interfaces;
 using AiDotNet.PromptEngineering.Tools;
+using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace AiDotNet.Tests.PromptEngineering;
@@ -11,13 +11,13 @@ public class ToolRegistryTests
     {
         public string Name { get; }
         public string Description { get; }
-        public JsonDocument ParameterSchema { get; }
+        public JObject ParameterSchema { get; }
 
         public MockTool(string name)
         {
             Name = name;
             Description = $"Mock tool {name}";
-            ParameterSchema = JsonDocument.Parse("""
+            ParameterSchema = JObject.Parse("""
                 {
                     "type": "object",
                     "properties": {
@@ -28,14 +28,14 @@ public class ToolRegistryTests
                 """);
         }
 
-        public string Execute(JsonDocument arguments)
+        public string Execute(JObject arguments)
         {
             return $"Executed {Name}";
         }
 
-        public bool ValidateArguments(JsonDocument arguments)
+        public bool ValidateArguments(JObject arguments)
         {
-            return arguments.RootElement.TryGetProperty("input", out _);
+            return arguments.TryGetValue("input", out _);
         }
     }
 
@@ -146,7 +146,7 @@ public class ToolRegistryTests
         var tool = new MockTool("test_tool");
         registry.RegisterTool(tool);
 
-        var args = JsonDocument.Parse("""{"input": "test"}""");
+        var args = JObject.Parse("""{"input": "test"}""");
         var result = registry.ExecuteTool("test_tool", args);
 
         Assert.Equal("Executed test_tool", result);
@@ -156,7 +156,7 @@ public class ToolRegistryTests
     public void ExecuteTool_WithNonExistentTool_ThrowsArgumentException()
     {
         var registry = new ToolRegistry();
-        var args = JsonDocument.Parse("""{"input": "test"}""");
+        var args = JObject.Parse("""{"input": "test"}""");
 
         Assert.Throws<ArgumentException>(() => registry.ExecuteTool("nonexistent", args));
     }
