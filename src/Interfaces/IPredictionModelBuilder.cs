@@ -380,6 +380,39 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration);
 
     /// <summary>
+    /// Configures a multi-stage training pipeline for advanced training workflows.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ConfigureTrainingPipeline enables advanced multi-stage training workflows where each stage
+    /// can have its own training method, optimizer, learning rate, and dataset. Stages execute
+    /// sequentially, with each stage's output model becoming the next stage's input.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this as a recipe with multiple cooking steps.
+    /// Just like you might marinate, then sear, then bake - training can have multiple
+    /// phases where each phase teaches the model something different.</para>
+    /// </remarks>
+    /// <param name="configuration">The training pipeline configuration defining the stages to execute.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingPipeline(
+        TrainingPipelineConfiguration<T, TInput, TOutput>? configuration = null);
+
+    /// <summary>
+    /// Configures a training pipeline with automatic stage selection based on the provided data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is a convenience overload that creates a TrainingPipelineConfiguration using the
+    /// Auto() factory method. The system analyzes your data characteristics and automatically
+    /// constructs an appropriate multi-stage pipeline.
+    /// </para>
+    /// </remarks>
+    /// <param name="trainingData">The training data to analyze for automatic pipeline construction.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingPipeline(
+        FineTuningData<T, TInput, TOutput> trainingData);
+
+    /// <summary>
     /// Configures uncertainty quantification (UQ) for inference-time uncertainty estimates.
     /// </summary>
     /// <remarks>

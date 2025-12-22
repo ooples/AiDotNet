@@ -215,6 +215,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     private UncertaintyQuantificationOptions? _uncertaintyQuantificationOptions;
     private AiDotNet.Models.Inputs.UncertaintyCalibrationData<TInput, TOutput>? _uncertaintyCalibrationData;
 
+    // Training pipeline configuration
+    private TrainingPipelineConfiguration<T, TInput, TOutput>? _trainingPipelineConfiguration;
+
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
     /// </summary>
@@ -2462,6 +2465,117 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     {
         _fineTuningConfiguration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         return this;
+    }
+
+    /// <summary>
+    /// Configures a multi-stage training pipeline for advanced training workflows.
+    /// </summary>
+    /// <param name="configuration">
+    /// The training pipeline configuration defining the stages to execute.
+    /// When null, uses the default single-stage training based on other configured settings.
+    /// </param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// ConfigureTrainingPipeline enables advanced multi-stage training workflows where each stage
+    /// can have its own training method, optimizer, learning rate, and dataset. Stages execute
+    /// sequentially, with each stage's output model becoming the next stage's input.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this as a recipe with multiple cooking steps.
+    /// Just like you might marinate, then sear, then bake - training can have multiple
+    /// phases where each phase teaches the model something different.</para>
+    /// <para>
+    /// <b>Common Training Pipelines:</b>
+    /// <list type="bullet">
+    /// <item><term>Standard Alignment</term><description>SFT → DPO (most common for chat models)</description></item>
+    /// <item><term>Full RLHF</term><description>SFT → Reward Model → PPO</description></item>
+    /// <item><term>Constitutional AI</term><description>SFT → CAI critique/revision → preference</description></item>
+    /// <item><term>Curriculum Learning</term><description>Easy data → Medium → Hard (progressive difficulty)</description></item>
+    /// <item><term>Iterative Refinement</term><description>Multiple DPO rounds with decreasing beta</description></item>
+    /// </list>
+    /// </para>
+    /// <example>
+    /// <code>
+    /// // Standard alignment pipeline (SFT → DPO)
+    /// builder.ConfigureTrainingPipeline(
+    ///     TrainingPipelineConfiguration&lt;double, string, string&gt;.StandardAlignment(sftData, preferenceData));
+    ///
+    /// // Automatic pipeline based on available data
+    /// builder.ConfigureTrainingPipeline(
+    ///     TrainingPipelineConfiguration&lt;double, string, string&gt;.Auto(myData));
+    ///
+    /// // Custom multi-stage pipeline with builder pattern
+    /// var pipeline = new TrainingPipelineConfiguration&lt;double, string, string&gt;()
+    ///     .AddSFTStage(stage => {
+    ///         stage.TrainingData = sftData;
+    ///         stage.Options = new FineTuningOptions&lt;double&gt; { Epochs = 3 };
+    ///     })
+    ///     .AddPreferenceStage(FineTuningMethodType.DPO, stage => {
+    ///         stage.TrainingData = preferenceData;
+    ///         stage.Options = new FineTuningOptions&lt;double&gt; { Beta = 0.1 };
+    ///     })
+    ///     .AddEvaluationStage();
+    /// builder.ConfigureTrainingPipeline(pipeline);
+    ///
+    /// // Iterative refinement with multiple DPO rounds
+    /// builder.ConfigureTrainingPipeline(
+    ///     TrainingPipelineConfiguration&lt;double, string, string&gt;.IterativeRefinement(3, sftData, preferenceData));
+    ///
+    /// // Custom stage with user-defined training logic
+    /// var customPipeline = new TrainingPipelineConfiguration&lt;double, string, string&gt;()
+    ///     .AddSFTStage()
+    ///     .AddCustomStage("My Custom Training", async (model, data, ct) => {
+    ///         // Custom training logic
+    ///         return model;
+    ///     });
+    /// builder.ConfigureTrainingPipeline(customPipeline);
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingPipeline(
+        TrainingPipelineConfiguration<T, TInput, TOutput>? configuration = null)
+    {
+        _trainingPipelineConfiguration = configuration;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures a training pipeline with automatic stage selection based on the provided data.
+    /// </summary>
+    /// <param name="trainingData">The training data to analyze for automatic pipeline construction.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is a convenience overload that creates a TrainingPipelineConfiguration using the
+    /// Auto() factory method. The system analyzes your data characteristics and automatically
+    /// constructs an appropriate multi-stage pipeline.
+    /// </para>
+    /// <para>
+    /// <b>Automatic Pipeline Selection:</b>
+    /// <list type="bullet">
+    /// <item><term>SFT data present</term><description>Starts with SFT stage</description></item>
+    /// <item><term>Preference pairs</term><description>Adds DPO stage after SFT</description></item>
+    /// <item><term>Unpaired preferences</term><description>Adds KTO stage</description></item>
+    /// <item><term>Reward data</term><description>Adds GRPO/RLHF stage</description></item>
+    /// <item><term>Critique revisions</term><description>Adds Constitutional AI stage</description></item>
+    /// </list>
+    /// </para>
+    /// <example>
+    /// <code>
+    /// // Quick setup - let the system choose the pipeline
+    /// builder.ConfigureTrainingPipeline(myTrainingData);
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingPipeline(
+        FineTuningData<T, TInput, TOutput> trainingData)
+    {
+        if (trainingData == null)
+        {
+            throw new ArgumentNullException(nameof(trainingData));
+        }
+
+        return ConfigureTrainingPipeline(TrainingPipelineConfiguration<T, TInput, TOutput>.Auto(trainingData));
     }
 
     /// <summary>
