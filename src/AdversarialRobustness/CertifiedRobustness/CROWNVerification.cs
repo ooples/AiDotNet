@@ -532,27 +532,19 @@ public class CROWNVerification<T> : ICertifiedDefense<T>
                 T aL = alphaLower[j];
                 T aU = alphaUpper[j];
 
-                if (NumOps.GreaterThan(aL, NumOps.Zero))
-                {
-                    lowerBound = NumOps.Add(lowerBound,
-                        NumOps.Multiply(aL, NumOps.Subtract(input[j], epsilon)));
-                }
-                else
-                {
-                    lowerBound = NumOps.Add(lowerBound,
-                        NumOps.Multiply(aL, NumOps.Add(input[j], epsilon)));
-                }
+                // For positive aL, use lower input bound (input - epsilon)
+                // For negative/zero aL, use upper input bound (input + epsilon)
+                var lowerInputBound = NumOps.GreaterThan(aL, NumOps.Zero)
+                    ? NumOps.Subtract(input[j], epsilon)
+                    : NumOps.Add(input[j], epsilon);
+                lowerBound = NumOps.Add(lowerBound, NumOps.Multiply(aL, lowerInputBound));
 
-                if (NumOps.GreaterThan(aU, NumOps.Zero))
-                {
-                    upperBound = NumOps.Add(upperBound,
-                        NumOps.Multiply(aU, NumOps.Add(input[j], epsilon)));
-                }
-                else
-                {
-                    upperBound = NumOps.Add(upperBound,
-                        NumOps.Multiply(aU, NumOps.Subtract(input[j], epsilon)));
-                }
+                // For positive aU, use upper input bound (input + epsilon)
+                // For negative/zero aU, use lower input bound (input - epsilon)
+                var upperInputBound = NumOps.GreaterThan(aU, NumOps.Zero)
+                    ? NumOps.Add(input[j], epsilon)
+                    : NumOps.Subtract(input[j], epsilon);
+                upperBound = NumOps.Add(upperBound, NumOps.Multiply(aU, upperInputBound));
             }
 
             outputLower[outIdx] = lowerBound;
@@ -620,17 +612,8 @@ public class CROWNVerification<T> : ICertifiedDefense<T>
                 T aL = alphaLower[i];
                 T aU = alphaUpper[i];
 
-                // For lower bound coefficient
-                if (NumOps.GreaterThanOrEquals(aL, NumOps.Zero))
-                {
-                    sumLower = NumOps.Add(sumLower, NumOps.Multiply(aL, w));
-                }
-                else
-                {
-                    sumLower = NumOps.Add(sumLower, NumOps.Multiply(aL, w));
-                }
-
-                // For upper bound coefficient - always accumulate regardless of sign
+                // For both lower and upper bound coefficients, accumulate regardless of sign
+                sumLower = NumOps.Add(sumLower, NumOps.Multiply(aL, w));
                 sumUpper = NumOps.Add(sumUpper, NumOps.Multiply(aU, w));
             }
 
