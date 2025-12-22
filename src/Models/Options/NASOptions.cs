@@ -1,8 +1,8 @@
+using System;
+using System.Collections.Generic;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Enums;
-using System;
-using System.Collections.Generic;
 
 namespace AiDotNet.Models.Options;
 

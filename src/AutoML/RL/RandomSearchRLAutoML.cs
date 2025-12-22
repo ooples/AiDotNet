@@ -1,3 +1,4 @@
+using System.Globalization;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -8,7 +9,6 @@ using AiDotNet.ReinforcementLearning.Agents.DDPG;
 using AiDotNet.ReinforcementLearning.Agents.DQN;
 using AiDotNet.ReinforcementLearning.Agents.PPO;
 using AiDotNet.ReinforcementLearning.Agents.SAC;
-using System.Globalization;
 
 namespace AiDotNet.AutoML.RL;
 

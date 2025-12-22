@@ -1,5 +1,5 @@
-using AiDotNet.Serving.Security;
 using System.ComponentModel.DataAnnotations;
+using AiDotNet.Serving.Security;
 
 namespace AiDotNet.Serving.Security.ApiKeys;
 

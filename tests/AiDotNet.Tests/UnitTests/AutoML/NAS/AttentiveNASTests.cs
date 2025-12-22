@@ -389,7 +389,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 
             // Assert - should still record the performance
             Assert.True(memory.Count > 0);
-            Assert.True(memory.Values.Any(v => v < 0));
+            Assert.Contains(memory.Values, v => v < 0);
         }
 
         [Fact]
