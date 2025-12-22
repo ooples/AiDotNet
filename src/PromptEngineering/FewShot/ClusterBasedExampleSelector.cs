@@ -44,6 +44,8 @@ namespace AiDotNet.PromptEngineering.FewShot;
 /// </remarks>
 public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
 {
+    private const int MaxSelectionCyclesPerCluster = 10;
+
     private readonly Func<string, Vector<T>> _embeddingFunction;
     private readonly Dictionary<FewShotExample, Vector<T>> _exampleEmbeddings;
     private readonly int _clusterCount;
@@ -150,7 +152,7 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
 
         // Second pass: if we need more, cycle through clusters again
         int cycleIndex = 0;
-        while (selected.Count < count && clustersByRelevance.Count > 0 && cycleIndex < clustersByRelevance.Count * 10)
+        while (selected.Count < count && clustersByRelevance.Count > 0 && cycleIndex < clustersByRelevance.Count * MaxSelectionCyclesPerCluster)
         {
             var clusterInfo = clustersByRelevance[cycleIndex % clustersByRelevance.Count];
             var nextBest = GetMostRelevantExample(clusterInfo.Cluster, queryEmbedding, selected);
