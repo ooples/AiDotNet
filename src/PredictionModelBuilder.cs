@@ -141,6 +141,8 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;
+    private AdversarialRobustnessConfiguration<T, TInput, TOutput>? _adversarialRobustnessConfiguration;
+    private FineTuningConfiguration<T, TInput, TOutput>? _fineTuningConfiguration;
     private ILoRAConfiguration<T>? _loraConfiguration;
     private IRetriever<T>? _ragRetriever;
     private IReranker<T>? _ragReranker;
@@ -216,6 +218,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     // Uncertainty quantification configuration
     private UncertaintyQuantificationOptions? _uncertaintyQuantificationOptions;
     private UncertaintyCalibrationData<TInput, TOutput>? _uncertaintyCalibrationData;
+
+    // Training pipeline configuration
+    private TrainingPipelineConfiguration<T, TInput, TOutput>? _trainingPipelineConfiguration;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -2324,6 +2329,206 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator)
     {
         _fairnessEvaluator = evaluator;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures adversarial robustness and AI safety features for the model.
+    /// </summary>
+    /// <param name="configuration">The adversarial robustness configuration. When null, uses industry-standard defaults.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This unified configuration provides comprehensive control over all aspects of adversarial robustness and AI safety:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><term>Safety Filtering</term><description>Input validation and output filtering for harmful content</description></item>
+    /// <item><term>Adversarial Attacks</term><description>FGSM, PGD, CW, AutoAttack for robustness testing</description></item>
+    /// <item><term>Adversarial Defenses</term><description>Adversarial training, input preprocessing, ensemble methods</description></item>
+    /// <item><term>Certified Robustness</term><description>Randomized smoothing, IBP, CROWN for provable guarantees</description></item>
+    /// <item><term>Content Moderation</term><description>Prompt injection detection, PII filtering for LLMs</description></item>
+    /// <item><term>Red Teaming</term><description>Automated adversarial prompt generation for evaluation</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> This is your one-stop configuration for making your model safe and robust.
+    /// When called with no parameters (null), industry-standard defaults are applied automatically.
+    /// You can use factory methods like <c>AdversarialRobustnessConfiguration.BasicSafety()</c> for common setups,
+    /// or customize individual options for your specific needs.</para>
+    /// <example>
+    /// <code>
+    /// // Use industry-standard defaults
+    /// builder.ConfigureAdversarialRobustness();
+    ///
+    /// // Basic safety filtering
+    /// builder.ConfigureAdversarialRobustness(AdversarialRobustnessConfiguration&lt;double, Vector&lt;double&gt;, int&gt;.BasicSafety());
+    ///
+    /// // Comprehensive robustness with certified guarantees
+    /// builder.ConfigureAdversarialRobustness(AdversarialRobustnessConfiguration&lt;double, Vector&lt;double&gt;, int&gt;.Comprehensive());
+    ///
+    /// // LLM safety with content moderation
+    /// builder.ConfigureAdversarialRobustness(AdversarialRobustnessConfiguration&lt;double, string, string&gt;.ForLLM());
+    ///
+    /// // Custom configuration
+    /// builder.ConfigureAdversarialRobustness(new AdversarialRobustnessConfiguration&lt;double, Vector&lt;double&gt;, int&gt;
+    /// {
+    ///     Enabled = true,
+    ///     Options = new AdversarialRobustnessOptions&lt;double&gt;
+    ///     {
+    ///         EnableSafetyFiltering = true,
+    ///         EnableAdversarialTraining = true,
+    ///         EnableCertifiedRobustness = true
+    ///     },
+    ///     UseCertifiedInference = true
+    /// });
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAdversarialRobustness(
+        AdversarialRobustnessConfiguration<T, TInput, TOutput>? configuration = null)
+    {
+        _adversarialRobustnessConfiguration = configuration ?? new AdversarialRobustnessConfiguration<T, TInput, TOutput>();
+        return this;
+    }
+
+    /// <summary>
+    /// Configures fine-tuning for the model using preference learning, RLHF, or other alignment methods.
+    /// </summary>
+    /// <param name="configuration">The fine-tuning configuration including training data. When null, uses industry-standard defaults.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This configuration enables post-training fine-tuning using various alignment techniques:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><term>Supervised Fine-Tuning (SFT)</term><description>Traditional fine-tuning on labeled examples</description></item>
+    /// <item><term>Direct Preference Optimization (DPO)</term><description>Learn from human preferences without reward models</description></item>
+    /// <item><term>Simple Preference Optimization (SimPO)</term><description>Reference-free, length-normalized preference learning</description></item>
+    /// <item><term>Group Relative Policy Optimization (GRPO)</term><description>Memory-efficient RL without critic models</description></item>
+    /// <item><term>Odds Ratio Preference Optimization (ORPO)</term><description>Combined SFT + preference in one step</description></item>
+    /// <item><term>Identity Preference Optimization (IPO)</term><description>Regularized preference optimization</description></item>
+    /// <item><term>Kahneman-Tversky Optimization (KTO)</term><description>Utility-maximizing preference learning</description></item>
+    /// <item><term>Contrastive Preference Optimization (CPO)</term><description>Contrastive learning for preferences</description></item>
+    /// <item><term>Constitutional AI (CAI)</term><description>Self-improvement with constitutional principles</description></item>
+    /// <item><term>Reinforcement Learning from Human Feedback (RLHF)</term><description>Classic PPO-based alignment</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> Fine-tuning helps align your model with human preferences.
+    /// When called with no parameters (null), industry-standard defaults are applied automatically.
+    /// Training data should be set in the configuration's TrainingData property.
+    /// Use factory methods like <c>FineTuningConfiguration.ForDPO(data)</c> for quick setup.
+    /// DPO and SimPO are simpler (no reward model needed), while RLHF and GRPO provide more control.</para>
+    /// <example>
+    /// <code>
+    /// // Use industry-standard defaults (training data set separately)
+    /// builder.ConfigureFineTuning();
+    ///
+    /// // DPO fine-tuning with preference pairs
+    /// var preferenceData = new FineTuningData&lt;double, string, string&gt;
+    /// {
+    ///     Inputs = prompts,
+    ///     ChosenOutputs = preferredResponses,
+    ///     RejectedOutputs = rejectedResponses
+    /// };
+    /// builder.ConfigureFineTuning(FineTuningConfiguration&lt;double, string, string&gt;.ForDPO(preferenceData));
+    ///
+    /// // GRPO for RL-based alignment
+    /// var rlData = new FineTuningData&lt;double, string, string&gt;
+    /// {
+    ///     Inputs = prompts,
+    ///     Rewards = rewardScores
+    /// };
+    /// builder.ConfigureFineTuning(FineTuningConfiguration&lt;double, string, string&gt;.ForGRPO(rlData));
+    ///
+    /// // Custom fine-tuning configuration
+    /// builder.ConfigureFineTuning(new FineTuningConfiguration&lt;double, Vector&lt;double&gt;, int&gt;
+    /// {
+    ///     Enabled = true,
+    ///     Options = new FineTuningOptions&lt;double&gt;
+    ///     {
+    ///         MethodType = FineTuningMethodType.SimPO,
+    ///         LearningRate = 1e-5,
+    ///         Epochs = 3,
+    ///         SimPOGamma = 1.0
+    ///     },
+    ///     TrainingData = myPreferenceData
+    /// });
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFineTuning(
+        FineTuningConfiguration<T, TInput, TOutput>? configuration = null)
+    {
+        _fineTuningConfiguration = configuration ?? new FineTuningConfiguration<T, TInput, TOutput>();
+        return this;
+    }
+
+    /// <summary>
+    /// Configures a multi-stage training pipeline for advanced training workflows.
+    /// </summary>
+    /// <param name="configuration">
+    /// The training pipeline configuration defining the stages to execute.
+    /// When null, uses the default single-stage training based on other configured settings.
+    /// </param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// ConfigureTrainingPipeline enables advanced multi-stage training workflows where each stage
+    /// can have its own training method, optimizer, learning rate, and dataset. Stages execute
+    /// sequentially, with each stage's output model becoming the next stage's input.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this as a recipe with multiple cooking steps.
+    /// Just like you might marinate, then sear, then bake - training can have multiple
+    /// phases where each phase teaches the model something different.</para>
+    /// <para>
+    /// <b>Common Training Pipelines:</b>
+    /// <list type="bullet">
+    /// <item><term>Standard Alignment</term><description>SFT → DPO (most common for chat models)</description></item>
+    /// <item><term>Full RLHF</term><description>SFT → Reward Model → PPO</description></item>
+    /// <item><term>Constitutional AI</term><description>SFT → CAI critique/revision → preference</description></item>
+    /// <item><term>Curriculum Learning</term><description>Easy data → Medium → Hard (progressive difficulty)</description></item>
+    /// <item><term>Iterative Refinement</term><description>Multiple DPO rounds with decreasing beta</description></item>
+    /// </list>
+    /// </para>
+    /// <example>
+    /// <code>
+    /// // Standard alignment pipeline (SFT → DPO)
+    /// builder.ConfigureTrainingPipeline(
+    ///     TrainingPipelineConfiguration&lt;double, string, string&gt;.StandardAlignment(sftData, preferenceData));
+    ///
+    /// // Automatic pipeline based on available data
+    /// builder.ConfigureTrainingPipeline(
+    ///     TrainingPipelineConfiguration&lt;double, string, string&gt;.Auto(myData));
+    ///
+    /// // Custom multi-stage pipeline with builder pattern
+    /// var pipeline = new TrainingPipelineConfiguration&lt;double, string, string&gt;()
+    ///     .AddSFTStage(stage => {
+    ///         stage.TrainingData = sftData;
+    ///         stage.Options = new FineTuningOptions&lt;double&gt; { Epochs = 3 };
+    ///     })
+    ///     .AddPreferenceStage(FineTuningMethodType.DPO, stage => {
+    ///         stage.TrainingData = preferenceData;
+    ///         stage.Options = new FineTuningOptions&lt;double&gt; { Beta = 0.1 };
+    ///     })
+    ///     .AddEvaluationStage();
+    /// builder.ConfigureTrainingPipeline(pipeline);
+    ///
+    /// // Iterative refinement with multiple DPO rounds
+    /// builder.ConfigureTrainingPipeline(
+    ///     TrainingPipelineConfiguration&lt;double, string, string&gt;.IterativeRefinement(3, sftData, preferenceData));
+    ///
+    /// // Custom stage with user-defined training logic
+    /// var customPipeline = new TrainingPipelineConfiguration&lt;double, string, string&gt;()
+    ///     .AddSFTStage()
+    ///     .AddCustomStage("My Custom Training", async (model, data, ct) => {
+    ///         // Custom training logic
+    ///         return model;
+    ///     });
+    /// builder.ConfigureTrainingPipeline(customPipeline);
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingPipeline(
+        TrainingPipelineConfiguration<T, TInput, TOutput>? configuration = null)
+    {
+        _trainingPipelineConfiguration = configuration;
         return this;
     }
 

@@ -1,5 +1,5 @@
-using System.Text.Json;
 using AiDotNet.Interfaces;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.PromptEngineering.Tools;
 
@@ -36,7 +36,7 @@ public abstract class FunctionToolBase : IFunctionTool
     /// <summary>
     /// Gets the JSON schema describing the function's parameters.
     /// </summary>
-    public JsonDocument ParameterSchema { get; protected set; }
+    public JObject ParameterSchema { get; protected set; }
 
     /// <summary>
     /// Initializes a new instance of the FunctionToolBase class.
@@ -44,7 +44,7 @@ public abstract class FunctionToolBase : IFunctionTool
     /// <param name="name">The function name.</param>
     /// <param name="description">The function description.</param>
     /// <param name="parameterSchema">The parameter schema as a JSON document.</param>
-    protected FunctionToolBase(string name, string description, JsonDocument parameterSchema)
+    protected FunctionToolBase(string name, string description, JObject parameterSchema)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -66,7 +66,7 @@ public abstract class FunctionToolBase : IFunctionTool
     /// </summary>
     /// <param name="arguments">The function arguments as a JSON document.</param>
     /// <returns>The function result as a string.</returns>
-    public string Execute(JsonDocument arguments)
+    public string Execute(JObject arguments)
     {
         if (arguments == null)
         {
@@ -93,7 +93,7 @@ public abstract class FunctionToolBase : IFunctionTool
     /// </summary>
     /// <param name="arguments">The function arguments to validate.</param>
     /// <returns>True if arguments are valid; otherwise, false.</returns>
-    public virtual bool ValidateArguments(JsonDocument arguments)
+    public virtual bool ValidateArguments(JObject arguments)
     {
         if (arguments == null)
         {
@@ -103,21 +103,20 @@ public abstract class FunctionToolBase : IFunctionTool
         try
         {
             // Get required fields from schema
-            var schema = ParameterSchema.RootElement;
-            if (schema.TryGetProperty("required", out var required))
+            if (ParameterSchema.TryGetValue("required", out var requiredToken) && requiredToken is JArray requiredArray)
             {
-                var requiredFields = required.EnumerateArray()
-                    .Select(e => e.GetString())
-                    .Where(s => s != null)
-                    .ToList();
-
-                var args = arguments.RootElement;
-
-                // Check that all required fields are present using LINQ
-                var allFieldsPresent = requiredFields.All(field => args.TryGetProperty(field!, out _));
-                if (!allFieldsPresent)
+                foreach (var requiredFieldToken in requiredArray)
                 {
-                    return false;
+                    var field = requiredFieldToken?.ToString() ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(field))
+                    {
+                        continue;
+                    }
+
+                    if (!arguments.TryGetValue(field, StringComparison.OrdinalIgnoreCase, out _))
+                    {
+                        return false;
+                    }
                 }
             }
 
@@ -134,5 +133,5 @@ public abstract class FunctionToolBase : IFunctionTool
     /// </summary>
     /// <param name="arguments">The validated arguments.</param>
     /// <returns>The function result.</returns>
-    protected abstract string ExecuteCore(JsonDocument arguments);
+    protected abstract string ExecuteCore(JObject arguments);
 }

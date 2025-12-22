@@ -73,7 +73,7 @@ public class MockFullModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     {
         _numClasses = numClasses;
         _numParameters = numParameters;
-        _random = new Random(seed);
+        _random = RandomHelper.CreateSeededRandom(seed);
         _ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         _parameters = new Vector<T>(numParameters);
         _activeFeatureIndices = Enumerable.Range(0, 10).ToList();

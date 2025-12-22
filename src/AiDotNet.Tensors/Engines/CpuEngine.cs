@@ -1251,12 +1251,8 @@ public class CpuEngine : IEngine
         // Use atanh(x) = 0.5 * log((1 + x) / (1 - x))
         for (int i = 0; i < vector.Length; i++)
         {
-            double val = Convert.ToDouble(vector[i]);
-#if NET5_0_OR_GREATER
-            result[i] = numOps.FromDouble(Math.Atanh(val));
-#else
-            result[i] = numOps.FromDouble(0.5 * Math.Log((1.0 + val) / (1.0 - val)));
-#endif
+            double val = numOps.ToDouble(vector[i]);
+            result[i] = numOps.FromDouble(MathHelper.Atanh(val));
         }
 
         return result;

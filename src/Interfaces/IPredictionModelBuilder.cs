@@ -7,7 +7,6 @@ using AiDotNet.MixedPrecision;
 using AiDotNet.Models;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
-using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.PromptEngineering.FewShot;
 using AiDotNet.Reasoning.Models;
@@ -344,6 +343,52 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator);
 
     /// <summary>
+    /// Configures adversarial robustness and AI safety features for the model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This unified configuration provides comprehensive control over all aspects of adversarial robustness and AI safety:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><term>Safety Filtering</term><description>Input validation and output filtering for harmful content</description></item>
+    /// <item><term>Adversarial Attacks</term><description>FGSM, PGD, CW, AutoAttack for robustness testing</description></item>
+    /// <item><term>Adversarial Defenses</term><description>Adversarial training, input preprocessing, ensemble methods</description></item>
+    /// <item><term>Certified Robustness</term><description>Randomized smoothing, IBP, CROWN for provable guarantees</description></item>
+    /// <item><term>Content Moderation</term><description>Prompt injection detection, PII filtering for LLMs</description></item>
+    /// <item><term>Red Teaming</term><description>Automated adversarial prompt generation for evaluation</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> This is your one-stop configuration for making your model safe and robust.
+    /// When called with no parameters (null), industry-standard defaults are applied automatically.</para>
+    /// </remarks>
+    /// <param name="configuration">The adversarial robustness configuration. When null, uses industry-standard defaults.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAdversarialRobustness(
+        AdversarialRobustnessConfiguration<T, TInput, TOutput>? configuration = null);
+
+    /// <summary>
+    /// Configures fine-tuning for the model using preference learning, RLHF, or other alignment methods.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This configuration enables post-training fine-tuning using various alignment techniques:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><term>Supervised Fine-Tuning (SFT)</term><description>Traditional fine-tuning on labeled examples</description></item>
+    /// <item><term>Direct Preference Optimization (DPO)</term><description>Learn from human preferences without reward models</description></item>
+    /// <item><term>Simple Preference Optimization (SimPO)</term><description>Reference-free, length-normalized preference learning</description></item>
+    /// <item><term>Group Relative Policy Optimization (GRPO)</term><description>Memory-efficient RL without critic models</description></item>
+    /// <item><term>Reinforcement Learning from Human Feedback (RLHF)</term><description>Classic PPO-based alignment</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> Fine-tuning helps align your model with human preferences.
+    /// When called with no parameters (null), industry-standard defaults are applied automatically.
+    /// Training data should be set in the configuration's TrainingData property.</para>
+    /// </remarks>
+    /// <param name="configuration">The fine-tuning configuration including training data. When null, uses industry-standard defaults.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFineTuning(
+        FineTuningConfiguration<T, TInput, TOutput>? configuration = null);
+
+    /// <summary>
     /// Configures LoRA (Low-Rank Adaptation) for parameter-efficient fine-tuning.
     /// </summary>
     /// <remarks>
@@ -371,6 +416,24 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="loraConfiguration">The LoRA configuration implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration);
+
+    /// <summary>
+    /// Configures a multi-stage training pipeline for advanced training workflows.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ConfigureTrainingPipeline enables advanced multi-stage training workflows where each stage
+    /// can have its own training method, optimizer, learning rate, and dataset. Stages execute
+    /// sequentially, with each stage's output model becoming the next stage's input.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this as a recipe with multiple cooking steps.
+    /// Just like you might marinate, then sear, then bake - training can have multiple
+    /// phases where each phase teaches the model something different.</para>
+    /// </remarks>
+    /// <param name="configuration">The training pipeline configuration defining the stages to execute.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingPipeline(
+        TrainingPipelineConfiguration<T, TInput, TOutput>? configuration = null);
 
     /// <summary>
     /// Configures uncertainty quantification (UQ) for inference-time uncertainty estimates.
