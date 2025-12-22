@@ -71,6 +71,23 @@ public class DataSetStats<T, TInput, TOutput>
     public PredictionStats<T> PredictionStats { get; set; } = PredictionStats<T>.Empty();
 
     /// <summary>
+    /// Gets or sets the uncertainty quantification statistics for the model's predictions.
+    /// </summary>
+    /// <value>An UncertaintyStats&lt;T&gt; object containing uncertainty metrics, or null if not computed.</value>
+    /// <remarks>
+    /// <para>
+    /// This property stores aggregate uncertainty metrics such as predictive entropy and mutual information
+    /// when models are configured with uncertainty quantification. It integrates seamlessly with the existing
+    /// evaluation pipeline.
+    /// </para>
+    /// <para><b>For Beginners:</b> When a model provides uncertainty estimates (e.g., Bayesian neural networks),
+    /// this property contains summary statistics about how confident the model is across all predictions.
+    /// Higher entropy typically means less confident predictions.
+    /// </para>
+    /// </remarks>
+    public UncertaintyStats<T>? UncertaintyStats { get; set; }
+
+    /// <summary>
     /// Gets or sets the predicted values.
     /// </summary>
     /// <value>The predicted values of type TOutput.</value>

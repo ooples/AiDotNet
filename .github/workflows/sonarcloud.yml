@@ -187,7 +187,7 @@ jobs:
         run: |
           dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --framework net8.0 --no-build --filter "Category!=GPU&Category!=Integration" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results-aidotnet-net8.trx" --results-directory ./TestResults
           dotnet test tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj -c Release --framework net8.0 --no-build --filter "Category!=GPU&Category!=Integration" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results-serving-net8.trx" --results-directory ./TestResults
-          dotnet test tests/AiDotNet.Tensors.Tests/AiDotNet.Tensors.Tests.csproj -c Release --framework net8.0 --filter "Category!=GPU&Category!=Integration" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results-tensors-net8.trx" --results-directory ./TestResults
+          dotnet test tests/AiDotNet.Tensors.Tests/AiDotNet.Tensors.Tests.csproj -c Release --framework net8.0 --no-build --filter "Category!=GPU&Category!=Integration" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results-tensors-net8.trx" --results-directory ./TestResults
 
       - name: End SonarCloud analysis
         if: github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250

@@ -51,4 +51,26 @@ public interface IModelRepository
     /// <param name="name">The name of the model</param>
     /// <returns>True if the model exists, false otherwise</returns>
     bool ModelExists(string name);
+
+    /// <summary>
+    /// Loads a model from the registry with associated metadata.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used by the model.</typeparam>
+    /// <param name="name">The unique name for the model in the serving repository.</param>
+    /// <param name="model">The servable model instance.</param>
+    /// <param name="version">The version number from the model registry.</param>
+    /// <param name="stage">The deployment stage (e.g., "Production", "Staging").</param>
+    /// <param name="storagePath">The path where the model artifacts are stored.</param>
+    /// <returns>True if the model was loaded successfully, false if a model with that name already exists.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method extends <see cref="LoadModel{T}"/> by capturing additional registry metadata
+    /// that can be used for model versioning, A/B testing, and audit trails.
+    /// </para>
+    /// <para><b>For Beginners:</b> When loading models from a model registry (like MLflow),
+    /// this method preserves important information about which version of the model is being served
+    /// and from which deployment stage it came.
+    /// </para>
+    /// </remarks>
+    bool LoadModelFromRegistry<T>(string name, IServableModel<T> model, int version, string stage, string? storagePath);
 }

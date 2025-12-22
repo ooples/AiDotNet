@@ -113,6 +113,32 @@ public class ModelRepository : IModelRepository
         return _models.ContainsKey(name);
     }
 
+    /// <inheritdoc/>
+    public bool LoadModelFromRegistry<T>(string name, IServableModel<T> model, int version, string stage, string? storagePath)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("Model name cannot be null or empty", nameof(name));
+        }
+
+        if (model == null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
+        var entry = new ModelEntry
+        {
+            Model = model,
+            NumericType = typeof(T).Name.ToLower(),
+            LoadedAt = DateTime.UtcNow,
+            SourcePath = storagePath,
+            RegistryVersion = version,
+            RegistryStage = stage
+        };
+
+        return _models.TryAdd(name, entry);
+    }
+
     /// <summary>
     /// Creates ModelInfo from a model entry.
     /// </summary>
@@ -144,5 +170,7 @@ public class ModelRepository : IModelRepository
         public string NumericType { get; set; } = string.Empty;
         public DateTime LoadedAt { get; set; }
         public string? SourcePath { get; set; }
+        public int? RegistryVersion { get; set; }
+        public string? RegistryStage { get; set; }
     }
 }
