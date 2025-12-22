@@ -1,7 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
-using AiDotNet.Models;
 using AiDotNet.ModelRegistry;
+using AiDotNet.Models;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.TrainingInfrastructure;
@@ -640,7 +640,7 @@ public class ModelRegistryTests : IDisposable
         // Assert
         Assert.NotNull(path);
         Assert.NotEmpty(path);
-        Assert.True(path.Contains("storage-path-test"));
+        Assert.Contains("storage-path-test", path);
     }
 
     #endregion

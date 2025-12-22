@@ -1,6 +1,6 @@
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
-using AiDotNet.Enums;
 using Newtonsoft.Json;
 
 namespace AiDotNet.CheckpointManagement;

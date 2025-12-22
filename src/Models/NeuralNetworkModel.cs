@@ -49,7 +49,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </para>
     /// </remarks>
     public NeuralNetworkBase<T> Network { get; }
-    
+
     /// <summary>
     /// Gets the architecture of the neural network.
     /// </summary>
@@ -73,7 +73,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </para>
     /// </remarks>
     public NeuralNetworkArchitecture<T> Architecture { get; }
-    
+
     /// <summary>
     /// The numeric operations provider used for mathematical operations on type T.
     /// </summary>
@@ -91,7 +91,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </para>
     /// </remarks>
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
-    
+
     /// <summary>
     /// The learning rate used during training to control the size of weight updates.
     /// </summary>
@@ -112,7 +112,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </para>
     /// </remarks>
     private T _learningRate;
-    
+
     /// <summary>
     /// Indicates whether the model is currently in training mode.
     /// </summary>
@@ -295,10 +295,10 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     {
         if (featureIndex < 0 || featureIndex >= FeatureCount)
         {
-            throw new ArgumentOutOfRangeException(nameof(featureIndex), 
+            throw new ArgumentOutOfRangeException(nameof(featureIndex),
                 $"Feature index must be between 0 and {FeatureCount - 1}");
         }
-        
+
         // Neural networks typically use all input features in some capacity
         return true;
     }
@@ -334,14 +334,14 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         {
             throw new InvalidOperationException("This neural network does not support training.");
         }
-        
+
         // Ensure the network is in training mode
         SetTrainingMode(true);
-        
+
         // Convert tensors to the format expected by the network
         Vector<T> inputVector = input.ToVector();
         Vector<T> expectedOutputVector = expectedOutput.ToVector();
-        
+
         // Forward pass with memory to store intermediate values for backpropagation
         Tensor<T> outputTensor = Network.ForwardWithMemory(Tensor<T>.FromVector(inputVector));
         Vector<T> outputVector = outputTensor.ToVector();
@@ -351,19 +351,19 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 
         // Backpropagate error
         Network.Backpropagate(Tensor<T>.FromVector(error));
-        
+
         // Update weights using the calculated gradients
         Vector<T> gradients = Network.GetParameterGradients();
         Vector<T> currentParams = Network.GetParameters();
         Vector<T> newParams = new Vector<T>(currentParams.Length);
-        
+
         for (int i = 0; i < currentParams.Length; i++)
         {
             // Simple gradient descent: param = param - learningRate * gradient
             T update = _numOps.Multiply(_learningRate, gradients[i]);
             newParams[i] = _numOps.Subtract(currentParams[i], update);
         }
-        
+
         Network.UpdateParameters(newParams);
     }
 
@@ -393,7 +393,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     {
         // Set to prediction mode (not training)
         SetTrainingMode(false);
-    
+
         // Forward pass through the network
         return Network.Predict(input);
     }
@@ -429,7 +429,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         {
             throw new InvalidOperationException("This neural network does not support training.");
         }
-        
+
         // Forward pass with memory to store intermediate values
         Tensor<T> outputTensor = Network.ForwardWithMemory(input);
         Vector<T> output = outputTensor.ToVector();
@@ -439,19 +439,19 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 
         // Backpropagate error
         Network.Backpropagate(Tensor<T>.FromVector(error));
-        
+
         // Update weights using the calculated gradients
         Vector<T> gradients = Network.GetParameterGradients();
         Vector<T> currentParams = Network.GetParameters();
         Vector<T> newParams = new Vector<T>(currentParams.Length);
-        
+
         for (int i = 0; i < currentParams.Length; i++)
         {
             // Simple gradient descent: param = param - learningRate * gradient
             T update = _numOps.Multiply(_learningRate, gradients[i]);
             newParams[i] = _numOps.Subtract(currentParams[i], update);
         }
-        
+
         Network.UpdateParameters(newParams);
     }
 
@@ -489,10 +489,10 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 
         // Get appropriate loss function based on the task type
         var lossFunction = NeuralNetworkHelper<T>.GetDefaultLossFunction(Architecture.TaskType);
-    
+
         // Calculate gradients based on the loss function
         Vector<T> error = lossFunction.CalculateDerivative(predicted, expected);
-    
+
         return error;
     }
 
@@ -525,7 +525,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     public ModelMetadata<T> GetModelMetadata()
     {
         int[] layerSizes = Architecture.GetLayerSizes();
-        
+
         return new ModelMetadata<T>
         {
             FeatureCount = FeatureCount,
@@ -573,13 +573,13 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     {
         using MemoryStream ms = new MemoryStream();
         using BinaryWriter writer = new BinaryWriter(ms);
-        
+
         // Write a version number for forward compatibility
         writer.Write(1); // Version 1
-        
+
         // Write the architecture type
         writer.Write(Architecture.GetType().FullName ?? "Unknown");
-        
+
         // Serialize the architecture
         // In a real implementation, we would need a more sophisticated approach
         // Here we just write key architecture properties
@@ -591,12 +591,12 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         writer.Write(Architecture.InputHeight);
         writer.Write(Architecture.InputWidth);
         writer.Write(Architecture.InputDepth);
-        
+
         // Serialize the network parameters
         var serializedNetwork = Network.Serialize();
         writer.Write(serializedNetwork.Length);
         writer.Write(serializedNetwork);
-        
+
         return ms.ToArray();
     }
 
@@ -632,17 +632,17 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         {
             throw new ArgumentException("Serialized data cannot be null or empty.", nameof(data));
         }
-        
+
         using MemoryStream ms = new MemoryStream(data);
         using BinaryReader reader = new BinaryReader(ms);
-            
+
         // Read version number
         int version = reader.ReadInt32();
         if (version != 1)
         {
             throw new InvalidOperationException($"Unsupported serialized model version: {version}. Expected version 1.");
         }
-            
+
         // Read architecture type
         string architectureType = reader.ReadString();
         string expectedArchitectureType = Architecture.GetType().FullName ?? "Unknown";
@@ -651,7 +651,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
             throw new InvalidOperationException(
                 $"Serialized network architecture type doesn't match this model. Expected '{expectedArchitectureType}', got '{architectureType}'.");
         }
-            
+
         // Read architecture properties
         InputType inputType = (InputType)reader.ReadInt32();
         NeuralNetworkTaskType taskType = (NeuralNetworkTaskType)reader.ReadInt32();
@@ -661,7 +661,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         int inputHeight = reader.ReadInt32();
         int inputWidth = reader.ReadInt32();
         int inputDepth = reader.ReadInt32();
-            
+
         // Check if the architecture matches
         if (Architecture.InputType != inputType ||
             Architecture.TaskType != taskType ||
@@ -675,7 +675,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
             throw new InvalidOperationException(
                 "Serialized network architecture doesn't match this model's architecture.");
         }
-        
+
         var length = reader.ReadInt32();
         var bytes = reader.ReadBytes(length);
         // Deserialize the network parameters
@@ -740,10 +740,10 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     {
         // Create a new model with the same architecture
         var newModel = new NeuralNetworkModel<T>(Architecture);
-    
+
         // Update the parameters of the new model
         newModel.Network.UpdateParameters(parameters);
-    
+
         return newModel;
     }
 
@@ -849,16 +849,16 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     {
         // Create a new model with the same architecture
         var copy = new NeuralNetworkModel<T>(Architecture);
-        
+
         // Copy the network parameters
         var parameters = Network.GetParameters();
         copy.Network.UpdateParameters(parameters);
-        
+
         // Copy additional properties
         copy._learningRate = _learningRate;
         copy._isTrainingMode = _isTrainingMode;
         copy.Network.SetTrainingMode(_isTrainingMode);
-        
+
         return copy;
     }
 

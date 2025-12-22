@@ -1,7 +1,7 @@
+using System.Threading;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
-using System.Threading;
 
 namespace AiDotNet.UncertaintyQuantification.Layers;
 

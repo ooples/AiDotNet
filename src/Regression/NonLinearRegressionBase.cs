@@ -316,9 +316,29 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     protected virtual void ExtractModelParameters()
     {
         // Extract support vectors and their corresponding alphas
-        var supportVectorIndices = Enumerable.Range(0, Alphas.Length)
+        int[] supportVectorIndices = Enumerable.Range(0, Alphas.Length)
             .Where(i => NumOps.GreaterThan(NumOps.Abs(Alphas[i]), NumOps.FromDouble(1e-5)))
             .ToArray();
+
+        // If all alphas are near-zero, keep the single largest-magnitude alpha as a fallback.
+        // This avoids producing an empty model that cannot be exported or JIT-compiled.
+        if (supportVectorIndices.Length == 0 && Alphas.Length > 0 && SupportVectors.Rows > 0)
+        {
+            int bestIndex = 0;
+            T bestAbs = NumOps.Abs(Alphas[0]);
+
+            for (int i = 1; i < Alphas.Length; i++)
+            {
+                T abs = NumOps.Abs(Alphas[i]);
+                if (NumOps.GreaterThan(abs, bestAbs))
+                {
+                    bestAbs = abs;
+                    bestIndex = i;
+                }
+            }
+
+            supportVectorIndices = new[] { bestIndex };
+        }
 
         int featureCount = SupportVectors.Columns;
         var oldSupportVectors = SupportVectors;

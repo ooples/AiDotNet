@@ -105,6 +105,10 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         {
             return ModelStats<T, TInput, TOutput>.Empty();
         }
+        catch (IndexOutOfRangeException)
+        {
+            return ModelStats<T, TInput, TOutput>.Empty();
+        }
     }
 
     /// <summary>

@@ -478,7 +478,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     public static Matrix<T> CreateRandom(int rows, int columns)
     {
         Matrix<T> matrix = new(rows, columns);
-        Random random = new();
+        var random = RandomHelper.CreateSecureRandom();
 
         for (int i = 0; i < rows; i++)
         {

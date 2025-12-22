@@ -1,3 +1,5 @@
+using AiDotNet.Serving.Configuration;
+
 namespace AiDotNet.Serving.Models;
 
 /// <summary>
@@ -13,7 +15,7 @@ public class ModelInfo
     /// <summary>
     /// Gets or sets the numeric type used by the model.
     /// </summary>
-    public string NumericType { get; set; } = string.Empty;
+    public NumericType NumericType { get; set; } = NumericType.Double;
 
     /// <summary>
     /// Gets or sets the expected number of input features.
@@ -51,46 +53,3 @@ public class ModelInfo
     public bool IsFromRegistry { get; set; }
 }
 
-/// <summary>
-/// Request to load a new model.
-/// </summary>
-public class LoadModelRequest
-{
-    /// <summary>
-    /// Gets or sets the unique name for the model.
-    /// </summary>
-    public string Name { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets the file path to the serialized model.
-    /// </summary>
-    public string Path { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets the numeric type used by the model.
-    /// Supported values: "double", "float", "decimal"
-    /// Default is "double".
-    /// </summary>
-    public string NumericType { get; set; } = "double";
-}
-
-/// <summary>
-/// Response after loading a model.
-/// </summary>
-public class LoadModelResponse
-{
-    /// <summary>
-    /// Gets or sets whether the model was loaded successfully.
-    /// </summary>
-    public bool Success { get; set; }
-
-    /// <summary>
-    /// Gets or sets the error message if loading failed.
-    /// </summary>
-    public string? Error { get; set; }
-
-    /// <summary>
-    /// Gets or sets information about the loaded model.
-    /// </summary>
-    public ModelInfo? ModelInfo { get; set; }
-}

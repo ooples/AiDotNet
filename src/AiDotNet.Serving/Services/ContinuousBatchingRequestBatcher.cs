@@ -453,17 +453,4 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
         base.DisposeManagedResources();
     }
 
-    /// <summary>
-    /// Internal class representing a request in the continuous batching queue.
-    /// </summary>
-    private class ContinuousRequest
-    {
-        public long RequestId { get; set; }
-        public string ModelName { get; set; } = string.Empty;
-        public string NumericType { get; set; } = string.Empty;
-        public object Input { get; set; } = null!;
-        public object CompletionSource { get; set; } = null!;
-        public RequestPriority Priority { get; set; } = RequestPriority.Normal;
-        public DateTime EnqueueTime { get; set; }
-    }
 }

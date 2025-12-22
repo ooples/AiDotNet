@@ -1,5 +1,6 @@
 using AiDotNet.ActiveLearning.Config;
 using AiDotNet.Agents;
+using AiDotNet.Benchmarking.Models;
 using AiDotNet.CheckpointManagement;
 using AiDotNet.Configuration;
 using AiDotNet.ContinualLearning.Config;
@@ -926,4 +927,22 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public CurriculumLearnerConfig<T>? CurriculumLearningConfig { get; set; }
+
+    // ============================================================================
+    // Benchmarking Properties
+    // ============================================================================
+
+    /// <summary>
+    /// Gets or sets the most recent benchmark report produced during model build/evaluation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is populated when the user enables benchmarking through the facade (for example,
+    /// <c>PredictionModelBuilder.ConfigureBenchmarking(...)</c>) and a benchmark report is generated.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the "report card" produced when you run benchmark suites
+    /// like GSM8K or MMLU. It contains summary metrics and timing.
+    /// </para>
+    /// </remarks>
+    public BenchmarkReport? BenchmarkReport { get; set; }
 }

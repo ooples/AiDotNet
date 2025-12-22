@@ -96,7 +96,6 @@ public class BayesianOptimizerTests
         Assert.NotNull(result);
         Assert.NotNull(result.BestParameters);
         Assert.True(result.BestParameters.ContainsKey("x"));
-        Assert.NotNull(result.BestObjectiveValue);
 
         // The best x should be reasonably close to 0
         var bestX = Convert.ToDouble(result.BestParameters["x"]);
@@ -163,7 +162,6 @@ public class BayesianOptimizerTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.NotNull(result.BestObjectiveValue);
         // Best score should be close to 0 (maximum of -x^2)
         Assert.True(result.BestObjectiveValue > -10.0, $"Best score={result.BestObjectiveValue} should be close to 0");
     }

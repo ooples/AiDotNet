@@ -1,5 +1,7 @@
 namespace AiDotNet.JitCompiler;
 
+using System.Globalization;
+
 /// <summary>
 /// Statistics about a compilation operation.
 /// </summary>
@@ -58,12 +60,15 @@ public class CompilationStats
     /// </summary>
     public override string ToString()
     {
+        var optimizationPercentage = OptimizationPercentage.ToString("F1", CultureInfo.InvariantCulture);
+        var compilationTimeMs = CompilationTime.TotalMilliseconds.ToString("F2", CultureInfo.InvariantCulture);
+
         return $"Compilation Stats:\n" +
                $"  Original operations: {OriginalOperationCount}\n" +
                $"  Optimized operations: {OptimizedOperationCount}\n" +
-               $"  Operations eliminated: {OperationsEliminated} ({OptimizationPercentage:F1}%)\n" +
+               $"  Operations eliminated: {OperationsEliminated} ({optimizationPercentage}%)\n" +
                $"  Optimizations applied: {string.Join(", ", OptimizationsApplied)}\n" +
-               $"  Compilation time: {CompilationTime.TotalMilliseconds:F2}ms\n" +
+               $"  Compilation time: {compilationTimeMs}ms\n" +
                $"  Cache hit: {CacheHit}";
     }
 }

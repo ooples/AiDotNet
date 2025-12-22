@@ -123,7 +123,22 @@ public class SafeSerializationBinder : ISerializationBinder
             return false;
         }
 
-        // Reject open generic types (unbound type parameters)
+        // Allow generic type definitions if they are in allowed namespaces.
+        // Note: Generic type definitions *do* contain generic parameters; rejecting them would block all closed generics too,
+        // because we validate the generic type definition as part of the closed generic validation path.
+        if (type.IsGenericTypeDefinition)
+        {
+            var defNamespace = type.Namespace ?? "";
+            if (defNamespace.Length == 0)
+            {
+                return false;
+            }
+
+            return AllowedNamespacePrefixes.Any(prefix =>
+                (defNamespace + ".").StartsWith(prefix, StringComparison.Ordinal));
+        }
+
+        // Reject partially-open generic types (unbound type parameters)
         if (type.ContainsGenericParameters)
         {
             return false;

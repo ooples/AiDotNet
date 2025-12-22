@@ -66,6 +66,20 @@ public abstract class TensorBase<T>
     public T[] Data => _data.Data;
 
     /// <summary>
+    /// Creates a new array containing a copy of the tensor's elements in flattened order.
+    /// </summary>
+    /// <returns>A new array containing the tensor's elements.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This converts the tensor into a regular one-dimensional array.
+    /// The data is returned in flattened (row-major) order. The returned array is a copy, so
+    /// changes to it will not affect the original tensor.</para>
+    /// </remarks>
+    public virtual T[] ToArray()
+    {
+        return _data.ToArray();
+    }
+
+    /// <summary>
     /// Initializes a new instance of the TensorBase class with the specified shape.
     /// </summary>
     /// <param name="shape">The shape of the tensor.</param>

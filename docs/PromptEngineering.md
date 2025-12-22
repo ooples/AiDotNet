@@ -65,7 +65,7 @@ selector.AddExample(new FewShotExample
 });
 
 // Create few-shot template
-var template = new FewShotPromptTemplate(
+var template = new FewShotPromptTemplate<double>(
     template: "Classify sentiment:\n\n{examples}\n\nText: {text}\nSentiment:",
     exampleSelector: selector,
     exampleCount: 2
@@ -99,6 +99,25 @@ using AiDotNet.Enums;
 var template = PromptTemplateFactory.Create(
     PromptTemplateType.Simple,
     "Summarize {document}"
+);
+```
+
+For Few-Shot templates, use the generic factory overload so your selector type matches:
+
+```csharp
+using AiDotNet.Factories;
+using AiDotNet.Enums;
+using AiDotNet.PromptEngineering.FewShot;
+
+var selector = new RandomExampleSelector<double>();
+selector.AddExample(new FewShotExample { Input = "Hello", Output = "Hola" });
+selector.AddExample(new FewShotExample { Input = "Goodbye", Output = "Adios" });
+
+var template = PromptTemplateFactory.Create<double>(
+    PromptTemplateType.FewShot,
+    "Translate English to Spanish.\n\n{examples}\n\nNow: {query}",
+    selector,
+    exampleCount: 2
 );
 ```
 
@@ -353,7 +372,7 @@ selector.AddExample(new FewShotExample
 });
 
 // Create few-shot template
-var template = new FewShotPromptTemplate(
+var template = new FewShotPromptTemplate<double>(
     template: "Classify the sentiment of customer reviews.\n\n{examples}\n\nReview: {review}\nSentiment:",
     exampleSelector: selector,
     exampleCount: 2

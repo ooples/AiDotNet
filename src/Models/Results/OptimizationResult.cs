@@ -422,7 +422,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// This constructor creates a new OptimizationResult instance and initializes all properties to their default values. 
     /// It obtains the appropriate numeric operations for the generic type T, creates a default symbolic model, and initializes 
     /// all vectors, lists, and nested objects. This provides a clean starting point for storing optimization results. The 
-    /// default symbolic model is a vector model, which is a simple linear model that can be used as a placeholder until a 
+    /// default symbolic model is a vector model, which is a simple linear model that can be used as a safe fallback until a 
     /// better model is found during optimization.
     /// </para>
     /// <para><b>For Beginners:</b> This constructor creates a new result object with default values.
@@ -430,7 +430,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// When a new OptimizationResult is created:
     /// - All numeric values are set to zero
     /// - All collections (vectors, lists) are initialized as empty
-    /// - A simple default model is created as a placeholder
+    /// - A simple default model is created as a safe fallback
     /// - All nested result objects are initialized with their own default values
     /// 
     /// This initialization is important because:
@@ -734,7 +734,7 @@ public class OptimizationResult<T, TInput, TOutput>
         /// This provides a clean starting point for storing dataset results. The empty data structures will be populated with actual 
         /// data and statistics during the evaluation of the model on the dataset.
         /// </para>
-        /// <para><b>For Beginners:</b> This constructor creates a new dataset result object with empty placeholders.
+        /// <para><b>For Beginners:</b> This constructor creates a new dataset result object with empty defaults.
         /// 
         /// When a new DatasetResult is created:
         /// - All data structures (matrices, vectors) are initialized as empty

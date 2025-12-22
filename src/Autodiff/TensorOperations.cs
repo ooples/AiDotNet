@@ -311,35 +311,56 @@ public static class TensorOperations<T>
     /// </remarks>
     public static ComputationNode<T> ElementwiseMultiply(ComputationNode<T> a, ComputationNode<T> b)
     {
-        // Forward pass: element-wise multiplication
-        var result = a.Value.ElementwiseMultiply(b.Value);
+        // Forward pass: element-wise multiplication (with limited broadcasting support)
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        Tensor<T> result = a.Value.Shape.SequenceEqual(b.Value.Shape)
+            ? engine.TensorMultiply(a.Value, b.Value)
+            : BroadcastMultiply(a.Value, b.Value, numOps);
+
+        // Store original shapes for gradient reduction
+        var aShape = a.Value.Shape;
+        var bShape = b.Value.Shape;
+
         // Create backward function
         void BackwardFunction(Tensor<T> gradient)
         {
             // d(a*b)/da = b, so gradient * b flows to 'a'
             if (a.RequiresGradient)
             {
-                var gradA = gradient.ElementwiseMultiply(b.Value);
+                var gradA = gradient.Shape.SequenceEqual(b.Value.Shape)
+                    ? engine.TensorMultiply(gradient, b.Value)
+                    : BroadcastMultiply(gradient, b.Value, numOps);
+
+                gradA = ReduceGradient(gradA, aShape);
+
                 if (a.Gradient == null)
                 {
                     a.Gradient = gradA;
                 }
                 else
                 {
-                    a.Gradient = a.Gradient.Add(gradA);
+                    a.Gradient = engine.TensorAdd(a.Gradient, gradA);
                 }
             }
+
             // d(a*b)/db = a, so gradient * a flows to 'b'
             if (b.RequiresGradient)
             {
-                var gradB = gradient.ElementwiseMultiply(a.Value);
+                var gradB = gradient.Shape.SequenceEqual(a.Value.Shape)
+                    ? engine.TensorMultiply(gradient, a.Value)
+                    : BroadcastMultiply(gradient, a.Value, numOps);
+
+                gradB = ReduceGradient(gradB, bShape);
+
                 if (b.Gradient == null)
                 {
                     b.Gradient = gradB;
                 }
                 else
                 {
-                    b.Gradient = b.Gradient.Add(gradB);
+                    b.Gradient = engine.TensorAdd(b.Gradient, gradB);
                 }
             }
         }
@@ -999,6 +1020,46 @@ public static class TensorOperations<T>
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
         return node;
+    }
+
+    /// <summary>
+    /// Performs a matrix-vector multiplication (2D x 1D) by reshaping the vector into a column matrix.
+    /// </summary>
+    /// <param name="matrix">The left matrix (must be 2D).</param>
+    /// <param name="vector">The right vector (must be 1D).</param>
+    /// <returns>A computation node representing the vector result.</returns>
+    public static ComputationNode<T> MatrixVectorMultiply(ComputationNode<T> matrix, ComputationNode<T> vector)
+    {
+        if (matrix == null)
+        {
+            throw new ArgumentNullException(nameof(matrix));
+        }
+
+        if (vector == null)
+        {
+            throw new ArgumentNullException(nameof(vector));
+        }
+
+        if (matrix.Value.Shape.Length != 2)
+        {
+            throw new ArgumentException("MatrixVectorMultiply requires a 2D matrix input.", nameof(matrix));
+        }
+
+        if (vector.Value.Shape.Length != 1)
+        {
+            throw new ArgumentException("MatrixVectorMultiply requires a 1D vector input.", nameof(vector));
+        }
+
+        var rows = matrix.Value.Shape[0];
+        var cols = matrix.Value.Shape[1];
+        if (vector.Value.Shape[0] != cols)
+        {
+            throw new ArgumentException("MatrixVectorMultiply requires matching inner dimensions.", nameof(vector));
+        }
+
+        var vector2d = Reshape(vector, cols, 1);
+        var result2d = MatrixMultiply(matrix, vector2d);
+        return Reshape(result2d, rows);
     }
 
     /// <summary>
@@ -10443,6 +10504,62 @@ public static class TensorOperations<T>
     }
 
     /// <summary>
+    /// Performs broadcasting multiplication of two tensors with different shapes.
+    /// </summary>
+    private static Tensor<T> BroadcastMultiply(Tensor<T> a, Tensor<T> b, INumericOperations<T> numOps)
+    {
+        // Scalar broadcast: [1] * X or X * [1]
+        if (a.Length == 1)
+        {
+            return b.Multiply(a[0]);
+        }
+
+        if (b.Length == 1)
+        {
+            return a.Multiply(b[0]);
+        }
+
+        // Handle common case: [batchSize, features] * [features]
+        if (a.Rank == 2 && b.Rank == 1 && a.Shape[1] == b.Shape[0])
+        {
+            int batchSize = a.Shape[0];
+            int features = a.Shape[1];
+            var result = new Tensor<T>(a.Shape);
+
+            for (int batch = 0; batch < batchSize; batch++)
+            {
+                for (int f = 0; f < features; f++)
+                {
+                    result[batch, f] = numOps.Multiply(a[batch, f], b[f]);
+                }
+            }
+
+            return result;
+        }
+
+        // Handle common case: [features] * [batchSize, features]
+        if (b.Rank == 2 && a.Rank == 1 && b.Shape[1] == a.Shape[0])
+        {
+            int batchSize = b.Shape[0];
+            int features = b.Shape[1];
+            var result = new Tensor<T>(b.Shape);
+
+            for (int batch = 0; batch < batchSize; batch++)
+            {
+                for (int f = 0; f < features; f++)
+                {
+                    result[batch, f] = numOps.Multiply(a[f], b[batch, f]);
+                }
+            }
+
+            return result;
+        }
+
+        throw new NotSupportedException(
+            $"Broadcasting multiplication from shape [{string.Join(", ", a.Shape)}] and [{string.Join(", ", b.Shape)}] is not yet implemented for this shape combination.");
+    }
+
+    /// <summary>
     /// Reduces gradient to match the original shape by summing across broadcasted dimensions.
     /// </summary>
     private static Tensor<T> ReduceGradient(Tensor<T> gradient, int[] originalShape)
@@ -10451,6 +10568,12 @@ public static class TensorOperations<T>
         if (gradient.Shape.SequenceEqual(originalShape))
         {
             return gradient;
+        }
+
+        // Scalar reduction: broadcasted scalar receives the sum of all gradient contributions.
+        if (originalShape.Length == 1 && originalShape[0] == 1)
+        {
+            return gradient.Sum();
         }
 
         var numOps = MathHelper.GetNumericOperations<T>();

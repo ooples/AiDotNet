@@ -23,7 +23,7 @@ public static class RandomHelper
     /// Each thread gets its own Random instance to avoid thread-safety issues.
     /// </summary>
     private static readonly ThreadLocal<Random> _threadLocalRandom = new(
-        () => new Random(GenerateCryptographicSeed()));
+        () => new LockedRandom(GenerateCryptographicSeed()));
 
     /// <summary>
     /// Gets the thread-safe random number generator for the current thread.
@@ -38,7 +38,7 @@ public static class RandomHelper
     /// consistent random sequences.
     /// </para>
     /// </remarks>
-    public static Random ThreadSafeRandom => _threadLocalRandom.Value ?? new Random(GenerateCryptographicSeed());
+    public static Random ThreadSafeRandom => _threadLocalRandom.Value ?? CreateSecureRandom();
 
     /// <summary>
     /// Gets a shared thread-safe random instance. Alias for ThreadSafeRandom.
@@ -77,9 +77,9 @@ public static class RandomHelper
     }
 
     /// <summary>
-    /// Creates a new Random instance with a cryptographically secure seed.
+    /// Creates a new thread-safe Random instance with a cryptographically secure seed.
     /// </summary>
-    /// <returns>A new Random instance with a unique seed.</returns>
+    /// <returns>A new thread-safe Random instance with a unique seed.</returns>
     /// <remarks>
     /// <para>
     /// Use this method when you need a dedicated Random instance (e.g., for storing in a field)
@@ -92,14 +92,14 @@ public static class RandomHelper
     /// </remarks>
     public static Random CreateSecureRandom()
     {
-        return new Random(GenerateCryptographicSeed());
+        return new LockedRandom(GenerateCryptographicSeed());
     }
 
     /// <summary>
-    /// Creates a new Random instance with the specified seed for reproducible results.
+    /// Creates a new thread-safe Random instance with the specified seed for reproducible results.
     /// </summary>
     /// <param name="seed">The seed value to initialize the random number generator.</param>
-    /// <returns>A new Random instance initialized with the specified seed.</returns>
+    /// <returns>A new thread-safe Random instance initialized with the specified seed.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Use this when you need reproducible random sequences,
     /// such as during testing or when you want experiments to be repeatable.
@@ -108,7 +108,7 @@ public static class RandomHelper
     /// </remarks>
     public static Random CreateSeededRandom(int seed)
     {
-        return new Random(seed);
+        return new LockedRandom(seed);
     }
 
     /// <summary>

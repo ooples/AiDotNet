@@ -5,6 +5,7 @@ namespace AiDotNet.PromptEngineering.Templates;
 /// <summary>
 /// Prompt template that includes few-shot examples to guide model behavior.
 /// </summary>
+/// <typeparam name="T">The numeric type used by the example selector for scoring and similarity.</typeparam>
 /// <remarks>
 /// <para>
 /// This template combines a base template with examples selected from a few-shot example selector.
@@ -18,7 +19,7 @@ namespace AiDotNet.PromptEngineering.Templates;
 /// var baseTemplate = "Classify the sentiment of the following text.\n\n{examples}\n\nText: {text}\nSentiment:";
 ///
 /// // Create few-shot template with example selector
-/// var template = new FewShotPromptTemplate(
+/// var template = new FewShotPromptTemplate&lt;double&gt;(
 ///     baseTemplate,
 ///     exampleSelector,
 ///     exampleCount: 3,
@@ -47,9 +48,9 @@ namespace AiDotNet.PromptEngineering.Templates;
 /// ```
 /// </para>
 /// </remarks>
-public class FewShotPromptTemplate : PromptTemplateBase
+public class FewShotPromptTemplate<T> : PromptTemplateBase
 {
-    private readonly IFewShotExampleSelector<double> _exampleSelector;
+    private readonly IFewShotExampleSelector<T> _exampleSelector;
     private readonly int _exampleCount;
     private readonly string _exampleFormat;
     private readonly string _exampleSeparator;
@@ -64,7 +65,7 @@ public class FewShotPromptTemplate : PromptTemplateBase
     /// <param name="exampleSeparator">Separator between examples (default: double newline).</param>
     public FewShotPromptTemplate(
         string template,
-        IFewShotExampleSelector<double> exampleSelector,
+        IFewShotExampleSelector<T> exampleSelector,
         int exampleCount = 3,
         string? exampleFormat = null,
         string? exampleSeparator = null)
