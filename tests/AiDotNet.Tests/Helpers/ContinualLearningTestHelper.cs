@@ -89,7 +89,7 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
         _isTraining = true;
         _activeFeatureIndices = Enumerable.Range(0, 10).ToList();
 
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < numParameters; i++)
         {
             _parameters[i] = _ops.FromDouble(random.NextDouble() * 2 - 1);

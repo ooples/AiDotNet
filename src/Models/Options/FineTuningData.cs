@@ -232,8 +232,8 @@ public class FineTuningData<T, TInput, TOutput>
         int? seed = null)
     {
         var random = seed.HasValue
-            ? new Random(seed.Value)
-            : new Random();
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         var indices = Enumerable.Range(0, Count).ToArray();
 

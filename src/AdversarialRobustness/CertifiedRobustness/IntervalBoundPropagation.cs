@@ -627,7 +627,7 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
         int numSamples = _options.NumSamples;
         var random = _options.RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
-            : new Random();
+            : RandomHelper.CreateSecureRandom();
 
         for (int s = 0; s < numSamples; s++)
         {

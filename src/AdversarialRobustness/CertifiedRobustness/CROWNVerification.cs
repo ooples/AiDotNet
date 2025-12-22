@@ -936,7 +936,7 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
         int numSamples = _options.NumSamples;
         var random = _options.RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
-            : new Random();
+            : RandomHelper.CreateSecureRandom();
 
         for (int s = 0; s < numSamples; s++)
         {
