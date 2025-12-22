@@ -85,9 +85,6 @@ jobs:
               # Check if description starts with lowercase (required for all types including deps)
               if [[ "$FIRST_CHAR" =~ ^[a-z] ]]; then
                 echo "✅ Valid commit: $FIRST_LINE"
-              elif [[ "$FIRST_LINE" =~ ^deps:.*[Bb]ump.* ]]; then
-                # Allow deps: with "Bump" from dependabot as a special case
-                echo "⚠️ Allowing deps commit with capital (likely dependabot): $FIRST_LINE"
               else
                 echo "❌ Invalid subject case: $FIRST_LINE"
                 NEEDS_FIX=true
@@ -226,7 +223,7 @@ The commitlint check failed because one or more commit messages didn't follow [C
 **Action taken** — All non-compliant commits have been fixed to follow the conventional commits format.
 
 **Changes made:**
-- Subject lines are now lowercase (except 'deps' type)
+- Subject lines are now lowercase (all types including 'deps')
 - Types are now one of: \`feat\`, \`fix\`, \`docs\`, \`refactor\`, \`perf\`, \`test\`, \`chore\`, \`ci\`, \`style\`, or \`deps\`
 
 The PR branch has been force-pushed with the fixed commits. If you had local changes, you may need to \`git pull --rebase\`.`
