@@ -1,3 +1,4 @@
+using AiDotNet.AdversarialRobustness.Documentation;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using Newtonsoft.Json;
@@ -167,6 +168,26 @@ public abstract class ModelRegistryBase<T, TInput, TOutput> : IModelRegistry<T, 
     /// Gets the storage location for a model version.
     /// </summary>
     public abstract string GetModelStoragePath(string modelName, int version);
+
+    /// <summary>
+    /// Attaches a Model Card to a registered model version.
+    /// </summary>
+    public abstract void AttachModelCard(string modelName, int version, ModelCard modelCard);
+
+    /// <summary>
+    /// Gets the Model Card for a registered model version.
+    /// </summary>
+    public abstract ModelCard? GetModelCard(string modelName, int version);
+
+    /// <summary>
+    /// Generates a Model Card from the registered model's metadata and evaluation results.
+    /// </summary>
+    public abstract ModelCard GenerateModelCard(string modelName, int version, string? developers = null);
+
+    /// <summary>
+    /// Saves the Model Card for a model version to a file.
+    /// </summary>
+    public abstract void SaveModelCard(string modelName, int version, string filePath);
 
     #region Protected Helper Methods
 

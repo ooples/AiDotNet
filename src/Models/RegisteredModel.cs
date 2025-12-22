@@ -1,3 +1,4 @@
+using AiDotNet.AdversarialRobustness.Documentation;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Models;
@@ -59,6 +60,17 @@ public class RegisteredModel<T, TInput, TOutput>
     /// Gets or sets the storage path for the model.
     /// </summary>
     public string? StoragePath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the Model Card for this model version.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A Model Card is like a nutrition label for AI models.
+    /// It documents the model's intended use, limitations, performance metrics, and ethical considerations.
+    /// Having a Model Card associated with each registered model helps maintain transparency
+    /// and responsible AI practices.</para>
+    /// </remarks>
+    public ModelCard? ModelCard { get; set; }
 }
 
 /// <summary>
