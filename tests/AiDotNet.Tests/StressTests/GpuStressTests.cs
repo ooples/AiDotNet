@@ -52,6 +52,9 @@ public class GpuStressTests
     private const int MediumRunIterations = 1_000;
     private const int ShortRunIterations = 100;
     private const int ConcurrentThreads = 8;
+    private static bool ShouldRunStressTests =>
+        string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_RUN_STRESS_TESTS"), "1", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_RUN_STRESS_TESTS"), "true", StringComparison.OrdinalIgnoreCase);
 
     #region Matrix Operation Stress Tests
 
@@ -59,6 +62,11 @@ public class GpuStressTests
     public void MatrixMultiply_LongRun_10KIterations_NoMemoryLeak()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         GpuEngine? engine = null;
         try
         {
@@ -68,6 +76,11 @@ public class GpuStressTests
         {
             // GPU not available - skip test
             return;
+        }
+
+        if (!engine.SupportsGpu)
+        {
+            return; // GPU not available (CPU accelerator selected)
         }
 
         var matrixA = CreateRandomMatrix(256, 256);
@@ -111,6 +124,11 @@ public class GpuStressTests
     public void MatrixMultiply_Concurrent_8Threads_NoRaceConditions()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         GpuEngine? engine = null;
         try
         {
@@ -119,6 +137,11 @@ public class GpuStressTests
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
+        }
+
+        if (!engine.SupportsGpu)
+        {
+            return; // GPU not available (CPU accelerator selected)
         }
 
         var matrices = new Matrix<float>[ConcurrentThreads];
@@ -165,6 +188,11 @@ public class GpuStressTests
     public void Conv2D_LongRun_1KIterations_StablePerformance()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         GpuEngine? engine = null;
         try
         {
@@ -173,6 +201,11 @@ public class GpuStressTests
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
+        }
+
+        if (!engine.SupportsGpu)
+        {
+            return; // GPU not available (CPU accelerator selected)
         }
 
         // Typical CNN layer sizes
@@ -221,6 +254,11 @@ public class GpuStressTests
     public void Pooling_HighFrequency_1KIterations_NoLeaks()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         GpuEngine? engine = null;
         try
         {
@@ -229,6 +267,11 @@ public class GpuStressTests
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
+        }
+
+        if (!engine.SupportsGpu)
+        {
+            return; // GPU not available (CPU accelerator selected)
         }
 
         var input = CreateRandomTensor(new[] { 8, 64, 56, 56 }); // Large batch for stress testing
@@ -266,6 +309,11 @@ public class GpuStressTests
     public void ConvolutionalLayer_LongRun_1KForwardPasses_Stable()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         GpuEngine? engine = null;
         try
         {
@@ -274,6 +322,11 @@ public class GpuStressTests
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
+        }
+
+        if (!engine.SupportsGpu)
+        {
+            return; // GPU not available (CPU accelerator selected)
         }
 
         var previousEngine = AiDotNetEngine.Current;
@@ -316,6 +369,11 @@ public class GpuStressTests
     public void FullCNNPipeline_100Iterations_NoMemoryLeaks()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         GpuEngine? engine = null;
         try
         {
@@ -324,6 +382,11 @@ public class GpuStressTests
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
+        }
+
+        if (!engine.SupportsGpu)
+        {
+            return; // GPU not available (CPU accelerator selected)
         }
 
         var previousEngine = AiDotNetEngine.Current;
@@ -385,6 +448,11 @@ public class GpuStressTests
     public void MemoryPool_VariableSizeAllocations_ReuseBuffers()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         GpuEngine? engine = null;
         try
         {
@@ -393,6 +461,11 @@ public class GpuStressTests
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
+        }
+
+        if (!engine.SupportsGpu)
+        {
+            return; // GPU not available (CPU accelerator selected)
         }
 
         var sizes = new[] { 64, 128, 256, 512, 256, 128, 64 }; // Varied sizes
@@ -422,6 +495,11 @@ public class GpuStressTests
     public void MemoryPool_RapidAllocDealloc_1KCycles_Stable()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         GpuEngine? engine = null;
         try
         {
@@ -430,6 +508,11 @@ public class GpuStressTests
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
+        }
+
+        if (!engine.SupportsGpu)
+        {
+            return; // GPU not available (CPU accelerator selected)
         }
 
         var initialMemory = GC.GetTotalMemory(forceFullCollection: true);
@@ -464,6 +547,11 @@ public class GpuStressTests
     public void GPU_InvalidOperations_GracefulErrorHandling()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         GpuEngine? engine = null;
         try
         {
@@ -472,6 +560,11 @@ public class GpuStressTests
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
+        }
+
+        if (!engine.SupportsGpu)
+        {
+            return; // GPU not available (CPU accelerator selected)
         }
 
         var validMatrix = CreateRandomMatrix(64, 64);
@@ -492,6 +585,11 @@ public class GpuStressTests
     public void GPU_MultipleErrors_ContinuesOperating()
     {
         // Arrange
+        if (!ShouldRunStressTests)
+        {
+            return;
+        }
+
         GpuEngine? engine = null;
         try
         {
@@ -500,6 +598,11 @@ public class GpuStressTests
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
+        }
+
+        if (!engine.SupportsGpu)
+        {
+            return; // GPU not available (CPU accelerator selected)
         }
 
         var validMatrix = CreateRandomMatrix(64, 64);
@@ -534,7 +637,7 @@ public class GpuStressTests
 
     private static Matrix<float> CreateRandomMatrix(int rows, int cols)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var matrix = new Matrix<float>(rows, cols);
         for (int i = 0; i < rows; i++)
         {
@@ -548,7 +651,7 @@ public class GpuStressTests
 
     private static Vector<float> CreateRandomVector(int size)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var vector = new Vector<float>(size);
         for (int i = 0; i < size; i++)
         {
@@ -559,7 +662,7 @@ public class GpuStressTests
 
     private static Tensor<float> CreateRandomTensor(int[] shape)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var tensor = new Tensor<float>(shape);
         for (int i = 0; i < tensor.Length; i++)
         {

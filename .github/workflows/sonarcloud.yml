@@ -82,12 +82,235 @@ jobs:
           category: "/language:csharp"
           upload: always
 
-  # SonarCloud analysis - runs in parallel with CodeQL
+  # Build once on Windows (net8.0 + net471), then run tests in parallel shards.
+  build-windows:
+    name: Build (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    if: github.event.pull_request.draft != true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 8.0
+        uses: actions/setup-dotnet@2016bd2012dba4e32de620c46fe006a3ac9f0602 # v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build (Release)
+        run: dotnet build -c Release --no-restore
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: build-output-${{ github.sha }}
+          path: |
+            **/bin/Release/
+            **/obj/Release/
+          retention-days: 1
+
+      - name: Build NuGet package
+        run: dotnet pack --no-build -c Release --output ./artifacts
+
+      - name: Upload NuGet package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nuget-packages
+          path: ./artifacts/*.nupkg
+
+  # Sharded test execution for fast, parallel feedback and coverage generation (net8.0).
+  # Coverage artifacts are consumed by the SonarCloud analysis job below.
+  test-net8-sharded:
+    name: Tests (net8.0) - ${{ matrix.shard.name }}
+    runs-on: windows-latest
+    needs: build-windows
+    timeout-minutes: 45
+    if: github.event.pull_request.draft != true
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - name: AiDotNet.Tests - Unit - 01 Core
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: >-
+              Category!=GPU&Category!=Integration&Category!=Stress&
+              FullyQualifiedName~AiDotNet.Tests.UnitTests&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.ActivationFunctions&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Attention&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Autodiff&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.AutoML&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Data&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Diagnostics&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Diffusion&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Encoding&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.FeatureSelectors&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.FitDetectors&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.FitnessCalculators&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Genetics&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Helpers&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Inference&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Interpretability&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.JitCompiler&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.KnowledgeDistillation&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.LearningRateSchedulers&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.LinearAlgebra&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Logging&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.LossFunctions&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.MetaLearning&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.MixedPrecision&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.ModelCompression&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.NestedLearning&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.NeuralNetworks&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Optimizers&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.RAG&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Regularization&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.ReinforcementLearning&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.RetrievalAugmentedGeneration&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Serving&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.TimeSeries&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Tokenization&
+              FullyQualifiedName!~AiDotNet.Tests.UnitTests.TransferLearning
+          - name: AiDotNet.Tests - Unit - 02 Activation/Attention
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.ActivationFunctions|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Attention'
+          - name: AiDotNet.Tests - Unit - 03 Autodiff/AutoML/Data
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Autodiff|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.AutoML|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Data'
+          - name: AiDotNet.Tests - Unit - 04 Diagnostics/Diffusion/Encoding
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Diagnostics|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Encoding'
+          - name: AiDotNet.Tests - Unit - 05 Feature/Fit/Fitness
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.FeatureSelectors|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.FitDetectors|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.FitnessCalculators'
+          - name: AiDotNet.Tests - Unit - 06 Genetics/Helpers/Inference
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Genetics|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Helpers|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Inference'
+          - name: AiDotNet.Tests - Unit - 07 Interpretability/JIT/KD
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Interpretability|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.JitCompiler|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.KnowledgeDistillation'
+          - name: AiDotNet.Tests - Unit - 08 Schedulers/LA/Logging/Loss
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.LearningRateSchedulers|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.LinearAlgebra|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Logging|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.LossFunctions'
+          - name: AiDotNet.Tests - Unit - 09 Meta/Mixed/Compression
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.MetaLearning|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.MixedPrecision|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.ModelCompression'
+          - name: AiDotNet.Tests - Unit - 10 NN/Optimizers/RAG
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Optimizers|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.RAG'
+          - name: AiDotNet.Tests - Unit - 11 Regularization/RL/RAG2
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Regularization|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.ReinforcementLearning|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.RetrievalAugmentedGeneration'
+          - name: AiDotNet.Tests - Unit - 12 Serving/TimeSeries/Token/Transfer
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Serving|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.TimeSeries|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Tokenization|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.TransferLearning'
+          - name: AiDotNet.Tests - Other - 13 InferenceOptimization
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.InferenceOptimization
+          - name: AiDotNet.Tests - Other - 14 PromptEngineering
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.PromptEngineering
+          - name: AiDotNet.Tests - Other - 15 Recovery/Concurrency
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.Recovery|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.Concurrency'
+          - name: AiDotNet.Tensors.Tests
+            project: tests/AiDotNet.Tensors.Tests/AiDotNet.Tensors.Tests.csproj
+            framework: net8.0
+            filter: Category!=GPU&Category!=Integration&Category!=Stress
+          - name: AiDotNet.Serving.Tests
+            project: tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj
+            framework: net8.0
+            filter: Category!=GPU&Category!=Integration&Category!=Stress
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup .NET 8.0
+        uses: actions/setup-dotnet@2016bd2012dba4e32de620c46fe006a3ac9f0602 # v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: build-output-${{ github.sha }}
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Run tests (sharded) with coverage
+        shell: powershell
+        run: |
+          # Sanitize shard name: remove/replace all characters invalid in file paths
+          $shardName = "${{ matrix.shard.name }}"
+          $sanitizedShardName = $shardName -replace '[\\/:*?"<>|\s-]+', '_'
+          $results = Join-Path "TestResults" $sanitizedShardName
+          New-Item -Path $results -ItemType Directory -Force | Out-Null
+          dotnet test ${{ matrix.shard.project }} -c Release --framework ${{ matrix.shard.framework }} --no-restore --filter "${{ matrix.shard.filter }}" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results.trx" --results-directory $results
+
+      - name: Set artifact name
+        if: always()
+        shell: powershell
+        run: |
+          # Create sanitized artifact name from shard name
+          $slug = "${{ matrix.shard.name }}" -replace '[\\/:*?"<>|\s-]+', '_'
+          echo "ARTIFACT_NAME=coverage-${{ github.sha }}-$slug" >> $env:GITHUB_ENV
+
+      - name: Upload coverage + test results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: |
+            TestResults/**/coverage.opencover.xml
+            TestResults/**/*.trx
+          if-no-files-found: ignore
+
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: windows-latest
     timeout-minutes: 45
     if: github.event.pull_request.draft != true
+    needs:
+      - build-windows
+      - test-net8-sharded
 
     steps:
       - name: Set up JDK 17
@@ -136,8 +359,12 @@ jobs:
           New-Item -Path ${{ runner.temp }}\scanner -ItemType Directory -Force
           dotnet tool update dotnet-sonarscanner --tool-path ${{ runner.temp }}\scanner
 
-      - name: Install coverage tool
-        run: dotnet tool install --global coverlet.console
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: coverage-${{ github.sha }}-*
+          path: TestResults
+          merge-multiple: true
 
       - name: Restore dependencies
         run: dotnet restore
@@ -163,7 +390,7 @@ jobs:
             "/o:ooples",
             "/d:sonar.token=$env:SONAR_TOKEN",
             "/d:sonar.host.url=https://sonarcloud.io",
-            "/d:sonar.cs.opencover.reportsPaths=**/coverage.opencover.xml",
+            "/d:sonar.cs.opencover.reportsPaths=TestResults/**/coverage.opencover.xml",
             "/d:sonar.coverage.exclusions=**/tests/**,**/testconsole/**,**/AiDotNetBenchmarkTests/**,**/examples/**",
             "/d:sonar.scm.provider=git"
           )
@@ -179,7 +406,6 @@ jobs:
 
           & "${{ runner.temp }}\scanner\dotnet-sonarscanner" begin @params
 
-      # SonarCloud needs to trace the build - build both frameworks
       - name: Build (Release)
         run: dotnet build -c Release --no-restore
 
@@ -197,38 +423,11 @@ jobs:
         run: |
           ${{ runner.temp }}\scanner\dotnet-sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"
 
-      # Upload build artifacts for other workflows to reuse
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: build-output-${{ github.sha }}
-          path: |
-            **/bin/Release/
-            **/obj/Release/
-          retention-days: 1
-
-      - name: Build NuGet package
-        run: dotnet pack --no-build -c Release --output ./artifacts
-
-      - name: Upload NuGet package
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: nuget-packages
-          path: ./artifacts/*.nupkg
-
-      - name: Upload test results
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: always()
-        with:
-          name: test-results-build
-          path: ./TestResults/*.trx
-          if-no-files-found: ignore
-
   # Run additional tests after build completes (net471)
   test-net471:
     name: Run Tests (net471)
     runs-on: windows-latest
-    needs: sonarcloud
+    needs: build-windows
     timeout-minutes: 30
 
     steps:
@@ -262,7 +461,7 @@ jobs:
       # Only run AiDotNet.Tests as AiDotNet.Serving.Tests only targets net8.0
       - name: Run tests (net471)
         run: |
-          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj --no-build -c Release --framework net471 --filter "Category!=GPU&Category!=Integration" --logger "trx;LogFileName=test-results-net471.trx" --results-directory ./TestResults
+          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj --no-build -c Release --framework net471 --filter "Category!=GPU&Category!=Integration&Category!=Stress" --logger "trx;LogFileName=test-results-net471.trx" --results-directory ./TestResults
 
       - name: Upload test results
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -276,7 +475,7 @@ jobs:
   size-check:
     name: Artifact Size Check
     runs-on: ubuntu-latest
-    needs: sonarcloud
+    needs: build-windows
     timeout-minutes: 10
 
     steps:

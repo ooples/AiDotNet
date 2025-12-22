@@ -7,6 +7,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Normalizers;
 using AiDotNet.OutlierRemoval;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNetTestConsole.Examples;
@@ -86,7 +87,7 @@ public class EnhancedNeuralNetworkExample
             Console.WriteLine("\nSplitting data into training, validation, and test sets...");
 
             // Shuffle data
-            Random random = new Random(42);
+            Random random = RandomHelper.CreateSeededRandom(42);
             var indices = Enumerable.Range(0, customerData.Length).ToArray();
             for (int i = 0; i < indices.Length; i++)
             {
@@ -534,7 +535,7 @@ public class EnhancedNeuralNetworkExample
             }
 
             // Permute the current feature
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             var indices = Enumerable.Range(0, features.Shape[0]).ToArray();
             for (int i = 0; i < indices.Length; i++)
             {
@@ -593,7 +594,7 @@ public class EnhancedNeuralNetworkExample
     // Helper method to generate synthetic customer data
     private (double[][] CustomerData, int[] ChurnLabels, string[] FeatureNames) GenerateCustomerData(int numSamples)
     {
-        Random random = new Random(42);
+        Random random = RandomHelper.CreateSeededRandom(42);
 
         // Define feature names
         string[] featureNames =

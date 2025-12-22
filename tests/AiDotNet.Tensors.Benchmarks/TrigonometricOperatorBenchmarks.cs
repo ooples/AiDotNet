@@ -31,7 +31,7 @@ public class TrigonometricOperatorBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         // Initialize input arrays with random values in [-π, π]
         _inputDouble = new double[N];

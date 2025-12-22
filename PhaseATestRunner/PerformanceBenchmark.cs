@@ -2,6 +2,7 @@ using System.Diagnostics;
 using AiDotNet.Engines;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Prototypes;
+using AiDotNet.Tensors.Helpers;
 
 namespace PhaseATestRunner;
 
@@ -47,7 +48,7 @@ public static class PerformanceBenchmark
         // Prepare test data
         var data1 = new float[size];
         var data2 = new float[size];
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < size; i++)
         {
             data1[i] = (float)random.NextDouble();

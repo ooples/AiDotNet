@@ -3,6 +3,7 @@ using System.Text;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Reasoning.Benchmarks.Models;
+using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Reasoning.Benchmarks;
@@ -231,7 +232,7 @@ public class ARCAGIBenchmark<T> : IBenchmark<T>
 
         if (count.HasValue && count.Value < problems.Count)
         {
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             problems = problems.OrderBy(_ => random.Next()).Take(count.Value).ToList();
         }
 

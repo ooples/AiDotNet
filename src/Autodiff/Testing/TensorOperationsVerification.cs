@@ -552,7 +552,7 @@ public class TensorOperationsVerification<T>
     private Tensor<T> CreateTestTensor(int[] shape, double min, double max, int seedOffset = 0)
     {
         var tensor = new Tensor<T>(shape);
-        var random = new Random(_config.RandomSeed + seedOffset);
+        var random = RandomHelper.CreateSeededRandom(_config.RandomSeed + seedOffset);
         var range = max - min;
 
         for (int i = 0; i < tensor.Length; i++)

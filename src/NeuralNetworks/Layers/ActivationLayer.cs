@@ -5,7 +5,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para>
 /// Activation functions introduce non-linearity to neural networks. Non-linearity means the output isn't 
 /// simply proportional to the input (like y = 2x). Instead, it can follow curves or more complex patterns.
-/// Without non-linearity, a neural network—no matter how many layers—would behave just like a single layer,
 /// severely limiting what it can learn.
 /// </para>
 /// <para>

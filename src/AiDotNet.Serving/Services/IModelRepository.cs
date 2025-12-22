@@ -58,9 +58,9 @@ public interface IModelRepository
     /// <typeparam name="T">The numeric type used by the model.</typeparam>
     /// <param name="name">The unique name for the model in the serving repository.</param>
     /// <param name="model">The servable model instance.</param>
-    /// <param name="version">The version number from the model registry.</param>
-    /// <param name="stage">The deployment stage (e.g., "Production", "Staging").</param>
-    /// <param name="storagePath">The path where the model artifacts are stored.</param>
+    /// <param name="registryVersion">The version from the model registry.</param>
+    /// <param name="registryStage">The stage from the model registry (Development, Staging, Production).</param>
+    /// <param name="sourcePath">Optional source path where the model was loaded from.</param>
     /// <returns>True if the model was loaded successfully, false if a model with that name already exists.</returns>
     /// <remarks>
     /// <para>
@@ -72,5 +72,10 @@ public interface IModelRepository
     /// and from which deployment stage it came.
     /// </para>
     /// </remarks>
-    bool LoadModelFromRegistry<T>(string name, IServableModel<T> model, int version, string stage, string? storagePath);
+    bool LoadModelFromRegistry<T>(
+        string name,
+        IServableModel<T> model,
+        int registryVersion,
+        string registryStage,
+        string? sourcePath = null);
 }

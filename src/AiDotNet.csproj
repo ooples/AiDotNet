@@ -90,6 +90,13 @@
 	  <None Remove="AiDotNet.Serving\**\*" />
 	</ItemGroup>
 
+	<!-- Exclude the AiDotNet.Dashboard project files from this project -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Dashboard\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Dashboard\**\*" />
+	  <None Remove="AiDotNet.Dashboard\**\*" />
+	</ItemGroup>
+
 	<!-- Exclude the AiDotNet.Tensors project files from this project -->
 	<ItemGroup>
 	  <Compile Remove="AiDotNet.Tensors\**\*.cs" />

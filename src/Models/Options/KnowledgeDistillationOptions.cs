@@ -80,7 +80,7 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput>
     /// <para>Example:
     /// <code>
     /// // After training
-    /// var trainedModel = await builder.ConfigureModel(model).BuildAsync(x, y);
+    /// var trainedModel = await builder.ConfigureModel(model).BuildAsync();
     ///
     /// // Use as teacher
     /// TeacherModel = trainedModel.Model

@@ -3,6 +3,7 @@ using AiDotNet.Data.Loaders;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.TimeSeries;
 
 namespace AiDotNetTestConsole.Examples;
@@ -33,7 +34,7 @@ public class TimeSeriesExample
                 double seasonal = 5 * Math.Sin(2 * Math.PI * i / 7);
 
                 // Random noise
-                double noise = new Random(42 + i).NextDouble() * 10 - 5;
+                double noise = RandomHelper.CreateSeededRandom(42 + i).NextDouble() * 10 - 5;
 
                 prices[i] = trend + seasonal + noise;
             }

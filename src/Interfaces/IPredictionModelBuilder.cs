@@ -1774,5 +1774,4 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="config">The curriculum learning configuration (optional, uses intelligent defaults if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureCurriculumLearning(CurriculumLearnerConfig<T>? config = null);
-
 }

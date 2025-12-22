@@ -243,7 +243,7 @@ public class TeacherModelFactoryTests
     {
         private readonly int _inputDim;
         private readonly int _outputDim;
-        private readonly Random _random = new Random(42);
+        private readonly Random _random = RandomHelper.CreateSeededRandom(42);
         private readonly HashSet<int> _activeFeatures = new();
 
         public MockFullModel(int inputDim, int outputDim)

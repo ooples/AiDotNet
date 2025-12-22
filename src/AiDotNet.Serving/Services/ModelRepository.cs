@@ -113,32 +113,6 @@ public class ModelRepository : IModelRepository
         return _models.ContainsKey(name);
     }
 
-    /// <inheritdoc/>
-    public bool LoadModelFromRegistry<T>(string name, IServableModel<T> model, int version, string stage, string? storagePath)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            throw new ArgumentException("Model name cannot be null or empty", nameof(name));
-        }
-
-        if (model == null)
-        {
-            throw new ArgumentNullException(nameof(model));
-        }
-
-        var entry = new ModelEntry
-        {
-            Model = model,
-            NumericType = typeof(T).Name.ToLower(),
-            LoadedAt = DateTime.UtcNow,
-            SourcePath = storagePath,
-            RegistryVersion = version,
-            RegistryStage = stage
-        };
-
-        return _models.TryAdd(name, entry);
-    }
-
     /// <summary>
     /// Creates ModelInfo from a model entry.
     /// </summary>
@@ -157,8 +131,52 @@ public class ModelRepository : IModelRepository
             InputDimension = (int)(inputDimProperty?.GetValue(entry.Model) ?? 0),
             OutputDimension = (int)(outputDimProperty?.GetValue(entry.Model) ?? 0),
             LoadedAt = entry.LoadedAt,
-            SourcePath = entry.SourcePath
+            SourcePath = entry.SourcePath,
+            IsFromRegistry = entry.IsFromRegistry,
+            RegistryVersion = entry.RegistryVersion,
+            RegistryStage = entry.RegistryStage
         };
+    }
+
+    /// <summary>
+    /// Loads a model with registry metadata.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used by the model.</typeparam>
+    /// <param name="name">The unique name for the model.</param>
+    /// <param name="model">The model instance.</param>
+    /// <param name="registryVersion">The version from the model registry.</param>
+    /// <param name="registryStage">The stage from the model registry.</param>
+    /// <param name="sourcePath">Optional source path where the model was loaded from.</param>
+    /// <returns>True if the model was loaded successfully, false if a model with that name already exists.</returns>
+    public bool LoadModelFromRegistry<T>(
+        string name,
+        IServableModel<T> model,
+        int registryVersion,
+        string registryStage,
+        string? sourcePath = null)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("Model name cannot be null or empty", nameof(name));
+        }
+
+        if (model == null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
+        var entry = new ModelEntry
+        {
+            Model = model,
+            NumericType = typeof(T).Name.ToLower(),
+            LoadedAt = DateTime.UtcNow,
+            SourcePath = sourcePath,
+            IsFromRegistry = true,
+            RegistryVersion = registryVersion,
+            RegistryStage = registryStage
+        };
+
+        return _models.TryAdd(name, entry);
     }
 
     /// <summary>
@@ -170,6 +188,7 @@ public class ModelRepository : IModelRepository
         public string NumericType { get; set; } = string.Empty;
         public DateTime LoadedAt { get; set; }
         public string? SourcePath { get; set; }
+        public bool IsFromRegistry { get; set; }
         public int? RegistryVersion { get; set; }
         public string? RegistryStage { get; set; }
     }

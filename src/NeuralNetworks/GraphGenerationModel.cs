@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -207,7 +208,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
 
         _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _random = new Random(42);
+        _random = RandomHelper.CreateSeededRandom(42);
 
         // Initialize variational layer weights
         _meanWeights = new Tensor<T>([hiddenDim, latentDim]);
