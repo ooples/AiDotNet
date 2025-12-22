@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using AiDotNet.Engines;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -331,8 +332,15 @@ public class GpuRecoveryTests
         // Assert
         Assert.Empty(exceptions);
         Assert.Equal(1000, healthResults.Count);
-        // All health checks should return same value (all healthy)
-        Assert.All(healthResults, h => Assert.True(h));
+        // All health checks should return the same value (consistency)
+        var results = healthResults.ToArray();
+        Assert.NotEmpty(results);
+        Assert.All(results, h => Assert.Equal(results[0], h));
+
+        if (engine.SupportsGpu)
+        {
+            Assert.True(results[0]);
+        }
     }
 
     #region Helper Methods

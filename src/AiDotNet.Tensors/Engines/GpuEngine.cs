@@ -6,6 +6,7 @@ using AiDotNet.Tensors.Operators;
 using ILGPU;
 using ILGPU.Algorithms;
 using ILGPU.Runtime;
+using ILGPU.Runtime.OpenCL;
 
 namespace AiDotNet.Tensors.Engines;
 
@@ -536,6 +537,7 @@ public class GpuEngine : IEngine, IDisposable
     // Thread-safe GPU health tracking (Phase B: US-GPU-019, US-GPU-020)
     // Volatile ensures visibility across threads without full locking
     private volatile bool _gpuHealthy = true;
+    private volatile bool _gpuPermanentlyDisabled = false;
 
     // GPU recovery tracking (Phase B: US-GPU-020)
     private volatile int _consecutiveFailures = 0;
@@ -4434,8 +4436,9 @@ public class GpuEngine : IEngine, IDisposable
                 Console.WriteLine("[GpuEngine] Memory pools initialized");
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException or OutOfMemoryException or CLException)
         {
+            _gpuHealthy = false;
             Console.WriteLine($"[GpuEngine] GPU initialization failed: {ex.Message}");
             Console.WriteLine("[GpuEngine] Operations will fallback to CPU");
         }
@@ -14975,7 +14978,11 @@ public class GpuEngine : IEngine, IDisposable
     {
         lock (_recoveryLock)
         {
+            if (_gpuPermanentlyDisabled)
+                return true;
+
             _consecutiveFailures++;
+            _gpuHealthy = false;
             Interlocked.Exchange(ref _lastFailureTimeTicks, DateTime.UtcNow.Ticks);
 
             Console.WriteLine($"[GpuEngine] GPU failure #{_consecutiveFailures}: {exception.Message}");
@@ -14983,13 +14990,14 @@ public class GpuEngine : IEngine, IDisposable
             // If we've exceeded maximum recovery attempts, permanently disable GPU
             if (_consecutiveFailures >= MaxRecoveryAttempts)
             {
-                RecordGpuFailure(exception);
+                _gpuPermanentlyDisabled = true;
+                Console.WriteLine($"[GpuEngine] GPU permanently disabled after {_consecutiveFailures} failures.");
                 return true;
             }
 
             // Temporarily mark unhealthy but allow recovery attempts
             Console.WriteLine($"[GpuEngine] GPU temporarily disabled. Recovery attempt {_consecutiveFailures}/{MaxRecoveryAttempts} will be tried after backoff period.");
-            return false;
+            return true;
         }
     }
 
@@ -15002,8 +15010,11 @@ public class GpuEngine : IEngine, IDisposable
         lock (_recoveryLock)
         {
             // If GPU is permanently disabled, don't attempt recovery
-            if (!_gpuHealthy)
+            if (_gpuPermanentlyDisabled)
                 return false;
+
+            if (_gpuHealthy)
+                return true;
 
             // Check if we're in backoff period
             var lastFailureTicks = Interlocked.Read(ref _lastFailureTimeTicks);
@@ -15052,24 +15063,35 @@ public class GpuEngine : IEngine, IDisposable
     /// <returns>A string containing GPU health diagnostics.</returns>
     public string GetGpuHealthDiagnostics()
     {
-        if (_accelerator == null)
-            return "GPU Status: Not Available (no accelerator initialized)";
-
         var diagnostics = new System.Text.StringBuilder();
         diagnostics.AppendLine("GPU Health Diagnostics:");
+        diagnostics.AppendLine($"  SupportsGpu: {SupportsGpu}");
         diagnostics.AppendLine($"  Healthy: {_gpuHealthy}");
+        diagnostics.AppendLine($"  Permanently Disabled: {_gpuPermanentlyDisabled}");
         diagnostics.AppendLine($"  Consecutive Failures: {_consecutiveFailures}/{MaxRecoveryAttempts}");
 
         var lastFailureTicks = Interlocked.Read(ref _lastFailureTimeTicks);
-        var lastFailureTime = new DateTime(lastFailureTicks);
-        diagnostics.AppendLine($"  Last Failure: {(lastFailureTicks == DateTime.MinValue.Ticks ? "Never" : lastFailureTime.ToString("yyyy-MM-dd HH:mm:ss UTC"))}");
-
+        DateTime? lastFailureTimeUtc = null;
         if (lastFailureTicks != DateTime.MinValue.Ticks)
         {
-            var timeSinceFailure = DateTime.UtcNow - lastFailureTime;
+            lastFailureTimeUtc = new DateTime(lastFailureTicks, DateTimeKind.Utc);
+            diagnostics.AppendLine($"  Last Failure: {lastFailureTimeUtc:yyyy-MM-dd HH:mm:ss} UTC");
+        }
+        else
+        {
+            diagnostics.AppendLine("  Last Failure: Never");
+        }
+
+        if (lastFailureTimeUtc.HasValue)
+        {
+            var timeSinceFailure = DateTime.UtcNow - lastFailureTimeUtc.Value;
             diagnostics.AppendLine($"  Time Since Failure: {timeSinceFailure.TotalSeconds:F1}s");
 
-            if (timeSinceFailure < RecoveryBackoffPeriod)
+            if (_gpuPermanentlyDisabled)
+            {
+                diagnostics.AppendLine("  Recovery Available: No (permanently disabled)");
+            }
+            else if (timeSinceFailure < RecoveryBackoffPeriod)
             {
                 var timeUntilRecovery = RecoveryBackoffPeriod - timeSinceFailure;
                 diagnostics.AppendLine($"  Recovery Available In: {timeUntilRecovery.TotalSeconds:F1}s");
@@ -15078,6 +15100,13 @@ public class GpuEngine : IEngine, IDisposable
             {
                 diagnostics.AppendLine("  Recovery Available: Yes");
             }
+        }
+
+        if (_accelerator == null)
+        {
+            diagnostics.AppendLine("  Accelerator: Not Available (no accelerator initialized)");
+            diagnostics.AppendLine("  Memory: N/A");
+            return diagnostics.ToString();
         }
 
         diagnostics.AppendLine($"  Accelerator: {_accelerator.Name}");

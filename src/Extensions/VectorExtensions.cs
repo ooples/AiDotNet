@@ -1038,7 +1038,7 @@ public static class VectorExtensions
             throw new ArgumentNullException(nameof(vector));
 
         int n = vector.Length;
-        var matrix = Matrix<T>.CreateMatrix<T>(n, 1);
+        var matrix = Matrix<T>.CreateMatrix<T>(1, n);
         for (int i = 0; i < n; ++i)
         {
             matrix[0, i] = vector[i];

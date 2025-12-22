@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -6,9 +9,6 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors.Helpers;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace AiDotNet;
 

@@ -5,6 +5,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.JitCompiler;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TimeSeries;
 using Xunit;
@@ -33,8 +34,12 @@ public class TimeSeriesJitCompilationTests
         {
             LookbackWindow = 10,
             ForecastHorizon = 3,
+            NumStacks = 1,
             NumBlocksPerStack = 2,
-            HiddenLayerSize = 16
+            HiddenLayerSize = 16,
+            NumHiddenLayers = 1,
+            Epochs = 1,
+            BatchSize = 8
         };
         var model = new NBEATSModel<double>(options);
 
@@ -54,8 +59,12 @@ public class TimeSeriesJitCompilationTests
         {
             LookbackWindow = 10,
             ForecastHorizon = 3,
+            NumStacks = 1,
             NumBlocksPerStack = 2,
-            HiddenLayerSize = 16
+            HiddenLayerSize = 16,
+            NumHiddenLayers = 1,
+            Epochs = 1,
+            BatchSize = 8
         };
         var model = new NBEATSModel<double>(options);
         var (X, y) = GenerateTrainingData(50, options.LookbackWindow);
@@ -79,8 +88,12 @@ public class TimeSeriesJitCompilationTests
         {
             LookbackWindow = 10,
             ForecastHorizon = 3,
+            NumStacks = 1,
             NumBlocksPerStack = 2,
-            HiddenLayerSize = 16
+            HiddenLayerSize = 16,
+            NumHiddenLayers = 1,
+            Epochs = 1,
+            BatchSize = 8
         };
         var model = new NBEATSModel<double>(options);
         var (X, y) = GenerateTrainingData(50, options.LookbackWindow);
@@ -485,8 +498,12 @@ public class TimeSeriesJitCompilationTests
             {
                 LookbackWindow = 10,
                 ForecastHorizon = 3,
+                NumStacks = 1,
                 NumBlocksPerStack = 2,
-                HiddenLayerSize = 16
+                HiddenLayerSize = 16,
+                NumHiddenLayers = 1,
+                Epochs = 1,
+                BatchSize = 8
             };
             var (X, y) = GenerateTrainingData(50, options.LookbackWindow);
             var model = new NBEATSModel<double>(options);
@@ -544,13 +561,4 @@ public class TimeSeriesJitCompilationTests
 
         return (x, y);
     }
-}
-
-/// <summary>
-/// Interface for time series models (for testing purposes).
-/// </summary>
-public interface ITimeSeriesModel<T>
-{
-    bool SupportsJitCompilation { get; }
-    ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes);
 }

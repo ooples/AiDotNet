@@ -175,6 +175,19 @@ public static class DeserializationHelper
             }
             instance = ctor.Invoke([featureSize, epsilon]);
         }
+        else if (genericDef == typeof(BatchNormalizationLayer<>))
+        {
+            // BatchNormalizationLayer(int featureSize, double epsilon = ..., double momentum = ...)
+            int featureSize = inputShape[0];
+            double epsilon = TryGetDouble(additionalParams, "Epsilon") ?? NumericalStabilityHelper.LargeEpsilon;
+            double momentum = TryGetDouble(additionalParams, "Momentum") ?? 0.9;
+            var ctor = type.GetConstructor([typeof(int), typeof(double), typeof(double)]);
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find BatchNormalizationLayer constructor with (int, double, double).");
+            }
+            instance = ctor.Invoke([featureSize, epsilon, momentum]);
+        }
         else if (genericDef == typeof(MultiHeadAttentionLayer<>))
         {
             instance = CreateMultiHeadAttentionLayer<T>(type, inputShape, additionalParams);

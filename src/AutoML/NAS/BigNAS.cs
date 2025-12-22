@@ -16,11 +16,11 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "BigNAS: Scaling Up Neural Architecture Search with Big Single-Stage Models"
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
-        public class BigNAS<T> : NasAutoMLModelBase<T>
-        {
-            private readonly INumericOperations<T> _ops;
-            private readonly SearchSpaceBase<T> _nasSearchSpace;
-            private readonly Random _random;
+    public class BigNAS<T> : NasAutoMLModelBase<T>
+    {
+        private readonly INumericOperations<T> _ops;
+        private readonly SearchSpaceBase<T> _nasSearchSpace;
+        private readonly Random _random;
 
         // Elastic search space dimensions (larger than OFA)
         private readonly List<int> _elasticDepths;

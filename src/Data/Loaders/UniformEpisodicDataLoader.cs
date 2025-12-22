@@ -79,6 +79,12 @@ namespace AiDotNet.Data.Loaders;
 /// </example>
 public class UniformEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderBase<T, TInput, TOutput>
 {
+    private const int MaxResampleAttempts = 8;
+
+    private bool _hasLastTaskSignature;
+    private ulong _lastTaskSignature;
+    private int _lastFirstSupportIndex;
+
     /// <summary>
     /// Initializes a new instance of the UniformEpisodicDataLoader for N-way K-shot task sampling with industry-standard defaults.
     /// </summary>
@@ -161,50 +167,102 @@ public class UniformEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderB
     /// </remarks>
     protected override MetaLearningTask<T, TInput, TOutput> GetNextTaskCore()
     {
-        // Step 1: Randomly select nWay unique classes
-        var selectedClasses = _availableClasses
-            .OrderBy(_ => RandomInstance.Next())
-            .Take(NWay)
-            .ToArray();
-
-        // Prepare storage for support and query sets
-        var supportExamples = new List<Vector<T>>();
-        var supportLabels = new List<T>();
-        var queryExamples = new List<Vector<T>>();
-        var queryLabels = new List<T>();
-
-        // Step 2: For each selected class, sample and split examples
-        for (int classIdx = 0; classIdx < selectedClasses.Length; classIdx++)
+        (MetaLearningTask<T, TInput, TOutput> Task, ulong Signature, int FirstSupportIndex) SampleTaskCandidate()
         {
-            int classLabel = selectedClasses[classIdx];
-            var classIndices = ClassToIndices[classLabel];
-
-            // Step 3: Sample (kShot + queryShots) examples and shuffle
-            var sampledIndices = classIndices
+            // Step 1: Randomly select nWay unique classes
+            var selectedClasses = _availableClasses
                 .OrderBy(_ => RandomInstance.Next())
-                .Take(KShot + QueryShots)
-                .ToList();
+                .Take(NWay)
+                .ToArray();
 
-            // Step 4: Split into support (first kShot) and query (remaining queryShots)
-            var supportIndices = sampledIndices.Take(KShot);
-            var queryIndices = sampledIndices.Skip(KShot);
+            // Prepare storage for support and query sets
+            var supportExamples = new List<Vector<T>>();
+            var supportLabels = new List<T>();
+            var queryExamples = new List<Vector<T>>();
+            var queryLabels = new List<T>();
+            int firstSupportIndex = -1;
 
-            // Add support examples
-            foreach (var idx in supportIndices)
+            ulong signature = 14695981039346656037UL;
+            for (int i = 0; i < selectedClasses.Length; i++)
             {
-                supportExamples.Add(DatasetX.GetRow(idx));
-                supportLabels.Add(NumOps.FromDouble(classIdx)); // Use index 0..nWay-1 for the task
+                signature = HashCombine(signature, selectedClasses[i]);
             }
 
-            // Add query examples
-            foreach (var idx in queryIndices)
+            // Step 2: For each selected class, sample and split examples
+            for (int classIdx = 0; classIdx < selectedClasses.Length; classIdx++)
             {
-                queryExamples.Add(DatasetX.GetRow(idx));
-                queryLabels.Add(NumOps.FromDouble(classIdx)); // Use index 0..nWay-1 for the task
+                int classLabel = selectedClasses[classIdx];
+                var classIndices = ClassToIndices[classLabel];
+
+                // Step 3: Sample (kShot + queryShots) examples and shuffle
+                var sampledIndices = classIndices
+                    .OrderBy(_ => RandomInstance.Next())
+                    .Take(KShot + QueryShots)
+                    .ToList();
+
+                for (int i = 0; i < sampledIndices.Count; i++)
+                {
+                    signature = HashCombine(signature, sampledIndices[i]);
+                }
+
+                if (classIdx == 0 && sampledIndices.Count > 0)
+                {
+                    firstSupportIndex = sampledIndices[0];
+                }
+
+                // Step 4: Split into support (first kShot) and query (remaining queryShots)
+                var supportIndices = sampledIndices.Take(KShot);
+                var queryIndices = sampledIndices.Skip(KShot);
+
+                // Add support examples
+                foreach (var idx in supportIndices)
+                {
+                    supportExamples.Add(DatasetX.GetRow(idx));
+                    supportLabels.Add(NumOps.FromDouble(classIdx)); // Use index 0..nWay-1 for the task
+                }
+
+                // Add query examples
+                foreach (var idx in queryIndices)
+                {
+                    queryExamples.Add(DatasetX.GetRow(idx));
+                    queryLabels.Add(NumOps.FromDouble(classIdx)); // Use index 0..nWay-1 for the task
+                }
             }
+
+            return (BuildMetaLearningTask(supportExamples, supportLabels, queryExamples, queryLabels), signature, firstSupportIndex);
         }
 
-        // Step 5: Build and return the task using base class helper
-        return BuildMetaLearningTask(supportExamples, supportLabels, queryExamples, queryLabels);
+        for (int attempt = 0; attempt < MaxResampleAttempts; attempt++)
+        {
+            var candidate = SampleTaskCandidate();
+
+            if (_hasLastTaskSignature &&
+                (candidate.Signature == _lastTaskSignature || candidate.FirstSupportIndex == _lastFirstSupportIndex))
+            {
+                continue;
+            }
+
+            _lastTaskSignature = candidate.Signature;
+            _hasLastTaskSignature = true;
+            _lastFirstSupportIndex = candidate.FirstSupportIndex;
+            return candidate.Task;
+        }
+
+        // Fallback: allow repetition to guarantee progress.
+        var fallbackCandidate = SampleTaskCandidate();
+        _lastTaskSignature = fallbackCandidate.Signature;
+        _hasLastTaskSignature = true;
+        _lastFirstSupportIndex = fallbackCandidate.FirstSupportIndex;
+        return fallbackCandidate.Task;
+    }
+
+    private static ulong HashCombine(ulong hash, int value)
+    {
+        unchecked
+        {
+            hash ^= (uint)value;
+            hash *= 1099511628211UL;
+            return hash;
+        }
     }
 }

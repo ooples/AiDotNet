@@ -1,6 +1,6 @@
+using AiDotNet.Tensors.Helpers;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
-using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNetBenchmarkTests.BenchmarkTests;
 

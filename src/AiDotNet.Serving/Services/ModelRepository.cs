@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
 
 namespace AiDotNet.Serving.Services;
@@ -37,7 +38,7 @@ public class ModelRepository : IModelRepository
         var entry = new ModelEntry
         {
             Model = model,
-            NumericType = typeof(T).Name.ToLower(),
+            NumericType = GetNumericType(typeof(T)),
             LoadedAt = DateTime.UtcNow,
             SourcePath = sourcePath
         };
@@ -59,7 +60,7 @@ public class ModelRepository : IModelRepository
         }
 
         // Verify the numeric type matches
-        var expectedType = typeof(T).Name.ToLower();
+        var expectedType = GetNumericType(typeof(T));
         if (entry.NumericType != expectedType)
         {
             throw new InvalidOperationException(
@@ -168,7 +169,7 @@ public class ModelRepository : IModelRepository
         var entry = new ModelEntry
         {
             Model = model,
-            NumericType = typeof(T).Name.ToLower(),
+            NumericType = GetNumericType(typeof(T)),
             LoadedAt = DateTime.UtcNow,
             SourcePath = sourcePath,
             IsFromRegistry = true,
@@ -179,17 +180,23 @@ public class ModelRepository : IModelRepository
         return _models.TryAdd(name, entry);
     }
 
-    /// <summary>
-    /// Internal class to store model metadata along with the model instance.
-    /// </summary>
-    private class ModelEntry
+    private static NumericType GetNumericType(Type type)
     {
-        public object Model { get; set; } = null!;
-        public string NumericType { get; set; } = string.Empty;
-        public DateTime LoadedAt { get; set; }
-        public string? SourcePath { get; set; }
-        public bool IsFromRegistry { get; set; }
-        public int? RegistryVersion { get; set; }
-        public string? RegistryStage { get; set; }
+        if (type == typeof(float))
+        {
+            return NumericType.Float;
+        }
+
+        if (type == typeof(decimal))
+        {
+            return NumericType.Decimal;
+        }
+
+        if (type == typeof(double))
+        {
+            return NumericType.Double;
+        }
+
+        throw new NotSupportedException($"Numeric type '{type}' is not supported.");
     }
 }

@@ -7,6 +7,7 @@ using AiDotNet.MixedPrecision;
 using AiDotNet.Models;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
+using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.PromptEngineering.FewShot;
 using AiDotNet.Reasoning.Models;
@@ -165,6 +166,28 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="optimizationAlgorithm">The optimization algorithm implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm);
+
+    /// <summary>
+    /// Enables federated learning training using the provided options.
+    /// </summary>
+    /// <remarks>
+    /// Federated learning is orchestrated internally by the builder to preserve the public facade API.
+    /// Users typically only provide an options object; optional strategy injection is available for advanced scenarios.
+    /// </remarks>
+    /// <param name="options">Federated learning configuration options.</param>
+    /// <param name="aggregationStrategy">Optional aggregation strategy override (null uses defaults based on options).</param>
+    /// <param name="clientSelectionStrategy">Optional client selection strategy override (null uses defaults based on options).</param>
+    /// <param name="serverOptimizer">Optional server-side optimizer override (null uses defaults based on options).</param>
+    /// <param name="heterogeneityCorrection">Optional heterogeneity correction strategy override (null uses defaults based on options).</param>
+    /// <param name="homomorphicEncryptionProvider">Optional homomorphic encryption provider for encrypted aggregation (null uses plaintext aggregation).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFederatedLearning(
+        FederatedLearningOptions options,
+        IAggregationStrategy<IFullModel<T, TInput, TOutput>>? aggregationStrategy = null,
+        IClientSelectionStrategy? clientSelectionStrategy = null,
+        IFederatedServerOptimizer<T>? serverOptimizer = null,
+        IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
+        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null);
 
     /// <summary>
     /// Configures the data preprocessing component for the model.
@@ -930,6 +953,20 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="config">The telemetry configuration (optional, uses default telemetry settings if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null);
+
+    /// <summary>
+    /// Configures benchmarking to run standardized benchmark suites and attach a structured report to the built model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This follows the AiDotNet facade pattern: users select benchmark suites using enums and receive a structured report,
+    /// without wiring benchmark implementations manually.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like running a standardized test after training/building your model.</para>
+    /// </remarks>
+    /// <param name="options">Benchmarking options. If null, sensible defaults are used.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureBenchmarking(BenchmarkingOptions? options = null);
 
     /// <summary>
     /// Configures export settings for deploying the model to different platforms.

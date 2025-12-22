@@ -158,7 +158,7 @@ public class RequestBatcher : IRequestBatcher, IDisposable
         var request = new BatchRequest
         {
             ModelName = modelName,
-            NumericType = typeof(T).Name,
+            NumericType = GetNumericType<T>(),
             Input = input,
             CompletionSource = tcs,
             Priority = priority,
@@ -356,25 +356,25 @@ public class RequestBatcher : IRequestBatcher, IDisposable
             try
             {
                 // Process based on numeric type
-                if (numericType == "Double")
+                switch (numericType)
                 {
-                    ProcessBatch<double>(modelName, batchRequests);
-                }
-                else if (numericType == "Single")
-                {
-                    ProcessBatch<float>(modelName, batchRequests);
-                }
-                else if (numericType == "Decimal")
-                {
-                    ProcessBatch<decimal>(modelName, batchRequests);
-                }
-                else
-                {
-                    // Unsupported type - fail all requests in this group
-                    foreach (var req in batchRequests)
-                    {
-                        SetException(req, new NotSupportedException($"Numeric type '{numericType}' is not supported"));
-                    }
+                    case NumericType.Double:
+                        ProcessBatch<double>(modelName, batchRequests);
+                        break;
+                    case NumericType.Float:
+                        ProcessBatch<float>(modelName, batchRequests);
+                        break;
+                    case NumericType.Decimal:
+                        ProcessBatch<decimal>(modelName, batchRequests);
+                        break;
+                    default:
+                        // Unsupported type - fail all requests in this group
+                        foreach (var req in batchRequests)
+                        {
+                            SetException(req, new NotSupportedException($"Numeric type '{numericType}' is not supported"));
+                        }
+
+                        break;
                 }
             }
             catch (InvalidOperationException ex)
@@ -630,16 +630,23 @@ public class RequestBatcher : IRequestBatcher, IDisposable
         GC.SuppressFinalize(this);
     }
 
-    /// <summary>
-    /// Internal class representing a queued batch request.
-    /// </summary>
-    private class BatchRequest
+    private static NumericType GetNumericType<T>()
     {
-        public string ModelName { get; set; } = string.Empty;
-        public string NumericType { get; set; } = string.Empty;
-        public object Input { get; set; } = null!;
-        public object CompletionSource { get; set; } = null!;
-        public RequestPriority Priority { get; set; } = RequestPriority.Normal;
-        public DateTime EnqueueTime { get; set; } = DateTime.UtcNow;
+        if (typeof(T) == typeof(float))
+        {
+            return NumericType.Float;
+        }
+
+        if (typeof(T) == typeof(decimal))
+        {
+            return NumericType.Decimal;
+        }
+
+        if (typeof(T) == typeof(double))
+        {
+            return NumericType.Double;
+        }
+
+        throw new NotSupportedException($"Numeric type '{typeof(T)}' is not supported.");
     }
 }

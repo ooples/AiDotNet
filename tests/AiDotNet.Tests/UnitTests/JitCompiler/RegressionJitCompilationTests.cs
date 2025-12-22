@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.JitCompiler;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using JitCompilerClass = AiDotNet.JitCompiler.JitCompiler;
@@ -372,7 +373,7 @@ public class RegressionJitCompilationTests
 
     private static (Matrix<double> X, Vector<double> y) GenerateLinearTestData(int samples, int features)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var X = new Matrix<double>(samples, features);
         var y = new Vector<double>(samples);
 
@@ -407,25 +408,30 @@ public class RegressionJitCompilationTests
             model.Train(X, y);
             return model;
         }
-        else if (modelType == typeof(MultipleRegression<double>))
+
+        var (XMulti, yMulti) = GenerateLinearTestData(100, 5);
+
+        if (modelType == typeof(MultipleRegression<double>))
         {
             var (X, y) = GenerateLinearTestData(100, 5);
             var model = new MultipleRegression<double>();
-            model.Train(X, y);
+            model.Train(XMulti, yMulti);
             return model;
         }
-        else if (modelType == typeof(PolynomialRegression<double>))
+
+        if (modelType == typeof(PolynomialRegression<double>))
         {
             var (X, y) = GenerateLinearTestData(100, 1);
             var model = new PolynomialRegression<double>();
-            model.Train(X, y);
+            model.Train(XMulti, yMulti);
             return model;
         }
-        else if (modelType == typeof(LogisticRegression<double>))
+
+        if (modelType == typeof(LogisticRegression<double>))
         {
             var (X, y) = GenerateLinearTestData(100, 5);
             var model = new LogisticRegression<double>();
-            model.Train(X, y);
+            model.Train(XMulti, yMulti);
             return model;
         }
 

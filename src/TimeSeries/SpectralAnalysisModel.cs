@@ -704,8 +704,12 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
             throw new InvalidOperationException("Cannot export computation graph: Periodogram has not been computed.");
         }
 
-        // For spectral analysis, prediction just returns the periodogram
-        // No input is needed - we just return the precomputed result
+        // Provide a consistent API by including an input node (even though the output is precomputed).
+        var inputTensor = new Tensor<T>(new[] { Math.Max(1, _spectralOptions.NFFT) });
+        var inputNode = TensorOperations<T>.Variable(inputTensor, "spectral_input", requiresGradient: false);
+        inputNodes.Add(inputNode);
+
+        // For spectral analysis, prediction just returns the periodogram (precomputed during training).
         var periodogramData = new T[_periodogram.Length];
         for (int i = 0; i < _periodogram.Length; i++)
         {

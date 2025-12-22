@@ -96,7 +96,7 @@ public class IntegrationTests
         selector.AddExample(new FewShotExample { Input = "Hello", Output = "Hola" });
         selector.AddExample(new FewShotExample { Input = "Goodbye", Output = "Adios" });
 
-        var template = new FewShotPromptTemplate(
+        var template = new FewShotPromptTemplate<double>(
             "You are a translator. Translate English to Spanish.\n\n{examples}\n\nNow translate: {query}",
             selector,
             exampleCount: 2,
@@ -289,7 +289,7 @@ public class IntegrationTests
         });
 
         // 2. Create template with example selector
-        var fewShotTemplate = new FewShotPromptTemplate(
+        var fewShotTemplate = new FewShotPromptTemplate<double>(
             "You are a helpful assistant that answers questions accurately.\n\n{examples}\n\n{query}",
             selector,
             exampleCount: 2,

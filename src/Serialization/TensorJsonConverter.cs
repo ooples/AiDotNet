@@ -149,27 +149,44 @@ namespace AiDotNet.Serialization
                     $"but got {dataArray.Length} elements.");
             }
 
-            // Try constructors in order: (IEnumerable<T>, int[]), then (T[], int[])
-            var enumerableType = typeof(System.Collections.Generic.IEnumerable<>).MakeGenericType(elementType);
-            var tensorConstructor = objectType.GetConstructor(new[] { enumerableType, typeof(int[]) });
+            // Prefer the current tensor API: Tensor(int[] dimensions, Vector<T> data).
+            var vectorType = typeof(AiDotNet.Tensors.LinearAlgebra.Vector<>).MakeGenericType(elementType);
+            var tensorConstructor = objectType.GetConstructor(new[] { typeof(int[]), vectorType });
 
             if (tensorConstructor != null)
             {
-                return tensorConstructor.Invoke(new object[] { dataArray, shape });
+                var vector = Activator.CreateInstance(vectorType, new object[] { dataArray })
+                    ?? throw new JsonSerializationException($"Cannot create Vector<{elementType.Name}> instance for tensor deserialization.");
+
+                return tensorConstructor.Invoke(new object[] { shape, vector });
             }
 
-            // Fallback: try constructor with T[] and int[]
-            tensorConstructor = objectType.GetConstructor(new[] { arrayType, typeof(int[]) });
-
+            // Fallback: Tensor(int[] dimensions) + copy into Data.
+            tensorConstructor = objectType.GetConstructor(new[] { typeof(int[]) });
             if (tensorConstructor != null)
             {
-                return tensorConstructor.Invoke(new object[] { dataArray, shape });
+                var tensor = tensorConstructor.Invoke(new object[] { shape })
+                    ?? throw new JsonSerializationException($"Constructor for {objectType.Name} returned null.");
+
+                var dataProperty = objectType.GetProperty("Data");
+                if (dataProperty == null)
+                {
+                    throw new JsonSerializationException($"Cannot deserialize tensor type {objectType.Name}: missing Data property.");
+                }
+
+                var destination = dataProperty.GetValue(tensor) as Array;
+                if (destination == null)
+                {
+                    throw new JsonSerializationException($"Cannot deserialize tensor type {objectType.Name}: Data property returned null.");
+                }
+
+                Array.Copy(dataArray, destination, dataArray.Length);
+                return tensor;
             }
 
-            // No suitable constructor found
             throw new JsonSerializationException(
                 $"Cannot find suitable constructor for {objectType.Name}. " +
-                $"Expected constructor with signature ({elementType.Name}[], int[]) or (IEnumerable<{elementType.Name}>, int[]).");
+                $"Expected constructor with signature (int[], Vector<{elementType.Name}>) or (int[]).");
         }
     }
 }
