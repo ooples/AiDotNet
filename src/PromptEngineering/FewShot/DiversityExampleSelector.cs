@@ -142,7 +142,7 @@ public class DiversityExampleSelector<T> : FewShotExampleSelectorBase<T>
         while (selected.Count < count && remaining.Count > 0)
         {
             FewShotExample? bestCandidate = null;
-            T bestMinDissimilarity = default!;
+            T bestMinDissimilarity = NumOps.Zero;
             bool hasBestMinDissimilarity = false;
 
             foreach (var candidate in remaining)
@@ -150,7 +150,7 @@ public class DiversityExampleSelector<T> : FewShotExampleSelectorBase<T>
                 var candidateEmbedding = _exampleEmbeddings[candidate];
 
                 // Calculate minimum dissimilarity to all selected examples
-                T minDissimilarity = default!;
+                T minDissimilarity = NumOps.Zero;
                 bool hasMinDissimilarity = false;
                 foreach (var selectedExample in selected)
                 {

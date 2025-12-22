@@ -138,7 +138,7 @@ public class MMRExampleSelector<T> : FewShotExampleSelectorBase<T>
         while (selected.Count < count && remaining.Count > 0)
         {
             FewShotExample? bestCandidate = null;
-            T bestScore = default!;
+            T bestScore = NumOps.Zero;
             bool hasBestScore = false;
 
             foreach (var candidate in remaining)

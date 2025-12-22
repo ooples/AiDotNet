@@ -171,7 +171,7 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
         List<FewShotExample> excluded)
     {
         FewShotExample? best = null;
-        T bestScore = default!;
+        T bestScore = NumOps.Zero;
         bool hasBestScore = false;
 
         foreach (var example in cluster)
@@ -269,7 +269,7 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
 
             for (int i = 0; i < embeddings.Count; i++)
             {
-                T minDist = default!;
+                T minDist = NumOps.Zero;
                 bool hasMinDist = false;
 
                 foreach (var centroid in centroids)
@@ -329,7 +329,7 @@ public class ClusterBasedExampleSelector<T> : FewShotExampleSelectorBase<T>
     private int FindNearestCentroid(Vector<T> embedding, List<Vector<T>> centroids)
     {
         int nearest = 0;
-        T minDistance = default!;
+        T minDistance = NumOps.Zero;
         bool hasMinDistance = false;
 
         for (int i = 0; i < centroids.Count; i++)
