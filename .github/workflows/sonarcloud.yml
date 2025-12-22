@@ -115,7 +115,7 @@ jobs:
         run: dotnet build -c Release --no-restore
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         with:
           name: build-output-${{ github.sha }}
           path: |
@@ -127,7 +127,7 @@ jobs:
         run: dotnet pack --no-build -c Release --output ./artifacts
 
       - name: Upload NuGet package
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         with:
           name: nuget-packages
           path: ./artifacts/*.nupkg
@@ -294,7 +294,7 @@ jobs:
           echo "ARTIFACT_NAME=coverage-${{ github.sha }}-$slug" >> $env:GITHUB_ENV
 
       - name: Upload coverage + test results
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         if: always()
         with:
           name: ${{ env.ARTIFACT_NAME }}
@@ -458,7 +458,7 @@ jobs:
           dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj --no-build -c Release --framework net471 --filter "Category!=GPU&Category!=Integration&Category!=Stress" --logger "trx;LogFileName=test-results-net471.trx" --results-directory ./TestResults
 
       - name: Upload test results
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         if: always()
         with:
           name: test-results-net471
