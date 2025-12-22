@@ -379,6 +379,15 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
             var valueLoss = Math.Pow(exp.Value - exp.Reward, 2);
             totalValueLoss += valueLoss;
 
+            // Update value model toward better value estimates
+            if (_valueModel != null)
+            {
+                var valueError = exp.Reward - exp.Value;
+                var cappedValueError = Math.Max(-1.0, Math.Min(1.0, valueError));
+                var valueGradients = _valueModel.ComputeGradients(input, exp.Output);
+                _valueModel.ApplyGradients(valueGradients, NumOps.FromDouble(Options.LearningRate * valueCoeff * cappedValueError));
+            }
+
             // Entropy loss from policy distribution
             var entropyLoss = ComputeEntropyLoss(policyModel, input);
             totalEntropyLoss += entropyLoss;
