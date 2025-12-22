@@ -1,7 +1,10 @@
+using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.Models;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.AdversarialRobustness.Attacks;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
@@ -23,12 +26,19 @@ namespace AiDotNet.AdversarialRobustness.Defenses;
 /// to resist them. This is one of the most effective defenses against adversarial attacks.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
-public class AdversarialTraining<T> : IAdversarialDefense<T>
+/// <typeparam name="TInput">The input data type for the model.</typeparam>
+/// <typeparam name="TOutput">The output data type for the model.</typeparam>
+public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TInput, TOutput>
 {
+    /// <summary>
+    /// Gets the global execution engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private AdversarialDefenseOptions<T> options;
-    private readonly IAdversarialAttack<T> attackMethod;
+    private readonly IAdversarialAttack<T, TInput, TOutput> attackMethod;
 
     /// <summary>
     /// Initializes a new instance of adversarial training.
@@ -48,15 +58,30 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
         };
 
         // Use PGD attack as the default for adversarial training
-        attackMethod = new PGDAttack<T>(attackOptions);
+        attackMethod = new PGDAttack<T, TInput, TOutput>(attackOptions);
     }
 
     /// <inheritdoc/>
-    public IPredictiveModel<T, Vector<T>, Vector<T>> ApplyDefense(Matrix<T> trainingData, Vector<int> labels, IPredictiveModel<T, Vector<T>, Vector<T>> model)
+    public IFullModel<T, TInput, TOutput> ApplyDefense(TInput[] trainingData, TOutput[] labels, IFullModel<T, TInput, TOutput> model)
     {
         if (model == null)
         {
             throw new ArgumentNullException(nameof(model));
+        }
+
+        if (trainingData == null)
+        {
+            throw new ArgumentNullException(nameof(trainingData));
+        }
+
+        if (labels == null)
+        {
+            throw new ArgumentNullException(nameof(labels));
+        }
+
+        if (trainingData.Length != labels.Length)
+        {
+            throw new ArgumentException("Number of labels must match number of training samples.", nameof(labels));
         }
 
         // Training-time adversarial example augmentation requires integration with a trainer.
@@ -66,33 +91,38 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
             return model;
         }
 
-        return new PreprocessingPredictiveModel(model, this);
+        return new PreprocessingFullModel(model, this);
     }
 
     /// <inheritdoc/>
-    public Vector<T> PreprocessInput(Vector<T> input)
+    public TInput PreprocessInput(TInput input)
     {
         if (!options.UsePreprocessing)
         {
             return input;
         }
 
-        // Apply simple preprocessing based on the method
-        return options.PreprocessingMethod.ToLowerInvariant() switch
+        // Apply preprocessing based on the method
+        // Convert to vector for preprocessing, then convert back
+        var vectorInput = ConversionsHelper.ConvertToVector<T, TInput>(input);
+
+        var preprocessed = options.PreprocessingMethod.ToLowerInvariant() switch
         {
-            "jpeg" => ApplyJPEGCompression(input),
-            "bit_depth_reduction" => ApplyBitDepthReduction(input),
-            "denoising" => ApplyDenoising(input),
-            _ => input
+            "jpeg" => ApplyJPEGCompression(vectorInput),
+            "bit_depth_reduction" => ApplyBitDepthReduction(vectorInput),
+            "denoising" => ApplyDenoising(vectorInput),
+            _ => vectorInput
         };
+
+        return ConversionsHelper.ConvertVectorToInput<T, TInput>(preprocessed, input);
     }
 
     /// <inheritdoc/>
     public RobustnessMetrics<T> EvaluateRobustness(
-        IPredictiveModel<T, Vector<T>, Vector<T>> model,
-        Matrix<T> testData,
-        Vector<int> labels,
-        IAdversarialAttack<T> attack)
+        IFullModel<T, TInput, TOutput> model,
+        TInput[] testData,
+        TOutput[] labels,
+        IAdversarialAttack<T, TInput, TOutput> attack)
     {
         if (model == null)
         {
@@ -114,9 +144,9 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
             throw new ArgumentNullException(nameof(attack));
         }
 
-        if (testData.Rows != labels.Length)
+        if (testData.Length != labels.Length)
         {
-            throw new ArgumentException("Number of labels must match number of test rows.", nameof(labels));
+            throw new ArgumentException("Number of labels must match number of test samples.", nameof(labels));
         }
 
         var metrics = new RobustnessMetrics<T>();
@@ -124,15 +154,21 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
         int adversarialCorrect = 0;
         var perturbationSizes = new List<double>();
 
-        for (int i = 0; i < testData.Rows; i++)
+        for (int i = 0; i < testData.Length; i++)
         {
-            var input = testData.GetRow(i);
+            var input = testData[i];
             var label = labels[i];
+
+            // Convert input and label to vectors for comparison
+            var inputVector = ConversionsHelper.ConvertToVector<T, TInput>(input);
+            var labelVector = ConversionsHelper.ConvertToVector<T, TOutput>(label);
+            var trueClass = ArgMaxVector(labelVector);
 
             // Evaluate on clean example
             var cleanOutput = model.Predict(input);
-            var cleanPrediction = ArgMax(cleanOutput);
-            if (cleanPrediction == label)
+            var cleanOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(cleanOutput);
+            var cleanPrediction = ArgMaxVector(cleanOutputVector);
+            if (cleanPrediction == trueClass)
             {
                 cleanCorrect++;
             }
@@ -142,21 +178,18 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
             {
                 var adversarial = attack.GenerateAdversarialExample(input, label, model);
                 var advOutput = model.Predict(adversarial);
-                var advPrediction = ArgMax(advOutput);
+                var advOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(advOutput);
+                var advPrediction = ArgMaxVector(advOutputVector);
 
-                if (advPrediction == label)
+                if (advPrediction == trueClass)
                 {
                     adversarialCorrect++;
                 }
 
-                // Calculate perturbation size
-                var perturbation = new Vector<T>(input.Length);
-                for (int j = 0; j < input.Length; j++)
-                {
-                    perturbation[j] = NumOps.Subtract(adversarial[j], input[j]);
-                }
-
-                var l2Norm = ComputeL2Norm(perturbation);
+                // Calculate perturbation size using vectorized operations
+                var adversarialVector = ConversionsHelper.ConvertToVector<T, TInput>(adversarial);
+                var perturbation = Engine.Subtract<T>(adversarialVector, inputVector);
+                var l2Norm = Engine.Norm<T>(perturbation);
                 perturbationSizes.Add(NumOps.ToDouble(l2Norm));
             }
             catch (ArgumentException)
@@ -171,8 +204,8 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
             }
         }
 
-        metrics.CleanAccuracy = (double)cleanCorrect / testData.Rows;
-        metrics.AdversarialAccuracy = (double)adversarialCorrect / testData.Rows;
+        metrics.CleanAccuracy = (double)cleanCorrect / testData.Length;
+        metrics.AdversarialAccuracy = (double)adversarialCorrect / testData.Length;
         metrics.AveragePerturbationSize = perturbationSizes.Count > 0 ? perturbationSizes.Average() : 0.0;
         metrics.AttackSuccessRate = 1.0 - metrics.AdversarialAccuracy;
         metrics.RobustnessScore = (metrics.CleanAccuracy + metrics.AdversarialAccuracy) / 2.0;
@@ -220,8 +253,8 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
     private Vector<T> ApplyJPEGCompression(Vector<T> input)
     {
         // Simplified JPEG-like compression: quantize values
-        var compressed = new Vector<T>(input.Length);
         var quantizationLevel = 0.1;
+        var compressed = new Vector<T>(input.Length);
 
         for (int i = 0; i < input.Length; i++)
         {
@@ -236,8 +269,8 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
     private Vector<T> ApplyBitDepthReduction(Vector<T> input)
     {
         // Reduce bit depth to remove fine-grained adversarial perturbations
-        var reduced = new Vector<T>(input.Length);
         var levels = 16.0; // Reduce to 4-bit color depth
+        var reduced = new Vector<T>(input.Length);
 
         for (int i = 0; i < input.Length; i++)
         {
@@ -252,18 +285,18 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
     private Vector<T> ApplyDenoising(Vector<T> input)
     {
         // Simple moving average denoising (for demonstration)
-        // In practice, would use more sophisticated methods
-        var clone = new Vector<T>(input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            clone[i] = input[i];
-        }
-
-        return clone; // Simplified
+        // Use Engine to clone the vector
+        var zeros = Engine.FillZero<T>(input.Length);
+        return Engine.Add<T>(input, zeros);
     }
 
-    private static int ArgMax(Vector<T> vector)
+    private static int ArgMaxVector(Vector<T> vector)
     {
+        if (vector == null || vector.Length == 0)
+        {
+            return 0;
+        }
+
         int maxIndex = 0;
         double maxValue = NumOps.ToDouble(vector[0]);
 
@@ -280,57 +313,156 @@ public class AdversarialTraining<T> : IAdversarialDefense<T>
         return maxIndex;
     }
 
-    private static T ComputeL2Norm(Vector<T> vector)
+    private sealed class PreprocessingFullModel : IFullModel<T, TInput, TOutput>
     {
-        double sumSquares = 0.0;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            var d = NumOps.ToDouble(vector[i]);
-            sumSquares += d * d;
-        }
-        return NumOps.FromDouble(Math.Sqrt(sumSquares));
-    }
+        private readonly IFullModel<T, TInput, TOutput> _inner;
+        private readonly AdversarialTraining<T, TInput, TOutput> _defense;
 
-    private sealed class PreprocessingPredictiveModel : IPredictiveModel<T, Vector<T>, Vector<T>>
-    {
-        private readonly IPredictiveModel<T, Vector<T>, Vector<T>> _inner;
-        private readonly AdversarialTraining<T> _defense;
-
-        public PreprocessingPredictiveModel(IPredictiveModel<T, Vector<T>, Vector<T>> inner, AdversarialTraining<T> defense)
+        public PreprocessingFullModel(IFullModel<T, TInput, TOutput> inner, AdversarialTraining<T, TInput, TOutput> defense)
         {
             _inner = inner ?? throw new ArgumentNullException(nameof(inner));
             _defense = defense ?? throw new ArgumentNullException(nameof(defense));
         }
 
-        public Vector<T> Predict(Vector<T> input)
+        /// <inheritdoc/>
+        public ILossFunction<T> DefaultLossFunction => _inner.DefaultLossFunction;
+
+        /// <inheritdoc/>
+        public int ParameterCount => _inner.ParameterCount;
+
+        /// <inheritdoc/>
+        public bool SupportsJitCompilation => _inner.SupportsJitCompilation;
+
+        /// <inheritdoc/>
+        public TOutput Predict(TInput input)
         {
             var preprocessed = _defense.PreprocessInput(input);
             return _inner.Predict(preprocessed);
         }
 
+        /// <inheritdoc/>
+        public void Train(TInput input, TOutput expectedOutput)
+        {
+            var preprocessed = _defense.PreprocessInput(input);
+            _inner.Train(preprocessed, expectedOutput);
+        }
+
+        /// <inheritdoc/>
         public ModelMetadata<T> GetModelMetadata()
         {
             return _inner.GetModelMetadata();
         }
 
+        /// <inheritdoc/>
         public byte[] Serialize()
         {
             return _inner.Serialize();
         }
 
+        /// <inheritdoc/>
         public void Deserialize(byte[] data)
         {
             _inner.Deserialize(data);
         }
 
+        /// <inheritdoc/>
         public void SaveModel(string filePath)
         {
             _inner.SaveModel(filePath);
         }
 
+        /// <inheritdoc/>
         public void LoadModel(string filePath)
         {
             _inner.LoadModel(filePath);
+        }
+
+        /// <inheritdoc/>
+        public void SaveState(Stream stream)
+        {
+            _inner.SaveState(stream);
+        }
+
+        /// <inheritdoc/>
+        public void LoadState(Stream stream)
+        {
+            _inner.LoadState(stream);
+        }
+
+        /// <inheritdoc/>
+        public Vector<T> GetParameters()
+        {
+            return _inner.GetParameters();
+        }
+
+        /// <inheritdoc/>
+        public void SetParameters(Vector<T> parameters)
+        {
+            _inner.SetParameters(parameters);
+        }
+
+        /// <inheritdoc/>
+        public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+        {
+            var innerWithParams = _inner.WithParameters(parameters);
+            return new PreprocessingFullModel(innerWithParams, _defense);
+        }
+
+        /// <inheritdoc/>
+        public IEnumerable<int> GetActiveFeatureIndices()
+        {
+            return _inner.GetActiveFeatureIndices();
+        }
+
+        /// <inheritdoc/>
+        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+        {
+            _inner.SetActiveFeatureIndices(featureIndices);
+        }
+
+        /// <inheritdoc/>
+        public bool IsFeatureUsed(int featureIndex)
+        {
+            return _inner.IsFeatureUsed(featureIndex);
+        }
+
+        /// <inheritdoc/>
+        public Dictionary<string, T> GetFeatureImportance()
+        {
+            return _inner.GetFeatureImportance();
+        }
+
+        /// <inheritdoc/>
+        public IFullModel<T, TInput, TOutput> DeepCopy()
+        {
+            var innerCopy = _inner.DeepCopy();
+            return new PreprocessingFullModel(innerCopy, _defense);
+        }
+
+        /// <inheritdoc/>
+        public IFullModel<T, TInput, TOutput> Clone()
+        {
+            var innerClone = _inner.Clone();
+            return new PreprocessingFullModel(innerClone, _defense);
+        }
+
+        /// <inheritdoc/>
+        public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
+        {
+            var preprocessed = _defense.PreprocessInput(input);
+            return _inner.ComputeGradients(preprocessed, target, lossFunction);
+        }
+
+        /// <inheritdoc/>
+        public void ApplyGradients(Vector<T> gradients, T learningRate)
+        {
+            _inner.ApplyGradients(gradients, learningRate);
+        }
+
+        /// <inheritdoc/>
+        public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+        {
+            return _inner.ExportComputationGraph(inputNodes);
         }
     }
 }
