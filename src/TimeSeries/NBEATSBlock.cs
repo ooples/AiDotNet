@@ -468,7 +468,7 @@ public class NBEATSBlock<T>
             var biasNode = TensorOperations<T>.Constant(biasTensor, $"block_fc{layer}_bias");
 
             // Linear transformation: y = W @ x + b
-            var linear = TensorOperations<T>.MatrixMultiply(weightNode, x);
+            var linear = TensorOperations<T>.MatrixVectorMultiply(weightNode, x);
             linear = TensorOperations<T>.Add(linear, biasNode);
 
             // ReLU activation
@@ -481,7 +481,7 @@ public class NBEATSBlock<T>
         var backcastBiasTensor = VectorToTensor(_fcBiases[_numHiddenLayers]);
         var backcastBiasNode = TensorOperations<T>.Constant(backcastBiasTensor, "block_backcast_bias");
 
-        var thetaBackcast = TensorOperations<T>.MatrixMultiply(backcastWeightNode, x);
+        var thetaBackcast = TensorOperations<T>.MatrixVectorMultiply(backcastWeightNode, x);
         thetaBackcast = TensorOperations<T>.Add(thetaBackcast, backcastBiasNode);
 
         // Compute theta for forecast
@@ -490,7 +490,7 @@ public class NBEATSBlock<T>
         var forecastBiasTensor = VectorToTensor(_fcBiases[_numHiddenLayers + 1]);
         var forecastBiasNode = TensorOperations<T>.Constant(forecastBiasTensor, "block_forecast_bias");
 
-        var thetaForecast = TensorOperations<T>.MatrixMultiply(forecastWeightNode, x);
+        var thetaForecast = TensorOperations<T>.MatrixVectorMultiply(forecastWeightNode, x);
         thetaForecast = TensorOperations<T>.Add(thetaForecast, forecastBiasNode);
 
         // Apply basis expansion
@@ -528,7 +528,7 @@ public class NBEATSBlock<T>
             var basisNode = TensorOperations<T>.Constant(basisTensor, isBackcast ? "backcast_basis" : "forecast_basis");
 
             // output = basis @ theta
-            return TensorOperations<T>.MatrixMultiply(basisNode, theta);
+            return TensorOperations<T>.MatrixVectorMultiply(basisNode, theta);
         }
         else
         {
@@ -550,7 +550,7 @@ public class NBEATSBlock<T>
             var basisNode = TensorOperations<T>.Constant(basisTensor, isBackcast ? "backcast_basis" : "forecast_basis");
 
             // output = basis @ theta
-            return TensorOperations<T>.MatrixMultiply(basisNode, theta);
+            return TensorOperations<T>.MatrixVectorMultiply(basisNode, theta);
         }
     }
 

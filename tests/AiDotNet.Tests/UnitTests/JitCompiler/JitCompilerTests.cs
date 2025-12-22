@@ -260,7 +260,7 @@ public class JitCompilerTests
             OriginalOperationCount = 10,
             OptimizedOperationCount = 6,
             OptimizationsApplied = new List<string> { "Constant Folding", "Dead Code Elimination" },
-            CompilationTime = TimeSpan.FromMilliseconds(15.5),
+            CompilationTime = TimeSpan.FromTicks(155_000), // 15.5ms (use ticks to avoid .NET Framework FromMilliseconds rounding)
             CacheHit = false
         };
 

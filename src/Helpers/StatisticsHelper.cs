@@ -1,4 +1,5 @@
 global using AiDotNet.Models.Results;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Helpers;
 
@@ -1192,7 +1193,7 @@ public static class StatisticsHelper<T>
     /// </remarks>
     private static void Shuffle(List<T> list)
     {
-        Random rng = new();
+        var rng = RandomHelper.CreateSecureRandom();
         int n = list.Count;
         while (n > 1)
         {
@@ -3235,7 +3236,7 @@ public static class StatisticsHelper<T>
         int bootstrapSamples = 1000;
         var bootstrapMeans = new List<T>();
 
-        Random random = new();
+        var random = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < bootstrapSamples; i++)
         {
             var sample = new Vector<T>(n);
@@ -3305,6 +3306,16 @@ public static class StatisticsHelper<T>
     public static (T Lower, T Upper) CalculateJackknifeInterval(Vector<T> actual, Vector<T> predicted)
     {
         int n = actual.Length;
+        if (n == 0)
+        {
+            return (_numOps.Zero, _numOps.Zero);
+        }
+
+        if (n == 1)
+        {
+            return (predicted[0], predicted[0]);
+        }
+
         var jackknifeSamples = new List<T>();
 
         for (int i = 0; i < n; i++)

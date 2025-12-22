@@ -378,6 +378,7 @@ public class NeuralNetworkArchitecture<T>
     /// and InputHeight=10, InputWidth=20 (which would imply InputSize=200).
     /// </para>
     /// </remarks>
+    [JsonConstructor]
     public NeuralNetworkArchitecture(
         InputType inputType,
         NeuralNetworkTaskType taskType,

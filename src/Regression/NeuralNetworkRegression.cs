@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Helpers;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -202,7 +204,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private void ShuffleArray(int[] array)
     {
-        Random random = new();
+        var random = RandomHelper.CreateSecureRandom();
         int n = array.Length;
         for (int i = n - 1; i > 0; i--)
         {

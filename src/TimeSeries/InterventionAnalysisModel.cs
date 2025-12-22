@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Helpers;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -260,7 +262,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
         _maParameters = new Vector<T>(q);
 
         // Initialize with small random values
-        Random rand = new();
+        var rand = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < p; i++) _arParameters[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
         for (int i = 0; i < q; i++) _maParameters[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
 

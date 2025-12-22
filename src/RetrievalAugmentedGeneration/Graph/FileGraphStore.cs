@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
@@ -59,6 +60,8 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
     private readonly BTreeIndex _nodeIndex;
     private readonly BTreeIndex _edgeIndex;
     private readonly WriteAheadLog? _wal;
+    private readonly SemaphoreSlim _nodesWriteLock = new SemaphoreSlim(1, 1);
+    private readonly SemaphoreSlim _edgesWriteLock = new SemaphoreSlim(1, 1);
 
     // In-memory caches for indices and metadata (thread-safe for concurrent async access)
     private readonly ConcurrentDictionary<string, HashSet<string>> _outgoingEdges; // nodeId -> edge IDs
@@ -127,25 +130,37 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             var json = JsonConvert.SerializeObject(node, _jsonSettings);
             var bytes = Encoding.UTF8.GetBytes(json);
 
-            // Get current file position (or reuse existing offset if updating)
+            _nodesWriteLock.Wait();
             long offset;
-            // For updates, we append to the end (old data becomes garbage)
-            // In production, you'd implement compaction to reclaim space
-            offset = new FileInfo(_nodesFilePath).Exists ? new FileInfo(_nodesFilePath).Length : 0;
-
-            // Write node data to file
-            using (var stream = new FileStream(_nodesFilePath, FileMode.Append, FileAccess.Write, FileShare.Read))
+            try
             {
-                // Write length prefix (4 bytes)
-                var lengthBytes = BitConverter.GetBytes(bytes.Length);
-                stream.Write(lengthBytes, 0, 4);
+                // Get current file position (or reuse existing offset if updating)
+                // For updates, we append to the end (old data becomes garbage)
+                // In production, you'd implement compaction to reclaim space
+                offset = new FileInfo(_nodesFilePath).Exists ? new FileInfo(_nodesFilePath).Length : 0;
 
-                // Write JSON data
-                stream.Write(bytes, 0, bytes.Length);
+                // Write node data to file
+                using (var stream = new FileStream(_nodesFilePath, FileMode.Append, FileAccess.Write, FileShare.Read))
+                {
+                    // Write length prefix (4 bytes)
+                    var lengthBytes = BitConverter.GetBytes(bytes.Length);
+                    stream.Write(lengthBytes, 0, 4);
+
+                    // Write JSON data
+                    stream.Write(bytes, 0, bytes.Length);
+                }
+
+                // Update index
+                _nodeIndex.Add(node.Id, offset);
+
+                // Flush indices periodically (every 100 operations for performance)
+                if (_nodeIndex.Count % 100 == 0)
+                    _nodeIndex.Flush();
             }
-
-            // Update index
-            _nodeIndex.Add(node.Id, offset);
+            finally
+            {
+                _nodesWriteLock.Release();
+            }
 
             // Update in-memory indices (thread-safe)
             lock (_cacheLock)
@@ -157,9 +172,6 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
                 _incomingEdges.GetOrAdd(node.Id, _ => new HashSet<string>());
             }
 
-            // Flush indices periodically (every 100 operations for performance)
-            if (_nodeIndex.Count % 100 == 0)
-                _nodeIndex.Flush();
         }
         catch (IOException ex)
         {
@@ -194,22 +206,35 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             var json = JsonConvert.SerializeObject(edge, _jsonSettings);
             var bytes = Encoding.UTF8.GetBytes(json);
 
-            // Get current file position
-            long offset = new FileInfo(_edgesFilePath).Exists ? new FileInfo(_edgesFilePath).Length : 0;
-
-            // Write edge data to file
-            using (var stream = new FileStream(_edgesFilePath, FileMode.Append, FileAccess.Write, FileShare.Read))
+            _edgesWriteLock.Wait();
+            long offset;
+            try
             {
-                // Write length prefix (4 bytes)
-                var lengthBytes = BitConverter.GetBytes(bytes.Length);
-                stream.Write(lengthBytes, 0, 4);
+                // Get current file position
+                offset = new FileInfo(_edgesFilePath).Exists ? new FileInfo(_edgesFilePath).Length : 0;
 
-                // Write JSON data
-                stream.Write(bytes, 0, bytes.Length);
+                // Write edge data to file
+                using (var stream = new FileStream(_edgesFilePath, FileMode.Append, FileAccess.Write, FileShare.Read))
+                {
+                    // Write length prefix (4 bytes)
+                    var lengthBytes = BitConverter.GetBytes(bytes.Length);
+                    stream.Write(lengthBytes, 0, 4);
+
+                    // Write JSON data
+                    stream.Write(bytes, 0, bytes.Length);
+                }
+
+                // Update index
+                _edgeIndex.Add(edge.Id, offset);
+
+                // Flush indices periodically
+                if (_edgeIndex.Count % 100 == 0)
+                    _edgeIndex.Flush();
             }
-
-            // Update index
-            _edgeIndex.Add(edge.Id, offset);
+            finally
+            {
+                _edgesWriteLock.Release();
+            }
 
             // Update in-memory edge indices (thread-safe)
             lock (_cacheLock)
@@ -220,9 +245,6 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
                     incomingSet.Add(edge.Id);
             }
 
-            // Flush indices periodically
-            if (_edgeIndex.Count % 100 == 0)
-                _edgeIndex.Flush();
         }
         catch (IOException ex)
         {
@@ -597,22 +619,35 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             var json = JsonConvert.SerializeObject(node, _jsonSettings);
             var bytes = Encoding.UTF8.GetBytes(json);
 
-            // Get current file position
-            long offset = new FileInfo(_nodesFilePath).Exists ? new FileInfo(_nodesFilePath).Length : 0;
-
-            // Write node data to file asynchronously
-            using (var stream = new FileStream(_nodesFilePath, FileMode.Append, FileAccess.Write, FileShare.Read, 4096, useAsync: true))
+            await _nodesWriteLock.WaitAsync().ConfigureAwait(false);
+            long offset;
+            try
             {
-                // Write length prefix (4 bytes)
-                var lengthBytes = BitConverter.GetBytes(bytes.Length);
-                await stream.WriteAsync(lengthBytes, 0, 4);
+                // Get current file position
+                offset = new FileInfo(_nodesFilePath).Exists ? new FileInfo(_nodesFilePath).Length : 0;
 
-                // Write JSON data
-                await stream.WriteAsync(bytes, 0, bytes.Length);
+                // Write node data to file asynchronously
+                using (var stream = new FileStream(_nodesFilePath, FileMode.Append, FileAccess.Write, FileShare.Read, 4096, useAsync: true))
+                {
+                    // Write length prefix (4 bytes)
+                    var lengthBytes = BitConverter.GetBytes(bytes.Length);
+                    await stream.WriteAsync(lengthBytes, 0, 4).ConfigureAwait(false);
+
+                    // Write JSON data
+                    await stream.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
+                }
+
+                // Update index
+                _nodeIndex.Add(node.Id, offset);
+
+                // Flush indices periodically
+                if (_nodeIndex.Count % 100 == 0)
+                    _nodeIndex.Flush();
             }
-
-            // Update index
-            _nodeIndex.Add(node.Id, offset);
+            finally
+            {
+                _nodesWriteLock.Release();
+            }
 
             // Update in-memory indices (thread-safe)
             lock (_cacheLock)
@@ -624,9 +659,6 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
                 _incomingEdges.GetOrAdd(node.Id, _ => new HashSet<string>());
             }
 
-            // Flush indices periodically
-            if (_nodeIndex.Count % 100 == 0)
-                _nodeIndex.Flush();
         }
         catch (IOException ex)
         {
@@ -661,22 +693,35 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             var json = JsonConvert.SerializeObject(edge, _jsonSettings);
             var bytes = Encoding.UTF8.GetBytes(json);
 
-            // Get current file position
-            long offset = new FileInfo(_edgesFilePath).Exists ? new FileInfo(_edgesFilePath).Length : 0;
-
-            // Write edge data to file asynchronously
-            using (var stream = new FileStream(_edgesFilePath, FileMode.Append, FileAccess.Write, FileShare.Read, 4096, useAsync: true))
+            await _edgesWriteLock.WaitAsync().ConfigureAwait(false);
+            long offset;
+            try
             {
-                // Write length prefix (4 bytes)
-                var lengthBytes = BitConverter.GetBytes(bytes.Length);
-                await stream.WriteAsync(lengthBytes, 0, 4);
+                // Get current file position
+                offset = new FileInfo(_edgesFilePath).Exists ? new FileInfo(_edgesFilePath).Length : 0;
 
-                // Write JSON data
-                await stream.WriteAsync(bytes, 0, bytes.Length);
+                // Write edge data to file asynchronously
+                using (var stream = new FileStream(_edgesFilePath, FileMode.Append, FileAccess.Write, FileShare.Read, 4096, useAsync: true))
+                {
+                    // Write length prefix (4 bytes)
+                    var lengthBytes = BitConverter.GetBytes(bytes.Length);
+                    await stream.WriteAsync(lengthBytes, 0, 4).ConfigureAwait(false);
+
+                    // Write JSON data
+                    await stream.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
+                }
+
+                // Update index
+                _edgeIndex.Add(edge.Id, offset);
+
+                // Flush indices periodically
+                if (_edgeIndex.Count % 100 == 0)
+                    _edgeIndex.Flush();
             }
-
-            // Update index
-            _edgeIndex.Add(edge.Id, offset);
+            finally
+            {
+                _edgesWriteLock.Release();
+            }
 
             // Update in-memory edge indices (thread-safe)
             lock (_cacheLock)
@@ -687,9 +732,6 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
                     incomingSet.Add(edge.Id);
             }
 
-            // Flush indices periodically
-            if (_edgeIndex.Count % 100 == 0)
-                _edgeIndex.Flush();
         }
         catch (IOException ex)
         {
@@ -962,6 +1004,8 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             _edgeIndex.Flush();
             _nodeIndex.Dispose();
             _edgeIndex.Dispose();
+            _nodesWriteLock.Dispose();
+            _edgesWriteLock.Dispose();
         }
         finally
         {

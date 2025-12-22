@@ -852,9 +852,14 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// </remarks>
     public virtual Vector<T> GetParameters()
     {
-        if (!IsTrained)
+        if (!IsTrained && (ModelParameters == null || ModelParameters.Length == 0))
         {
             throw new InvalidOperationException("Cannot get parameters for an untrained model.");
+        }
+
+        if (ModelParameters == null || ModelParameters.Length == 0)
+        {
+            throw new InvalidOperationException("Model parameters have not been initialized.");
         }
 
         return ModelParameters.Clone();

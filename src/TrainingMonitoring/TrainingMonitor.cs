@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using Newtonsoft.Json;
@@ -44,6 +45,7 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
                 SessionId = sessionId,
                 SessionName = sessionName,
                 StartTime = DateTime.UtcNow,
+                StartTimestamp = Stopwatch.GetTimestamp(),
                 Metadata = metadata ?? new Dictionary<string, object>()
             };
 
@@ -255,8 +257,8 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
         lock (SyncLock)
         {
             var session = GetSession(sessionId);
-            var elapsed = DateTime.UtcNow - session.StartTime;
             var progress = session.Progress;
+            var elapsed = GetElapsedTime(session, progress);
 
             double iterationsPerSecond = 0;
             double secondsPerIteration = 0;
@@ -291,6 +293,33 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
                 TotalIterations = progress.TotalSteps
             };
         }
+    }
+
+    private static TimeSpan GetElapsedTime(MonitoringSession<T> session, ProgressInfo progress)
+    {
+        // Prefer high-resolution stopwatch time for stability across runtimes (notably .NET Framework).
+        if (session.StartTimestamp > 0)
+        {
+            long deltaTicks = Stopwatch.GetTimestamp() - session.StartTimestamp;
+            if (deltaTicks > 0 && Stopwatch.Frequency > 0)
+            {
+                return TimeSpan.FromSeconds(deltaTicks / (double)Stopwatch.Frequency);
+            }
+        }
+
+        var elapsed = DateTime.UtcNow - session.StartTime;
+        if (elapsed < TimeSpan.Zero)
+        {
+            elapsed = TimeSpan.Zero;
+        }
+
+        // If progress has started but timer resolution produced a 0 duration, clamp to a minimal value.
+        if (elapsed == TimeSpan.Zero && progress.CurrentStep > 0)
+        {
+            elapsed = TimeSpan.FromMilliseconds(1);
+        }
+
+        return elapsed;
     }
 
     /// <summary>

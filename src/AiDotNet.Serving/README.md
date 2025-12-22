@@ -34,8 +34,8 @@ public interface IModelRepository
 
 ### 2. RequestBatcher (Singleton)
 Collects incoming requests and processes them in batches:
-- Requests are queued in a `ConcurrentQueue`
-- A background timer (default 10ms) triggers batch processing
+- Requests are queued in a bounded `Channel` for backpressure
+- A background processing loop triggers batch formation and execution
 - Requests are grouped by model and numeric type
 - The model's `PredictBatch` method is called once for the entire batch
 - Individual results are returned via `TaskCompletionSource`
@@ -51,7 +51,7 @@ public interface IRequestBatcher
 ### 3. REST API Controllers
 
 #### ModelsController
-- `POST /api/models` - Load a model (placeholder for file-based loading)
+- `POST /api/models` - Load a model artifact from a file under the configured model directory
 - `GET /api/models` - List all loaded models
 - `GET /api/models/{name}` - Get specific model info
 - `DELETE /api/models/{name}` - Unload a model
@@ -350,28 +350,10 @@ public class MyCustomModel : IServableModel<double>
 }
 ```
 
-### Model Serialization (Not Implemented)
+### Model Serialization
 
-The `POST /api/models` endpoint is a placeholder. To implement file-based model loading:
-
-1. Implement serialization for your models
-2. Modify `ModelsController.LoadModel` to deserialize models from files
-3. Ensure you handle the generic type parameter correctly
-
-Example pseudocode:
-```csharp
-[HttpPost]
-public IActionResult LoadModel([FromBody] LoadModelRequest request)
-{
-    // Deserialize based on numeric type
-    if (request.NumericType == "double")
-    {
-        var model = ModelSerializer.Load<double>(request.Path);
-        _modelRepository.LoadModel(request.Name, model, request.Path);
-    }
-    // ... handle other types
-}
-```
+AiDotNet.Serving loads and serves AiDotNet model artifacts from disk via `PredictionModelResult<T, Matrix<T>, Vector<T>>`.
+The server validates that the requested model path resolves under `ServingOptions.ModelDirectory` to prevent directory traversal.
 
 ## 🤝 Contributing
 

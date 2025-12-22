@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using AiDotNet.Engines;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -54,6 +55,10 @@ public class ThreadSafetyTests
             engine = new GpuEngine();
         }
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return; // GPU not available
+        }
+        if (!engine.SupportsGpu)
         {
             return; // GPU not available
         }
@@ -112,6 +117,10 @@ public class ThreadSafetyTests
         {
             return; // GPU not available
         }
+        if (!engine.SupportsGpu)
+        {
+            return; // GPU not available
+        }
 
         var exceptions = new ConcurrentBag<Exception>();
         var results = new ConcurrentBag<Matrix<float>>();
@@ -164,6 +173,10 @@ public class ThreadSafetyTests
             engine = new GpuEngine();
         }
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return; // GPU not available
+        }
+        if (!engine.SupportsGpu)
         {
             return; // GPU not available
         }
@@ -229,6 +242,10 @@ public class ThreadSafetyTests
         {
             return; // GPU not available
         }
+        if (!engine.SupportsGpu)
+        {
+            return; // GPU not available
+        }
 
         var exceptions = new ConcurrentBag<Exception>();
         var results = new ConcurrentBag<Tensor<float>>();
@@ -276,6 +293,10 @@ public class ThreadSafetyTests
             engine = new GpuEngine();
         }
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return; // GPU not available
+        }
+        if (!engine.SupportsGpu)
         {
             return; // GPU not available
         }
@@ -334,6 +355,10 @@ public class ThreadSafetyTests
         {
             return; // GPU not available
         }
+        if (!engine.SupportsGpu)
+        {
+            return; // GPU not available
+        }
 
         var healthChecks = new ConcurrentBag<bool>();
         var exceptions = new ConcurrentBag<Exception>();
@@ -377,6 +402,10 @@ public class ThreadSafetyTests
             engine = new GpuEngine();
         }
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return; // GPU not available
+        }
+        if (!engine.SupportsGpu)
         {
             return; // GPU not available
         }

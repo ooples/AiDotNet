@@ -27,4 +27,8 @@
     <ProjectReference Include="..\..\src\AiDotNet.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

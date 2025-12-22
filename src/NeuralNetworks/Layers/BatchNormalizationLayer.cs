@@ -212,6 +212,15 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         return _momentum;
     }
 
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        return new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Epsilon"] = NumOps.ToDouble(_epsilon).ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+            ["Momentum"] = NumOps.ToDouble(_momentum).ToString("R", System.Globalization.CultureInfo.InvariantCulture)
+        };
+    }
+
     public override bool SupportsTraining => true;
 
     /// <summary>
