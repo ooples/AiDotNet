@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.CurriculumLearning.Interfaces;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.CurriculumLearning.DifficultyEstimators;
 
@@ -196,7 +197,7 @@ public class ExpertDefinedDifficultyEstimator<T, TInput, TOutput> : DifficultyEs
         int totalSamples,
         int? seed = null)
     {
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue ? new Random(seed.Value) : RandomHelper.Shared;
         var difficulties = new T[totalSamples];
         var numOps = MathHelper.GetNumericOperations<T>();
 
