@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
 using System.Net.Http;
@@ -313,7 +314,7 @@ public sealed class ShapeNetCorePartSegmentationDataLoader<T> : PointCloudDatase
         return true;
     }
 
-    private bool TryResolveLabelPath(string root, string pointsPath, out string? labelPath)
+    private bool TryResolveLabelPath(string root, string pointsPath, [NotNullWhen(true)] out string? labelPath)
     {
         labelPath = null;
         string pointsDir = Path.Combine(root, "points");

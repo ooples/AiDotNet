@@ -1053,7 +1053,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         for (int level = 0; level < _numLevels; level++)
         {
             int resolution = GetLevelResolution(level);
-            var table = _hashTables[level].Data;
+            var table = _hashTables[level];
 
             for (int i = 0; i < numPoints; i++)
             {
@@ -1119,7 +1119,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
     }
 
     private void UpdateHashEntry(
-        Vector<T> table,
+        Tensor<T> table,
         int index,
         int feature,
         double grad,

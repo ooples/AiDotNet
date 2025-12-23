@@ -134,7 +134,7 @@ public sealed class ScanNetSemanticSegmentationDataLoader<T> : PointCloudDataset
                 }
 
                 var rawData = await LoadRawSceneAsync(rawFiles, labelMapping, cancellationToken);
-                FillSceneSample(rawData.Points, rawData.Labels, featureDim, numClasses, sampleIndex, random, featuresData, labelsData);
+                FillSceneSample(rawData, rawData.Labels, featureDim, numClasses, sampleIndex, random, featuresData, labelsData);
             }
             else
             {
@@ -144,7 +144,7 @@ public sealed class ScanNetSemanticSegmentationDataLoader<T> : PointCloudDataset
                 }
 
                 var preprocessed = await LoadPreprocessedSceneAsync(files, cancellationToken);
-                FillSceneSample(preprocessed.PointRows, preprocessed.Labels, featureDim, numClasses, sampleIndex, random, featuresData, labelsData);
+                FillSceneSample(preprocessed, preprocessed.Labels, featureDim, numClasses, sampleIndex, random, featuresData, labelsData);
             }
         }
 
@@ -519,7 +519,7 @@ public sealed class ScanNetSemanticSegmentationDataLoader<T> : PointCloudDataset
 
     private bool TryGetRawSceneFiles(string root, string sceneId, out RawSceneFiles files)
     {
-        files = new PreprocessedSceneFiles(string.Empty, null);
+        files = new RawSceneFiles(string.Empty, string.Empty, string.Empty);
         string sceneDir = Path.Combine(root, "scans", sceneId);
         if (!Directory.Exists(sceneDir))
         {
@@ -680,7 +680,11 @@ public sealed class ScanNetSemanticSegmentationDataLoader<T> : PointCloudDataset
             string scansDir = Path.Combine(root, "scans");
             if (Directory.Exists(scansDir))
             {
-                sceneIds.AddRange(Directory.GetDirectories(scansDir).Select(Path.GetFileName).Where(name => !string.IsNullOrWhiteSpace(name)));
+                var names = Directory.GetDirectories(scansDir)
+                    .Select(Path.GetFileName)
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
+                    .Cast<string>();
+                sceneIds.AddRange(names);
             }
         }
 

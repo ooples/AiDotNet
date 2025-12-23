@@ -25,13 +25,7 @@ public abstract class TensorBase<T>
     /// </remarks>
     protected readonly Vector<T> _data;
 
-    /// <summary>
-    /// Gets direct access to the underlying data storage.
-    /// </summary>
-    /// <remarks>
-    /// Intended for performance-critical paths that need zero-copy access.
-    /// </remarks>
-    public Vector<T> Data => _data;
+
 
     /// <summary>
     /// Provides numeric operations for the tensor's element type.
@@ -71,7 +65,7 @@ public abstract class TensorBase<T>
     /// Modifications to this array will affect the tensor. Use with caution in
     /// performance-critical code paths like SIMD operations.</para>
     /// </remarks>
-    public T[] Data => _data.Data;
+    internal T[] Data => _data.Data;
 
     /// <summary>
     /// Creates a new array containing a copy of the tensor's elements in flattened order.
