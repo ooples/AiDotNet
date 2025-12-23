@@ -187,7 +187,12 @@ public class PointCloudData<T>
     /// </remarks>
     public Tensor<T>? GetFeatures()
     {
-        if (NumFeatures <= 3)
+        if (NumFeatures < 3)
+        {
+            throw new InvalidOperationException("NumFeatures must be at least 3 (XYZ coordinates).");
+        }
+
+        if (NumFeatures == 3)
         {
             return null;
         }

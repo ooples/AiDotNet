@@ -906,10 +906,10 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         }
 
         // Convert and validate inputs
-        var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
-        var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
+        int xSamples = ConversionsHelper.GetSampleCount<T, TInput>(x);
+        int ySamples = ConversionsHelper.GetSampleCount<T, TOutput>(y);
 
-        if (convertedX.Rows != convertedY.Length)
+        if (xSamples != ySamples)
             throw new ArgumentException("Number of rows in features must match length of actual values", nameof(x));
 
         // AGENT ASSISTANCE (if enabled)
@@ -4175,8 +4175,8 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         var chatModel = CreateChatModel(_agentConfig!);
         var recommendation = new AgentRecommendation<T, TInput, TOutput>();
 
-        var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
-        var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
+        int xSamples = ConversionsHelper.GetSampleCount<T, TInput>(x);
+        int ySamples = ConversionsHelper.GetSampleCount<T, TOutput>(y);
 
         var nSamples = convertedX.Rows;
         var nFeatures = convertedX.Columns;

@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -39,17 +41,21 @@ namespace AiDotNet.PointCloud.Layers;
 public class TNetLayer<T> : LayerBase<T>
 {
     private readonly int _transformDim; // Dimension of transformation (e.g., 3 for XYZ, 64 for features)
-    private readonly List<ILayer<T>> _layers;
-    private readonly int[] _inputShape;
-    private readonly int[] _outputShape;
+    private readonly int _numFeatures;
+    private readonly List<ILayer<T>> _mlpLayers;
+    private readonly List<ILayer<T>> _fcLayers;
+    private readonly MaxPoolingLayer<T> _maxPooling;
     private Tensor<T>? _lastInput;
     private Matrix<T>? _transformMatrix;
+    private Tensor<T>? _lastTransformVector;
 
     /// <summary>
     /// Initializes a new instance of the TNetLayer class.
     /// </summary>
     /// <param name="transformDim">Dimension of the transformation matrix (3 for spatial, higher for features).</param>
     /// <param name="numFeatures">Number of feature channels in the input.</param>
+    /// <param name="mlpChannels">Per-point MLP channels used before global pooling.</param>
+    /// <param name="fcChannels">Fully connected channels used to predict the transformation.</param>
     /// <remarks>
     /// <b>For Beginners:</b> Creates a T-Net that learns transformations for point clouds.
     ///
@@ -68,63 +74,101 @@ public class TNetLayer<T> : LayerBase<T>
     /// - TNetLayer(3, 3): Spatial transformer for XYZ coordinates
     /// - TNetLayer(64, 64): Feature transformer for 64-dimensional features
     /// </remarks>
-    public TNetLayer(int transformDim, int numFeatures)
+    public TNetLayer(int transformDim, int numFeatures, int[]? mlpChannels = null, int[]? fcChannels = null)
+        : base([0, numFeatures], [0, numFeatures])
     {
-        _transformDim = transformDim;
-        _inputShape = [0, numFeatures];
-        _outputShape = [0, numFeatures];
-        _layers = [];
-
-        // T-Net architecture: Conv layers -> MaxPool -> FC layers -> Transform matrix
-        // This is a simplified version; full implementation would match PointNet paper
-        _layers.Add(new PointConvolutionLayer<T>(numFeatures, 64));
-        _layers.Add(new PointConvolutionLayer<T>(64, 128));
-        _layers.Add(new PointConvolutionLayer<T>(128, 1024));
-        _layers.Add(new MaxPoolingLayer<T>(1024));
-        // After max pooling, we have a 1024-dimensional vector
-        // Need FC layers to produce transformDim x transformDim matrix
-        // This would require DenseLayer implementation
-
-        // Count total parameters
-        int totalParams = 0;
-        foreach (var layer in _layers)
+        if (transformDim <= 0)
         {
-            totalParams += layer.ParameterCount;
+            throw new ArgumentOutOfRangeException(nameof(transformDim), "Transform dimension must be positive.");
         }
-        Parameters = new Vector<T>(totalParams);
+        if (numFeatures <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be positive.");
+        }
+        if (transformDim > numFeatures)
+        {
+            throw new ArgumentOutOfRangeException(nameof(transformDim), "Transform dimension must be <= number of features.");
+        }
+
+        _transformDim = transformDim;
+        _numFeatures = numFeatures;
+        _mlpLayers = [];
+        _fcLayers = [];
+
+        var mlp = ValidateChannelArray(mlpChannels ?? new[] { 64, 128, 1024 }, nameof(mlpChannels));
+        var fc = ValidateChannelArray(fcChannels ?? new[] { 512, 256 }, nameof(fcChannels));
+
+        int inputChannels = numFeatures;
+        foreach (var outChannels in mlp)
+        {
+            _mlpLayers.Add(new PointConvolutionLayer<T>(inputChannels, outChannels, new ReLUActivation<T>()));
+            inputChannels = outChannels;
+        }
+
+        _maxPooling = new MaxPoolingLayer<T>(inputChannels);
+
+        int fcInput = inputChannels;
+        foreach (var hidden in fc)
+        {
+            _fcLayers.Add(new DenseLayer<T>(fcInput, hidden, activationFunction: new ReLUActivation<T>()));
+            fcInput = hidden;
+        }
+
+        int outputDim = _transformDim * _transformDim;
+        _fcLayers.Add(new DenseLayer<T>(fcInput, outputDim, activationFunction: new IdentityActivation<T>()));
+
+        Parameters = GetParameters();
     }
-
-    public override int[] GetInputShape() => _inputShape;
-
-    public override int[] GetOutputShape() => _outputShape;
 
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
 
-        // Process through mini-network to predict transformation
         Tensor<T> features = input;
-        foreach (var layer in _layers)
+        foreach (var layer in _mlpLayers)
         {
             features = layer.Forward(features);
         }
 
-        // Convert features to transformation matrix
-        // In full implementation, would use FC layers here
-        _transformMatrix = GenerateTransformMatrix(features);
+        features = _maxPooling.Forward(features);
+
+        Tensor<T> transformVector = features;
+        foreach (var layer in _fcLayers)
+        {
+            transformVector = layer.Forward(transformVector);
+        }
+
+        _lastTransformVector = transformVector;
+        _transformMatrix = BuildTransformMatrix(transformVector);
 
         // Apply transformation to input
         return ApplyTransformation(input, _transformMatrix);
     }
 
-    private Matrix<T> GenerateTransformMatrix(Tensor<T> features)
+    private Matrix<T> BuildTransformMatrix(Tensor<T> transformVector)
     {
-        // Simplified: Initialize as identity matrix
-        // Full implementation would use learned parameters from features
-        var matrix = Matrix<T>.Identity(_transformDim);
+        int expected = _transformDim * _transformDim;
+        if (transformVector.Length != expected)
+        {
+            throw new InvalidOperationException("Transform vector has unexpected length.");
+        }
 
-        // Add small learned perturbations (would come from FC layer in full version)
-        // For now, return identity to maintain shape
+        var matrix = new Matrix<T>(_transformDim, _transformDim);
+        var numOps = NumOps;
+        int index = 0;
+        for (int r = 0; r < _transformDim; r++)
+        {
+            for (int c = 0; c < _transformDim; c++)
+            {
+                T value = transformVector.Data[index++];
+                if (r == c)
+                {
+                    value = numOps.Add(value, numOps.One);
+                }
+                matrix[r, c] = value;
+            }
+        }
+
         return matrix;
     }
 
@@ -162,53 +206,71 @@ public class TNetLayer<T> : LayerBase<T>
 
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _transformMatrix == null)
+        if (_lastInput == null || _transformMatrix == null || _lastTransformVector == null)
         {
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        // Backprop through transformation
-        // This is simplified; full implementation would backprop through the entire T-Net
         int numPoints = outputGradient.Shape[0];
         int numFeatures = outputGradient.Shape[1];
         var inputGradient = new T[numPoints * numFeatures];
+        var transformGrad = new T[_transformDim * _transformDim];
         var numOps = NumOps;
 
-        // Gradient w.r.t. input: dL/dX = dL/dY * transform
         for (int n = 0; n < numPoints; n++)
         {
-            for (int inF = 0; inF < _transformDim; inF++)
+            for (int outF = 0; outF < _transformDim; outF++)
             {
-                T sum = numOps.Zero;
-                for (int outF = 0; outF < _transformDim; outF++)
+                var outGrad = outputGradient.Data[n * numFeatures + outF];
+                for (int inF = 0; inF < _transformDim; inF++)
                 {
-                    var outGrad = outputGradient.Data[n * numFeatures + outF];
                     var transformVal = _transformMatrix[inF, outF];
-                    sum = numOps.Add(sum, numOps.Multiply(outGrad, transformVal));
+                    var inputVal = _lastInput.Data[n * numFeatures + inF];
+                    inputGradient[n * numFeatures + inF] = numOps.Add(
+                        inputGradient[n * numFeatures + inF],
+                        numOps.Multiply(outGrad, transformVal));
+                    int tIndex = inF * _transformDim + outF;
+                    transformGrad[tIndex] = numOps.Add(
+                        transformGrad[tIndex],
+                        numOps.Multiply(inputVal, outGrad));
                 }
-                inputGradient[n * numFeatures + inF] = sum;
             }
 
-            // Pass through gradient for remaining features
             for (int f = _transformDim; f < numFeatures; f++)
             {
                 inputGradient[n * numFeatures + f] = outputGradient.Data[n * numFeatures + f];
             }
         }
 
-        // Would also backprop through the mini-network layers here
-        var gradient = new Tensor<T>(inputGradient, [numPoints, numFeatures]);
-        for (int i = _layers.Count - 1; i >= 0; i--)
+        var transformGradTensor = new Tensor<T>(transformGrad, _lastTransformVector.Shape);
+        Tensor<T> layerGradient = transformGradTensor;
+        for (int i = _fcLayers.Count - 1; i >= 0; i--)
         {
-            gradient = _layers[i].Backward(gradient);
+            layerGradient = _fcLayers[i].Backward(layerGradient);
         }
 
-        return gradient;
+        layerGradient = _maxPooling.Backward(layerGradient);
+        for (int i = _mlpLayers.Count - 1; i >= 0; i--)
+        {
+            layerGradient = _mlpLayers[i].Backward(layerGradient);
+        }
+
+        var layerGradData = layerGradient.Data;
+        for (int i = 0; i < inputGradient.Length; i++)
+        {
+            inputGradient[i] = numOps.Add(inputGradient[i], layerGradData[i]);
+        }
+
+        return new Tensor<T>(inputGradient, [numPoints, numFeatures]);
     }
 
     public override void UpdateParameters(T learningRate)
     {
-        foreach (var layer in _layers)
+        foreach (var layer in _mlpLayers)
+        {
+            layer.UpdateParameters(learningRate);
+        }
+        foreach (var layer in _fcLayers)
         {
             layer.UpdateParameters(learningRate);
         }
@@ -216,10 +278,100 @@ public class TNetLayer<T> : LayerBase<T>
 
     public override void ClearGradients()
     {
-        foreach (var layer in _layers)
+        foreach (var layer in _mlpLayers)
         {
             layer.ClearGradients();
         }
+        foreach (var layer in _fcLayers)
+        {
+            layer.ClearGradients();
+        }
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        int totalParams = ParameterCount;
+        var parameters = new Vector<T>(totalParams);
+        int offset = 0;
+
+        foreach (var layer in _mlpLayers)
+        {
+            var layerParameters = layer.GetParameters();
+            for (int i = 0; i < layerParameters.Length; i++)
+            {
+                parameters[offset + i] = layerParameters[i];
+            }
+
+            offset += layerParameters.Length;
+        }
+
+        foreach (var layer in _fcLayers)
+        {
+            var layerParameters = layer.GetParameters();
+            for (int i = 0; i < layerParameters.Length; i++)
+            {
+                parameters[offset + i] = layerParameters[i];
+            }
+
+            offset += layerParameters.Length;
+        }
+
+        Parameters = parameters;
+        return parameters;
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        foreach (var layer in _mlpLayers)
+        {
+            int layerParameterCount = layer.ParameterCount;
+            if (layerParameterCount > 0)
+            {
+                var layerParameters = parameters.SubVector(offset, layerParameterCount);
+                layer.UpdateParameters(layerParameters);
+                offset += layerParameterCount;
+            }
+        }
+
+        foreach (var layer in _fcLayers)
+        {
+            int layerParameterCount = layer.ParameterCount;
+            if (layerParameterCount > 0)
+            {
+                var layerParameters = parameters.SubVector(offset, layerParameterCount);
+                layer.UpdateParameters(layerParameters);
+                offset += layerParameterCount;
+            }
+        }
+
+        Parameters = parameters;
+    }
+
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _transformMatrix = null;
+        _lastTransformVector = null;
+
+        foreach (var layer in _mlpLayers)
+        {
+            layer.ResetState();
+        }
+        foreach (var layer in _fcLayers)
+        {
+            layer.ResetState();
+        }
+
+        _maxPooling.ResetState();
+    }
+
+    public override bool SupportsJitCompilation => false;
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "TNetLayer does not support computation graph export due to point cloud-specific operations.");
     }
 
     public override int ParameterCount
@@ -227,7 +379,11 @@ public class TNetLayer<T> : LayerBase<T>
         get
         {
             int total = 0;
-            foreach (var layer in _layers)
+            foreach (var layer in _mlpLayers)
+            {
+                total += layer.ParameterCount;
+            }
+            foreach (var layer in _fcLayers)
             {
                 total += layer.ParameterCount;
             }
@@ -236,4 +392,21 @@ public class TNetLayer<T> : LayerBase<T>
     }
 
     public override bool SupportsTraining => true;
+
+    private static int[] ValidateChannelArray(int[] values, string paramName)
+    {
+        if (values.Length == 0)
+        {
+            throw new ArgumentException("Channel array must not be empty.", paramName);
+        }
+        for (int i = 0; i < values.Length; i++)
+        {
+            if (values[i] <= 0)
+            {
+                throw new ArgumentOutOfRangeException(paramName, "Channel sizes must be positive.");
+            }
+        }
+
+        return values;
+    }
 }

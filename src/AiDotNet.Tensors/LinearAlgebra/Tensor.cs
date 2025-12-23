@@ -61,6 +61,15 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Creates a new tensor with the specified dimensions using a raw array.
+    /// </summary>
+    /// <param name="data">The data to populate the tensor with.</param>
+    /// <param name="dimensions">An array specifying the size of each dimension.</param>
+    public Tensor(T[] data, int[] dimensions) : base(data, dimensions)
+    {
+    }
+
+    /// <summary>
     /// Creates a new tensor with the specified dimensions using data from a matrix.
     /// </summary>
     /// <param name="dimensions">An array specifying the size of each dimension.</param>

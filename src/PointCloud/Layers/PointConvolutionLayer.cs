@@ -1,3 +1,5 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -30,13 +32,12 @@ public class PointConvolutionLayer<T> : LayerBase<T>
 {
     private readonly int _inputChannels;
     private readonly int _outputChannels;
-    private readonly int[] _inputShape;
-    private readonly int[] _outputShape;
-    private Matrix<T> _weights;
-    private Vector<T> _biases;
-    private Matrix<T> _weightGradients;
-    private Vector<T> _biasGradients;
+    private readonly Matrix<T> _weights;
+    private readonly Vector<T> _biases;
+    private readonly Matrix<T> _weightGradients;
+    private readonly Vector<T> _biasGradients;
     private Tensor<T>? _lastInput;
+    private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// Initializes a new instance of the PointConvolutionLayer class.
@@ -59,11 +60,10 @@ public class PointConvolutionLayer<T> : LayerBase<T>
     /// The layer learns which combinations of input features are important.
     /// </remarks>
     public PointConvolutionLayer(int inputChannels, int outputChannels, IActivationFunction<T>? activation = null)
+        : base([0, inputChannels], [0, outputChannels], activation ?? new IdentityActivation<T>())
     {
         _inputChannels = inputChannels;
         _outputChannels = outputChannels;
-        _inputShape = [0, inputChannels]; // 0 because number of points can vary
-        _outputShape = [0, outputChannels];
 
         // Initialize weights using He initialization
         _weights = InitializeWeights(inputChannels, outputChannels);
@@ -133,10 +133,6 @@ public class PointConvolutionLayer<T> : LayerBase<T>
         }
     }
 
-    public override int[] GetInputShape() => _inputShape;
-
-    public override int[] GetOutputShape() => _outputShape;
-
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
@@ -160,18 +156,22 @@ public class PointConvolutionLayer<T> : LayerBase<T>
             }
         }
 
-        var result = new Tensor<T>(output, [numPoints, _outputChannels]);
+        var preActivation = new Tensor<T>(output, [numPoints, _outputChannels]);
+        _lastPreActivation = preActivation;
 
         // Apply activation if specified
         if (ScalarActivation != null)
         {
+            var activated = new T[output.Length];
             for (int i = 0; i < output.Length; i++)
             {
-                result.Data[i] = ScalarActivation.Activate(result.Data[i]);
+                activated[i] = ScalarActivation.Activate(output[i]);
             }
+
+            return new Tensor<T>(activated, [numPoints, _outputChannels]);
         }
 
-        return result;
+        return preActivation;
     }
 
     public override Tensor<T> Backward(Tensor<T> outputGradient)
@@ -189,13 +189,19 @@ public class PointConvolutionLayer<T> : LayerBase<T>
         var gradient = outputGradient.Data;
         if (ScalarActivation != null)
         {
-            gradient = new T[gradient.Length];
+            if (_lastPreActivation == null)
+            {
+                throw new InvalidOperationException("Forward pass must be called before backward pass.");
+            }
+
+            var activatedGradient = new Vector<T>(gradient.Length);
             for (int i = 0; i < gradient.Length; i++)
             {
-                // Compute output value for derivative
-                var outputVal = default(T); // Would need to cache from forward pass for exact computation
-                gradient[i] = numOps.Multiply(outputGradient.Data[i], ScalarActivation.Derivative(outputVal));
+                var preActivation = _lastPreActivation.Data[i];
+                activatedGradient[i] = numOps.Multiply(outputGradient.Data[i], ScalarActivation.Derivative(preActivation));
             }
+
+            gradient = activatedGradient;
         }
 
         // Compute weight gradients: dL/dW = X^T * dL/dY
@@ -282,6 +288,38 @@ public class PointConvolutionLayer<T> : LayerBase<T>
         {
             _biasGradients[i] = numOps.Zero;
         }
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        UpdateParametersFromWeightsAndBiases();
+        return Parameters.Clone();
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException("Parameter vector length does not match layer parameter count.", nameof(parameters));
+        }
+
+        Parameters = parameters;
+        UpdateWeightsAndBiasesFromParameters();
+    }
+
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _lastPreActivation = null;
+        ClearGradients();
+    }
+
+    public override bool SupportsJitCompilation => false;
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "PointConvolutionLayer does not support computation graph export due to point cloud-specific operations.");
     }
 
     public override int ParameterCount => _inputChannels * _outputChannels + _outputChannels;

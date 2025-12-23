@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -30,8 +31,6 @@ namespace AiDotNet.PointCloud.Layers;
 public class MaxPoolingLayer<T> : LayerBase<T>
 {
     private readonly int _numFeatures;
-    private readonly int[] _inputShape;
-    private readonly int[] _outputShape;
     private int[]? _maxIndices; // Store indices of max values for backward pass
     private int _numPoints;
 
@@ -50,16 +49,11 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// selects the maximum value for each feature across all points.
     /// </remarks>
     public MaxPoolingLayer(int numFeatures)
+        : base([0, numFeatures], [1, numFeatures])
     {
         _numFeatures = numFeatures;
-        _inputShape = [0, numFeatures]; // 0 because number of points can vary
-        _outputShape = [1, numFeatures];
-        Parameters = new Vector<T>(0); // No trainable parameters
+        Parameters = Vector<T>.Empty(); // No trainable parameters
     }
-
-    public override int[] GetInputShape() => _inputShape;
-
-    public override int[] GetOutputShape() => _outputShape;
 
     public override Tensor<T> Forward(Tensor<T> input)
     {
@@ -77,7 +71,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
             for (int n = 1; n < _numPoints; n++)
             {
                 T currentVal = input.Data[n * _numFeatures + c];
-                if (numOps.Compare(currentVal, maxVal) > 0)
+                if (numOps.GreaterThan(currentVal, maxVal))
                 {
                     maxVal = currentVal;
                     maxIdx = n;
@@ -128,7 +122,26 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         // No gradients to clear
     }
 
+    public override Vector<T> GetParameters()
+    {
+        return Vector<T>.Empty();
+    }
+
+    public override void ResetState()
+    {
+        _maxIndices = null;
+        _numPoints = 0;
+    }
+
+    public override bool SupportsJitCompilation => false;
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "MaxPoolingLayer does not support computation graph export due to point cloud-specific pooling.");
+    }
+
     public override int ParameterCount => 0;
 
-    public override bool SupportsTraining => false; // No trainable parameters
+    public override bool SupportsTraining => false; // No parameters to update; still participates in backprop
 }

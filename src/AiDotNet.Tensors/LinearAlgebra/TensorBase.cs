@@ -26,6 +26,14 @@ public abstract class TensorBase<T>
     protected readonly Vector<T> _data;
 
     /// <summary>
+    /// Gets direct access to the underlying data storage.
+    /// </summary>
+    /// <remarks>
+    /// Intended for performance-critical paths that need zero-copy access.
+    /// </remarks>
+    public Vector<T> Data => _data;
+
+    /// <summary>
     /// Provides numeric operations for the tensor's element type.
     /// </summary>
     /// <remarks>
