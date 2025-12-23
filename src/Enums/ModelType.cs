@@ -858,6 +858,25 @@ public enum ModelType
     /// </remarks>
     VoxelCNN,
 
+    /// <summary>
+    /// 3D U-Net architecture for volumetric semantic segmentation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A 3D U-Net is like an intelligent 3D scanner that can identify and label
+    /// every single voxel in a 3D volume. The "U" shape comes from its encoder-decoder design:
+    /// - Encoder: Progressively zooms out to understand the big picture
+    /// - Decoder: Progressively zooms back in to produce detailed predictions
+    /// - Skip connections: Preserve fine details by linking encoder to decoder
+    ///
+    /// 3D U-Net is useful for:
+    /// - Medical image segmentation (organs, tumors in CT/MRI)
+    /// - 3D point cloud semantic segmentation
+    /// - Part segmentation of 3D shapes
+    /// </para>
+    /// </remarks>
+    UNet3D,
+
     RestrictedBoltzmannMachine,
 
     SpikingNeuralNetwork,

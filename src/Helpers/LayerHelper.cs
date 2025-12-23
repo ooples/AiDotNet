@@ -2850,4 +2850,174 @@ public static class LayerHelper<T>
             outputSize: numClasses,
             activationFunction: outputActivation);
     }
+
+    /// <summary>
+    /// Creates default layers for a 3D U-Net architecture for volumetric segmentation.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="voxelResolution">The resolution of the voxel grid (e.g., 32 for 32x32x32). Default is 32.</param>
+    /// <param name="numEncoderBlocks">The number of encoder blocks. Default is 4.</param>
+    /// <param name="baseFilters">The number of filters in the first convolutional layer. Doubles with each block. Default is 32.</param>
+    /// <returns>A collection of layers configured for 3D volumetric segmentation.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A 3D U-Net is like a specialized 3D image processor that can identify
+    /// different parts of a 3D volume (like organs in a CT scan or objects in a point cloud).
+    /// </para>
+    /// <para>
+    /// The U-shape architecture:
+    /// - Encoder: Progressively downsamples to capture context (like zooming out)
+    /// - Bottleneck: Smallest representation capturing global features
+    /// - Decoder: Progressively upsamples to restore resolution (like zooming in)
+    /// - Skip connections: Link encoder to decoder to preserve fine details
+    /// </para>
+    /// <para>
+    /// Applications include:
+    /// - 3D semantic segmentation of point clouds
+    /// - Medical image segmentation (organs, tumors in CT/MRI)
+    /// - Part segmentation of 3D shapes
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the architecture has invalid dimensions.</exception>
+    public static IEnumerable<ILayer<T>> CreateDefaultUNet3DLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int voxelResolution = 32,
+        int numEncoderBlocks = 4,
+        int baseFilters = 32)
+    {
+        if (architecture.OutputSize <= 0)
+        {
+            throw new InvalidOperationException("Output size (number of segmentation classes) must be greater than 0.");
+        }
+
+        if (voxelResolution <= 0)
+        {
+            throw new ArgumentException("Voxel resolution must be positive.", nameof(voxelResolution));
+        }
+
+        // Verify resolution is sufficient for the number of encoder blocks
+        int minResolution = 1 << numEncoderBlocks; // 2^numEncoderBlocks
+        if (voxelResolution < minResolution)
+        {
+            throw new ArgumentOutOfRangeException(nameof(voxelResolution),
+                $"VoxelResolution must be at least {minResolution} for {numEncoderBlocks} encoder blocks.");
+        }
+
+        int numClasses = architecture.OutputSize;
+        int currentResolution = voxelResolution;
+        int inputChannels = 1; // Typically single-channel occupancy grid
+
+        // Track encoder output filter counts for skip connections
+        var encoderFilters = new int[numEncoderBlocks];
+
+        // ============== ENCODER PATH ==============
+        // Each encoder block: Conv3D -> Conv3D -> MaxPool3D
+        for (int block = 0; block < numEncoderBlocks; block++)
+        {
+            int outputFilters = baseFilters * (1 << block); // Double filters each block
+            int inChannels = block == 0 ? inputChannels : encoderFilters[block - 1];
+            encoderFilters[block] = outputFilters;
+
+            // First Conv3D in block
+            yield return new Conv3DLayer<T>(
+                inputChannels: inChannels,
+                outputChannels: outputFilters,
+                kernelSize: 3,
+                inputDepth: currentResolution,
+                inputHeight: currentResolution,
+                inputWidth: currentResolution,
+                stride: 1,
+                padding: 1,
+                activation: new ReLUActivation<T>());
+
+            // Second Conv3D in block
+            yield return new Conv3DLayer<T>(
+                inputChannels: outputFilters,
+                outputChannels: outputFilters,
+                kernelSize: 3,
+                inputDepth: currentResolution,
+                inputHeight: currentResolution,
+                inputWidth: currentResolution,
+                stride: 1,
+                padding: 1,
+                activation: new ReLUActivation<T>());
+
+            // MaxPool3D to downsample (except last encoder block)
+            if (block < numEncoderBlocks - 1)
+            {
+                yield return new MaxPool3DLayer<T>(
+                    inputShape: [outputFilters, currentResolution, currentResolution, currentResolution],
+                    poolSize: 2,
+                    stride: 2);
+                currentResolution /= 2;
+            }
+        }
+
+        // ============== BOTTLENECK ==============
+        // Additional convolutions at the bottleneck
+        int bottleneckFilters = baseFilters * (1 << (numEncoderBlocks - 1)) * 2;
+        yield return new Conv3DLayer<T>(
+            inputChannels: encoderFilters[numEncoderBlocks - 1],
+            outputChannels: bottleneckFilters,
+            kernelSize: 3,
+            inputDepth: currentResolution,
+            inputHeight: currentResolution,
+            inputWidth: currentResolution,
+            stride: 1,
+            padding: 1,
+            activation: new ReLUActivation<T>());
+
+        // ============== DECODER PATH ==============
+        // Each decoder block: Upsample3D -> Conv3D -> Conv3D
+        // Note: Skip connections need to be handled by the network model
+        for (int block = numEncoderBlocks - 2; block >= 0; block--)
+        {
+            int outputFilters = encoderFilters[block];
+            int inChannels = block == numEncoderBlocks - 2 ? bottleneckFilters : encoderFilters[block + 1] * 2;
+
+            // Upsample3D to increase resolution
+            yield return new Upsample3DLayer<T>(
+                inputShape: [inChannels, currentResolution, currentResolution, currentResolution],
+                scaleFactor: 2);
+            currentResolution *= 2;
+
+            // First Conv3D after upsample (would concatenate with skip in full U-Net)
+            // For simplicity, we assume channels are doubled from skip connection
+            yield return new Conv3DLayer<T>(
+                inputChannels: inChannels, // In full U-Net: inChannels + encoderFilters[block] from skip
+                outputChannels: outputFilters,
+                kernelSize: 3,
+                inputDepth: currentResolution,
+                inputHeight: currentResolution,
+                inputWidth: currentResolution,
+                stride: 1,
+                padding: 1,
+                activation: new ReLUActivation<T>());
+
+            // Second Conv3D in decoder block
+            yield return new Conv3DLayer<T>(
+                inputChannels: outputFilters,
+                outputChannels: outputFilters,
+                kernelSize: 3,
+                inputDepth: currentResolution,
+                inputHeight: currentResolution,
+                inputWidth: currentResolution,
+                stride: 1,
+                padding: 1,
+                activation: new ReLUActivation<T>());
+        }
+
+        // ============== OUTPUT LAYER ==============
+        // 1x1x1 convolution to produce per-voxel class predictions
+        yield return new Conv3DLayer<T>(
+            inputChannels: baseFilters,
+            outputChannels: numClasses,
+            kernelSize: 1,
+            inputDepth: currentResolution,
+            inputHeight: currentResolution,
+            inputWidth: currentResolution,
+            stride: 1,
+            padding: 0,
+            activation: numClasses > 1 ? new SoftmaxActivation<T>() : new SigmoidActivation<T>());
+    }
 }
