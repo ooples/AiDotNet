@@ -4095,4 +4095,376 @@ public interface IEngine
     Tensor<T> TensorWhere<T>(Tensor<bool> condition, Tensor<T> x, Tensor<T> y);
 
     #endregion
+
+    #region Neural Radiance Fields Operations
+
+    /// <summary>
+    /// Computes positional encoding for Neural Radiance Fields.
+    /// Applies sin/cos frequency encoding: [sin(2^0*π*x), cos(2^0*π*x), ..., sin(2^(L-1)*π*x), cos(2^(L-1)*π*x)]
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="positions">Input positions tensor of shape [N, D] where D is typically 3 (x,y,z).</param>
+    /// <param name="numFrequencies">Number of frequency levels (L in the paper, typically 10 for positions, 4 for directions).</param>
+    /// <returns>Encoded tensor of shape [N, D * 2 * numFrequencies].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Positional encoding transforms low-dimensional coordinates into
+    /// high-dimensional features that help neural networks learn high-frequency details.
+    /// </para>
+    /// <para>
+    /// Without positional encoding, neural networks tend to learn smooth, blurry functions.
+    /// The sin/cos encoding at multiple frequencies enables sharp, detailed reconstructions.
+    /// </para>
+    /// <para>
+    /// Reference: "NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis"
+    /// by Mildenhall et al., ECCV 2020
+    /// </para>
+    /// </remarks>
+    Tensor<T> PositionalEncoding<T>(Tensor<T> positions, int numFrequencies);
+
+    /// <summary>
+    /// Computes the backward pass for positional encoding.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="positions">Original input positions tensor of shape [N, D].</param>
+    /// <param name="encodedGradient">Gradient of loss with respect to encoded output [N, D * 2 * numFrequencies].</param>
+    /// <param name="numFrequencies">Number of frequency levels used in forward pass.</param>
+    /// <returns>Gradient with respect to input positions [N, D].</returns>
+    Tensor<T> PositionalEncodingBackward<T>(Tensor<T> positions, Tensor<T> encodedGradient, int numFrequencies);
+
+    /// <summary>
+    /// Performs volume rendering along rays using alpha compositing.
+    /// Computes: C(r) = Σ T_i * α_i * c_i where T_i = Π(1 - α_j) for j &lt; i
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="rgbSamples">RGB color samples of shape [numRays, numSamples, 3].</param>
+    /// <param name="densitySamples">Density/sigma samples of shape [numRays, numSamples, 1].</param>
+    /// <param name="tValues">Distance values along rays of shape [numRays, numSamples].</param>
+    /// <returns>Rendered colors of shape [numRays, 3].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Volume rendering accumulates color along a ray by considering
+    /// how much light is blocked (transmittance) at each sample point.
+    /// </para>
+    /// <para>
+    /// The alpha value at each point represents how much light is absorbed there.
+    /// Transmittance tracks how much light reaches each point from the camera.
+    /// Final color is the weighted sum of all sample colors.
+    /// </para>
+    /// </remarks>
+    Tensor<T> VolumeRendering<T>(Tensor<T> rgbSamples, Tensor<T> densitySamples, Tensor<T> tValues);
+
+    /// <summary>
+    /// Computes the backward pass for volume rendering.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="rgbSamples">RGB color samples from forward pass [numRays, numSamples, 3].</param>
+    /// <param name="densitySamples">Density samples from forward pass [numRays, numSamples, 1].</param>
+    /// <param name="tValues">Distance values from forward pass [numRays, numSamples].</param>
+    /// <param name="outputGradient">Gradient of loss with respect to rendered colors [numRays, 3].</param>
+    /// <param name="rgbGradient">Output: Gradient with respect to RGB samples.</param>
+    /// <param name="densityGradient">Output: Gradient with respect to density samples.</param>
+    void VolumeRenderingBackward<T>(
+        Tensor<T> rgbSamples,
+        Tensor<T> densitySamples,
+        Tensor<T> tValues,
+        Tensor<T> outputGradient,
+        out Tensor<T> rgbGradient,
+        out Tensor<T> densityGradient);
+
+    /// <summary>
+    /// Samples points uniformly along rays for volume rendering.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="rayOrigins">Ray origin points of shape [numRays, 3].</param>
+    /// <param name="rayDirections">Ray direction vectors of shape [numRays, 3] (should be normalized).</param>
+    /// <param name="nearBound">Near clipping distance.</param>
+    /// <param name="farBound">Far clipping distance.</param>
+    /// <param name="numSamples">Number of samples per ray.</param>
+    /// <param name="stratified">If true, adds jitter to sample positions for anti-aliasing.</param>
+    /// <returns>Tuple of (sample positions [numRays * numSamples, 3], sample directions [numRays * numSamples, 3], t values [numRays, numSamples]).</returns>
+    (Tensor<T> positions, Tensor<T> directions, Tensor<T> tValues) SampleRayPoints<T>(
+        Tensor<T> rayOrigins,
+        Tensor<T> rayDirections,
+        T nearBound,
+        T farBound,
+        int numSamples,
+        bool stratified = true);
+
+    /// <summary>
+    /// Performs importance sampling based on coarse network density predictions.
+    /// Samples more points where density is high (hierarchical sampling).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tValuesCoarse">Coarse sample t values [numRays, numCoarseSamples].</param>
+    /// <param name="weightsCoarse">Rendering weights from coarse samples [numRays, numCoarseSamples].</param>
+    /// <param name="numFineSamples">Number of additional fine samples to generate.</param>
+    /// <returns>Fine sample t values [numRays, numFineSamples] concentrated where density is high.</returns>
+    Tensor<T> ImportanceSampling<T>(Tensor<T> tValuesCoarse, Tensor<T> weightsCoarse, int numFineSamples);
+
+    /// <summary>
+    /// Generates camera rays for each pixel in an image.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="cameraPosition">Camera position in world coordinates [3].</param>
+    /// <param name="cameraRotation">Camera rotation matrix [3, 3] (camera-to-world).</param>
+    /// <param name="imageWidth">Image width in pixels.</param>
+    /// <param name="imageHeight">Image height in pixels.</param>
+    /// <param name="focalLength">Camera focal length.</param>
+    /// <returns>Tuple of (ray origins [H*W, 3], ray directions [H*W, 3]).</returns>
+    (Tensor<T> origins, Tensor<T> directions) GenerateCameraRays<T>(
+        Vector<T> cameraPosition,
+        Matrix<T> cameraRotation,
+        int imageWidth,
+        int imageHeight,
+        T focalLength);
+
+    #endregion
+
+    #region Gaussian Splatting Operations
+
+    /// <summary>
+    /// Projects 3D Gaussians to 2D screen space for rasterization.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="means3D">Gaussian center positions [N, 3].</param>
+    /// <param name="covariances3D">3D covariance matrices [N, 3, 3] or [N, 6] (upper triangular).</param>
+    /// <param name="viewMatrix">World-to-camera transformation [4, 4].</param>
+    /// <param name="projMatrix">Camera projection matrix [4, 4].</param>
+    /// <param name="imageWidth">Target image width.</param>
+    /// <param name="imageHeight">Target image height.</param>
+    /// <param name="means2D">Output: Projected 2D means [N, 2].</param>
+    /// <param name="covariances2D">Output: Projected 2D covariances [N, 3] (a, b, c for ax² + 2bxy + cy²).</param>
+    /// <param name="depths">Output: Depth values for sorting [N].</param>
+    /// <param name="visible">Output: Visibility mask (in frustum and valid) [N].</param>
+    void ProjectGaussians3DTo2D<T>(
+        Tensor<T> means3D,
+        Tensor<T> covariances3D,
+        Matrix<T> viewMatrix,
+        Matrix<T> projMatrix,
+        int imageWidth,
+        int imageHeight,
+        out Tensor<T> means2D,
+        out Tensor<T> covariances2D,
+        out Tensor<T> depths,
+        out Tensor<bool> visible);
+
+    /// <summary>
+    /// Rasterizes 2D Gaussians onto an image using alpha blending.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="means2D">Projected 2D Gaussian centers [N, 2].</param>
+    /// <param name="covariances2D">2D covariance parameters [N, 3].</param>
+    /// <param name="colors">Gaussian colors [N, C] where C is typically 3 (RGB) or more for SH.</param>
+    /// <param name="opacities">Gaussian opacities [N].</param>
+    /// <param name="depths">Depth values for sorting [N].</param>
+    /// <param name="imageWidth">Output image width.</param>
+    /// <param name="imageHeight">Output image height.</param>
+    /// <param name="tileSize">Tile size for tiled rasterization (typically 16).</param>
+    /// <returns>Rendered image [H, W, C].</returns>
+    Tensor<T> RasterizeGaussians<T>(
+        Tensor<T> means2D,
+        Tensor<T> covariances2D,
+        Tensor<T> colors,
+        Tensor<T> opacities,
+        Tensor<T> depths,
+        int imageWidth,
+        int imageHeight,
+        int tileSize = 16);
+
+    /// <summary>
+    /// Computes the backward pass for Gaussian rasterization.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="means2D">Projected 2D Gaussian centers [N, 2].</param>
+    /// <param name="covariances2D">2D covariance parameters [N, 3].</param>
+    /// <param name="colors">Gaussian colors [N, C].</param>
+    /// <param name="opacities">Gaussian opacities [N].</param>
+    /// <param name="depths">Depth values [N].</param>
+    /// <param name="imageWidth">Image width.</param>
+    /// <param name="imageHeight">Image height.</param>
+    /// <param name="outputGradient">Gradient of loss with respect to rendered image [H, W, C].</param>
+    /// <param name="tileSize">Tile size used in forward pass.</param>
+    /// <param name="means2DGrad">Output: Gradient with respect to 2D means.</param>
+    /// <param name="covariances2DGrad">Output: Gradient with respect to 2D covariances.</param>
+    /// <param name="colorsGrad">Output: Gradient with respect to colors.</param>
+    /// <param name="opacitiesGrad">Output: Gradient with respect to opacities.</param>
+    void RasterizeGaussiansBackward<T>(
+        Tensor<T> means2D,
+        Tensor<T> covariances2D,
+        Tensor<T> colors,
+        Tensor<T> opacities,
+        Tensor<T> depths,
+        int imageWidth,
+        int imageHeight,
+        Tensor<T> outputGradient,
+        int tileSize,
+        out Tensor<T> means2DGrad,
+        out Tensor<T> covariances2DGrad,
+        out Tensor<T> colorsGrad,
+        out Tensor<T> opacitiesGrad);
+
+    /// <summary>
+    /// Evaluates spherical harmonics for view-dependent color in Gaussian Splatting.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="shCoefficients">Spherical harmonics coefficients [N, (degree+1)², C] where C=3 for RGB.</param>
+    /// <param name="viewDirections">Normalized view directions [N, 3] or [1, 3] for broadcast.</param>
+    /// <param name="degree">SH degree (0-3, where 0=constant, 3=full view dependence).</param>
+    /// <returns>Evaluated colors [N, C].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Spherical harmonics allow colors to change based on viewing angle,
+    /// enabling realistic specular highlights and view-dependent effects.
+    /// </para>
+    /// <para>
+    /// Degree 0: Constant color (1 coefficient per channel)
+    /// Degree 1: Linear variation (4 coefficients per channel)
+    /// Degree 2: Quadratic variation (9 coefficients per channel)
+    /// Degree 3: Cubic variation (16 coefficients per channel)
+    /// </para>
+    /// </remarks>
+    Tensor<T> EvaluateSphericalHarmonics<T>(Tensor<T> shCoefficients, Tensor<T> viewDirections, int degree);
+
+    /// <summary>
+    /// Computes the backward pass for spherical harmonics evaluation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="shCoefficients">SH coefficients from forward pass.</param>
+    /// <param name="viewDirections">View directions from forward pass.</param>
+    /// <param name="degree">SH degree.</param>
+    /// <param name="outputGradient">Gradient with respect to evaluated colors.</param>
+    /// <returns>Gradient with respect to SH coefficients.</returns>
+    Tensor<T> EvaluateSphericalHarmonicsBackward<T>(
+        Tensor<T> shCoefficients,
+        Tensor<T> viewDirections,
+        int degree,
+        Tensor<T> outputGradient);
+
+    /// <summary>
+    /// Computes 3D covariance matrices from rotation quaternions and scale vectors.
+    /// Covariance = R * S * S^T * R^T where R is rotation matrix from quaternion, S is diagonal scale.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="rotations">Rotation quaternions [N, 4] (w, x, y, z).</param>
+    /// <param name="scales">Scale vectors [N, 3].</param>
+    /// <returns>Covariance matrices [N, 3, 3] or [N, 6] (upper triangular).</returns>
+    Tensor<T> ComputeGaussianCovariance<T>(Tensor<T> rotations, Tensor<T> scales);
+
+    /// <summary>
+    /// Computes the backward pass for Gaussian covariance computation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="rotations">Rotation quaternions from forward pass.</param>
+    /// <param name="scales">Scale vectors from forward pass.</param>
+    /// <param name="covarianceGradient">Gradient with respect to covariances.</param>
+    /// <param name="rotationsGrad">Output: Gradient with respect to rotations.</param>
+    /// <param name="scalesGrad">Output: Gradient with respect to scales.</param>
+    void ComputeGaussianCovarianceBackward<T>(
+        Tensor<T> rotations,
+        Tensor<T> scales,
+        Tensor<T> covarianceGradient,
+        out Tensor<T> rotationsGrad,
+        out Tensor<T> scalesGrad);
+
+    #endregion
+
+    #region Instant-NGP Operations
+
+    /// <summary>
+    /// Performs multiresolution hash encoding for Instant-NGP.
+    /// Encodes 3D positions using a hierarchy of hash tables with trilinear interpolation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="positions">Input positions [N, 3] normalized to [0, 1].</param>
+    /// <param name="hashTables">List of hash tables, one per resolution level.</param>
+    /// <param name="resolutions">Resolution at each level.</param>
+    /// <param name="featuresPerLevel">Number of features stored per hash entry.</param>
+    /// <returns>Encoded features [N, numLevels * featuresPerLevel].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Hash encoding replaces expensive positional encoding with fast
+    /// table lookups, enabling 100x faster training and 1000x faster rendering than NeRF.
+    /// </para>
+    /// <para>
+    /// The key insight is that hash collisions are okay because:
+    /// 1. Multiple positions mapping to the same entry often have similar features
+    /// 2. The neural network learns to handle collisions during training
+    /// 3. The speed benefit far outweighs the minor quality impact
+    /// </para>
+    /// <para>
+    /// Reference: "Instant Neural Graphics Primitives with a Multiresolution Hash Encoding"
+    /// by Müller et al., ACM Transactions on Graphics 2022
+    /// </para>
+    /// </remarks>
+    Tensor<T> MultiresolutionHashEncoding<T>(
+        Tensor<T> positions,
+        Tensor<T>[] hashTables,
+        int[] resolutions,
+        int featuresPerLevel);
+
+    /// <summary>
+    /// Computes the backward pass for multiresolution hash encoding.
+    /// Accumulates gradients to the appropriate hash table entries.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="positions">Input positions from forward pass.</param>
+    /// <param name="hashTables">Hash tables from forward pass.</param>
+    /// <param name="resolutions">Resolutions from forward pass.</param>
+    /// <param name="featuresPerLevel">Features per level from forward pass.</param>
+    /// <param name="outputGradient">Gradient with respect to encoded features.</param>
+    /// <returns>Gradients for each hash table.</returns>
+    Tensor<T>[] MultiresolutionHashEncodingBackward<T>(
+        Tensor<T> positions,
+        Tensor<T>[] hashTables,
+        int[] resolutions,
+        int featuresPerLevel,
+        Tensor<T> outputGradient);
+
+    /// <summary>
+    /// Updates occupancy grid for efficient ray sampling in Instant-NGP.
+    /// Marks which voxels contain geometry based on density threshold.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="occupancyGrid">Current occupancy grid [gridSize, gridSize, gridSize].</param>
+    /// <param name="densities">Sampled density values.</param>
+    /// <param name="positions">Positions where densities were sampled.</param>
+    /// <param name="gridSize">Size of the occupancy grid.</param>
+    /// <param name="threshold">Density threshold for occupancy.</param>
+    /// <param name="decayFactor">EMA decay for updating occupancy values.</param>
+    /// <returns>Updated occupancy grid.</returns>
+    Tensor<T> UpdateOccupancyGrid<T>(
+        Tensor<T> occupancyGrid,
+        Tensor<T> densities,
+        Tensor<T> positions,
+        int gridSize,
+        T threshold,
+        T decayFactor);
+
+    /// <summary>
+    /// Samples rays while skipping empty space using occupancy grid.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="rayOrigins">Ray origins [numRays, 3].</param>
+    /// <param name="rayDirections">Ray directions [numRays, 3].</param>
+    /// <param name="occupancyBitfield">Packed occupancy bits for fast lookup.</param>
+    /// <param name="gridSize">Size of the occupancy grid.</param>
+    /// <param name="sceneBoundsMin">Minimum scene bounds [3].</param>
+    /// <param name="sceneBoundsMax">Maximum scene bounds [3].</param>
+    /// <param name="nearBound">Near clipping distance.</param>
+    /// <param name="farBound">Far clipping distance.</param>
+    /// <param name="maxSamples">Maximum samples per ray.</param>
+    /// <returns>Tuple of (sample positions, sample directions, valid mask, t values).</returns>
+    (Tensor<T> positions, Tensor<T> directions, Tensor<bool> validMask, Tensor<T> tValues) SampleRaysWithOccupancy<T>(
+        Tensor<T> rayOrigins,
+        Tensor<T> rayDirections,
+        uint[] occupancyBitfield,
+        int gridSize,
+        Vector<T> sceneBoundsMin,
+        Vector<T> sceneBoundsMax,
+        T nearBound,
+        T farBound,
+        int maxSamples);
+
+    #endregion
 }

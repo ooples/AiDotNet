@@ -383,77 +383,29 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         return (rgb, density);
     }
 
+    /// <summary>
+    /// Computes positional encoding for Neural Radiance Fields using vectorized Engine operations.
+    /// </summary>
+    /// <param name="input">Input tensor of shape [N, D] where N is number of points and D is input dimension.</param>
+    /// <param name="numLevels">Number of frequency levels for encoding.</param>
+    /// <returns>Encoded tensor of shape [N, D * 2 * numLevels].</returns>
     private Tensor<T> PositionalEncoding(Tensor<T> input, int numLevels)        
     {
-        int numPoints = input.Shape[0];
-        int inputDim = input.Shape[1];
-        int outputDim = inputDim * 2 * numLevels; // Each dimension gets 2*L encoded values
-
-        var encoded = new T[numPoints * outputDim];
-        var numOps = NumOps;
-
-        for (int n = 0; n < numPoints; n++)
-        {
-            for (int d = 0; d < inputDim; d++)
-            {
-                var value = numOps.ToDouble(input.Data[n * inputDim + d]);
-
-                for (int l = 0; l < numLevels; l++)
-                {
-                    double freq = Math.Pow(2, l) * Math.PI;
-                    int outIdx = n * outputDim + d * 2 * numLevels + l * 2;
-
-                    // sin(2^l * π * x)
-                    encoded[outIdx] = numOps.FromDouble(Math.Sin(freq * value));
-
-                    // cos(2^l * π * x)
-                    encoded[outIdx + 1] = numOps.FromDouble(Math.Cos(freq * value));
-                }
-            }
-        }
-
-        return new Tensor<T>(encoded, [numPoints, outputDim]);
+        // Use vectorized Engine implementation for CPU/GPU acceleration
+        return Engine.PositionalEncoding(input, numLevels);
     }
 
+    /// <summary>
+    /// Computes the backward pass for positional encoding using vectorized Engine operations.
+    /// </summary>
+    /// <param name="input">Original input tensor of shape [N, D].</param>
+    /// <param name="numLevels">Number of frequency levels used in encoding.</param>
+    /// <param name="encodedGradient">Gradient from downstream of shape [N, D * 2 * numLevels].</param>
+    /// <returns>Gradient with respect to input of shape [N, D].</returns>
     private Tensor<T> PositionalEncodingBackward(Tensor<T> input, int numLevels, Tensor<T> encodedGradient)
     {
-        int numPoints = input.Shape[0];
-        int inputDim = input.Shape[1];
-        int outputDim = inputDim * 2 * numLevels;
-
-        if (encodedGradient.Shape.Length != 2 || encodedGradient.Shape[1] != outputDim)
-        {
-            throw new ArgumentException("Encoded gradient must have shape [N, 2 * D * L].", nameof(encodedGradient));
-        }
-
-        var gradInput = new double[numPoints * inputDim];
-        var numOps = NumOps;
-
-        for (int n = 0; n < numPoints; n++)
-        {
-            for (int d = 0; d < inputDim; d++)
-            {
-                double x = numOps.ToDouble(input.Data[n * inputDim + d]);
-                for (int l = 0; l < numLevels; l++)
-                {
-                    double freq = Math.Pow(2, l) * Math.PI;
-                    int outIdx = n * outputDim + d * 2 * numLevels + l * 2;
-                    double gradSin = numOps.ToDouble(encodedGradient.Data[outIdx]);
-                    double gradCos = numOps.ToDouble(encodedGradient.Data[outIdx + 1]);
-                    double dSin = Math.Cos(freq * x) * freq;
-                    double dCos = -Math.Sin(freq * x) * freq;
-                    gradInput[n * inputDim + d] += gradSin * dSin + gradCos * dCos;
-                }
-            }
-        }
-
-        var grad = new T[gradInput.Length];
-        for (int i = 0; i < gradInput.Length; i++)
-        {
-            grad[i] = numOps.FromDouble(gradInput[i]);
-        }
-
-        return new Tensor<T>(grad, [numPoints, inputDim]);
+        // Use vectorized Engine implementation for CPU/GPU acceleration
+        return Engine.PositionalEncodingBackward(input, encodedGradient, numLevels);
     }
 
     private Tensor<T> NormalizeDirections(Tensor<T> directions)

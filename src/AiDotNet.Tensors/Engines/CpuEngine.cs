@@ -9496,4 +9496,225 @@ public class CpuEngine : IEngine
     }
 
     #endregion
+
+    #region Neural Radiance Fields Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> PositionalEncoding<T>(Tensor<T> positions, int numFrequencies)
+    {
+        return NeRFOperations.PositionalEncoding(positions, numFrequencies);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> PositionalEncodingBackward<T>(Tensor<T> positions, Tensor<T> encodedGradient, int numFrequencies)
+    {
+        return NeRFOperations.PositionalEncodingBackward(positions, encodedGradient, numFrequencies);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> VolumeRendering<T>(Tensor<T> rgbSamples, Tensor<T> densitySamples, Tensor<T> tValues)
+    {
+        return NeRFOperations.VolumeRendering(rgbSamples, densitySamples, tValues);
+    }
+
+    /// <inheritdoc/>
+    public void VolumeRenderingBackward<T>(
+        Tensor<T> rgbSamples,
+        Tensor<T> densitySamples,
+        Tensor<T> tValues,
+        Tensor<T> outputGradient,
+        out Tensor<T> rgbGradient,
+        out Tensor<T> densityGradient)
+    {
+        NeRFOperations.VolumeRenderingBackward(
+            rgbSamples, densitySamples, tValues, outputGradient,
+            out rgbGradient, out densityGradient);
+    }
+
+    /// <inheritdoc/>
+    public (Tensor<T> positions, Tensor<T> directions, Tensor<T> tValues) SampleRayPoints<T>(
+        Tensor<T> rayOrigins,
+        Tensor<T> rayDirections,
+        T nearBound,
+        T farBound,
+        int numSamples,
+        bool stratified = true)
+    {
+        return NeRFOperations.SampleRayPoints(
+            rayOrigins, rayDirections, nearBound, farBound, numSamples, stratified);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ImportanceSampling<T>(Tensor<T> tValuesCoarse, Tensor<T> weightsCoarse, int numFineSamples)
+    {
+        return NeRFOperations.ImportanceSampling(tValuesCoarse, weightsCoarse, numFineSamples);
+    }
+
+    /// <inheritdoc/>
+    public (Tensor<T> origins, Tensor<T> directions) GenerateCameraRays<T>(
+        Vector<T> cameraPosition,
+        Matrix<T> cameraRotation,
+        int imageWidth,
+        int imageHeight,
+        T focalLength)
+    {
+        return NeRFOperations.GenerateCameraRays(
+            cameraPosition, cameraRotation, imageWidth, imageHeight, focalLength);
+    }
+
+    #endregion
+
+    #region Gaussian Splatting Operations
+
+    /// <inheritdoc/>
+    public void ProjectGaussians3DTo2D<T>(
+        Tensor<T> means3D,
+        Tensor<T> covariances3D,
+        Matrix<T> viewMatrix,
+        Matrix<T> projMatrix,
+        int imageWidth,
+        int imageHeight,
+        out Tensor<T> means2D,
+        out Tensor<T> covariances2D,
+        out Tensor<T> depths,
+        out Tensor<bool> visible)
+    {
+        GaussianSplattingOperations.ProjectGaussians3DTo2D(
+            means3D, covariances3D, viewMatrix, projMatrix,
+            imageWidth, imageHeight,
+            out means2D, out covariances2D, out depths, out visible);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> RasterizeGaussians<T>(
+        Tensor<T> means2D,
+        Tensor<T> covariances2D,
+        Tensor<T> colors,
+        Tensor<T> opacities,
+        Tensor<T> depths,
+        int imageWidth,
+        int imageHeight,
+        int tileSize = 16)
+    {
+        return GaussianSplattingOperations.RasterizeGaussians(
+            means2D, covariances2D, colors, opacities, depths,
+            imageWidth, imageHeight, tileSize);
+    }
+
+    /// <inheritdoc/>
+    public void RasterizeGaussiansBackward<T>(
+        Tensor<T> means2D,
+        Tensor<T> covariances2D,
+        Tensor<T> colors,
+        Tensor<T> opacities,
+        Tensor<T> depths,
+        int imageWidth,
+        int imageHeight,
+        Tensor<T> outputGradient,
+        int tileSize,
+        out Tensor<T> means2DGrad,
+        out Tensor<T> covariances2DGrad,
+        out Tensor<T> colorsGrad,
+        out Tensor<T> opacitiesGrad)
+    {
+        GaussianSplattingOperations.RasterizeGaussiansBackward(
+            means2D, covariances2D, colors, opacities, depths,
+            imageWidth, imageHeight, outputGradient, tileSize,
+            out means2DGrad, out covariances2DGrad, out colorsGrad, out opacitiesGrad);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> EvaluateSphericalHarmonics<T>(Tensor<T> shCoefficients, Tensor<T> viewDirections, int degree)
+    {
+        return GaussianSplattingOperations.EvaluateSphericalHarmonics(shCoefficients, viewDirections, degree);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> EvaluateSphericalHarmonicsBackward<T>(
+        Tensor<T> shCoefficients,
+        Tensor<T> viewDirections,
+        int degree,
+        Tensor<T> outputGradient)
+    {
+        return GaussianSplattingOperations.EvaluateSphericalHarmonicsBackward(
+            shCoefficients, viewDirections, degree, outputGradient);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ComputeGaussianCovariance<T>(Tensor<T> rotations, Tensor<T> scales)
+    {
+        return GaussianSplattingOperations.ComputeGaussianCovariance(rotations, scales);
+    }
+
+    /// <inheritdoc/>
+    public void ComputeGaussianCovarianceBackward<T>(
+        Tensor<T> rotations,
+        Tensor<T> scales,
+        Tensor<T> covarianceGradient,
+        out Tensor<T> rotationsGrad,
+        out Tensor<T> scalesGrad)
+    {
+        GaussianSplattingOperations.ComputeGaussianCovarianceBackward(
+            rotations, scales, covarianceGradient,
+            out rotationsGrad, out scalesGrad);
+    }
+
+    #endregion
+
+    #region Instant-NGP Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> MultiresolutionHashEncoding<T>(
+        Tensor<T> positions,
+        Tensor<T>[] hashTables,
+        int[] resolutions,
+        int featuresPerLevel)
+    {
+        return InstantNGPOperations.MultiresolutionHashEncoding(
+            positions, hashTables, resolutions, featuresPerLevel);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T>[] MultiresolutionHashEncodingBackward<T>(
+        Tensor<T> positions,
+        Tensor<T>[] hashTables,
+        int[] resolutions,
+        int featuresPerLevel,
+        Tensor<T> outputGradient)
+    {
+        return InstantNGPOperations.MultiresolutionHashEncodingBackward(
+            positions, hashTables, resolutions, featuresPerLevel, outputGradient);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> UpdateOccupancyGrid<T>(
+        Tensor<T> occupancyGrid,
+        Tensor<T> densities,
+        Tensor<T> positions,
+        int gridSize,
+        T threshold,
+        T decayFactor)
+    {
+        return InstantNGPOperations.UpdateOccupancyGrid(
+            occupancyGrid, densities, positions, gridSize, threshold, decayFactor);
+    }
+
+    /// <inheritdoc/>
+    public (Tensor<T> positions, Tensor<T> directions, Tensor<bool> validMask, Tensor<T> tValues) SampleRaysWithOccupancy<T>(
+        Tensor<T> rayOrigins,
+        Tensor<T> rayDirections,
+        uint[] occupancyBitfield,
+        int gridSize,
+        Vector<T> sceneBoundsMin,
+        Vector<T> sceneBoundsMax,
+        T nearBound,
+        T farBound,
+        int maxSamples)
+    {
+        return InstantNGPOperations.SampleRaysWithOccupancy(
+            rayOrigins, rayDirections, occupancyBitfield, gridSize,
+            sceneBoundsMin, sceneBoundsMax, nearBound, farBound, maxSamples);
+    }
+
+    #endregion
 }
