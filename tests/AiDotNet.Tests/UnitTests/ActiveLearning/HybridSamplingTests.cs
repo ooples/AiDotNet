@@ -440,8 +440,8 @@ public class HybridSamplingTests
 
         // Assert
         // Should include Strategy0_ and Strategy1_ prefixed keys
-        Assert.True(stats.Keys.Any(k => k.StartsWith("Strategy0_")));
-        Assert.True(stats.Keys.Any(k => k.StartsWith("Strategy1_")));
+        Assert.Contains(stats.Keys, k => k.StartsWith("Strategy0_"));
+        Assert.Contains(stats.Keys, k => k.StartsWith("Strategy1_"));
     }
 
     #endregion

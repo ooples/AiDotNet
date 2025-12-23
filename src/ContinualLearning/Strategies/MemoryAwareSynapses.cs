@@ -1,8 +1,8 @@
-using AiDotNet.Interfaces;
+using System.Text.Json;
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.Helpers;
-using System.Text.Json;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.ContinualLearning.Strategies;
 

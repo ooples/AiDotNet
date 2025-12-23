@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using AiDotNet.ActiveLearning.Config;
-using AiDotNet.Interfaces;
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.ActiveLearning.Results;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.ActiveLearning.Core;
 

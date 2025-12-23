@@ -1,5 +1,6 @@
 global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
+using System.Runtime.CompilerServices;
 using AiDotNet.AdversarialRobustness.Safety;
 using AiDotNet.Agents;
 using AiDotNet.Benchmarking;
@@ -36,7 +37,6 @@ using AiDotNet.Tokenization.Configuration;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
 using AiDotNet.TrainingMonitoring;
-using System.Runtime.CompilerServices;
 
 namespace AiDotNet.Models.Results;
 

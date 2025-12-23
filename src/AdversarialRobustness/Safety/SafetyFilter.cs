@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -6,7 +7,6 @@ using AiDotNet.Serialization;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
-using System.Text;
 
 namespace AiDotNet.AdversarialRobustness.Safety;
 
