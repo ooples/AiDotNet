@@ -123,17 +123,16 @@ public class UNet3D<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(architecture));
         if (voxelResolution <= 0)
             throw new ArgumentException("Voxel resolution must be positive.", nameof(voxelResolution));
+        if (numEncoderBlocks <= 0)
+            throw new ArgumentException("Number of encoder blocks must be positive.", nameof(numEncoderBlocks));
+        if (baseFilters <= 0)
+            throw new ArgumentException("Base filters must be positive.", nameof(baseFilters));
 
         // Minimum resolution depends on numEncoderBlocks
         int minResolution = 1 << numEncoderBlocks; // 2^numEncoderBlocks
         if (voxelResolution < minResolution)
             throw new ArgumentOutOfRangeException(nameof(voxelResolution),
                 $"VoxelResolution must be at least {minResolution} for {numEncoderBlocks} encoder blocks.");
-
-        if (numEncoderBlocks <= 0)
-            throw new ArgumentException("Number of encoder blocks must be positive.", nameof(numEncoderBlocks));
-        if (baseFilters <= 0)
-            throw new ArgumentException("Base filters must be positive.", nameof(baseFilters));
 
         VoxelResolution = voxelResolution;
         NumEncoderBlocks = numEncoderBlocks;

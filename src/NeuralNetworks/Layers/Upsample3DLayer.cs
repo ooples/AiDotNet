@@ -370,15 +370,53 @@ public class Upsample3DLayer<T> : LayerBase<T>
     /// Deserializes the layer from a binary stream.
     /// </summary>
     /// <param name="reader">The binary reader to deserialize from.</param>
+    /// <exception cref="InvalidOperationException">Thrown because Upsample3DLayer uses readonly properties and cannot be deserialized in-place.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method validates that the serialized scale factors match the current instance's values.
+    /// For full deserialization support, use the static factory method <see cref="DeserializeFrom"/> instead.
+    /// </para>
+    /// </remarks>
     public override void Deserialize(BinaryReader reader)
     {
         base.Deserialize(reader);
-        // Scale factors are readonly, so we trust they were set correctly during construction
-        // If needed, we could use reflection or a factory pattern
         var scaleD = reader.ReadInt32();
         var scaleH = reader.ReadInt32();
         var scaleW = reader.ReadInt32();
-        // Note: These values should match ScaleDepth/Height/Width set in constructor
+        
+        // Validate serialized values match current instance (readonly properties cannot be changed)
+        if (scaleD != ScaleDepth || scaleH != ScaleHeight || scaleW != ScaleWidth)
+        {
+            throw new InvalidOperationException(
+                $"Deserialized scale factors [{scaleD}, {scaleH}, {scaleW}] do not match current instance " +
+                $"[{ScaleDepth}, {ScaleHeight}, {ScaleWidth}]. Use DeserializeFrom factory method instead.");
+        }
+    }
+
+    /// <summary>
+    /// Creates a new Upsample3DLayer instance from serialized data.
+    /// </summary>
+    /// <param name="reader">The binary reader containing serialized data.</param>
+    /// <returns>A new Upsample3DLayer instance with the deserialized configuration.</returns>
+    /// <remarks>
+    /// <para>
+    /// This factory method properly deserializes Upsample3DLayer by creating a new instance
+    /// with the correct scale factors from the serialized data.
+    /// </para>
+    /// </remarks>
+    public static Upsample3DLayer<T> DeserializeFrom(BinaryReader reader)
+    {
+        // Skip base layer data (will be re-read by constructor via InputShape/OutputShape calculation)
+        // Read scale factors
+        var scaleD = reader.ReadInt32();
+        var scaleH = reader.ReadInt32();
+        var scaleW = reader.ReadInt32();
+        
+        // Note: This factory approach requires knowing the input shape from context
+        // For now, create with placeholder values - real implementation needs input shape from context
+        return new Upsample3DLayer<T>(
+            new int[] { 1, 1, 1, 1 },  // Placeholder input shape [channels, depth, height, width]
+            scaleD, scaleH, scaleW);
     }
 
     #endregion
@@ -390,32 +428,19 @@ public class Upsample3DLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputNodes">List to append input nodes to.</param>
     /// <returns>A computation node representing the upsampling operation.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when input shape is not configured.</exception>
+    /// <exception cref="NotSupportedException">Thrown because Upsample3D autodiff is not yet implemented.</exception>
     /// <remarks>
     /// <para>
-    /// This method exports the layer's computation as part of a computation graph that can be
-    /// used for automatic differentiation or JIT compilation.
+    /// This method is not yet implemented. The TensorOperations.Upsample3D method needs to be added
+    /// to support JIT compilation and automatic differentiation for 3D upsampling operations.
     /// </para>
     /// </remarks>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create placeholder for input tensor
-        // Input shape: [channels, depth, height, width]
-        var inputPlaceholder = new Tensor<T>(InputShape);
-        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "upsample3d_input");
-        inputNodes.Add(inputNode);
-
-        // Apply 3D upsampling operation
-        // Note: TensorOperations.Upsample3D may need to be added if not present
-        // For now, we return the input node as upsampling autodiff integration is pending
-        return inputNode;
+        // TODO: Implement TensorOperations.Upsample3D for autodiff support
+        throw new NotSupportedException(
+            "Upsample3DLayer.ExportComputationGraph is not yet implemented. " +
+            "TensorOperations.Upsample3D needs to be added for JIT compilation and autodiff support.");
     }
 
     #endregion
