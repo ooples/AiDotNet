@@ -84,6 +84,11 @@ public class ChamferDistance<T> where T : struct
         int numTarget = target.Shape[0];
         int dim = source.Shape[1];
 
+        if (numSource == 0)
+        {
+            return _numOps.Zero;
+        }
+
         T totalDist = _numOps.Zero;
 
         for (int i = 0; i < numSource; i++)
@@ -136,9 +141,22 @@ public class ChamferDistance<T> where T : struct
     /// <returns>Array of Chamfer Distances, one per batch item.</returns>
     public T[] ComputeBatch(Tensor<T> batchA, Tensor<T> batchB)
     {
+        if (batchA == null) throw new ArgumentNullException(nameof(batchA));
+        if (batchB == null) throw new ArgumentNullException(nameof(batchB));
+
         if (batchA.Rank != 3 || batchB.Rank != 3)
         {
             throw new ArgumentException("Batch computation requires 3D tensors [B, N, D]");
+        }
+
+        if (batchA.Shape[0] != batchB.Shape[0])
+        {
+            throw new ArgumentException($"Batch sizes must match: {batchA.Shape[0]} vs {batchB.Shape[0]}");
+        }
+
+        if (batchA.Shape[2] != batchB.Shape[2])
+        {
+            throw new ArgumentException($"Point dimensions must match: {batchA.Shape[2]} vs {batchB.Shape[2]}");
         }
 
         int batchSize = batchA.Shape[0];
@@ -235,6 +253,16 @@ public class EarthMoversDistance<T> where T : struct
     {
         if (pointsA == null) throw new ArgumentNullException(nameof(pointsA));
         if (pointsB == null) throw new ArgumentNullException(nameof(pointsB));
+
+        if (pointsA.Rank != 2 || pointsB.Rank != 2)
+        {
+            throw new ArgumentException("Point clouds must be 2D tensors [N, D]");
+        }
+
+        if (pointsA.Shape[1] != pointsB.Shape[1])
+        {
+            throw new ArgumentException($"Point dimensions must match: {pointsA.Shape[1]} vs {pointsB.Shape[1]}");
+        }
 
         int n = pointsA.Shape[0];
         int m = pointsB.Shape[0];
@@ -394,6 +422,20 @@ public class FScore<T> where T : struct
         int numGT = groundTruth.Shape[0];
         int dim = predicted.Shape[1];
 
+        // Handle empty point clouds
+        if (numPred == 0 && numGT == 0)
+        {
+            return (_numOps.FromDouble(1.0), _numOps.FromDouble(1.0));
+        }
+        if (numPred == 0)
+        {
+            return (_numOps.Zero, _numOps.Zero);
+        }
+        if (numGT == 0)
+        {
+            return (_numOps.Zero, _numOps.Zero);
+        }
+
         double thresholdSquared = _threshold * _threshold;
 
         // Precision: fraction of predicted points close to any GT point
@@ -485,6 +527,11 @@ public class IoU3D<T> where T : struct
     {
         if (voxelsA == null) throw new ArgumentNullException(nameof(voxelsA));
         if (voxelsB == null) throw new ArgumentNullException(nameof(voxelsB));
+
+        if (voxelsA.Length != voxelsB.Length)
+        {
+            throw new ArgumentException($"Voxel grids must have the same size: {voxelsA.Length} vs {voxelsB.Length}");
+        }
 
         long intersection = 0;
         long unionCount = 0;
