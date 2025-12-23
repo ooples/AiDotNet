@@ -1,9 +1,9 @@
+using System.Text;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
-using System.Text;
 
 namespace AiDotNet.FineTuning;
 

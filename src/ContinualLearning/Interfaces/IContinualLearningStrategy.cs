@@ -1,5 +1,5 @@
-using AiDotNet.Interfaces;
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.ContinualLearning.Interfaces;
 
