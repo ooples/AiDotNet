@@ -193,6 +193,19 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public int HeadCount => _headCount;
 
     /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <remarks>
+    /// Multi-head attention parameters are stored in multiple internal tensors (Q/K/V/O projections + output bias).
+    /// </remarks>
+    public override int ParameterCount =>
+        _queryWeights.Length +
+        _keyWeights.Length +
+        _valueWeights.Length +
+        _outputWeights.Length +
+        _outputBias.Length;
+
+    /// <summary>
     /// Gets the query projection weights tensor for JIT compilation.
     /// </summary>
     public Tensor<T> GetQueryWeights() => _queryWeights;
@@ -303,6 +316,19 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Initialize bias tensor to zeros
         _outputBias.Fill(NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Returns layer-specific metadata required for cloning/serialization.
+    /// </summary>
+    /// <remarks>
+    /// Multi-head attention requires the configured head count to reconstruct the layer correctly from shapes alone.
+    /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["HeadCount"] = _headCount.ToString();
+        return metadata;
     }
 
     /// <summary>
@@ -474,14 +500,6 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             { "NumberOfHeads", _headCount.ToString() },
             { "AttentionScoresCached", (_lastAttentionScores != null).ToString() },
             { "HeadOutputsCached", (_lastHeadOutputs != null).ToString() }
-        };
-    }
-
-    internal override Dictionary<string, string> GetMetadata()
-    {
-        return new Dictionary<string, string>
-        {
-            ["HeadCount"] = _headCount.ToString()
         };
     }
 

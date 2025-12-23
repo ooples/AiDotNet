@@ -136,7 +136,6 @@ public class InferenceController : ControllerBase
         catch (ArgumentException ex)
         {
             _logger.LogError(ex, "Invalid argument during prediction for model '{ModelName}'", modelName);
-
             if (ex.Message.Contains("maximum allowed when batching is disabled", StringComparison.OrdinalIgnoreCase))
             {
                 return StatusCode(StatusCodes.Status413PayloadTooLarge, new
@@ -159,118 +158,24 @@ public class InferenceController : ControllerBase
     /// </summary>
     private async Task<double[][]> PredictWithType<T>(string modelName, double[][] features)
     {
-        string effectiveModelName = ResolveModelNameWithAdapter(modelName);
-        var model = _modelRepository.GetModel<T>(effectiveModelName) ?? _modelRepository.GetModel<T>(modelName);
-        if (model == null)
-        {
-            string attemptedNames = effectiveModelName != modelName
-                ? $"'{effectiveModelName}' (with adapter) or '{modelName}'"
-                : $"'{modelName}'";
-            throw new InvalidOperationException($"Model {attemptedNames} was not found.");
-        }
-
-        // Respect per-model inference configuration: bypass batching when disabled.
-        if (model is AiDotNet.Serving.Models.IServableModelInferenceOptions opts && !opts.EnableBatching)
-        {
-            const int MaxUnbatchedItems = 1000;
-            if (features.Length > MaxUnbatchedItems)
-            {
-                _logger.LogWarning(
-                    "Rejected large unbatched request ({Count} items) for model '{ModelName}' (batching disabled)",
-                    features.Length,
-                    modelName);
-
-                throw new ArgumentException(
-                    $"Request batch size ({features.Length}) exceeds the maximum allowed when batching is disabled ({MaxUnbatchedItems}). " +
-                    $"Enable batching for model '{modelName}' or split the request into smaller batches.");
-            }
-
-            _logger.LogDebug(
-                "Batching disabled for model '{ModelName}', processing {Count} items individually",
-                modelName,
-                features.Length);
-
-            var predictions = new double[features.Length][];
-            for (int i = 0; i < features.Length; i++)
-            {
-                var inputVector = ConvertToVector<T>(features[i]);
-                var resultVector = model.Predict(inputVector);
-                predictions[i] = ConvertFromVector(resultVector);
-            }
-
-            return predictions;
-        }
-
         // Queue all requests first to enable batching
         var tasks = features.Select(featureArray =>
         {
             var inputVector = ConvertToVector<T>(featureArray);
-            return _requestBatcher.QueueRequest(effectiveModelName, inputVector);
+            return _requestBatcher.QueueRequest(modelName, inputVector);
         }).ToArray();
 
         // Await all requests together
         var resultVectors = await Task.WhenAll(tasks);
 
         // Convert results back to double arrays
-        var batchedPredictions = new double[resultVectors.Length][];
+        var predictions = new double[resultVectors.Length][];
         for (int i = 0; i < resultVectors.Length; i++)
         {
-            batchedPredictions[i] = ConvertFromVector(resultVectors[i]);
+            predictions[i] = ConvertFromVector(resultVectors[i]);
         }
 
-        return batchedPredictions;
-    }
-
-    private string ResolveModelNameWithAdapter(string modelName)
-    {
-        // Multi-LoRA / adapter routing (serving-first): select a pre-loaded model variant via request header.
-        // This keeps adapter details out of the public model facade while enabling per-request selection.
-        if (Request?.Headers == null)
-        {
-            _logger.LogDebug("No request headers available; routing to base model '{ModelName}'.", modelName);
-            return modelName;
-        }
-
-        if (!Request.Headers.TryGetValue("X-AiDotNet-Lora", out var adapterValues) &&
-            !Request.Headers.TryGetValue("X-AiDotNet-Adapter", out adapterValues))
-        {
-            _logger.LogDebug("No adapter header present; routing to base model '{ModelName}'.", modelName);
-            return modelName;
-        }
-
-        var adapterId = adapterValues.ToString()?.Trim();
-        if (string.IsNullOrWhiteSpace(adapterId) || adapterId.Length > 64 || !IsSafeAdapterId(adapterId))
-        {
-            if (!string.IsNullOrWhiteSpace(adapterId))
-            {
-                string reason = adapterId.Length > 64 ? "TooLong" : (!IsSafeAdapterId(adapterId) ? "UnsafeCharacters" : "EmptyOrWhitespace");
-                var level = adapterId.Length > 64 || !IsSafeAdapterId(adapterId) ? LogLevel.Warning : LogLevel.Debug;
-                _logger.Log(level,
-                    "Ignoring invalid adapter ID '{AdapterId}' for model '{ModelName}' (reason: {Reason}).",
-                    adapterId,
-                    modelName,
-                    reason);
-            }
-            return modelName;
-        }
-
-        _logger.LogDebug("Routing to adapter model '{EffectiveModelName}'.", $"{modelName}__{adapterId}");
-        return $"{modelName}__{adapterId}";
-    }
-
-    private static bool IsSafeAdapterId(string adapterId)
-    {
-        for (int i = 0; i < adapterId.Length; i++)
-        {
-            char c = adapterId[i];
-            bool ok = (c >= 'a' && c <= 'z') ||
-                      (c >= 'A' && c <= 'Z') ||
-                      (c >= '0' && c <= '9') ||
-                      c == '-' || c == '_' || c == '.';
-            if (!ok) return false;
-        }
-
-        return true;
+        return predictions;
     }
 
     /// <summary>

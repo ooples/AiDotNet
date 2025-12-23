@@ -1,5 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -30,7 +32,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// The result is parameter-efficient fine-tuning that works across different layer architectures!
 /// </para>
 /// </remarks>
-public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
+public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayerSerializationExtras<T>
 {
     /// <summary>
     /// The base layer being adapted.
@@ -117,6 +119,29 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
     /// Gets whether this adapter supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    int ILayerSerializationExtras<T>.ExtraParameterCount => _freezeBaseLayer ? _baseLayer.GetParameters().Length : 0;
+
+    Vector<T> ILayerSerializationExtras<T>.GetExtraParameters()
+    {
+        return _freezeBaseLayer ? _baseLayer.GetParameters() : Vector<T>.Empty();
+    }
+
+    void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
+    {
+        if (!_freezeBaseLayer)
+        {
+            return;
+        }
+
+        var expected = _baseLayer.GetParameters().Length;
+        if (extraParameters.Length != expected)
+        {
+            throw new InvalidOperationException($"Expected {expected} extra parameters for frozen base layer, but got {extraParameters.Length}.");
+        }
+
+        _baseLayer.SetParameters(extraParameters);
+    }
 
     /// <summary>
     /// Initializes a new LoRA adapter base with the specified parameters.

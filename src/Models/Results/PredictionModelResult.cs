@@ -1,5 +1,6 @@
 global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
+using System.Linq;
 using AiDotNet.AdversarialRobustness.Safety;
 using AiDotNet.Agents;
 using AiDotNet.Benchmarking;
@@ -1095,6 +1096,15 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         Tokenizer = options.Tokenizer;
         TokenizationConfig = options.TokenizationConfig;
 
+        // Program Synthesis (optional)
+        ProgramSynthesisModel = options.ProgramSynthesisModel;
+        ProgramSynthesisServingClientOptions = options.ProgramSynthesisServingClientOptions;
+        ProgramSynthesisServingClient =
+            options.ProgramSynthesisServingClient ??
+            (options.ProgramSynthesisServingClientOptions is not null
+                ? new AiDotNet.ProgramSynthesis.Serving.ProgramSynthesisServingClient(options.ProgramSynthesisServingClientOptions)
+                : null);
+
         // RAG (Retrieval Augmented Generation)
         RagRetriever = options.RagRetriever;
         RagReranker = options.RagReranker;
@@ -1348,7 +1358,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
             if (optimizedNeuralModel != null)
             {
                 var optimizedOutput = optimizedNeuralModel.Predict(inputTensor);
-                if ((object)optimizedOutput is TOutput output)
+                if (optimizedOutput is TOutput output)
                 {
                     normalizedPredictions = output;
                 }
@@ -1692,7 +1702,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
                 if (optimized != null)
                 {
                     var optimizedOutput = optimized.Predict(inputTensor);
-                    if ((object)optimizedOutput is TOutput output)
+                    if (optimizedOutput is TOutput output)
                     {
                         return _result.NormalizationInfo.Normalizer.Denormalize(output, _result.NormalizationInfo.YParams);
                     }
@@ -1809,13 +1819,10 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
                                 modelForSequence = (NeuralNetworkBase<T>)model.Clone();
 
                                 int appliedCount = 0;
-                                foreach (var layer in modelForSequence.Layers)
+                                foreach (var multi in modelForSequence.Layers.OfType<AiDotNet.LoRA.Adapters.MultiLoRAAdapter<T>>())
                                 {
-                                    if (layer is AiDotNet.LoRA.Adapters.MultiLoRAAdapter<T> multi)
-                                    {
-                                        multi.SetCurrentTask(_multiLoRATask!);
-                                        appliedCount++;
-                                    }
+                                    multi.SetCurrentTask(_multiLoRATask!);
+                                    appliedCount++;
                                 }
 
                                 InferenceDiagnostics.RecordDecision(
@@ -4774,27 +4781,23 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
             throw new InvalidOperationException("Model is not initialized.");
         }
 
-        // Check if the model implements IJitCompilable
-        if (Model is IJitCompilable<T> jitModel)
+        if (Model is not IJitCompilable<T> jitModel)
         {
-            // Check if it actually supports JIT before delegating
-            if (!jitModel.SupportsJitCompilation)
-            {
-                throw new NotSupportedException(
-                    $"The underlying model type ({Model.GetType().Name}) does not support JIT compilation. " +
-                    "Check SupportsJitCompilation property before calling ExportComputationGraph.");
-            }
-
-            // Delegate to the wrapped model
-            return jitModel.ExportComputationGraph(inputNodes);
+            throw new NotSupportedException(
+                $"The underlying model type ({Model.GetType().Name}) does not implement IJitCompilable<T>. " +
+                "JIT compilation is only supported for models that use differentiable computation graphs, such as " +
+                "linear models, polynomial models, and neural networks. Tree-based models (decision trees, random forests, " +
+                "gradient boosting) cannot be JIT compiled due to their discrete branching logic.");
         }
 
-        // Model doesn't implement IJitCompilable at all
-        throw new NotSupportedException(
-            $"The underlying model type ({Model.GetType().Name}) does not implement IJitCompilable<T>. " +
-            "JIT compilation is only supported for models that use differentiable computation graphs, such as " +
-            "linear models, polynomial models, and neural networks. Tree-based models (decision trees, random forests, " +
-            "gradient boosting) cannot be JIT compiled due to their discrete branching logic.");
+        if (!jitModel.SupportsJitCompilation)
+        {
+            throw new NotSupportedException(
+                $"The underlying model type ({Model.GetType().Name}) does not support JIT compilation. " +
+                "Check SupportsJitCompilation property before calling ExportComputationGraph.");
+        }
+
+        return jitModel.ExportComputationGraph(inputNodes);
     }
 
     #endregion

@@ -659,9 +659,9 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         int vocabularySize = reader.ReadInt32();
         T dropoutRate = NumOps.FromDouble(reader.ReadDouble());
 
-        // Read and reconstruct loss function and optimizer
+        // Read and reconstruct loss function and optimizer (must match serialization order).
         LossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader)
-            ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(_transformerArchitecture.TaskType);
+            ?? LossFunction;
 
         _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader)
             ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);

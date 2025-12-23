@@ -12,10 +12,12 @@ using AiDotNet.Interpretability;
 using AiDotNet.Models.Results;
 using AiDotNet.PromptEngineering.Analysis;
 using AiDotNet.PromptEngineering.Compression;
+using AiDotNet.ProgramSynthesis.Serving;
 using AiDotNet.Reasoning;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using AiDotNet.Tokenization.Configuration;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.TrainingMonitoring;
 using AiDotNet.TrainingMonitoring.ExperimentTracking;
@@ -601,6 +603,46 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public TokenizationConfig? TokenizationConfig { get; set; }
+
+    // ============================================================================
+    // Program Synthesis Properties
+    // ============================================================================
+
+    /// <summary>
+    /// Gets or sets the Program Synthesis model used for code tasks (optional).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Program Synthesis is independent of the main prediction model. This allows a single <c>PredictionModelResult</c>
+    /// to expose code-task capabilities even when the primary model uses non-tensor data types (for example,
+    /// <c>Vector&lt;T&gt;</c> or <c>Matrix&lt;T&gt;</c>).
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the specialized model used for code-related tasks such as code generation or repair.
+    /// You typically configure this via <c>PredictionModelBuilder.ConfigureProgramSynthesis(...)</c>.
+    /// </para>
+    /// </remarks>
+    public IFullModel<T, Tensor<T>, Tensor<T>>? ProgramSynthesisModel { get; set; }
+
+    /// <summary>
+    /// Gets or sets the Program Synthesis Serving client (optional).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When provided, Program Synthesis inference (code tasks, sandboxed execution, evaluation) can be routed through
+    /// <c>AiDotNet.Serving</c> by default to isolate untrusted code and keep proprietary logic on the server side.
+    /// </para>
+    /// <para><b>For Beginners:</b> This lets your app call a secure server to run code tasks safely.
+    ///
+    /// Instead of running code on your machine (which can be unsafe), you can point AiDotNet to a Serving instance that
+    /// runs everything in a sandbox.
+    /// </para>
+    /// </remarks>
+    public IProgramSynthesisServingClient? ProgramSynthesisServingClient { get; set; }
+
+    /// <summary>
+    /// Gets or sets the options used to create a default <see cref="ProgramSynthesisServingClient"/> when no explicit client is provided.
+    /// </summary>
+    public ProgramSynthesisServingClientOptions? ProgramSynthesisServingClientOptions { get; set; }
 
     // ============================================================================
     // Diagnostics Properties

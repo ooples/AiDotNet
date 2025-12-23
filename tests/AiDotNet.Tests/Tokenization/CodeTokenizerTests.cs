@@ -17,7 +17,7 @@ namespace AiDotNet.Tests.Tokenization
             vocab.AddTokens(new[] { "get", "user", "name", "by", "id" });
 
             var baseTokenizer = new WordPieceTokenizer(vocab, SpecialTokens.Bert());
-            var codeTokenizer = new CodeTokenizer(baseTokenizer, CodeTokenizer.ProgrammingLanguage.CSharp, splitIdentifiers: true);
+            var codeTokenizer = new CodeTokenizer(baseTokenizer, ProgrammingLanguage.CSharp, splitIdentifiers: true);
 
             // Act
             var tokens = codeTokenizer.Tokenize("getUserNameById");
@@ -36,7 +36,7 @@ namespace AiDotNet.Tests.Tokenization
             vocab.AddTokens(new[] { "get", "user", "name" });
 
             var baseTokenizer = new WordPieceTokenizer(vocab, SpecialTokens.Bert());
-            var codeTokenizer = new CodeTokenizer(baseTokenizer, CodeTokenizer.ProgrammingLanguage.Python, splitIdentifiers: true);
+            var codeTokenizer = new CodeTokenizer(baseTokenizer, ProgrammingLanguage.Python, splitIdentifiers: true);
 
             // Act
             var tokens = codeTokenizer.Tokenize("get_user_name");
@@ -55,7 +55,7 @@ namespace AiDotNet.Tests.Tokenization
             vocab.AddTokens(new[] { "public", "class", "void", "if", "return" });
 
             var baseTokenizer = new WordPieceTokenizer(vocab, SpecialTokens.Bert());
-            var codeTokenizer = new CodeTokenizer(baseTokenizer, CodeTokenizer.ProgrammingLanguage.CSharp);
+            var codeTokenizer = new CodeTokenizer(baseTokenizer, ProgrammingLanguage.CSharp);
 
             // Act
             var tokens = codeTokenizer.Tokenize("public class if void return");
@@ -76,7 +76,7 @@ namespace AiDotNet.Tests.Tokenization
             vocab.AddTokens(new[] { "def", "class", "if", "return", "import" });
 
             var baseTokenizer = new WordPieceTokenizer(vocab, SpecialTokens.Bert());
-            var codeTokenizer = new CodeTokenizer(baseTokenizer, CodeTokenizer.ProgrammingLanguage.Python);
+            var codeTokenizer = new CodeTokenizer(baseTokenizer, ProgrammingLanguage.Python);
 
             // Act
             var tokens = codeTokenizer.Tokenize("def class if return import");
@@ -97,7 +97,7 @@ namespace AiDotNet.Tests.Tokenization
             vocab.AddTokens(new[] { "[PAD]", "[CLS]", "[SEP]", "[MASK]" });
             vocab.AddTokens(new[] { "return", "sum", "of", "two", "numbers", "a", "b", "+", "def", "add" });
 
-            var codeBert = new CodeBertTokenizer(vocab, CodeTokenizer.ProgrammingLanguage.Python);
+            var codeBert = new CodeBertTokenizer(vocab, ProgrammingLanguage.Python);
 
             // Act
             var result = codeBert.EncodeCodeAndNL(
@@ -119,7 +119,7 @@ namespace AiDotNet.Tests.Tokenization
             var vocab = new Vocabulary("[UNK]");
             vocab.AddTokens(new[] { "[PAD]", "[CLS]", "[SEP]", "def", "add", "return", "a", "b", "+", "(", ")", ":", "," });
 
-            var codeBert = new CodeBertTokenizer(vocab, CodeTokenizer.ProgrammingLanguage.Python);
+            var codeBert = new CodeBertTokenizer(vocab, ProgrammingLanguage.Python);
 
             // Act
             var result = codeBert.EncodeCodeAndNL(code: "def add(a, b): return a + b");

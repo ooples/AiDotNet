@@ -234,16 +234,15 @@ public class GpuStressTests
         var lastQuartileAvg = timings.Skip(3 * MediumRunIterations / 4).Average();
 
         // Guard against zero division on very fast hardware
-        // Only check for degradation (last > first), not improvement
-        double performanceDegradation = 0;
-        if (firstQuartileAvg > 0 && lastQuartileAvg > firstQuartileAvg)
+        double performanceDrift = 0;
+        if (firstQuartileAvg > 0)
         {
-            performanceDegradation = (lastQuartileAvg - firstQuartileAvg) / firstQuartileAvg;
+            performanceDrift = Math.Abs(lastQuartileAvg - firstQuartileAvg) / firstQuartileAvg;
         }
 
-        // Performance should not degrade by more than 20% (improvement is acceptable)
-        Assert.True(performanceDegradation < 0.20,
-            $"Performance degraded by {performanceDegradation * 100:F1}% (first: {firstQuartileAvg:F2}ms, last: {lastQuartileAvg:F2}ms)");
+        // Performance should not degrade by more than 20%
+        Assert.True(performanceDrift < 0.20,
+            $"Performance degraded by {performanceDrift * 100:F1}% (first: {firstQuartileAvg:F2}ms, last: {lastQuartileAvg:F2}ms)");
 
         // Memory growth should be minimal
         Assert.True(memoryGrowth < 20_000_000,

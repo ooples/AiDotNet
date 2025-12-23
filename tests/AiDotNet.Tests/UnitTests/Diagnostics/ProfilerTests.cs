@@ -305,12 +305,18 @@ public class ProfilerSessionTests
         // Arrange - Create baseline session and report
         var config = new ProfilingConfig { Enabled = true };
         var baselineSession = new ProfilerSession(config);
-        using (baselineSession.Scope("CompareOp")) { Thread.Sleep(10); }
+        for (int i = 0; i < 2; i++)
+        {
+            using (baselineSession.Scope("CompareOp")) { Thread.Sleep(50); }
+        }
         var baseline = baselineSession.GetReport();
 
         // Create current session with slower operation
         var currentSession = new ProfilerSession(config);
-        using (currentSession.Scope("CompareOp")) { Thread.Sleep(50); }
+        for (int i = 0; i < 2; i++)
+        {
+            using (currentSession.Scope("CompareOp")) { Thread.Sleep(200); }
+        }
         var current = currentSession.GetReport();
 
         // Act
@@ -324,16 +330,22 @@ public class ProfilerSessionTests
     [Fact]
     public void ProfileReport_CompareTo_DetectsImprovement()
     {
-        // Arrange - Create baseline session with slow operation
-        var config = new ProfilingConfig { Enabled = true };
-        var baselineSession = new ProfilerSession(config);
-        using (baselineSession.Scope("ImprovementOp")) { Thread.Sleep(50); }
-        var baseline = baselineSession.GetReport();
+        // Arrange - Deterministic synthetic reports (avoids timer jitter/flakiness on CI)
+        var baselineEntry = new ProfilerSessionEntry("ImprovementOp", reservoirSize: 16);
+        baselineEntry.RecordSample(200);
+        baselineEntry.RecordSample(200);
+        var baseline = new ProfileReport(
+            entries: new List<IProfilerEntry> { baselineEntry },
+            totalRuntime: TimeSpan.FromMilliseconds(400),
+            startTime: DateTime.UtcNow);
 
-        // Create current session with faster operation
-        var currentSession = new ProfilerSession(config);
-        using (currentSession.Scope("ImprovementOp")) { Thread.Sleep(10); }
-        var current = currentSession.GetReport();
+        var currentEntry = new ProfilerSessionEntry("ImprovementOp", reservoirSize: 16);
+        currentEntry.RecordSample(50);
+        currentEntry.RecordSample(50);
+        var current = new ProfileReport(
+            entries: new List<IProfilerEntry> { currentEntry },
+            totalRuntime: TimeSpan.FromMilliseconds(100),
+            startTime: DateTime.UtcNow);
 
         // Act
         var comparison = current.CompareTo(baseline, thresholdPercent: 50);

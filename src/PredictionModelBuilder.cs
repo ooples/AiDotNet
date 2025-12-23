@@ -27,6 +27,8 @@ global using AiDotNet.PromptEngineering.Chains;
 global using AiDotNet.PromptEngineering.FewShot;
 global using AiDotNet.PromptEngineering.Optimization;
 global using AiDotNet.PromptEngineering.Templates;
+global using AiDotNet.ProgramSynthesis.Interfaces;
+global using AiDotNet.ProgramSynthesis.Serving;
 global using AiDotNet.Reasoning.Models;
 global using AiDotNet.Regularization;
 global using AiDotNet.RetrievalAugmentedGeneration.Graph;
@@ -196,6 +198,11 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     // Tokenization configuration
     private ITokenizer? _tokenizer;
     private TokenizationConfig? _tokenizationConfig;
+
+    // Program synthesis Serving configuration
+    private ProgramSynthesisServingClientOptions? _programSynthesisServingClientOptions;
+    private IProgramSynthesisServingClient? _programSynthesisServingClient;
+    private IFullModel<T, Tensor<T>, Tensor<T>>? _programSynthesisModel;
 
     // Prompt engineering configuration
     private IPromptTemplate? _promptTemplate;
@@ -840,6 +847,14 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             return result;
         }
 
+        // PROGRAM SYNTHESIS INFERENCE PATH - allow inference-only builds when a code model is configured.
+        // This supports code-task workflows that do not require a training dataset, while keeping other
+        // training paths explicit via ConfigureDataLoader/ConfigureReinforcementLearning/ConfigureMetaLearning.
+        if (_programSynthesisModel is not null && _model is not null)
+        {
+            return BuildProgramSynthesisInferenceOnlyResult();
+        }
+
         // No training path configured
         throw new InvalidOperationException(
             "BuildAsync() requires one of the following to be configured first:\n" +
@@ -847,6 +862,60 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             "- ConfigureDataLoader() for supervised learning\n" +
             "- ConfigureMetaLearning() for meta-learning\n" +
             "For supervised learning, configure a data loader via ConfigureDataLoader() and then call BuildAsync().");
+    }
+
+    private PredictionModelResult<T, TInput, TOutput> BuildProgramSynthesisInferenceOnlyResult()
+    {
+        // Ensure inference-only builds still honor configured GPU acceleration.
+        ApplyGpuConfiguration();
+
+        var optimizationResult = new OptimizationResult<T, TInput, TOutput>
+        {
+            BestSolution = _model!
+        };
+
+        var deploymentConfig = DeploymentConfiguration.Create(
+            _quantizationConfig,
+            _cacheConfig,
+            _versioningConfig,
+            _abTestingConfig,
+            _telemetryConfig,
+            _exportConfig,
+            _gpuAccelerationConfig,
+            _compressionConfig,
+            _profilingConfig);
+
+        var options = new PredictionModelResultOptions<T, TInput, TOutput>
+        {
+            OptimizationResult = optimizationResult,
+            NormalizationInfo = new NormalizationInfo<T, TInput, TOutput>(),
+            Tokenizer = _tokenizer,
+            TokenizationConfig = _tokenizationConfig,
+            ProgramSynthesisModel = _programSynthesisModel,
+            ProgramSynthesisServingClient = _programSynthesisServingClient,
+            ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
+            InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            ReasoningConfig = _reasoningConfig,
+            DeploymentConfiguration = deploymentConfig,
+            BiasDetector = _biasDetector,
+            FairnessEvaluator = _fairnessEvaluator,
+            RagRetriever = _ragRetriever,
+            RagReranker = _ragReranker,
+            RagGenerator = _ragGenerator,
+            QueryProcessors = _queryProcessors,
+            KnowledgeGraph = _knowledgeGraph,
+            GraphStore = _graphStore,
+            HybridGraphRetriever = _hybridGraphRetriever,
+            AgentConfig = _agentConfig,
+            PromptTemplate = _promptTemplate,
+            PromptChain = _promptChain,
+            PromptOptimizer = _promptOptimizer,
+            FewShotExampleSelector = _fewShotExampleSelector,
+            PromptAnalyzer = _promptAnalyzer,
+            PromptCompressor = _promptCompressor
+        };
+
+        return new PredictionModelResult<T, TInput, TOutput>(options);
     }
 
     private Task RunBenchmarksIfConfiguredAsync(PredictionModelResult<T, TInput, TOutput> result)
@@ -1716,13 +1785,15 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             HybridGraphRetriever = _hybridGraphRetriever,
             Tokenizer = _tokenizer,
             TokenizationConfig = _tokenizationConfig,
+            ProgramSynthesisModel = _programSynthesisModel,
+            ProgramSynthesisServingClient = _programSynthesisServingClient,
+            ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             PromptTemplate = _promptTemplate,
             PromptChain = _promptChain,
             PromptOptimizer = _promptOptimizer,
             FewShotExampleSelector = _fewShotExampleSelector,
             PromptAnalyzer = _promptAnalyzer,
             PromptCompressor = _promptCompressor,
-
             // Diagnostics Properties
             ProfilingReport = profilerSession?.GetReport(),
 
@@ -1855,13 +1926,15 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             QueryProcessors = _queryProcessors,
             AgentConfig = _agentConfig,
             DeploymentConfiguration = deploymentConfig,
-            InferenceOptimizationConfig = _inferenceOptimizationConfig,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
             GraphStore = _graphStore,
             HybridGraphRetriever = _hybridGraphRetriever,
             Tokenizer = _tokenizer,
             TokenizationConfig = _tokenizationConfig,
+            ProgramSynthesisModel = _programSynthesisModel,
+            ProgramSynthesisServingClient = _programSynthesisServingClient,
+            ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             PromptTemplate = _promptTemplate,
             PromptChain = _promptChain,
             PromptOptimizer = _promptOptimizer,
@@ -2174,6 +2247,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             HybridGraphRetriever = _hybridGraphRetriever,
             Tokenizer = _tokenizer,
             TokenizationConfig = _tokenizationConfig,
+            ProgramSynthesisModel = _programSynthesisModel,
+            ProgramSynthesisServingClient = _programSynthesisServingClient,
+            ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             PromptTemplate = _promptTemplate,
             PromptChain = _promptChain,
             PromptOptimizer = _promptOptimizer,
@@ -3463,6 +3539,180 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     {
         _tokenizer = tokenizer;
         _tokenizationConfig = config ?? new TokenizationConfig();
+        return this;
+    }
+
+    /// <summary>
+    /// Configures program synthesis (code generation / repair) settings with sensible defaults.
+    /// </summary>
+    /// <param name="options">Optional configuration options. If null, safe industry-standard defaults are used.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Program synthesis focuses on code-oriented tasks such as generation, completion, and repair.
+    /// This method wires up the default program-synthesis components and chooses safe default values when
+    /// options are not provided (for example, a safe maximum sequence length and vocabulary size).
+    /// </para>
+    /// <para>
+    /// Tokenizer selection:
+    /// - If <paramref name="options"/> provides a tokenizer, it is used.
+    /// - Otherwise, if a tokenizer was configured earlier via <see cref="ConfigureTokenizer"/>, that tokenizer is reused.
+    /// - If no tokenizer is available, a code-aware tokenizer is created automatically based on the target language.
+    /// </para>
+    /// <para>
+    /// Model selection:
+    /// - The builder creates a program-synthesis model based on the configured model kind (for example CodeBERT / GraphCodeBERT / CodeT5).
+    /// - If the created model is compatible with this builder’s <typeparamref name="TInput"/> and <typeparamref name="TOutput"/>, the model is applied.
+    ///   If not compatible, the tokenizer/options are still configured, but the existing model is left unchanged.
+    /// </para>
+    /// <para><b>For Beginners:</b> Use this when you want a ready-to-use setup for code tasks and you do not want to
+    /// manually choose every low-level component (tokenizer, defaults, and model configuration).
+    ///
+    /// Simple usage (defaults):
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureProgramSynthesis()
+    ///     .BuildAsync();
+    /// </code>
+    ///
+    /// Custom usage:
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureProgramSynthesis(new ProgramSynthesisOptions
+    ///     {
+    ///         TargetLanguage = ProgramLanguage.CSharp,
+    ///         ModelKind = ProgramSynthesisModelKind.CodeT5,
+    ///         MaxSequenceLength = 1024
+    ///     })
+    ///     .BuildAsync();
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureProgramSynthesis(
+        AiDotNet.ProgramSynthesis.Options.ProgramSynthesisOptions? options = null)
+    {
+        options ??= new AiDotNet.ProgramSynthesis.Options.ProgramSynthesisOptions();
+
+        // Defaults-first: clamp invalid user inputs to safe industry-standard values.
+        var maxSequenceLength = options.MaxSequenceLength > 0 ? options.MaxSequenceLength : 512;
+        var vocabularySize = options.VocabularySize > 0 ? options.VocabularySize : 50000;
+        var numEncoderLayers = Math.Max(0, options.NumEncoderLayers);
+        var numDecoderLayersConfigured = Math.Max(0, options.NumDecoderLayers);
+
+        var tokenizer = options.Tokenizer ?? _tokenizer;
+
+        if (tokenizer is null)
+        {
+            var baseTokenizer = AiDotNet.Tokenization.Algorithms.CharacterTokenizer.CreateAscii(
+                AiDotNet.Tokenization.Models.SpecialTokens.Bert(),
+                lowercase: false);
+
+            var codeLanguage = options.TargetLanguage switch
+            {
+                AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.CSharp => AiDotNet.Tokenization.CodeTokenization.ProgrammingLanguage.CSharp,
+                AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.Python => AiDotNet.Tokenization.CodeTokenization.ProgrammingLanguage.Python,
+                AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.Java => AiDotNet.Tokenization.CodeTokenization.ProgrammingLanguage.Java,
+                AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.JavaScript => AiDotNet.Tokenization.CodeTokenization.ProgrammingLanguage.JavaScript,
+                AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.TypeScript => AiDotNet.Tokenization.CodeTokenization.ProgrammingLanguage.TypeScript,
+                AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.C => AiDotNet.Tokenization.CodeTokenization.ProgrammingLanguage.C,
+                AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.CPlusPlus => AiDotNet.Tokenization.CodeTokenization.ProgrammingLanguage.Cpp,
+                AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.Go => AiDotNet.Tokenization.CodeTokenization.ProgrammingLanguage.Go,
+                AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.Rust => AiDotNet.Tokenization.CodeTokenization.ProgrammingLanguage.Rust,
+                AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.SQL => AiDotNet.Tokenization.CodeTokenization.ProgrammingLanguage.SQL,
+                _ => AiDotNet.Tokenization.CodeTokenization.ProgrammingLanguage.Generic
+            };
+
+            tokenizer = new AiDotNet.Tokenization.CodeTokenization.CodeTokenizer(
+                baseTokenizer,
+                codeLanguage,
+                splitIdentifiers: true);
+        }
+
+        _tokenizer = tokenizer;
+        _tokenizationConfig ??= new TokenizationConfig();
+
+        bool useDataFlow = options.ModelKind == AiDotNet.ProgramSynthesis.Options.ProgramSynthesisModelKind.GraphCodeBERT;
+
+        int numDecoderLayers = options.ModelKind == AiDotNet.ProgramSynthesis.Options.ProgramSynthesisModelKind.CodeT5
+            ? Math.Max(1, numDecoderLayersConfigured)
+            : 0;
+
+        var architecture = new AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture<T>(
+            synthesisType: options.SynthesisType,
+            targetLanguage: options.TargetLanguage,
+            codeTaskType: options.DefaultTask,
+            numEncoderLayers: numEncoderLayers,
+            numDecoderLayers: numDecoderLayers,
+            maxSequenceLength: maxSequenceLength,
+            vocabularySize: vocabularySize,
+            useDataFlow: useDataFlow);
+
+        AiDotNet.ProgramSynthesis.Interfaces.ICodeModel<T> codeModel = options.ModelKind switch
+        {
+            AiDotNet.ProgramSynthesis.Options.ProgramSynthesisModelKind.CodeBERT =>
+                new AiDotNet.ProgramSynthesis.Engines.CodeBERT<T>(architecture, tokenizer: tokenizer),
+            AiDotNet.ProgramSynthesis.Options.ProgramSynthesisModelKind.GraphCodeBERT =>
+                new AiDotNet.ProgramSynthesis.Engines.GraphCodeBERT<T>(architecture, tokenizer: tokenizer),
+            _ =>
+                new AiDotNet.ProgramSynthesis.Engines.CodeT5<T>(architecture, tokenizer: tokenizer)
+        };
+
+        // Store the program-synthesis model separately so it is available regardless of the primary model's TInput/TOutput types.
+        _programSynthesisModel = codeModel;
+
+        // If compatible, also apply as the primary model (supports code-only workflows).
+        if (codeModel is IFullModel<T, TInput, TOutput> fullModel)
+        {
+            _model = fullModel;
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Configures program synthesis to use <c>AiDotNet.Serving</c> for program execution and evaluation (optional).
+    /// </summary>
+    /// <param name="options">
+    /// Serving client options. If null (and <paramref name="client"/> is null), a default configuration is used that targets
+    /// <c>http://localhost:52432/</c>.
+    /// </param>
+    /// <param name="client">Optional custom client implementation. When provided, this takes precedence over <paramref name="options"/>.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Some program-synthesis workflows need to run or evaluate generated programs (for example, execute code against test cases).
+    /// This method lets you route those operations through a Serving endpoint (or a custom client), which is useful for centralized
+    /// execution, resource control, and isolation.
+    /// </para>
+    /// <para>
+    /// Precedence rules:
+    /// - If <paramref name="client"/> is provided, it is used.
+    /// - Otherwise, if <paramref name="options"/> is provided it is used.
+    /// - Otherwise, a default configuration is used that targets <c>http://localhost:52432/</c>.
+    /// </para>
+    /// <para><b>For Beginners:</b> If you only want the model to generate code, you can skip this.
+    /// If you want to automatically execute or evaluate generated code, configure Serving. If you're running
+    /// <c>AiDotNet.Serving</c> locally with default settings, calling this method with no parameters is enough.
+    ///
+    /// Example:
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureProgramSynthesis()
+    ///     .ConfigureProgramSynthesisServing() // Defaults to http://localhost:52432/
+    ///     .BuildAsync();
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureProgramSynthesisServing(
+        ProgramSynthesisServingClientOptions? options = null,
+        IProgramSynthesisServingClient? client = null)
+    {
+        // Defaults-first: calling this method opts into Serving using the standard local endpoint unless overridden.
+        _programSynthesisServingClientOptions = options ?? (client is null
+            ? new ProgramSynthesisServingClientOptions { BaseAddress = new Uri("http://localhost:52432/") }
+            : null);
+
+        _programSynthesisServingClient = client;
         return this;
     }
 

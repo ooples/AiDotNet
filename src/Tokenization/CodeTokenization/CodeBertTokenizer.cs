@@ -29,7 +29,7 @@ namespace AiDotNet.Tokenization.CodeTokenization
         /// <param name="specialTokens">The special tokens (BERT-style by default).</param>
         public CodeBertTokenizer(
             IVocabulary vocabulary,
-            CodeTokenizer.ProgrammingLanguage language = CodeTokenizer.ProgrammingLanguage.Generic,
+            ProgrammingLanguage language = ProgrammingLanguage.Generic,
             SpecialTokens? specialTokens = null)
         {
             specialTokens ??= SpecialTokens.Bert();

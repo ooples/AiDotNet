@@ -26,8 +26,8 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <param name="outputDimension">The number of output dimensions</param>
     /// <param name="predictFunc">Function to perform single prediction</param>
     /// <param name="predictBatchFunc">Optional function to perform batch prediction. If not provided, batch prediction will use multiple single predictions.</param>
-    /// <param name="enableBatching">Whether this model supports serving-side batching.</param>
-    /// <param name="enableSpeculativeDecoding">Whether this model supports speculative decoding in serving/session workflows.</param>
+    /// <param name="enableBatching">Whether serving-side batching is enabled for this model.</param>
+    /// <param name="enableSpeculativeDecoding">Whether speculative decoding is enabled for this model.</param>
     public ServableModelWrapper(
         string modelName,
         int inputDimension,
@@ -52,16 +52,20 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <param name="modelName">The name of the model</param>
     /// <param name="regressionModel">The regression model to wrap</param>
     /// <param name="inputDimension">The expected number of input features</param>
+    /// <param name="enableBatching">Whether serving-side batching is enabled for this model.</param>
+    /// <param name="enableSpeculativeDecoding">Whether speculative decoding is enabled for this model.</param>
     public ServableModelWrapper(
         string modelName,
         IRegression<T> regressionModel,
-        int inputDimension)
+        int inputDimension,
+        bool enableBatching = true,
+        bool enableSpeculativeDecoding = false)
     {
         _modelName = modelName ?? throw new ArgumentNullException(nameof(modelName));
         _inputDimension = inputDimension;
         _outputDimension = 1; // Regression models typically output a single value
-        _enableBatching = true;
-        _enableSpeculativeDecoding = false;
+        _enableBatching = enableBatching;
+        _enableSpeculativeDecoding = enableSpeculativeDecoding;
 
         if (regressionModel == null)
         {
@@ -101,6 +105,10 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
 
     /// <inheritdoc/>
     public int OutputDimension => _outputDimension;
+
+    bool IServableModelInferenceOptions.EnableBatching => _enableBatching;
+
+    bool IServableModelInferenceOptions.EnableSpeculativeDecoding => _enableSpeculativeDecoding;
 
     /// <inheritdoc/>
     public Vector<T> Predict(Vector<T> input)
@@ -145,7 +153,4 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
 
         return result;
     }
-
-    bool IServableModelInferenceOptions.EnableBatching => _enableBatching;
-    bool IServableModelInferenceOptions.EnableSpeculativeDecoding => _enableSpeculativeDecoding;
 }

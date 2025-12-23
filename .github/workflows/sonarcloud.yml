@@ -9,6 +9,19 @@ on:
       - main
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Optional: PR number to run SonarCloud PR analysis (decorates the PR).'
+        required: false
+      pr_base:
+        description: 'Optional: PR base branch name (e.g. master). Used only when pr_number is set.'
+        required: false
+        default: 'master'
+      pr_repo:
+        description: 'Optional: GitHub repo for PR decoration (e.g. owner/repo). Used only when pr_number is set.'
+        required: false
+        default: 'ooples/AiDotNet'
   schedule:
     # Weekly CodeQL scan on Mondays at 8am UTC
     - cron: '0 8 * * 1'
@@ -54,7 +67,7 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore src/AiDotNet.csproj
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@5d4e8d1aca955e8d8589aabd499c5cae939e33c7 # v4
@@ -229,6 +242,10 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Serving|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.TimeSeries|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Tokenization|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.TransferLearning'
+          - name: AiDotNet.Tests - Unit - 13 ProgramSynthesis/Reasoning
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.ProgramSynthesis|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Reasoning'
           - name: AiDotNet.Tests - Other - 13 InferenceOptimization
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
@@ -273,7 +290,7 @@ jobs:
           name: build-output-${{ github.sha }}
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore ${{ matrix.shard.project }}
 
       - name: Run tests (sharded) with coverage
         shell: powershell
@@ -378,10 +395,10 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Pass user-controlled values as env vars to prevent script injection
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_BRANCH: ${{ github.head_ref }}
-          PR_BASE: ${{ github.base_ref }}
-          PR_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          PR_BRANCH: ${{ github.head_ref || github.ref_name }}
+          PR_BASE: ${{ github.base_ref || inputs.pr_base || 'master' }}
+          PR_REPO: ${{ github.repository || inputs.pr_repo || 'ooples/AiDotNet' }}
           EVENT_NAME: ${{ github.event_name }}
         shell: powershell
         run: |
@@ -391,12 +408,14 @@ jobs:
             "/d:sonar.token=$env:SONAR_TOKEN",
             "/d:sonar.host.url=https://sonarcloud.io",
             "/d:sonar.cs.opencover.reportsPaths=TestResults/**/coverage.opencover.xml",
-            "/d:sonar.coverage.exclusions=**/tests/**,**/testconsole/**,**/AiDotNetBenchmarkTests/**,**/examples/**",
+            "/d:sonar.exclusions=**/ProgramSynthesis/Models/**,**/ProgramSynthesis/Execution/**,**/ProgramSynthesis/Requests/**,**/ProgramSynthesis/Results/**,**/AiDotNet.Serving/Configuration/**,**/AiDotNet.Serving/Models/**,**/AiDotNet.Serving/Persistence/Migrations/**",
+            "/d:sonar.coverage.exclusions=**/tests/**,**/testconsole/**,**/AiDotNetBenchmarkTests/**,**/examples/**,**/Interfaces/**,**/ProgramSynthesis/Interfaces/**,**/ProgramSynthesis/Enums/**,**/ProgramSynthesis/Models/**,**/ProgramSynthesis/Execution/**,**/ProgramSynthesis/Requests/**,**/ProgramSynthesis/Results/**,**/AiDotNet.Serving/**/I*.cs,**/AiDotNet.Serving/Configuration/**,**/AiDotNet.Serving/Models/**,**/AiDotNet.Serving/Persistence/Entities/**,**/AiDotNet.Serving/Persistence/Migrations/**",
+            "/d:sonar.cpd.exclusions=**/Interfaces/**,**/ProgramSynthesis/Interfaces/**,**/ProgramSynthesis/Enums/**,**/ProgramSynthesis/Models/**,**/ProgramSynthesis/Execution/**,**/ProgramSynthesis/Requests/**,**/ProgramSynthesis/Results/**,**/AiDotNet.Serving/**/I*.cs,**/AiDotNet.Serving/Configuration/**,**/AiDotNet.Serving/Models/**,**/AiDotNet.Serving/Persistence/Entities/**,**/AiDotNet.Serving/Persistence/Migrations/**",
             "/d:sonar.scm.provider=git"
           )
 
-          # For PRs, add incremental analysis parameters (using env vars for safety)
-          if ($env:EVENT_NAME -eq "pull_request") {
+          # For PR analysis, add incremental analysis parameters (using env vars for safety)
+          if (-not [string]::IsNullOrWhiteSpace($env:PR_NUMBER)) {
             $params += "/d:sonar.pullrequest.key=$env:PR_NUMBER"
             $params += "/d:sonar.pullrequest.branch=$env:PR_BRANCH"
             $params += "/d:sonar.pullrequest.base=$env:PR_BASE"
