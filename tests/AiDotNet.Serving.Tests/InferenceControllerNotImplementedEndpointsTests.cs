@@ -1,14 +1,15 @@
 using System.Net;
-using System.Net.Http.Json;
 using System.Reflection;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
 using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Serialization;
 using Xunit;
 
 namespace AiDotNet.Serving.Tests;
@@ -16,9 +17,9 @@ namespace AiDotNet.Serving.Tests;
 [Collection("ServingIntegrationTests")]
 public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<WebApplicationFactory<Program>>, IAsyncLifetime
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    private static readonly JsonSerializerSettings JsonSettings = new()
     {
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) }
+        Converters = { new StringEnumConverter(new CamelCaseNamingStrategy(), allowIntegerValues: false) }
     };
 
     private readonly WebApplicationFactory<Program> _factory;
@@ -29,6 +30,18 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
     {
         _factory = factory;
         _client = _factory.CreateClient();
+    }
+
+    private static async Task<T?> ReadAsJsonAsync<T>(HttpContent content)
+    {
+        var stringContent = await content.ReadAsStringAsync();
+        return JsonConvert.DeserializeObject<T>(stringContent, JsonSettings);
+    }
+
+    private async Task<HttpResponseMessage> PostAsJsonAsync<T>(string requestUri, T value)
+    {
+        var content = new StringContent(JsonConvert.SerializeObject(value, JsonSettings), Encoding.UTF8, "application/json");
+        return await _client.PostAsync(requestUri, content);
     }
 
     public Task InitializeAsync()
@@ -46,14 +59,13 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
     [Fact]
     public async Task GenerateWithSpeculativeDecoding_WhenRequestInvalid_Returns400()
     {
-        var response = await _client.PostAsJsonAsync(
+        var response = await PostAsJsonAsync(
             "/api/inference/generate/any-model",
-            new SpeculativeDecodingRequest { InputTokens = Array.Empty<int>() },
-            JsonOptions);
+            new SpeculativeDecodingRequest { InputTokens = Array.Empty<int>() });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
-        var payload = await response.Content.ReadFromJsonAsync<SpeculativeDecodingResponse>(JsonOptions);
+        var payload = await ReadAsJsonAsync<SpeculativeDecodingResponse>(response.Content);
         Assert.NotNull(payload);
         Assert.Equal("InputTokens array is required and cannot be empty", payload!.Error);
     }
@@ -61,14 +73,13 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
     [Fact]
     public async Task GenerateWithSpeculativeDecoding_WhenModelMissing_Returns404()
     {
-        var response = await _client.PostAsJsonAsync(
+        var response = await PostAsJsonAsync(
             "/api/inference/generate/missing-model",
-            new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, MaxNewTokens = 1, Temperature = 1.0, NumDraftTokens = 1 },
-            JsonOptions);
+            new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, MaxNewTokens = 1, Temperature = 1.0, NumDraftTokens = 1 });
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
 
-        var payload = await response.Content.ReadFromJsonAsync<SpeculativeDecodingResponse>(JsonOptions);
+        var payload = await ReadAsJsonAsync<SpeculativeDecodingResponse>(response.Content);
         Assert.NotNull(payload);
         Assert.Contains("missing-model", payload!.Error ?? string.Empty, StringComparison.Ordinal);
     }
@@ -78,14 +89,13 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
     {
         LoadSimpleModel("spec-decoding-model", enableBatching: true);
 
-        var response = await _client.PostAsJsonAsync(
+        var response = await PostAsJsonAsync(
             "/api/inference/generate/spec-decoding-model",
-            new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, MaxNewTokens = 1, Temperature = 1.0, NumDraftTokens = 1 },
-            JsonOptions);
+            new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, MaxNewTokens = 1, Temperature = 1.0, NumDraftTokens = 1 });
 
         Assert.Equal(HttpStatusCode.NotImplemented, response.StatusCode);
 
-        var payload = await response.Content.ReadFromJsonAsync<SpeculativeDecodingResponse>(JsonOptions);
+        var payload = await ReadAsJsonAsync<SpeculativeDecodingResponse>(response.Content);
         Assert.NotNull(payload);
         Assert.Equal("Speculative decoding is not available via the REST API in the current version.", payload!.Error);
     }
@@ -93,14 +103,13 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
     [Fact]
     public async Task FineTuneWithLoRA_WhenRequestInvalid_Returns400()
     {
-        var response = await _client.PostAsJsonAsync(
+        var response = await PostAsJsonAsync(
             "/api/inference/finetune/lora",
-            new LoRAFineTuneRequest { ModelName = " " },
-            JsonOptions);
+            new LoRAFineTuneRequest { ModelName = " " });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
-        var payload = await response.Content.ReadFromJsonAsync<LoRAFineTuneResponse>(JsonOptions);
+        var payload = await ReadAsJsonAsync<LoRAFineTuneResponse>(response.Content);
         Assert.NotNull(payload);
         Assert.False(payload!.Success);
         Assert.Equal("ModelName is required", payload.Error);
@@ -109,19 +118,18 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
     [Fact]
     public async Task FineTuneWithLoRA_WhenModelMissing_Returns404()
     {
-        var response = await _client.PostAsJsonAsync(
+        var response = await PostAsJsonAsync(
             "/api/inference/finetune/lora",
             new LoRAFineTuneRequest
             {
                 ModelName = "missing-model",
                 TrainingFeatures = new[] { new[] { 1.0, 2.0 } },
                 TrainingLabels = new[] { new[] { 3.0 } }
-            },
-            JsonOptions);
+            });
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
 
-        var payload = await response.Content.ReadFromJsonAsync<LoRAFineTuneResponse>(JsonOptions);
+        var payload = await ReadAsJsonAsync<LoRAFineTuneResponse>(response.Content);
         Assert.NotNull(payload);
         Assert.False(payload!.Success);
         Assert.Contains("missing-model", payload.Error ?? string.Empty, StringComparison.Ordinal);
@@ -132,19 +140,18 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
     {
         LoadSimpleModel("lora-model", enableBatching: true);
 
-        var response = await _client.PostAsJsonAsync(
+        var response = await PostAsJsonAsync(
             "/api/inference/finetune/lora",
             new LoRAFineTuneRequest
             {
                 ModelName = "lora-model",
                 TrainingFeatures = new[] { new[] { 1.0, 2.0 } },
                 TrainingLabels = new[] { new[] { 3.0 } }
-            },
-            JsonOptions);
+            });
 
         Assert.Equal(HttpStatusCode.NotImplemented, response.StatusCode);
 
-        var payload = await response.Content.ReadFromJsonAsync<LoRAFineTuneResponse>(JsonOptions);
+        var payload = await ReadAsJsonAsync<LoRAFineTuneResponse>(response.Content);
         Assert.NotNull(payload);
         Assert.False(payload!.Success);
         Assert.Equal("LoRA fine-tuning is not available via the REST API in the current version.", payload.Error);
@@ -161,14 +168,13 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Web
             features[i] = new[] { 1.0 };
         }
 
-        var response = await _client.PostAsJsonAsync(
+        var response = await PostAsJsonAsync(
             "/api/inference/predict/unbatched-model",
-            new PredictionRequest { Features = features },
-            JsonOptions);
+            new PredictionRequest { Features = features });
 
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
 
-        var payload = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>(JsonOptions);
+        var payload = await ReadAsJsonAsync<Dictionary<string, string>>(response.Content);
         Assert.NotNull(payload);
         Assert.True(payload!.TryGetValue("error", out var error));
         Assert.Contains("batching is disabled", error ?? string.Empty, StringComparison.OrdinalIgnoreCase);

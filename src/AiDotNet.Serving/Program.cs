@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Persistence;
 using AiDotNet.Serving.Security;
@@ -9,6 +7,8 @@ using AiDotNet.Serving.Services;
 using AiDotNet.Serving.Services.Federated;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Serialization;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 
 namespace AiDotNet.Serving;
@@ -127,12 +127,12 @@ public class Program
         builder.Services.AddHostedService<ModelStartupService>();
 
         // Add controllers and API documentation
-        builder.Services.AddControllers().AddJsonOptions(options =>
+        builder.Services.AddControllers().AddNewtonsoftJson(options =>
         {
-            options.JsonSerializerOptions.Converters.Add(
-                new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
+            options.SerializerSettings.Converters.Add(new StringEnumConverter(new CamelCaseNamingStrategy(), allowIntegerValues: false));
         });
         builder.Services.AddEndpointsApiExplorer();
+
         builder.Services.AddSwaggerGen(options =>
         {
             options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo

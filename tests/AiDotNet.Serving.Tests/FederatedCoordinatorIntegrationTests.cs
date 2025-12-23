@@ -1,9 +1,6 @@
 using System.Net;
-using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using AiDotNet;
 using AiDotNet.Data.Loaders;
 using AiDotNet.Models;
@@ -19,6 +16,9 @@ using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Serialization;
 using Xunit;
 
 namespace AiDotNet.Serving.Tests;
@@ -28,9 +28,9 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
 {
     private const string ApiKeyHeaderName = "X-AiDotNet-ApiKey";
 
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    private static readonly JsonSerializerSettings JsonSettings = new()
     {
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) }
+        Converters = { new StringEnumConverter(new CamelCaseNamingStrategy(), allowIntegerValues: false) }
     };
 
     private readonly WebApplicationFactory<Program> _factory;
@@ -42,6 +42,26 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
     {
         _factory = factory;
         _client = _factory.CreateClient();
+    }
+
+    private static async Task<T?> ReadAsJsonAsync<T>(HttpContent content)
+    {
+        var stringContent = await content.ReadAsStringAsync();
+        return JsonConvert.DeserializeObject<T>(stringContent, JsonSettings);
+    }
+
+    private async Task<HttpResponseMessage> PostAsJsonAsync<T>(string requestUri, T value)
+    {
+        var content = new StringContent(JsonConvert.SerializeObject(value, JsonSettings), Encoding.UTF8, "application/json");
+        return await _client.PostAsync(requestUri, content);
+    }
+
+    private async Task<T?> GetAsJsonAsync<T>(string requestUri)
+    {
+        var response = await _client.GetAsync(requestUri);
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync();
+        return JsonConvert.DeserializeObject<T>(content, JsonSettings);
     }
 
     public Task InitializeAsync()
@@ -61,12 +81,12 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
     [Fact]
     public async Task CreateRun_WhenModelDoesNotExist_Returns404()
     {
-        var response = await _client.PostAsJsonAsync("/api/federated/runs", new CreateFederatedRunRequest
+        var response = await PostAsJsonAsync("/api/federated/runs", new CreateFederatedRunRequest
         {
             ModelName = "non-existent-model",
             Options = new FederatedLearningOptions(),
             MinClientUpdatesPerRound = 1
-        }, JsonOptions);
+        });
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -77,23 +97,23 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         var modelName = "fed-join-enterprise";
         await LoadTrainedVectorModelAsync(modelName);
 
-        var create = await _client.PostAsJsonAsync("/api/federated/runs", new CreateFederatedRunRequest
+        var create = await PostAsJsonAsync("/api/federated/runs", new CreateFederatedRunRequest
         {
             ModelName = modelName,
             Options = new FederatedLearningOptions { AggregationStrategy = FederatedAggregationStrategy.FedAvg },
             MinClientUpdatesPerRound = 1
-        }, JsonOptions);
+        });
         create.EnsureSuccessStatusCode();
-        var createResponse = await create.Content.ReadFromJsonAsync<CreateFederatedRunResponse>(JsonOptions);
+        var createResponse = await ReadAsJsonAsync<CreateFederatedRunResponse>(create.Content);
         Assert.NotNull(createResponse);
 
         var enterpriseApiKey = await CreateApiKeyAsync(SubscriptionTier.Enterprise);
         SetApiKey(enterpriseApiKey);
-        var join = await _client.PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/join", new JoinFederatedRunRequest
+        var join = await PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/join", new JoinFederatedRunRequest
         {
             ClientId = null,
             Attestation = null!
-        }, JsonOptions);
+        });
 
         if (join.StatusCode != HttpStatusCode.Forbidden)
         {
@@ -111,40 +131,39 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         var proApiKey = await CreateApiKeyAsync(SubscriptionTier.Pro);
         var enterpriseApiKey = await CreateApiKeyAsync(SubscriptionTier.Enterprise);
         SetApiKey(null);
-        var create = await _client.PostAsJsonAsync("/api/federated/runs", new CreateFederatedRunRequest
+        var create = await PostAsJsonAsync("/api/federated/runs", new CreateFederatedRunRequest
         {
             ModelName = modelName,
             Options = new FederatedLearningOptions { AggregationStrategy = FederatedAggregationStrategy.FedAvg },
             MinClientUpdatesPerRound = 2
-        }, JsonOptions);
+        });
         if (!create.IsSuccessStatusCode)
         {
             var body = await create.Content.ReadAsStringAsync();
             throw new InvalidOperationException($"CreateRun failed (HTTP {(int)create.StatusCode}): {body}");
         }
-        var createResponse = await create.Content.ReadFromJsonAsync<CreateFederatedRunResponse>(JsonOptions);
+        var createResponse = await ReadAsJsonAsync<CreateFederatedRunResponse>(create.Content);
         Assert.NotNull(createResponse);
         Assert.True(createResponse.ParameterCount > 0);
 
-        var join0 = await _client.PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/join", new JoinFederatedRunRequest
+        var join0 = await PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/join", new JoinFederatedRunRequest
         {
             Attestation = CreateAttestationEvidence()
-        }, JsonOptions);
+        });
         join0.EnsureSuccessStatusCode();
-        var join0Response = await join0.Content.ReadFromJsonAsync<JoinFederatedRunResponse>(JsonOptions);
+        var join0Response = await ReadAsJsonAsync<JoinFederatedRunResponse>(join0.Content);
         Assert.NotNull(join0Response);
 
-        var join1 = await _client.PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/join", new JoinFederatedRunRequest
+        var join1 = await PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/join", new JoinFederatedRunRequest
         {
             Attestation = CreateAttestationEvidence()
-        }, JsonOptions);
+        });
         join1.EnsureSuccessStatusCode();
-        var join1Response = await join1.Content.ReadFromJsonAsync<JoinFederatedRunResponse>(JsonOptions);
+        var join1Response = await ReadAsJsonAsync<JoinFederatedRunResponse>(join1.Content);
         Assert.NotNull(join1Response);
 
-        var initial = await _client.GetFromJsonAsync<FederatedRunParametersResponse>(
-            $"/api/federated/runs/{createResponse.RunId}/clients/{join0Response.ClientId}/parameters",
-            JsonOptions);
+        var initial = await GetAsJsonAsync<FederatedRunParametersResponse>(
+            $"/api/federated/runs/{createResponse.RunId}/clients/{join0Response.ClientId}/parameters");
         Assert.NotNull(initial);
         Assert.Equal(0, initial.RoundNumber);
         Assert.Equal(createResponse.ParameterCount, initial.ParameterCount);
@@ -153,34 +172,33 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         var ones = Enumerable.Repeat(1.0, createResponse.ParameterCount).ToArray();
         var threes = Enumerable.Repeat(3.0, createResponse.ParameterCount).ToArray();
 
-        var update0 = await _client.PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/updates", new SubmitFederatedUpdateRequest
+        var update0 = await PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/updates", new SubmitFederatedUpdateRequest
         {
             ClientId = join0Response.ClientId,
             RoundNumber = 0,
             ClientWeight = 1.0,
             Parameters = ones
-        }, JsonOptions);
+        });
         update0.EnsureSuccessStatusCode();
 
-        var update1 = await _client.PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/updates", new SubmitFederatedUpdateRequest
+        var update1 = await PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/updates", new SubmitFederatedUpdateRequest
         {
             ClientId = join1Response.ClientId,
             RoundNumber = 0,
             ClientWeight = 1.0,
             Parameters = threes
-        }, JsonOptions);
+        });
         update1.EnsureSuccessStatusCode();
 
-        var aggregate = await _client.PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/aggregate", new { }, JsonOptions);
+        var aggregate = await PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/aggregate", new { });
         aggregate.EnsureSuccessStatusCode();
-        var aggregateResponse = await aggregate.Content.ReadFromJsonAsync<AggregateFederatedRoundResponse>(JsonOptions);
+        var aggregateResponse = await ReadAsJsonAsync<AggregateFederatedRoundResponse>(aggregate.Content);
         Assert.NotNull(aggregateResponse);
         Assert.Equal(1, aggregateResponse.NewCurrentRound);
         Assert.Equal(2, aggregateResponse.AggregatedClientCount);
 
-        var after = await _client.GetFromJsonAsync<FederatedRunParametersResponse>(
-            $"/api/federated/runs/{createResponse.RunId}/clients/{join0Response.ClientId}/parameters",
-            JsonOptions);
+        var after = await GetAsJsonAsync<FederatedRunParametersResponse>(
+            $"/api/federated/runs/{createResponse.RunId}/clients/{join0Response.ClientId}/parameters");
         Assert.NotNull(after);
         Assert.Equal(1, after.RoundNumber);
         Assert.Equal(createResponse.ParameterCount, after.Parameters.Length);
@@ -202,7 +220,7 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         var proKeyContent = new StringContent("null", Encoding.UTF8, "application/json");
         var proKeyResponse = await _client.PostAsync($"/api/federated/runs/{createResponse.RunId}/artifact/key", proKeyContent);
         proKeyResponse.EnsureSuccessStatusCode();
-        var proKey = await proKeyResponse.Content.ReadFromJsonAsync<ModelArtifactKeyResponse>(JsonOptions);
+        var proKey = await ReadAsJsonAsync<ModelArtifactKeyResponse>(proKeyResponse.Content);
         Assert.NotNull(proKey);
 
         var proBytes = DecryptAesGcmArtifact(createResponse.RunId, proEncryptedBytes, proKey!);
@@ -228,12 +246,11 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         var missingEvidence = await _client.PostAsync($"/api/federated/runs/{createResponse.RunId}/artifact/key", missingEvidenceContent);
         Assert.Equal(HttpStatusCode.BadRequest, missingEvidence.StatusCode);
 
-        var keyResponse = await _client.PostAsJsonAsync(
+        var keyResponse = await PostAsJsonAsync(
             $"/api/federated/runs/{createResponse.RunId}/artifact/key",
-            CreateAttestationEvidence(),
-            JsonOptions);
+            CreateAttestationEvidence());
         keyResponse.EnsureSuccessStatusCode();
-        var key = await keyResponse.Content.ReadFromJsonAsync<ModelArtifactKeyResponse>(JsonOptions);
+        var key = await ReadAsJsonAsync<ModelArtifactKeyResponse>(keyResponse.Content);
         Assert.NotNull(key);
         Assert.False(string.IsNullOrWhiteSpace(key!.KeyBase64));
     }
@@ -245,14 +262,14 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         await LoadTrainedVectorModelAsync(modelName);
 
         SetApiKey(null);
-        var create = await _client.PostAsJsonAsync("/api/federated/runs", new CreateFederatedRunRequest
+        var create = await PostAsJsonAsync("/api/federated/runs", new CreateFederatedRunRequest
         {
             ModelName = modelName,
             Options = new FederatedLearningOptions(),
             MinClientUpdatesPerRound = 1
-        }, JsonOptions);
+        });
         create.EnsureSuccessStatusCode();
-        var createResponse = await create.Content.ReadFromJsonAsync<CreateFederatedRunResponse>(JsonOptions);
+        var createResponse = await ReadAsJsonAsync<CreateFederatedRunResponse>(create.Content);
         Assert.NotNull(createResponse);
 
         var response = await _client.GetAsync($"/api/federated/runs/{createResponse.RunId}/clients/12345/parameters");
@@ -384,12 +401,12 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         await CreateAndSaveVectorModelArtifactAsync(modelPath);
         _createdModelFiles.Add(modelPath);
 
-        var load = await _client.PostAsJsonAsync("/api/models", new LoadModelRequest
+        var load = await PostAsJsonAsync("/api/models", new LoadModelRequest
         {
             Name = modelName,
             Path = fileName,
             NumericType = NumericType.Double
-        }, JsonOptions);
+        });
 
         if (!load.IsSuccessStatusCode)
         {
