@@ -685,80 +685,60 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         return (rgb, density);
     }
 
+    /// <summary>
+    /// Performs multiresolution hash encoding using vectorized Engine operations.
+    /// </summary>
+    /// <param name="positions">Input positions tensor of shape [N, 3].</param>
+    /// <returns>Encoded features tensor of shape [N, numLevels * featuresPerLevel].</returns>
+    /// <remarks>
+    /// <para>
+    /// Uses Engine.MultiresolutionHashEncoding for CPU/GPU accelerated hash lookups.
+    /// The multiresolution hash encoding is the key innovation of Instant-NGP that enables
+    /// ~100x faster training than traditional NeRF positional encoding.
+    /// </para>
+    /// </remarks>
     private Tensor<T> MultiresolutionHashEncoding(Tensor<T> positions)
     {
-        int numPoints = positions.Shape[0];
-        int totalFeatures = _numLevels * _featuresPerLevel;
-        var features = new T[numPoints * totalFeatures];
-        var posData = positions.Data;
-
+        // Prepare hash tables array and resolutions for Engine operation
+        var hashTablesArray = new Tensor<T>[_numLevels];
+        var resolutions = new int[_numLevels];
+        
         for (int level = 0; level < _numLevels; level++)
         {
-            int resolution = GetLevelResolution(level);
-            var table = _hashTables[level].Data;
-
-            // For each point, hash and lookup features
-            for (int i = 0; i < numPoints; i++)
-            {
-                double px = NumOps.ToDouble(posData[i * 3]);
-                double py = NumOps.ToDouble(posData[i * 3 + 1]);
-                double pz = NumOps.ToDouble(posData[i * 3 + 2]);
-                NormalizePosition(px, py, pz, out double x, out double y, out double z);
-
-                double gx = x * resolution;
-                double gy = y * resolution;
-                double gz = z * resolution;
-
-                int x0 = (int)Math.Floor(gx);
-                int y0 = (int)Math.Floor(gy);
-                int z0 = (int)Math.Floor(gz);
-
-                double fx = gx - x0;
-                double fy = gy - y0;
-                double fz = gz - z0;
-
-                int x1 = x0 + 1;
-                int y1 = y0 + 1;
-                int z1 = z0 + 1;
-
-                var w000 = (1 - fx) * (1 - fy) * (1 - fz);
-                var w001 = (1 - fx) * (1 - fy) * fz;
-                var w010 = (1 - fx) * fy * (1 - fz);
-                var w011 = (1 - fx) * fy * fz;
-                var w100 = fx * (1 - fy) * (1 - fz);
-                var w101 = fx * (1 - fy) * fz;
-                var w110 = fx * fy * (1 - fz);
-                var w111 = fx * fy * fz;
-
-                int h000 = HashIndex(x0, y0, z0);
-                int h001 = HashIndex(x0, y0, z1);
-                int h010 = HashIndex(x0, y1, z0);
-                int h011 = HashIndex(x0, y1, z1);
-                int h100 = HashIndex(x1, y0, z0);
-                int h101 = HashIndex(x1, y0, z1);
-                int h110 = HashIndex(x1, y1, z0);
-                int h111 = HashIndex(x1, y1, z1);
-
-                int featureBase = i * totalFeatures + level * _featuresPerLevel;
-
-                for (int f = 0; f < _featuresPerLevel; f++)
-                {
-                    double value =
-                        w000 * NumOps.ToDouble(table[h000 * _featuresPerLevel + f]) +
-                        w001 * NumOps.ToDouble(table[h001 * _featuresPerLevel + f]) +
-                        w010 * NumOps.ToDouble(table[h010 * _featuresPerLevel + f]) +
-                        w011 * NumOps.ToDouble(table[h011 * _featuresPerLevel + f]) +
-                        w100 * NumOps.ToDouble(table[h100 * _featuresPerLevel + f]) +
-                        w101 * NumOps.ToDouble(table[h101 * _featuresPerLevel + f]) +
-                        w110 * NumOps.ToDouble(table[h110 * _featuresPerLevel + f]) +
-                        w111 * NumOps.ToDouble(table[h111 * _featuresPerLevel + f]);
-
-                    features[featureBase + f] = NumOps.FromDouble(value);
-                }
-            }
+            hashTablesArray[level] = _hashTables[level];
+            resolutions[level] = GetLevelResolution(level);
         }
+        
+        // Normalize positions to [0, 1] range before encoding
+        var normalizedPositions = NormalizePositionsToUnit(positions);
+        
+        // Use vectorized Engine implementation for CPU/GPU acceleration
+        return Engine.MultiresolutionHashEncoding(normalizedPositions, hashTablesArray, resolutions, _featuresPerLevel);
+    }
 
-        return new Tensor<T>(features, [numPoints, totalFeatures]);
+    /// <summary>
+    /// Normalizes positions from world space to [0, 1] range based on scene bounds.
+    /// </summary>
+    private Tensor<T> NormalizePositionsToUnit(Tensor<T> positions)
+    {
+        int numPoints = positions.Shape[0];
+        var normalized = new T[numPoints * 3];
+        var posData = positions.Data;
+        
+        for (int i = 0; i < numPoints; i++)
+        {
+            double px = NumOps.ToDouble(posData[i * 3]);
+            double py = NumOps.ToDouble(posData[i * 3 + 1]);
+            double pz = NumOps.ToDouble(posData[i * 3 + 2]);
+            
+            NormalizePosition(px, py, pz, out double nx, out double ny, out double nz);
+            
+            normalized[i * 3] = NumOps.FromDouble(nx);
+            normalized[i * 3 + 1] = NumOps.FromDouble(ny);
+            normalized[i * 3 + 2] = NumOps.FromDouble(nz);
+        }
+        
+        return new Tensor<T>(normalized, [numPoints, 3]);
     }
 
     private static int SpatialHash(int x, int y, int z)
