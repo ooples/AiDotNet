@@ -1197,4 +1197,125 @@ public enum MetricType
     /// </para>
     /// </remarks>
     AverageEpisodeReward,
+    /// <summary>
+    /// Chamfer Distance for point cloud similarity measurement.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Chamfer Distance measures how similar two point clouds are by computing
+    /// the average distance from each point in one cloud to its nearest neighbor in the other.
+    /// Lower values indicate better similarity. Used for 3D reconstruction, point cloud completion,
+    /// and generative 3D model evaluation.
+    /// </para>
+    /// </remarks>
+    ChamferDistance,
+
+    /// <summary>
+    /// Earth Mover's Distance (Wasserstein) for point cloud comparison.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Earth Mover's Distance measures the minimum "work" needed to transform
+    /// one point cloud into another, where work is defined as moving mass times distance.
+    /// Lower values indicate better similarity. More computationally expensive than Chamfer Distance
+    /// but provides a true metric on probability distributions.
+    /// </para>
+    /// </remarks>
+    EarthMoversDistance,
+
+    /// <summary>
+    /// Intersection over Union for 3D volumetric segmentation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> 3D IoU measures the overlap between predicted and ground truth volumes.
+    /// It's the 3D extension of the 2D IoU metric used in image segmentation. Higher values (closer to 1)
+    /// indicate better segmentation accuracy.
+    /// </para>
+    /// </remarks>
+    IoU3D,
+
+    /// <summary>
+    /// Peak Signal-to-Noise Ratio for rendered image quality.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> PSNR measures the quality of reconstructed or rendered images compared to
+    /// a reference. Higher values indicate better quality. Commonly used to evaluate NeRF and other
+    /// neural rendering methods. Values above 30 dB are generally considered good quality.
+    /// </para>
+    /// </remarks>
+    PSNR,
+
+    /// <summary>
+    /// Structural Similarity Index for perceptual image quality.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SSIM measures perceived visual quality by comparing luminance, contrast,
+    /// and structure between images. Values range from -1 to 1, with 1 indicating perfect similarity.
+    /// Often considered more aligned with human perception than PSNR.
+    /// </para>
+    /// </remarks>
+    SSIM,
+
+    /// <summary>
+    /// Learned Perceptual Image Patch Similarity for deep perceptual quality.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> LPIPS uses deep neural networks to measure perceptual similarity between
+    /// images. Lower values indicate more similar images. Often better at matching human judgment
+    /// than traditional metrics like PSNR or SSIM.
+    /// </para>
+    /// </remarks>
+    LPIPS,
+
+    /// <summary>
+    /// Mean Intersection over Union across all classes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> mIoU averages the IoU score across all classes in a segmentation task.
+    /// Used for semantic segmentation of point clouds, meshes, and volumes. Higher values indicate
+    /// better overall segmentation quality.
+    /// </para>
+    /// </remarks>
+    MeanIoU,
+
+    /// <summary>
+    /// Part-averaged IoU for part segmentation tasks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Part IoU is specifically designed for object part segmentation tasks,
+    /// averaging IoU over different parts of objects (e.g., chair legs, back, seat).
+    /// </para>
+    /// </remarks>
+    PartIoU,
+
+    /// <summary>
+    /// Normal consistency for surface reconstruction quality.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Normal Consistency measures how well the predicted surface normals
+    /// match the ground truth. Higher values indicate better surface reconstruction quality.
+    /// Important for mesh reconstruction and NeRF geometry evaluation.
+    /// </para>
+    /// </remarks>
+    NormalConsistency,
+
+    /// <summary>
+    /// Depth error metrics for depth estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Absolute Relative Error measures the average error in depth predictions
+    /// relative to the true depth. Lower values indicate better depth estimation accuracy.
+    /// Common thresholds (δ < 1.25^n) are also often reported.
+    /// </para>
+    /// </remarks>
+    AbsoluteRelativeError
 }
+

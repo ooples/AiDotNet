@@ -900,14 +900,26 @@ public enum ModelType
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> SpiralNet++ processes 3D meshes by applying convolutions
-    /// along spiral sequences of vertex neighbors. This creates consistent operations
+    /// along spiral sequences of vertices. This provides consistent local feature learning
     /// on irregular mesh structures without requiring mesh registration.
-    /// 
+    ///
     /// SpiralNet++ is useful for:
-    /// - 3D face reconstruction and recognition
-    /// - Human body shape analysis
+    /// - Mesh shape analysis and classification
     /// - Medical mesh analysis (organs, bones)
     /// - General mesh classification and segmentation
+    ///
+    /// Strengths: Works on irregular meshes, efficient spiral-based operations
+    /// </para>
+    /// </remarks>
+    SpiralNetPlusPlus,
+    /// <summary>
+    /// SpiralNet neural network for mesh processing using spiral convolutions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SpiralNet is the original spiral convolution architecture
+    /// for processing 3D meshes. It defines consistent spiral ordering of vertex neighbors
+    /// for convolutional operations on irregular mesh structures.
     /// </para>
     /// </remarks>
     SpiralNet,
@@ -1274,5 +1286,142 @@ public enum ModelType
     /// Use ConfigureKnowledgeDistillation() on PredictionModelBuilder to enable this technique.
     /// </para>
     /// </remarks>
-    KnowledgeDistillation
+    KnowledgeDistillation,
+
+    /// <summary>
+    /// PointNet neural network for direct point cloud processing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> PointNet processes 3D point clouds directly without converting
+    /// to voxels or meshes. It learns global features from unordered point sets through
+    /// symmetric functions (max pooling) that ensure permutation invariance.
+    ///
+    /// PointNet is useful for:
+    /// - 3D object classification from LiDAR or depth sensors
+    /// - Point cloud segmentation
+    /// - 3D shape recognition
+    ///
+    /// Strengths: Simple, efficient, handles raw point clouds directly
+    /// </para>
+    /// </remarks>
+    PointNet,
+
+    /// <summary>
+    /// PointNet++ neural network with hierarchical point set learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> PointNet++ extends PointNet by learning local features at multiple scales.
+    /// It uses farthest point sampling and ball query to create hierarchical point cloud representations,
+    /// capturing both fine details and global structure.
+    ///
+    /// PointNet++ is useful for:
+    /// - High-accuracy 3D classification and segmentation
+    /// - Scenes with varying point densities
+    /// - Applications requiring local geometric feature learning
+    ///
+    /// Strengths: Better local feature learning, multi-scale processing, state-of-the-art accuracy
+    /// </para>
+    /// </remarks>
+    PointNetPlusPlus,
+
+    /// <summary>
+    /// Dynamic Graph CNN for point cloud processing with dynamic edge convolutions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DGCNN constructs graphs dynamically in feature space and applies
+    /// edge convolutions. Unlike fixed graph methods, it recomputes nearest neighbors after
+    /// each layer, allowing the network to learn better representations.
+    ///
+    /// DGCNN is useful for:
+    /// - Point cloud classification with high accuracy
+    /// - Part segmentation
+    /// - 3D shape analysis
+    ///
+    /// Strengths: Dynamic graph construction, captures both local and global features
+    /// </para>
+    /// </remarks>
+    DGCNN,
+
+    /// <summary>
+    /// Neural Radiance Fields for novel view synthesis.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> NeRF learns a continuous 3D representation of a scene from 2D images.
+    /// It represents scenes as a function mapping 3D coordinates and viewing direction to color
+    /// and density, enabling photorealistic novel view synthesis.
+    ///
+    /// NeRF is useful for:
+    /// - Novel view synthesis from photos
+    /// - 3D reconstruction
+    /// - Virtual reality content creation
+    ///
+    /// Strengths: High-quality rendering, continuous representation, view-dependent effects
+    /// </para>
+    /// </remarks>
+    NeRF,
+
+    /// <summary>
+    /// Instant Neural Graphics Primitives with multiresolution hash encoding.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Instant-NGP dramatically accelerates NeRF training using multiresolution
+    /// hash encoding. Instead of slow positional encoding, it uses learned hash tables at multiple
+    /// resolutions, enabling real-time training and rendering.
+    ///
+    /// Instant-NGP is useful for:
+    /// - Real-time 3D reconstruction
+    /// - Fast NeRF training (seconds instead of hours)
+    /// - Interactive 3D scene editing
+    ///
+    /// Strengths: 1000x faster than vanilla NeRF, compact representation, real-time rendering
+    /// </para>
+    /// </remarks>
+    InstantNGP,
+
+    /// <summary>
+    /// 3D Gaussian Splatting for real-time radiance field rendering.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> 3D Gaussian Splatting represents scenes as millions of 3D Gaussians
+    /// that can be efficiently rasterized. Unlike NeRF's ray marching, it uses tile-based
+    /// rasterization for real-time rendering at high quality.
+    ///
+    /// Gaussian Splatting is useful for:
+    /// - Real-time novel view synthesis
+    /// - High-quality 3D reconstruction
+    /// - AR/VR applications requiring fast rendering
+    ///
+    /// Strengths: Real-time rendering (100+ FPS), high quality, explicit 3D representation
+    /// </para>
+    /// </remarks>
+    GaussianSplatting,
+
+    /// <summary>
+    /// DiffusionNet for learning on 3D surfaces using diffusion-based message passing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DiffusionNet processes 3D meshes using heat diffusion as a building block.
+    /// It learns features by simulating how heat would spread across the surface, which naturally
+    /// captures surface geometry and is robust to mesh discretization.
+    ///
+    /// DiffusionNet is useful for:
+    /// - Mesh segmentation
+    /// - Shape correspondence
+    /// - Surface-based learning tasks
+    ///
+    /// Strengths: Robust to mesh quality, captures intrinsic geometry, state-of-the-art on surfaces
+    /// </para>
+    /// </remarks>
+    DiffusionNet
 }
+
+
+
+
