@@ -271,8 +271,14 @@ public static class InstantNGPOperations
             newGrid[i] = numOps.FromDouble(numOps.ToDouble(newGrid[i]) * decayVal);
         }
 
-        // Update with new density samples
-        var lockObj = new object();
+        // Use striped locking to reduce contention while avoiding memory overhead of per-cell locks
+        // Number of stripes is a power of 2 for efficient modulo operation via bitwise AND
+        const int NumStripes = 256;
+        var stripeLocks = new object[NumStripes];
+        for (int i = 0; i < NumStripes; i++)
+        {
+            stripeLocks[i] = new object();
+        }
 
         Parallel.For(0, numSamples, i =>
         {
@@ -293,8 +299,9 @@ public static class InstantNGPOperations
 
             int gridIdx = (gx * gridSize + gy) * gridSize + gz;
 
-            // Update with max of current and new density
-            lock (lockObj)
+            // Use striped lock based on grid index to reduce contention
+            int stripeIdx = gridIdx & (NumStripes - 1);
+            lock (stripeLocks[stripeIdx])
             {
                 double current = numOps.ToDouble(newGrid[gridIdx]);
                 double alpha = 1.0 - Math.Exp(-density);

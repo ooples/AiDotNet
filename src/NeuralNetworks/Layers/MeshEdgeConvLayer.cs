@@ -371,9 +371,8 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
         var result = new Tensor<T>([numEdges, aggregatedSize]);
 
         // Step 1: Copy self-features (first InputChannels columns)
-        // Use TensorSetSlice to copy input to the first InputChannels columns of result
-        var selfSlice = Engine.TensorSlice(result, [0, 0], [numEdges, InputChannels]);
-        Engine.TensorCopy(input, selfSlice);
+        // Use TensorSetSlice for consistent API usage
+        Engine.TensorSetSlice(result, input, [0, 0]);
 
         // Step 2: Gather neighbor features for each neighbor position
         for (int n = 0; n < NumNeighbors; n++)

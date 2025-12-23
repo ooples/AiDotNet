@@ -18438,6 +18438,14 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> Conv3D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation)
     {
+        // Validate array parameter lengths
+        if (stride == null || stride.Length != 3)
+            throw new ArgumentException("stride array must have exactly 3 elements (D, H, W).", nameof(stride));
+        if (padding == null || padding.Length != 3)
+            throw new ArgumentException("padding array must have exactly 3 elements (D, H, W).", nameof(padding));
+        if (dilation == null || dilation.Length != 3)
+            throw new ArgumentException("dilation array must have exactly 3 elements (D, H, W).", nameof(dilation));
+
         // Adaptive execution: use convolution threshold
         if (input.Length < _thresholds.Convolution)
         {
@@ -18484,10 +18492,17 @@ public class GpuEngine : IEngine, IDisposable
         int outputHeight = (height + 2 * padding[1] - effectiveKernelHeight) / stride[1] + 1;
         int outputWidth = (width + 2 * padding[2] - effectiveKernelWidth) / stride[2] + 1;
 
+        // Check for potential overflow using long arithmetic
+        long outputSizeLong = (long)batch * outChannels * outputDepth * outputHeight * outputWidth;
+        if (outputSizeLong > int.MaxValue)
+        {
+            throw new ArgumentException($"Output tensor size ({outputSizeLong}) exceeds maximum supported size ({int.MaxValue}). Consider reducing batch size or output dimensions.");
+        }
+        int outputSize = (int)outputSizeLong;
+
         try
         {
             var result = new Tensor<float>(new[] { batch, outChannels, outputDepth, outputHeight, outputWidth });
-            int outputSize = batch * outChannels * outputDepth * outputHeight * outputWidth;
 
             var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
             var gpuKernel = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(kernel.Length);
@@ -18556,10 +18571,17 @@ public class GpuEngine : IEngine, IDisposable
         int outputHeight = (height + 2 * padding[1] - effectiveKernelHeight) / stride[1] + 1;
         int outputWidth = (width + 2 * padding[2] - effectiveKernelWidth) / stride[2] + 1;
 
+        // Check for potential overflow using long arithmetic
+        long outputSizeLong = (long)batch * outChannels * outputDepth * outputHeight * outputWidth;
+        if (outputSizeLong > int.MaxValue)
+        {
+            throw new ArgumentException($"Output tensor size ({outputSizeLong}) exceeds maximum supported size ({int.MaxValue}). Consider reducing batch size or output dimensions.");
+        }
+        int outputSize = (int)outputSizeLong;
+
         try
         {
             var result = new Tensor<double>(new[] { batch, outChannels, outputDepth, outputHeight, outputWidth });
-            int outputSize = batch * outChannels * outputDepth * outputHeight * outputWidth;
 
             var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
             var gpuKernel = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(kernel.Length);
@@ -18623,6 +18645,14 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> MaxPool3D<T>(Tensor<T> input, int[] poolSize, int[] stride, int[] padding)
     {
+        // Validate array parameter lengths
+        if (poolSize == null || poolSize.Length != 3)
+            throw new ArgumentException("poolSize array must have exactly 3 elements (D, H, W).", nameof(poolSize));
+        if (stride == null || stride.Length != 3)
+            throw new ArgumentException("stride array must have exactly 3 elements (D, H, W).", nameof(stride));
+        if (padding == null || padding.Length != 3)
+            throw new ArgumentException("padding array must have exactly 3 elements (D, H, W).", nameof(padding));
+
         // Adaptive execution
         if (input.Length < _thresholds.VectorAdd)
         {
@@ -18654,6 +18684,13 @@ public class GpuEngine : IEngine, IDisposable
         int outputDepth = (depth + 2 * padding[0] - poolSize[0]) / stride[0] + 1;
         int outputHeight = (height + 2 * padding[1] - poolSize[1]) / stride[1] + 1;
         int outputWidth = (width + 2 * padding[2] - poolSize[2]) / stride[2] + 1;
+
+        // Check for potential overflow using long arithmetic
+        long outputSizeLong = (long)batch * channels * outputDepth * outputHeight * outputWidth;
+        if (outputSizeLong > int.MaxValue)
+        {
+            throw new ArgumentException($"Output tensor size ({outputSizeLong}) exceeds maximum supported size ({int.MaxValue}).");
+        }
 
         try
         {
@@ -18776,6 +18813,14 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> AvgPool3D<T>(Tensor<T> input, int[] poolSize, int[] stride, int[] padding)
     {
+        // Validate array parameter lengths
+        if (poolSize == null || poolSize.Length != 3)
+            throw new ArgumentException("poolSize array must have exactly 3 elements (D, H, W).", nameof(poolSize));
+        if (stride == null || stride.Length != 3)
+            throw new ArgumentException("stride array must have exactly 3 elements (D, H, W).", nameof(stride));
+        if (padding == null || padding.Length != 3)
+            throw new ArgumentException("padding array must have exactly 3 elements (D, H, W).", nameof(padding));
+
         // Adaptive execution
         if (input.Length < _thresholds.VectorAdd)
         {
@@ -18808,10 +18853,17 @@ public class GpuEngine : IEngine, IDisposable
         int outputHeight = (height + 2 * padding[1] - poolSize[1]) / stride[1] + 1;
         int outputWidth = (width + 2 * padding[2] - poolSize[2]) / stride[2] + 1;
 
+        // Check for potential overflow using long arithmetic
+        long outputSizeLong = (long)batch * channels * outputDepth * outputHeight * outputWidth;
+        if (outputSizeLong > int.MaxValue)
+        {
+            throw new ArgumentException($"Output tensor size ({outputSizeLong}) exceeds maximum supported size ({int.MaxValue}).");
+        }
+        int outputSize = (int)outputSizeLong;
+
         try
         {
             var result = new Tensor<float>(new[] { batch, channels, outputDepth, outputHeight, outputWidth });
-            int outputSize = batch * channels * outputDepth * outputHeight * outputWidth;
 
             var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
             var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);

@@ -152,6 +152,11 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     /// </summary>
     private readonly int _numEigenvectors;
 
+    /// <summary>
+    /// Cached gradients for diffusion time parameters from backward pass.
+    /// </summary>
+    private T[]? _diffusionTimesGradient;
+
     #endregion
 
     #region Constructors
@@ -640,6 +645,13 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         bool hasBatch = _lastInput.Rank == 3;
         int numVertices = hasBatch ? _lastInput.Shape[1] : _lastInput.Shape[0];
 
+        // Initialize diffusion times gradient
+        _diffusionTimesGradient = new T[NumTimeScales];
+        for (int t = 0; t < NumTimeScales; t++)
+        {
+            _diffusionTimesGradient[t] = NumOps.Zero;
+        }
+
         if (hasBatch)
         {
             // For batched inputs, accumulate gradients across all batches
@@ -658,6 +670,10 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             
             // Compute input gradients
             var diffusedGrad = Engine.TensorMatMul(deltaReshaped, _weights);
+            
+            // Compute diffusion time gradients (accumulate across batches)
+            ComputeDiffusionTimeGradients(diffusedGrad, _lastInput.Reshape(batchSize * numVertices, InputChannels), numVertices * batchSize);
+            
             var inputGrad = BackpropagateThroughDiffusion(diffusedGrad, numVertices * batchSize);
             
             return inputGrad.Reshape(batchSize, numVertices, InputChannels);
@@ -669,10 +685,183 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             _biasesGradient = Engine.ReduceSum(delta, [0], keepDims: false);
 
             var diffusedGrad = Engine.TensorMatMul(delta, _weights);
+            
+            // Compute diffusion time gradients
+            ComputeDiffusionTimeGradients(diffusedGrad, _lastInput, numVertices);
+            
             var inputGrad = BackpropagateThroughDiffusion(diffusedGrad, numVertices);
 
             return inputGrad;
         }
+    }
+
+    /// <summary>
+    /// Computes gradients for diffusion time parameters using the chain rule.
+    /// </summary>
+    /// <param name="diffusedGrad">Gradient w.r.t. diffused features [numVertices, InputChannels * NumTimeScales].</param>
+    /// <param name="input">Original input features [numVertices, InputChannels].</param>
+    /// <param name="numVertices">Number of vertices.</param>
+    /// <remarks>
+    /// <para>
+    /// For spectral diffusion, the gradient w.r.t. time t is:
+    /// dL/dt = sum_k,c (-lambda_k * exp(-lambda_k * t) * (Phi @ coeffs)_c * dL/d(diffused)_t,c)
+    /// where coeffs = Phi^T @ input.
+    /// </para>
+    /// </remarks>
+    private void ComputeDiffusionTimeGradients(Tensor<T> diffusedGrad, Tensor<T> input, int numVertices)
+    {
+        if (_diffusionTimesGradient == null)
+        {
+            _diffusionTimesGradient = new T[NumTimeScales];
+        }
+
+        if (_eigenvalues != null && _eigenvectors != null)
+        {
+            ComputeTimeGradientsSpectral(diffusedGrad, input, numVertices);
+        }
+        else if (_laplacian != null)
+        {
+            ComputeTimeGradientsDirect(diffusedGrad, input, numVertices);
+        }
+    }
+
+    /// <summary>
+    /// Computes time gradients using spectral method.
+    /// </summary>
+    private void ComputeTimeGradientsSpectral(Tensor<T> diffusedGrad, Tensor<T> input, int numVertices)
+    {
+        if (_eigenvalues == null || _eigenvectors == null || _diffusionTimesGradient == null)
+            return;
+
+        int numEig = Math.Min(_numEigenvectors, _eigenvalues.Length);
+        var eigenvectorsTransposed = Engine.TensorTranspose(_eigenvectors);
+
+        // Project input to spectral domain once: [numEig, InputChannels]
+        var spectralCoeffs = Engine.TensorMatMul(eigenvectorsTransposed, input);
+
+        for (int t = 0; t < NumTimeScales; t++)
+        {
+            T time = DiffusionTimes[t];
+            T timeGrad = NumOps.Zero;
+
+            // For each eigenvalue, compute the derivative contribution
+            // d/dt(exp(-lambda * t)) = -lambda * exp(-lambda * t)
+            var derivativeCoeffs = new T[numEig * InputChannels];
+            for (int k = 0; k < numEig; k++)
+            {
+                T lambda = _eigenvalues[k];
+                T decay = NumOps.Exp(NumOps.Negate(NumOps.Multiply(lambda, time)));
+                T derivativeFactor = NumOps.Negate(NumOps.Multiply(lambda, decay));
+
+                for (int c = 0; c < InputChannels; c++)
+                {
+                    int idx = k * InputChannels + c;
+                    derivativeCoeffs[idx] = NumOps.Multiply(spectralCoeffs[k, c], derivativeFactor);
+                }
+            }
+
+            // Project derivative back to spatial domain: [numVertices, InputChannels]
+            var derivTensor = new Tensor<T>(derivativeCoeffs, [numEig, InputChannels]);
+            var spatialDeriv = Engine.TensorMatMul(_eigenvectors, derivTensor);
+
+            // Extract gradient slice for this time scale
+            int baseOffset = t * InputChannels;
+            var timeGradSlice = Engine.TensorSlice(diffusedGrad, [0, baseOffset], [numVertices, InputChannels]);
+
+            // Dot product of gradient and derivative gives time gradient
+            var product = Engine.TensorMultiply(timeGradSlice, spatialDeriv);
+            var sumTensor = Engine.ReduceSum(product, [0, 1], keepDims: false);
+            timeGrad = sumTensor.GetFlat(0);
+
+            _diffusionTimesGradient[t] = NumOps.Add(_diffusionTimesGradient[t], timeGrad);
+        }
+    }
+
+    /// <summary>
+    /// Computes time gradients using direct (iterative) method.
+    /// </summary>
+    /// <remarks>
+    /// For direct diffusion using matrix exponential approximation, the gradient
+    /// computation is more complex. We use finite differences as a practical approximation.
+    /// </remarks>
+    private void ComputeTimeGradientsDirect(Tensor<T> diffusedGrad, Tensor<T> input, int numVertices)
+    {
+        if (_laplacian == null || _diffusionTimesGradient == null)
+            return;
+
+        // Use numerical differentiation for direct method
+        T epsilon = NumOps.FromDouble(1e-5);
+
+        for (int t = 0; t < NumTimeScales; t++)
+        {
+            T originalTime = DiffusionTimes[t];
+
+            // Compute diffusion at t + epsilon
+            DiffusionTimes[t] = NumOps.Add(originalTime, epsilon);
+            var diffusedPlus = new T[numVertices * InputChannels];
+            ComputeDiffusionDirectSingleTime(input, diffusedPlus, numVertices, t);
+
+            // Compute diffusion at t - epsilon
+            DiffusionTimes[t] = NumOps.Subtract(originalTime, epsilon);
+            var diffusedMinus = new T[numVertices * InputChannels];
+            ComputeDiffusionDirectSingleTime(input, diffusedMinus, numVertices, t);
+
+            // Restore original time
+            DiffusionTimes[t] = originalTime;
+
+            // Compute finite difference: (f(t+e) - f(t-e)) / (2*e)
+            T twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
+            T timeGrad = NumOps.Zero;
+
+            int baseOffset = t * InputChannels;
+            for (int v = 0; v < numVertices; v++)
+            {
+                for (int c = 0; c < InputChannels; c++)
+                {
+                    int localIdx = v * InputChannels + c;
+                    int gradIdx = v * InputChannels * NumTimeScales + baseOffset + c;
+
+                    T diff = NumOps.Divide(
+                        NumOps.Subtract(diffusedPlus[localIdx], diffusedMinus[localIdx]),
+                        twoEpsilon);
+                    T grad = diffusedGrad.GetFlat(gradIdx);
+                    timeGrad = NumOps.Add(timeGrad, NumOps.Multiply(grad, diff));
+                }
+            }
+
+            _diffusionTimesGradient[t] = NumOps.Add(_diffusionTimesGradient[t], timeGrad);
+        }
+    }
+
+    /// <summary>
+    /// Computes direct diffusion for a single time scale.
+    /// </summary>
+    private void ComputeDiffusionDirectSingleTime(Tensor<T> input, T[] output, int numVertices, int timeIndex)
+    {
+        if (_laplacian == null)
+            return;
+
+        T time = DiffusionTimes[timeIndex];
+
+        // Use iterative approximation: (I - t*L/n)^n
+        int numIterations = Math.Max(1, (int)(NumOps.ToDouble(time) * 10));
+        T stepSize = NumOps.Divide(time, NumOps.FromDouble(numIterations));
+        T negStepSize = NumOps.Negate(stepSize);
+
+        // Start with input
+        var current = input;
+
+        for (int iter = 0; iter < numIterations; iter++)
+        {
+            // diffusion_step = x - stepSize * L @ x
+            var laplacianProduct = Engine.TensorMatMul(_laplacian, current);
+            var scaled = Engine.TensorMultiplyScalar(laplacianProduct, negStepSize);
+            current = Engine.TensorAdd(current, scaled);
+        }
+
+        // Copy to output
+        var currentArray = current.ToArray();
+        Array.Copy(currentArray, output, output.Length);
     }
 
     /// <summary>
@@ -821,16 +1010,42 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     /// <summary>
     /// Updates layer parameters using computed gradients.
     /// </summary>
+    /// <param name="learningRate">Learning rate for gradient descent step.</param>
+    /// <remarks>
+    /// <para>
+    /// Updates weights, biases, and diffusion time parameters using gradient descent.
+    /// Diffusion times are constrained to remain positive after update.
+    /// </para>
+    /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
         if (_weightsGradient == null || _biasesGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
+        // Update weights
         var scaledWeightGrad = Engine.TensorMultiplyScalar(_weightsGradient, learningRate);
         _weights = Engine.TensorSubtract(_weights, scaledWeightGrad);
 
+        // Update biases
         var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
         _biases = Engine.TensorSubtract(_biases, scaledBiasGrad);
+
+        // Update diffusion times if gradients are available
+        if (_diffusionTimesGradient != null)
+        {
+            T minTime = NumOps.FromDouble(1e-6); // Minimum allowed diffusion time
+            for (int t = 0; t < NumTimeScales; t++)
+            {
+                T update = NumOps.Multiply(learningRate, _diffusionTimesGradient[t]);
+                DiffusionTimes[t] = NumOps.Subtract(DiffusionTimes[t], update);
+                
+                // Clamp to minimum positive value to ensure valid diffusion
+                if (NumOps.ToDouble(DiffusionTimes[t]) < NumOps.ToDouble(minTime))
+                {
+                    DiffusionTimes[t] = minTime;
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -937,6 +1152,17 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     /// <summary>
     /// Serializes the layer to a binary stream.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Saves all learnable parameters and mesh configuration including:
+    /// - Layer configuration (channels, time scales, eigenvector count)
+    /// - Weights and biases
+    /// - Diffusion time parameters
+    /// - Eigenvalues and eigenvectors (if available)
+    /// - Laplacian and mass matrices (if available)
+    /// </para>
+    /// </remarks>
+    /// <param name="writer">Binary writer to serialize to.</param>
     public override void Serialize(BinaryWriter writer)
     {
         base.Serialize(writer);
@@ -945,27 +1171,87 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         writer.Write(NumTimeScales);
         writer.Write(_numEigenvectors);
 
+        // Serialize weights
         var weightArray = _weights.ToArray();
         for (int i = 0; i < weightArray.Length; i++)
         {
             writer.Write(NumOps.ToDouble(weightArray[i]));
         }
 
+        // Serialize biases
         var biasArray = _biases.ToArray();
         for (int i = 0; i < biasArray.Length; i++)
         {
             writer.Write(NumOps.ToDouble(biasArray[i]));
         }
 
+        // Serialize diffusion times
         for (int i = 0; i < DiffusionTimes.Length; i++)
         {
             writer.Write(NumOps.ToDouble(DiffusionTimes[i]));
+        }
+
+        // Serialize mesh configuration
+        // Flag indicating which mesh data is available
+        byte meshFlags = 0;
+        if (_eigenvalues != null && _eigenvectors != null) meshFlags |= 0x01;
+        if (_laplacian != null) meshFlags |= 0x02;
+        if (_massMatrix != null) meshFlags |= 0x04;
+        writer.Write(meshFlags);
+
+        // Serialize eigenvalues and eigenvectors
+        if (_eigenvalues != null && _eigenvectors != null)
+        {
+            writer.Write(_eigenvalues.Length);
+            for (int i = 0; i < _eigenvalues.Length; i++)
+            {
+                writer.Write(NumOps.ToDouble(_eigenvalues[i]));
+            }
+
+            // Write eigenvector shape and data
+            writer.Write(_eigenvectors.Shape[0]); // numVertices
+            writer.Write(_eigenvectors.Shape[1]); // numEigenvalues
+            var eigenvectorArray = _eigenvectors.ToArray();
+            for (int i = 0; i < eigenvectorArray.Length; i++)
+            {
+                writer.Write(NumOps.ToDouble(eigenvectorArray[i]));
+            }
+        }
+
+        // Serialize Laplacian
+        if (_laplacian != null)
+        {
+            writer.Write(_laplacian.Shape[0]); // numVertices (square matrix)
+            var laplacianArray = _laplacian.ToArray();
+            for (int i = 0; i < laplacianArray.Length; i++)
+            {
+                writer.Write(NumOps.ToDouble(laplacianArray[i]));
+            }
+        }
+
+        // Serialize mass matrix
+        if (_massMatrix != null)
+        {
+            writer.Write(_massMatrix.Length);
+            var massArray = _massMatrix.ToArray();
+            for (int i = 0; i < massArray.Length; i++)
+            {
+                writer.Write(NumOps.ToDouble(massArray[i]));
+            }
         }
     }
 
     /// <summary>
     /// Deserializes the layer from a binary stream.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Restores all learnable parameters and mesh configuration.
+    /// After deserialization, the layer is ready for inference without
+    /// needing to call SetEigenbasis or SetLaplacian.
+    /// </para>
+    /// </remarks>
+    /// <param name="reader">Binary reader to deserialize from.</param>
     public override void Deserialize(BinaryReader reader)
     {
         base.Deserialize(reader);
@@ -995,6 +1281,53 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         for (int i = 0; i < NumTimeScales; i++)
         {
             DiffusionTimes[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Deserialize mesh configuration
+        byte meshFlags = reader.ReadByte();
+
+        // Deserialize eigenvalues and eigenvectors
+        if ((meshFlags & 0x01) != 0)
+        {
+            int numEig = reader.ReadInt32();
+            _eigenvalues = new T[numEig];
+            for (int i = 0; i < numEig; i++)
+            {
+                _eigenvalues[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+
+            int numVertices = reader.ReadInt32();
+            int eigCount = reader.ReadInt32();
+            var eigenvectorArray = new T[numVertices * eigCount];
+            for (int i = 0; i < eigenvectorArray.Length; i++)
+            {
+                eigenvectorArray[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            _eigenvectors = new Tensor<T>(eigenvectorArray, [numVertices, eigCount]);
+        }
+
+        // Deserialize Laplacian
+        if ((meshFlags & 0x02) != 0)
+        {
+            int numVertices = reader.ReadInt32();
+            var laplacianArray = new T[numVertices * numVertices];
+            for (int i = 0; i < laplacianArray.Length; i++)
+            {
+                laplacianArray[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            _laplacian = new Tensor<T>(laplacianArray, [numVertices, numVertices]);
+        }
+
+        // Deserialize mass matrix
+        if ((meshFlags & 0x04) != 0)
+        {
+            int numVertices = reader.ReadInt32();
+            var massArray = new T[numVertices];
+            for (int i = 0; i < massArray.Length; i++)
+            {
+                massArray[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            _massMatrix = new Tensor<T>(massArray, [numVertices]);
         }
     }
 
