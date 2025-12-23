@@ -27,7 +27,6 @@ public class SqlSandboxTests : IClassFixture<SqlSandboxTestFactory>
         };
 
         var response = await _client.PostAsJsonAsync("/api/program-synthesis/sql/execute", request);
-
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<SqlExecuteResponse>();

@@ -160,7 +160,7 @@ public sealed class SqlSandboxExecutor : ISqlSandboxExecutor
             };
         }
         catch (InvalidOperationException ex) when (
-            ex.Message.Contains("ConnectionString is not configured and Docker fallback is disabled.", StringComparison.Ordinal))
+            ex.Message.Contains("is not configured and Docker fallback is disabled.", StringComparison.Ordinal))
         {
             return new SqlExecuteResponse
             {

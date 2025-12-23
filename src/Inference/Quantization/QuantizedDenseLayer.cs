@@ -32,15 +32,11 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
         if (weights == null || biases == null)
             throw new ArgumentException("Dense layer must expose weights and biases.", nameof(source));
 
-        var q = Int8WeightOnlyQuantization.QuantizePerRow(weights);
+        var q = Int8WeightOnlyQuantization.QuantizePerRow(weights.ToArray(), rows: _outputSize, cols: _inputSize);
         _weightsInt8 = q.Weights;
         _rowScales = q.Scales;
 
-        _biases = new float[biases.Length];
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            _biases[i] = biases[i];
-        }
+        _biases = biases.ToArray();
     }
 
     public QuantizedDenseLayer(DenseLayer<float> source, IVectorActivationFunction<float> vectorActivation)
@@ -57,15 +53,11 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
         if (weights == null || biases == null)
             throw new ArgumentException("Dense layer must expose weights and biases.", nameof(source));
 
-        var q = Int8WeightOnlyQuantization.QuantizePerRow(weights);
+        var q = Int8WeightOnlyQuantization.QuantizePerRow(weights.ToArray(), rows: _outputSize, cols: _inputSize);
         _weightsInt8 = q.Weights;
         _rowScales = q.Scales;
 
-        _biases = new float[biases.Length];
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            _biases[i] = biases[i];
-        }
+        _biases = biases.ToArray();
     }
 
     public override bool SupportsTraining => false;
@@ -104,9 +96,12 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
             throw new ArgumentException($"QuantizedDenseLayer input size mismatch. Expected {_inputSize}, got {featuresIn}.");
 
         var output = new Tensor<float>(new[] { batchSize, _outputSize });
+        var inputSpan = flat.AsSpan();
 
         for (int b = 0; b < batchSize; b++)
         {
+            int inputBase = b * featuresIn;
+            int outputBase = b * _outputSize;
             for (int o = 0; o < _outputSize; o++)
             {
                 float sum = _biases[o];
@@ -114,9 +109,9 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
                 int wBase = o * _inputSize;
                 for (int i = 0; i < _inputSize; i++)
                 {
-                    sum += flat[b, i] * (_weightsInt8[wBase + i] * scale);
+                    sum += inputSpan[inputBase + i] * (_weightsInt8[wBase + i] * scale);
                 }
-                output[b, o] = sum;
+                output.SetFlat(outputBase + o, sum);
             }
         }
 
