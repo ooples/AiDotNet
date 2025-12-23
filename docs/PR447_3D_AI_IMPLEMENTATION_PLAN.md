@@ -23,7 +23,7 @@ concrete deliverables; no placeholders or stubs are acceptable.
 - [x] Triangle mesh data structure with validated topology and attributes.
 - [x] Voxel grid data structure with world-space metadata (origin, voxel size).
 - [x] Point cloud conversion utilities (mesh -> points, voxels -> points).
-- [ ] IO utilities for mesh and point data (OBJ, PLY, STL) with tests.
+- [x] IO utilities for mesh and point data (OBJ, PLY, STL) with tests.
 - [ ] Dataset adapters for ModelNet40, ShapeNetCore, ScanNet (IO + metadata).
 
 ## Phase 2 - 3D Preprocessing and Geometry Ops
