@@ -116,8 +116,9 @@ public static class GaussianSplattingOperations
             }
             else
             {
-                c00 = c11 = c22 = 0.01;
-                c01 = c02 = c12 = 0.0;
+                throw new ArgumentException(
+                    $"Unsupported covariance shape: expected [N, 6] or [N, 3, 3], got [{string.Join(", ", covariances3D.Shape)}]",
+                    nameof(covariances3D));
             }
 
             // Transform covariance to camera space: Σ_cam = R * Σ * R^T
@@ -569,7 +570,21 @@ public static class GaussianSplattingOperations
 
             for (int ch = 0; ch < numChannels; ch++)
             {
+                // Recompute pre-clamped color to check if it was saturated
+                double preclampColor = 0.0;
+                for (int b = 0; b < basisCount; b++)
+                {
+                    double coeff = numOps.ToDouble(shCoefficients.GetFlat(i * basisCount * numChannels + b * numChannels + ch));
+                    preclampColor += coeff * basis[b];
+                }
+
+                // Mask gradient if color was clamped (gradient is 0 outside [0,1])
                 double colorGrad = numOps.ToDouble(outputGradient.GetFlat(i * numChannels + ch));
+                if (preclampColor < 0.0 || preclampColor > 1.0)
+                {
+                    colorGrad = 0.0;
+                }
+
                 for (int b = 0; b < basisCount; b++)
                 {
                     // dL/d(coeff) = dL/dcolor * basis

@@ -19,8 +19,6 @@ namespace AiDotNet.NeuralNetworks.Metrics;
 /// </remarks>
 public static class SegmentationMetrics<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     /// <summary>
     /// Computes Mean Intersection over Union (mIoU) for segmentation.
     /// </summary>
