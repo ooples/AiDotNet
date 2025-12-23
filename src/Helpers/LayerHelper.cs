@@ -3141,4 +3141,122 @@ public static class LayerHelper<T>
             outputSize: numClasses,
             activationFunction: outputActivation);
     }
+
+    /// <summary>
+    /// Creates the default layer sequence for a SpiralNet mesh neural network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="inputFeatures">Number of input features per vertex (default: 3 for coordinates).</param>
+    /// <param name="spiralLength">Length of spiral sequences for convolutions.</param>
+    /// <param name="convChannels">Channel sizes for each spiral convolution block.</param>
+    /// <param name="poolRatios">Pooling ratios for mesh simplification at each level.</param>
+    /// <param name="fcSizes">Sizes of fully connected layers before output.</param>
+    /// <param name="useBatchNorm">Whether to use batch normalization after convolutions.</param>
+    /// <param name="dropoutRate">Dropout rate for fully connected layers.</param>
+    /// <param name="useGlobalAveragePooling">Whether to use global average (true) or max (false) pooling.</param>
+    /// <returns>An enumerable of layers forming the SpiralNet architecture.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method builds the default layer stack for SpiralNet++.</para>
+    /// <para>
+    /// Architecture pattern:
+    /// - Multiple spiral convolution blocks (SpiralConv + optional BatchNorm)
+    /// - Global pooling to aggregate vertex features
+    /// - Fully connected layers for classification
+    /// 
+    /// Applications:
+    /// - 3D face recognition and reconstruction
+    /// - Human body shape analysis
+    /// - Medical mesh analysis
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the architecture has invalid output size.</exception>
+    public static IEnumerable<ILayer<T>> CreateDefaultSpiralNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int inputFeatures = 3,
+        int spiralLength = 9,
+        int[]? convChannels = null,
+        double[]? poolRatios = null,
+        int[]? fcSizes = null,
+        bool useBatchNorm = true,
+        double dropoutRate = 0.5,
+        bool useGlobalAveragePooling = true)
+    {
+        if (architecture.OutputSize <= 0)
+        {
+            throw new InvalidOperationException("Output size must be specified and greater than 0 for SpiralNet.");
+        }
+
+        convChannels ??= [32, 64, 128, 256];
+        poolRatios ??= [0.5, 0.5];
+        fcSizes ??= [256, 128];
+
+        if (inputFeatures <= 0)
+        {
+            throw new ArgumentException("Input features must be positive.", nameof(inputFeatures));
+        }
+
+        if (spiralLength <= 0)
+        {
+            throw new ArgumentException("Spiral length must be positive.", nameof(spiralLength));
+        }
+
+        int numClasses = architecture.OutputSize;
+        int currentChannels = inputFeatures;
+
+        // Spiral convolution blocks
+        for (int block = 0; block < convChannels.Length; block++)
+        {
+            int outChannels = convChannels[block];
+
+            // SpiralConv layer
+            yield return new SpiralConvLayer<T>(
+                inputChannels: currentChannels,
+                outputChannels: outChannels,
+                spiralLength: spiralLength,
+                activation: new ReLUActivation<T>());
+
+            currentChannels = outChannels;
+
+            // Optional batch normalization
+            if (useBatchNorm)
+            {
+                yield return new BatchNormalizationLayer<T>(currentChannels);
+            }
+        }
+
+        // Global pooling to aggregate vertex features
+        yield return new GlobalPoolingLayer<T>(
+            inputShape: [currentChannels],
+            poolingType: useGlobalAveragePooling ? PoolingType.Average : PoolingType.Max,
+            activationFunction: (IActivationFunction<T>?)null);
+
+        // Fully connected layers
+        int fcInput = currentChannels;
+        foreach (var fcSize in fcSizes)
+        {
+            yield return new DenseLayer<T>(
+                inputSize: fcInput,
+                outputSize: fcSize,
+                activationFunction: new ReLUActivation<T>());
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            fcInput = fcSize;
+        }
+
+        // Output layer
+        IActivationFunction<T> outputActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
+            ? new SoftmaxActivation<T>()
+            : architecture.TaskType == NeuralNetworkTaskType.BinaryClassification
+                ? new SigmoidActivation<T>()
+                : new IdentityActivation<T>();
+
+        yield return new DenseLayer<T>(
+            inputSize: fcInput,
+            outputSize: numClasses,
+            activationFunction: outputActivation);
+    }
 }

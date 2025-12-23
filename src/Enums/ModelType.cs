@@ -894,6 +894,24 @@ public enum ModelType
     /// </remarks>
     MeshCNN,
 
+    /// <summary>
+    /// SpiralNet++ neural network for mesh vertex processing using spiral convolutions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SpiralNet++ processes 3D meshes by applying convolutions
+    /// along spiral sequences of vertex neighbors. This creates consistent operations
+    /// on irregular mesh structures without requiring mesh registration.
+    /// 
+    /// SpiralNet++ is useful for:
+    /// - 3D face reconstruction and recognition
+    /// - Human body shape analysis
+    /// - Medical mesh analysis (organs, bones)
+    /// - General mesh classification and segmentation
+    /// </para>
+    /// </remarks>
+    SpiralNet,
+
     RestrictedBoltzmannMachine,
 
     SpikingNeuralNetwork,
