@@ -470,13 +470,32 @@ public class Conv3DLayer<T> : LayerBase<T>
     /// <exception cref="InvalidOperationException">Thrown when Forward has not been called.</exception>
     /// <remarks>
     /// <para>
-    /// The backward pass computes:
-    /// 1. Input gradient using Engine.Conv3DBackwardInput
-    /// 2. Kernel gradient using Engine.Conv3DBackwardKernel
-    /// 3. Bias gradient by summing over spatial dimensions
+    /// The backward pass routes to either manual or autodiff implementation based on the
+    /// <see cref="LayerBase{T}.UseAutodiff"/> property.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to this layer's output.</param>
+    /// <returns>The gradient of the loss with respect to this layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// The backward pass computes:
+    /// 1. Activation derivative applied to output gradient
+    /// 2. Input gradient using Engine.Conv3DBackwardInput
+    /// 3. Kernel gradient using Engine.Conv3DBackwardKernel
+    /// 4. Bias gradient by summing over batch and spatial dimensions
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastPreActivation == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -524,6 +543,29 @@ public class Conv3DLayer<T> : LayerBase<T>
         }
 
         return inputGrad;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to this layer's output.</param>
+    /// <returns>The gradient of the loss with respect to this layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. It's useful for:
+    /// - Verifying gradient correctness
+    /// - Rapid prototyping with custom modifications
+    /// - Research and experimentation
+    /// </para>
+    /// <para>
+    /// Currently falls back to manual implementation as Conv3D autodiff is pending integration.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // Conv3D autodiff operations are pending full integration
+        // Fall back to manual implementation for now
+        return BackwardManual(outputGradient);
     }
 
     /// <summary>
@@ -612,6 +654,64 @@ public class Conv3DLayer<T> : LayerBase<T>
     /// </summary>
     /// <returns>The kernel tensor.</returns>
     public Tensor<T> GetFilters() => _kernels;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in the layer.
+    /// </summary>
+    /// <value>
+    /// The sum of the number of kernel weights and biases.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This equals: OutputChannels * InputChannels * KernelSize^3 + OutputChannels
+    /// </para>
+    /// </remarks>
+    public override int ParameterCount => _kernels.Length + _biases.Length;
+
+    /// <summary>
+    /// Creates a deep copy of the layer with the same configuration and parameters.
+    /// </summary>
+    /// <returns>A new instance of the <see cref="Conv3DLayer{T}"/> with identical configuration and parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// The clone is completely independent from the original layer. Changes to one
+    /// will not affect the other.
+    /// </para>
+    /// </remarks>
+    public override LayerBase<T> Clone()
+    {
+        Conv3DLayer<T> copy;
+
+        if (UsingVectorActivation)
+        {
+            copy = new Conv3DLayer<T>(
+                InputChannels,
+                OutputChannels,
+                KernelSize,
+                _inputDepth,
+                _inputHeight,
+                _inputWidth,
+                Stride,
+                Padding,
+                VectorActivation);
+        }
+        else
+        {
+            copy = new Conv3DLayer<T>(
+                InputChannels,
+                OutputChannels,
+                KernelSize,
+                _inputDepth,
+                _inputHeight,
+                _inputWidth,
+                Stride,
+                Padding,
+                ScalarActivation);
+        }
+
+        copy.SetParameters(GetParameters());
+        return copy;
+    }
 
     #endregion
 

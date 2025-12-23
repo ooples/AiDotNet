@@ -2748,4 +2748,106 @@ public static class LayerHelper<T>
             currentInputDim = hiddenDim;
         }
     }
+
+    /// <summary>
+    /// Creates default layers for a Voxel-based 3D Convolutional Neural Network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="voxelResolution">The resolution of the voxel grid (e.g., 32 for 32x32x32). Default is 32.</param>
+    /// <param name="numConvBlocks">The number of convolutional blocks (each block has Conv3D + MaxPool3D). Default is 3.</param>
+    /// <param name="baseFilters">The number of filters in the first convolutional layer. Doubles with each block. Default is 32.</param>
+    /// <returns>A collection of layers configured for voxel-based 3D classification.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A Voxel CNN is like a 3D version of a regular image classifier.
+    /// Instead of looking at a 2D image, it examines a 3D grid of "blocks" (voxels) to understand
+    /// 3D shapes. This is like how Minecraft represents the world - each block is either filled
+    /// or empty, and the pattern of blocks creates recognizable objects.
+    /// </para>
+    /// <para>
+    /// The architecture follows a standard pattern:
+    /// - Multiple Conv3D + MaxPool3D blocks to extract hierarchical 3D features
+    /// - Each block doubles the number of filters while halving the spatial resolution
+    /// - Global average pooling to aggregate spatial information
+    /// - Dense output layer for classification
+    /// </para>
+    /// <para>
+    /// Applications include:
+    /// - Recognizing 3D objects from voxelized point clouds (e.g., ModelNet40)
+    /// - Medical image analysis (CT, MRI volumetric scans)
+    /// - Spatial occupancy prediction from depth sensors
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the architecture has invalid input or output dimensions.</exception>
+    public static IEnumerable<ILayer<T>> CreateDefaultVoxelCNNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int voxelResolution = 32,
+        int numConvBlocks = 3,
+        int baseFilters = 32)
+    {
+        if (architecture.OutputSize <= 0)
+        {
+            throw new InvalidOperationException("Output size must be specified and greater than 0 for VoxelCNN.");
+        }
+
+        if (voxelResolution <= 0)
+        {
+            throw new ArgumentException("Voxel resolution must be positive.", nameof(voxelResolution));
+        }
+
+        int numClasses = architecture.OutputSize;
+        int currentResolution = voxelResolution;
+        int currentFilters = baseFilters;
+        int inputChannels = 1; // Typically single-channel occupancy grid
+
+        // Create Conv3D + MaxPool3D blocks
+        for (int block = 0; block < numConvBlocks; block++)
+        {
+            int outputFilters = currentFilters * (1 << block); // Double filters each block
+            int inChannels = (block == 0) ? inputChannels : (currentFilters * (1 << (block - 1)));
+
+            // Conv3D layer with padding to maintain resolution before pooling
+            yield return new Conv3DLayer<T>(
+                inputChannels: inChannels,
+                outputChannels: outputFilters,
+                kernelSize: 3,
+                inputDepth: currentResolution,
+                inputHeight: currentResolution,
+                inputWidth: currentResolution,
+                stride: 1,
+                padding: 1,
+                activation: new ReLUActivation<T>());
+
+            // MaxPool3D layer to downsample by factor of 2
+            if (currentResolution >= 2)
+            {
+                yield return new MaxPool3DLayer<T>(
+                    inputShape: [outputFilters, currentResolution, currentResolution, currentResolution],
+                    poolSize: 2,
+                    stride: 2);
+                currentResolution /= 2;
+            }
+        }
+
+        // Final number of filters after all blocks
+        int finalFilters = currentFilters * (1 << (numConvBlocks - 1));
+
+        // Global average pooling to aggregate spatial information
+        yield return new GlobalPoolingLayer<T>(
+            inputShape: [finalFilters, currentResolution, currentResolution, currentResolution],
+            poolingType: PoolingType.Average,
+            activationFunction: (IActivationFunction<T>?)null);
+
+        // Dense output layer for classification
+        IActivationFunction<T> outputActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
+            ? new SoftmaxActivation<T>()
+            : architecture.TaskType == NeuralNetworkTaskType.BinaryClassification
+                ? new SigmoidActivation<T>()
+                : new IdentityActivation<T>();
+
+        yield return new DenseLayer<T>(
+            inputSize: finalFilters,
+            outputSize: numClasses,
+            activationFunction: outputActivation);
+    }
 }
