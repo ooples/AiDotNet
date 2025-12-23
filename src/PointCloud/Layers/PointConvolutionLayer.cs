@@ -137,22 +137,28 @@ public class PointConvolutionLayer<T> : LayerBase<T>
     {
         _lastInput = input;
         int numPoints = input.Shape[0];
+        
+        // Use vectorized matrix multiplication: [N, inputChannels] @ [inputChannels, outputChannels] = [N, outputChannels]
+        // Reshape input to matrix for matmul
+        var inputMatrix = new Matrix<T>(numPoints, _inputChannels);
+        for (int i = 0; i < numPoints; i++)
+        {
+            for (int j = 0; j < _inputChannels; j++)
+            {
+                inputMatrix[i, j] = input.Data[i * _inputChannels + j];
+            }
+        }
+        
+        // Vectorized matrix multiplication via Engine
+        var outputMatrix = Engine.MatrixMultiply(inputMatrix, _weights);
+        
+        // Add biases using broadcasting (vectorized)
         var output = new T[numPoints * _outputChannels];
-        var numOps = NumOps;
-
-        // Matrix multiplication: [N, inputChannels] x [inputChannels, outputChannels] = [N, outputChannels]
         for (int n = 0; n < numPoints; n++)
         {
             for (int outC = 0; outC < _outputChannels; outC++)
             {
-                T sum = _biases[outC];
-                for (int inC = 0; inC < _inputChannels; inC++)
-                {
-                    var inputVal = input.Data[n * _inputChannels + inC];
-                    var weightVal = _weights[inC, outC];
-                    sum = numOps.Add(sum, numOps.Multiply(inputVal, weightVal));
-                }
-                output[n * _outputChannels + outC] = sum;
+                output[n * _outputChannels + outC] = NumOps.Add(outputMatrix[n, outC], _biases[outC]);
             }
         }
 
@@ -162,13 +168,9 @@ public class PointConvolutionLayer<T> : LayerBase<T>
         // Apply activation if specified
         if (ScalarActivation != null)
         {
-            var activated = new T[output.Length];
-            for (int i = 0; i < output.Length; i++)
-            {
-                activated[i] = ScalarActivation.Activate(output[i]);
-            }
-
-            return new Tensor<T>(activated, [numPoints, _outputChannels]);
+            // Use vectorized tensor operations
+            var activatedTensor = ApplyActivation(preActivation);
+            return activatedTensor;
         }
 
         return preActivation;
@@ -182,68 +184,74 @@ public class PointConvolutionLayer<T> : LayerBase<T>
         }
 
         int numPoints = _lastInput.Shape[0];
-        var inputGradient = new T[numPoints * _inputChannels];
         var numOps = NumOps;
 
         // Apply activation derivative if needed
-        var gradient = outputGradient.Data;
+        Tensor<T> gradientTensor;
         if (ScalarActivation != null)
         {
             if (_lastPreActivation == null)
             {
                 throw new InvalidOperationException("Forward pass must be called before backward pass.");
             }
-
-            var activatedGradient = new Vector<T>(gradient.Length);
-            for (int i = 0; i < gradient.Length; i++)
-            {
-                var preActivation = _lastPreActivation.Data[i];
-                activatedGradient[i] = numOps.Multiply(outputGradient.Data[i], ScalarActivation.Derivative(preActivation));
-            }
-
-            gradient = activatedGradient;
+            gradientTensor = ApplyActivationDerivative(_lastPreActivation, outputGradient);
+        }
+        else
+        {
+            gradientTensor = outputGradient;
         }
 
-        // Compute weight gradients: dL/dW = X^T * dL/dY
+        // Convert tensors to matrices for vectorized operations
+        var inputMatrix = new Matrix<T>(numPoints, _inputChannels);
+        for (int i = 0; i < numPoints; i++)
+        {
+            for (int j = 0; j < _inputChannels; j++)
+            {
+                inputMatrix[i, j] = _lastInput.Data[i * _inputChannels + j];
+            }
+        }
+        
+        var gradMatrix = new Matrix<T>(numPoints, _outputChannels);
+        for (int i = 0; i < numPoints; i++)
+        {
+            for (int j = 0; j < _outputChannels; j++)
+            {
+                gradMatrix[i, j] = gradientTensor.Data[i * _outputChannels + j];
+            }
+        }
+
+        // Compute weight gradients: dL/dW = X^T * dL/dY (vectorized)
+        var inputT = Engine.MatrixTranspose(inputMatrix);
+        var weightGrad = Engine.MatrixMultiply(inputT, gradMatrix);
         for (int inC = 0; inC < _inputChannels; inC++)
         {
             for (int outC = 0; outC < _outputChannels; outC++)
             {
-                T gradSum = numOps.Zero;
-                for (int n = 0; n < numPoints; n++)
-                {
-                    var inputVal = _lastInput.Data[n * _inputChannels + inC];
-                    var outGrad = gradient[n * _outputChannels + outC];
-                    gradSum = numOps.Add(gradSum, numOps.Multiply(inputVal, outGrad));
-                }
-                _weightGradients[inC, outC] = numOps.Add(_weightGradients[inC, outC], gradSum);
+                _weightGradients[inC, outC] = numOps.Add(_weightGradients[inC, outC], weightGrad[inC, outC]);
             }
         }
 
-        // Compute bias gradients
+        // Compute bias gradients: sum over batch dimension (vectorized)
         for (int outC = 0; outC < _outputChannels; outC++)
         {
             T gradSum = numOps.Zero;
             for (int n = 0; n < numPoints; n++)
             {
-                gradSum = numOps.Add(gradSum, gradient[n * _outputChannels + outC]);
+                gradSum = numOps.Add(gradSum, gradMatrix[n, outC]);
             }
             _biasGradients[outC] = numOps.Add(_biasGradients[outC], gradSum);
         }
 
-        // Compute input gradient: dL/dX = dL/dY * W^T
+        // Compute input gradient: dL/dX = dL/dY * W^T (vectorized)
+        var weightsT = Engine.MatrixTranspose(_weights);
+        var inputGradMatrix = Engine.MatrixMultiply(gradMatrix, weightsT);
+        
+        var inputGradient = new T[numPoints * _inputChannels];
         for (int n = 0; n < numPoints; n++)
         {
             for (int inC = 0; inC < _inputChannels; inC++)
             {
-                T sum = numOps.Zero;
-                for (int outC = 0; outC < _outputChannels; outC++)
-                {
-                    var outGrad = gradient[n * _outputChannels + outC];
-                    var weightVal = _weights[inC, outC];
-                    sum = numOps.Add(sum, numOps.Multiply(outGrad, weightVal));
-                }
-                inputGradient[n * _inputChannels + inC] = sum;
+                inputGradient[n * _inputChannels + inC] = inputGradMatrix[n, inC];
             }
         }
 

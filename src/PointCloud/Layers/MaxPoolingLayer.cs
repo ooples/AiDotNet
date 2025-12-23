@@ -58,31 +58,13 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _numPoints = input.Shape[0];
-        _maxIndices = new int[_numFeatures];
-        var output = new T[_numFeatures];
-        var numOps = NumOps;
+        
+        // Use vectorized ReduceMax along axis 0 (points dimension)
+        // This reduces [numPoints, numFeatures] to [1, numFeatures] taking max across all points
+        var pooledOutput = Engine.ReduceMax(input, [0], true, out int[] maxIndices);
+        _maxIndices = maxIndices;
 
-        // For each feature channel, find the maximum across all points
-        for (int c = 0; c < _numFeatures; c++)
-        {
-            T maxVal = input.Data[c]; // Start with first point's value
-            int maxIdx = 0;
-
-            for (int n = 1; n < _numPoints; n++)
-            {
-                T currentVal = input.Data[n * _numFeatures + c];
-                if (numOps.GreaterThan(currentVal, maxVal))
-                {
-                    maxVal = currentVal;
-                    maxIdx = n;
-                }
-            }
-
-            output[c] = maxVal;
-            _maxIndices[c] = maxIdx;
-        }
-
-        return new Tensor<T>(output, [1, _numFeatures]);
+        return pooledOutput;
     }
 
     public override Tensor<T> Backward(Tensor<T> outputGradient)
@@ -92,24 +74,8 @@ public class MaxPoolingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        // Gradient flows only to the points that had maximum values
-        var inputGradient = new T[_numPoints * _numFeatures];
-        var numOps = NumOps;
-
-        // Initialize all gradients to zero
-        for (int i = 0; i < inputGradient.Length; i++)
-        {
-            inputGradient[i] = numOps.Zero;
-        }
-
-        // Assign gradient only to the max points
-        for (int c = 0; c < _numFeatures; c++)
-        {
-            int maxIdx = _maxIndices[c];
-            inputGradient[maxIdx * _numFeatures + c] = outputGradient.Data[c];
-        }
-
-        return new Tensor<T>(inputGradient, [_numPoints, _numFeatures]);
+        // Use vectorized backward pass
+        return Engine.ReduceMaxBackward(outputGradient, _maxIndices, [_numPoints, _numFeatures]);
     }
 
     public override void UpdateParameters(T learningRate)
