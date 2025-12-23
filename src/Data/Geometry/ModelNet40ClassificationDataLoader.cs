@@ -247,7 +247,7 @@ public sealed class ModelNet40ClassificationDataLoader<T> : PointCloudDatasetLoa
         string fileName = Path.HasExtension(entryPath) ? entryPath : entryPath + ".txt";
         string relativePath = entryPath.Contains(Path.DirectorySeparatorChar)
             ? fileName
-            : Path.Combine(className, fileName);
+            : Path.Combine(safeClassName, fileName);
 
         string filePath = Path.Combine(root, relativePath);
         if (!File.Exists(filePath))
