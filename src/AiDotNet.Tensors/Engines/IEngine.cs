@@ -4467,4 +4467,190 @@ public interface IEngine
         int maxSamples);
 
     #endregion
+
+    #region Mesh Convolution Operations
+
+    /// <summary>
+    /// Performs spiral convolution on mesh vertex features.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="vertexFeatures">Input vertex features [numVertices, inputChannels].</param>
+    /// <param name="spiralIndices">Spiral neighbor indices [numVertices, spiralLength].</param>
+    /// <param name="weights">Convolution weights [outputChannels, inputChannels * spiralLength].</param>
+    /// <param name="biases">Bias values [outputChannels].</param>
+    /// <returns>Output vertex features [numVertices, outputChannels].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Spiral convolution extends traditional convolution to irregular mesh surfaces.
+    /// Unlike grid-based convolutions where neighbors are in fixed positions, mesh vertices have
+    /// variable connectivity. Spiral convolution solves this by:
+    /// 
+    /// 1. Defining a consistent spiral ordering of neighbors around each vertex
+    /// 2. Gathering features from neighbors in this canonical order
+    /// 3. Applying learned weights to the ordered features
+    /// 
+    /// This creates translation-equivariant convolutions on arbitrary mesh topologies.
+    /// </para>
+    /// <para>
+    /// <b>Mathematical Formulation:</b>
+    /// For each vertex v with spiral neighbors S(v) = [n₁, n₂, ..., nₖ]:
+    /// 
+    /// gathered[v] = concat(features[n₁], features[n₂], ..., features[nₖ])
+    /// output[v] = weights @ gathered[v] + bias
+    /// 
+    /// The spiral ordering ensures that the convolution is invariant to mesh parameterization.
+    /// </para>
+    /// <para>
+    /// Reference: "Neural 3D Morphable Models: Spiral Convolutional Networks" by Bouritsas et al.
+    /// Reference: "SpiralNet++: A Fast and Highly Efficient Mesh Convolution Operator" by Gong et al.
+    /// </para>
+    /// </remarks>
+    Tensor<T> SpiralConv<T>(
+        Tensor<T> vertexFeatures,
+        Tensor<int> spiralIndices,
+        Tensor<T> weights,
+        Tensor<T> biases);
+
+    /// <summary>
+    /// Computes the backward pass for spiral convolution with respect to input features.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="outputGradient">Gradient with respect to output [numVertices, outputChannels].</param>
+    /// <param name="spiralIndices">Spiral neighbor indices [numVertices, spiralLength].</param>
+    /// <param name="weights">Convolution weights [outputChannels, inputChannels * spiralLength].</param>
+    /// <param name="inputChannels">Number of input channels.</param>
+    /// <returns>Gradient with respect to input features [numVertices, inputChannels].</returns>
+    /// <remarks>
+    /// <para>
+    /// The backward pass scatters gradients back to the original vertex positions according
+    /// to the spiral indices. This uses atomic scatter-add operations for correctness when
+    /// multiple spiral paths reference the same vertex.
+    /// </para>
+    /// </remarks>
+    Tensor<T> SpiralConvBackwardInput<T>(
+        Tensor<T> outputGradient,
+        Tensor<int> spiralIndices,
+        Tensor<T> weights,
+        int inputChannels);
+
+    /// <summary>
+    /// Computes the backward pass for spiral convolution with respect to weights.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="outputGradient">Gradient with respect to output [numVertices, outputChannels].</param>
+    /// <param name="vertexFeatures">Input vertex features from forward pass [numVertices, inputChannels].</param>
+    /// <param name="spiralIndices">Spiral neighbor indices [numVertices, spiralLength].</param>
+    /// <returns>Gradient with respect to weights [outputChannels, inputChannels * spiralLength].</returns>
+    Tensor<T> SpiralConvBackwardWeights<T>(
+        Tensor<T> outputGradient,
+        Tensor<T> vertexFeatures,
+        Tensor<int> spiralIndices);
+
+    /// <summary>
+    /// Computes the backward pass for spiral convolution with respect to biases.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="outputGradient">Gradient with respect to output [numVertices, outputChannels].</param>
+    /// <returns>Gradient with respect to biases [outputChannels].</returns>
+    Tensor<T> SpiralConvBackwardBias<T>(Tensor<T> outputGradient);
+
+    /// <summary>
+    /// Performs diffusion convolution on mesh vertex features using the Laplacian operator.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="vertexFeatures">Input vertex features [numVertices, inputChannels].</param>
+    /// <param name="laplacian">Mesh Laplacian matrix [numVertices, numVertices].</param>
+    /// <param name="weights">Diffusion weights [outputChannels, inputChannels].</param>
+    /// <param name="biases">Bias values [outputChannels].</param>
+    /// <param name="diffusionTime">Diffusion time parameter controlling spatial extent.</param>
+    /// <returns>Output vertex features [numVertices, outputChannels].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Diffusion convolution uses heat diffusion on the mesh surface
+    /// to define the convolution kernel. Features spread across the mesh according to the
+    /// heat equation, which respects the intrinsic geometry of the surface.
+    /// 
+    /// The diffusion time controls how far features propagate:
+    /// - Small time: local features, fine detail
+    /// - Large time: global features, coarse structure
+    /// </para>
+    /// <para>
+    /// <b>Mathematical Formulation:</b>
+    /// output = exp(-t * L) @ input @ weights + bias
+    /// 
+    /// Where L is the mesh Laplacian and t is the diffusion time.
+    /// The matrix exponential is computed using eigendecomposition or Taylor series.
+    /// </para>
+    /// <para>
+    /// Reference: "DiffusionNet: Discretization Agnostic Learning on Surfaces" by Sharp et al.
+    /// </para>
+    /// </remarks>
+    Tensor<T> DiffusionConv<T>(
+        Tensor<T> vertexFeatures,
+        Tensor<T> laplacian,
+        Tensor<T> weights,
+        Tensor<T> biases,
+        T diffusionTime);
+
+    /// <summary>
+    /// Computes the backward pass for diffusion convolution.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="outputGradient">Gradient with respect to output [numVertices, outputChannels].</param>
+    /// <param name="vertexFeatures">Input vertex features from forward pass.</param>
+    /// <param name="laplacian">Mesh Laplacian matrix from forward pass.</param>
+    /// <param name="weights">Diffusion weights from forward pass.</param>
+    /// <param name="diffusionTime">Diffusion time from forward pass.</param>
+    /// <returns>Tuple of (input gradient, weight gradient, bias gradient).</returns>
+    (Tensor<T> inputGrad, Tensor<T> weightGrad, Tensor<T> biasGrad) DiffusionConvBackward<T>(
+        Tensor<T> outputGradient,
+        Tensor<T> vertexFeatures,
+        Tensor<T> laplacian,
+        Tensor<T> weights,
+        T diffusionTime);
+
+    /// <summary>
+    /// Computes the mesh Laplacian matrix from vertex positions and face indices.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="vertices">Vertex positions [numVertices, 3].</param>
+    /// <param name="faces">Face indices [numFaces, 3] for triangular mesh.</param>
+    /// <param name="laplacianType">Type of Laplacian: "uniform", "cotangent", or "normalized".</param>
+    /// <returns>Laplacian matrix [numVertices, numVertices].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Laplacian Types:</b>
+    /// - Uniform: Simple adjacency-based, ignores geometry
+    /// - Cotangent: Geometry-aware, preserves angles
+    /// - Normalized: Cotangent normalized by vertex areas
+    /// </para>
+    /// </remarks>
+    Tensor<T> ComputeMeshLaplacian<T>(
+        Tensor<T> vertices,
+        Tensor<int> faces,
+        string laplacianType = "cotangent");
+
+    /// <summary>
+    /// Generates spiral indices for mesh vertices based on connectivity.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for vertex positions.</typeparam>
+    /// <param name="vertices">Vertex positions [numVertices, 3].</param>
+    /// <param name="faces">Face indices [numFaces, 3].</param>
+    /// <param name="spiralLength">Number of neighbors in each spiral.</param>
+    /// <returns>Spiral indices [numVertices, spiralLength].</returns>
+    /// <remarks>
+    /// <para>
+    /// The algorithm:
+    /// 1. Build adjacency list from faces
+    /// 2. For each vertex, find the initial reference direction
+    /// 3. Sort neighbors by angle from reference in consistent winding order
+    /// 4. Extend to spiral length by following the ring structure
+    /// </para>
+    /// </remarks>
+    Tensor<int> GenerateSpiralIndices<T>(
+        Tensor<T> vertices,
+        Tensor<int> faces,
+        int spiralLength);
+
+    #endregion
 }

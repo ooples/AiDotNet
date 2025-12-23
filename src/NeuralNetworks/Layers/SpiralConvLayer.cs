@@ -395,18 +395,62 @@ public class SpiralConvLayer<T> : LayerBase<T>
     private Tensor<T> ProcessBatched(Tensor<T> input, int batchSize, int numVertices)
     {
         var outputData = new T[batchSize * numVertices * OutputChannels];
+        
+        // Thread-local storage for gathered features per batch sample
+        var localGatheredFeatures = new Tensor<T>[batchSize];
+        var transposedWeights = Engine.TensorTranspose(_weights);
 
         Parallel.For(0, batchSize, b =>
         {
             var singleInput = ExtractBatchSlice(input, b, numVertices);
-            var singleOutput = ProcessSingle(singleInput, numVertices);
+            
+            // Gather spiral features (thread-safe, result stored per-batch)
+            var gathered = GatherSpiralFeatures(singleInput, numVertices);
+            localGatheredFeatures[b] = gathered;
+            
+            // Compute output using pre-transposed weights
+            var singleOutput = Engine.TensorMatMul(gathered, transposedWeights);
+            singleOutput = AddBiases(singleOutput, numVertices);
+            
+            // Apply activation
+            singleOutput = ApplyActivation(singleOutput);
+            
             var singleData = singleOutput.ToArray();
-
             int offset = b * numVertices * OutputChannels;
             Array.Copy(singleData, 0, outputData, offset, singleData.Length);
         });
 
+        // Combine gathered features for backward pass (sum across batch)
+        // For backward pass, we need the gathered features. Store the first batch's for gradient computation.
+        // A more complete solution would store all or use a different gradient strategy.
+        if (batchSize > 0 && localGatheredFeatures[0] != null)
+        {
+            _gatheredFeatures = CombineGatheredFeatures(localGatheredFeatures, batchSize, numVertices);
+        }
+
         return new Tensor<T>(outputData, [batchSize, numVertices, OutputChannels]);
+    }
+
+    /// <summary>
+    /// Combines gathered features from all batch samples for backward pass.
+    /// </summary>
+    /// <param name="localGatheredFeatures">Array of gathered features per batch sample.</param>
+    /// <param name="batchSize">Number of batch samples.</param>
+    /// <param name="numVertices">Number of vertices per sample.</param>
+    /// <returns>Combined gathered features tensor.</returns>
+    private Tensor<T> CombineGatheredFeatures(Tensor<T>[] localGatheredFeatures, int batchSize, int numVertices)
+    {
+        int featureDim = SpiralLength * InputChannels;
+        var combinedData = new T[batchSize * numVertices * featureDim];
+        
+        for (int b = 0; b < batchSize; b++)
+        {
+            var batchData = localGatheredFeatures[b].ToArray();
+            int offset = b * numVertices * featureDim;
+            Array.Copy(batchData, 0, combinedData, offset, batchData.Length);
+        }
+        
+        return new Tensor<T>(combinedData, [batchSize, numVertices, featureDim]);
     }
 
     /// <summary>

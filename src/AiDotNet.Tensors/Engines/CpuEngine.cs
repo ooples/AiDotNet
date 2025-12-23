@@ -9715,4 +9715,83 @@ public class CpuEngine : IEngine
     }
 
     #endregion
+
+    #region Mesh Convolution Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> SpiralConv<T>(
+        Tensor<T> vertexFeatures,
+        Tensor<int> spiralIndices,
+        Tensor<T> weights,
+        Tensor<T> biases)
+    {
+        return MeshConvolutionOperations.SpiralConv(vertexFeatures, spiralIndices, weights, biases);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SpiralConvBackwardInput<T>(
+        Tensor<T> outputGradient,
+        Tensor<int> spiralIndices,
+        Tensor<T> weights,
+        int inputChannels)
+    {
+        return MeshConvolutionOperations.SpiralConvBackwardInput(outputGradient, spiralIndices, weights, inputChannels);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SpiralConvBackwardWeights<T>(
+        Tensor<T> outputGradient,
+        Tensor<T> vertexFeatures,
+        Tensor<int> spiralIndices)
+    {
+        return MeshConvolutionOperations.SpiralConvBackwardWeights(outputGradient, vertexFeatures, spiralIndices);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SpiralConvBackwardBias<T>(Tensor<T> outputGradient)
+    {
+        return MeshConvolutionOperations.SpiralConvBackwardBias(outputGradient);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DiffusionConv<T>(
+        Tensor<T> vertexFeatures,
+        Tensor<T> laplacian,
+        Tensor<T> weights,
+        Tensor<T> biases,
+        T diffusionTime)
+    {
+        return MeshConvolutionOperations.DiffusionConv(vertexFeatures, laplacian, weights, biases, diffusionTime);
+    }
+
+    /// <inheritdoc/>
+    public (Tensor<T> inputGrad, Tensor<T> weightGrad, Tensor<T> biasGrad) DiffusionConvBackward<T>(
+        Tensor<T> outputGradient,
+        Tensor<T> vertexFeatures,
+        Tensor<T> laplacian,
+        Tensor<T> weights,
+        T diffusionTime)
+    {
+        return MeshConvolutionOperations.DiffusionConvBackward(outputGradient, vertexFeatures, laplacian, weights, diffusionTime);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ComputeMeshLaplacian<T>(
+        Tensor<T> vertices,
+        Tensor<int> faces,
+        string laplacianType = "cotangent")
+    {
+        return MeshConvolutionOperations.ComputeMeshLaplacian(vertices, faces, laplacianType);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<int> GenerateSpiralIndices<T>(
+        Tensor<T> vertices,
+        Tensor<int> faces,
+        int spiralLength)
+    {
+        return MeshConvolutionOperations.GenerateSpiralIndices(vertices, faces, spiralLength);
+    }
+
+    #endregion
 }

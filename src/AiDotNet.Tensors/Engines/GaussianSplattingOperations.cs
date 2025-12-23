@@ -351,6 +351,15 @@ public static class GaussianSplattingOperations
         int numGaussians = means2D.Shape[0];
         int numChannels = colors.Shape[1];
 
+        // Validate against integer overflow for large datasets
+        const int maxSafeGaussians = int.MaxValue / 9;
+        if (numGaussians > maxSafeGaussians)
+        {
+            throw new ArgumentException(
+                $"Number of Gaussians ({numGaussians}) exceeds maximum safe limit ({maxSafeGaussians}) to prevent integer overflow in index calculations.",
+                nameof(means2D));
+        }
+
         var means2DGradData = new double[numGaussians * 2];
         var cov2DGradData = new double[numGaussians * 3];
         var colorsGradData = new double[numGaussians * numChannels];

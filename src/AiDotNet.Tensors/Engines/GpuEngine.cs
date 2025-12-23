@@ -29372,5 +29372,96 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     #endregion
+
+    #region Mesh Convolution Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> SpiralConv<T>(
+        Tensor<T> vertexFeatures,
+        Tensor<int> spiralIndices,
+        Tensor<T> weights,
+        Tensor<T> biases)
+    {
+        // GPU kernel implementation for spiral convolution is complex due to
+        // the irregular access patterns of mesh topology. For initial implementation,
+        // use CPU fallback which is already highly optimized with SIMD.
+        // TODO: Implement optimized GPU kernel with shared memory for coalesced access.
+        return _cpuFallback.SpiralConv(vertexFeatures, spiralIndices, weights, biases);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SpiralConvBackwardInput<T>(
+        Tensor<T> outputGradient,
+        Tensor<int> spiralIndices,
+        Tensor<T> weights,
+        int inputChannels)
+    {
+        // Backward pass requires scatter-add operations which have complex
+        // synchronization requirements on GPU. Use CPU fallback.
+        return _cpuFallback.SpiralConvBackwardInput(outputGradient, spiralIndices, weights, inputChannels);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SpiralConvBackwardWeights<T>(
+        Tensor<T> outputGradient,
+        Tensor<T> vertexFeatures,
+        Tensor<int> spiralIndices)
+    {
+        return _cpuFallback.SpiralConvBackwardWeights(outputGradient, vertexFeatures, spiralIndices);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SpiralConvBackwardBias<T>(Tensor<T> outputGradient)
+    {
+        return _cpuFallback.SpiralConvBackwardBias(outputGradient);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DiffusionConv<T>(
+        Tensor<T> vertexFeatures,
+        Tensor<T> laplacian,
+        Tensor<T> weights,
+        Tensor<T> biases,
+        T diffusionTime)
+    {
+        // Diffusion convolution requires matrix exponential computation
+        // which is efficiently handled by CPU with Taylor series.
+        return _cpuFallback.DiffusionConv(vertexFeatures, laplacian, weights, biases, diffusionTime);
+    }
+
+    /// <inheritdoc/>
+    public (Tensor<T> inputGrad, Tensor<T> weightGrad, Tensor<T> biasGrad) DiffusionConvBackward<T>(
+        Tensor<T> outputGradient,
+        Tensor<T> vertexFeatures,
+        Tensor<T> laplacian,
+        Tensor<T> weights,
+        T diffusionTime)
+    {
+        return _cpuFallback.DiffusionConvBackward(outputGradient, vertexFeatures, laplacian, weights, diffusionTime);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ComputeMeshLaplacian<T>(
+        Tensor<T> vertices,
+        Tensor<int> faces,
+        string laplacianType = "cotangent")
+    {
+        // Laplacian computation is a one-time preprocessing step per mesh.
+        // CPU implementation is sufficient and avoids GPU memory transfer overhead.
+        return _cpuFallback.ComputeMeshLaplacian(vertices, faces, laplacianType);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<int> GenerateSpiralIndices<T>(
+        Tensor<T> vertices,
+        Tensor<int> faces,
+        int spiralLength)
+    {
+        // Spiral index generation is complex and depends on mesh topology.
+        // This is a one-time preprocessing step, CPU implementation is sufficient.
+        return _cpuFallback.GenerateSpiralIndices(vertices, faces, spiralLength);
+    }
+
+    #endregion
 }
 #endif
