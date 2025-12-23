@@ -1,4 +1,4 @@
-using AiDotNet.PointCloud.Data;
+﻿using AiDotNet.PointCloud.Data;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -80,7 +80,7 @@ public static class PointCloudSampling<T>
         
         var selectedIndices = new List<int>(numSamples);
         var minDistances = new double[numPoints];
-        Array.Fill(minDistances, double.MaxValue);
+        for (int fillIdx = 0; fillIdx < minDistances.Length; fillIdx++) minDistances[fillIdx] = double.MaxValue;
 
         int firstIdx = random.Next(numPoints);
         selectedIndices.Add(firstIdx);

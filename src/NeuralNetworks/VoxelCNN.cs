@@ -31,7 +31,7 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the voxel grid resolution used by this network.
     /// </summary>
-    public int VoxelResolution { get; }
+    public int VoxelResolution { get; private set; }
 
     /// <summary>
     /// Initializes a new instance of the VoxelCNN class.
@@ -248,9 +248,7 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // VoxelResolution is readonly, so it's set in constructor
-        // Just read to advance the reader position
-        _ = reader.ReadInt32();
+        VoxelResolution = reader.ReadInt32();
     }
 
     /// <inheritdoc />

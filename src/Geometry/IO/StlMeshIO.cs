@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -416,7 +416,12 @@ public static class StlMeshIO
 
     private static string ResolveSolidName(string? solidName)
     {
-        return string.IsNullOrWhiteSpace(solidName) ? "AiDotNet" : solidName.Trim();
+        if (string.IsNullOrWhiteSpace(solidName))
+        {
+            return "AiDotNet";
+        }
+        string safeName = solidName ?? string.Empty;
+        return safeName.Trim();
     }
 
     private static double ParseDouble(string token, string label)
@@ -458,7 +463,7 @@ public static class StlMeshIO
 
         public override int GetHashCode()
         {
-            return HashCode.Combine(X, Y, Z);
+            unchecked { return ((17 * 31 + X.GetHashCode()) * 31 + Y.GetHashCode()) * 31 + Z.GetHashCode(); }
         }
     }
 }

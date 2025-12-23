@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using AiDotNet.Geometry.IO;
 using AiDotNet.PointCloud.Data;
 using AiDotNet.Tensors.Helpers;
@@ -425,6 +425,7 @@ public sealed class ScanNetSemanticSegmentationDataLoader<T> : PointCloudDataset
         foreach (var groupToken in segGroups)
         {
             string? labelName = groupToken?["label"]?.Value<string>();
+            string safeLabelName = labelName ?? string.Empty;
             if (string.IsNullOrWhiteSpace(labelName))
             {
                 continue;
@@ -441,7 +442,7 @@ public sealed class ScanNetSemanticSegmentationDataLoader<T> : PointCloudDataset
                 int segId = segToken?.Value<int>() ?? -1;
                 if (segId >= 0)
                 {
-                    segmentToLabel[segId] = labelName;
+                    segmentToLabel[segId] = safeLabelName;
                 }
             }
         }
@@ -572,9 +573,10 @@ public sealed class ScanNetSemanticSegmentationDataLoader<T> : PointCloudDataset
         {
             return false;
         }
+        string safePointsPath = pointsPath ?? string.Empty;
 
-        string? labelsPath = FindPreprocessedLabelsPath(pointsPath);
-        files = new PreprocessedSceneFiles(pointsPath, labelsPath);
+        string? labelsPath = FindPreprocessedLabelsPath(safePointsPath);
+        files = new PreprocessedSceneFiles(safePointsPath, labelsPath);
         return true;
     }
 

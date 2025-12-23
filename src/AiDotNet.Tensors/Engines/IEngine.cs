@@ -2411,6 +2411,232 @@ public interface IEngine
 
     #endregion
 
+    #region 3D Convolution and Pooling Operations
+
+    /// <summary>
+    /// Performs 3D convolution on a 5D tensor for volumetric data processing.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, in_channels, depth, height, width].</param>
+    /// <param name="kernel">The convolution kernel [out_channels, in_channels, kernel_depth, kernel_height, kernel_width].</param>
+    /// <param name="stride">The stride of the convolution (applied equally to all spatial dimensions).</param>
+    /// <param name="padding">The zero-padding to add to all sides (applied equally to all spatial dimensions).</param>
+    /// <param name="dilation">The spacing between kernel elements (applied equally to all spatial dimensions).</param>
+    /// <returns>The convolved tensor [batch, out_channels, output_depth, output_height, output_width].</returns>
+    /// <exception cref="ArgumentException">Thrown when input or kernel dimensions are invalid.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-030: Conv3D</b></para>
+    /// <para>
+    /// 3D convolution extends 2D convolution to volumetric data by applying learnable filters
+    /// across depth, height, and width dimensions. This is essential for:
+    /// - Voxel-based 3D object recognition (ModelNet, ShapeNet)
+    /// - Medical imaging analysis (CT scans, MRI volumes)
+    /// - Video understanding (treating time as the third spatial dimension)
+    /// - Point cloud processing after voxelization
+    /// </para>
+    /// <para>
+    /// Output dimensions:
+    /// output_depth = floor((depth + 2*padding - dilation*(kernel_depth-1) - 1) / stride) + 1
+    /// output_height = floor((height + 2*padding - dilation*(kernel_height-1) - 1) / stride) + 1
+    /// output_width = floor((width + 2*padding - dilation*(kernel_width-1) - 1) / stride) + 1
+    /// </para>
+    /// <para>
+    /// GPU acceleration provides 100-1000x speedup for typical 3D CNN layers due to the
+    /// cubic growth in computation compared to 2D convolutions.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of 3D convolution as sliding a small 3D cube (the kernel)
+    /// through a larger 3D volume (the input), computing dot products at each position.
+    /// This allows the network to learn 3D patterns like surfaces, edges, and volumetric shapes.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Conv3D<T>(Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0, int dilation = 1);
+
+    /// <summary>
+    /// Performs 3D convolution with asymmetric stride, padding, and dilation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, in_channels, depth, height, width].</param>
+    /// <param name="kernel">The convolution kernel [out_channels, in_channels, kernel_depth, kernel_height, kernel_width].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW] of the convolution.</param>
+    /// <param name="padding">The padding [padD, padH, padW] to add to the input.</param>
+    /// <param name="dilation">The dilation [dilationD, dilationH, dilationW] spacing between kernel elements.</param>
+    /// <returns>The convolved tensor [batch, out_channels, output_depth, output_height, output_width].</returns>
+    /// <exception cref="ArgumentException">Thrown when input or kernel dimensions are invalid or stride/padding/dilation arrays have incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This overload allows different stride, padding, and dilation values for each spatial dimension,
+    /// providing more flexibility for architectures that need asymmetric operations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Conv3D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation);
+
+    /// <summary>
+    /// Computes the gradient of Conv3D with respect to the input tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output [batch, out_channels, out_depth, out_height, out_width].</param>
+    /// <param name="kernel">The convolution kernel used in forward pass [out_channels, in_channels, kernel_depth, kernel_height, kernel_width].</param>
+    /// <param name="inputShape">The shape of the original input tensor [batch, in_channels, depth, height, width].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW] used in forward pass.</param>
+    /// <param name="padding">The padding [padD, padH, padW] used in forward pass.</param>
+    /// <param name="dilation">The dilation [dilationD, dilationH, dilationW] used in forward pass.</param>
+    /// <returns>The gradient with respect to the input tensor [batch, in_channels, depth, height, width].</returns>
+    /// <remarks>
+    /// <para>
+    /// This is used during backpropagation to compute how the loss changes with respect to the input.
+    /// The operation is mathematically a transposed convolution (deconvolution) of the gradient
+    /// with the kernel rotated 180 degrees in each spatial dimension.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Conv3DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding, int[] dilation);
+
+    /// <summary>
+    /// Computes the gradient of Conv3D with respect to the kernel (weights).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output [batch, out_channels, out_depth, out_height, out_width].</param>
+    /// <param name="input">The original input tensor from forward pass [batch, in_channels, depth, height, width].</param>
+    /// <param name="kernelShape">The shape of the kernel [out_channels, in_channels, kernel_depth, kernel_height, kernel_width].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW] used in forward pass.</param>
+    /// <param name="padding">The padding [padD, padH, padW] used in forward pass.</param>
+    /// <param name="dilation">The dilation [dilationD, dilationH, dilationW] used in forward pass.</param>
+    /// <returns>The gradient with respect to the kernel [out_channels, in_channels, kernel_depth, kernel_height, kernel_width].</returns>
+    /// <remarks>
+    /// <para>
+    /// This is used during backpropagation to compute how the loss changes with respect to the weights.
+    /// The operation is mathematically a convolution between the input and the output gradient.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Conv3DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding, int[] dilation);
+
+    /// <summary>
+    /// Performs 3D max pooling on a 5D tensor (batch, channels, depth, height, width).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, channels, depth, height, width].</param>
+    /// <param name="poolSize">The size of the pooling window (applied equally to all spatial dimensions).</param>
+    /// <param name="stride">The stride of the pooling window. If 0, defaults to poolSize.</param>
+    /// <param name="padding">The amount of zero-padding to add to the input.</param>
+    /// <returns>The pooled tensor [batch, channels, output_depth, output_height, output_width].</returns>
+    /// <exception cref="ArgumentException">Thrown when input is not a 5D tensor.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-031: MaxPool3D</b></para>
+    /// <para>
+    /// Max pooling downsamples the spatial dimensions by taking the maximum value
+    /// in each 3D pooling window. Commonly used in 3D CNNs for:
+    /// - Reducing spatial dimensions of volumetric data
+    /// - Providing translation invariance in 3D
+    /// - Reducing computation in deeper layers
+    /// </para>
+    /// <para>
+    /// Output dimensions:
+    /// output_d = floor((depth + 2*padding - poolSize) / stride) + 1
+    /// output_h = floor((height + 2*padding - poolSize) / stride) + 1
+    /// output_w = floor((width + 2*padding - poolSize) / stride) + 1
+    /// </para>
+    /// </remarks>
+    Tensor<T> MaxPool3D<T>(Tensor<T> input, int poolSize, int stride = 0, int padding = 0);
+
+    /// <summary>
+    /// Performs 3D max pooling with asymmetric pool size, stride, and padding.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, channels, depth, height, width].</param>
+    /// <param name="poolSize">The pooling window size [poolD, poolH, poolW].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW].</param>
+    /// <param name="padding">The padding [padD, padH, padW].</param>
+    /// <returns>The pooled tensor [batch, channels, output_depth, output_height, output_width].</returns>
+    Tensor<T> MaxPool3D<T>(Tensor<T> input, int[] poolSize, int[] stride, int[] padding);
+
+    /// <summary>
+    /// Performs 3D max pooling and returns the indices of the maximum values.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, channels, depth, height, width].</param>
+    /// <param name="poolSize">The pooling window size [poolD, poolH, poolW].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW].</param>
+    /// <param name="maxIndices">Output parameter containing the linear indices of maximum values for each output position.</param>
+    /// <returns>The pooled tensor [batch, channels, output_depth, output_height, output_width].</returns>
+    /// <remarks>
+    /// <para>
+    /// The maxIndices array stores the flattened index within each pooling window where the maximum
+    /// value was found. This is essential for the backward pass to route gradients correctly.
+    /// Shape of maxIndices: [batch, channels, output_depth, output_height, output_width]
+    /// </para>
+    /// </remarks>
+    Tensor<T> MaxPool3DWithIndices<T>(Tensor<T> input, int[] poolSize, int[] stride, out int[,,,,,] maxIndices);
+
+    /// <summary>
+    /// Computes the gradient of MaxPool3D with respect to the input.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output.</param>
+    /// <param name="maxIndices">The indices of maximum values from the forward pass.</param>
+    /// <param name="inputShape">The shape of the original input tensor.</param>
+    /// <param name="poolSize">The pooling window size [poolD, poolH, poolW].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW].</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// During backpropagation, gradients are routed only to the positions that had the maximum
+    /// values in the forward pass (as indicated by maxIndices). All other positions receive zero gradient.
+    /// </para>
+    /// </remarks>
+    Tensor<T> MaxPool3DBackward<T>(Tensor<T> gradOutput, int[,,,,,] maxIndices, int[] inputShape, int[] poolSize, int[] stride);
+
+    /// <summary>
+    /// Performs 3D average pooling on a 5D tensor (batch, channels, depth, height, width).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, channels, depth, height, width].</param>
+    /// <param name="poolSize">The size of the pooling window (applied equally to all spatial dimensions).</param>
+    /// <param name="stride">The stride of the pooling window. If 0, defaults to poolSize.</param>
+    /// <param name="padding">The amount of zero-padding to add to the input.</param>
+    /// <returns>The pooled tensor [batch, channels, output_depth, output_height, output_width].</returns>
+    /// <exception cref="ArgumentException">Thrown when input is not a 5D tensor.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-032: AvgPool3D</b></para>
+    /// <para>
+    /// Average pooling downsamples the spatial dimensions by computing the average value
+    /// in each 3D pooling window. Compared to max pooling:
+    /// - Smoother gradients during backpropagation
+    /// - Better for preserving overall magnitude information
+    /// - Often used in later layers or for global pooling
+    /// </para>
+    /// </remarks>
+    Tensor<T> AvgPool3D<T>(Tensor<T> input, int poolSize, int stride = 0, int padding = 0);
+
+    /// <summary>
+    /// Performs 3D average pooling with asymmetric pool size, stride, and padding.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, channels, depth, height, width].</param>
+    /// <param name="poolSize">The pooling window size [poolD, poolH, poolW].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW].</param>
+    /// <param name="padding">The padding [padD, padH, padW].</param>
+    /// <returns>The pooled tensor [batch, channels, output_depth, output_height, output_width].</returns>
+    Tensor<T> AvgPool3D<T>(Tensor<T> input, int[] poolSize, int[] stride, int[] padding);
+
+    /// <summary>
+    /// Computes the gradient of AvgPool3D with respect to the input.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output.</param>
+    /// <param name="inputShape">The shape of the original input tensor.</param>
+    /// <param name="poolSize">The pooling window size [poolD, poolH, poolW].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW].</param>
+    /// <param name="padding">The padding [padD, padH, padW].</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// During backpropagation, each gradient value from the output is divided equally among
+    /// all the input positions that contributed to that output (i.e., divided by the pool volume).
+    /// </para>
+    /// </remarks>
+    Tensor<T> AvgPool3DBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] poolSize, int[] stride, int[] padding);
+
+    #endregion
+
     #region Normalization and Activation Operations
 
     /// <summary>

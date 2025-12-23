@@ -1,4 +1,4 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Net.Http;
 using AiDotNet.Tensors.Helpers;
 
@@ -214,7 +214,7 @@ public sealed class ModelNet40ClassificationDataLoader<T> : PointCloudDatasetLoa
 
         if (entryPath.Contains(Path.DirectorySeparatorChar))
         {
-            string[] parts = entryPath.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+            string[] parts = entryPath.Split(new[] { Path.DirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length > 0)
             {
                 className = parts[0];
@@ -237,8 +237,9 @@ public sealed class ModelNet40ClassificationDataLoader<T> : PointCloudDatasetLoa
         {
             return false;
         }
+        string safeClassName = className ?? string.Empty;
 
-        if (!classIndexMap.TryGetValue(className, out int classIndex))
+        if (!classIndexMap.TryGetValue(safeClassName, out int classIndex))
         {
             return false;
         }

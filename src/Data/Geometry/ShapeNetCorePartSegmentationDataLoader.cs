@@ -1,5 +1,9 @@
+﻿#if NETFRAMEWORK
+using System.Globalization;
+#else
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+#endif
 using System.IO.Compression;
 using System.Net.Http;
 using AiDotNet.Tensors.Helpers;
@@ -191,7 +195,7 @@ public sealed class ShapeNetCorePartSegmentationDataLoader<T> : PointCloudDatase
                     continue;
                 }
 
-                samples.Add(new ShapeNetSample(pointPath, labelPath));
+                if (labelPath != null) samples.Add(new ShapeNetSample(pointPath, labelPath));
             }
 
             return samples;
@@ -310,11 +314,15 @@ public sealed class ShapeNetCorePartSegmentationDataLoader<T> : PointCloudDatase
             return false;
         }
 
-        sample = new ShapeNetSample(pointsPath, labelPath);
+        sample = new ShapeNetSample(pointsPath, labelPath ?? string.Empty);
         return true;
     }
 
+#if NETFRAMEWORK
+    private bool TryResolveLabelPath(string root, string pointsPath, out string? labelPath)
+#else
     private bool TryResolveLabelPath(string root, string pointsPath, [NotNullWhen(true)] out string? labelPath)
+#endif
     {
         labelPath = null;
         string pointsDir = Path.Combine(root, "points");

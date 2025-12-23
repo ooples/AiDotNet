@@ -1,4 +1,4 @@
-using AiDotNet.Geometry.Data;
+﻿using AiDotNet.Geometry.Data;
 using AiDotNet.PointCloud.Data;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -12,6 +12,15 @@ namespace AiDotNet.Geometry.Preprocessing;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public static class Voxelization<T>
 {
+    /// <summary>
+    /// Clamps a value between a minimum and maximum. .NET 4.7.1 compatible.
+    /// </summary>
+    private static int ClampValue(int value, int min, int max)
+    {
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
+    }
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
@@ -74,9 +83,9 @@ public static class Voxelization<T>
             int vy = (int)Math.Floor((y - minY) / voxelSize);
             int vz = (int)Math.Floor((z - minZ) / voxelSize);
 
-            vx = Math.Clamp(vx, 0, resolution - 1);
-            vy = Math.Clamp(vy, 0, resolution - 1);
-            vz = Math.Clamp(vz, 0, resolution - 1);
+            vx = ClampValue(vx, 0, resolution - 1);
+            vy = ClampValue(vy, 0, resolution - 1);
+            vz = ClampValue(vz, 0, resolution - 1);
 
             int idx = vz * resolution * resolution + vy * resolution + vx;
             voxels[idx] = NumOps.One;
@@ -176,9 +185,9 @@ public static class Voxelization<T>
                     int vy = (int)Math.Floor((py - minY) / voxelSize);
                     int vz = (int)Math.Floor((pz - minZ) / voxelSize);
 
-                    vx = Math.Clamp(vx, 0, resolution - 1);
-                    vy = Math.Clamp(vy, 0, resolution - 1);
-                    vz = Math.Clamp(vz, 0, resolution - 1);
+                    vx = ClampValue(vx, 0, resolution - 1);
+                    vy = ClampValue(vy, 0, resolution - 1);
+                    vz = ClampValue(vz, 0, resolution - 1);
 
                     int idx = vz * resolution * resolution + vy * resolution + vx;
                     voxels[idx] = NumOps.One;

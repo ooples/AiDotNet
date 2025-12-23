@@ -17698,6 +17698,87 @@ public class GpuEngine : IEngine, IDisposable
 
     #endregion
 
+    #region 3D Convolution and Pooling Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> Conv3D<T>(Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0, int dilation = 1)
+    {
+        return Conv3D(input, kernel, [stride, stride, stride], [padding, padding, padding], [dilation, dilation, dilation]);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Conv3D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation)
+    {
+        // Conv3D GPU kernels not yet implemented - use CPU fallback which is already parallelized
+        // GPU implementation would require ILGPU kernels with 21 parameters for the full 3D convolution
+        return _cpuFallback.Conv3D(input, kernel, stride, padding, dilation);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Conv3DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding, int[] dilation)
+    {
+        // Conv3D backward GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.Conv3DBackwardInput(gradOutput, kernel, inputShape, stride, padding, dilation);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Conv3DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding, int[] dilation)
+    {
+        // Conv3D backward GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.Conv3DBackwardKernel(gradOutput, input, kernelShape, stride, padding, dilation);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> MaxPool3D<T>(Tensor<T> input, int poolSize, int stride = 0, int padding = 0)
+    {
+        if (stride == 0) stride = poolSize;
+        return MaxPool3D(input, [poolSize, poolSize, poolSize], [stride, stride, stride], [padding, padding, padding]);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> MaxPool3D<T>(Tensor<T> input, int[] poolSize, int[] stride, int[] padding)
+    {
+        // MaxPool3D GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.MaxPool3D(input, poolSize, stride, padding);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> MaxPool3DWithIndices<T>(Tensor<T> input, int[] poolSize, int[] stride, out int[,,,,,] maxIndices)
+    {
+        // MaxPool3DWithIndices requires tracking indices - use CPU implementation
+        return _cpuFallback.MaxPool3DWithIndices(input, poolSize, stride, out maxIndices);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> MaxPool3DBackward<T>(Tensor<T> gradOutput, int[,,,,,] maxIndices, int[] inputShape, int[] poolSize, int[] stride)
+    {
+        // MaxPool3DBackward uses indices from forward pass - use CPU implementation
+        return _cpuFallback.MaxPool3DBackward(gradOutput, maxIndices, inputShape, poolSize, stride);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> AvgPool3D<T>(Tensor<T> input, int poolSize, int stride = 0, int padding = 0)
+    {
+        if (stride == 0) stride = poolSize;
+        return AvgPool3D(input, [poolSize, poolSize, poolSize], [stride, stride, stride], [padding, padding, padding]);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> AvgPool3D<T>(Tensor<T> input, int[] poolSize, int[] stride, int[] padding)
+    {
+        // AvgPool3D GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.AvgPool3D(input, poolSize, stride, padding);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> AvgPool3DBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] poolSize, int[] stride, int[] padding)
+    {
+        // AvgPool3DBackward GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.AvgPool3DBackward(gradOutput, inputShape, poolSize, stride, padding);
+    }
+
+    #endregion
+
     #region Normalization and Activation Operations (Extended)
 
     /// <inheritdoc/>

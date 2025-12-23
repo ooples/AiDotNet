@@ -1,4 +1,5 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -13,62 +14,155 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// <para><b>For Beginners:</b> A 3D convolutional layer is like a 2D convolution but extended
 /// to work with volumetric data.
-/// 
+///
 /// Think of it like examining a 3D cube of data:
 /// - A 2D convolution slides a filter across height and width
 /// - A 3D convolution slides a filter across depth, height, and width
-/// 
+///
 /// This is useful for:
 /// - Recognizing 3D shapes from voxel grids (like ModelNet40)
 /// - Analyzing medical scans (CT, MRI)
 /// - Processing video frames as a 3D volume
-/// 
+///
 /// The layer learns to detect 3D patterns like edges, surfaces, and volumes.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class Conv3DLayer<T> : LayerBase<T>
 {
+    #region Properties
+
     /// <summary>
-    /// Gets the number of input channels.
+    /// Gets the number of input channels expected by this layer.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Input channels represent the depth of the input volume in the channel dimension.
+    /// For raw voxel data, this is typically 1 (occupancy). For multi-feature voxels,
+    /// this could be higher (e.g., density, color, normals).
+    /// </para>
+    /// </remarks>
     public int InputChannels { get; private set; }
 
     /// <summary>
-    /// Gets the number of output channels (filters).
+    /// Gets the number of output channels (filters) produced by this layer.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Each output channel corresponds to one learned 3D filter that detects a specific
+    /// volumetric pattern. More output channels allow the layer to learn more diverse features
+    /// but increase computational cost.
+    /// </para>
+    /// </remarks>
     public int OutputChannels { get; private set; }
 
     /// <summary>
-    /// Gets the size of the 3D convolution kernel.
+    /// Gets the size of the 3D convolution kernel (same for depth, height, width).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The kernel size determines the receptive field of each convolution operation.
+    /// Typical values are 3 (most common), 5, or 7. Larger kernels capture more context
+    /// but are more computationally expensive.
+    /// </para>
+    /// </remarks>
     public int KernelSize { get; private set; }
 
     /// <summary>
-    /// Gets the stride of the convolution.
+    /// Gets the stride of the convolution (step size when sliding the kernel).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stride controls how much the kernel moves between positions. A stride of 1 produces
+    /// the largest output. Stride of 2 halves each spatial dimension (downsampling).
+    /// </para>
+    /// </remarks>
     public int Stride { get; private set; }
 
     /// <summary>
-    /// Gets the padding applied to all sides.
+    /// Gets the zero-padding applied to all sides of the input volume.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Padding adds zeros around the input volume to control the output size.
+    /// With padding = (kernel_size - 1) / 2, the output has the same spatial dimensions
+    /// as the input (when stride = 1).
+    /// </para>
+    /// </remarks>
     public int Padding { get; private set; }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training (backpropagation).
+    /// </summary>
+    /// <value>Always <c>true</c> for Conv3DLayer as it has learnable parameters.</value>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation for accelerated execution.
+    /// </summary>
+    /// <value><c>true</c> if kernels and biases are initialized and activation can be JIT compiled.</value>
     public override bool SupportsJitCompilation => _kernels != null && _biases != null && CanActivationBeJitted();
 
+    #endregion
+
+    #region Private Fields
+
+    /// <summary>
+    /// The learnable convolution kernels with shape [OutputChannels, InputChannels, KernelSize, KernelSize, KernelSize].
+    /// </summary>
     private Tensor<T> _kernels;
+
+    /// <summary>
+    /// The learnable bias values with shape [OutputChannels], one per output channel.
+    /// </summary>
     private Tensor<T> _biases;
+
+    /// <summary>
+    /// Cached gradient for kernels computed during backward pass.
+    /// </summary>
     private Tensor<T>? _kernelsGradient;
+
+    /// <summary>
+    /// Cached gradient for biases computed during backward pass.
+    /// </summary>
     private Tensor<T>? _biasesGradient;
+
+    /// <summary>
+    /// Cached input from the last forward pass, needed for backward computation.
+    /// </summary>
     private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Cached output from the last forward pass (before activation), needed for backward computation.
+    /// </summary>
+    private Tensor<T>? _lastPreActivation;
+
+    /// <summary>
+    /// Cached output from the last forward pass (after activation).
+    /// </summary>
     private Tensor<T>? _lastOutput;
 
     /// <summary>
-    /// Initializes a new instance of the Conv3DLayer class.
+    /// Depth of input volume (cached for shape calculations).
+    /// </summary>
+    private readonly int _inputDepth;
+
+    /// <summary>
+    /// Height of input volume (cached for shape calculations).
+    /// </summary>
+    private readonly int _inputHeight;
+
+    /// <summary>
+    /// Width of input volume (cached for shape calculations).
+    /// </summary>
+    private readonly int _inputWidth;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Conv3DLayer{T}"/> class with specified parameters.
     /// </summary>
     /// <param name="inputChannels">Number of input channels.</param>
     /// <param name="outputChannels">Number of output channels (filters).</param>
@@ -79,6 +173,16 @@ public class Conv3DLayer<T> : LayerBase<T>
     /// <param name="stride">Stride of the convolution. Defaults to 1.</param>
     /// <param name="padding">Zero-padding added to all sides. Defaults to 0.</param>
     /// <param name="activation">The activation function to apply. Defaults to ReLU.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any dimension parameter is non-positive.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a 3D convolutional layer that processes volumetric data.</para>
+    /// <para>
+    /// The layer will:
+    /// 1. Apply 3D convolution with the specified kernel size
+    /// 2. Add learned biases
+    /// 3. Apply the activation function (ReLU by default)
+    /// </para>
+    /// </remarks>
     public Conv3DLayer(
         int inputChannels,
         int outputChannels,
@@ -94,13 +198,17 @@ public class Conv3DLayer<T> : LayerBase<T>
             CalculateOutputShape(outputChannels, inputDepth, inputHeight, inputWidth, kernelSize, stride, padding),
             activation ?? new ReLUActivation<T>())
     {
+        ValidateParameters(inputChannels, outputChannels, kernelSize, inputDepth, inputHeight, inputWidth, stride);
+
         InputChannels = inputChannels;
         OutputChannels = outputChannels;
         KernelSize = kernelSize;
         Stride = stride;
         Padding = padding;
+        _inputDepth = inputDepth;
+        _inputHeight = inputHeight;
+        _inputWidth = inputWidth;
 
-        // Initialize kernels: [outputChannels, inputChannels, kernelSize, kernelSize, kernelSize]
         _kernels = new Tensor<T>([outputChannels, inputChannels, kernelSize, kernelSize, kernelSize]);
         _biases = new Tensor<T>([outputChannels]);
 
@@ -108,8 +216,23 @@ public class Conv3DLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Initializes a new instance of the Conv3DLayer class with a vector activation function.
+    /// Initializes a new instance of the <see cref="Conv3DLayer{T}"/> class with a vector activation function.
     /// </summary>
+    /// <param name="inputChannels">Number of input channels.</param>
+    /// <param name="outputChannels">Number of output channels (filters).</param>
+    /// <param name="kernelSize">Size of the 3D convolution kernel.</param>
+    /// <param name="inputDepth">Depth of the input volume.</param>
+    /// <param name="inputHeight">Height of the input volume.</param>
+    /// <param name="inputWidth">Width of the input volume.</param>
+    /// <param name="stride">Stride of the convolution. Defaults to 1.</param>
+    /// <param name="padding">Zero-padding added to all sides. Defaults to 0.</param>
+    /// <param name="vectorActivation">The vector activation function to apply. Defaults to ReLU.</param>
+    /// <remarks>
+    /// <para>
+    /// Vector activation functions operate on entire vectors at once, which can be more efficient
+    /// for certain operations like Softmax that need to consider all elements together.
+    /// </para>
+    /// </remarks>
     public Conv3DLayer(
         int inputChannels,
         int outputChannels,
@@ -125,11 +248,16 @@ public class Conv3DLayer<T> : LayerBase<T>
             CalculateOutputShape(outputChannels, inputDepth, inputHeight, inputWidth, kernelSize, stride, padding),
             vectorActivation ?? new ReLUActivation<T>())
     {
+        ValidateParameters(inputChannels, outputChannels, kernelSize, inputDepth, inputHeight, inputWidth, stride);
+
         InputChannels = inputChannels;
         OutputChannels = outputChannels;
         KernelSize = kernelSize;
         Stride = stride;
         Padding = padding;
+        _inputDepth = inputDepth;
+        _inputHeight = inputHeight;
+        _inputWidth = inputWidth;
 
         _kernels = new Tensor<T>([outputChannels, inputChannels, kernelSize, kernelSize, kernelSize]);
         _biases = new Tensor<T>([outputChannels]);
@@ -137,12 +265,36 @@ public class Conv3DLayer<T> : LayerBase<T>
         InitializeWeights();
     }
 
+    #endregion
+
+    #region Static Helper Methods
+
+    /// <summary>
+    /// Calculates the input shape array for the layer.
+    /// </summary>
+    /// <param name="channels">Number of input channels.</param>
+    /// <param name="depth">Depth of the input volume.</param>
+    /// <param name="height">Height of the input volume.</param>
+    /// <param name="width">Width of the input volume.</param>
+    /// <returns>An array representing [channels, depth, height, width].</returns>
     private static int[] CalculateInputShape(int channels, int depth, int height, int width)
     {
         return [channels, depth, height, width];
     }
 
-    private static int[] CalculateOutputShape(int channels, int inputDepth, int inputHeight, int inputWidth, int kernelSize, int stride, int padding)
+    /// <summary>
+    /// Calculates the output shape array based on convolution parameters.
+    /// </summary>
+    /// <param name="channels">Number of output channels.</param>
+    /// <param name="inputDepth">Depth of the input volume.</param>
+    /// <param name="inputHeight">Height of the input volume.</param>
+    /// <param name="inputWidth">Width of the input volume.</param>
+    /// <param name="kernelSize">Size of the convolution kernel.</param>
+    /// <param name="stride">Stride of the convolution.</param>
+    /// <param name="padding">Padding applied to the input.</param>
+    /// <returns>An array representing [channels, outputDepth, outputHeight, outputWidth].</returns>
+    private static int[] CalculateOutputShape(int channels, int inputDepth, int inputHeight, int inputWidth, 
+        int kernelSize, int stride, int padding)
     {
         int outputDepth = (inputDepth + 2 * padding - kernelSize) / stride + 1;
         int outputHeight = (inputHeight + 2 * padding - kernelSize) / stride + 1;
@@ -150,225 +302,275 @@ public class Conv3DLayer<T> : LayerBase<T>
         return [channels, outputDepth, outputHeight, outputWidth];
     }
 
+    /// <summary>
+    /// Validates constructor parameters.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels.</param>
+    /// <param name="outputChannels">Number of output channels.</param>
+    /// <param name="kernelSize">Kernel size.</param>
+    /// <param name="inputDepth">Input depth.</param>
+    /// <param name="inputHeight">Input height.</param>
+    /// <param name="inputWidth">Input width.</param>
+    /// <param name="stride">Stride value.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any parameter is invalid.</exception>
+    private static void ValidateParameters(int inputChannels, int outputChannels, int kernelSize,
+        int inputDepth, int inputHeight, int inputWidth, int stride)
+    {
+        if (inputChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputChannels), "Input channels must be positive.");
+        if (outputChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputChannels), "Output channels must be positive.");
+        if (kernelSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(kernelSize), "Kernel size must be positive.");
+        if (inputDepth <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputDepth), "Input depth must be positive.");
+        if (inputHeight <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputHeight), "Input height must be positive.");
+        if (inputWidth <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputWidth), "Input width must be positive.");
+        if (stride <= 0)
+            throw new ArgumentOutOfRangeException(nameof(stride), "Stride must be positive.");
+    }
+
+    #endregion
+
+    #region Initialization
+
+    /// <summary>
+    /// Initializes the kernel weights using He (Kaiming) initialization and biases to zero.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// He initialization scales the initial weights based on the fan-in (number of input connections)
+    /// to prevent vanishing or exploding gradients during training. This is particularly effective
+    /// for ReLU activation functions.
+    /// </para>
+    /// <para>
+    /// Formula: weight ~ N(0, sqrt(2 / fan_in)) where fan_in = InputChannels * KernelSize^3
+    /// </para>
+    /// </remarks>
     private void InitializeWeights()
     {
-        // He initialization for ReLU activations
         int fanIn = InputChannels * KernelSize * KernelSize * KernelSize;
         T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(
             NumOps.FromDouble(2.0),
             NumOps.FromDouble(fanIn)));
+        double scaleDouble = NumOps.ToDouble(scale);
 
-        for (int oc = 0; oc < OutputChannels; oc++)
+        var random = RandomHelper.CreateSecureRandom();
+        var kernelData = _kernels.ToArray();
+        
+        for (int i = 0; i < kernelData.Length; i++)
         {
-            for (int ic = 0; ic < InputChannels; ic++)
-            {
-                for (int kd = 0; kd < KernelSize; kd++)
-                {
-                    for (int kh = 0; kh < KernelSize; kh++)
-                    {
-                        for (int kw = 0; kw < KernelSize; kw++)
-                        {
-                            _kernels[oc, ic, kd, kh, kw] = NumOps.Multiply(
-                                scale,
-                                NumOps.FromDouble(Random.NextDouble() * 2 - 1));
-                        }
-                    }
-                }
-            }
-            _biases[oc] = NumOps.Zero;
+            kernelData[i] = NumOps.FromDouble((random.NextDouble() * 2.0 - 1.0) * scaleDouble);
         }
+        _kernels = new Tensor<T>(kernelData, _kernels.Shape);
+
+        var biasData = new T[OutputChannels];
+        for (int i = 0; i < biasData.Length; i++)
+        {
+            biasData[i] = NumOps.Zero;
+        }
+        _biases = new Tensor<T>(biasData, _biases.Shape);
     }
 
-    /// <inheritdoc />
+    #endregion
+
+    #region Forward Pass
+
+    /// <summary>
+    /// Performs the forward pass of the 3D convolution operation.
+    /// </summary>
+    /// <param name="input">
+    /// The input tensor with shape [batch, channels, depth, height, width] or [channels, depth, height, width].
+    /// </param>
+    /// <returns>
+    /// The output tensor after convolution, bias addition, and activation.
+    /// Shape: [batch, OutputChannels, outD, outH, outW] or [OutputChannels, outD, outH, outW].
+    /// </returns>
+    /// <exception cref="ArgumentException">Thrown when input tensor has invalid rank or dimensions.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method uses the vectorized IEngine.Conv3D operation for CPU/GPU acceleration.
+    /// The computation flow is:
+    /// 1. Reshape input to 5D if needed (add batch dimension)
+    /// 2. Perform 3D convolution using Engine.Conv3D
+    /// 3. Add biases using Engine.TensorBroadcastAdd
+    /// 4. Apply activation function
+    /// </para>
+    /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
 
-        // Input shape: [batch, channels, depth, height, width] or [channels, depth, height, width]
         bool hasBatch = input.Rank == 5;
-        int batch = hasBatch ? input.Shape[0] : 1;
-        int inC = hasBatch ? input.Shape[1] : input.Shape[0];
-        int inD = hasBatch ? input.Shape[2] : input.Shape[1];
-        int inH = hasBatch ? input.Shape[3] : input.Shape[2];
-        int inW = hasBatch ? input.Shape[4] : input.Shape[3];
+        Tensor<T> batchedInput;
 
-        int outD = (inD + 2 * Padding - KernelSize) / Stride + 1;
-        int outH = (inH + 2 * Padding - KernelSize) / Stride + 1;
-        int outW = (inW + 2 * Padding - KernelSize) / Stride + 1;
-
-        var outputData = new T[batch * OutputChannels * outD * outH * outW];
-        var output = new Tensor<T>(outputData, hasBatch 
-            ? [batch, OutputChannels, outD, outH, outW] 
-            : [OutputChannels, outD, outH, outW]);
-
-        // Perform 3D convolution
-        for (int b = 0; b < batch; b++)
+        if (hasBatch)
         {
-            for (int oc = 0; oc < OutputChannels; oc++)
-            {
-                for (int od = 0; od < outD; od++)
-                {
-                    for (int oh = 0; oh < outH; oh++)
-                    {
-                        for (int ow = 0; ow < outW; ow++)
-                        {
-                            T sum = _biases[oc];
-
-                            for (int ic = 0; ic < inC; ic++)
-                            {
-                                for (int kd = 0; kd < KernelSize; kd++)
-                                {
-                                    for (int kh = 0; kh < KernelSize; kh++)
-                                    {
-                                        for (int kw = 0; kw < KernelSize; kw++)
-                                        {
-                                            int id = od * Stride + kd - Padding;
-                                            int ih = oh * Stride + kh - Padding;
-                                            int iw = ow * Stride + kw - Padding;
-
-                                            if (id >= 0 && id < inD && ih >= 0 && ih < inH && iw >= 0 && iw < inW)
-                                            {
-                                                T inputVal = hasBatch ? input[b, ic, id, ih, iw] : input[ic, id, ih, iw];
-                                                T kernelVal = _kernels[oc, ic, kd, kh, kw];
-                                                sum = NumOps.Add(sum, NumOps.Multiply(inputVal, kernelVal));
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (hasBatch)
-                                output[b, oc, od, oh, ow] = sum;
-                            else
-                                output[oc, od, oh, ow] = sum;
-                        }
-                    }
-                }
-            }
+            batchedInput = input;
+        }
+        else if (input.Rank == 4)
+        {
+            batchedInput = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3]);
+        }
+        else
+        {
+            throw new ArgumentException(
+                $"Conv3DLayer expects 4D [C,D,H,W] or 5D [N,C,D,H,W] input, got {input.Rank}D.", nameof(input));
         }
 
-        _lastOutput = ApplyActivation(output);
-        return _lastOutput;
+        var convOutput = Engine.Conv3D(
+            batchedInput,
+            _kernels,
+            [Stride, Stride, Stride],
+            [Padding, Padding, Padding],
+            [1, 1, 1]);
+
+        var withBias = AddBiases(convOutput);
+        _lastPreActivation = withBias;
+
+        var activated = ApplyActivation(withBias);
+        _lastOutput = activated;
+
+        if (!hasBatch && activated.Rank == 5 && activated.Shape[0] == 1)
+        {
+            return activated.Reshape(activated.Shape[1], activated.Shape[2], activated.Shape[3], activated.Shape[4]);
+        }
+
+        return activated;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Adds bias values to each output channel using vectorized operations.
+    /// </summary>
+    /// <param name="convOutput">The convolution output tensor [batch, channels, depth, height, width].</param>
+    /// <returns>Tensor with biases added to each channel.</returns>
+    private Tensor<T> AddBiases(Tensor<T> convOutput)
+    {
+        int batch = convOutput.Shape[0];
+        int channels = convOutput.Shape[1];
+        int depth = convOutput.Shape[2];
+        int height = convOutput.Shape[3];
+        int width = convOutput.Shape[4];
+
+        var biasExpanded = _biases.Reshape(1, channels, 1, 1, 1);
+        return Engine.TensorBroadcastAdd(convOutput, biasExpanded);
+    }
+
+    #endregion
+
+    #region Backward Pass
+
+    /// <summary>
+    /// Performs the backward pass to compute gradients for training.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to this layer's output.</param>
+    /// <returns>The gradient of the loss with respect to this layer's input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when Forward has not been called.</exception>
+    /// <remarks>
+    /// <para>
+    /// The backward pass computes:
+    /// 1. Input gradient using Engine.Conv3DBackwardInput
+    /// 2. Kernel gradient using Engine.Conv3DBackwardKernel
+    /// 3. Bias gradient by summing over spatial dimensions
+    /// </para>
+    /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
+        if (_lastInput == null || _lastPreActivation == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Apply activation derivative
         var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
 
         bool hasBatch = _lastInput.Rank == 5;
-        int batch = hasBatch ? _lastInput.Shape[0] : 1;
-        int inC = hasBatch ? _lastInput.Shape[1] : _lastInput.Shape[0];
-        int inD = hasBatch ? _lastInput.Shape[2] : _lastInput.Shape[1];
-        int inH = hasBatch ? _lastInput.Shape[3] : _lastInput.Shape[2];
-        int inW = hasBatch ? _lastInput.Shape[4] : _lastInput.Shape[3];
+        Tensor<T> batchedDelta;
+        Tensor<T> batchedInput;
 
-        int outD = hasBatch ? delta.Shape[2] : delta.Shape[1];
-        int outH = hasBatch ? delta.Shape[3] : delta.Shape[2];
-        int outW = hasBatch ? delta.Shape[4] : delta.Shape[3];
-
-        // Initialize gradients
-        var inputGradData = new T[batch * inC * inD * inH * inW];
-        var inputGrad = new Tensor<T>(inputGradData, _lastInput.Shape);
-
-        _kernelsGradient = new Tensor<T>(_kernels.Shape);
-        _biasesGradient = new Tensor<T>(_biases.Shape);
-
-        // Compute gradients
-        for (int b = 0; b < batch; b++)
+        if (hasBatch)
         {
-            for (int oc = 0; oc < OutputChannels; oc++)
-            {
-                for (int od = 0; od < outD; od++)
-                {
-                    for (int oh = 0; oh < outH; oh++)
-                    {
-                        for (int ow = 0; ow < outW; ow++)
-                        {
-                            T gradVal = hasBatch ? delta[b, oc, od, oh, ow] : delta[oc, od, oh, ow];
+            batchedDelta = delta;
+            batchedInput = _lastInput;
+        }
+        else
+        {
+            batchedDelta = delta.Rank == 4 
+                ? delta.Reshape(1, delta.Shape[0], delta.Shape[1], delta.Shape[2], delta.Shape[3])
+                : delta;
+            batchedInput = _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2], _lastInput.Shape[3]);
+        }
 
-                            // Bias gradient
-                            _biasesGradient[oc] = NumOps.Add(_biasesGradient[oc], gradVal);
+        var inputGrad = Engine.Conv3DBackwardInput(
+            batchedDelta,
+            _kernels,
+            batchedInput.Shape,
+            [Stride, Stride, Stride],
+            [Padding, Padding, Padding],
+            [1, 1, 1]);
 
-                            for (int ic = 0; ic < inC; ic++)
-                            {
-                                for (int kd = 0; kd < KernelSize; kd++)
-                                {
-                                    for (int kh = 0; kh < KernelSize; kh++)
-                                    {
-                                        for (int kw = 0; kw < KernelSize; kw++)
-                                        {
-                                            int id = od * Stride + kd - Padding;
-                                            int ih = oh * Stride + kh - Padding;
-                                            int iw = ow * Stride + kw - Padding;
+        _kernelsGradient = Engine.Conv3DBackwardKernel(
+            batchedDelta,
+            batchedInput,
+            _kernels.Shape,
+            [Stride, Stride, Stride],
+            [Padding, Padding, Padding],
+            [1, 1, 1]);
 
-                                            if (id >= 0 && id < inD && ih >= 0 && ih < inH && iw >= 0 && iw < inW)
-                                            {
-                                                // Kernel gradient
-                                                T inputVal = hasBatch ? _lastInput[b, ic, id, ih, iw] : _lastInput[ic, id, ih, iw];
-                                                T currentKernelGrad = _kernelsGradient[oc, ic, kd, kh, kw];
-                                                _kernelsGradient[oc, ic, kd, kh, kw] = NumOps.Add(
-                                                    currentKernelGrad,
-                                                    NumOps.Multiply(gradVal, inputVal));
+        _biasesGradient = ComputeBiasGradient(batchedDelta);
 
-                                                // Input gradient
-                                                T kernelVal = _kernels[oc, ic, kd, kh, kw];
-                                                if (hasBatch)
-                                                {
-                                                    T currentInputGrad = inputGrad[b, ic, id, ih, iw];
-                                                    inputGrad[b, ic, id, ih, iw] = NumOps.Add(
-                                                        currentInputGrad,
-                                                        NumOps.Multiply(gradVal, kernelVal));
-                                                }
-                                                else
-                                                {
-                                                    T currentInputGrad = inputGrad[ic, id, ih, iw];
-                                                    inputGrad[ic, id, ih, iw] = NumOps.Add(
-                                                        currentInputGrad,
-                                                        NumOps.Multiply(gradVal, kernelVal));
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        if (!hasBatch && inputGrad.Rank == 5 && inputGrad.Shape[0] == 1)
+        {
+            return inputGrad.Reshape(inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3], inputGrad.Shape[4]);
         }
 
         return inputGrad;
     }
 
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    /// <summary>
+    /// Computes the bias gradient by summing gradients over batch and spatial dimensions.
+    /// </summary>
+    /// <param name="delta">The gradient tensor [batch, channels, depth, height, width].</param>
+    /// <returns>Bias gradient tensor [channels].</returns>
+    private Tensor<T> ComputeBiasGradient(Tensor<T> delta)
     {
-        // Fallback to manual for now - autodiff Conv3D not yet implemented
-        return BackwardManual(outputGradient);
+        int channels = delta.Shape[1];
+        var biasGrad = new T[channels];
+        
+        var sumOverBatchAndSpatial = Engine.ReduceSum(delta, [0, 2, 3, 4], keepDims: false);
+        
+        for (int c = 0; c < channels; c++)
+        {
+            biasGrad[c] = sumOverBatchAndSpatial[c];
+        }
+        
+        return new Tensor<T>(biasGrad, [channels]);
     }
 
-    /// <inheritdoc />
+    #endregion
+
+    #region Parameter Management
+
+    /// <summary>
+    /// Updates the layer parameters using the computed gradients and learning rate.
+    /// </summary>
+    /// <param name="learningRate">The learning rate for gradient descent.</param>
+    /// <exception cref="InvalidOperationException">Thrown when Backward has not been called.</exception>
     public override void UpdateParameters(T learningRate)
     {
         if (_kernelsGradient == null || _biasesGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _kernels = _kernels.Subtract(_kernelsGradient.Multiply(learningRate));
-        _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+        var scaledKernelGrad = Engine.TensorMultiplyScalar(_kernelsGradient, learningRate);
+        _kernels = Engine.TensorSubtract(_kernels, scaledKernelGrad);
+
+        var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
+        _biases = Engine.TensorSubtract(_biases, scaledBiasGrad);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets all trainable parameters as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all kernel and bias parameters.</returns>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
@@ -376,7 +578,11 @@ public class Conv3DLayer<T> : LayerBase<T>
             new Vector<T>(_biases.ToArray()));
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Sets all trainable parameters from a single vector.
+    /// </summary>
+    /// <param name="parameters">Vector containing all parameters (kernels followed by biases).</param>
+    /// <exception cref="ArgumentException">Thrown when parameter count does not match expected.</exception>
     public override void SetParameters(Vector<T> parameters)
     {
         int expected = _kernels.Length + _biases.Length;
@@ -389,16 +595,54 @@ public class Conv3DLayer<T> : LayerBase<T>
         _biases = new Tensor<T>(_biases.Shape, parameters.Slice(index, _biases.Length));
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the kernel weights tensor.
+    /// </summary>
+    /// <returns>The kernel tensor with shape [OutputChannels, InputChannels, KernelSize, KernelSize, KernelSize].</returns>
+    public override Tensor<T> GetWeights() => _kernels;
+
+    /// <summary>
+    /// Gets the bias tensor.
+    /// </summary>
+    /// <returns>The bias tensor with shape [OutputChannels].</returns>
+    public override Tensor<T> GetBiases() => _biases;
+
+    /// <summary>
+    /// Gets the convolution filter kernels.
+    /// </summary>
+    /// <returns>The kernel tensor.</returns>
+    public Tensor<T> GetFilters() => _kernels;
+
+    #endregion
+
+    #region State Management
+
+    /// <summary>
+    /// Resets the cached state from forward/backward passes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call this method to free memory after training is complete or when switching
+    /// between training and inference modes.
+    /// </para>
+    /// </remarks>
     public override void ResetState()
     {
         _lastInput = null;
+        _lastPreActivation = null;
         _lastOutput = null;
         _kernelsGradient = null;
         _biasesGradient = null;
     }
 
-    /// <inheritdoc />
+    #endregion
+
+    #region Serialization
+
+    /// <summary>
+    /// Serializes the layer to a binary stream.
+    /// </summary>
+    /// <param name="writer">The binary writer to serialize to.</param>
     public override void Serialize(BinaryWriter writer)
     {
         base.Serialize(writer);
@@ -407,21 +651,27 @@ public class Conv3DLayer<T> : LayerBase<T>
         writer.Write(KernelSize);
         writer.Write(Stride);
         writer.Write(Padding);
+        writer.Write(_inputDepth);
+        writer.Write(_inputHeight);
+        writer.Write(_inputWidth);
 
-        // Serialize kernels
-        for (int i = 0; i < _kernels.Length; i++)
+        var kernelArray = _kernels.ToArray();
+        for (int i = 0; i < kernelArray.Length; i++)
         {
-            writer.Write(NumOps.ToDouble(_kernels[i]));
+            writer.Write(NumOps.ToDouble(kernelArray[i]));
         }
 
-        // Serialize biases
-        for (int i = 0; i < _biases.Length; i++)
+        var biasArray = _biases.ToArray();
+        for (int i = 0; i < biasArray.Length; i++)
         {
-            writer.Write(NumOps.ToDouble(_biases[i]));
+            writer.Write(NumOps.ToDouble(biasArray[i]));
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Deserializes the layer from a binary stream.
+    /// </summary>
+    /// <param name="reader">The binary reader to deserialize from.</param>
     public override void Deserialize(BinaryReader reader)
     {
         base.Deserialize(reader);
@@ -430,23 +680,38 @@ public class Conv3DLayer<T> : LayerBase<T>
         KernelSize = reader.ReadInt32();
         Stride = reader.ReadInt32();
         Padding = reader.ReadInt32();
+        _ = reader.ReadInt32();
+        _ = reader.ReadInt32();
+        _ = reader.ReadInt32();
 
-        // Deserialize kernels
         _kernels = new Tensor<T>([OutputChannels, InputChannels, KernelSize, KernelSize, KernelSize]);
-        for (int i = 0; i < _kernels.Length; i++)
+        var kernelArray = new T[_kernels.Length];
+        for (int i = 0; i < kernelArray.Length; i++)
         {
-            _kernels[i] = NumOps.FromDouble(reader.ReadDouble());
+            kernelArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+        _kernels = new Tensor<T>(kernelArray, _kernels.Shape);
 
-        // Deserialize biases
         _biases = new Tensor<T>([OutputChannels]);
-        for (int i = 0; i < _biases.Length; i++)
+        var biasArray = new T[_biases.Length];
+        for (int i = 0; i < biasArray.Length; i++)
         {
-            _biases[i] = NumOps.FromDouble(reader.ReadDouble());
+            biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+        _biases = new Tensor<T>(biasArray, _biases.Shape);
     }
 
-    /// <inheritdoc />
+    #endregion
+
+    #region JIT Compilation
+
+    /// <summary>
+    /// Exports the layer as a computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input nodes.</param>
+    /// <returns>The output computation node.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when layer is not properly initialized.</exception>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
         if (inputNodes == null)
@@ -458,26 +723,16 @@ public class Conv3DLayer<T> : LayerBase<T>
         if (_kernels == null || _biases == null)
             throw new InvalidOperationException("Layer weights not initialized.");
 
-        // Create symbolic input: [1, channels, depth, height, width]
         var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "conv3d_input");
         inputNodes.Add(inputNode);
 
-        // Create constant nodes for kernels and biases
-        var kernelNode = TensorOperations<T>.Constant(_kernels, "kernel");
-        var biasNode = TensorOperations<T>.Constant(_biases, "bias");
+        var kernelNode = TensorOperations<T>.Constant(_kernels, "conv3d_kernel");
+        var biasNode = TensorOperations<T>.Constant(_biases, "conv3d_bias");
 
-        // Note: Conv3D operation not yet in TensorOperations - return input for now
-        // This is a placeholder for future JIT support
         var activatedOutput = ApplyActivationToGraph(inputNode);
         return activatedOutput;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> GetBiases() => _biases;
-
-    /// <summary>
-    /// Gets the filter kernels of the convolutional layer.
-    /// </summary>
-    public Tensor<T> GetFilters() => _kernels;
+    #endregion
 }
