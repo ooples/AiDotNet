@@ -136,10 +136,11 @@ public sealed class ServingCodeTaskResultRedactorTests
 
         Assert.Single(redacted.FixSuggestions);
         Assert.Equal("sugg", redacted.FixSuggestions[0].Summary);
-        Assert.NotNull(redacted.FixSuggestions[0].Diff);
-        Assert.Equal("unif", redacted.FixSuggestions[0].Diff!.UnifiedDiff);
-        Assert.Single(redacted.FixSuggestions[0].Diff.Edits);
-        Assert.Equal("edit", redacted.FixSuggestions[0].Diff.Edits[0].Text);
+        var diff = redacted.FixSuggestions[0].Diff;
+        Assert.NotNull(diff);
+        Assert.Equal("unif", diff!.UnifiedDiff);
+        Assert.Single(diff.Edits);
+        Assert.Equal("edit", diff.Edits[0].Text);
 
         Assert.Single(redacted.PrioritizedPlan);
         Assert.Equal("plan", redacted.PrioritizedPlan[0]);

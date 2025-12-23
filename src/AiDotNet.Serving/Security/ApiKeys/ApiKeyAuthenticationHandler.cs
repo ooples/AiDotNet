@@ -16,9 +16,8 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAu
         IOptionsMonitor<ApiKeyAuthenticationOptions> options,
         ILoggerFactory logger,
         System.Text.Encodings.Web.UrlEncoder encoder,
-        ISystemClock clock,
         IApiKeyService apiKeys)
-        : base(options, logger, encoder, clock)
+        : base(options, logger, encoder)
     {
         _apiKeys = apiKeys ?? throw new ArgumentNullException(nameof(apiKeys));
     }

@@ -21,14 +21,15 @@ public sealed class ServingRequestContextResolver : IServingRequestContextResolv
             throw new ArgumentNullException(nameof(httpContext));
         }
 
-        var isAuthenticated = httpContext.User?.Identity?.IsAuthenticated == true;
+        var user = httpContext.User;
+        var isAuthenticated = user.Identity?.IsAuthenticated == true;
         var subscriptionTier = _tierResolver.ResolveTier(httpContext);
 
         return Task.FromResult(new ServingRequestContext
         {
             Tier = MapTier(subscriptionTier),
             IsAuthenticated = isAuthenticated,
-            Subject = isAuthenticated ? ResolveSubject(httpContext.User) : null
+            Subject = isAuthenticated ? ResolveSubject(user) : null
         });
     }
 
