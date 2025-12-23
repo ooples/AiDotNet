@@ -1,10 +1,10 @@
 using System.Text.Json;
-using AiDotNet.Interfaces;
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.CurriculumLearning.Interfaces;
 using AiDotNet.CurriculumLearning.Results;
 using AiDotNet.CurriculumLearning.Schedulers;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.CurriculumLearning;
 

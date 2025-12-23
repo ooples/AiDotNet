@@ -1,10 +1,10 @@
-using AiDotNet.Interfaces;
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.ContinualLearning.Config;
 using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.ContinualLearning.Results;
 using AiDotNet.ContinualLearning.Strategies;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.ContinualLearning.Trainers;
 

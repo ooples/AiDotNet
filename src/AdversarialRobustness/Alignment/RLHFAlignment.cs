@@ -1,10 +1,10 @@
+using System.Text;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
-using System.Text;
 
 namespace AiDotNet.AdversarialRobustness.Alignment;
 

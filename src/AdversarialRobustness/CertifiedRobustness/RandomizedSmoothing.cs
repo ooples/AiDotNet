@@ -1,3 +1,4 @@
+using System.Text;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -6,7 +7,6 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
-using System.Text;
 
 namespace AiDotNet.AdversarialRobustness.CertifiedRobustness;
 

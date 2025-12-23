@@ -1,8 +1,8 @@
 // Polyfills for .NET Framework 4.7.1 to support modern C# features
 
-using AiDotNet.Tensors.Helpers;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using AiDotNet.Tensors.Helpers;
 
 #if !NET5_0_OR_GREATER
 
