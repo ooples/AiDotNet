@@ -299,6 +299,12 @@ public class Conv3DLayer<T> : LayerBase<T>
         int outputDepth = (inputDepth + 2 * padding - kernelSize) / stride + 1;
         int outputHeight = (inputHeight + 2 * padding - kernelSize) / stride + 1;
         int outputWidth = (inputWidth + 2 * padding - kernelSize) / stride + 1;
+
+        if (outputDepth <= 0 || outputHeight <= 0 || outputWidth <= 0)
+            throw new ArgumentException(
+                $"Kernel size {kernelSize} with stride {stride} and padding {padding} produces invalid output dimensions " +
+                $"[{outputDepth}, {outputHeight}, {outputWidth}] for input [{inputDepth}, {inputHeight}, {inputWidth}].");
+
         return [channels, outputDepth, outputHeight, outputWidth];
     }
 

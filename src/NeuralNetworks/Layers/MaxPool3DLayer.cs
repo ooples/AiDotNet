@@ -373,7 +373,12 @@ public class MaxPool3DLayer<T> : LayerBase<T>
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "maxpool3d_input");
         inputNodes.Add(inputNode);
 
-        return inputNode;
+        var poolNode = TensorOperations<T>.MaxPool3D(
+            inputNode,
+            new int[] { PoolSize, PoolSize, PoolSize },
+            new int[] { Stride, Stride, Stride });
+
+        return poolNode;
     }
 
     #endregion

@@ -320,6 +320,11 @@ public enum OperationType
     MaxPool2D,
 
     /// <summary>
+    /// 3D max pooling.
+    /// </summary>
+    MaxPool3D,
+
+    /// <summary>
     /// 2D average pooling.
     /// </summary>
     AvgPool2D,

@@ -18,6 +18,11 @@ public static class PointCloudSampling<T>
     /// </summary>
     public static PointCloudData<T> UniformSample(PointCloudData<T> pointCloud, int numSamples, int? seed = null)
     {
+        if (numSamples <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numSamples), "Number of samples must be positive.");
+        }
+
         int numPoints = pointCloud.NumPoints;
         int numFeatures = pointCloud.NumFeatures;
 
@@ -73,6 +78,11 @@ public static class PointCloudSampling<T>
     /// <exception cref="ArgumentException">Thrown when point cloud has fewer than 3 features (xyz coordinates).</exception>
     public static PointCloudData<T> FarthestPointSample(PointCloudData<T> pointCloud, int numSamples, int? seed = null)
     {
+        if (numSamples <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numSamples), "Number of samples must be positive.");
+        }
+
         int numPoints = pointCloud.NumPoints;
         int numFeatures = pointCloud.NumFeatures;
 
@@ -153,12 +163,18 @@ public static class PointCloudSampling<T>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     /// <returns>A new point cloud with the sampled points.</returns>
     /// <exception cref="ArgumentException">Thrown when point cloud has fewer than 3 features (xyz coordinates).</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when minDistance is not positive.</exception>
     public static PointCloudData<T> PoissonDiskSample(
         PointCloudData<T> pointCloud,
         double minDistance,
         int maxSamples = 0,
         int? seed = null)
     {
+        if (minDistance <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(minDistance), "Minimum distance must be positive.");
+        }
+
         int numPoints = pointCloud.NumPoints;
         int numFeatures = pointCloud.NumFeatures;
 

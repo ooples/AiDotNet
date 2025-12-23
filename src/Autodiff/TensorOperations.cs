@@ -4304,6 +4304,78 @@ public static class TensorOperations<T>
     }
 
     /// <summary>
+    /// Performs 3D max pooling on a 5D tensor (batch, channels, depth, height, width).
+    /// </summary>
+    /// <param name="input">The input node with shape [batch, channels, depth, height, width].</param>
+    /// <param name="poolSize">The size of the pooling window [poolD, poolH, poolW].</param>
+    /// <param name="strides">The stride for the pooling operation [strideD, strideH, strideW]. If null, uses poolSize.</param>
+    /// <returns>A new computation node containing the max pooled result.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs max pooling over 3D spatial dimensions (depth, height, width).
+    /// The backward function routes gradients only to the maximum values in each pooling window.
+    /// </para>
+    /// <para><b>For Beginners:</b> MaxPool3D downsamples volumetric data by taking the maximum value in each window.
+    ///
+    /// For max pooling:
+    /// - The forward pass slides a 3D window and takes the maximum
+    /// - This reduces the spatial dimensions while preserving the strongest activations
+    /// - The backward pass routes gradients only to where the max came from
+    /// - Non-max elements get zero gradient
+    ///
+    /// Used in:
+    /// - Voxel-based 3D CNNs for shape classification
+    /// - Medical image analysis (CT/MRI)
+    /// - Video processing
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> MaxPool3D(
+        ComputationNode<T> input,
+        int[] poolSize,
+        int[]? strides = null)
+    {
+        var shape = input.Value.Shape;
+        if (shape.Length != 5)
+            throw new ArgumentException("MaxPool3D requires 5D input [batch, channels, depth, height, width]");
+
+        strides ??= poolSize;
+
+        var engine = AiDotNetEngine.Current;
+        var result = engine.MaxPool3DWithIndices(input.Value, poolSize, strides, out var maxIndices);
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradA = engine.MaxPool3DBackward(gradient, maxIndices, shape, poolSize, strides);
+                var existingGrad = input.Gradient;
+                input.Gradient = existingGrad == null ? gradA : existingGrad.Add(gradA);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.MaxPool3D;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "KernelSize", poolSize },
+            { "Stride", strides },
+            { "Padding", new int[] { 0, 0, 0 } }
+        };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
     /// Performs 2D transposed convolution (deconvolution) on a 4D tensor.
     /// </summary>
     /// <param name="input">The input node with shape [batch, inChannels, height, width].</param>

@@ -37,6 +37,13 @@ public static class Voxelization<T>
             return CreateEmptyGrid(resolution);
         }
 
+        if (pointCloud.NumFeatures < 3)
+        {
+            throw new ArgumentException(
+                $"VoxelizePointCloud requires at least 3 features (xyz coordinates). Got {pointCloud.NumFeatures} features.",
+                nameof(pointCloud));
+        }
+
         double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
         double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
 
@@ -112,6 +119,20 @@ public static class Voxelization<T>
         if (numVertices == 0 || numFaces == 0 || resolution <= 0)
         {
             return CreateEmptyGrid(resolution);
+        }
+
+        if (mesh.Vertices.Shape.Length < 2 || mesh.Vertices.Shape[1] < 3)
+        {
+            throw new ArgumentException(
+                $"VoxelizeMeshSurface requires at least 3 vertex coordinates (xyz). Got {(mesh.Vertices.Shape.Length >= 2 ? mesh.Vertices.Shape[1] : 0)} columns.",
+                nameof(mesh));
+        }
+
+        if (mesh.Faces.Shape.Length < 2 || mesh.Faces.Shape[1] < 3)
+        {
+            throw new ArgumentException(
+                $"VoxelizeMeshSurface requires at least 3 face indices per triangle. Got {(mesh.Faces.Shape.Length >= 2 ? mesh.Faces.Shape[1] : 0)} columns.",
+                nameof(mesh));
         }
 
         double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
