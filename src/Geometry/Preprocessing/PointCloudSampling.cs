@@ -66,6 +66,11 @@ public static class PointCloudSampling<T>
     /// <summary>
     /// Performs farthest point sampling (FPS) on a point cloud.
     /// </summary>
+    /// <param name="pointCloud">The input point cloud to sample from.</param>
+    /// <param name="numSamples">The number of points to sample.</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <returns>A new point cloud with the sampled points.</returns>
+    /// <exception cref="ArgumentException">Thrown when point cloud has fewer than 3 features (xyz coordinates).</exception>
     public static PointCloudData<T> FarthestPointSample(PointCloudData<T> pointCloud, int numSamples, int? seed = null)
     {
         int numPoints = pointCloud.NumPoints;
@@ -74,6 +79,13 @@ public static class PointCloudSampling<T>
         if (numSamples >= numPoints)
         {
             return pointCloud;
+        }
+
+        if (numFeatures < 3)
+        {
+            throw new ArgumentException(
+                $"FarthestPointSample requires at least 3 features (xyz coordinates). Got {numFeatures} features.",
+                nameof(pointCloud));
         }
 
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : new Random();
@@ -135,6 +147,12 @@ public static class PointCloudSampling<T>
     /// <summary>
     /// Performs Poisson disk sampling on a point cloud.
     /// </summary>
+    /// <param name="pointCloud">The input point cloud to sample from.</param>
+    /// <param name="minDistance">The minimum distance between sampled points.</param>
+    /// <param name="maxSamples">Maximum number of samples to return. 0 for unlimited.</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <returns>A new point cloud with the sampled points.</returns>
+    /// <exception cref="ArgumentException">Thrown when point cloud has fewer than 3 features (xyz coordinates).</exception>
     public static PointCloudData<T> PoissonDiskSample(
         PointCloudData<T> pointCloud,
         double minDistance,
@@ -147,6 +165,13 @@ public static class PointCloudSampling<T>
         if (numPoints == 0)
         {
             return pointCloud;
+        }
+
+        if (numFeatures < 3)
+        {
+            throw new ArgumentException(
+                $"PoissonDiskSample requires at least 3 features (xyz coordinates). Got {numFeatures} features.",
+                nameof(pointCloud));
         }
 
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : new Random();
@@ -227,6 +252,10 @@ public static class PointCloudSampling<T>
     /// <summary>
     /// Samples points by voxel grid downsampling.
     /// </summary>
+    /// <param name="pointCloud">The input point cloud to sample from.</param>
+    /// <param name="voxelSize">The size of each voxel in the grid.</param>
+    /// <returns>A new downsampled point cloud with one point per occupied voxel.</returns>
+    /// <exception cref="ArgumentException">Thrown when point cloud has fewer than 3 features (xyz coordinates).</exception>
     public static PointCloudData<T> VoxelGridSample(PointCloudData<T> pointCloud, double voxelSize)
     {
         int numPoints = pointCloud.NumPoints;
@@ -235,6 +264,13 @@ public static class PointCloudSampling<T>
         if (numPoints == 0 || voxelSize <= 0)
         {
             return pointCloud;
+        }
+
+        if (numFeatures < 3)
+        {
+            throw new ArgumentException(
+                $"VoxelGridSample requires at least 3 features (xyz coordinates). Got {numFeatures} features.",
+                nameof(pointCloud));
         }
 
         var voxelMap = new Dictionary<(int, int, int), List<int>>();

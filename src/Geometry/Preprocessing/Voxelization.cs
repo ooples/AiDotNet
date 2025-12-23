@@ -157,6 +157,15 @@ public static class Voxelization<T>
             int v1 = mesh.Faces[f, 1];
             int v2 = mesh.Faces[f, 2];
 
+            // Validate vertex indices are within bounds
+            if (v0 < 0 || v0 >= numVertices ||
+                v1 < 0 || v1 >= numVertices ||
+                v2 < 0 || v2 >= numVertices)
+            {
+                // Skip invalid faces
+                continue;
+            }
+
             double x0 = NumOps.ToDouble(mesh.Vertices[v0, 0]);
             double y0 = NumOps.ToDouble(mesh.Vertices[v0, 1]);
             double z0 = NumOps.ToDouble(mesh.Vertices[v0, 2]);

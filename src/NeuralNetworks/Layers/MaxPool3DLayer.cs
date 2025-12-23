@@ -120,6 +120,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     /// <param name="poolSize">The pooling window size.</param>
     /// <param name="stride">The stride value.</param>
     /// <returns>The output shape [channels, outputDepth, outputHeight, outputWidth].</returns>
+    /// <exception cref="ArgumentException">Thrown when output dimensions would be invalid.</exception>
     private static int[] CalculateOutputShape(int[] inputShape, int poolSize, int stride)
     {
         if (inputShape.Length != 4)
@@ -133,6 +134,12 @@ public class MaxPool3DLayer<T> : LayerBase<T>
         int outputDepth = (depth - poolSize) / stride + 1;
         int outputHeight = (height - poolSize) / stride + 1;
         int outputWidth = (width - poolSize) / stride + 1;
+
+        if (outputDepth <= 0 || outputHeight <= 0 || outputWidth <= 0)
+            throw new ArgumentException(
+                $"Pool size {poolSize} with stride {stride} produces invalid output dimensions " +
+                $"[{outputDepth}, {outputHeight}, {outputWidth}] for input [{depth}, {height}, {width}].",
+                nameof(inputShape));
 
         return [channels, outputDepth, outputHeight, outputWidth];
     }

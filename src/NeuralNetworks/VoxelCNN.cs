@@ -108,6 +108,13 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(architecture));
         if (voxelResolution <= 0)
             throw new ArgumentException("Voxel resolution must be positive.", nameof(voxelResolution));
+
+        // Minimum resolution depends on numConvBlocks (each block halves resolution)
+        int minResolution = 1 << numConvBlocks; // 2^numConvBlocks
+        if (voxelResolution < minResolution)
+            throw new ArgumentOutOfRangeException(nameof(voxelResolution),
+                $"VoxelResolution must be at least {minResolution} for {numConvBlocks} convolutional blocks.");
+
         if (numConvBlocks <= 0)
             throw new ArgumentException("Number of convolutional blocks must be positive.", nameof(numConvBlocks));
         if (baseFilters <= 0)
@@ -280,7 +287,7 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
                 { "NumConvBlocks", NumConvBlocks },
                 { "BaseFilters", BaseFilters },
                 { "InputShape", Architecture.GetInputShape() },
-                { "OutputShape", Layers[Layers.Count - 1].GetOutputShape() },
+                { "OutputShape", Layers.Count > 0 ? Layers[Layers.Count - 1].GetOutputShape() : Array.Empty<int>() },
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },

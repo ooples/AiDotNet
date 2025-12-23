@@ -145,17 +145,17 @@ public class Conv3DLayer<T> : LayerBase<T>
     /// <summary>
     /// Depth of input volume (cached for shape calculations).
     /// </summary>
-    private readonly int _inputDepth;
+    private int _inputDepth;
 
     /// <summary>
     /// Height of input volume (cached for shape calculations).
     /// </summary>
-    private readonly int _inputHeight;
+    private int _inputHeight;
 
     /// <summary>
     /// Width of input volume (cached for shape calculations).
     /// </summary>
-    private readonly int _inputWidth;
+    private int _inputWidth;
 
     #endregion
 
@@ -780,9 +780,9 @@ public class Conv3DLayer<T> : LayerBase<T>
         KernelSize = reader.ReadInt32();
         Stride = reader.ReadInt32();
         Padding = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
+        _inputDepth = reader.ReadInt32();
+        _inputHeight = reader.ReadInt32();
+        _inputWidth = reader.ReadInt32();
 
         _kernels = new Tensor<T>([OutputChannels, InputChannels, KernelSize, KernelSize, KernelSize]);
         var kernelArray = new T[_kernels.Length];
@@ -823,14 +823,25 @@ public class Conv3DLayer<T> : LayerBase<T>
         if (_kernels == null || _biases == null)
             throw new InvalidOperationException("Layer weights not initialized.");
 
+        // Create input node with batch dimension
         var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "conv3d_input");
         inputNodes.Add(inputNode);
 
+        // Create constant nodes for kernels and biases
         var kernelNode = TensorOperations<T>.Constant(_kernels, "conv3d_kernel");
         var biasNode = TensorOperations<T>.Constant(_biases, "conv3d_bias");
 
-        var activatedOutput = ApplyActivationToGraph(inputNode);
+        // Build the actual convolution graph: Conv3D(input, kernel) + bias -> activation
+        var convNode = TensorOperations<T>.Conv3D(
+            inputNode,
+            kernelNode,
+            biasNode,
+            new int[] { Stride, Stride, Stride },
+            new int[] { Padding, Padding, Padding });
+
+        // Apply activation function to the convolution result
+        var activatedOutput = ApplyActivationToGraph(convNode);
         return activatedOutput;
     }
 

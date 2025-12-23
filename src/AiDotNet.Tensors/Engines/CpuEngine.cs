@@ -4224,6 +4224,10 @@ public class CpuEngine : IEngine
         if (padding == null || padding.Length != 3) throw new ArgumentException("Padding must be array of 3 elements.", nameof(padding));
         if (dilation == null || dilation.Length != 3) throw new ArgumentException("Dilation must be array of 3 elements.", nameof(dilation));
 
+        // Rank and shape validation
+        if (gradOutput.Rank != 5) throw new ArgumentException($"Conv3DBackwardInput requires 5D gradOutput tensor. Got rank {gradOutput.Rank}.", nameof(gradOutput));
+        if (kernel.Rank != 5) throw new ArgumentException($"Conv3DBackwardInput requires 5D kernel tensor. Got rank {kernel.Rank}.", nameof(kernel));
+
         var numOps = MathHelper.GetNumericOperations<T>();
 
         int batch = inputShape[0];
@@ -4236,6 +4240,14 @@ public class CpuEngine : IEngine
         int kernelDepth = kernel.Shape[2];
         int kernelHeight = kernel.Shape[3];
         int kernelWidth = kernel.Shape[4];
+
+        // Validate shape consistency
+        if (gradOutput.Shape[0] != batch)
+            throw new ArgumentException($"gradOutput batch size ({gradOutput.Shape[0]}) must match inputShape batch size ({batch}).", nameof(gradOutput));
+        if (gradOutput.Shape[1] != outChannels)
+            throw new ArgumentException($"gradOutput outChannels ({gradOutput.Shape[1]}) must match kernel out_channels ({outChannels}).", nameof(gradOutput));
+        if (inputShape[1] != kernel.Shape[1])
+            throw new ArgumentException($"inputShape in_channels ({inputShape[1]}) must match kernel in_channels ({kernel.Shape[1]}).", nameof(inputShape));
 
         int strideD = stride[0], strideH = stride[1], strideW = stride[2];
         int padD = padding[0], padH = padding[1], padW = padding[2];
@@ -4253,22 +4265,10 @@ public class CpuEngine : IEngine
         for (int i = 0; i < gradInputData.Length; i++)
             gradInputData[i] = numOps.Zero;
 
-        // Use thread-local accumulators to avoid race conditions
-        int numThreads = Environment.ProcessorCount;
-        var localGradInputs = new T[numThreads][];
-        for (int t = 0; t < numThreads; t++)
-        {
-            localGradInputs[t] = new T[gradInputData.Length];
-            for (int i = 0; i < gradInputData.Length; i++)
-                localGradInputs[t][i] = numOps.Zero;
-        }
-
-        // Parallel over batch * inChannels
+        // Parallel over (batch, inChannels) - each pair owns disjoint gradInput slices
+        // so direct writes are race-free without thread-local buffers
         Parallel.For(0, batch * inChannels, idx =>
         {
-            int threadId = Environment.CurrentManagedThreadId % numThreads;
-            var localGrad = localGradInputs[threadId];
-
             int b = idx / inChannels;
             int ic = idx % inChannels;
 
@@ -4300,7 +4300,7 @@ public class CpuEngine : IEngine
 
                                         int inputIdx = (((b * inChannels + ic) * depth + id) * height + ih) * width + iw;
                                         int kernelIdx = (((oc * inChannels + ic) * kernelDepth + kd) * kernelHeight + kh) * kernelWidth + kw;
-                                        localGrad[inputIdx] = numOps.Add(localGrad[inputIdx], numOps.Multiply(gradVal, kernelData[kernelIdx]));
+                                        gradInputData[inputIdx] = numOps.Add(gradInputData[inputIdx], numOps.Multiply(gradVal, kernelData[kernelIdx]));
                                     }
                                 }
                             }
@@ -4309,15 +4309,6 @@ public class CpuEngine : IEngine
                 }
             }
         });
-
-        // Merge thread-local results
-        for (int t = 0; t < numThreads; t++)
-        {
-            for (int i = 0; i < gradInputData.Length; i++)
-            {
-                gradInputData[i] = numOps.Add(gradInputData[i], localGradInputs[t][i]);
-            }
-        }
 
         return new Tensor<T>(inputShape, new Vector<T>(gradInputData));
     }
@@ -4332,6 +4323,10 @@ public class CpuEngine : IEngine
         if (padding == null || padding.Length != 3) throw new ArgumentException("Padding must be array of 3 elements.", nameof(padding));
         if (dilation == null || dilation.Length != 3) throw new ArgumentException("Dilation must be array of 3 elements.", nameof(dilation));
 
+        // Rank and shape validation
+        if (gradOutput.Rank != 5) throw new ArgumentException($"Conv3DBackwardKernel requires 5D gradOutput tensor. Got rank {gradOutput.Rank}.", nameof(gradOutput));
+        if (input.Rank != 5) throw new ArgumentException($"Conv3DBackwardKernel requires 5D input tensor. Got rank {input.Rank}.", nameof(input));
+
         var numOps = MathHelper.GetNumericOperations<T>();
 
         int batch = input.Shape[0];
@@ -4344,6 +4339,14 @@ public class CpuEngine : IEngine
         int kernelDepth = kernelShape[2];
         int kernelHeight = kernelShape[3];
         int kernelWidth = kernelShape[4];
+
+        // Validate shape consistency
+        if (gradOutput.Shape[0] != batch)
+            throw new ArgumentException($"gradOutput batch size ({gradOutput.Shape[0]}) must match input batch size ({batch}).", nameof(gradOutput));
+        if (gradOutput.Shape[1] != outChannels)
+            throw new ArgumentException($"gradOutput outChannels ({gradOutput.Shape[1]}) must match kernelShape out_channels ({outChannels}).", nameof(gradOutput));
+        if (input.Shape[1] != kernelShape[1])
+            throw new ArgumentException($"input in_channels ({input.Shape[1]}) must match kernelShape in_channels ({kernelShape[1]}).", nameof(input));
 
         int strideD = stride[0], strideH = stride[1], strideW = stride[2];
         int padD = padding[0], padH = padding[1], padW = padding[2];

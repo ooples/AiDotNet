@@ -466,7 +466,8 @@ public sealed class ScanNetSemanticSegmentationDataLoader<T> : PointCloudDataset
         {
             if (!Train20IdToIndex.TryGetValue(nyu40Id, out int mapped))
             {
-                return _options.IncludeUnknownClass ? 0 : 0;
+                // Unknown label maps to 0 (unknown class)
+                return 0;
             }
 
             return _options.IncludeUnknownClass ? mapped + 1 : mapped;
@@ -474,7 +475,8 @@ public sealed class ScanNetSemanticSegmentationDataLoader<T> : PointCloudDataset
 
         if (nyu40Id <= 0)
         {
-            return _options.IncludeUnknownClass ? 0 : 0;
+            // Invalid/unknown maps to 0
+            return 0;
         }
 
         return _options.IncludeUnknownClass ? nyu40Id : nyu40Id - 1;
