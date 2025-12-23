@@ -4903,8 +4903,6 @@ public class CpuEngine : IEngine
         if (input.Rank != 5) throw new ArgumentException($"Upsample3D requires 5D input tensor [batch, channels, depth, height, width]. Got rank {input.Rank}.", nameof(input));
         if (scaleD <= 0 || scaleH <= 0 || scaleW <= 0) throw new ArgumentException("Scale factors must be positive.");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-
         int batch = input.Shape[0];
         int channels = input.Shape[1];
         int depth = input.Shape[2];

@@ -35,6 +35,16 @@ public static class GaussianSplattingOperations
         var numOps = MathHelper.GetNumericOperations<T>();
         int numGaussians = means3D.Shape[0];
 
+        // Validate against integer overflow for large datasets
+        // Maximum safe size is int.MaxValue / 9 (for 3x3 covariance matrix indexing)
+        const int maxSafeGaussians = int.MaxValue / 9;
+        if (numGaussians > maxSafeGaussians)
+        {
+            throw new ArgumentException(
+                $"Number of Gaussians ({numGaussians}) exceeds maximum safe limit ({maxSafeGaussians}) to prevent integer overflow in index calculations.",
+                nameof(means3D));
+        }
+
         var means2DData = new T[numGaussians * 2];
         var cov2DData = new T[numGaussians * 3]; // a, b, c for ax² + 2bxy + cy²
         var depthsData = new T[numGaussians];
@@ -181,6 +191,23 @@ public static class GaussianSplattingOperations
         var numOps = MathHelper.GetNumericOperations<T>();
         int numGaussians = means2D.Shape[0];
         int numChannels = colors.Shape[1];
+
+        // Validate against integer overflow for large datasets
+        const int maxSafeGaussians = int.MaxValue / 9;
+        if (numGaussians > maxSafeGaussians)
+        {
+            throw new ArgumentException(
+                $"Number of Gaussians ({numGaussians}) exceeds maximum safe limit ({maxSafeGaussians}) to prevent integer overflow.",
+                nameof(means2D));
+        }
+
+        // Validate image dimensions to prevent overflow
+        if ((long)imageHeight * imageWidth * numChannels > int.MaxValue)
+        {
+            throw new ArgumentException(
+                $"Image dimensions ({imageWidth}x{imageHeight}x{numChannels}) exceed maximum safe array size.",
+                nameof(imageWidth));
+        }
 
         var image = new double[imageHeight * imageWidth * numChannels];
 

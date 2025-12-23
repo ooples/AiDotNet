@@ -76,8 +76,9 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports JIT compilation.
     /// </summary>
-    /// <value><c>true</c> if weights are initialized and activation can be JIT compiled.</value>
-    public override bool SupportsJitCompilation => _weights != null && _biases != null && CanActivationBeJitted();
+    /// <value><c>false</c>. JIT compilation is not currently supported for MeshEdgeConvLayer due to
+    /// the lack of graph-specific operations for edge aggregation in TensorOperations.</value>
+    public override bool SupportsJitCompilation => false;
 
     #endregion
 
@@ -229,12 +230,12 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     #region Initialization
 
     /// <summary>
-    /// Initializes weights using He (Kaiming) initialization and biases to zero.
+    /// Initializes weights using He (Kaiming) uniform initialization and biases to zero.
     /// </summary>
     /// <remarks>
     /// <para>
     /// He initialization scales weights based on fan-in to prevent vanishing/exploding gradients.
-    /// Formula: weight ~ N(0, sqrt(2 / fan_in))
+    /// Formula: weight ~ U(-sqrt(2 / fan_in), sqrt(2 / fan_in))
     /// </para>
     /// </remarks>
     private void InitializeWeights()

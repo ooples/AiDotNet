@@ -361,6 +361,14 @@ public class Upsample3DLayer<T> : LayerBase<T>
     public override void Serialize(BinaryWriter writer)
     {
         base.Serialize(writer);
+        
+        // Write input shape for proper deserialization
+        writer.Write(InputShape.Length);
+        foreach (var dim in InputShape)
+        {
+            writer.Write(dim);
+        }
+        
         writer.Write(ScaleDepth);
         writer.Write(ScaleHeight);
         writer.Write(ScaleWidth);
@@ -380,6 +388,15 @@ public class Upsample3DLayer<T> : LayerBase<T>
     public override void Deserialize(BinaryReader reader)
     {
         base.Deserialize(reader);
+        
+        // Read input shape
+        int inputShapeLength = reader.ReadInt32();
+        var inputShape = new int[inputShapeLength];
+        for (int i = 0; i < inputShapeLength; i++)
+        {
+            inputShape[i] = reader.ReadInt32();
+        }
+        
         var scaleD = reader.ReadInt32();
         var scaleH = reader.ReadInt32();
         var scaleW = reader.ReadInt32();
@@ -401,22 +418,32 @@ public class Upsample3DLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This factory method properly deserializes Upsample3DLayer by creating a new instance
-    /// with the correct scale factors from the serialized data.
+    /// with the correct scale factors and input shape from the serialized data.
     /// </para>
     /// </remarks>
     public static Upsample3DLayer<T> DeserializeFrom(BinaryReader reader)
     {
-        // Skip base layer data (will be re-read by constructor via InputShape/OutputShape calculation)
+        // Read base layer data (ParameterCount + parameters)
+        int paramCount = reader.ReadInt32();
+        for (int i = 0; i < paramCount; i++)
+        {
+            reader.ReadDouble(); // Skip parameters (not used for this layer type)
+        }
+        
+        // Read input shape
+        int inputShapeLength = reader.ReadInt32();
+        var inputShape = new int[inputShapeLength];
+        for (int i = 0; i < inputShapeLength; i++)
+        {
+            inputShape[i] = reader.ReadInt32();
+        }
+        
         // Read scale factors
         var scaleD = reader.ReadInt32();
         var scaleH = reader.ReadInt32();
         var scaleW = reader.ReadInt32();
         
-        // Note: This factory approach requires knowing the input shape from context
-        // For now, create with placeholder values - real implementation needs input shape from context
-        return new Upsample3DLayer<T>(
-            new int[] { 1, 1, 1, 1 },  // Placeholder input shape [channels, depth, height, width]
-            scaleD, scaleH, scaleW);
+        return new Upsample3DLayer<T>(inputShape, scaleD, scaleH, scaleW);
     }
 
     #endregion

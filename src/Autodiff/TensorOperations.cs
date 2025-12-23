@@ -4375,6 +4375,73 @@ public static class TensorOperations<T>
         return node;
     }
 
+
+    /// <summary>
+    /// Performs 3D upsampling (nearest neighbor) on a 5D tensor.
+    /// </summary>
+    /// <param name="input">The input node with shape [batch, channels, depth, height, width].</param>
+    /// <param name="scaleD">Scale factor for depth dimension.</param>
+    /// <param name="scaleH">Scale factor for height dimension.</param>
+    /// <param name="scaleW">Scale factor for width dimension.</param>
+    /// <returns>A new computation node containing the upsampled result with shape 
+    /// [batch, channels, depth*scaleD, height*scaleH, width*scaleW].</returns>
+    /// <exception cref="ArgumentException">Thrown when input is not 5D.</exception>
+    /// <remarks>
+    /// <para>
+    /// 3D upsampling increases spatial resolution by repeating values. This is the inverse
+    /// operation of 3D max pooling and is commonly used in 3D U-Net decoder paths.
+    /// </para>
+    /// <para><b>For Beginners:</b> Upsample3D makes volumetric data larger by repeating voxels.
+    /// If you have a 4x4x4 volume and upsample by 2 in each dimension, you get an 8x8x8 volume
+    /// where each original voxel is repeated 2x2x2 times.
+    /// </para>
+    /// <para><b>Gradient:</b> The gradient is computed by summing gradients that were distributed
+    /// to repeated elements back to the original position.</para>
+    /// </remarks>
+    public static ComputationNode<T> Upsample3D(
+        ComputationNode<T> input,
+        int scaleD,
+        int scaleH,
+        int scaleW)
+    {
+        var shape = input.Value.Shape;
+        if (shape.Length != 5)
+            throw new ArgumentException("Upsample3D requires 5D input [batch, channels, depth, height, width]");
+
+        var engine = AiDotNetEngine.Current;
+        var result = engine.Upsample3D(input.Value, scaleD, scaleH, scaleW);
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradA = engine.Upsample3DBackward(gradient, shape, scaleD, scaleH, scaleW);
+                var existingGrad = input.Gradient;
+                input.Gradient = existingGrad == null ? gradA : existingGrad.Add(gradA);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.Upsample3D;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "ScaleD", scaleD },
+            { "ScaleH", scaleH },
+            { "ScaleW", scaleW }
+        };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
     /// <summary>
     /// Performs 2D transposed convolution (deconvolution) on a 4D tensor.
     /// </summary>

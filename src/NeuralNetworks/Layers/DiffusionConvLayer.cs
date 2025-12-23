@@ -263,6 +263,14 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         double logMin = Math.Log(minTime);
         double logMax = Math.Log(maxTime);
 
+        // Handle edge case where numTimeScales is 1
+        if (numTimeScales == 1)
+        {
+            // Use geometric mean of min and max times
+            times[0] = NumOps.FromDouble(Math.Sqrt(minTime * maxTime));
+            return times;
+        }
+
         for (int i = 0; i < numTimeScales; i++)
         {
             double logT = logMin + (logMax - logMin) * i / (numTimeScales - 1);
@@ -632,20 +640,39 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         bool hasBatch = _lastInput.Rank == 3;
         int numVertices = hasBatch ? _lastInput.Shape[1] : _lastInput.Shape[0];
 
-        var transposedDelta = Engine.TensorTranspose(delta);
-        _weightsGradient = Engine.TensorMatMul(transposedDelta, _diffusedFeatures);
-        _biasesGradient = Engine.ReduceSum(delta, [0], keepDims: false);
-
-        var diffusedGrad = Engine.TensorMatMul(delta, _weights);
-        var inputGrad = BackpropagateThroughDiffusion(diffusedGrad, numVertices);
-
         if (hasBatch)
         {
+            // For batched inputs, accumulate gradients across all batches
             int batchSize = _lastInput.Shape[0];
-            inputGrad = inputGrad.Reshape(batchSize, numVertices, InputChannels);
+            
+            // Reshape delta to [batchSize * numVertices, OutputChannels] for matrix operations
+            var deltaReshaped = delta.Reshape(batchSize * numVertices, OutputChannels);
+            var diffusedReshaped = _diffusedFeatures.Reshape(batchSize * numVertices, InputChannels * NumTimeScales);
+            
+            // Compute weight gradients: sum over all samples
+            var transposedDelta = Engine.TensorTranspose(deltaReshaped);
+            _weightsGradient = Engine.TensorMatMul(transposedDelta, diffusedReshaped);
+            
+            // Compute bias gradients: sum over all samples
+            _biasesGradient = Engine.ReduceSum(deltaReshaped, [0], keepDims: false);
+            
+            // Compute input gradients
+            var diffusedGrad = Engine.TensorMatMul(deltaReshaped, _weights);
+            var inputGrad = BackpropagateThroughDiffusion(diffusedGrad, numVertices * batchSize);
+            
+            return inputGrad.Reshape(batchSize, numVertices, InputChannels);
         }
+        else
+        {
+            var transposedDelta = Engine.TensorTranspose(delta);
+            _weightsGradient = Engine.TensorMatMul(transposedDelta, _diffusedFeatures);
+            _biasesGradient = Engine.ReduceSum(delta, [0], keepDims: false);
 
-        return inputGrad;
+            var diffusedGrad = Engine.TensorMatMul(delta, _weights);
+            var inputGrad = BackpropagateThroughDiffusion(diffusedGrad, numVertices);
+
+            return inputGrad;
+        }
     }
 
     /// <summary>

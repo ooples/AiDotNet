@@ -325,6 +325,12 @@ public enum OperationType
     MaxPool3D,
 
     /// <summary>
+    /// 3D upsampling operation for volumetric data.
+    /// Increases spatial resolution by repeating or interpolating values in depth, height, and width.
+    /// </summary>
+    Upsample3D,
+
+    /// <summary>
     /// 2D average pooling.
     /// </summary>
     AvgPool2D,
