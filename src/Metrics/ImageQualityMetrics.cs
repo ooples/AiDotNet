@@ -96,6 +96,16 @@ public class PeakSignalToNoiseRatio<T> where T : struct
             throw new ArgumentException("Batch computation requires 4D tensors [B, H, W, C]");
         }
 
+        // Validate that shapes match
+        if (predicted.Shape[0] != groundTruth.Shape[0] ||
+            predicted.Shape[1] != groundTruth.Shape[1] ||
+            predicted.Shape[2] != groundTruth.Shape[2] ||
+            predicted.Shape[3] != groundTruth.Shape[3])
+        {
+            throw new ArgumentException(
+                $"Shape mismatch: predicted [{string.Join(",", predicted.Shape)}] vs ground truth [{string.Join(",", groundTruth.Shape)}]");
+        }
+
         int batchSize = predicted.Shape[0];
         var results = new T[batchSize];
 
@@ -106,14 +116,21 @@ public class PeakSignalToNoiseRatio<T> where T : struct
 
         for (int b = 0; b < batchSize; b++)
         {
-            // Extract single image from batch
+            // Extract single image from batch using proper 4D indexing
             var predImage = new T[imageSize];
             var gtImage = new T[imageSize];
 
-            for (int i = 0; i < imageSize; i++)
+            for (int hi = 0; hi < h; hi++)
             {
-                predImage[i] = predicted[b * imageSize + i];
-                gtImage[i] = groundTruth[b * imageSize + i];
+                for (int wi = 0; wi < w; wi++)
+                {
+                    for (int ci = 0; ci < c; ci++)
+                    {
+                        int flatIdx = (hi * w + wi) * c + ci;
+                        predImage[flatIdx] = predicted[b, hi, wi, ci];
+                        gtImage[flatIdx] = groundTruth[b, hi, wi, ci];
+                    }
+                }
             }
 
             var predTensor = new Tensor<T>(new[] { h, w, c }, new Vector<T>(predImage));

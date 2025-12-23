@@ -452,14 +452,23 @@ public static class NeRFOperations
                             idx++;
                         }
 
-                        // Linear interpolation
-                        double cdfPrev = idx > 0 ? cdf[idx - 1] : 0.0;
-                        double cdfCurr = cdf[idx];
-                        double t0 = numOps.ToDouble(tValuesCoarse.GetFlat(coarseOffset + Math.Max(0, idx - 1)));
-                        double t1 = numOps.ToDouble(tValuesCoarse.GetFlat(coarseOffset + idx));
+                        double t;
+                        if (idx == 0)
+                        {
+                            // At first bin, use the coarse bin value directly (no interpolation possible)
+                            t = numOps.ToDouble(tValuesCoarse.GetFlat(coarseOffset));
+                        }
+                        else
+                        {
+                            // Linear interpolation between adjacent bins
+                            double cdfPrev = cdf[idx - 1];
+                            double cdfCurr = cdf[idx];
+                            double t0 = numOps.ToDouble(tValuesCoarse.GetFlat(coarseOffset + idx - 1));
+                            double t1 = numOps.ToDouble(tValuesCoarse.GetFlat(coarseOffset + idx));
 
-                        double denom = cdfCurr - cdfPrev;
-                        double t = denom > 1e-10 ? t0 + (u - cdfPrev) / denom * (t1 - t0) : t0;
+                            double denom = cdfCurr - cdfPrev;
+                            t = denom > 1e-10 ? t0 + (u - cdfPrev) / denom * (t1 - t0) : t0;
+                        }
                         fineTValues[r * numFineSamples + i] = numOps.FromDouble(t);
                     }
                 }
