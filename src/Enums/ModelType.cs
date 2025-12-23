@@ -877,6 +877,23 @@ public enum ModelType
     /// </remarks>
     UNet3D,
 
+    /// <summary>
+    /// MeshCNN neural network for processing 3D triangle meshes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> MeshCNN processes 3D shapes represented as triangle meshes
+    /// directly, without converting to voxels or point clouds. It learns from the
+    /// connectivity of triangles through edge-based convolutions.
+    /// 
+    /// MeshCNN is useful for:
+    /// - Shape classification from mesh data
+    /// - Mesh segmentation (labeling different parts)
+    /// - Learning from CAD models and 3D scans
+    /// </para>
+    /// </remarks>
+    MeshCNN,
+
     RestrictedBoltzmannMachine,
 
     SpikingNeuralNetwork,

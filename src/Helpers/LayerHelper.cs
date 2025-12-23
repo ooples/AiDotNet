@@ -3020,4 +3020,125 @@ public static class LayerHelper<T>
             padding: 0,
             activation: numClasses > 1 ? new SoftmaxActivation<T>() : new SigmoidActivation<T>());
     }
+
+    /// <summary>
+    /// Creates default layers for a MeshCNN architecture for mesh classification/segmentation.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="inputFeatures">Number of input features per edge. Default is 5.</param>
+    /// <param name="convChannels">Channel sizes for each edge convolution block.</param>
+    /// <param name="poolTargets">Target edge counts after each pooling operation.</param>
+    /// <param name="fcSizes">Sizes of fully connected layers before output.</param>
+    /// <param name="numNeighbors">Number of neighboring edges per edge. Default is 4.</param>
+    /// <param name="useBatchNorm">Whether to use batch normalization. Default is true.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization. Default is 0.5.</param>
+    /// <param name="useGlobalAveragePooling">Whether to use global average pooling. Default is false (max pooling).</param>
+    /// <returns>A collection of layers configured for mesh processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> MeshCNN processes 3D mesh data by learning from edge features.
+    /// </para>
+    /// <para>
+    /// The architecture consists of:
+    /// - Edge convolution blocks: Learn patterns from edge neighborhoods
+    /// - Mesh pooling: Simplify the mesh by removing less important edges
+    /// - Global pooling: Aggregate all edge features into a fixed-size vector
+    /// - Fully connected layers: Map aggregated features to class predictions
+    /// </para>
+    /// <para>
+    /// Applications include:
+    /// - 3D shape classification from mesh data
+    /// - Mesh segmentation (labeling different parts)
+    /// - Learning from CAD models and 3D scans
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the architecture has invalid output size.</exception>
+    public static IEnumerable<ILayer<T>> CreateDefaultMeshCNNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int inputFeatures = 5,
+        int[]? convChannels = null,
+        int[]? poolTargets = null,
+        int[]? fcSizes = null,
+        int numNeighbors = 4,
+        bool useBatchNorm = true,
+        double dropoutRate = 0.5,
+        bool useGlobalAveragePooling = false)
+    {
+        if (architecture.OutputSize <= 0)
+        {
+            throw new InvalidOperationException("Output size must be specified and greater than 0 for MeshCNN.");
+        }
+
+        convChannels ??= [64, 128, 256, 256];
+        poolTargets ??= [1800, 1350, 600];
+        fcSizes ??= [100];
+
+        if (inputFeatures <= 0)
+        {
+            throw new ArgumentException("Input features must be positive.", nameof(inputFeatures));
+        }
+
+        int numClasses = architecture.OutputSize;
+        int currentChannels = inputFeatures;
+
+        // Edge convolution blocks with optional pooling
+        for (int block = 0; block < convChannels.Length; block++)
+        {
+            int outChannels = convChannels[block];
+
+            // MeshEdgeConv layer
+            yield return new MeshEdgeConvLayer<T>(
+                inputChannels: currentChannels,
+                outputChannels: outChannels,
+                numNeighbors: numNeighbors,
+                activation: new ReLUActivation<T>());
+
+            currentChannels = outChannels;
+
+            // MeshPool layer (if we have a target for this block)
+            if (block < poolTargets.Length)
+            {
+                yield return new MeshPoolLayer<T>(
+                    inputChannels: currentChannels,
+                    targetEdges: poolTargets[block],
+                    numNeighbors: numNeighbors);
+            }
+        }
+
+        // Global pooling to aggregate edge features
+        // Note: MeshCNN typically uses a simple max/avg over all edges
+        yield return new GlobalPoolingLayer<T>(
+            inputShape: [currentChannels],
+            poolingType: useGlobalAveragePooling ? PoolingType.Average : PoolingType.Max,
+            activationFunction: (IActivationFunction<T>?)null);
+
+        // Fully connected layers
+        int fcInput = currentChannels;
+        foreach (var fcSize in fcSizes)
+        {
+            yield return new DenseLayer<T>(
+                inputSize: fcInput,
+                outputSize: fcSize,
+                activationFunction: new ReLUActivation<T>());
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            fcInput = fcSize;
+        }
+
+        // Output layer
+        IActivationFunction<T> outputActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
+            ? new SoftmaxActivation<T>()
+            : architecture.TaskType == NeuralNetworkTaskType.BinaryClassification
+                ? new SigmoidActivation<T>()
+                : new IdentityActivation<T>();
+
+        yield return new DenseLayer<T>(
+            inputSize: fcInput,
+            outputSize: numClasses,
+            activationFunction: outputActivation);
+    }
 }
