@@ -132,9 +132,17 @@ public static class ThreeDAIExamples
         var predictedLabels = new float[numPoints];
         for (int i = 0; i < numPoints; i++)
         {
-            // Simulate predictions (with some noise)
-            float noise = random.NextDouble() < 0.1 ? random.Next(numPartClasses) : groundTruthLabels[i];
-            predictedLabels[i] = noise;
+            // Simulate predictions (with some noise that guarantees incorrect predictions)
+            if (random.NextDouble() < 0.1)
+            {
+                // Add noise: pick a different class than ground truth
+                int wrongClass = random.Next(numPartClasses - 1);
+                predictedLabels[i] = wrongClass >= groundTruthLabels[i] ? wrongClass + 1 : wrongClass;
+            }
+            else
+            {
+                predictedLabels[i] = groundTruthLabels[i];
+            }
         }
 
         // 4. Evaluate with mIoU

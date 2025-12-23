@@ -85,9 +85,9 @@ public static class GaussianSplattingOperations
             double screenX = p00 * camX * invZ * cx + cx;
             double screenY = p11 * camY * invZ * cy + cy;
 
-            // Check if in frustum
-            if (screenX < -imageWidth || screenX > 2 * imageWidth ||
-                screenY < -imageHeight || screenY > 2 * imageHeight)
+            // Check if in frustum (explicit casts to avoid potential integer overflow)
+            if (screenX < -(double)imageWidth || screenX > 2.0 * (double)imageWidth ||
+                screenY < -(double)imageHeight || screenY > 2.0 * (double)imageHeight)
             {
                 visibleData[i] = false;
                 return;
@@ -671,7 +671,13 @@ public static class GaussianSplattingOperations
 
     /// <summary>
     /// Computes the backward pass for Gaussian covariance computation.
+    /// Implements full analytical gradients for both rotation quaternions and scale vectors.
     /// </summary>
+    /// <remarks>
+    /// The covariance matrix Σ is computed as Σ = R * S² * R^T where R is the rotation matrix
+    /// derived from the quaternion and S is a diagonal scale matrix. This method computes
+    /// the gradients dL/dq and dL/ds given dL/dΣ using the chain rule.
+    /// </remarks>
     public static void ComputeGaussianCovarianceBackward<T>(
         Tensor<T> rotations,
         Tensor<T> scales,
@@ -689,20 +695,34 @@ public static class GaussianSplattingOperations
         var rotGrad = new T[numGaussians * 4];
         var scaleGrad = new T[numGaussians * 3];
 
-        // Simplified gradient computation
         Parallel.For(0, numGaussians, i =>
         {
-            // Get current values
+            // Get quaternion (w, x, y, z) and normalize
             double qw = numOps.ToDouble(rotations.GetFlat(i * 4));
             double qx = numOps.ToDouble(rotations.GetFlat(i * 4 + 1));
             double qy = numOps.ToDouble(rotations.GetFlat(i * 4 + 2));
             double qz = numOps.ToDouble(rotations.GetFlat(i * 4 + 3));
 
+            double qNorm = Math.Sqrt(qw * qw + qx * qx + qy * qy + qz * qz);
+            if (qNorm > 1e-10)
+            {
+                double inv = 1.0 / qNorm;
+                qw *= inv;
+                qx *= inv;
+                qy *= inv;
+                qz *= inv;
+            }
+
+            // Get scales with minimum threshold
             double sx = Math.Max(1e-6, Math.Abs(numOps.ToDouble(scales.GetFlat(i * 3))));
             double sy = Math.Max(1e-6, Math.Abs(numOps.ToDouble(scales.GetFlat(i * 3 + 1))));
             double sz = Math.Max(1e-6, Math.Abs(numOps.ToDouble(scales.GetFlat(i * 3 + 2))));
 
-            // Get covariance gradients
+            double sx2 = sx * sx;
+            double sy2 = sy * sy;
+            double sz2 = sz * sz;
+
+            // Get covariance gradients (symmetric, so gc01 = gc10, etc.)
             int offset = i * 6;
             double gc00 = numOps.ToDouble(covarianceGradient.GetFlat(offset));
             double gc01 = numOps.ToDouble(covarianceGradient.GetFlat(offset + 1));
@@ -711,16 +731,122 @@ public static class GaussianSplattingOperations
             double gc12 = numOps.ToDouble(covarianceGradient.GetFlat(offset + 4));
             double gc22 = numOps.ToDouble(covarianceGradient.GetFlat(offset + 5));
 
-            // Simplified: approximate scale gradients from diagonal covariance gradients
-            scaleGrad[i * 3] = numOps.FromDouble(2.0 * sx * gc00);
-            scaleGrad[i * 3 + 1] = numOps.FromDouble(2.0 * sy * gc11);
-            scaleGrad[i * 3 + 2] = numOps.FromDouble(2.0 * sz * gc22);
+            // Rotation matrix elements from quaternion
+            double r00 = 1.0 - 2.0 * (qy * qy + qz * qz);
+            double r01 = 2.0 * (qx * qy - qw * qz);
+            double r02 = 2.0 * (qx * qz + qw * qy);
+            double r10 = 2.0 * (qx * qy + qw * qz);
+            double r11 = 1.0 - 2.0 * (qx * qx + qz * qz);
+            double r12 = 2.0 * (qy * qz - qw * qx);
+            double r20 = 2.0 * (qx * qz - qw * qy);
+            double r21 = 2.0 * (qy * qz + qw * qx);
+            double r22 = 1.0 - 2.0 * (qx * qx + qy * qy);
 
-            // Rotation gradients are more complex - simplified version
-            rotGrad[i * 4] = numOps.Zero;
-            rotGrad[i * 4 + 1] = numOps.Zero;
-            rotGrad[i * 4 + 2] = numOps.Zero;
-            rotGrad[i * 4 + 3] = numOps.Zero;
+            // Compute scale gradients: dL/ds_k = 2 * s_k * sum_ij(dL/dΣ_ij * R_ik * R_jk)
+            // For scale x (k=0): dL/ds_x = 2*s_x * (gc00*r00*r00 + 2*gc01*r00*r10 + 2*gc02*r00*r20 + gc11*r10*r10 + 2*gc12*r10*r20 + gc22*r20*r20)
+            double dL_dsx = 2.0 * sx * (
+                gc00 * r00 * r00 + 
+                2.0 * gc01 * r00 * r10 + 
+                2.0 * gc02 * r00 * r20 + 
+                gc11 * r10 * r10 + 
+                2.0 * gc12 * r10 * r20 + 
+                gc22 * r20 * r20);
+
+            double dL_dsy = 2.0 * sy * (
+                gc00 * r01 * r01 + 
+                2.0 * gc01 * r01 * r11 + 
+                2.0 * gc02 * r01 * r21 + 
+                gc11 * r11 * r11 + 
+                2.0 * gc12 * r11 * r21 + 
+                gc22 * r21 * r21);
+
+            double dL_dsz = 2.0 * sz * (
+                gc00 * r02 * r02 + 
+                2.0 * gc01 * r02 * r12 + 
+                2.0 * gc02 * r02 * r22 + 
+                gc11 * r12 * r12 + 
+                2.0 * gc12 * r12 * r22 + 
+                gc22 * r22 * r22);
+
+            scaleGrad[i * 3] = numOps.FromDouble(dL_dsx);
+            scaleGrad[i * 3 + 1] = numOps.FromDouble(dL_dsy);
+            scaleGrad[i * 3 + 2] = numOps.FromDouble(dL_dsz);
+
+            // Compute rotation gradients using chain rule through rotation matrix
+            // dL/dq = sum_ij(dL/dΣ_ij * dΣ_ij/dR * dR/dq)
+            // For quaternion components, we need to compute dR/dq_k for each rotation matrix element
+
+            // Compute M = R * S² (column-wise multiplication)
+            double m00 = r00 * sx2; double m01 = r01 * sy2; double m02 = r02 * sz2;
+            double m10 = r10 * sx2; double m11 = r11 * sy2; double m12 = r12 * sz2;
+            double m20 = r20 * sx2; double m21 = r21 * sy2; double m22 = r22 * sz2;
+
+            // Gradient of covariance w.r.t. rotation matrix elements
+            // Σ = M * R^T, so dL/dM_ij = sum_k(dL/dΣ_ik * R_jk)
+            // And dL/dR_ij (through M) = S_j² * sum_k(dL/dΣ_ik * R_jk)
+            // Plus dL/dR_ij (through R^T) = sum_k(dL/dΣ_ki * M_kj)
+
+            // Combined gradient for rotation matrix
+            // dL/dR_ij = dL/dΣ * (M * δR)^T + (δR * M)^T where we accumulate through both paths
+            double dL_dr00 = sx2 * (gc00 * r00 + gc01 * r10 + gc02 * r20) + (gc00 * m00 + gc01 * m10 + gc02 * m20);
+            double dL_dr01 = sy2 * (gc00 * r01 + gc01 * r11 + gc02 * r21) + (gc00 * m01 + gc01 * m11 + gc02 * m21);
+            double dL_dr02 = sz2 * (gc00 * r02 + gc01 * r12 + gc02 * r22) + (gc00 * m02 + gc01 * m12 + gc02 * m22);
+            double dL_dr10 = sx2 * (gc01 * r00 + gc11 * r10 + gc12 * r20) + (gc01 * m00 + gc11 * m10 + gc12 * m20);
+            double dL_dr11 = sy2 * (gc01 * r01 + gc11 * r11 + gc12 * r21) + (gc01 * m01 + gc11 * m11 + gc12 * m21);
+            double dL_dr12 = sz2 * (gc01 * r02 + gc11 * r12 + gc12 * r22) + (gc01 * m02 + gc11 * m12 + gc12 * m22);
+            double dL_dr20 = sx2 * (gc02 * r00 + gc12 * r10 + gc22 * r20) + (gc02 * m00 + gc12 * m10 + gc22 * m20);
+            double dL_dr21 = sy2 * (gc02 * r01 + gc12 * r11 + gc22 * r21) + (gc02 * m01 + gc12 * m11 + gc22 * m21);
+            double dL_dr22 = sz2 * (gc02 * r02 + gc12 * r12 + gc22 * r22) + (gc02 * m02 + gc12 * m12 + gc22 * m22);
+
+            // Derivatives of rotation matrix elements w.r.t. quaternion components
+            // r00 = 1 - 2(qy² + qz²), r01 = 2(qx*qy - qw*qz), r02 = 2(qx*qz + qw*qy), etc.
+            
+            // dL/dqw
+            double dL_dqw = 
+                dL_dr01 * (-2.0 * qz) +  // dr01/dqw = -2qz
+                dL_dr02 * (2.0 * qy) +   // dr02/dqw = 2qy
+                dL_dr10 * (2.0 * qz) +   // dr10/dqw = 2qz
+                dL_dr12 * (-2.0 * qx) +  // dr12/dqw = -2qx
+                dL_dr20 * (-2.0 * qy) +  // dr20/dqw = -2qy
+                dL_dr21 * (2.0 * qx);    // dr21/dqw = 2qx
+
+            // dL/dqx
+            double dL_dqx = 
+                dL_dr01 * (2.0 * qy) +   // dr01/dqx = 2qy
+                dL_dr02 * (2.0 * qz) +   // dr02/dqx = 2qz
+                dL_dr10 * (2.0 * qy) +   // dr10/dqx = 2qy
+                dL_dr11 * (-4.0 * qx) +  // dr11/dqx = -4qx
+                dL_dr12 * (-2.0 * qw) +  // dr12/dqx = -2qw
+                dL_dr20 * (2.0 * qz) +   // dr20/dqx = 2qz
+                dL_dr21 * (2.0 * qw) +   // dr21/dqx = 2qw
+                dL_dr22 * (-4.0 * qx);   // dr22/dqx = -4qx
+
+            // dL/dqy
+            double dL_dqy = 
+                dL_dr00 * (-4.0 * qy) +  // dr00/dqy = -4qy
+                dL_dr01 * (2.0 * qx) +   // dr01/dqy = 2qx
+                dL_dr02 * (2.0 * qw) +   // dr02/dqy = 2qw
+                dL_dr10 * (2.0 * qx) +   // dr10/dqy = 2qx
+                dL_dr12 * (2.0 * qz) +   // dr12/dqy = 2qz
+                dL_dr20 * (-2.0 * qw) +  // dr20/dqy = -2qw
+                dL_dr21 * (2.0 * qz) +   // dr21/dqy = 2qz
+                dL_dr22 * (-4.0 * qy);   // dr22/dqy = -4qy
+
+            // dL/dqz
+            double dL_dqz = 
+                dL_dr00 * (-4.0 * qz) +  // dr00/dqz = -4qz
+                dL_dr01 * (-2.0 * qw) +  // dr01/dqz = -2qw
+                dL_dr02 * (2.0 * qx) +   // dr02/dqz = 2qx
+                dL_dr10 * (2.0 * qw) +   // dr10/dqz = 2qw
+                dL_dr11 * (-4.0 * qz) +  // dr11/dqz = -4qz
+                dL_dr12 * (2.0 * qy) +   // dr12/dqz = 2qy
+                dL_dr20 * (2.0 * qx) +   // dr20/dqz = 2qx
+                dL_dr21 * (2.0 * qy);    // dr21/dqz = 2qy
+
+            rotGrad[i * 4] = numOps.FromDouble(dL_dqw);
+            rotGrad[i * 4 + 1] = numOps.FromDouble(dL_dqx);
+            rotGrad[i * 4 + 2] = numOps.FromDouble(dL_dqy);
+            rotGrad[i * 4 + 3] = numOps.FromDouble(dL_dqz);
         });
 
         rotationsGrad = new Tensor<T>(rotGrad, [numGaussians, 4]);
