@@ -478,11 +478,24 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Computes diffusion using spectral method (eigenbasis).
+    /// Computes diffusion using spectral method (eigenbasis) with vectorized operations.
     /// </summary>
     /// <param name="input">Input features.</param>
     /// <param name="diffused">Output buffer for diffused features.</param>
     /// <param name="numVertices">Number of vertices.</param>
+    /// <remarks>
+    /// <para>
+    /// The spectral diffusion is computed as:
+    /// diffused = Phi @ diag(exp(-lambda * t)) @ Phi^T @ input
+    /// where Phi is the eigenvector matrix and lambda are eigenvalues.
+    /// </para>
+    /// <para>
+    /// We use vectorized operations:
+    /// 1. Project input to spectral domain: coeffs = Phi^T @ input
+    /// 2. Apply heat kernel: coeffs = coeffs * exp(-lambda * t)
+    /// 3. Project back: output = Phi @ coeffs
+    /// </para>
+    /// </remarks>
     private void ComputeDiffusionSpectral(Tensor<T> input, T[] diffused, int numVertices)
     {
         if (_eigenvalues == null || _eigenvectors == null)
@@ -490,50 +503,61 @@ public class DiffusionConvLayer<T> : LayerBase<T>
 
         int numEig = Math.Min(_numEigenvectors, _eigenvalues.Length);
 
-        Parallel.For(0, NumTimeScales, t =>
+        // Transpose eigenvectors for spectral projection: [numEig, numVertices]
+        var eigenvectorsTransposed = Engine.TensorTranspose(_eigenvectors);
+
+        for (int t = 0; t < NumTimeScales; t++)
         {
             T time = DiffusionTimes[t];
 
-            for (int c = 0; c < InputChannels; c++)
+            // Compute decay factors: exp(-eigenvalue * time) for each eigenvalue
+            var decayFactors = new T[numEig];
+            for (int k = 0; k < numEig; k++)
             {
-                var spectralCoeffs = new T[numEig];
-                for (int k = 0; k < numEig; k++)
+                decayFactors[k] = NumOps.Exp(NumOps.Negate(NumOps.Multiply(_eigenvalues[k], time)));
+            }
+            var decayTensor = new Tensor<T>(decayFactors, [numEig, 1]);
+
+            // Step 1: Project input to spectral domain
+            // spectralCoeffs = eigenvectors^T @ input -> [numEig, InputChannels]
+            var spectralCoeffs = Engine.TensorMatMul(eigenvectorsTransposed, input);
+
+            // Step 2: Apply heat kernel (multiply by decay factors)
+            // Scale each row by corresponding decay factor
+            var tiledDecay = Engine.TensorTile(decayTensor, [1, InputChannels]);
+            spectralCoeffs = Engine.TensorMultiply(spectralCoeffs, tiledDecay);
+
+            // Step 3: Project back to spatial domain
+            // output = eigenvectors @ spectralCoeffs -> [numVertices, InputChannels]
+            var output = Engine.TensorMatMul(_eigenvectors, spectralCoeffs);
+
+            // Copy to output buffer at appropriate offset
+            var outputArray = output.ToArray();
+            int baseOffset = t * InputChannels;
+            for (int v = 0; v < numVertices; v++)
+            {
+                for (int c = 0; c < InputChannels; c++)
                 {
-                    T coeff = NumOps.Zero;
-                    for (int v = 0; v < numVertices; v++)
-                    {
-                        coeff = NumOps.Add(coeff, NumOps.Multiply(
-                            _eigenvectors[v, k],
-                            input[v, c]));
-                    }
-
-                    T decay = NumOps.Exp(NumOps.Negate(NumOps.Multiply(_eigenvalues[k], time)));
-                    spectralCoeffs[k] = NumOps.Multiply(coeff, decay);
-                }
-
-                for (int v = 0; v < numVertices; v++)
-                {
-                    T result = NumOps.Zero;
-                    for (int k = 0; k < numEig; k++)
-                    {
-                        result = NumOps.Add(result, NumOps.Multiply(
-                            _eigenvectors[v, k],
-                            spectralCoeffs[k]));
-                    }
-
-                    int outIdx = v * InputChannels * NumTimeScales + t * InputChannels + c;
-                    diffused[outIdx] = result;
+                    int srcIdx = v * InputChannels + c;
+                    int dstIdx = v * InputChannels * NumTimeScales + baseOffset + c;
+                    diffused[dstIdx] = outputArray[srcIdx];
                 }
             }
-        });
+        }
     }
 
     /// <summary>
-    /// Computes diffusion using direct matrix method.
+    /// Computes diffusion using direct matrix method with vectorized operations.
     /// </summary>
     /// <param name="input">Input features.</param>
     /// <param name="diffused">Output buffer for diffused features.</param>
     /// <param name="numVertices">Number of vertices.</param>
+    /// <remarks>
+    /// <para>
+    /// Direct diffusion computes: output[v, c] = sum_u(exp(-L[v,u] * t) * input[u, c])
+    /// This is a matrix multiplication with element-wise exponential decay.
+    /// </para>
+    /// </remarks>
     private void ComputeDiffusionDirect(Tensor<T> input, T[] diffused, int numVertices)
     {
         if (_laplacian == null)
@@ -543,25 +567,32 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         {
             T time = DiffusionTimes[t];
 
-            Parallel.For(0, numVertices, v =>
+            // Compute heat kernel matrix: K[v,u] = exp(-L[v,u] * t)
+            var laplacianArray = _laplacian.ToArray();
+            var heatKernelArray = new T[numVertices * numVertices];
+
+            // Vectorize the exponential computation
+            for (int i = 0; i < laplacianArray.Length; i++)
+            {
+                heatKernelArray[i] = NumOps.Exp(NumOps.Multiply(NumOps.Negate(laplacianArray[i]), time));
+            }
+            var heatKernel = new Tensor<T>(heatKernelArray, [numVertices, numVertices]);
+
+            // Compute diffused output: output = heatKernel @ input -> [numVertices, InputChannels]
+            var output = Engine.TensorMatMul(heatKernel, input);
+
+            // Copy to output buffer at appropriate offset
+            var outputArray = output.ToArray();
+            int baseOffset = t * InputChannels;
+            for (int v = 0; v < numVertices; v++)
             {
                 for (int c = 0; c < InputChannels; c++)
                 {
-                    T result = NumOps.Zero;
-
-                    for (int u = 0; u < numVertices; u++)
-                    {
-                        T laplacianVal = _laplacian[v, u];
-                        T inputVal = input[u, c];
-                        T decayedVal = NumOps.Multiply(inputVal,
-                            NumOps.Exp(NumOps.Multiply(NumOps.Negate(laplacianVal), time)));
-                        result = NumOps.Add(result, decayedVal);
-                    }
-
-                    int outIdx = v * InputChannels * NumTimeScales + t * InputChannels + c;
-                    diffused[outIdx] = result;
+                    int srcIdx = v * InputChannels + c;
+                    int dstIdx = v * InputChannels * NumTimeScales + baseOffset + c;
+                    diffused[dstIdx] = outputArray[srcIdx];
                 }
-            });
+            }
         }
     }
 
@@ -620,97 +651,140 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     /// <summary>
     /// Backward pass using automatic differentiation.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Currently routes to manual implementation. Full autodiff integration pending
+    /// the addition of diffusion-specific operations to the computation graph.
+    /// </para>
+    /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
+        // TODO: Implement proper autodiff when diffusion graph operations are available
         return BackwardManual(outputGradient);
     }
 
     /// <summary>
-    /// Backpropagates gradients through the diffusion operation.
+    /// Backpropagates gradients through the diffusion operation using vectorized operations.
     /// </summary>
+    /// <param name="diffusedGrad">Gradient tensor [numVertices, InputChannels * NumTimeScales].</param>
+    /// <param name="numVertices">Number of vertices.</param>
+    /// <returns>Input gradient tensor [numVertices, InputChannels].</returns>
     private Tensor<T> BackpropagateThroughDiffusion(Tensor<T> diffusedGrad, int numVertices)
     {
-        var inputGrad = new T[numVertices * InputChannels];
+        Tensor<T> inputGrad;
 
         if (_eigenvalues != null && _eigenvectors != null)
         {
-            BackpropagateDiffusionSpectral(diffusedGrad, inputGrad, numVertices);
+            inputGrad = BackpropagateDiffusionSpectralVectorized(diffusedGrad, numVertices);
         }
         else if (_laplacian != null)
         {
-            BackpropagateDiffusionDirect(diffusedGrad, inputGrad, numVertices);
+            inputGrad = BackpropagateDiffusionDirectVectorized(diffusedGrad, numVertices);
+        }
+        else
+        {
+            inputGrad = new Tensor<T>([numVertices, InputChannels]);
         }
 
-        return new Tensor<T>(inputGrad, [numVertices, InputChannels]);
+        return inputGrad;
     }
 
     /// <summary>
-    /// Backpropagates through spectral diffusion.
+    /// Backpropagates through spectral diffusion using vectorized operations.
     /// </summary>
-    private void BackpropagateDiffusionSpectral(Tensor<T> diffusedGrad, T[] inputGrad, int numVertices)
+    /// <param name="diffusedGrad">Gradient tensor [numVertices, InputChannels * NumTimeScales].</param>
+    /// <param name="numVertices">Number of vertices.</param>
+    /// <returns>Input gradient tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// The backward pass through spectral diffusion is:
+    /// inputGrad = sum_t(Phi @ diag(exp(-lambda * t)) @ Phi^T @ diffusedGrad_t)
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackpropagateDiffusionSpectralVectorized(Tensor<T> diffusedGrad, int numVertices)
     {
         if (_eigenvalues == null || _eigenvectors == null)
-            return;
+            return new Tensor<T>([numVertices, InputChannels]);
 
         int numEig = Math.Min(_numEigenvectors, _eigenvalues.Length);
 
-        Parallel.For(0, InputChannels, c =>
+        // Initialize accumulated gradient
+        var inputGrad = new Tensor<T>([numVertices, InputChannels]);
+
+        // Transpose eigenvectors for projection: [numEig, numVertices]
+        var eigenvectorsTransposed = Engine.TensorTranspose(_eigenvectors);
+
+        for (int t = 0; t < NumTimeScales; t++)
         {
-            for (int v = 0; v < numVertices; v++)
+            T time = DiffusionTimes[t];
+            int baseOffset = t * InputChannels;
+
+            // Extract gradient slice for this time scale
+            var timeGrad = Engine.TensorSlice(diffusedGrad, [0, baseOffset], [numVertices, InputChannels]);
+
+            // Compute decay factors
+            var decayFactors = new T[numEig];
+            for (int k = 0; k < numEig; k++)
             {
-                T grad = NumOps.Zero;
-
-                for (int t = 0; t < NumTimeScales; t++)
-                {
-                    T time = DiffusionTimes[t];
-                    int gradIdx = v * InputChannels * NumTimeScales + t * InputChannels + c;
-                    T diffGrad = diffusedGrad[v, t * InputChannels + c];
-
-                    for (int k = 0; k < numEig; k++)
-                    {
-                        T decay = NumOps.Exp(NumOps.Negate(NumOps.Multiply(_eigenvalues[k], time)));
-                        T eigVec = _eigenvectors[v, k];
-                        grad = NumOps.Add(grad, NumOps.Multiply(NumOps.Multiply(diffGrad, eigVec), decay));
-                    }
-                }
-
-                int outIdx = v * InputChannels + c;
-                inputGrad[outIdx] = grad;
+                decayFactors[k] = NumOps.Exp(NumOps.Negate(NumOps.Multiply(_eigenvalues[k], time)));
             }
-        });
+            var decayTensor = new Tensor<T>(decayFactors, [numEig, 1]);
+
+            // Project gradient to spectral domain
+            var spectralGrad = Engine.TensorMatMul(eigenvectorsTransposed, timeGrad);
+
+            // Apply decay
+            var tiledDecay = Engine.TensorTile(decayTensor, [1, InputChannels]);
+            spectralGrad = Engine.TensorMultiply(spectralGrad, tiledDecay);
+
+            // Project back and accumulate
+            var contribution = Engine.TensorMatMul(_eigenvectors, spectralGrad);
+            inputGrad = Engine.TensorAdd(inputGrad, contribution);
+        }
+
+        return inputGrad;
     }
 
     /// <summary>
-    /// Backpropagates through direct diffusion.
+    /// Backpropagates through direct diffusion using vectorized operations.
     /// </summary>
-    private void BackpropagateDiffusionDirect(Tensor<T> diffusedGrad, T[] inputGrad, int numVertices)
+    /// <param name="diffusedGrad">Gradient tensor [numVertices, InputChannels * NumTimeScales].</param>
+    /// <param name="numVertices">Number of vertices.</param>
+    /// <returns>Input gradient tensor.</returns>
+    private Tensor<T> BackpropagateDiffusionDirectVectorized(Tensor<T> diffusedGrad, int numVertices)
     {
         if (_laplacian == null)
-            return;
+            return new Tensor<T>([numVertices, InputChannels]);
 
-        Parallel.For(0, numVertices, v =>
+        // Initialize accumulated gradient
+        var inputGrad = new Tensor<T>([numVertices, InputChannels]);
+
+        for (int t = 0; t < NumTimeScales; t++)
         {
-            for (int c = 0; c < InputChannels; c++)
+            T time = DiffusionTimes[t];
+            int baseOffset = t * InputChannels;
+
+            // Extract gradient slice for this time scale
+            var timeGrad = Engine.TensorSlice(diffusedGrad, [0, baseOffset], [numVertices, InputChannels]);
+
+            // Compute heat kernel matrix transposed: K^T[v,u] = exp(-L[u,v] * t)
+            // For symmetric Laplacian, K^T = K, so we can reuse forward computation
+            var laplacianArray = _laplacian.ToArray();
+            var heatKernelArray = new T[numVertices * numVertices];
+
+            for (int i = 0; i < laplacianArray.Length; i++)
             {
-                T grad = NumOps.Zero;
-
-                for (int t = 0; t < NumTimeScales; t++)
-                {
-                    T time = DiffusionTimes[t];
-
-                    for (int u = 0; u < numVertices; u++)
-                    {
-                        T laplacianVal = _laplacian[u, v];
-                        T diffGrad = diffusedGrad[u, t * InputChannels + c];
-                        T decay = NumOps.Exp(NumOps.Multiply(NumOps.Negate(laplacianVal), time));
-                        grad = NumOps.Add(grad, NumOps.Multiply(diffGrad, decay));
-                    }
-                }
-
-                int outIdx = v * InputChannels + c;
-                inputGrad[outIdx] = grad;
+                heatKernelArray[i] = NumOps.Exp(NumOps.Multiply(NumOps.Negate(laplacianArray[i]), time));
             }
-        });
+            var heatKernel = new Tensor<T>(heatKernelArray, [numVertices, numVertices]);
+
+            // For backward pass, we need K^T @ grad
+            var heatKernelTransposed = Engine.TensorTranspose(heatKernel);
+            var contribution = Engine.TensorMatMul(heatKernelTransposed, timeGrad);
+            inputGrad = Engine.TensorAdd(inputGrad, contribution);
+        }
+
+        return inputGrad;
     }
 
     #endregion

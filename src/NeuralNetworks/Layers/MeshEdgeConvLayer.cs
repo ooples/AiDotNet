@@ -350,49 +350,66 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Aggregates features from each edge and its neighbors.
+    /// Aggregates features from each edge and its neighbors using vectorized operations.
     /// </summary>
     /// <param name="input">Input edge features [numEdges, InputChannels].</param>
     /// <param name="adjacency">Edge adjacency [numEdges, NumNeighbors].</param>
     /// <param name="numEdges">Number of edges.</param>
     /// <param name="aggregatedSize">Size of aggregated feature vector.</param>
     /// <returns>Aggregated features [numEdges, aggregatedSize].</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses vectorized gather operations to efficiently collect neighbor features.
+    /// The aggregated output concatenates self-features with neighbor features:
+    /// [self_features | neighbor_1_features | neighbor_2_features | ... | neighbor_N_features]
+    /// </para>
+    /// </remarks>
     private Tensor<T> AggregateEdgeFeatures(Tensor<T> input, int[,] adjacency, int numEdges, int aggregatedSize)
     {
-        var result = new T[numEdges * aggregatedSize];
+        // Create result tensor [numEdges, aggregatedSize]
+        var result = new Tensor<T>([numEdges, aggregatedSize]);
 
-        for (int e = 0; e < numEdges; e++)
+        // Step 1: Copy self-features (first InputChannels columns)
+        // Use TensorSetSlice to copy input to the first InputChannels columns of result
+        var selfSlice = Engine.TensorSlice(result, [0, 0], [numEdges, InputChannels]);
+        Engine.TensorCopy(input, selfSlice);
+
+        // Step 2: Gather neighbor features for each neighbor position
+        for (int n = 0; n < NumNeighbors; n++)
         {
-            int baseIdx = e * aggregatedSize;
+            int featureOffset = InputChannels * (1 + n);
 
-            for (int c = 0; c < InputChannels; c++)
+            // Create indices tensor for this neighbor position
+            var neighborIndices = new int[numEdges];
+            for (int e = 0; e < numEdges; e++)
             {
-                result[baseIdx + c] = input[e, c];
+                int idx = adjacency[e, n];
+                // Clamp invalid indices to 0 and we'll zero them out after
+                neighborIndices[e] = (idx >= 0 && idx < numEdges) ? idx : 0;
             }
 
-            for (int n = 0; n < NumNeighbors; n++)
-            {
-                int neighborIdx = adjacency[e, n];
-                int featureOffset = InputChannels * (1 + n);
+            var indicesTensor = new Tensor<int>(neighborIndices, [numEdges]);
 
-                if (neighborIdx >= 0 && neighborIdx < numEdges)
-                {
-                    for (int c = 0; c < InputChannels; c++)
-                    {
-                        result[baseIdx + featureOffset + c] = input[neighborIdx, c];
-                    }
-                }
-                else
-                {
-                    for (int c = 0; c < InputChannels; c++)
-                    {
-                        result[baseIdx + featureOffset + c] = NumOps.Zero;
-                    }
-                }
+            // Gather neighbor features using vectorized operation
+            var gathered = Engine.TensorGather(input, indicesTensor, axis: 0);
+
+            // Create mask for invalid neighbors and zero them out
+            var maskData = new T[numEdges];
+            for (int e = 0; e < numEdges; e++)
+            {
+                int idx = adjacency[e, n];
+                maskData[e] = (idx >= 0 && idx < numEdges) ? NumOps.One : NumOps.Zero;
             }
+            var mask = new Tensor<T>(maskData, [numEdges, 1]);
+
+            // Apply mask (multiply gathered features by mask to zero out invalid neighbors)
+            gathered = Engine.TensorMultiply(gathered, Engine.TensorTile(mask, [1, InputChannels]));
+
+            // Set the gathered features into the result at the appropriate offset
+            Engine.TensorSetSlice(result, gathered, [0, featureOffset]);
         }
 
-        return new Tensor<T>(result, [numEdges, aggregatedSize]);
+        return result;
     }
 
     /// <summary>
@@ -465,74 +482,95 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to output.</param>
     /// <returns>The gradient of the loss with respect to input.</returns>
+    /// <remarks>
+    /// <para>
+    /// Currently routes to manual implementation. Full autodiff integration pending
+    /// the addition of mesh-specific operations to the computation graph.
+    /// </para>
+    /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
+        // TODO: Implement proper autodiff when mesh graph operations are available
         return BackwardManual(outputGradient);
     }
 
     /// <summary>
-    /// Computes the bias gradient by summing gradients over edges.
+    /// Computes the bias gradient by summing gradients over edges using vectorized reduction.
     /// </summary>
     /// <param name="delta">The gradient tensor [numEdges, OutputChannels].</param>
     /// <returns>Bias gradient tensor [OutputChannels].</returns>
+    /// <remarks>
+    /// <para>
+    /// Uses Engine.ReduceSum for vectorized summation along the edge dimension (axis 0).
+    /// This provides significant speedup on both CPU (via SIMD) and GPU.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ComputeBiasGradient(Tensor<T> delta)
     {
-        int numEdges = delta.Shape[0];
-        var biasGrad = new T[OutputChannels];
-
-        for (int c = 0; c < OutputChannels; c++)
-        {
-            T sum = NumOps.Zero;
-            for (int e = 0; e < numEdges; e++)
-            {
-                sum = NumOps.Add(sum, delta[e, c]);
-            }
-            biasGrad[c] = sum;
-        }
-
-        return new Tensor<T>(biasGrad, [OutputChannels]);
+        // Use vectorized reduce sum along axis 0 (sum over all edges)
+        return Engine.ReduceSum(delta, [0], keepDims: false);
     }
 
     /// <summary>
-    /// Scatters gradients from aggregated features back to original edges.
+    /// Scatters gradients from aggregated features back to original edges using vectorized operations.
     /// </summary>
     /// <param name="aggregatedGrad">Gradient of aggregated features [numEdges, aggregatedFeatures].</param>
     /// <param name="adjacency">Edge adjacency [numEdges, NumNeighbors].</param>
     /// <param name="numEdges">Number of edges.</param>
     /// <returns>Input gradient tensor [numEdges, InputChannels].</returns>
+    /// <remarks>
+    /// <para>
+    /// This method scatters gradients back using vectorized operations:
+    /// 1. Self-gradients: Direct slice copy from first InputChannels columns
+    /// 2. Neighbor gradients: Use TensorScatterAdd for each neighbor position
+    /// </para>
+    /// </remarks>
     private Tensor<T> ScatterGradients(Tensor<T> aggregatedGrad, int[,] adjacency, int numEdges)
     {
-        var inputGrad = new T[numEdges * InputChannels];
+        // Initialize input gradient tensor
+        var inputGrad = new Tensor<T>([numEdges, InputChannels]);
 
-        for (int e = 0; e < numEdges; e++)
-        {
-            for (int c = 0; c < InputChannels; c++)
-            {
-                inputGrad[e * InputChannels + c] = NumOps.Add(
-                    inputGrad[e * InputChannels + c],
-                    aggregatedGrad[e, c]);
-            }
-        }
+        // Step 1: Add self-gradients (first InputChannels columns)
+        var selfGrad = Engine.TensorSlice(aggregatedGrad, [0, 0], [numEdges, InputChannels]);
+        inputGrad = Engine.TensorAdd(inputGrad, selfGrad);
 
-        for (int e = 0; e < numEdges; e++)
+        // Step 2: Scatter neighbor gradients for each neighbor position
+        for (int n = 0; n < NumNeighbors; n++)
         {
-            for (int n = 0; n < NumNeighbors; n++)
+            int featureOffset = InputChannels * (1 + n);
+
+            // Extract gradient slice for this neighbor position
+            var neighborGrad = Engine.TensorSlice(aggregatedGrad, [0, featureOffset], [numEdges, InputChannels]);
+
+            // Create indices tensor for scatter
+            var neighborIndices = new int[numEdges];
+            var validMask = new T[numEdges];
+            for (int e = 0; e < numEdges; e++)
             {
-                int neighborIdx = adjacency[e, n];
-                if (neighborIdx >= 0 && neighborIdx < numEdges)
+                int idx = adjacency[e, n];
+                if (idx >= 0 && idx < numEdges)
                 {
-                    int featureOffset = InputChannels * (1 + n);
-                    for (int c = 0; c < InputChannels; c++)
-                    {
-                        inputGrad[neighborIdx * InputChannels + c] = NumOps.Add(
-                            inputGrad[neighborIdx * InputChannels + c],
-                            aggregatedGrad[e, featureOffset + c]);
-                    }
+                    neighborIndices[e] = idx;
+                    validMask[e] = NumOps.One;
+                }
+                else
+                {
+                    neighborIndices[e] = 0; // Won't matter since mask is zero
+                    validMask[e] = NumOps.Zero;
                 }
             }
+
+            var indicesTensor = new Tensor<int>(neighborIndices, [numEdges]);
+
+            // Mask the gradients to zero out invalid neighbors
+            var mask = new Tensor<T>(validMask, [numEdges, 1]);
+            var maskedGrad = Engine.TensorMultiply(neighborGrad, Engine.TensorTile(mask, [1, InputChannels]));
+
+            // Scatter-add the gradients back to their original positions
+            inputGrad = Engine.TensorScatterAdd(inputGrad, indicesTensor, maskedGrad, axis: 0);
         }
 
-        return new Tensor<T>(inputGrad, [numEdges, InputChannels]);
+        return inputGrad;
     }
 
     #endregion

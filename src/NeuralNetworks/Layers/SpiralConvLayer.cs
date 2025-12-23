@@ -438,41 +438,60 @@ public class SpiralConvLayer<T> : LayerBase<T>
     /// <param name="input">Input vertex features [numVertices, InputChannels].</param>
     /// <param name="numVertices">Number of vertices.</param>
     /// <returns>Gathered features [numVertices, InputChannels * SpiralLength].</returns>
+    /// <remarks>
+    /// <para>
+    /// Uses vectorized TensorGather operations to efficiently collect neighbor features.
+    /// Each spiral position is gathered independently and concatenated.
+    /// </para>
+    /// </remarks>
     private Tensor<T> GatherSpiralFeatures(Tensor<T> input, int numVertices)
     {
         if (_spiralIndices == null)
             throw new InvalidOperationException("Spiral indices not set.");
 
         int gatheredSize = InputChannels * SpiralLength;
-        var gathered = new T[numVertices * gatheredSize];
 
-        Parallel.For(0, numVertices, v =>
+        // Create result tensor
+        var gathered = new Tensor<T>([numVertices, gatheredSize]);
+
+        // Gather features for each spiral position using vectorized operations
+        for (int s = 0; s < SpiralLength; s++)
         {
-            int outOffset = v * gatheredSize;
+            int featureOffset = s * InputChannels;
 
-            for (int s = 0; s < SpiralLength; s++)
+            // Create indices for this spiral position
+            var spiralPositionIndices = new int[numVertices];
+            var validMask = new T[numVertices];
+
+            for (int v = 0; v < numVertices; v++)
             {
-                int neighborIdx = _spiralIndices[v, s];
-                int featureOffset = s * InputChannels;
-
-                if (neighborIdx >= 0 && neighborIdx < numVertices)
+                int idx = _spiralIndices[v, s];
+                if (idx >= 0 && idx < numVertices)
                 {
-                    for (int c = 0; c < InputChannels; c++)
-                    {
-                        gathered[outOffset + featureOffset + c] = input[neighborIdx, c];
-                    }
+                    spiralPositionIndices[v] = idx;
+                    validMask[v] = NumOps.One;
                 }
                 else
                 {
-                    for (int c = 0; c < InputChannels; c++)
-                    {
-                        gathered[outOffset + featureOffset + c] = NumOps.Zero;
-                    }
+                    spiralPositionIndices[v] = 0; // Placeholder, will be masked to zero
+                    validMask[v] = NumOps.Zero;
                 }
             }
-        });
 
-        return new Tensor<T>(gathered, [numVertices, gatheredSize]);
+            var indicesTensor = new Tensor<int>(spiralPositionIndices, [numVertices]);
+
+            // Gather neighbor features
+            var neighborFeatures = Engine.TensorGather(input, indicesTensor, axis: 0);
+
+            // Apply mask to zero out invalid neighbors
+            var mask = new Tensor<T>(validMask, [numVertices, 1]);
+            neighborFeatures = Engine.TensorMultiply(neighborFeatures, Engine.TensorTile(mask, [1, InputChannels]));
+
+            // Set the gathered features into the result at the appropriate offset
+            Engine.TensorSetSlice(gathered, neighborFeatures, [0, featureOffset]);
+        }
+
+        return gathered;
     }
 
     /// <summary>
@@ -544,51 +563,76 @@ public class SpiralConvLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="outputGradient">Gradient of loss with respect to output.</param>
     /// <returns>Gradient of loss with respect to input.</returns>
+    /// <remarks>
+    /// <para>
+    /// Currently routes to manual implementation. Full autodiff integration pending
+    /// the addition of spiral-specific operations to the computation graph.
+    /// </para>
+    /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
+        // TODO: Implement proper autodiff when spiral graph operations are available
         return BackwardManual(outputGradient);
     }
 
     /// <summary>
-    /// Scatters gradients back to input vertices according to spiral indices.
+    /// Scatters gradients back to input vertices according to spiral indices using vectorized operations.
     /// </summary>
     /// <param name="gatheredGrad">Gradients for gathered features [numVertices, InputChannels * SpiralLength].</param>
     /// <param name="numVertices">Number of vertices.</param>
     /// <returns>Input gradients [numVertices, InputChannels].</returns>
+    /// <remarks>
+    /// <para>
+    /// Uses vectorized TensorScatterAdd operations to efficiently scatter gradients back.
+    /// Each spiral position is processed independently for better parallelism.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ScatterSpiralGradients(Tensor<T> gatheredGrad, int numVertices)
     {
         if (_spiralIndices == null)
             throw new InvalidOperationException("Spiral indices not set.");
 
-        var inputGrad = new T[numVertices * InputChannels];
-        var gradLock = new object();
+        // Initialize input gradient tensor
+        var inputGrad = new Tensor<T>([numVertices, InputChannels]);
 
-        for (int v = 0; v < numVertices; v++)
+        // Scatter gradients for each spiral position
+        for (int s = 0; s < SpiralLength; s++)
         {
-            int srcOffset = v * InputChannels * SpiralLength;
+            int featureOffset = s * InputChannels;
 
-            for (int s = 0; s < SpiralLength; s++)
+            // Extract gradient slice for this spiral position
+            var spiralGrad = Engine.TensorSlice(gatheredGrad, [0, featureOffset], [numVertices, InputChannels]);
+
+            // Create indices and mask for scatter
+            var neighborIndices = new int[numVertices];
+            var validMask = new T[numVertices];
+
+            for (int v = 0; v < numVertices; v++)
             {
-                int neighborIdx = _spiralIndices[v, s];
-                int featureOffset = s * InputChannels;
-
-                if (neighborIdx >= 0 && neighborIdx < numVertices)
+                int idx = _spiralIndices[v, s];
+                if (idx >= 0 && idx < numVertices)
                 {
-                    int destOffset = neighborIdx * InputChannels;
-                    for (int c = 0; c < InputChannels; c++)
-                    {
-                        lock (gradLock)
-                        {
-                            inputGrad[destOffset + c] = NumOps.Add(
-                                inputGrad[destOffset + c],
-                                gatheredGrad[v, featureOffset + c]);
-                        }
-                    }
+                    neighborIndices[v] = idx;
+                    validMask[v] = NumOps.One;
+                }
+                else
+                {
+                    neighborIndices[v] = 0; // Placeholder, masked out
+                    validMask[v] = NumOps.Zero;
                 }
             }
+
+            var indicesTensor = new Tensor<int>(neighborIndices, [numVertices]);
+
+            // Apply mask to zero out invalid gradients
+            var mask = new Tensor<T>(validMask, [numVertices, 1]);
+            var maskedGrad = Engine.TensorMultiply(spiralGrad, Engine.TensorTile(mask, [1, InputChannels]));
+
+            // Scatter-add gradients back to original positions
+            inputGrad = Engine.TensorScatterAdd(inputGrad, indicesTensor, maskedGrad, axis: 0);
         }
 
-        return new Tensor<T>(inputGrad, [numVertices, InputChannels]);
+        return inputGrad;
     }
 
     #endregion

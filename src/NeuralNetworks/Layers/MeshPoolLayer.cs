@@ -266,26 +266,26 @@ public class MeshPoolLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Computes importance scores for all edges.
+    /// Computes importance scores for all edges using vectorized matrix-vector multiplication.
     /// </summary>
     /// <param name="input">Edge features [numEdges, InputChannels].</param>
     /// <returns>Importance scores [numEdges].</returns>
+    /// <remarks>
+    /// <para>
+    /// Uses Engine.TensorMatMul to compute scores = input @ weights^T in a single vectorized operation.
+    /// This provides significant speedup over element-wise loops on both CPU (via SIMD) and GPU.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ComputeImportanceScores(Tensor<T> input)
     {
-        int numEdges = input.Shape[0];
-        var scores = new T[numEdges];
+        // Reshape weights to [InputChannels, 1] for matrix-vector multiplication
+        var weightsReshaped = _importanceWeights.Reshape(InputChannels, 1);
 
-        for (int e = 0; e < numEdges; e++)
-        {
-            T score = NumOps.Zero;
-            for (int c = 0; c < InputChannels; c++)
-            {
-                score = NumOps.Add(score, NumOps.Multiply(input[e, c], _importanceWeights[c]));
-            }
-            scores[e] = score;
-        }
+        // Compute scores = input @ weights (result is [numEdges, 1])
+        var scores = Engine.TensorMatMul(input, weightsReshaped);
 
-        return new Tensor<T>(scores, [numEdges]);
+        // Squeeze to get [numEdges] shape
+        return Engine.TensorSqueeze(scores, axis: 1);
     }
 
     /// <summary>
@@ -294,14 +294,24 @@ public class MeshPoolLayer<T> : LayerBase<T>
     /// <param name="importanceScores">Importance scores for each edge.</param>
     /// <param name="numEdges">Number of edges.</param>
     /// <returns>Array of edge indices sorted by ascending importance.</returns>
+    /// <remarks>
+    /// <para>
+    /// Note: Sorting is inherently sequential, but we extract scores in bulk using ToArray().
+    /// Future optimization could use GPU-based sorting if available.
+    /// </para>
+    /// </remarks>
     private int[] SortEdgesByImportance(Tensor<T> importanceScores, int numEdges)
     {
         var indices = Enumerable.Range(0, numEdges).ToArray();
+
+        // Extract scores to array in one operation
+        var scoresArray = importanceScores.ToArray();
         var scoreValues = new double[numEdges];
 
+        // Convert to double for sorting (vectorized when possible)
         for (int i = 0; i < numEdges; i++)
         {
-            scoreValues[i] = NumOps.ToDouble(importanceScores[i]);
+            scoreValues[i] = NumOps.ToDouble(scoresArray[i]);
         }
 
         Array.Sort(scoreValues, indices);
@@ -350,11 +360,17 @@ public class MeshPoolLayer<T> : LayerBase<T>
     #region Backward Pass
 
     /// <summary>
-    /// Performs the backward pass for mesh pooling.
+    /// Performs the backward pass for mesh pooling using vectorized scatter operations.
     /// </summary>
     /// <param name="outputGradient">Gradient with respect to pooled output.</param>
     /// <returns>Gradient with respect to input (sparse, only at kept edges).</returns>
     /// <exception cref="InvalidOperationException">Thrown when Forward has not been called.</exception>
+    /// <remarks>
+    /// <para>
+    /// Uses Engine.TensorScatterAdd to efficiently scatter gradients back to their original positions.
+    /// This is much faster than element-wise loops, especially on GPU.
+    /// </para>
+    /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         if (_lastInput == null || RemainingEdgeIndices == null || _lastImportanceScores == null)
@@ -363,48 +379,54 @@ public class MeshPoolLayer<T> : LayerBase<T>
         int numEdges = _lastInput.Shape[0];
         int numKept = RemainingEdgeIndices.Length;
 
-        var inputGrad = new T[numEdges * InputChannels];
-        for (int i = 0; i < numKept; i++)
-        {
-            int originalIdx = RemainingEdgeIndices[i];
-            for (int c = 0; c < InputChannels; c++)
-            {
-                inputGrad[originalIdx * InputChannels + c] = outputGradient[i, c];
-            }
-        }
+        // Create zero-initialized input gradient tensor
+        var inputGrad = new Tensor<T>([numEdges, InputChannels]);
+
+        // Create indices tensor for scatter operation
+        var indicesTensor = new Tensor<int>(RemainingEdgeIndices, [numKept]);
+
+        // Scatter-add gradients back to original positions
+        inputGrad = Engine.TensorScatterAdd(inputGrad, indicesTensor, outputGradient, axis: 0);
 
         _importanceWeightsGradient = ComputeImportanceWeightsGradient(outputGradient, _lastInput, RemainingEdgeIndices);
 
-        return new Tensor<T>(inputGrad, [numEdges, InputChannels]);
+        return inputGrad;
     }
 
     /// <summary>
-    /// Computes gradient for importance weights.
+    /// Computes gradient for importance weights using vectorized operations.
     /// </summary>
     /// <param name="outputGradient">Gradient from output.</param>
     /// <param name="input">Original input features.</param>
     /// <param name="remainingIndices">Indices of kept edges.</param>
     /// <returns>Gradient for importance weights.</returns>
+    /// <remarks>
+    /// <para>
+    /// The gradient is computed as: sum over kept edges of (sum(grad) * input_features).
+    /// We use vectorized operations to:
+    /// 1. Gather kept edge features using TensorGather
+    /// 2. Sum output gradients using ReduceSum
+    /// 3. Compute weighted sum using TensorMatMul
+    /// </para>
+    /// </remarks>
     private Tensor<T> ComputeImportanceWeightsGradient(Tensor<T> outputGradient, Tensor<T> input, int[] remainingIndices)
     {
-        var grad = new T[InputChannels];
+        int numKept = remainingIndices.Length;
 
-        for (int i = 0; i < remainingIndices.Length; i++)
-        {
-            int edgeIdx = remainingIndices[i];
-            T gradScale = NumOps.Zero;
-            for (int c = 0; c < InputChannels; c++)
-            {
-                gradScale = NumOps.Add(gradScale, outputGradient[i, c]);
-            }
+        // Create indices tensor for gathering
+        var indicesTensor = new Tensor<int>(remainingIndices, [numKept]);
 
-            for (int c = 0; c < InputChannels; c++)
-            {
-                grad[c] = NumOps.Add(grad[c], NumOps.Multiply(gradScale, input[edgeIdx, c]));
-            }
-        }
+        // Gather the kept edge features from input
+        var keptFeatures = Engine.TensorGather(input, indicesTensor, axis: 0);
 
-        return new Tensor<T>(grad, [InputChannels]);
+        // Sum output gradients along channels to get scale factors [numKept, 1]
+        var gradScale = Engine.ReduceSum(outputGradient, [1], keepDims: true);
+
+        // Element-wise multiply scales with features: [numKept, InputChannels]
+        var scaledFeatures = Engine.TensorMultiply(keptFeatures, Engine.TensorTile(gradScale, [1, InputChannels]));
+
+        // Sum over kept edges to get final gradient [InputChannels]
+        return Engine.ReduceSum(scaledFeatures, [0], keepDims: false);
     }
 
     #endregion
