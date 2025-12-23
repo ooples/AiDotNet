@@ -682,6 +682,29 @@ public static class VectorExtensions
     }
 
     /// <summary>
+    /// Finds the minimum element value in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector elements.</typeparam>
+    /// <param name="vector">The vector to search.</param>
+    /// <returns>The smallest value in the vector.</returns>
+    /// <exception cref="ArgumentException">Thrown when the vector is empty.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method finds the smallest number in your vector.
+    /// For example, in the vector [5, 2, 8, 1], the minimum is 1.
+    /// </para>
+    /// </remarks>
+    public static T Minimum<T>(this Vector<T> vector)
+    {
+        if (vector.Length == 0)
+            throw new ArgumentException("Vector cannot be empty");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var span = vector.AsSpan();
+        return numOps.Min(span);
+    }
+
+    /// <summary>
     /// Creates a new vector where each element is the absolute value of the corresponding element in the input vector.
     /// </summary>
     /// <typeparam name="T">The numeric type of the vector elements.</typeparam>

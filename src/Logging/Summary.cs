@@ -5,7 +5,7 @@ namespace AiDotNet.Logging;
 /// </summary>
 internal class Summary
 {
-    public List<SummaryValue> Values { get; } = [];
+    public List<SummaryValue> Values { get; } = new List<SummaryValue>();
 
     public byte[] ToBytes()
     {

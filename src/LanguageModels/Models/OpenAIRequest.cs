@@ -11,7 +11,7 @@ internal class OpenAIRequest
     public string Model { get; set; } = "";
 
     [JsonProperty("messages")]
-    public OpenAIMessage[] Messages { get; set; } = [];
+    public OpenAIMessage[] Messages { get; set; } = Array.Empty<OpenAIMessage>();
 
     [JsonProperty("temperature")]
     public double Temperature { get; set; }

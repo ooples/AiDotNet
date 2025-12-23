@@ -5,7 +5,7 @@ namespace AiDotNet.Genetics;
 /// </summary>
 public class RealValuedIndividual : IEvolvable<RealGene, double>
 {
-    private List<RealGene> _genes = [];
+    private List<RealGene> _genes = new List<RealGene>();
     private double _fitness;
 
     /// <summary>

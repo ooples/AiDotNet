@@ -406,6 +406,8 @@ public class SByteOperations : INumericOperations<sbyte>
     /// </remarks>
     public bool Equals(sbyte a, sbyte b) => a == b;
 
+    public int Compare(sbyte a, sbyte b) => a.CompareTo(b);
+
     /// <summary>
     /// Raises a signed byte to the specified power.
     /// </summary>

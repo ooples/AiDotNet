@@ -24,7 +24,7 @@ public class NodeGene
     {
         Type = type;
         Value = value;
-        Children = [];
+        Children = new List<NodeGene>();
     }
 
     public NodeGene Clone()

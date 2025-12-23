@@ -5,7 +5,7 @@ namespace AiDotNet.Genetics;
 /// </summary>
 public class BinaryIndividual : IEvolvable<BinaryGene, double>
 {
-    private List<BinaryGene> _genes = [];
+    private List<BinaryGene> _genes = new List<BinaryGene>();
     private double _fitness;
 
     /// <summary>

@@ -1,3 +1,5 @@
+using AiDotNet.AdversarialRobustness.Documentation;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using Newtonsoft.Json;
@@ -516,6 +518,180 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
     public override string GetModelStoragePath(string modelName, int version)
     {
         return GetModelVersionPath(modelName, version);
+    }
+
+    /// <summary>
+    /// Attaches a Model Card to a registered model version.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A Model Card is like a nutrition label for AI models.
+    /// This method associates a Model Card with a specific version of your model,
+    /// documenting its intended use, limitations, and performance characteristics.</para>
+    /// </remarks>
+    public override void AttachModelCard(string modelName, int version, ModelCard modelCard)
+    {
+        if (modelCard == null)
+            throw new ArgumentNullException(nameof(modelCard));
+
+        lock (SyncLock)
+        {
+            var model = GetModel(modelName, version);
+            model.ModelCard = modelCard;
+            model.LastModifiedAt = DateTime.UtcNow;
+            SaveModelVersion(model);
+
+            // Also save the Model Card as a separate file for easy access
+            var modelCardPath = GetModelCardPath(modelName, version);
+            ValidatePathWithinDirectory(modelCardPath, RegistryDirectory);
+            var json = SerializeToJson(modelCard);
+            File.WriteAllText(modelCardPath, json);
+        }
+    }
+
+    /// <summary>
+    /// Gets the Model Card for a registered model version.
+    /// </summary>
+    public override ModelCard? GetModelCard(string modelName, int version)
+    {
+        lock (SyncLock)
+        {
+            var model = GetModel(modelName, version);
+            if (model.ModelCard != null)
+            {
+                return model.ModelCard;
+            }
+
+            // Try to load from file if not in memory
+            var modelCardPath = GetModelCardPath(modelName, version);
+            if (File.Exists(modelCardPath))
+            {
+                try
+                {
+                    ValidatePathWithinDirectory(modelCardPath, RegistryDirectory);
+                    var json = File.ReadAllText(modelCardPath);
+                    var modelCard = DeserializeFromJson<ModelCard>(json);
+                    if (modelCard != null)
+                    {
+                        model.ModelCard = modelCard;
+                    }
+                    return modelCard;
+                }
+                catch (IOException)
+                {
+                    return null;
+                }
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Generates a Model Card from the registered model's metadata and evaluation results.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This automatically creates a Model Card from information
+    /// already stored about your model. It's a quick way to create documentation without
+    /// having to fill in everything manually.</para>
+    /// </remarks>
+    public override ModelCard GenerateModelCard(string modelName, int version, string? developers = null)
+    {
+        lock (SyncLock)
+        {
+            var model = GetModel(modelName, version);
+            var numOps = MathHelper.GetNumericOperations<T>();
+
+            var modelCard = new ModelCard
+            {
+                ModelName = modelName,
+                Version = $"{version}.0.0",
+                Date = model.CreatedAt,
+                Developers = developers ?? string.Empty,
+                ModelType = model.Metadata?.ModelType.ToString() ?? "Unknown"
+            };
+
+            // Extract performance metrics from metadata
+            if (model.Metadata?.FeatureImportance != null)
+            {
+                var performanceMetrics = new Dictionary<string, double>();
+                foreach (var kvp in model.Metadata.FeatureImportance)
+                {
+                    performanceMetrics[$"FeatureImportance_{kvp.Key}"] = numOps.ToDouble(kvp.Value);
+                }
+
+                if (performanceMetrics.Count > 0)
+                {
+                    modelCard.PerformanceMetrics["FeatureImportance"] = performanceMetrics;
+                }
+            }
+
+            // Add metadata as additional info
+            if (model.Metadata != null)
+            {
+                modelCard.TrainingData = $"Feature count: {model.Metadata.FeatureCount}, Complexity: {model.Metadata.Complexity}";
+            }
+
+            // Add tags as recommendations if relevant
+            if (model.Tags != null)
+            {
+                foreach (var tag in model.Tags)
+                {
+                    if (tag.Key.StartsWith("recommendation_", StringComparison.OrdinalIgnoreCase))
+                    {
+                        modelCard.Recommendations.Add(tag.Value);
+                    }
+                    else if (tag.Key.StartsWith("limitation_", StringComparison.OrdinalIgnoreCase))
+                    {
+                        modelCard.Limitations.Add(tag.Value);
+                    }
+                }
+            }
+
+            // Add standard recommendations
+            modelCard.Recommendations.Add("Continuously monitor model performance in production");
+            modelCard.Recommendations.Add("Regularly evaluate model for fairness across demographic groups");
+            modelCard.Recommendations.Add("Update the model with new data as needed");
+
+            // Add standard caveats
+            modelCard.Caveats.Add("Model performance may degrade over time due to data drift");
+            modelCard.Caveats.Add("Results should be validated in your specific use case before deployment");
+
+            return modelCard;
+        }
+    }
+
+    /// <summary>
+    /// Saves the Model Card for a model version to a file.
+    /// </summary>
+    /// <remarks>
+    /// The filePath must resolve to a location within the registry directory
+    /// to prevent path traversal attacks.
+    /// </remarks>
+    public override void SaveModelCard(string modelName, int version, string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        // Validate path is within registry directory to prevent path traversal
+        var resolvedPath = Path.GetFullPath(filePath);
+        ValidatePathWithinDirectory(resolvedPath, RegistryDirectory);
+
+        var modelCard = GetModelCard(modelName, version);
+        if (modelCard == null)
+        {
+            // Generate one if it doesn't exist
+            modelCard = GenerateModelCard(modelName, version);
+        }
+
+        modelCard.SaveToFile(resolvedPath);
+    }
+
+    private string GetModelCardPath(string modelName, int version)
+    {
+        var modelDir = GetModelDirectoryPath(modelName);
+        var path = Path.Combine(modelDir, $"v{version}_modelcard.json");
+        ValidatePathWithinDirectory(path, RegistryDirectory);
+        return path;
     }
 
     #region Private Helper Methods

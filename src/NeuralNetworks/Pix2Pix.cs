@@ -37,8 +37,8 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class Pix2Pix<T> : NeuralNetworkBase<T>
 {
-    private readonly List<T> _discriminatorLosses = [];
-    private readonly List<T> _generatorLosses = [];
+    private readonly List<T> _discriminatorLosses = new List<T>();
+    private readonly List<T> _generatorLosses = new List<T>();
 
     /// <summary>
     /// The optimizer for the generator network.

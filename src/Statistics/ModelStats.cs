@@ -404,7 +404,7 @@ public class ModelStats<T, TInput, TOutput>
         _options = options ?? new ModelStatsOptions(); // Use default options if not provided
         FeatureCount = inputs.FeatureCount;
         ConditionNumber = _numOps.Zero;
-        VIFList = [];
+        VIFList = new List<T>();
         CorrelationMatrix = Matrix<T>.Empty();
         CovarianceMatrix = Matrix<T>.Empty();
         AutoCorrelationFunction = Vector<T>.Empty();
@@ -425,9 +425,9 @@ public class ModelStats<T, TInput, TOutput>
         HammingDistance = _numOps.Zero;
         MahalanobisDistance = _numOps.Zero;
         LogPointwisePredictiveDensity = _numOps.Zero;
-        LeaveOneOutPredictiveDensities = [];
+        LeaveOneOutPredictiveDensities = new List<T>();
         ObservedTestStatistic = _numOps.Zero;
-        PosteriorPredictiveSamples = [];
+        PosteriorPredictiveSamples = new List<T>();
         MarginalLikelihood = _numOps.Zero;
         ReferenceModelMarginalLikelihood = _numOps.Zero;
         LogLikelihood = _numOps.Zero;
@@ -436,8 +436,8 @@ public class ModelStats<T, TInput, TOutput>
         Predicted = inputs.Predicted;
         Features = inputs.XMatrix;
         Model = inputs.Model;
-        FeatureNames = inputs.FeatureNames ?? [];
-        FeatureValues = inputs.FeatureValues ?? [];
+        FeatureNames = inputs.FeatureNames ?? new List<string>();
+        FeatureValues = inputs.FeatureValues ?? new Dictionary<string, TOutput>();
 
         // Only calculate statistics if we have actual data to analyze
         // Skip calculation for empty ModelStats (placeholder objects)

@@ -24,7 +24,7 @@ public static class OptimizerFactory<T, TInput, TOutput>
     /// <b>For Beginners:</b> This dictionary stores information about which class to use for each 
     /// optimizer type, making it easy to look up the right implementation when needed.
     /// </remarks>
-    private static readonly Dictionary<OptimizerType, Type> _optimizerTypes = [];
+    private static readonly Dictionary<OptimizerType, Type> _optimizerTypes = new Dictionary<OptimizerType, Type>();
 
     /// <summary>
     /// Static constructor that initializes the optimizer type dictionary.

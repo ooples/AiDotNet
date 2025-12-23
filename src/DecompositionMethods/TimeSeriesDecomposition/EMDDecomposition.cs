@@ -275,7 +275,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private List<Vector<T>> DecomposeSignal(Vector<T> signal)
     {
-        List<Vector<T>> imfs = [];
+        List<Vector<T>> imfs = new List<Vector<T>>();
         Vector<T> residual = signal.Clone();
 
         while (!IsResidual(residual) && imfs.Count < _maxImf)
@@ -299,7 +299,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     private List<Vector<T>> AverageImfs(List<List<Vector<T>>> allImfs)
     {
         int maxImfCount = allImfs.Max(imfs => imfs.Count);
-        List<Vector<T>> averagedImfs = [];
+        List<Vector<T>> averagedImfs = new List<Vector<T>>();
 
         for (int i = 0; i < maxImfCount; i++)
         {
@@ -355,7 +355,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private Vector<T> ExtractCEEMDImf(Vector<T> signal, int ensembleSize, double noiseAmplitude)
     {
-        List<Vector<T>> ensembleImfs = [];
+        List<Vector<T>> ensembleImfs = new List<Vector<T>>();
 
         for (int i = 0; i < ensembleSize; i++)
         {
@@ -434,7 +434,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private List<Vector<T>> ProjectSignal(Matrix<T> signal, int numDirections)
     {
-        List<Vector<T>> projections = [];
+        List<Vector<T>> projections = new List<Vector<T>>();
         int channels = signal.Columns;
 
         for (int i = 0; i < numDirections; i++)
@@ -458,7 +458,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>A list of envelope vectors.</returns>
     private List<Vector<T>> ComputeMultivariateEnvelopes(List<Vector<T>> projections)
     {
-        List<Vector<T>> envelopes = [];
+        List<Vector<T>> envelopes = new List<Vector<T>>();
         foreach (var projection in projections)
         {
             Vector<T> upperEnvelope = ComputeEnvelope(projection, EnvelopeType.Upper);
@@ -688,7 +688,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>A list of indices where extrema occur.</returns>
     private List<int> FindExtrema(Vector<T> signal, EnvelopeType envelopeType)
     {
-        List<int> extremaIndices = [];
+        List<int> extremaIndices = new List<int>();
 
         for (int i = 1; i < signal.Length - 1; i++)
         {

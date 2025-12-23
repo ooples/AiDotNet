@@ -191,7 +191,7 @@ public class ModelStatsInputs<T, TInput, TOutput>
     /// to understand what the model is actually using to make predictions.
     /// </para>
     /// </remarks>
-    public List<string> FeatureNames { get; set; } = [];
+    public List<string> FeatureNames { get; set; } = new List<string>();
 
     /// <summary>
     /// Gets or sets the values for each feature organized by feature name.
@@ -214,7 +214,7 @@ public class ModelStatsInputs<T, TInput, TOutput>
     /// - Perform feature-specific transformations
     /// </para>
     /// </remarks>
-    public Dictionary<string, TOutput> FeatureValues { get; set; } = [];
+    public Dictionary<string, TOutput> FeatureValues { get; set; } = new Dictionary<string, TOutput>();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ModelStatsInputs{T, TInput, TOutput}"/> class.

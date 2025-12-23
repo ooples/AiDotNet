@@ -51,7 +51,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// improvement and make coaching adjustments.
     /// </para>
     /// </remarks>
-    private List<T> _generatorLosses = [];
+    private List<T> _generatorLosses = new List<T>();
 
     /// <summary>
     /// Gets the generator network that creates synthetic data.
@@ -358,7 +358,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         _lastGeneratorLoss = NumOps.Zero;
 
         // Initialize tracking collections
-        _generatorLosses = [];
+        _generatorLosses = new List<T>();
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);

@@ -87,7 +87,7 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
         : base(options, regularization)
     {
         _options = options;
-        _trees = [];
+        _trees = new List<DecisionTreeRegression<T>>();
         _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 

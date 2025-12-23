@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.Intrinsics;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.Tensors.Operators;
@@ -15,13 +16,7 @@ public readonly struct AtanhOperatorDouble : IUnaryOperator<double, double>
     /// </summary>
     public double Invoke(double x)
     {
-#if NET5_0_OR_GREATER
-        return Math.Atanh(x);
-#else
-        // atanh(x) = 0.5 * log((1 + x) / (1 - x))
-        // For -1 < x < 1
-        return 0.5 * Math.Log((1.0 + x) / (1.0 - x));
-#endif
+        return MathHelper.Atanh(x);
     }
 
     /// <summary>
@@ -87,13 +82,7 @@ public readonly struct AtanhOperatorFloat : IUnaryOperator<float, float>
     /// </summary>
     public float Invoke(float x)
     {
-#if NET5_0_OR_GREATER
-        return MathF.Atanh(x);
-#else
-        // atanh(x) = 0.5 * log((1 + x) / (1 - x))
-        // For -1 < x < 1
-        return 0.5f * (float)Math.Log((1f + x) / (1f - x));
-#endif
+        return (float)MathHelper.Atanh(x);
     }
 
 #if NET5_0_OR_GREATER

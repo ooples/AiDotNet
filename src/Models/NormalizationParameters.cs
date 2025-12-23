@@ -73,8 +73,8 @@ public class NormalizationParameters<T>
         _numOps = numOps ?? MathHelper.GetNumericOperations<T>();
         Method = NormalizationMethod.None;
         Min = Max = Mean = StdDev = Scale = Shift = Median = IQR = P = MaxAbs = _numOps.Zero;
-        Bins = [];
-        Quantiles = [];
+        Bins = new List<T>();
+        Quantiles = new List<T>();
         OutputDistribution = OutputDistribution.Uniform;
     }
 

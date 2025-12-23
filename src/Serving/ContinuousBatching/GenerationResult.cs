@@ -10,10 +10,10 @@ public class GenerationResult<T>
     public long SequenceId { get; set; }
 
     /// <summary>All token IDs including prompt.</summary>
-    public List<int> TokenIds { get; set; } = [];
+    public List<int> TokenIds { get; set; } = new List<int>();
 
     /// <summary>Only the generated tokens (excluding prompt).</summary>
-    public List<int> GeneratedTokens { get; set; } = [];
+    public List<int> GeneratedTokens { get; set; } = new List<int>();
 
     /// <summary>Reason why generation stopped.</summary>
     public StopReason FinishReason { get; set; }

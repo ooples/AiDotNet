@@ -4,7 +4,7 @@ namespace AiDotNet.Helpers;
 
 public static class DeserializationHelper
 {
-    private static readonly Dictionary<string, Type> LayerTypes = [];
+    private static readonly Dictionary<string, Type> LayerTypes = new Dictionary<string, Type>();
 
     static DeserializationHelper()
     {
@@ -100,24 +100,24 @@ public static class DeserializationHelper
         else if (genericDef == typeof(InputLayer<>))
         {
             // InputLayer(int inputSize)
-            var ctor = type.GetConstructor([typeof(int)]);
+            var ctor = type.GetConstructor(new Type[] { typeof(int) });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find InputLayer constructor with (int).");
             }
 
-            instance = ctor.Invoke([inputShape[0]]);
+            instance = ctor.Invoke(new object[] { inputShape[0] });
         }
         else if (genericDef == typeof(ReshapeLayer<>))
         {
             // ReshapeLayer(int[] inputShape, int[] outputShape)
-            var ctor = type.GetConstructor([typeof(int[]), typeof(int[])]);
+            var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int[]) });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find ReshapeLayer constructor with (int[], int[]).");
             }
 
-            instance = ctor.Invoke([inputShape, outputShape]);
+            instance = ctor.Invoke(new object[] { inputShape, outputShape });
         }
         else if (genericDef == typeof(EmbeddingLayer<>))
         {
@@ -127,12 +127,12 @@ public static class DeserializationHelper
                 ?? TryGetInt(additionalParams, "VocabSize")
                 ?? throw new InvalidOperationException("EmbeddingLayer requires VocabularySize metadata for deserialization.");
 
-            var ctor = type.GetConstructor([typeof(int), typeof(int)]);
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find EmbeddingLayer constructor with (int, int).");
             }
-            instance = ctor.Invoke([vocabSize, embeddingDim]);
+            instance = ctor.Invoke(new object[] { vocabSize, embeddingDim });
         }
         else if (genericDef == typeof(PositionalEncodingLayer<>))
         {
@@ -145,35 +145,35 @@ public static class DeserializationHelper
             int maxSeqLen = inputShape[0];
             int embDim = inputShape[1];
 
-            var ctor = type.GetConstructor([typeof(int), typeof(int)]);
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find PositionalEncodingLayer constructor with (int, int).");
             }
-            instance = ctor.Invoke([maxSeqLen, embDim]);
+            instance = ctor.Invoke(new object[] { maxSeqLen, embDim });
         }
         else if (genericDef == typeof(DropoutLayer<>))
         {
             // DropoutLayer(double dropoutRate = 0.5)
             double rate = TryGetDouble(additionalParams, "DropoutRate") ?? 0.5;
-            var ctor = type.GetConstructor([typeof(double)]);
+            var ctor = type.GetConstructor(new Type[] { typeof(double) });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find DropoutLayer constructor with (double).");
             }
-            instance = ctor.Invoke([rate]);
+            instance = ctor.Invoke(new object[] { rate });
         }
         else if (genericDef == typeof(LayerNormalizationLayer<>))
         {
             // LayerNormalizationLayer(int featureSize, double epsilon = ...)
             int featureSize = inputShape[0];
             double epsilon = TryGetDouble(additionalParams, "Epsilon") ?? NumericalStabilityHelper.LargeEpsilon;
-            var ctor = type.GetConstructor([typeof(int), typeof(double)]);
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(double) });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find LayerNormalizationLayer constructor with (int, double).");
             }
-            instance = ctor.Invoke([featureSize, epsilon]);
+            instance = ctor.Invoke(new object[] { featureSize, epsilon });
         }
         else if (genericDef == typeof(BatchNormalizationLayer<>))
         {
@@ -205,13 +205,13 @@ public static class DeserializationHelper
             int headCount = TryGetInt(additionalParams, "HeadCount") ?? ResolveDefaultHeadCount(embDim);
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor([typeof(int), typeof(int), typeof(int), activationFuncType]);
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find SelfAttentionLayer constructor with (int, int, int, IActivationFunction<T>).");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            instance = ctor.Invoke([seqLen, embDim, headCount, activation]);
+            instance = ctor.Invoke(new object?[] { seqLen, embDim, headCount, activation });
         }
         else if (genericDef == typeof(AttentionLayer<>))
         {
@@ -220,13 +220,13 @@ public static class DeserializationHelper
             int attentionSize = outputShape[0];
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor([typeof(int), typeof(int), activationFuncType]);
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find AttentionLayer constructor with (int, int, IActivationFunction<T>).");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            instance = ctor.Invoke([inputSize, attentionSize, activation]);
+            instance = ctor.Invoke(new object?[] { inputSize, attentionSize, activation });
         }
         else if (genericDef == typeof(GraphAttentionLayer<>))
         {
@@ -238,13 +238,13 @@ public static class DeserializationHelper
             double dropout = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor([typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType]);
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find GraphAttentionLayer constructor with expected signature.");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            instance = ctor.Invoke([inputFeatures, outputFeatures, numHeads, alpha, dropout, activation]);
+            instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Attention.FlashAttentionLayer<>))
         {
@@ -275,12 +275,12 @@ public static class DeserializationHelper
             int outputDepth = outputShape[0];
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor([typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType]);
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
             {
                 throw new InvalidOperationException($"Cannot find ConvolutionalLayer constructor.");
             }
-            instance = ctor.Invoke([inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, null]);
+            instance = ctor.Invoke(new object?[] { inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, null });
         }
         else if (genericDef == typeof(PoolingLayer<>))
         {
@@ -294,12 +294,12 @@ public static class DeserializationHelper
             int inputHeight = inputShape.Length > 0 ? inputShape[0] : 1;
             int inputWidth = inputShape.Length > 1 ? inputShape[1] : 1;
 
-            var ctor = type.GetConstructor([typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(PoolingType)]);
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(PoolingType) });
             if (ctor is null)
             {
                 throw new InvalidOperationException($"Cannot find PoolingLayer constructor.");
             }
-            instance = ctor.Invoke([inputDepth, inputHeight, inputWidth, poolSize, stride, poolingType]);
+            instance = ctor.Invoke(new object[] { inputDepth, inputHeight, inputWidth, poolSize, stride, poolingType });
         }
         else if (genericDef == typeof(ActivationLayer<>))
         {
@@ -308,14 +308,14 @@ public static class DeserializationHelper
         else
         {
             // Default: pass inputShape as first parameter
-            var ctor = type.GetConstructor([typeof(int[])]);
+            var ctor = type.GetConstructor(new Type[] { typeof(int[]) });
             if (ctor is null)
             {
                 throw new NotSupportedException(
                     $"Layer type {layerType} is not supported for deserialization (no known constructor found).");
             }
 
-            instance = ctor.Invoke([inputShape]);
+            instance = ctor.Invoke(new object[] { inputShape });
         }
         if (instance == null)
         {
@@ -330,14 +330,14 @@ public static class DeserializationHelper
         // DenseLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
         // Use specific constructor to avoid ambiguity with vector activation constructor.
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-        var ctor = type.GetConstructor([typeof(int), typeof(int), activationFuncType]);
+        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
         if (ctor is null)
         {
             throw new InvalidOperationException("Cannot find DenseLayer constructor with (int, int, IActivationFunction<T>).");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke([inputShape[0], outputShape[0], activation]);
+        return ctor.Invoke(new object?[] { inputShape[0], outputShape[0], activation });
     }
 
     private static object CreateMultiHeadAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)
@@ -353,14 +353,14 @@ public static class DeserializationHelper
         int headCount = TryGetInt(additionalParams, "HeadCount") ?? ResolveDefaultHeadCount(embDim);
 
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-        var ctor = type.GetConstructor([typeof(int), typeof(int), typeof(int), activationFuncType]);
+        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType });
         if (ctor is null)
         {
             throw new InvalidOperationException("Cannot find MultiHeadAttentionLayer constructor with (int, int, int, IActivationFunction<T>).");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke([seqLen, embDim, headCount, activation]);
+        return ctor.Invoke(new object?[] { seqLen, embDim, headCount, activation });
     }
 
     private static object CreateFlashAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)
@@ -380,14 +380,14 @@ public static class DeserializationHelper
         flashConfig.UseCausalMask = useCausal;
 
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-        var ctor = type.GetConstructor([typeof(int), typeof(int), typeof(int), typeof(AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig), activationFuncType]);
+        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig), activationFuncType });
         if (ctor is null)
         {
             throw new InvalidOperationException("Cannot find FlashAttentionLayer constructor with expected signature.");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke([seqLen, embDim, headCount, flashConfig, activation]);
+        return ctor.Invoke(new object?[] { seqLen, embDim, headCount, flashConfig, activation });
     }
 
     private static object CreateCachedMultiHeadAttention<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)
@@ -405,14 +405,14 @@ public static class DeserializationHelper
         bool useCausal = TryGetBool(additionalParams, "UseCausalMask") ?? true;
 
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-        var ctor = type.GetConstructor([typeof(int), typeof(int), typeof(int), typeof(bool), typeof(int), typeof(bool), activationFuncType]);
+        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(bool), typeof(int), typeof(bool), activationFuncType });
         if (ctor is null)
         {
             throw new InvalidOperationException("Cannot find CachedMultiHeadAttention constructor with expected signature.");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke([seqLen, embDim, headCount, useFlash, 0, useCausal, activation]);
+        return ctor.Invoke(new object?[] { seqLen, embDim, headCount, useFlash, 0, useCausal, activation });
     }
 
     private static object CreatePagedCachedMultiHeadAttention<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)
@@ -429,14 +429,14 @@ public static class DeserializationHelper
         bool useCausal = TryGetBool(additionalParams, "UseCausalMask") ?? true;
 
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-        var ctor = type.GetConstructor([typeof(int), typeof(int), typeof(int), typeof(bool), activationFuncType]);
+        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(bool), activationFuncType });
         if (ctor is null)
         {
             throw new InvalidOperationException("Cannot find PagedCachedMultiHeadAttention constructor with expected signature.");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke([seqLen, embDim, headCount, useCausal, activation]);
+        return ctor.Invoke(new object?[] { seqLen, embDim, headCount, useCausal, activation });
     }
 
     private static object CreateMultiLoRAAdapter<T>(Type type, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams)
@@ -483,7 +483,7 @@ public static class DeserializationHelper
         var encodedTasks = ParseList(tasksRaw);
         if (encodedTasks.Length == 0)
         {
-            encodedTasks = ["default"];
+            encodedTasks = new string[] { "default" };
         }
 
         var tasks = encodedTasks.Select(Uri.UnescapeDataString).ToArray();
@@ -494,13 +494,13 @@ public static class DeserializationHelper
         double defaultAlpha = alphas.Length > 0 ? alphas[0] : -1;
 
         var iLayerType = typeof(ILayer<>).MakeGenericType(typeof(T));
-        var ctor = type.GetConstructor([iLayerType, typeof(string), typeof(int), typeof(double), typeof(bool)]);
+        var ctor = type.GetConstructor(new Type[] { iLayerType, typeof(string), typeof(int), typeof(double), typeof(bool) });
         if (ctor is null)
         {
             throw new InvalidOperationException("Cannot find MultiLoRAAdapter constructor with expected signature.");
         }
 
-        var instance = ctor.Invoke([baseLayer, tasks[0], defaultRank, defaultAlpha, freezeBaseLayer]);
+        var instance = ctor.Invoke(new object[] { baseLayer, tasks[0], defaultRank, defaultAlpha, freezeBaseLayer });
         var multi = (AiDotNet.LoRA.Adapters.MultiLoRAAdapter<T>)instance;
 
         for (int taskIndex = 1; taskIndex < tasks.Length; taskIndex++)
@@ -547,7 +547,7 @@ public static class DeserializationHelper
                 throw new InvalidOperationException("Cannot find ActivationFunctionFactory.CreateActivationFunction method.");
             }
 
-            activationFunction = createMethod.Invoke(null, [activationFunctionEnum]);
+            activationFunction = createMethod.Invoke(null, new object[] { activationFunctionEnum });
         }
 
         if (activationFunction == null)
@@ -557,20 +557,20 @@ public static class DeserializationHelper
 
         if (vectorActivationType.IsInstanceOfType(activationFunction))
         {
-            var ctor = type.GetConstructor([typeof(int[]), vectorActivationType]);
+            var ctor = type.GetConstructor(new Type[] { typeof(int[]), vectorActivationType });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find ActivationLayer constructor with (int[], IVectorActivationFunction<T>).");
             }
-            return ctor.Invoke([inputShape, activationFunction]);
+            return ctor.Invoke(new object[] { inputShape, activationFunction });
         }
 
-        var scalarCtor = type.GetConstructor([typeof(int[]), scalarActivationType]);
+        var scalarCtor = type.GetConstructor(new Type[] { typeof(int[]), scalarActivationType });
         if (scalarCtor is null)
         {
             throw new InvalidOperationException("Cannot find ActivationLayer constructor with (int[], IActivationFunction<T>).");
         }
-        return scalarCtor.Invoke([inputShape, activationFunction]);
+        return scalarCtor.Invoke(new object[] { inputShape, activationFunction });
     }
 
     private static bool TryParseLayerTypeIdentifier(

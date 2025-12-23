@@ -232,6 +232,26 @@ public interface INumericOperations<T> : IVectorizedOperations<T>
     bool LessThanOrEquals(T a, T b);
 
     /// <summary>
+    /// Compares two values and returns an integer that indicates their relative order.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is like comparing two numbers to determine their ordering:
+    /// - If a is less than b, returns a negative number (-1)
+    /// - If a equals b, returns zero (0)
+    /// - If a is greater than b, returns a positive number (1)
+    ///
+    /// This is commonly used for sorting or determining relative positions of values.
+    /// </remarks>
+    /// <param name="a">The first value to compare.</param>
+    /// <param name="b">The second value to compare.</param>
+    /// <returns>
+    /// A value less than zero if a is less than b;
+    /// zero if a equals b;
+    /// a value greater than zero if a is greater than b.
+    /// </returns>
+    int Compare(T a, T b);
+
+    /// <summary>
     /// Rounds a value to the nearest integral value.
     /// </summary>
     /// <remarks>

@@ -1,6 +1,7 @@
 using System.Text;
-using System.Text.Json;
 using AiDotNet.Interfaces;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.PromptEngineering.Tools;
 
@@ -27,7 +28,7 @@ namespace AiDotNet.PromptEngineering.Tools;
 /// var tools = registry.GetAllTools(); // Returns all 3 tools
 ///
 /// // Execute a tool
-/// var args = JsonDocument.Parse("{\"city\": \"Paris\"}");
+/// var args = JObject.Parse("{\"city\": \"Paris\"}");
 /// var result = registry.ExecuteTool("get_weather", args);
 /// ```
 /// </para>
@@ -111,7 +112,7 @@ public class ToolRegistry
     /// <param name="arguments">The arguments for the tool.</param>
     /// <returns>The tool execution result.</returns>
     /// <exception cref="ArgumentException">Thrown when the tool is not found.</exception>
-    public string ExecuteTool(string toolName, JsonDocument arguments)
+    public string ExecuteTool(string toolName, JObject arguments)
     {
         var tool = GetTool(toolName);
         if (tool == null)
@@ -156,7 +157,7 @@ public class ToolRegistry
         {
             builder.AppendLine($"Tool: {tool.Name}");
             builder.AppendLine($"Description: {tool.Description}");
-            builder.AppendLine($"Parameters: {tool.ParameterSchema.RootElement.GetRawText()}");
+            builder.AppendLine($"Parameters: {tool.ParameterSchema.ToString(Formatting.None)}");
             builder.AppendLine();
         }
 

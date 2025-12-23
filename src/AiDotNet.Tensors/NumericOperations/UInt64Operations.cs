@@ -399,6 +399,8 @@ public class UInt64Operations : INumericOperations<ulong>
     /// </remarks>
     public bool Equals(ulong a, ulong b) => a == b;
 
+    public int Compare(ulong a, ulong b) => a.CompareTo(b);
+
     /// <summary>
     /// Raises a value to the specified power.
     /// </summary>

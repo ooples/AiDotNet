@@ -70,8 +70,8 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         : base(model, options ?? new())
     {
         _options = options ?? new LBFGSOptimizerOptions<T, TInput, TOutput>();
-        _s = [];
-        _y = [];
+        _s = new List<Vector<T>>();
+        _y = new List<Vector<T>>();
 
         InitializeAdaptiveParameters();
     }

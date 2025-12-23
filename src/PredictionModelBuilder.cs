@@ -1,3 +1,5 @@
+
+
 global using AiDotNet.Agents;
 global using AiDotNet.Configuration;
 global using AiDotNet.DataProcessor;
@@ -139,6 +141,8 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;
+    private AdversarialRobustnessConfiguration<T, TInput, TOutput>? _adversarialRobustnessConfiguration;
+    private FineTuningConfiguration<T, TInput, TOutput>? _fineTuningConfiguration;
     private ILoRAConfiguration<T>? _loraConfiguration;
     private IRetriever<T>? _ragRetriever;
     private IReranker<T>? _ragReranker;
@@ -164,6 +168,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     private RLTrainingOptions<T>? _rlOptions;
     private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
     private AutoMLOptions<T, TInput, TOutput>? _autoMLOptions;
+
+    // Curriculum learning configuration
+    private CurriculumLearningOptions<T, TInput, TOutput>? _curriculumLearningOptions;
 
     // Federated learning configuration (facade-first: orchestration is internal)
     private FederatedLearningOptions? _federatedLearningOptions;
@@ -210,7 +217,10 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
 
     // Uncertainty quantification configuration
     private UncertaintyQuantificationOptions? _uncertaintyQuantificationOptions;
-    private AiDotNet.Models.Inputs.UncertaintyCalibrationData<TInput, TOutput>? _uncertaintyCalibrationData;
+    private UncertaintyCalibrationData<TInput, TOutput>? _uncertaintyCalibrationData;
+
+    // Training pipeline configuration
+    private TrainingPipelineConfiguration<T, TInput, TOutput>? _trainingPipelineConfiguration;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -2323,6 +2333,206 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     }
 
     /// <summary>
+    /// Configures adversarial robustness and AI safety features for the model.
+    /// </summary>
+    /// <param name="configuration">The adversarial robustness configuration. When null, uses industry-standard defaults.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This unified configuration provides comprehensive control over all aspects of adversarial robustness and AI safety:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><term>Safety Filtering</term><description>Input validation and output filtering for harmful content</description></item>
+    /// <item><term>Adversarial Attacks</term><description>FGSM, PGD, CW, AutoAttack for robustness testing</description></item>
+    /// <item><term>Adversarial Defenses</term><description>Adversarial training, input preprocessing, ensemble methods</description></item>
+    /// <item><term>Certified Robustness</term><description>Randomized smoothing, IBP, CROWN for provable guarantees</description></item>
+    /// <item><term>Content Moderation</term><description>Prompt injection detection, PII filtering for LLMs</description></item>
+    /// <item><term>Red Teaming</term><description>Automated adversarial prompt generation for evaluation</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> This is your one-stop configuration for making your model safe and robust.
+    /// When called with no parameters (null), industry-standard defaults are applied automatically.
+    /// You can use factory methods like <c>AdversarialRobustnessConfiguration.BasicSafety()</c> for common setups,
+    /// or customize individual options for your specific needs.</para>
+    /// <example>
+    /// <code>
+    /// // Use industry-standard defaults
+    /// builder.ConfigureAdversarialRobustness();
+    ///
+    /// // Basic safety filtering
+    /// builder.ConfigureAdversarialRobustness(AdversarialRobustnessConfiguration&lt;double, Vector&lt;double&gt;, int&gt;.BasicSafety());
+    ///
+    /// // Comprehensive robustness with certified guarantees
+    /// builder.ConfigureAdversarialRobustness(AdversarialRobustnessConfiguration&lt;double, Vector&lt;double&gt;, int&gt;.Comprehensive());
+    ///
+    /// // LLM safety with content moderation
+    /// builder.ConfigureAdversarialRobustness(AdversarialRobustnessConfiguration&lt;double, string, string&gt;.ForLLM());
+    ///
+    /// // Custom configuration
+    /// builder.ConfigureAdversarialRobustness(new AdversarialRobustnessConfiguration&lt;double, Vector&lt;double&gt;, int&gt;
+    /// {
+    ///     Enabled = true,
+    ///     Options = new AdversarialRobustnessOptions&lt;double&gt;
+    ///     {
+    ///         EnableSafetyFiltering = true,
+    ///         EnableAdversarialTraining = true,
+    ///         EnableCertifiedRobustness = true
+    ///     },
+    ///     UseCertifiedInference = true
+    /// });
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAdversarialRobustness(
+        AdversarialRobustnessConfiguration<T, TInput, TOutput>? configuration = null)
+    {
+        _adversarialRobustnessConfiguration = configuration ?? new AdversarialRobustnessConfiguration<T, TInput, TOutput>();
+        return this;
+    }
+
+    /// <summary>
+    /// Configures fine-tuning for the model using preference learning, RLHF, or other alignment methods.
+    /// </summary>
+    /// <param name="configuration">The fine-tuning configuration including training data. When null, uses industry-standard defaults.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This configuration enables post-training fine-tuning using various alignment techniques:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><term>Supervised Fine-Tuning (SFT)</term><description>Traditional fine-tuning on labeled examples</description></item>
+    /// <item><term>Direct Preference Optimization (DPO)</term><description>Learn from human preferences without reward models</description></item>
+    /// <item><term>Simple Preference Optimization (SimPO)</term><description>Reference-free, length-normalized preference learning</description></item>
+    /// <item><term>Group Relative Policy Optimization (GRPO)</term><description>Memory-efficient RL without critic models</description></item>
+    /// <item><term>Odds Ratio Preference Optimization (ORPO)</term><description>Combined SFT + preference in one step</description></item>
+    /// <item><term>Identity Preference Optimization (IPO)</term><description>Regularized preference optimization</description></item>
+    /// <item><term>Kahneman-Tversky Optimization (KTO)</term><description>Utility-maximizing preference learning</description></item>
+    /// <item><term>Contrastive Preference Optimization (CPO)</term><description>Contrastive learning for preferences</description></item>
+    /// <item><term>Constitutional AI (CAI)</term><description>Self-improvement with constitutional principles</description></item>
+    /// <item><term>Reinforcement Learning from Human Feedback (RLHF)</term><description>Classic PPO-based alignment</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> Fine-tuning helps align your model with human preferences.
+    /// When called with no parameters (null), industry-standard defaults are applied automatically.
+    /// Training data should be set in the configuration's TrainingData property.
+    /// Use factory methods like <c>FineTuningConfiguration.ForDPO(data)</c> for quick setup.
+    /// DPO and SimPO are simpler (no reward model needed), while RLHF and GRPO provide more control.</para>
+    /// <example>
+    /// <code>
+    /// // Use industry-standard defaults (training data set separately)
+    /// builder.ConfigureFineTuning();
+    ///
+    /// // DPO fine-tuning with preference pairs
+    /// var preferenceData = new FineTuningData&lt;double, string, string&gt;
+    /// {
+    ///     Inputs = prompts,
+    ///     ChosenOutputs = preferredResponses,
+    ///     RejectedOutputs = rejectedResponses
+    /// };
+    /// builder.ConfigureFineTuning(FineTuningConfiguration&lt;double, string, string&gt;.ForDPO(preferenceData));
+    ///
+    /// // GRPO for RL-based alignment
+    /// var rlData = new FineTuningData&lt;double, string, string&gt;
+    /// {
+    ///     Inputs = prompts,
+    ///     Rewards = rewardScores
+    /// };
+    /// builder.ConfigureFineTuning(FineTuningConfiguration&lt;double, string, string&gt;.ForGRPO(rlData));
+    ///
+    /// // Custom fine-tuning configuration
+    /// builder.ConfigureFineTuning(new FineTuningConfiguration&lt;double, Vector&lt;double&gt;, int&gt;
+    /// {
+    ///     Enabled = true,
+    ///     Options = new FineTuningOptions&lt;double&gt;
+    ///     {
+    ///         MethodType = FineTuningMethodType.SimPO,
+    ///         LearningRate = 1e-5,
+    ///         Epochs = 3,
+    ///         SimPOGamma = 1.0
+    ///     },
+    ///     TrainingData = myPreferenceData
+    /// });
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFineTuning(
+        FineTuningConfiguration<T, TInput, TOutput>? configuration = null)
+    {
+        _fineTuningConfiguration = configuration ?? new FineTuningConfiguration<T, TInput, TOutput>();
+        return this;
+    }
+
+    /// <summary>
+    /// Configures a multi-stage training pipeline for advanced training workflows.
+    /// </summary>
+    /// <param name="configuration">
+    /// The training pipeline configuration defining the stages to execute.
+    /// When null, uses the default single-stage training based on other configured settings.
+    /// </param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// ConfigureTrainingPipeline enables advanced multi-stage training workflows where each stage
+    /// can have its own training method, optimizer, learning rate, and dataset. Stages execute
+    /// sequentially, with each stage's output model becoming the next stage's input.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this as a recipe with multiple cooking steps.
+    /// Just like you might marinate, then sear, then bake - training can have multiple
+    /// phases where each phase teaches the model something different.</para>
+    /// <para>
+    /// <b>Common Training Pipelines:</b>
+    /// <list type="bullet">
+    /// <item><term>Standard Alignment</term><description>SFT → DPO (most common for chat models)</description></item>
+    /// <item><term>Full RLHF</term><description>SFT → Reward Model → PPO</description></item>
+    /// <item><term>Constitutional AI</term><description>SFT → CAI critique/revision → preference</description></item>
+    /// <item><term>Curriculum Learning</term><description>Easy data → Medium → Hard (progressive difficulty)</description></item>
+    /// <item><term>Iterative Refinement</term><description>Multiple DPO rounds with decreasing beta</description></item>
+    /// </list>
+    /// </para>
+    /// <example>
+    /// <code>
+    /// // Standard alignment pipeline (SFT → DPO)
+    /// builder.ConfigureTrainingPipeline(
+    ///     TrainingPipelineConfiguration&lt;double, string, string&gt;.StandardAlignment(sftData, preferenceData));
+    ///
+    /// // Automatic pipeline based on available data
+    /// builder.ConfigureTrainingPipeline(
+    ///     TrainingPipelineConfiguration&lt;double, string, string&gt;.Auto(myData));
+    ///
+    /// // Custom multi-stage pipeline with builder pattern
+    /// var pipeline = new TrainingPipelineConfiguration&lt;double, string, string&gt;()
+    ///     .AddSFTStage(stage => {
+    ///         stage.TrainingData = sftData;
+    ///         stage.Options = new FineTuningOptions&lt;double&gt; { Epochs = 3 };
+    ///     })
+    ///     .AddPreferenceStage(FineTuningMethodType.DPO, stage => {
+    ///         stage.TrainingData = preferenceData;
+    ///         stage.Options = new FineTuningOptions&lt;double&gt; { Beta = 0.1 };
+    ///     })
+    ///     .AddEvaluationStage();
+    /// builder.ConfigureTrainingPipeline(pipeline);
+    ///
+    /// // Iterative refinement with multiple DPO rounds
+    /// builder.ConfigureTrainingPipeline(
+    ///     TrainingPipelineConfiguration&lt;double, string, string&gt;.IterativeRefinement(3, sftData, preferenceData));
+    ///
+    /// // Custom stage with user-defined training logic
+    /// var customPipeline = new TrainingPipelineConfiguration&lt;double, string, string&gt;()
+    ///     .AddSFTStage()
+    ///     .AddCustomStage("My Custom Training", async (model, data, ct) => {
+    ///         // Custom training logic
+    ///         return model;
+    ///     });
+    /// builder.ConfigureTrainingPipeline(customPipeline);
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingPipeline(
+        TrainingPipelineConfiguration<T, TInput, TOutput>? configuration = null)
+    {
+        _trainingPipelineConfiguration = configuration;
+        return this;
+    }
+
+    /// <summary>
     /// Configures LoRA (Low-Rank Adaptation) for parameter-efficient fine-tuning.
     /// </summary>
     /// <param name="loraConfiguration">The LoRA configuration implementation to use.</param>
@@ -2571,6 +2781,24 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             _autoMLModel.SetOptimizationMetric(metric, maximize);
         }
 
+        return this;
+    }
+
+    /// <summary>
+    /// Configures curriculum learning for training with ordered sample difficulty.
+    /// </summary>
+    /// <param name="options">Curriculum learning options (schedule type, phases, difficulty estimation).
+    /// If null, sensible defaults are used (Linear schedule, 5 phases, loss-based difficulty).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Curriculum Learning trains models by presenting samples in order of difficulty,
+    /// starting with easy examples and gradually introducing harder ones. This often leads to faster
+    /// convergence and better final performance compared to random training order.</para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCurriculumLearning(
+        CurriculumLearningOptions<T, TInput, TOutput>? options = null)
+    {
+        _curriculumLearningOptions = options ?? new CurriculumLearningOptions<T, TInput, TOutput>();
         return this;
     }
 
@@ -3101,6 +3329,103 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     }
 
     /// <summary>
+    /// Configures experiment tracking for logging and organizing training runs.
+    /// </summary>
+    /// <param name="tracker">The experiment tracker implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> An experiment tracker is like a lab notebook for your ML experiments.
+    /// It logs parameters, metrics, and artifacts so you can compare runs and reproduce results.</para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureExperimentTracker(IExperimentTracker<T> tracker)
+    {
+        _experimentTracker = tracker;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures checkpoint management for saving and restoring training state.
+    /// </summary>
+    /// <param name="manager">The checkpoint manager implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Checkpoints are like save points in a video game.
+    /// They let you pause training and resume later, or go back to an earlier state if something goes wrong.</para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCheckpointManager(ICheckpointManager<T, TInput, TOutput> manager)
+    {
+        _checkpointManager = manager;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures training monitoring for real-time visibility into training progress.
+    /// </summary>
+    /// <param name="monitor">The training monitor implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A training monitor is like a dashboard for your model training.
+    /// It shows you how training is progressing, what resources are being used, and if there are any problems.</para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingMonitor(ITrainingMonitor<T> monitor)
+    {
+        _trainingMonitor = monitor;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures model registry for centralized model storage and versioning.
+    /// </summary>
+    /// <param name="registry">The model registry implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A model registry is like a library for your trained models.
+    /// It keeps track of all your models, their versions, and which ones are in production.</para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelRegistry(IModelRegistry<T, TInput, TOutput> registry)
+    {
+        _modelRegistry = registry;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures data version control for tracking dataset changes.
+    /// </summary>
+    /// <param name="dataVersionControl">The data version control implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Data version control is like Git, but for your datasets.
+    /// It tracks what data was used for training each model and lets you reproduce experiments.</para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataVersionControl(IDataVersionControl<T> dataVersionControl)
+    {
+        _dataVersionControl = dataVersionControl;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures hyperparameter optimization for automatic tuning of model settings.
+    /// </summary>
+    /// <param name="optimizer">The hyperparameter optimizer implementation to use.</param>
+    /// <param name="searchSpace">The hyperparameter search space defining parameter ranges. If null, hyperparameter optimization is disabled.</param>
+    /// <param name="nTrials">Number of trials to run. Default is 10.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Hyperparameter optimization automatically finds the best settings
+    /// for your model (like learning rate, number of layers, etc.) instead of you having to guess.</para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureHyperparameterOptimizer(
+        IHyperparameterOptimizer<T, TInput, TOutput> optimizer,
+        HyperparameterSearchSpace? searchSpace = null,
+        int nTrials = 10)
+    {
+        _hyperparameterOptimizer = optimizer;
+        _hyperparameterSearchSpace = searchSpace;
+        _hyperparameterTrials = nTrials;
+        return this;
+    }
+
+    /// <summary>
     /// Configures tokenization for text-based input processing.
     /// </summary>
     /// <param name="tokenizer">The tokenizer to use for text processing.</param>
@@ -3478,225 +3803,6 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptCompressor(IPromptCompressor? compressor = null)
     {
         _promptCompressor = compressor;
-        return this;
-    }
-
-    // ============================================================================
-    // Training Infrastructure Configuration Methods
-    // ============================================================================
-
-    /// <summary>
-    /// Configures experiment tracking for organizing and logging ML experiments.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Experiment tracking is like a lab notebook for your machine learning work.
-    /// It helps you keep track of what you've tried, what worked, and what didn't.
-    /// </para>
-    /// <para>
-    /// Key features include:
-    /// - Creating experiments to group related training runs
-    /// - Logging hyperparameters, metrics, and artifacts
-    /// - Comparing different runs to find the best approach
-    /// - Reproducing previous experiments
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// var tracker = new ExperimentTracker&lt;double&gt;("./experiments");
-    /// var result = await builder
-    ///     .ConfigureModel(model)
-    ///     .ConfigureExperimentTracker(tracker)
-    ///     .BuildAsync(x, y);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    /// <param name="tracker">The experiment tracker implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureExperimentTracker(IExperimentTracker<T> tracker)
-    {
-        _experimentTracker = tracker;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures checkpoint management for saving and restoring training state.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Checkpoints are like save points in a video game.
-    /// They let you pause training and resume later, or go back to an earlier state if something goes wrong.
-    /// </para>
-    /// <para>
-    /// Key features include:
-    /// - Saving model state periodically during training
-    /// - Restoring from the latest or best checkpoint
-    /// - Automatic cleanup of old checkpoints
-    /// - Tracking metrics at each checkpoint
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// var checkpointManager = new CheckpointManager&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;("./checkpoints");
-    /// var result = await builder
-    ///     .ConfigureModel(model)
-    ///     .ConfigureCheckpointManager(checkpointManager)
-    ///     .BuildAsync(x, y);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    /// <param name="manager">The checkpoint manager implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCheckpointManager(ICheckpointManager<T, TInput, TOutput> manager)
-    {
-        _checkpointManager = manager;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures training monitoring for real-time visibility into training progress.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> A training monitor is like a dashboard for your model training.
-    /// It shows you how training is progressing, what resources are being used, and if there are any problems.
-    /// </para>
-    /// <para>
-    /// Key features include:
-    /// - Real-time metric tracking (loss, accuracy, etc.)
-    /// - Resource usage monitoring (CPU, GPU, memory)
-    /// - Progress updates and ETA estimation
-    /// - Alert thresholds for detecting problems
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// var monitor = new TrainingMonitor&lt;double&gt;("./logs");
-    /// var result = await builder
-    ///     .ConfigureModel(model)
-    ///     .ConfigureTrainingMonitor(monitor)
-    ///     .BuildAsync(x, y);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    /// <param name="monitor">The training monitor implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingMonitor(ITrainingMonitor<T> monitor)
-    {
-        _trainingMonitor = monitor;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures model registry for centralized model storage and versioning.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> A model registry is like a library for your trained models.
-    /// It keeps track of all your models, their versions, and which ones are in production.
-    /// </para>
-    /// <para>
-    /// Key features include:
-    /// - Storing and versioning trained models
-    /// - Managing model lifecycle (development → staging → production)
-    /// - Tracking model metadata and lineage
-    /// - Comparing different model versions
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// var registry = new ModelRegistry&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;("./models");
-    /// var result = await builder
-    ///     .ConfigureModel(model)
-    ///     .ConfigureModelRegistry(registry)
-    ///     .BuildAsync(x, y);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    /// <param name="registry">The model registry implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelRegistry(IModelRegistry<T, TInput, TOutput> registry)
-    {
-        _modelRegistry = registry;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures data version control for tracking dataset changes.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Data version control is like Git, but for your datasets.
-    /// It tracks what data was used for training each model and lets you reproduce experiments.
-    /// </para>
-    /// <para>
-    /// Key features include:
-    /// - Creating and tracking dataset versions
-    /// - Computing dataset hashes for integrity verification
-    /// - Tracking data lineage and transformations
-    /// - Linking datasets to training runs
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// var dvc = new DataVersionControl&lt;double&gt;("./data-versions");
-    /// var result = await builder
-    ///     .ConfigureModel(model)
-    ///     .ConfigureDataVersionControl(dvc)
-    ///     .BuildAsync(x, y);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    /// <param name="dataVersionControl">The data version control implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataVersionControl(IDataVersionControl<T> dataVersionControl)
-    {
-        _dataVersionControl = dataVersionControl;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures hyperparameter optimization for automatic tuning of model settings.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Hyperparameter optimization automatically finds the best settings
-    /// for your model (like learning rate, number of layers, etc.) instead of you having to guess.
-    /// </para>
-    /// <para>
-    /// Key features include:
-    /// - Systematic search through hyperparameter space
-    /// - Multiple search strategies (grid, random, Bayesian)
-    /// - Tracking and comparing trial results
-    /// - Early stopping of unpromising trials
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// var searchSpace = new HyperparameterSearchSpace();
-    /// searchSpace.AddContinuous("learning_rate", 0.0001, 0.1, logScale: true);
-    /// searchSpace.AddInteger("hidden_units", 32, 256);
-    ///
-    /// var optimizer = new RandomSearchOptimizer&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(maximize: false);
-    /// var result = builder
-    ///     .ConfigureModel(model)
-    ///     .ConfigureHyperparameterOptimizer(optimizer, searchSpace, nTrials: 20)
-    ///     .Build(x, y);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    /// <param name="optimizer">The hyperparameter optimizer implementation to use.</param>
-    /// <param name="searchSpace">The hyperparameter search space defining parameter ranges. If null, hyperparameter optimization is disabled.</param>
-    /// <param name="nTrials">Number of trials to run. Default is 10.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureHyperparameterOptimizer(
-        IHyperparameterOptimizer<T, TInput, TOutput> optimizer,
-        HyperparameterSearchSpace? searchSpace = null,
-        int nTrials = 10)
-    {
-        _hyperparameterOptimizer = optimizer;
-        _hyperparameterSearchSpace = searchSpace;
-        _hyperparameterTrials = nTrials > 0 ? nTrials : 10;
         return this;
     }
 

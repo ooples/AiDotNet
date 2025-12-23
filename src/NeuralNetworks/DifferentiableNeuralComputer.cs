@@ -394,8 +394,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         _memory = new Matrix<T>(_memorySize, _memoryWordSize);
         _usageFree = new Vector<T>(_memorySize);
         _writeWeighting = new Vector<T>(_memorySize);
-        _readWeightings = [];
-        _readVectors = [];
+        _readWeightings = new List<Vector<T>>();
+        _readVectors = new List<Vector<T>>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         // Calculate combinedSize (controller output + read vectors)
@@ -468,8 +468,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         _memory = new Matrix<T>(_memorySize, _memoryWordSize);
         _usageFree = new Vector<T>(_memorySize);
         _writeWeighting = new Vector<T>(_memorySize);
-        _readWeightings = [];
-        _readVectors = [];
+        _readWeightings = new List<Vector<T>>();
+        _readVectors = new List<Vector<T>>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         // Calculate combinedSize (controller output + read vectors)
@@ -1224,7 +1224,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     private List<Vector<T>> ReadFromMemory(MemoryInterfaceSignals signals)
     {
-        List<Vector<T>> readVectors = [];
+        List<Vector<T>> readVectors = new List<Vector<T>>();
 
         // Calculate read weightings for each read head
         for (int i = 0; i < _readHeads; i++)
@@ -2255,7 +2255,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             ResetMemoryState();
         }
 
-        List<Tensor<T>> outputs = [];
+        List<Tensor<T>> outputs = new List<Tensor<T>>();
 
         foreach (var input in inputs)
         {
