@@ -152,7 +152,8 @@ public class Program
         // Add controllers and API documentation
         builder.Services.AddControllers().AddJsonOptions(options =>
         {
-            _ = options;
+            options.JsonSerializerOptions.Converters.Add(
+                new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
         });
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen(options =>
