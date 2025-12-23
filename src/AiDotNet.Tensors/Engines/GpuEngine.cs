@@ -489,6 +489,372 @@ internal static class LocallyConnectedConv2DKernels
 }
 
 /// <summary>
+/// Parameter struct for Conv3D kernel (groups 15 scalar parameters for volumetric convolution).
+/// </summary>
+internal readonly struct Conv3DParams
+{
+    public readonly int Batch;
+    public readonly int InChannels;
+    public readonly int Depth;
+    public readonly int Height;
+    public readonly int Width;
+    public readonly int OutChannels;
+    public readonly int OutputDepth;
+    public readonly int OutputHeight;
+    public readonly int OutputWidth;
+    public readonly int KernelDepth;
+    public readonly int KernelHeight;
+    public readonly int KernelWidth;
+    public readonly int StrideD;
+    public readonly int StrideH;
+    public readonly int StrideW;
+    public readonly int PadD;
+    public readonly int PadH;
+    public readonly int PadW;
+    public readonly int DilationD;
+    public readonly int DilationH;
+    public readonly int DilationW;
+
+    public Conv3DParams(int batch, int inChannels, int depth, int height, int width, int outChannels,
+        int outputDepth, int outputHeight, int outputWidth, int kernelDepth, int kernelHeight, int kernelWidth,
+        int strideD, int strideH, int strideW, int padD, int padH, int padW, int dilationD, int dilationH, int dilationW)
+    {
+        Batch = batch;
+        InChannels = inChannels;
+        Depth = depth;
+        Height = height;
+        Width = width;
+        OutChannels = outChannels;
+        OutputDepth = outputDepth;
+        OutputHeight = outputHeight;
+        OutputWidth = outputWidth;
+        KernelDepth = kernelDepth;
+        KernelHeight = kernelHeight;
+        KernelWidth = kernelWidth;
+        StrideD = strideD;
+        StrideH = strideH;
+        StrideW = strideW;
+        PadD = padD;
+        PadH = padH;
+        PadW = padW;
+        DilationD = dilationD;
+        DilationH = dilationH;
+        DilationW = dilationW;
+    }
+}
+
+/// <summary>
+/// Static helper class for Conv3D kernel methods (required for explicit compilation).
+/// </summary>
+internal static class Conv3DKernels
+{
+    /// <summary>
+    /// Conv3D forward kernel implementation for float precision.
+    /// Input: [batch, inChannels, depth, height, width]
+    /// Kernel: [outChannels, inChannels, kernelD, kernelH, kernelW]
+    /// Output: [batch, outChannels, outputD, outputH, outputW]
+    /// </summary>
+    public static void Conv3DKernelFloatImpl(Index1D index, ArrayView<float> input, ArrayView<float> kernel, ArrayView<float> output,
+        Conv3DParams p)
+    {
+        // Convert flat index to 5D coordinates: [b, oc, od, oh, ow]
+        int ow = (int)index % p.OutputWidth;
+        int temp = (int)index / p.OutputWidth;
+        int oh = temp % p.OutputHeight;
+        temp /= p.OutputHeight;
+        int od = temp % p.OutputDepth;
+        temp /= p.OutputDepth;
+        int oc = temp % p.OutChannels;
+        int b = temp / p.OutChannels;
+
+        float sum = 0;
+
+        // Sum over input channels and kernel volume
+        for (int ic = 0; ic < p.InChannels; ic++)
+        {
+            for (int kd = 0; kd < p.KernelDepth; kd++)
+            {
+                for (int kh = 0; kh < p.KernelHeight; kh++)
+                {
+                    for (int kw = 0; kw < p.KernelWidth; kw++)
+                    {
+                        int id = od * p.StrideD + kd * p.DilationD - p.PadD;
+                        int ih = oh * p.StrideH + kh * p.DilationH - p.PadH;
+                        int iw = ow * p.StrideW + kw * p.DilationW - p.PadW;
+
+                        if (id >= 0 && id < p.Depth && ih >= 0 && ih < p.Height && iw >= 0 && iw < p.Width)
+                        {
+                            // input index: [b, ic, id, ih, iw]
+                            int inputIdx = (((b * p.InChannels + ic) * p.Depth + id) * p.Height + ih) * p.Width + iw;
+                            // kernel index: [oc, ic, kd, kh, kw]
+                            int kernelIdx = (((oc * p.InChannels + ic) * p.KernelDepth + kd) * p.KernelHeight + kh) * p.KernelWidth + kw;
+                            sum += input[inputIdx] * kernel[kernelIdx];
+                        }
+                    }
+                }
+            }
+        }
+
+        output[index] = sum;
+    }
+
+    /// <summary>
+    /// Conv3D forward kernel implementation for double precision.
+    /// </summary>
+    public static void Conv3DKernelDoubleImpl(Index1D index, ArrayView<double> input, ArrayView<double> kernel, ArrayView<double> output,
+        Conv3DParams p)
+    {
+        int ow = (int)index % p.OutputWidth;
+        int temp = (int)index / p.OutputWidth;
+        int oh = temp % p.OutputHeight;
+        temp /= p.OutputHeight;
+        int od = temp % p.OutputDepth;
+        temp /= p.OutputDepth;
+        int oc = temp % p.OutChannels;
+        int b = temp / p.OutChannels;
+
+        double sum = 0;
+
+        for (int ic = 0; ic < p.InChannels; ic++)
+        {
+            for (int kd = 0; kd < p.KernelDepth; kd++)
+            {
+                for (int kh = 0; kh < p.KernelHeight; kh++)
+                {
+                    for (int kw = 0; kw < p.KernelWidth; kw++)
+                    {
+                        int id = od * p.StrideD + kd * p.DilationD - p.PadD;
+                        int ih = oh * p.StrideH + kh * p.DilationH - p.PadH;
+                        int iw = ow * p.StrideW + kw * p.DilationW - p.PadW;
+
+                        if (id >= 0 && id < p.Depth && ih >= 0 && ih < p.Height && iw >= 0 && iw < p.Width)
+                        {
+                            int inputIdx = (((b * p.InChannels + ic) * p.Depth + id) * p.Height + ih) * p.Width + iw;
+                            int kernelIdx = (((oc * p.InChannels + ic) * p.KernelDepth + kd) * p.KernelHeight + kh) * p.KernelWidth + kw;
+                            sum += input[inputIdx] * kernel[kernelIdx];
+                        }
+                    }
+                }
+            }
+        }
+
+        output[index] = sum;
+    }
+}
+
+/// <summary>
+/// Parameter struct for Pool3D kernel (for MaxPool3D and AvgPool3D).
+/// </summary>
+internal readonly struct Pool3DParams
+{
+    public readonly int Batch;
+    public readonly int Channels;
+    public readonly int Depth;
+    public readonly int Height;
+    public readonly int Width;
+    public readonly int OutputDepth;
+    public readonly int OutputHeight;
+    public readonly int OutputWidth;
+    public readonly int PoolD;
+    public readonly int PoolH;
+    public readonly int PoolW;
+    public readonly int StrideD;
+    public readonly int StrideH;
+    public readonly int StrideW;
+    public readonly int PadD;
+    public readonly int PadH;
+    public readonly int PadW;
+
+    public Pool3DParams(int batch, int channels, int depth, int height, int width,
+        int outputDepth, int outputHeight, int outputWidth,
+        int poolD, int poolH, int poolW, int strideD, int strideH, int strideW,
+        int padD, int padH, int padW)
+    {
+        Batch = batch;
+        Channels = channels;
+        Depth = depth;
+        Height = height;
+        Width = width;
+        OutputDepth = outputDepth;
+        OutputHeight = outputHeight;
+        OutputWidth = outputWidth;
+        PoolD = poolD;
+        PoolH = poolH;
+        PoolW = poolW;
+        StrideD = strideD;
+        StrideH = strideH;
+        StrideW = strideW;
+        PadD = padD;
+        PadH = padH;
+        PadW = padW;
+    }
+}
+
+/// <summary>
+/// Static helper class for Pool3D kernel methods.
+/// </summary>
+internal static class Pool3DKernels
+{
+    /// <summary>
+    /// MaxPool3D forward kernel for float precision.
+    /// </summary>
+    public static void MaxPool3DKernelFloatImpl(Index1D index, ArrayView<float> input, ArrayView<float> output, Pool3DParams p)
+    {
+        int ow = (int)index % p.OutputWidth;
+        int temp = (int)index / p.OutputWidth;
+        int oh = temp % p.OutputHeight;
+        temp /= p.OutputHeight;
+        int od = temp % p.OutputDepth;
+        temp /= p.OutputDepth;
+        int c = temp % p.Channels;
+        int b = temp / p.Channels;
+
+        float maxVal = float.NegativeInfinity;
+
+        for (int pd = 0; pd < p.PoolD; pd++)
+        {
+            for (int ph = 0; ph < p.PoolH; ph++)
+            {
+                for (int pw = 0; pw < p.PoolW; pw++)
+                {
+                    int id = od * p.StrideD + pd - p.PadD;
+                    int ih = oh * p.StrideH + ph - p.PadH;
+                    int iw = ow * p.StrideW + pw - p.PadW;
+
+                    if (id >= 0 && id < p.Depth && ih >= 0 && ih < p.Height && iw >= 0 && iw < p.Width)
+                    {
+                        int inputIdx = (((b * p.Channels + c) * p.Depth + id) * p.Height + ih) * p.Width + iw;
+                        float val = input[inputIdx];
+                        if (val > maxVal) maxVal = val;
+                    }
+                }
+            }
+        }
+
+        output[index] = maxVal;
+    }
+
+    /// <summary>
+    /// MaxPool3D forward kernel for double precision.
+    /// </summary>
+    public static void MaxPool3DKernelDoubleImpl(Index1D index, ArrayView<double> input, ArrayView<double> output, Pool3DParams p)
+    {
+        int ow = (int)index % p.OutputWidth;
+        int temp = (int)index / p.OutputWidth;
+        int oh = temp % p.OutputHeight;
+        temp /= p.OutputHeight;
+        int od = temp % p.OutputDepth;
+        temp /= p.OutputDepth;
+        int c = temp % p.Channels;
+        int b = temp / p.Channels;
+
+        double maxVal = double.NegativeInfinity;
+
+        for (int pd = 0; pd < p.PoolD; pd++)
+        {
+            for (int ph = 0; ph < p.PoolH; ph++)
+            {
+                for (int pw = 0; pw < p.PoolW; pw++)
+                {
+                    int id = od * p.StrideD + pd - p.PadD;
+                    int ih = oh * p.StrideH + ph - p.PadH;
+                    int iw = ow * p.StrideW + pw - p.PadW;
+
+                    if (id >= 0 && id < p.Depth && ih >= 0 && ih < p.Height && iw >= 0 && iw < p.Width)
+                    {
+                        int inputIdx = (((b * p.Channels + c) * p.Depth + id) * p.Height + ih) * p.Width + iw;
+                        double val = input[inputIdx];
+                        if (val > maxVal) maxVal = val;
+                    }
+                }
+            }
+        }
+
+        output[index] = maxVal;
+    }
+
+    /// <summary>
+    /// AvgPool3D forward kernel for float precision.
+    /// </summary>
+    public static void AvgPool3DKernelFloatImpl(Index1D index, ArrayView<float> input, ArrayView<float> output, Pool3DParams p)
+    {
+        int ow = (int)index % p.OutputWidth;
+        int temp = (int)index / p.OutputWidth;
+        int oh = temp % p.OutputHeight;
+        temp /= p.OutputHeight;
+        int od = temp % p.OutputDepth;
+        temp /= p.OutputDepth;
+        int c = temp % p.Channels;
+        int b = temp / p.Channels;
+
+        float sum = 0;
+        int count = 0;
+
+        for (int pd = 0; pd < p.PoolD; pd++)
+        {
+            for (int ph = 0; ph < p.PoolH; ph++)
+            {
+                for (int pw = 0; pw < p.PoolW; pw++)
+                {
+                    int id = od * p.StrideD + pd - p.PadD;
+                    int ih = oh * p.StrideH + ph - p.PadH;
+                    int iw = ow * p.StrideW + pw - p.PadW;
+
+                    if (id >= 0 && id < p.Depth && ih >= 0 && ih < p.Height && iw >= 0 && iw < p.Width)
+                    {
+                        int inputIdx = (((b * p.Channels + c) * p.Depth + id) * p.Height + ih) * p.Width + iw;
+                        sum += input[inputIdx];
+                        count++;
+                    }
+                }
+            }
+        }
+
+        output[index] = count > 0 ? sum / count : 0;
+    }
+
+    /// <summary>
+    /// AvgPool3D forward kernel for double precision.
+    /// </summary>
+    public static void AvgPool3DKernelDoubleImpl(Index1D index, ArrayView<double> input, ArrayView<double> output, Pool3DParams p)
+    {
+        int ow = (int)index % p.OutputWidth;
+        int temp = (int)index / p.OutputWidth;
+        int oh = temp % p.OutputHeight;
+        temp /= p.OutputHeight;
+        int od = temp % p.OutputDepth;
+        temp /= p.OutputDepth;
+        int c = temp % p.Channels;
+        int b = temp / p.Channels;
+
+        double sum = 0;
+        int count = 0;
+
+        for (int pd = 0; pd < p.PoolD; pd++)
+        {
+            for (int ph = 0; ph < p.PoolH; ph++)
+            {
+                for (int pw = 0; pw < p.PoolW; pw++)
+                {
+                    int id = od * p.StrideD + pd - p.PadD;
+                    int ih = oh * p.StrideH + ph - p.PadH;
+                    int iw = ow * p.StrideW + pw - p.PadW;
+
+                    if (id >= 0 && id < p.Depth && ih >= 0 && ih < p.Height && iw >= 0 && iw < p.Width)
+                    {
+                        int inputIdx = (((b * p.Channels + c) * p.Depth + id) * p.Height + ih) * p.Width + iw;
+                        sum += input[inputIdx];
+                        count++;
+                    }
+                }
+            }
+        }
+
+        output[index] = count > 0 ? sum / count : 0;
+    }
+}
+
+/// <summary>
 /// GPU-based execution engine using ILGPU for hardware acceleration.
 /// </summary>
 /// <remarks>
@@ -687,6 +1053,14 @@ public class GpuEngine : IEngine, IDisposable
     // Parameters: result, input, bias, batchSize, channels, height, width
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>? _conv2DBiasAddKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _conv2DBiasAddKernelDouble;
+
+    // Conv3D and Pool3D GPU kernels for volumetric operations
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, Conv3DParams>? _conv3DKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, Conv3DParams>? _conv3DKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, Pool3DParams>? _maxPool3DKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, Pool3DParams>? _maxPool3DKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, Pool3DParams>? _avgPool3DKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, Pool3DParams>? _avgPool3DKernelDouble;
 
     // Production GPU kernels - Mathematical functions (Phase C: Production Ready)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _log2KernelFloat;
@@ -1802,6 +2176,28 @@ public class GpuEngine : IEngine, IDisposable
                 _conv2DKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, Conv2DParams>(
                     Conv2DKernels.Conv2DKernelDoubleImpl);
+
+                // Pre-compile Conv3D kernels for volumetric convolution
+                _conv3DKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, Conv3DParams>(
+                    Conv3DKernels.Conv3DKernelFloatImpl);
+                _conv3DKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, Conv3DParams>(
+                    Conv3DKernels.Conv3DKernelDoubleImpl);
+
+                // Pre-compile Pool3D kernels for volumetric pooling
+                _maxPool3DKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, Pool3DParams>(
+                    Pool3DKernels.MaxPool3DKernelFloatImpl);
+                _maxPool3DKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, Pool3DParams>(
+                    Pool3DKernels.MaxPool3DKernelDoubleImpl);
+                _avgPool3DKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, Pool3DParams>(
+                    Pool3DKernels.AvgPool3DKernelFloatImpl);
+                _avgPool3DKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, Pool3DParams>(
+                    Pool3DKernels.AvgPool3DKernelDoubleImpl);
 
                 Console.WriteLine("[GpuEngine] Tensor kernels pre-compiled");
 
@@ -17709,9 +18105,165 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> Conv3D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation)
     {
-        // Conv3D GPU kernels not yet implemented - use CPU fallback which is already parallelized
-        // GPU implementation would require ILGPU kernels with 21 parameters for the full 3D convolution
+        // Adaptive execution: use convolution threshold
+        if (input.Length < _thresholds.Convolution)
+        {
+            return _cpuFallback.Conv3D(input, kernel, stride, padding, dilation);
+        }
+
+        // Check GPU health and type support
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)Conv3DGpu((Tensor<float>)(object)input, (Tensor<float>)(object)kernel, stride, padding, dilation);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)Conv3DGpuDouble((Tensor<double>)(object)input, (Tensor<double>)(object)kernel, stride, padding, dilation);
+        }
+
         return _cpuFallback.Conv3D(input, kernel, stride, padding, dilation);
+    }
+
+    private Tensor<float> Conv3DGpu(Tensor<float> input, Tensor<float> kernel, int[] stride, int[] padding, int[] dilation)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (input.Rank != 5 || kernel.Rank != 5)
+        {
+            throw new ArgumentException($"Conv3D requires 5D tensors. Got input rank {input.Rank}, kernel rank {kernel.Rank}.");
+        }
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int depth = input.Shape[2];
+        int height = input.Shape[3];
+        int width = input.Shape[4];
+
+        int outChannels = kernel.Shape[0];
+        int kernelDepth = kernel.Shape[2];
+        int kernelHeight = kernel.Shape[3];
+        int kernelWidth = kernel.Shape[4];
+
+        int effectiveKernelDepth = dilation[0] * (kernelDepth - 1) + 1;
+        int effectiveKernelHeight = dilation[1] * (kernelHeight - 1) + 1;
+        int effectiveKernelWidth = dilation[2] * (kernelWidth - 1) + 1;
+
+        int outputDepth = (depth + 2 * padding[0] - effectiveKernelDepth) / stride[0] + 1;
+        int outputHeight = (height + 2 * padding[1] - effectiveKernelHeight) / stride[1] + 1;
+        int outputWidth = (width + 2 * padding[2] - effectiveKernelWidth) / stride[2] + 1;
+
+        try
+        {
+            var result = new Tensor<float>(new[] { batch, outChannels, outputDepth, outputHeight, outputWidth });
+            int outputSize = batch * outChannels * outputDepth * outputHeight * outputWidth;
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuKernel = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(kernel.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuKernel.View.BaseView.CopyFromCPU(kernel.AsSpan());
+
+                // Thread-safe kernel execution
+                lock (_gpuLock)
+                {
+                    var parameters = new Conv3DParams(batch, inChannels, depth, height, width, outChannels,
+                        outputDepth, outputHeight, outputWidth, kernelDepth, kernelHeight, kernelWidth,
+                        stride[0], stride[1], stride[2], padding[0], padding[1], padding[2],
+                        dilation[0], dilation[1], dilation[2]);
+                    (_conv3DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View, parameters);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuKernel);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU Conv3D failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Conv3D(input, kernel, stride, padding, dilation);
+        }
+    }
+
+    private Tensor<double> Conv3DGpuDouble(Tensor<double> input, Tensor<double> kernel, int[] stride, int[] padding, int[] dilation)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (input.Rank != 5 || kernel.Rank != 5)
+        {
+            throw new ArgumentException($"Conv3D requires 5D tensors. Got input rank {input.Rank}, kernel rank {kernel.Rank}.");
+        }
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int depth = input.Shape[2];
+        int height = input.Shape[3];
+        int width = input.Shape[4];
+
+        int outChannels = kernel.Shape[0];
+        int kernelDepth = kernel.Shape[2];
+        int kernelHeight = kernel.Shape[3];
+        int kernelWidth = kernel.Shape[4];
+
+        int effectiveKernelDepth = dilation[0] * (kernelDepth - 1) + 1;
+        int effectiveKernelHeight = dilation[1] * (kernelHeight - 1) + 1;
+        int effectiveKernelWidth = dilation[2] * (kernelWidth - 1) + 1;
+
+        int outputDepth = (depth + 2 * padding[0] - effectiveKernelDepth) / stride[0] + 1;
+        int outputHeight = (height + 2 * padding[1] - effectiveKernelHeight) / stride[1] + 1;
+        int outputWidth = (width + 2 * padding[2] - effectiveKernelWidth) / stride[2] + 1;
+
+        try
+        {
+            var result = new Tensor<double>(new[] { batch, outChannels, outputDepth, outputHeight, outputWidth });
+            int outputSize = batch * outChannels * outputDepth * outputHeight * outputWidth;
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuKernel = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(kernel.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuKernel.View.BaseView.CopyFromCPU(kernel.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    var parameters = new Conv3DParams(batch, inChannels, depth, height, width, outChannels,
+                        outputDepth, outputHeight, outputWidth, kernelDepth, kernelHeight, kernelWidth,
+                        stride[0], stride[1], stride[2], padding[0], padding[1], padding[2],
+                        dilation[0], dilation[1], dilation[2]);
+                    (_conv3DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View, parameters);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuKernel);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU Conv3D double failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Conv3D(input, kernel, stride, padding, dilation);
+        }
     }
 
     /// <inheritdoc/>
@@ -17738,8 +18290,133 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> MaxPool3D<T>(Tensor<T> input, int[] poolSize, int[] stride, int[] padding)
     {
-        // MaxPool3D GPU kernels not yet implemented - use CPU fallback
+        // Adaptive execution
+        if (input.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.MaxPool3D(input, poolSize, stride, padding);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)MaxPool3DGpu((Tensor<float>)(object)input, poolSize, stride, padding);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)MaxPool3DGpuDouble((Tensor<double>)(object)input, poolSize, stride, padding);
+        }
+
         return _cpuFallback.MaxPool3D(input, poolSize, stride, padding);
+    }
+
+    private Tensor<float> MaxPool3DGpu(Tensor<float> input, int[] poolSize, int[] stride, int[] padding)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 5) throw new ArgumentException($"MaxPool3D requires 5D tensor. Got rank {input.Rank}.");
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int depth = input.Shape[2];
+        int height = input.Shape[3];
+        int width = input.Shape[4];
+
+        int outputDepth = (depth + 2 * padding[0] - poolSize[0]) / stride[0] + 1;
+        int outputHeight = (height + 2 * padding[1] - poolSize[1]) / stride[1] + 1;
+        int outputWidth = (width + 2 * padding[2] - poolSize[2]) / stride[2] + 1;
+
+        try
+        {
+            var result = new Tensor<float>(new[] { batch, channels, outputDepth, outputHeight, outputWidth });
+            int outputSize = batch * channels * outputDepth * outputHeight * outputWidth;
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    var parameters = new Pool3DParams(batch, channels, depth, height, width,
+                        outputDepth, outputHeight, outputWidth,
+                        poolSize[0], poolSize[1], poolSize[2],
+                        stride[0], stride[1], stride[2],
+                        padding[0], padding[1], padding[2]);
+                    (_maxPool3DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputSize, gpuInput.View, gpuOutput.View, parameters);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU MaxPool3D failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MaxPool3D(input, poolSize, stride, padding);
+        }
+    }
+
+    private Tensor<double> MaxPool3DGpuDouble(Tensor<double> input, int[] poolSize, int[] stride, int[] padding)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 5) throw new ArgumentException($"MaxPool3D requires 5D tensor. Got rank {input.Rank}.");
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int depth = input.Shape[2];
+        int height = input.Shape[3];
+        int width = input.Shape[4];
+
+        int outputDepth = (depth + 2 * padding[0] - poolSize[0]) / stride[0] + 1;
+        int outputHeight = (height + 2 * padding[1] - poolSize[1]) / stride[1] + 1;
+        int outputWidth = (width + 2 * padding[2] - poolSize[2]) / stride[2] + 1;
+
+        try
+        {
+            var result = new Tensor<double>(new[] { batch, channels, outputDepth, outputHeight, outputWidth });
+            int outputSize = batch * channels * outputDepth * outputHeight * outputWidth;
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    var parameters = new Pool3DParams(batch, channels, depth, height, width,
+                        outputDepth, outputHeight, outputWidth,
+                        poolSize[0], poolSize[1], poolSize[2],
+                        stride[0], stride[1], stride[2],
+                        padding[0], padding[1], padding[2]);
+                    (_maxPool3DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputSize, gpuInput.View, gpuOutput.View, parameters);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU MaxPool3D double failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MaxPool3D(input, poolSize, stride, padding);
+        }
     }
 
     /// <inheritdoc/>
@@ -17766,8 +18443,133 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> AvgPool3D<T>(Tensor<T> input, int[] poolSize, int[] stride, int[] padding)
     {
-        // AvgPool3D GPU kernels not yet implemented - use CPU fallback
+        // Adaptive execution
+        if (input.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.AvgPool3D(input, poolSize, stride, padding);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)AvgPool3DGpu((Tensor<float>)(object)input, poolSize, stride, padding);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)AvgPool3DGpuDouble((Tensor<double>)(object)input, poolSize, stride, padding);
+        }
+
         return _cpuFallback.AvgPool3D(input, poolSize, stride, padding);
+    }
+
+    private Tensor<float> AvgPool3DGpu(Tensor<float> input, int[] poolSize, int[] stride, int[] padding)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 5) throw new ArgumentException($"AvgPool3D requires 5D tensor. Got rank {input.Rank}.");
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int depth = input.Shape[2];
+        int height = input.Shape[3];
+        int width = input.Shape[4];
+
+        int outputDepth = (depth + 2 * padding[0] - poolSize[0]) / stride[0] + 1;
+        int outputHeight = (height + 2 * padding[1] - poolSize[1]) / stride[1] + 1;
+        int outputWidth = (width + 2 * padding[2] - poolSize[2]) / stride[2] + 1;
+
+        try
+        {
+            var result = new Tensor<float>(new[] { batch, channels, outputDepth, outputHeight, outputWidth });
+            int outputSize = batch * channels * outputDepth * outputHeight * outputWidth;
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    var parameters = new Pool3DParams(batch, channels, depth, height, width,
+                        outputDepth, outputHeight, outputWidth,
+                        poolSize[0], poolSize[1], poolSize[2],
+                        stride[0], stride[1], stride[2],
+                        padding[0], padding[1], padding[2]);
+                    (_avgPool3DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputSize, gpuInput.View, gpuOutput.View, parameters);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU AvgPool3D failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.AvgPool3D(input, poolSize, stride, padding);
+        }
+    }
+
+    private Tensor<double> AvgPool3DGpuDouble(Tensor<double> input, int[] poolSize, int[] stride, int[] padding)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 5) throw new ArgumentException($"AvgPool3D requires 5D tensor. Got rank {input.Rank}.");
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int depth = input.Shape[2];
+        int height = input.Shape[3];
+        int width = input.Shape[4];
+
+        int outputDepth = (depth + 2 * padding[0] - poolSize[0]) / stride[0] + 1;
+        int outputHeight = (height + 2 * padding[1] - poolSize[1]) / stride[1] + 1;
+        int outputWidth = (width + 2 * padding[2] - poolSize[2]) / stride[2] + 1;
+
+        try
+        {
+            var result = new Tensor<double>(new[] { batch, channels, outputDepth, outputHeight, outputWidth });
+            int outputSize = batch * channels * outputDepth * outputHeight * outputWidth;
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    var parameters = new Pool3DParams(batch, channels, depth, height, width,
+                        outputDepth, outputHeight, outputWidth,
+                        poolSize[0], poolSize[1], poolSize[2],
+                        stride[0], stride[1], stride[2],
+                        padding[0], padding[1], padding[2]);
+                    (_avgPool3DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputSize, gpuInput.View, gpuOutput.View, parameters);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU AvgPool3D double failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.AvgPool3D(input, poolSize, stride, padding);
+        }
     }
 
     /// <inheritdoc/>
