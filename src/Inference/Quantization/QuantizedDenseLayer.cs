@@ -60,7 +60,7 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
         _biases = biases.ToArray();
     }
 
-    public override bool SupportsTraining => false;
+    public override bool SupportsTraining=> false;
 
     public override bool SupportsJitCompilation => false;
 
