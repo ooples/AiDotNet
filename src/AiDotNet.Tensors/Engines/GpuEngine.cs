@@ -17777,6 +17777,41 @@ public class GpuEngine : IEngine, IDisposable
         return _cpuFallback.AvgPool3DBackward(gradOutput, inputShape, poolSize, stride, padding);
     }
 
+    /// <inheritdoc/>
+    public Tensor<T> Upsample3D<T>(Tensor<T> input, int scaleD, int scaleH, int scaleW)
+    {
+        // Upsample3D GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.Upsample3D(input, scaleD, scaleH, scaleW);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Upsample3DBackward<T>(Tensor<T> gradOutput, int[] inputShape, int scaleD, int scaleH, int scaleW)
+    {
+        // Upsample3DBackward GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.Upsample3DBackward(gradOutput, inputShape, scaleD, scaleH, scaleW);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ConvTranspose3D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] outputPadding)
+    {
+        // ConvTranspose3D GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.ConvTranspose3D(input, kernel, stride, padding, outputPadding);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ConvTranspose3DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding)
+    {
+        // ConvTranspose3DBackwardInput GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.ConvTranspose3DBackwardInput(gradOutput, kernel, inputShape, stride, padding);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ConvTranspose3DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding)
+    {
+        // ConvTranspose3DBackwardKernel GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.ConvTranspose3DBackwardKernel(gradOutput, input, kernelShape, stride, padding);
+    }
+
     #endregion
 
     #region Normalization and Activation Operations (Extended)

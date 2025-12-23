@@ -2635,6 +2635,85 @@ public interface IEngine
     /// </remarks>
     Tensor<T> AvgPool3DBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] poolSize, int[] stride, int[] padding);
 
+    /// <summary>
+    /// Performs 3D nearest-neighbor upsampling on a 5D tensor (batch, channels, depth, height, width).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, channels, depth, height, width].</param>
+    /// <param name="scaleD">The depth scaling factor.</param>
+    /// <param name="scaleH">The height scaling factor.</param>
+    /// <param name="scaleW">The width scaling factor.</param>
+    /// <returns>The upsampled tensor with shape [batch, channels, depth*scaleD, height*scaleH, width*scaleW].</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-035: Upsample3D</b></para>
+    /// <para>
+    /// 3D upsampling increases the spatial dimensions of volumetric data by replicating values.
+    /// This is essential for decoder paths in encoder-decoder architectures like 3D U-Net.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Upsample3D<T>(Tensor<T> input, int scaleD, int scaleH, int scaleW);
+
+    /// <summary>
+    /// Computes the backward pass for 3D upsampling.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer [batch, channels, out_depth, out_height, out_width].</param>
+    /// <param name="inputShape">The original input shape [batch, channels, depth, height, width].</param>
+    /// <param name="scaleD">The depth scaling factor used in forward pass.</param>
+    /// <param name="scaleH">The height scaling factor used in forward pass.</param>
+    /// <param name="scaleW">The width scaling factor used in forward pass.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// During backpropagation, gradients are accumulated from all output positions that were
+    /// derived from each input position (i.e., summed over the scaling block).
+    /// </para>
+    /// </remarks>
+    Tensor<T> Upsample3DBackward<T>(Tensor<T> gradOutput, int[] inputShape, int scaleD, int scaleH, int scaleW);
+
+    /// <summary>
+    /// Performs 3D transposed convolution (deconvolution) for learned upsampling.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, in_channels, depth, height, width].</param>
+    /// <param name="kernel">The kernel tensor [in_channels, out_channels, kernel_depth, kernel_height, kernel_width].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW].</param>
+    /// <param name="padding">The padding [padD, padH, padW].</param>
+    /// <param name="outputPadding">Output padding for size adjustment [outPadD, outPadH, outPadW].</param>
+    /// <returns>The upsampled tensor.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-036: ConvTranspose3D</b></para>
+    /// <para>
+    /// Transposed 3D convolution learns upsampling filters, providing more flexibility than
+    /// nearest-neighbor upsampling. Used in decoder paths of 3D U-Net and similar architectures.
+    /// </para>
+    /// </remarks>
+    Tensor<T> ConvTranspose3D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] outputPadding);
+
+    /// <summary>
+    /// Computes the gradient of ConvTranspose3D with respect to the input.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="kernel">The kernel tensor used in forward pass.</param>
+    /// <param name="inputShape">The original input shape.</param>
+    /// <param name="stride">The stride used in forward pass.</param>
+    /// <param name="padding">The padding used in forward pass.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> ConvTranspose3DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding);
+
+    /// <summary>
+    /// Computes the gradient of ConvTranspose3D with respect to the kernel.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor from forward pass.</param>
+    /// <param name="kernelShape">The shape of the kernel.</param>
+    /// <param name="stride">The stride used in forward pass.</param>
+    /// <param name="padding">The padding used in forward pass.</param>
+    /// <returns>The gradient with respect to the kernel.</returns>
+    Tensor<T> ConvTranspose3DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding);
+
     #endregion
 
     #region Normalization and Activation Operations
