@@ -855,6 +855,311 @@ internal static class Pool3DKernels
 }
 
 /// <summary>
+/// Parameter struct for PositionalEncoding GPU kernel.
+/// </summary>
+internal readonly struct PositionalEncodingParams
+{
+    /// <summary>Number of input points.</summary>
+    public readonly int NumPoints;
+    /// <summary>Input dimension (typically 3 for xyz).</summary>
+    public readonly int InputDim;
+    /// <summary>Number of frequency bands for encoding.</summary>
+    public readonly int NumFrequencies;
+    /// <summary>Output dimension per input value (2 * NumFrequencies for sin+cos).</summary>
+    public readonly int EncodingDim;
+
+    /// <summary>
+    /// Initializes positional encoding parameters.
+    /// </summary>
+    public PositionalEncodingParams(int numPoints, int inputDim, int numFrequencies)
+    {
+        NumPoints = numPoints;
+        InputDim = inputDim;
+        NumFrequencies = numFrequencies;
+        EncodingDim = 2 * numFrequencies;
+    }
+}
+
+/// <summary>
+/// GPU kernel implementations for NeRF positional encoding.
+/// </summary>
+internal static class PositionalEncodingKernels
+{
+    /// <summary>
+    /// PositionalEncoding forward kernel for float precision.
+    /// Encodes each input coordinate using sinusoidal functions at multiple frequencies.
+    /// Output layout: [numPoints, inputDim * (1 + 2 * numFrequencies)]
+    /// For each input value x, outputs: [x, sin(2^0 * pi * x), cos(2^0 * pi * x), ..., sin(2^(L-1) * pi * x), cos(2^(L-1) * pi * x)]
+    /// </summary>
+    public static void PositionalEncodingForwardFloat(
+        Index1D index,
+        ArrayView<float> input,
+        ArrayView<float> output,
+        PositionalEncodingParams p)
+    {
+        int totalOutputPerPoint = p.InputDim * (1 + p.EncodingDim);
+        int pointIdx = (int)index / totalOutputPerPoint;
+        int outputOffset = (int)index % totalOutputPerPoint;
+
+        if (pointIdx >= p.NumPoints) return;
+
+        int dimIdx = outputOffset / (1 + p.EncodingDim);
+        int encodingIdx = outputOffset % (1 + p.EncodingDim);
+
+        int inputIdx = pointIdx * p.InputDim + dimIdx;
+        float x = input[inputIdx];
+
+        if (encodingIdx == 0)
+        {
+            // Identity component
+            output[index] = x;
+        }
+        else
+        {
+            int freqIdx = (encodingIdx - 1) / 2;
+            bool isSin = (encodingIdx - 1) % 2 == 0;
+            float freq = XMath.Pow(2.0f, freqIdx) * 3.14159265358979f;
+            float angle = freq * x;
+            output[index] = isSin ? XMath.Sin(angle) : XMath.Cos(angle);
+        }
+    }
+
+    /// <summary>
+    /// PositionalEncoding forward kernel for double precision.
+    /// </summary>
+    public static void PositionalEncodingForwardDouble(
+        Index1D index,
+        ArrayView<double> input,
+        ArrayView<double> output,
+        PositionalEncodingParams p)
+    {
+        int totalOutputPerPoint = p.InputDim * (1 + p.EncodingDim);
+        int pointIdx = (int)index / totalOutputPerPoint;
+        int outputOffset = (int)index % totalOutputPerPoint;
+
+        if (pointIdx >= p.NumPoints) return;
+
+        int dimIdx = outputOffset / (1 + p.EncodingDim);
+        int encodingIdx = outputOffset % (1 + p.EncodingDim);
+
+        int inputIdx = pointIdx * p.InputDim + dimIdx;
+        double x = input[inputIdx];
+
+        if (encodingIdx == 0)
+        {
+            output[index] = x;
+        }
+        else
+        {
+            int freqIdx = (encodingIdx - 1) / 2;
+            bool isSin = (encodingIdx - 1) % 2 == 0;
+            double freq = XMath.Pow(2.0, freqIdx) * 3.14159265358979;
+            double angle = freq * x;
+            output[index] = isSin ? XMath.Sin(angle) : XMath.Cos(angle);
+        }
+    }
+
+    /// <summary>
+    /// PositionalEncoding backward kernel for float precision.
+    /// Computes gradient w.r.t. input positions from encoded gradient.
+    /// </summary>
+    public static void PositionalEncodingBackwardFloat(
+        Index1D index,
+        ArrayView<float> positions,
+        ArrayView<float> encodedGrad,
+        ArrayView<float> positionsGrad,
+        PositionalEncodingParams p)
+    {
+        int pointIdx = (int)index / p.InputDim;
+        int dimIdx = (int)index % p.InputDim;
+
+        if (pointIdx >= p.NumPoints) return;
+
+        int totalOutputPerPoint = p.InputDim * (1 + p.EncodingDim);
+        int inputIdx = pointIdx * p.InputDim + dimIdx;
+        float x = positions[inputIdx];
+
+        float grad = 0.0f;
+
+        // Gradient from identity component
+        int identityIdx = pointIdx * totalOutputPerPoint + dimIdx * (1 + p.EncodingDim);
+        grad += encodedGrad[identityIdx];
+
+        // Gradient from frequency components
+        for (int f = 0; f < p.NumFrequencies; f++)
+        {
+            float freq = XMath.Pow(2.0f, f) * 3.14159265358979f;
+            float angle = freq * x;
+
+            int sinIdx = identityIdx + 1 + 2 * f;
+            int cosIdx = identityIdx + 2 + 2 * f;
+
+            // d(sin(freq*x))/dx = freq * cos(freq*x)
+            grad += encodedGrad[sinIdx] * freq * XMath.Cos(angle);
+            // d(cos(freq*x))/dx = -freq * sin(freq*x)
+            grad += encodedGrad[cosIdx] * (-freq) * XMath.Sin(angle);
+        }
+
+        positionsGrad[index] = grad;
+    }
+
+    /// <summary>
+    /// PositionalEncoding backward kernel for double precision.
+    /// </summary>
+    public static void PositionalEncodingBackwardDouble(
+        Index1D index,
+        ArrayView<double> positions,
+        ArrayView<double> encodedGrad,
+        ArrayView<double> positionsGrad,
+        PositionalEncodingParams p)
+    {
+        int pointIdx = (int)index / p.InputDim;
+        int dimIdx = (int)index % p.InputDim;
+
+        if (pointIdx >= p.NumPoints) return;
+
+        int totalOutputPerPoint = p.InputDim * (1 + p.EncodingDim);
+        int inputIdx = pointIdx * p.InputDim + dimIdx;
+        double x = positions[inputIdx];
+
+        double grad = 0.0;
+
+        int identityIdx = pointIdx * totalOutputPerPoint + dimIdx * (1 + p.EncodingDim);
+        grad += encodedGrad[identityIdx];
+
+        for (int f = 0; f < p.NumFrequencies; f++)
+        {
+            double freq = XMath.Pow(2.0, f) * 3.14159265358979;
+            double angle = freq * x;
+
+            int sinIdx = identityIdx + 1 + 2 * f;
+            int cosIdx = identityIdx + 2 + 2 * f;
+
+            grad += encodedGrad[sinIdx] * freq * XMath.Cos(angle);
+            grad += encodedGrad[cosIdx] * (-freq) * XMath.Sin(angle);
+        }
+
+        positionsGrad[index] = grad;
+    }
+}
+
+/// <summary>
+/// Parameter struct for VolumeRendering GPU kernel.
+/// </summary>
+internal readonly struct VolumeRenderingParams
+{
+    /// <summary>Number of rays being rendered.</summary>
+    public readonly int NumRays;
+    /// <summary>Number of samples along each ray.</summary>
+    public readonly int NumSamples;
+    /// <summary>Number of color channels (typically 3 for RGB).</summary>
+    public readonly int NumChannels;
+
+    /// <summary>
+    /// Initializes volume rendering parameters.
+    /// </summary>
+    public VolumeRenderingParams(int numRays, int numSamples, int numChannels)
+    {
+        NumRays = numRays;
+        NumSamples = numSamples;
+        NumChannels = numChannels;
+    }
+}
+
+/// <summary>
+/// GPU kernel implementations for NeRF volume rendering.
+/// </summary>
+internal static class VolumeRenderingKernels
+{
+    /// <summary>
+    /// Volume rendering forward kernel for float precision.
+    /// Implements the classical volume rendering equation from NeRF.
+    /// C(r) = sum_i(T_i * alpha_i * c_i) where T_i = prod_j&lt;i(1 - alpha_j)
+    /// alpha_i = 1 - exp(-sigma_i * delta_i)
+    /// </summary>
+    public static void VolumeRenderingForwardFloat(
+        Index1D index,
+        ArrayView<float> rgb,        // [numRays, numSamples, numChannels]
+        ArrayView<float> density,    // [numRays, numSamples]
+        ArrayView<float> tValues,    // [numRays, numSamples]
+        ArrayView<float> output,     // [numRays, numChannels]
+        VolumeRenderingParams p)
+    {
+        int rayIdx = (int)index / p.NumChannels;
+        int channelIdx = (int)index % p.NumChannels;
+
+        if (rayIdx >= p.NumRays) return;
+
+        float accumulated = 0.0f;
+        float transmittance = 1.0f;
+
+        for (int s = 0; s < p.NumSamples - 1; s++)
+        {
+            int rgbIdx = (rayIdx * p.NumSamples + s) * p.NumChannels + channelIdx;
+            int densityIdx = rayIdx * p.NumSamples + s;
+            int tIdx = rayIdx * p.NumSamples + s;
+            int tNextIdx = rayIdx * p.NumSamples + s + 1;
+
+            float sigma = density[densityIdx];
+            float delta = tValues[tNextIdx] - tValues[tIdx];
+            float c = rgb[rgbIdx];
+
+            // alpha = 1 - exp(-sigma * delta)
+            float alpha = 1.0f - XMath.Exp(-sigma * delta);
+
+            accumulated += transmittance * alpha * c;
+            transmittance *= (1.0f - alpha);
+
+            // Early termination if transmittance is negligible
+            if (transmittance < 1e-4f) break;
+        }
+
+        output[index] = accumulated;
+    }
+
+    /// <summary>
+    /// Volume rendering forward kernel for double precision.
+    /// </summary>
+    public static void VolumeRenderingForwardDouble(
+        Index1D index,
+        ArrayView<double> rgb,
+        ArrayView<double> density,
+        ArrayView<double> tValues,
+        ArrayView<double> output,
+        VolumeRenderingParams p)
+    {
+        int rayIdx = (int)index / p.NumChannels;
+        int channelIdx = (int)index % p.NumChannels;
+
+        if (rayIdx >= p.NumRays) return;
+
+        double accumulated = 0.0;
+        double transmittance = 1.0;
+
+        for (int s = 0; s < p.NumSamples - 1; s++)
+        {
+            int rgbIdx = (rayIdx * p.NumSamples + s) * p.NumChannels + channelIdx;
+            int densityIdx = rayIdx * p.NumSamples + s;
+            int tIdx = rayIdx * p.NumSamples + s;
+            int tNextIdx = rayIdx * p.NumSamples + s + 1;
+
+            double sigma = density[densityIdx];
+            double delta = tValues[tNextIdx] - tValues[tIdx];
+            double c = rgb[rgbIdx];
+
+            double alpha = 1.0 - XMath.Exp(-sigma * delta);
+
+            accumulated += transmittance * alpha * c;
+            transmittance *= (1.0 - alpha);
+
+            if (transmittance < 1e-8) break;
+        }
+
+        output[index] = accumulated;
+    }
+}
+
+/// <summary>
 /// GPU-based execution engine using ILGPU for hardware acceleration.
 /// </summary>
 /// <remarks>
@@ -1061,6 +1366,14 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, Pool3DParams>? _maxPool3DKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, Pool3DParams>? _avgPool3DKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, Pool3DParams>? _avgPool3DKernelDouble;
+
+    // NeRF GPU kernels - Positional Encoding and Volume Rendering (3D AI Phase 3)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, PositionalEncodingParams>? _positionalEncodingForwardKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, PositionalEncodingParams>? _positionalEncodingForwardKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, PositionalEncodingParams>? _positionalEncodingBackwardKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, PositionalEncodingParams>? _positionalEncodingBackwardKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, VolumeRenderingParams>? _volumeRenderingForwardKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, VolumeRenderingParams>? _volumeRenderingForwardKernelDouble;
 
     // Production GPU kernels - Mathematical functions (Phase C: Production Ready)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _log2KernelFloat;
@@ -2198,6 +2511,26 @@ public class GpuEngine : IEngine, IDisposable
                 _avgPool3DKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, Pool3DParams>(
                     Pool3DKernels.AvgPool3DKernelDoubleImpl);
+
+                // Pre-compile NeRF GPU kernels - Positional Encoding and Volume Rendering (3D AI Phase 3)
+                _positionalEncodingForwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, PositionalEncodingParams>(
+                    PositionalEncodingKernels.PositionalEncodingForwardFloat);
+                _positionalEncodingForwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, PositionalEncodingParams>(
+                    PositionalEncodingKernels.PositionalEncodingForwardDouble);
+                _positionalEncodingBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, PositionalEncodingParams>(
+                    PositionalEncodingKernels.PositionalEncodingBackwardFloat);
+                _positionalEncodingBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, PositionalEncodingParams>(
+                    PositionalEncodingKernels.PositionalEncodingBackwardDouble);
+                _volumeRenderingForwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, VolumeRenderingParams>(
+                    VolumeRenderingKernels.VolumeRenderingForwardFloat);
+                _volumeRenderingForwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, VolumeRenderingParams>(
+                    VolumeRenderingKernels.VolumeRenderingForwardDouble);
 
                 Console.WriteLine("[GpuEngine] Tensor kernels pre-compiled");
 
@@ -28493,20 +28826,348 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> PositionalEncoding<T>(Tensor<T> positions, int numFrequencies)
     {
-        // NeRF operations use CPU implementation (can be GPU-accelerated later)
+        if (!SupportsGpu || !_gpuHealthy)
+        {
+            return _cpuFallback.PositionalEncoding(positions, numFrequencies);
+        }
+
+        // positions shape: [numPoints, inputDim] (typically inputDim=3 for xyz)
+        int numPoints = positions.Shape[0];
+        int inputDim = positions.Shape.Length > 1 ? positions.Shape[1] : 1;
+        int outputDim = inputDim * (1 + 2 * numFrequencies);
+        
+        // For small tensors, use CPU (use VectorAdd threshold as baseline)
+        if (numPoints * outputDim < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.PositionalEncoding(positions, numFrequencies);
+        }
+
+        try
+        {
+            if (typeof(T) == typeof(float) && _positionalEncodingForwardKernelFloat != null)
+            {
+                return (Tensor<T>)(object)PositionalEncodingGpuFloat(
+                    (Tensor<float>)(object)positions, numFrequencies, numPoints, inputDim, outputDim);
+            }
+            else if (typeof(T) == typeof(double) && _positionalEncodingForwardKernelDouble != null)
+            {
+                return (Tensor<T>)(object)PositionalEncodingGpuDouble(
+                    (Tensor<double>)(object)positions, numFrequencies, numPoints, inputDim, outputDim);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU PositionalEncoding failed: {ex.Message}. Falling back to CPU.");
+        }
+
         return _cpuFallback.PositionalEncoding(positions, numFrequencies);
+    }
+
+    private Tensor<float> PositionalEncodingGpuFloat(Tensor<float> positions, int numFrequencies, int numPoints, int inputDim, int outputDim)
+    {
+        var outputShape = new int[] { numPoints, outputDim };
+        int outputSize = numPoints * outputDim;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<float>(positions.Length);
+            using var outputBuffer = _accelerator.Allocate1D<float>(outputSize);
+
+            // Copy input data
+            var inputData = new float[positions.Length];
+            for (int i = 0; i < positions.Length; i++)
+            {
+                inputData[i] = positions[i];
+            }
+            inputBuffer.CopyFromCPU(inputData);
+
+            var parameters = new PositionalEncodingParams(numPoints, inputDim, numFrequencies);
+
+            _positionalEncodingForwardKernelFloat!(
+                _accelerator.DefaultStream,
+                outputSize,
+                inputBuffer.View,
+                outputBuffer.View,
+                parameters);
+
+            _accelerator.Synchronize();
+
+            var outputData = outputBuffer.GetAsArray1D();
+            return new Tensor<float>(outputShape, new Vector<float>(outputData));
+        }
+    }
+
+    private Tensor<double> PositionalEncodingGpuDouble(Tensor<double> positions, int numFrequencies, int numPoints, int inputDim, int outputDim)
+    {
+        var outputShape = new int[] { numPoints, outputDim };
+        int outputSize = numPoints * outputDim;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<double>(positions.Length);
+            using var outputBuffer = _accelerator.Allocate1D<double>(outputSize);
+
+            var inputData = new double[positions.Length];
+            for (int i = 0; i < positions.Length; i++)
+            {
+                inputData[i] = positions[i];
+            }
+            inputBuffer.CopyFromCPU(inputData);
+
+            var parameters = new PositionalEncodingParams(numPoints, inputDim, numFrequencies);
+
+            _positionalEncodingForwardKernelDouble!(
+                _accelerator.DefaultStream,
+                outputSize,
+                inputBuffer.View,
+                outputBuffer.View,
+                parameters);
+
+            _accelerator.Synchronize();
+
+            var outputData = outputBuffer.GetAsArray1D();
+            return new Tensor<double>(outputShape, new Vector<double>(outputData));
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> PositionalEncodingBackward<T>(Tensor<T> positions, Tensor<T> encodedGradient, int numFrequencies)
     {
+        if (!SupportsGpu || !_gpuHealthy)
+        {
+            return _cpuFallback.PositionalEncodingBackward(positions, encodedGradient, numFrequencies);
+        }
+
+        int numPoints = positions.Shape[0];
+        int inputDim = positions.Shape.Length > 1 ? positions.Shape[1] : 1;
+
+        if (numPoints * inputDim < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.PositionalEncodingBackward(positions, encodedGradient, numFrequencies);
+        }
+
+        try
+        {
+            if (typeof(T) == typeof(float) && _positionalEncodingBackwardKernelFloat != null)
+            {
+                return (Tensor<T>)(object)PositionalEncodingBackwardGpuFloat(
+                    (Tensor<float>)(object)positions, (Tensor<float>)(object)encodedGradient, numFrequencies, numPoints, inputDim);
+            }
+            else if (typeof(T) == typeof(double) && _positionalEncodingBackwardKernelDouble != null)
+            {
+                return (Tensor<T>)(object)PositionalEncodingBackwardGpuDouble(
+                    (Tensor<double>)(object)positions, (Tensor<double>)(object)encodedGradient, numFrequencies, numPoints, inputDim);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU PositionalEncodingBackward failed: {ex.Message}. Falling back to CPU.");
+        }
+
         return _cpuFallback.PositionalEncodingBackward(positions, encodedGradient, numFrequencies);
+    }
+
+    private Tensor<float> PositionalEncodingBackwardGpuFloat(Tensor<float> positions, Tensor<float> encodedGrad, int numFrequencies, int numPoints, int inputDim)
+    {
+        var outputShape = positions.Shape;
+        int outputSize = numPoints * inputDim;
+
+        lock (_gpuLock)
+        {
+            using var positionsBuffer = _accelerator!.Allocate1D<float>(positions.Length);
+            using var gradBuffer = _accelerator.Allocate1D<float>(encodedGrad.Length);
+            using var outputBuffer = _accelerator.Allocate1D<float>(outputSize);
+
+            var posData = new float[positions.Length];
+            for (int i = 0; i < positions.Length; i++) posData[i] = positions[i];
+            positionsBuffer.CopyFromCPU(posData);
+
+            var gradData = new float[encodedGrad.Length];
+            for (int i = 0; i < encodedGrad.Length; i++) gradData[i] = encodedGrad[i];
+            gradBuffer.CopyFromCPU(gradData);
+
+            var parameters = new PositionalEncodingParams(numPoints, inputDim, numFrequencies);
+
+            _positionalEncodingBackwardKernelFloat!(
+                _accelerator.DefaultStream,
+                outputSize,
+                positionsBuffer.View,
+                gradBuffer.View,
+                outputBuffer.View,
+                parameters);
+
+            _accelerator.Synchronize();
+
+            var outputData = outputBuffer.GetAsArray1D();
+            return new Tensor<float>(outputShape, new Vector<float>(outputData));
+        }
+    }
+
+    private Tensor<double> PositionalEncodingBackwardGpuDouble(Tensor<double> positions, Tensor<double> encodedGrad, int numFrequencies, int numPoints, int inputDim)
+    {
+        var outputShape = positions.Shape;
+        int outputSize = numPoints * inputDim;
+
+        lock (_gpuLock)
+        {
+            using var positionsBuffer = _accelerator!.Allocate1D<double>(positions.Length);
+            using var gradBuffer = _accelerator.Allocate1D<double>(encodedGrad.Length);
+            using var outputBuffer = _accelerator.Allocate1D<double>(outputSize);
+
+            var posData = new double[positions.Length];
+            for (int i = 0; i < positions.Length; i++) posData[i] = positions[i];
+            positionsBuffer.CopyFromCPU(posData);
+
+            var gradData = new double[encodedGrad.Length];
+            for (int i = 0; i < encodedGrad.Length; i++) gradData[i] = encodedGrad[i];
+            gradBuffer.CopyFromCPU(gradData);
+
+            var parameters = new PositionalEncodingParams(numPoints, inputDim, numFrequencies);
+
+            _positionalEncodingBackwardKernelDouble!(
+                _accelerator.DefaultStream,
+                outputSize,
+                positionsBuffer.View,
+                gradBuffer.View,
+                outputBuffer.View,
+                parameters);
+
+            _accelerator.Synchronize();
+
+            var outputData = outputBuffer.GetAsArray1D();
+            return new Tensor<double>(outputShape, new Vector<double>(outputData));
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> VolumeRendering<T>(Tensor<T> rgbSamples, Tensor<T> densitySamples, Tensor<T> tValues)
     {
+        if (!SupportsGpu || !_gpuHealthy)
+        {
+            return _cpuFallback.VolumeRendering(rgbSamples, densitySamples, tValues);
+        }
+
+        // rgbSamples: [numRays, numSamples, numChannels]
+        // densitySamples: [numRays, numSamples]
+        // tValues: [numRays, numSamples]
+        int numRays = rgbSamples.Shape[0];
+        int numSamples = rgbSamples.Shape[1];
+        int numChannels = rgbSamples.Shape.Length > 2 ? rgbSamples.Shape[2] : 1;
+
+        if (numRays * numChannels < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.VolumeRendering(rgbSamples, densitySamples, tValues);
+        }
+
+        try
+        {
+            if (typeof(T) == typeof(float) && _volumeRenderingForwardKernelFloat != null)
+            {
+                return (Tensor<T>)(object)VolumeRenderingGpuFloat(
+                    (Tensor<float>)(object)rgbSamples,
+                    (Tensor<float>)(object)densitySamples,
+                    (Tensor<float>)(object)tValues,
+                    numRays, numSamples, numChannels);
+            }
+            else if (typeof(T) == typeof(double) && _volumeRenderingForwardKernelDouble != null)
+            {
+                return (Tensor<T>)(object)VolumeRenderingGpuDouble(
+                    (Tensor<double>)(object)rgbSamples,
+                    (Tensor<double>)(object)densitySamples,
+                    (Tensor<double>)(object)tValues,
+                    numRays, numSamples, numChannels);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU VolumeRendering failed: {ex.Message}. Falling back to CPU.");
+        }
+
         return _cpuFallback.VolumeRendering(rgbSamples, densitySamples, tValues);
+    }
+
+    private Tensor<float> VolumeRenderingGpuFloat(Tensor<float> rgb, Tensor<float> density, Tensor<float> tValues, int numRays, int numSamples, int numChannels)
+    {
+        var outputShape = new int[] { numRays, numChannels };
+        int outputSize = numRays * numChannels;
+
+        lock (_gpuLock)
+        {
+            using var rgbBuffer = _accelerator!.Allocate1D<float>(rgb.Length);
+            using var densityBuffer = _accelerator.Allocate1D<float>(density.Length);
+            using var tBuffer = _accelerator.Allocate1D<float>(tValues.Length);
+            using var outputBuffer = _accelerator.Allocate1D<float>(outputSize);
+
+            var rgbData = new float[rgb.Length];
+            for (int i = 0; i < rgb.Length; i++) rgbData[i] = rgb[i];
+            rgbBuffer.CopyFromCPU(rgbData);
+
+            var densityData = new float[density.Length];
+            for (int i = 0; i < density.Length; i++) densityData[i] = density[i];
+            densityBuffer.CopyFromCPU(densityData);
+
+            var tData = new float[tValues.Length];
+            for (int i = 0; i < tValues.Length; i++) tData[i] = tValues[i];
+            tBuffer.CopyFromCPU(tData);
+
+            var parameters = new VolumeRenderingParams(numRays, numSamples, numChannels);
+
+            _volumeRenderingForwardKernelFloat!(
+                _accelerator.DefaultStream,
+                outputSize,
+                rgbBuffer.View,
+                densityBuffer.View,
+                tBuffer.View,
+                outputBuffer.View,
+                parameters);
+
+            _accelerator.Synchronize();
+
+            var outputData = outputBuffer.GetAsArray1D();
+            return new Tensor<float>(outputShape, new Vector<float>(outputData));
+        }
+    }
+
+    private Tensor<double> VolumeRenderingGpuDouble(Tensor<double> rgb, Tensor<double> density, Tensor<double> tValues, int numRays, int numSamples, int numChannels)
+    {
+        var outputShape = new int[] { numRays, numChannels };
+        int outputSize = numRays * numChannels;
+
+        lock (_gpuLock)
+        {
+            using var rgbBuffer = _accelerator!.Allocate1D<double>(rgb.Length);
+            using var densityBuffer = _accelerator.Allocate1D<double>(density.Length);
+            using var tBuffer = _accelerator.Allocate1D<double>(tValues.Length);
+            using var outputBuffer = _accelerator.Allocate1D<double>(outputSize);
+
+            var rgbData = new double[rgb.Length];
+            for (int i = 0; i < rgb.Length; i++) rgbData[i] = rgb[i];
+            rgbBuffer.CopyFromCPU(rgbData);
+
+            var densityData = new double[density.Length];
+            for (int i = 0; i < density.Length; i++) densityData[i] = density[i];
+            densityBuffer.CopyFromCPU(densityData);
+
+            var tData = new double[tValues.Length];
+            for (int i = 0; i < tValues.Length; i++) tData[i] = tValues[i];
+            tBuffer.CopyFromCPU(tData);
+
+            var parameters = new VolumeRenderingParams(numRays, numSamples, numChannels);
+
+            _volumeRenderingForwardKernelDouble!(
+                _accelerator.DefaultStream,
+                outputSize,
+                rgbBuffer.View,
+                densityBuffer.View,
+                tBuffer.View,
+                outputBuffer.View,
+                parameters);
+
+            _accelerator.Synchronize();
+
+            var outputData = outputBuffer.GetAsArray1D();
+            return new Tensor<double>(outputShape, new Vector<double>(outputData));
+        }
     }
 
     /// <inheritdoc/>
@@ -28518,6 +29179,8 @@ public class GpuEngine : IEngine, IDisposable
         out Tensor<T> rgbGradient,
         out Tensor<T> densityGradient)
     {
+        // VolumeRendering backward is complex with multiple outputs
+        // CPU fallback is acceptable for now as backward pass is less frequent
         _cpuFallback.VolumeRenderingBackward(
             rgbSamples, densitySamples, tValues, outputGradient,
             out rgbGradient, out densityGradient);
