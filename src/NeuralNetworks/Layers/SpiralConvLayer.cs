@@ -799,6 +799,12 @@ public class SpiralConvLayer<T> : LayerBase<T>
     /// Serializes the layer to a binary stream.
     /// </summary>
     /// <param name="writer">Binary writer for serialization.</param>
+    /// <remarks>
+    /// <para>
+    /// If spiral indices are set, they are serialized along with the layer.
+    /// Otherwise, users must call <see cref="SetSpiralIndices"/> after deserialization.
+    /// </para>
+    /// </remarks>
     public override void Serialize(BinaryWriter writer)
     {
         base.Serialize(writer);
@@ -817,12 +823,34 @@ public class SpiralConvLayer<T> : LayerBase<T>
         {
             writer.Write(NumOps.ToDouble(biasArray[i]));
         }
+
+        // Serialize spiral indices if set
+        bool hasIndices = _spiralIndices != null;
+        writer.Write(hasIndices);
+        if (hasIndices && _spiralIndices != null)
+        {
+            int numVertices = _spiralIndices.GetLength(0);
+            writer.Write(numVertices);
+            for (int v = 0; v < numVertices; v++)
+            {
+                for (int s = 0; s < SpiralLength; s++)
+                {
+                    writer.Write(_spiralIndices[v, s]);
+                }
+            }
+        }
     }
 
     /// <summary>
     /// Deserializes the layer from a binary stream.
     /// </summary>
     /// <param name="reader">Binary reader for deserialization.</param>
+    /// <remarks>
+    /// <para>
+    /// If spiral indices were serialized with the layer, they are restored automatically.
+    /// Otherwise, users must call <see cref="SetSpiralIndices"/> before calling Forward.
+    /// </para>
+    /// </remarks>
     public override void Deserialize(BinaryReader reader)
     {
         base.Deserialize(reader);
@@ -846,6 +874,21 @@ public class SpiralConvLayer<T> : LayerBase<T>
             biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
         _biases = new Tensor<T>(biasArray, _biases.Shape);
+
+        // Deserialize spiral indices if present
+        bool hasIndices = reader.ReadBoolean();
+        if (hasIndices)
+        {
+            int numVertices = reader.ReadInt32();
+            _spiralIndices = new int[numVertices, SpiralLength];
+            for (int v = 0; v < numVertices; v++)
+            {
+                for (int s = 0; s < SpiralLength; s++)
+                {
+                    _spiralIndices[v, s] = reader.ReadInt32();
+                }
+            }
+        }
     }
 
     #endregion
