@@ -840,6 +840,24 @@ public enum ModelType
 
     OccupancyNetwork,
 
+    /// <summary>
+    /// A 3D Convolutional Neural Network that processes voxelized volumetric data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> VoxelCNN is like a regular CNN but for 3D data. Instead of looking at
+    /// 2D images, it examines 3D grids of "voxels" (volumetric pixels). Think of voxels like
+    /// 3D Minecraft blocks - each block is either filled or empty.
+    /// 
+    /// VoxelCNN is useful for:
+    /// - 3D shape classification (e.g., ModelNet40 dataset)
+    /// - Medical image analysis (CT scans, MRI)
+    /// - Robotics and spatial understanding
+    /// - Point cloud classification (after voxelization)
+    /// </para>
+    /// </remarks>
+    VoxelCNN,
+
     RestrictedBoltzmannMachine,
 
     SpikingNeuralNetwork,
