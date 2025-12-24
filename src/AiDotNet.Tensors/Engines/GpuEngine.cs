@@ -1309,6 +1309,151 @@ internal static class TrilinearInterpolateKernels
         output[index] = w000 * v000 + w001 * v001 + w010 * v010 + w011 * v011 +
                         w100 * v100 + w101 * v101 + w110 * v110 + w111 * v111;
     }
+
+    /// <summary>
+    /// Backward pass kernel for trilinear interpolation (float precision).
+    /// Scatters gradients from output back to grid using atomic operations.
+    /// Each thread handles one (position, channel) pair.
+    /// </summary>
+    public static void TrilinearInterpolateBackwardFloatImpl(
+        Index1D index,
+        ArrayView<float> gradOutput,  // [N, C] flattened - input gradients
+        ArrayView<float> positions,   // [N, 3] flattened - interpolation positions
+        ArrayView<float> gradGrid,    // [D, H, W, C] flattened - output gradients (accumulated atomically)
+        int depth, int height, int width, int channels)
+    {
+        int n = (int)index / channels;
+        int c = (int)index % channels;
+        int numPositions = (int)gradOutput.Length / channels;
+
+        if (n >= numPositions) return;
+
+        float grad = gradOutput[index];
+
+        // Get position (z, y, x) in [0, dim-1] range
+        float z = positions[n * 3 + 0] * (depth - 1);
+        float y = positions[n * 3 + 1] * (height - 1);
+        float x = positions[n * 3 + 2] * (width - 1);
+
+        // Clamp to valid range
+        z = XMath.Max(0f, XMath.Min(depth - 1.001f, z));
+        y = XMath.Max(0f, XMath.Min(height - 1.001f, y));
+        x = XMath.Max(0f, XMath.Min(width - 1.001f, x));
+
+        // Get integer indices and fractional parts
+        int z0 = (int)XMath.Floor(z);
+        int y0 = (int)XMath.Floor(y);
+        int x0 = (int)XMath.Floor(x);
+        int z1 = z0 + 1;
+        int y1 = y0 + 1;
+        int x1 = x0 + 1;
+
+        // Clamp upper indices
+        z1 = XMath.Min(z1, depth - 1);
+        y1 = XMath.Min(y1, height - 1);
+        x1 = XMath.Min(x1, width - 1);
+
+        float zd = z - z0;
+        float yd = y - y0;
+        float xd = x - x0;
+
+        // Compute weights for 8 corners (same as forward pass)
+        float w000 = (1 - zd) * (1 - yd) * (1 - xd);
+        float w001 = (1 - zd) * (1 - yd) * xd;
+        float w010 = (1 - zd) * yd * (1 - xd);
+        float w011 = (1 - zd) * yd * xd;
+        float w100 = zd * (1 - yd) * (1 - xd);
+        float w101 = zd * (1 - yd) * xd;
+        float w110 = zd * yd * (1 - xd);
+        float w111 = zd * yd * xd;
+
+        // Compute grid indices (grid layout is [D, H, W, C])
+        int stride_d = height * width * channels;
+        int stride_h = width * channels;
+        int stride_w = channels;
+
+        // Scatter gradient to 8 corners using atomic add
+        Atomic.Add(ref gradGrid[z0 * stride_d + y0 * stride_h + x0 * stride_w + c], w000 * grad);
+        Atomic.Add(ref gradGrid[z0 * stride_d + y0 * stride_h + x1 * stride_w + c], w001 * grad);
+        Atomic.Add(ref gradGrid[z0 * stride_d + y1 * stride_h + x0 * stride_w + c], w010 * grad);
+        Atomic.Add(ref gradGrid[z0 * stride_d + y1 * stride_h + x1 * stride_w + c], w011 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y0 * stride_h + x0 * stride_w + c], w100 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y0 * stride_h + x1 * stride_w + c], w101 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y1 * stride_h + x0 * stride_w + c], w110 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y1 * stride_h + x1 * stride_w + c], w111 * grad);
+    }
+
+    /// <summary>
+    /// Backward pass kernel for trilinear interpolation (double precision).
+    /// Scatters gradients from output back to grid using atomic operations.
+    /// </summary>
+    public static void TrilinearInterpolateBackwardDoubleImpl(
+        Index1D index,
+        ArrayView<double> gradOutput,  // [N, C] flattened - input gradients
+        ArrayView<double> positions,   // [N, 3] flattened - interpolation positions
+        ArrayView<double> gradGrid,    // [D, H, W, C] flattened - output gradients (accumulated atomically)
+        int depth, int height, int width, int channels)
+    {
+        int n = (int)index / channels;
+        int c = (int)index % channels;
+        int numPositions = (int)gradOutput.Length / channels;
+
+        if (n >= numPositions) return;
+
+        double grad = gradOutput[index];
+
+        // Get position (z, y, x) in [0, dim-1] range
+        double z = positions[n * 3 + 0] * (depth - 1);
+        double y = positions[n * 3 + 1] * (height - 1);
+        double x = positions[n * 3 + 2] * (width - 1);
+
+        // Clamp to valid range
+        z = XMath.Max(0.0, XMath.Min(depth - 1.001, z));
+        y = XMath.Max(0.0, XMath.Min(height - 1.001, y));
+        x = XMath.Max(0.0, XMath.Min(width - 1.001, x));
+
+        // Get integer indices and fractional parts
+        int z0 = (int)XMath.Floor(z);
+        int y0 = (int)XMath.Floor(y);
+        int x0 = (int)XMath.Floor(x);
+        int z1 = z0 + 1;
+        int y1 = y0 + 1;
+        int x1 = x0 + 1;
+
+        // Clamp upper indices
+        z1 = XMath.Min(z1, depth - 1);
+        y1 = XMath.Min(y1, height - 1);
+        x1 = XMath.Min(x1, width - 1);
+
+        double zd = z - z0;
+        double yd = y - y0;
+        double xd = x - x0;
+
+        // Compute weights for 8 corners (same as forward pass)
+        double w000 = (1 - zd) * (1 - yd) * (1 - xd);
+        double w001 = (1 - zd) * (1 - yd) * xd;
+        double w010 = (1 - zd) * yd * (1 - xd);
+        double w011 = (1 - zd) * yd * xd;
+        double w100 = zd * (1 - yd) * (1 - xd);
+        double w101 = zd * (1 - yd) * xd;
+        double w110 = zd * yd * (1 - xd);
+        double w111 = zd * yd * xd;
+
+        // Compute grid indices (grid layout is [D, H, W, C])
+        int stride_d = height * width * channels;
+        int stride_h = width * channels;
+        int stride_w = channels;
+
+        // Scatter gradient to 8 corners using atomic add
+        Atomic.Add(ref gradGrid[z0 * stride_d + y0 * stride_h + x0 * stride_w + c], w000 * grad);
+        Atomic.Add(ref gradGrid[z0 * stride_d + y0 * stride_h + x1 * stride_w + c], w001 * grad);
+        Atomic.Add(ref gradGrid[z0 * stride_d + y1 * stride_h + x0 * stride_w + c], w010 * grad);
+        Atomic.Add(ref gradGrid[z0 * stride_d + y1 * stride_h + x1 * stride_w + c], w011 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y0 * stride_h + x0 * stride_w + c], w100 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y0 * stride_h + x1 * stride_w + c], w101 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y1 * stride_h + x0 * stride_w + c], w110 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y1 * stride_h + x1 * stride_w + c], w111 * grad);
+    }
 }
 
 /// <summary>
@@ -1572,6 +1717,8 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _fracKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>? _trilinearInterpolateKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _trilinearInterpolateKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>? _trilinearInterpolateBackwardKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _trilinearInterpolateBackwardKernelDouble;
 
     // Production GPU kernels - Fill operations (Phase C: Production Ready)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, float>? _fillKernelFloat;
@@ -2841,7 +2988,13 @@ public class GpuEngine : IEngine, IDisposable
                 _trilinearInterpolateKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>(
                     TrilinearInterpolateKernels.TrilinearInterpolateDoubleImpl);
-                Console.WriteLine("[GpuEngine] Rounding kernels pre-compiled");
+                _trilinearInterpolateBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>(
+                    TrilinearInterpolateKernels.TrilinearInterpolateBackwardFloatImpl);
+                _trilinearInterpolateBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>(
+                    TrilinearInterpolateKernels.TrilinearInterpolateBackwardDoubleImpl);
+                Console.WriteLine("[GpuEngine] Rounding and trilinear interpolation kernels pre-compiled");
 
                 // Pre-compile production GPU kernels - Fill operations (Phase C: Production Ready)
                 _fillKernelFloat = _accelerator.LoadAutoGroupedKernel<
@@ -15039,8 +15192,129 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> TensorTrilinearInterpolateBackward<T>(Tensor<T> gradOutput, Tensor<T> grid, Tensor<T> positions)
     {
-        // Fallback to CPU implementation - GPU version can be added later for performance
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (grid == null) throw new ArgumentNullException(nameof(grid));
+        if (positions == null) throw new ArgumentNullException(nameof(positions));
+
+        // Grid should be [D, H, W, C], positions should be [N, 3], gradOutput should be [N, C]
+        if (grid.Rank != 4) throw new ArgumentException("Grid must be 4D [D, H, W, C]", nameof(grid));
+        if (positions.Rank != 2 || positions.Shape[1] != 3) throw new ArgumentException("Positions must be [N, 3]", nameof(positions));
+
+        int numPositions = positions.Shape[0];
+        int channels = grid.Shape[3];
+
+        if (gradOutput.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorTrilinearInterpolateBackward(gradOutput, grid, positions);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorTrilinearInterpolateBackwardGpu(
+                    (Tensor<float>)(object)gradOutput, (Tensor<float>)(object)grid, (Tensor<float>)(object)positions);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorTrilinearInterpolateBackwardGpuDouble(
+                    (Tensor<double>)(object)gradOutput, (Tensor<double>)(object)grid, (Tensor<double>)(object)positions);
+        }
+
         return _cpuFallback.TensorTrilinearInterpolateBackward(gradOutput, grid, positions);
+    }
+
+    private Tensor<float> TensorTrilinearInterpolateBackwardGpu(Tensor<float> gradOutput, Tensor<float> grid, Tensor<float> positions)
+    {
+        try
+        {
+            int depth = grid.Shape[0];
+            int height = grid.Shape[1];
+            int width = grid.Shape[2];
+            int channels = grid.Shape[3];
+            int numPositions = positions.Shape[0];
+
+            var gradGrid = new Tensor<float>(grid.Shape);
+            var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuPositions = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(positions.Length);
+            var gpuGradGrid = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradGrid.Length);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuPositions.View.BaseView.CopyFromCPU(positions.AsSpan());
+
+                // Zero-initialize the gradient grid
+                gpuGradGrid.View.BaseView.MemSetToZero();
+
+                lock (_gpuLock)
+                {
+                    (_trilinearInterpolateBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        gradOutput.Length, gpuGradOutput.View, gpuPositions.View, gpuGradGrid.View,
+                        depth, height, width, channels);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradGrid.View.BaseView.CopyToCPU(gradGrid.AsWritableSpan());
+                return gradGrid;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGradOutput);
+                _memoryPoolFloat.Return(gpuPositions);
+                _memoryPoolFloat.Return(gpuGradGrid);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorTrilinearInterpolateBackward(gradOutput, grid, positions);
+        }
+    }
+
+    private Tensor<double> TensorTrilinearInterpolateBackwardGpuDouble(Tensor<double> gradOutput, Tensor<double> grid, Tensor<double> positions)
+    {
+        try
+        {
+            int depth = grid.Shape[0];
+            int height = grid.Shape[1];
+            int width = grid.Shape[2];
+            int channels = grid.Shape[3];
+            int numPositions = positions.Shape[0];
+
+            var gradGrid = new Tensor<double>(grid.Shape);
+            var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuPositions = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(positions.Length);
+            var gpuGradGrid = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradGrid.Length);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuPositions.View.BaseView.CopyFromCPU(positions.AsSpan());
+
+                // Zero-initialize the gradient grid
+                gpuGradGrid.View.BaseView.MemSetToZero();
+
+                lock (_gpuLock)
+                {
+                    (_trilinearInterpolateBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        gradOutput.Length, gpuGradOutput.View, gpuPositions.View, gpuGradGrid.View,
+                        depth, height, width, channels);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradGrid.View.BaseView.CopyToCPU(gradGrid.AsWritableSpan());
+                return gradGrid;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGradOutput);
+                _memoryPoolDouble.Return(gpuPositions);
+                _memoryPoolDouble.Return(gpuGradGrid);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorTrilinearInterpolateBackward(gradOutput, grid, positions);
+        }
     }
 
     /// <inheritdoc/>
