@@ -622,10 +622,8 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     private Tensor<T> CreateLabelTensor(int batchSize, T value)
     {
         var tensor = new Tensor<T>(new int[] { batchSize, 1 });
-        for (int i = 0; i < batchSize; i++)
-        {
-            tensor[i, 0] = value;
-        }
+        // === Vectorized tensor fill using IEngine (Phase B: US-GPU-015) ===
+        Engine.TensorFill(tensor, value);
         return tensor;
     }
 

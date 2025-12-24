@@ -493,11 +493,8 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         var shape = new int[] { batchSize, 1 };
         var tensor = new Tensor<T>(shape);
 
-        // Fill with the specified value
-        for (int i = 0; i < batchSize; i++)
-        {
-            tensor[i, 0] = value;
-        }
+        // === Vectorized tensor fill using IEngine (Phase B: US-GPU-015) ===
+        Engine.TensorFill(tensor, value);
 
         return tensor;
     }
