@@ -53,13 +53,13 @@ GitHub Issue: #443
 | Task | Status | Commit |
 |------|--------|--------|
 | 2A: IDataSampler interface + Random/Stratified/Weighted | COMPLETE | 9ff9833 |
-| 2B: Curriculum/Importance/Active learning | IN PROGRESS | - |
+| 2B: Curriculum/Importance/Active learning | COMPLETE | f5bea56 |
 
 ### Phase 3: Async and Parallel Support
 | Task | Status | Commit |
 |------|--------|--------|
 | 3A: Async prefetching with Channel | COMPLETE | (included in 1A) |
-| 3B: Parallel worker support | PENDING | - |
+| 3B: Parallel worker support | COMPLETE | 908b09d |
 
 ### Phase 4: Advanced Features
 | Task | Status | Commit |
@@ -101,6 +101,11 @@ GitHub Issue: #443
 - `src/Data/Sampling/RandomSampler.cs` - Random, Sequential, Subset samplers
 - `src/Data/Sampling/StratifiedSampler.cs` - Stratified and StratifiedBatch samplers
 - `src/Data/Sampling/WeightedSampler.cs` - Weighted sampling with class balancing
+- `src/Data/Sampling/CurriculumSampler.cs` - Curriculum and Self-paced learning
+- `src/Data/Sampling/ImportanceSampler.cs` - Importance and Active learning samplers
+
+### Parallel Loading
+- `src/Data/Loaders/ParallelBatchLoader.cs` - Multi-worker batch loading with prefetch
 
 ## API Design
 
