@@ -408,7 +408,7 @@ public interface IEngine
     /// </summary>
     /// <typeparam name="T">The numeric type of the vector.</typeparam>
     /// <param name="vector">The input vector.</param>
-    /// <returns>The L2 norm: sqrt(sum(x[i]Ãƒâ€šÃ‚Â²)).</returns>
+    /// <returns>The L2 norm: sqrt(sum(x[i]ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â²)).</returns>
     /// <remarks>
     /// <para>
     /// L2 norm is the Euclidean length of the vector.
@@ -427,7 +427,7 @@ public interface IEngine
     /// <typeparam name="T">The numeric type of the vectors.</typeparam>
     /// <param name="a">The first vector.</param>
     /// <param name="b">The second vector.</param>
-    /// <returns>The Euclidean distance: sqrt(sum((a[i] - b[i])Ãƒâ€šÃ‚Â²)).</returns>
+    /// <returns>The Euclidean distance: sqrt(sum((a[i] - b[i])ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â²)).</returns>
     /// <exception cref="ArgumentException">Thrown when vectors have different lengths.</exception>
     /// <remarks>
     /// <para>
@@ -922,12 +922,12 @@ public interface IEngine
     /// </summary>
     /// <typeparam name="T">The numeric type of the vector.</typeparam>
     /// <param name="vector">The input vector (values in range [-1, 1]).</param>
-    /// <returns>A new vector containing arcsin values in range [-π/2, π/2].</returns>
+    /// <returns>A new vector containing arcsin values in range [-Ãâ‚¬/2, Ãâ‚¬/2].</returns>
     /// <remarks>
     /// <para>
     /// Inverse sine (arcsin) is the inverse of the sine function.
     /// Input domain: [-1, 1]
-    /// Output range: [-π/2, π/2] radians
+    /// Output range: [-Ãâ‚¬/2, Ãâ‚¬/2] radians
     /// </para>
     /// </remarks>
     Vector<T> Asin<T>(Vector<T> vector);
@@ -953,12 +953,12 @@ public interface IEngine
     /// </summary>
     /// <typeparam name="T">The numeric type of the vector.</typeparam>
     /// <param name="vector">The input vector (values in range [-1, 1]).</param>
-    /// <returns>A new vector containing arccos values in range [0, π].</returns>
+    /// <returns>A new vector containing arccos values in range [0, Ãâ‚¬].</returns>
     /// <remarks>
     /// <para>
     /// Inverse cosine (arccos) is the inverse of the cosine function.
     /// Input domain: [-1, 1]
-    /// Output range: [0, π] radians
+    /// Output range: [0, Ãâ‚¬] radians
     /// </para>
     /// </remarks>
     Vector<T> Acos<T>(Vector<T> vector);
@@ -984,12 +984,12 @@ public interface IEngine
     /// </summary>
     /// <typeparam name="T">The numeric type of the vector.</typeparam>
     /// <param name="vector">The input vector.</param>
-    /// <returns>A new vector containing arctan values in range (-π/2, π/2).</returns>
+    /// <returns>A new vector containing arctan values in range (-Ãâ‚¬/2, Ãâ‚¬/2).</returns>
     /// <remarks>
     /// <para>
     /// Inverse tangent (arctan) is the inverse of the tangent function.
     /// Input domain: (-Inf, Inf)
-    /// Output range: (-π/2, π/2) radians
+    /// Output range: (-Ãâ‚¬/2, Ãâ‚¬/2) radians
     /// </para>
     /// </remarks>
     Vector<T> Atan<T>(Vector<T> vector);
@@ -1272,7 +1272,7 @@ public interface IEngine
     /// <para>
     /// Tanh activation function: tanh(x) = (e^x - e^-x) / (e^x + e^-x).
     /// Commonly used in hidden layers of neural networks.
-    /// CPU implementation uses TensorPrimitives for SIMD optimization (3-6ÃƒÆ’Ã¢â‚¬â€ speedup for float).
+    /// CPU implementation uses TensorPrimitives for SIMD optimization (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float).
     /// GPU implementation uses ILGPU kernels.
     /// </para>
     /// </remarks>
@@ -1286,9 +1286,9 @@ public interface IEngine
     /// <returns>A new vector containing sigmoid values between 0 and 1.</returns>
     /// <remarks>
     /// <para>
-    /// Sigmoid activation function: ÃƒÂÃ†â€™(x) = 1 / (1 + e^-x).
+    /// Sigmoid activation function: ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢(x) = 1 / (1 + e^-x).
     /// Commonly used for binary classification and gate functions in LSTMs/GRUs.
-    /// CPU implementation uses TensorPrimitives for SIMD optimization (3-6ÃƒÆ’Ã¢â‚¬â€ speedup for float).
+    /// CPU implementation uses TensorPrimitives for SIMD optimization (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float).
     /// GPU implementation uses ILGPU kernels.
     /// </para>
     /// </remarks>
@@ -1363,9 +1363,9 @@ public interface IEngine
     /// <returns>A new vector with GELU activation applied.</returns>
     /// <remarks>
     /// <para>
-    /// GELU activation: x * ÃƒÅ½Ã‚Â¦(x) where ÃƒÅ½Ã‚Â¦ is the standard Gaussian cumulative distribution.
+    /// GELU activation: x * ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â½ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦(x) where ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â½ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ is the standard Gaussian cumulative distribution.
     /// Commonly used in transformers (BERT, GPT) and modern architectures.
-    /// Approximation: 0.5 * x * (1 + tanh(ÃƒÂ¢Ã‹â€ Ã…Â¡(2/ÃƒÂÃ¢â€šÂ¬) * (x + 0.044715 * xÃƒâ€šÃ‚Â³)))
+    /// Approximation: 0.5 * x * (1 + tanh(ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¹ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡(2/ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬) * (x + 0.044715 * xÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³)))
     /// </para>
     /// </remarks>
     Vector<T> GELU<T>(Vector<T> vector);
@@ -1448,7 +1448,7 @@ public interface IEngine
     /// <remarks>
     /// <para><b>US-GPU-007: GEMM</b></para>
     /// <para>
-    /// Matrix multiplication is O(nÃƒâ€šÃ‚Â³) - highly computationally intensive.
+    /// Matrix multiplication is O(nÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³) - highly computationally intensive.
     /// GPU acceleration provides 100-1000x speedup for large matrices.
     /// Essential for dense neural network layers.
     /// </para>
@@ -1570,7 +1570,7 @@ public interface IEngine
     /// <typeparam name="T">The numeric type of vector elements.</typeparam>
     /// <param name="a">The first vector (length M).</param>
     /// <param name="b">The second vector (length N).</param>
-    /// <returns>An MÃƒÆ’Ã¢â‚¬â€N matrix containing the outer product.</returns>
+    /// <returns>An MÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂN matrix containing the outer product.</returns>
     /// <remarks>
     /// GPU-accelerated outer product for SVD and other decompositions.
     /// </remarks>
@@ -1642,9 +1642,9 @@ public interface IEngine
     /// Performs batched matrix multiplication on 3D tensors.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="a">The first tensor [B, M, K] - B batches of MÃƒÆ’Ã¢â‚¬â€K matrices.</param>
-    /// <param name="b">The second tensor [B, K, N] - B batches of KÃƒÆ’Ã¢â‚¬â€N matrices.</param>
-    /// <returns>The result tensor [B, M, N] - B batches of MÃƒÆ’Ã¢â‚¬â€N matrices.</returns>
+    /// <param name="a">The first tensor [B, M, K] - B batches of MÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂK matrices.</param>
+    /// <param name="b">The second tensor [B, K, N] - B batches of KÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂN matrices.</param>
+    /// <returns>The result tensor [B, M, N] - B batches of MÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂN matrices.</returns>
     /// <exception cref="ArgumentException">Thrown when tensor dimensions are incompatible.</exception>
     /// <remarks>
     /// <para><b>US-GPU-013: BatchMatMul</b></para>
@@ -2878,7 +2878,7 @@ public interface IEngine
     /// <remarks>
     /// <para>
     /// TaylorSoftmax uses Taylor series approximation of exp(x):
-    /// exp(x) ≈ 1 + x + x²/2! + x³/3! + ... + xⁿ/n!
+    /// exp(x) Ã¢â€°Ë† 1 + x + xÃ‚Â²/2! + xÃ‚Â³/3! + ... + xÃ¢ÂÂ¿/n!
     /// Then normalizes like standard softmax.
     /// More computationally efficient than standard softmax for some hardware.
     /// </para>
@@ -2932,7 +2932,7 @@ public interface IEngine
     /// <returns>A tensor with Spherical-Softmax applied.</returns>
     /// <remarks>
     /// <para>
-    /// SphericalSoftmax = softmax(x / ||x||₂)
+    /// SphericalSoftmax = softmax(x / ||x||Ã¢â€šâ€š)
     /// First L2-normalizes the input, then applies softmax.
     /// This improves numerical stability for inputs with varying magnitudes.
     /// </para>
@@ -3280,7 +3280,7 @@ public interface IEngine
     /// <remarks>
     /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
     /// <para>
-    /// Computes Σ(x_i²) for all elements in the tensor. Used in:
+    /// Computes ÃŽÂ£(x_iÃ‚Â²) for all elements in the tensor. Used in:
     /// - L2 regularization loss computation
     /// - Frobenius norm calculation (sqrt of sum of squares)
     /// - Gradient magnitude computation
@@ -3343,14 +3343,14 @@ public interface IEngine
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
     /// <param name="input">The input tensor with shape [batch, features].</param>
     /// <param name="centers">The RBF center positions with shape [numCenters, features].</param>
-    /// <param name="epsilons">The epsilon values (1/(2*width²)) for each center with shape [numCenters].</param>
-    /// <returns>The RBF kernel output with shape [batch, numCenters], computing exp(-epsilon * ||x - center||²).</returns>
+    /// <param name="epsilons">The epsilon values (1/(2*widthÃ‚Â²)) for each center with shape [numCenters].</param>
+    /// <returns>The RBF kernel output with shape [batch, numCenters], computing exp(-epsilon * ||x - center||Ã‚Â²).</returns>
     /// <remarks>
     /// <para>
-    /// Computes Gaussian RBF: K(x, c) = exp(-epsilon * ||x - c||²) where:
+    /// Computes Gaussian RBF: K(x, c) = exp(-epsilon * ||x - c||Ã‚Â²) where:
     /// - x is an input sample
     /// - c is a center
-    /// - epsilon = 1/(2*width²) controls the spread
+    /// - epsilon = 1/(2*widthÃ‚Â²) controls the spread
     /// </para>
     /// <para><b>For Beginners:</b> RBF kernels measure similarity between points.
     /// Points close to a center produce values near 1, distant points produce values near 0.
@@ -4201,7 +4201,7 @@ public interface IEngine
 
     /// <summary>
     /// Computes positional encoding for Neural Radiance Fields.
-    /// Applies sin/cos frequency encoding: [sin(2^0*π*x), cos(2^0*π*x), ..., sin(2^(L-1)*π*x), cos(2^(L-1)*π*x)]
+    /// Applies sin/cos frequency encoding: [sin(2^0*Ãâ‚¬*x), cos(2^0*Ãâ‚¬*x), ..., sin(2^(L-1)*Ãâ‚¬*x), cos(2^(L-1)*Ãâ‚¬*x)]
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
     /// <param name="positions">Input positions tensor of shape [N, D] where D is typically 3 (x,y,z).</param>
@@ -4235,7 +4235,7 @@ public interface IEngine
 
     /// <summary>
     /// Performs volume rendering along rays using alpha compositing.
-    /// Computes: C(r) = Σ T_i * α_i * c_i where T_i = Π(1 - α_j) for j &lt; i
+    /// Computes: C(r) = ÃŽÂ£ T_i * ÃŽÂ±_i * c_i where T_i = ÃŽÂ (1 - ÃŽÂ±_j) for j &lt; i
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
     /// <param name="rgbSamples">RGB color samples of shape [numRays, numSamples, 3].</param>
@@ -4335,7 +4335,7 @@ public interface IEngine
     /// <param name="imageWidth">Target image width.</param>
     /// <param name="imageHeight">Target image height.</param>
     /// <param name="means2D">Output: Projected 2D means [N, 2].</param>
-    /// <param name="covariances2D">Output: Projected 2D covariances [N, 3] (a, b, c for ax² + 2bxy + cy²).</param>
+    /// <param name="covariances2D">Output: Projected 2D covariances [N, 3] (a, b, c for axÃ‚Â² + 2bxy + cyÃ‚Â²).</param>
     /// <param name="depths">Output: Depth values for sorting [N].</param>
     /// <param name="visible">Output: Visibility mask (in frustum and valid) [N].</param>
     void ProjectGaussians3DTo2D<T>(
@@ -4409,7 +4409,7 @@ public interface IEngine
     /// Evaluates spherical harmonics for view-dependent color in Gaussian Splatting.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="shCoefficients">Spherical harmonics coefficients [N, (degree+1)², C] where C=3 for RGB.</param>
+    /// <param name="shCoefficients">Spherical harmonics coefficients [N, (degree+1)Ã‚Â², C] where C=3 for RGB.</param>
     /// <param name="viewDirections">Normalized view directions [N, 3] or [1, 3] for broadcast.</param>
     /// <param name="degree">SH degree (0-3, where 0=constant, 3=full view dependence).</param>
     /// <returns>Evaluated colors [N, C].</returns>
@@ -4495,7 +4495,7 @@ public interface IEngine
     /// </para>
     /// <para>
     /// Reference: "Instant Neural Graphics Primitives with a Multiresolution Hash Encoding"
-    /// by Müller et al., ACM Transactions on Graphics 2022
+    /// by MÃƒÂ¼ller et al., ACM Transactions on Graphics 2022
     /// </para>
     /// </remarks>
     Tensor<T> MultiresolutionHashEncoding<T>(
@@ -4594,9 +4594,9 @@ public interface IEngine
     /// </para>
     /// <para>
     /// <b>Mathematical Formulation:</b>
-    /// For each vertex v with spiral neighbors S(v) = [n₁, n₂, ..., nₖ]:
+    /// For each vertex v with spiral neighbors S(v) = [nÃ¢â€šÂ, nÃ¢â€šâ€š, ..., nÃ¢â€šâ€“]:
     /// 
-    /// gathered[v] = concat(features[n₁], features[n₂], ..., features[nₖ])
+    /// gathered[v] = concat(features[nÃ¢â€šÂ], features[nÃ¢â€šâ€š], ..., features[nÃ¢â€šâ€“])
     /// output[v] = weights @ gathered[v] + bias
     /// 
     /// The spiral ordering ensures that the convolution is invariant to mesh parameterization.
@@ -4752,6 +4752,110 @@ public interface IEngine
         Tensor<T> vertices,
         Tensor<int> faces,
         int spiralLength);
+
+    #endregion
+
+    #region Advanced Vectorization Operations
+
+    /// <summary>
+    /// Computes pairwise squared Euclidean distances between two sets of points.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="x">First set of points [N, D] where N is number of points and D is dimensionality.</param>
+    /// <param name="y">Second set of points [M, D] where M is number of points and D is dimensionality.</param>
+    /// <returns>Distance matrix [N, M] where element [i,j] is squared distance between x[i] and y[j].</returns>
+    /// <remarks>
+    /// Uses the identity: ||x - y||^2 = ||x||^2 + ||y||^2 - 2 * x.y for efficiency.
+    /// This avoids the O(N*M*D) explicit subtraction and enables GPU parallelization.
+    /// </remarks>
+    Tensor<T> PairwiseDistanceSquared<T>(Tensor<T> x, Tensor<T> y);
+
+    /// <summary>
+    /// Computes pairwise Euclidean distances between two sets of points.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="x">First set of points [N, D].</param>
+    /// <param name="y">Second set of points [M, D].</param>
+    /// <returns>Distance matrix [N, M] where element [i,j] is Euclidean distance between x[i] and y[j].</returns>
+    Tensor<T> PairwiseDistance<T>(Tensor<T> x, Tensor<T> y);
+
+    /// <summary>
+    /// Returns the k largest or smallest elements along an axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor.</param>
+    /// <param name="k">Number of top elements to return.</param>
+    /// <param name="axis">Axis along which to find top-k. Default -1 means last axis.</param>
+    /// <param name="largest">If true, return k largest elements; if false, return k smallest.</param>
+    /// <returns>Tuple of (values, indices) where values contains the top-k elements and indices their positions.</returns>
+    (Tensor<T> values, Tensor<int> indices) TopK<T>(Tensor<T> input, int k, int axis = -1, bool largest = true);
+
+    /// <summary>
+    /// Returns indices that would sort the tensor along an axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor.</param>
+    /// <param name="axis">Axis along which to sort. Default -1 means last axis.</param>
+    /// <param name="descending">If true, sort in descending order.</param>
+    /// <returns>Tensor of indices that would sort the input.</returns>
+    Tensor<int> ArgSort<T>(Tensor<T> input, int axis = -1, bool descending = false);
+
+/// <summary>
+    /// Gathers elements from input tensor along an axis using indices.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Source tensor to gather from.</param>
+    /// <param name="indices">Indices specifying which elements to gather.</param>
+    /// <param name="axis">Axis along which to gather.</param>
+    /// <returns>Tensor of gathered elements.</returns>
+    Tensor<T> Gather<T>(Tensor<T> input, Tensor<int> indices, int axis);
+
+    /// <summary>
+    /// Scatters values into a new tensor at positions specified by indices.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor providing the shape and initial values.</param>
+    /// <param name="indices">Indices where to scatter values.</param>
+    /// <param name="values">Values to scatter.</param>
+    /// <param name="axis">Axis along which to scatter.</param>
+    /// <returns>New tensor with scattered values.</returns>
+    Tensor<T> Scatter<T>(Tensor<T> input, Tensor<int> indices, Tensor<T> values, int axis);
+
+    /// <summary>
+    /// Scatters values by adding them to existing values at positions specified by indices.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor providing the shape and initial values.</param>
+    /// <param name="indices">Indices where to add values.</param>
+    /// <param name="values">Values to add at specified indices.</param>
+    /// <param name="axis">Axis along which to scatter-add.</param>
+    /// <returns>New tensor with values added at specified positions.</returns>
+    Tensor<T> ScatterAdd<T>(Tensor<T> input, Tensor<int> indices, Tensor<T> values, int axis);
+
+    /// <summary>
+    /// Computes the hyperbolic cosine of each element in the tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">Input tensor.</param>
+    /// <returns>Tensor with hyperbolic cosine applied element-wise.</returns>
+    Tensor<T> TensorCosh<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the hyperbolic sine of each element in the tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">Input tensor.</param>
+    /// <returns>Tensor with hyperbolic sine applied element-wise.</returns>
+    Tensor<T> TensorSinh<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the outer product of two 1D tensors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">First 1D tensor of length N.</param>
+    /// <param name="b">Second 1D tensor of length M.</param>
+    /// <returns>2D tensor [N, M] where result[i,j] = a[i] * b[j].</returns>
+    Tensor<T> TensorOuter<T>(Tensor<T> a, Tensor<T> b);
 
     #endregion
 }

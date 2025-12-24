@@ -30260,6 +30260,396 @@ public class GpuEngine : IEngine, IDisposable
         return _cpuFallback.GenerateSpiralIndices(vertices, faces, spiralLength);
     }
 
+    
+    #region Advanced Vectorization Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> PairwiseDistanceSquared<T>(Tensor<T> x, Tensor<T> y)
+    {
+        if (x.Shape.Length != 2 || y.Shape.Length != 2)
+            throw new ArgumentException("Input tensors must be 2D [N, D]");
+        if (x.Shape[1] != y.Shape[1])
+            throw new ArgumentException("Input tensors must have the same dimensionality");
+
+        int n = x.Shape[0];
+        int m = y.Shape[0];
+        int d = x.Shape[1];
+
+        var result = new Tensor<T>([n, m]);
+
+        if (typeof(T) == typeof(float))
+        {
+            var xf = x as Tensor<float>;
+            var yf = y as Tensor<float>;
+            var rf = result as Tensor<float>;
+
+            using var xBuffer = _accelerator!.Allocate1D<float>(n * d);
+            using var yBuffer = _accelerator!.Allocate1D<float>(m * d);
+            using var resultBuffer = _accelerator!.Allocate1D<float>(n * m);
+
+            xBuffer.CopyFromCPU(xf!.Data);
+            yBuffer.CopyFromCPU(yf!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>,
+                ArrayView1D<float, Stride1D.Dense>, int, int, int>(PairwiseDistanceSquaredKernelFloat);
+
+            kernel(n * m, xBuffer.View, yBuffer.View, resultBuffer.View, n, m, d);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(rf!.Data);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            var xd = x as Tensor<double>;
+            var yd = y as Tensor<double>;
+            var rd = result as Tensor<double>;
+
+            using var xBuffer = _accelerator!.Allocate1D<double>(n * d);
+            using var yBuffer = _accelerator!.Allocate1D<double>(m * d);
+            using var resultBuffer = _accelerator!.Allocate1D<double>(n * m);
+
+            xBuffer.CopyFromCPU(xd!.Data);
+            yBuffer.CopyFromCPU(yd!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>,
+                ArrayView1D<double, Stride1D.Dense>, int, int, int>(PairwiseDistanceSquaredKernelDouble);
+
+            kernel(n * m, xBuffer.View, yBuffer.View, resultBuffer.View, n, m, d);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(rd!.Data);
+        }
+        else
+        {
+            return _cpuFallback.PairwiseDistanceSquared(x, y);
+        }
+
+        return result;
+    }
+
+    private static void PairwiseDistanceSquaredKernelFloat(
+        Index1D index,
+        ArrayView1D<float, Stride1D.Dense> x,
+        ArrayView1D<float, Stride1D.Dense> y,
+        ArrayView1D<float, Stride1D.Dense> result,
+        int n, int m, int d)
+    {
+        int i = index / m;
+        int j = index % m;
+
+        float dist = 0f;
+        for (int k = 0; k < d; k++)
+        {
+            float diff = x[i * d + k] - y[j * d + k];
+            dist += diff * diff;
+        }
+        result[index] = dist;
+    }
+
+    private static void PairwiseDistanceSquaredKernelDouble(
+        Index1D index,
+        ArrayView1D<double, Stride1D.Dense> x,
+        ArrayView1D<double, Stride1D.Dense> y,
+        ArrayView1D<double, Stride1D.Dense> result,
+        int n, int m, int d)
+    {
+        int i = index / m;
+        int j = index % m;
+
+        double dist = 0.0;
+        for (int k = 0; k < d; k++)
+        {
+            double diff = x[i * d + k] - y[j * d + k];
+            dist += diff * diff;
+        }
+        result[index] = dist;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> PairwiseDistance<T>(Tensor<T> x, Tensor<T> y)
+    {
+        var distSq = PairwiseDistanceSquared(x, y);
+        return TensorSqrt(distSq);
+    }
+
+    /// <inheritdoc/>
+    public (Tensor<T> values, Tensor<int> indices) TopK<T>(Tensor<T> input, int k, int axis = -1, bool largest = true)
+    {
+        // TopK involves sorting which is complex on GPU
+        // For now, use CPU fallback. GPU partial sort can be added later.
+        return _cpuFallback.TopK(input, k, axis, largest);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<int> ArgSort<T>(Tensor<T> input, int axis = -1, bool descending = false)
+    {
+        // ArgSort involves sorting which is complex on GPU
+        // For now, use CPU fallback. GPU radix sort can be added later.
+        return _cpuFallback.ArgSort(input, axis, descending);
+    }
+
+/// <inheritdoc/>
+    public Tensor<T> Gather<T>(Tensor<T> input, Tensor<int> indices, int axis)
+    {
+        // Gather is memory-bound and CPU implementation is efficient
+        // GPU version would require complex index calculations
+        return _cpuFallback.Gather(input, indices, axis);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Scatter<T>(Tensor<T> input, Tensor<int> indices, Tensor<T> values, int axis)
+    {
+        // Scatter has potential race conditions on GPU
+        // CPU implementation is safer
+        return _cpuFallback.Scatter(input, indices, values, axis);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ScatterAdd<T>(Tensor<T> input, Tensor<int> indices, Tensor<T> values, int axis)
+    {
+        // ScatterAdd has potential race conditions on GPU (atomic operations needed)
+        // CPU implementation is safer
+        return _cpuFallback.ScatterAdd(input, indices, values, axis);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorCosh<T>(Tensor<T> tensor)
+    {
+        var result = new Tensor<T>(tensor.Shape);
+        int length = tensor.Length;
+
+        if (typeof(T) == typeof(float))
+        {
+            var tf = tensor as Tensor<float>;
+            var rf = result as Tensor<float>;
+
+            using var inputBuffer = _accelerator!.Allocate1D<float>(length);
+            using var outputBuffer = _accelerator!.Allocate1D<float>(length);
+
+            inputBuffer.CopyFromCPU(tf!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>>(CoshKernelFloat);
+
+            kernel(length, inputBuffer.View, outputBuffer.View);
+            _accelerator!.Synchronize();
+
+            outputBuffer.CopyToCPU(rf!.Data);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            var td = tensor as Tensor<double>;
+            var rd = result as Tensor<double>;
+
+            using var inputBuffer = _accelerator!.Allocate1D<double>(length);
+            using var outputBuffer = _accelerator!.Allocate1D<double>(length);
+
+            inputBuffer.CopyFromCPU(td!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>>(CoshKernelDouble);
+
+            kernel(length, inputBuffer.View, outputBuffer.View);
+            _accelerator!.Synchronize();
+
+            outputBuffer.CopyToCPU(rd!.Data);
+        }
+        else
+        {
+            return _cpuFallback.TensorCosh(tensor);
+        }
+
+        return result;
+    }
+
+    private static void CoshKernelFloat(
+        Index1D index,
+        ArrayView1D<float, Stride1D.Dense> input,
+        ArrayView1D<float, Stride1D.Dense> output)
+    {
+        float x = input[index];
+        // cosh(x) = (e^x + e^-x) / 2
+        float expX = XMath.Exp(x);
+        float expNegX = XMath.Exp(-x);
+        output[index] = (expX + expNegX) * 0.5f;
+    }
+
+    private static void CoshKernelDouble(
+        Index1D index,
+        ArrayView1D<double, Stride1D.Dense> input,
+        ArrayView1D<double, Stride1D.Dense> output)
+    {
+        double x = input[index];
+        // cosh(x) = (e^x + e^-x) / 2
+        double expX = XMath.Exp(x);
+        double expNegX = XMath.Exp(-x);
+        output[index] = (expX + expNegX) * 0.5;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSinh<T>(Tensor<T> tensor)
+    {
+        var result = new Tensor<T>(tensor.Shape);
+        int length = tensor.Length;
+
+        if (typeof(T) == typeof(float))
+        {
+            var tf = tensor as Tensor<float>;
+            var rf = result as Tensor<float>;
+
+            using var inputBuffer = _accelerator!.Allocate1D<float>(length);
+            using var outputBuffer = _accelerator!.Allocate1D<float>(length);
+
+            inputBuffer.CopyFromCPU(tf!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>>(SinhKernelFloat);
+
+            kernel(length, inputBuffer.View, outputBuffer.View);
+            _accelerator!.Synchronize();
+
+            outputBuffer.CopyToCPU(rf!.Data);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            var td = tensor as Tensor<double>;
+            var rd = result as Tensor<double>;
+
+            using var inputBuffer = _accelerator!.Allocate1D<double>(length);
+            using var outputBuffer = _accelerator!.Allocate1D<double>(length);
+
+            inputBuffer.CopyFromCPU(td!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>>(SinhKernelDouble);
+
+            kernel(length, inputBuffer.View, outputBuffer.View);
+            _accelerator!.Synchronize();
+
+            outputBuffer.CopyToCPU(rd!.Data);
+        }
+        else
+        {
+            return _cpuFallback.TensorSinh(tensor);
+        }
+
+        return result;
+    }
+
+    private static void SinhKernelFloat(
+        Index1D index,
+        ArrayView1D<float, Stride1D.Dense> input,
+        ArrayView1D<float, Stride1D.Dense> output)
+    {
+        float x = input[index];
+        // sinh(x) = (e^x - e^-x) / 2
+        float expX = XMath.Exp(x);
+        float expNegX = XMath.Exp(-x);
+        output[index] = (expX - expNegX) * 0.5f;
+    }
+
+    private static void SinhKernelDouble(
+        Index1D index,
+        ArrayView1D<double, Stride1D.Dense> input,
+        ArrayView1D<double, Stride1D.Dense> output)
+    {
+        double x = input[index];
+        // sinh(x) = (e^x - e^-x) / 2
+        double expX = XMath.Exp(x);
+        double expNegX = XMath.Exp(-x);
+        output[index] = (expX - expNegX) * 0.5;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorOuter<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Shape.Length != 1 || b.Shape.Length != 1)
+            throw new ArgumentException("Both inputs must be 1D tensors");
+
+        int n = a.Shape[0];
+        int m = b.Shape[0];
+        var result = new Tensor<T>([n, m]);
+
+        if (typeof(T) == typeof(float))
+        {
+            var af = a as Tensor<float>;
+            var bf = b as Tensor<float>;
+            var rf = result as Tensor<float>;
+
+            using var aBuffer = _accelerator!.Allocate1D<float>(n);
+            using var bBuffer = _accelerator!.Allocate1D<float>(m);
+            using var resultBuffer = _accelerator!.Allocate1D<float>(n * m);
+
+            aBuffer.CopyFromCPU(af!.Data);
+            bBuffer.CopyFromCPU(bf!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>,
+                ArrayView1D<float, Stride1D.Dense>, int, int>(OuterKernelFloat);
+
+            kernel(n * m, aBuffer.View, bBuffer.View, resultBuffer.View, n, m);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(rf!.Data);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            var ad = a as Tensor<double>;
+            var bd = b as Tensor<double>;
+            var rd = result as Tensor<double>;
+
+            using var aBuffer = _accelerator!.Allocate1D<double>(n);
+            using var bBuffer = _accelerator!.Allocate1D<double>(m);
+            using var resultBuffer = _accelerator!.Allocate1D<double>(n * m);
+
+            aBuffer.CopyFromCPU(ad!.Data);
+            bBuffer.CopyFromCPU(bd!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>,
+                ArrayView1D<double, Stride1D.Dense>, int, int>(OuterKernelDouble);
+
+            kernel(n * m, aBuffer.View, bBuffer.View, resultBuffer.View, n, m);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(rd!.Data);
+        }
+        else
+        {
+            return _cpuFallback.TensorOuter(a, b);
+        }
+
+        return result;
+    }
+
+    private static void OuterKernelFloat(
+        Index1D index,
+        ArrayView1D<float, Stride1D.Dense> a,
+        ArrayView1D<float, Stride1D.Dense> b,
+        ArrayView1D<float, Stride1D.Dense> result,
+        int n, int m)
+    {
+        int i = index / m;
+        int j = index % m;
+        result[index] = a[i] * b[j];
+    }
+
+    private static void OuterKernelDouble(
+        Index1D index,
+        ArrayView1D<double, Stride1D.Dense> a,
+        ArrayView1D<double, Stride1D.Dense> b,
+        ArrayView1D<double, Stride1D.Dense> result,
+        int n, int m)
+    {
+        int i = index / m;
+        int j = index % m;
+        result[index] = a[i] * b[j];
+    }
+
     #endregion
+
+#endregion
 }
 #endif

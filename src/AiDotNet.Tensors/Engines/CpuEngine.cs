@@ -49,7 +49,7 @@ public class CpuEngine : IEngine
             throw new ArgumentException($"Vector lengths must match. Got {a.Length} and {b.Length}");
         }
 
-        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã¢â‚¬â€ speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
         return TensorPrimitivesHelper<T>.Add(a, b);
     }
 
@@ -63,7 +63,7 @@ public class CpuEngine : IEngine
             throw new ArgumentException($"Vector lengths must match. Got {a.Length} and {b.Length}");
         }
 
-        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã¢â‚¬â€ speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
         return TensorPrimitivesHelper<T>.Subtract(a, b);
     }
 
@@ -77,7 +77,7 @@ public class CpuEngine : IEngine
             throw new ArgumentException($"Vector lengths must match. Got {a.Length} and {b.Length}");
         }
 
-        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã¢â‚¬â€ speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
         return TensorPrimitivesHelper<T>.Multiply(a, b);
     }
 
@@ -112,7 +112,7 @@ public class CpuEngine : IEngine
             }
         }
 
-        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã¢â‚¬â€ speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
         return TensorPrimitivesHelper<T>.Divide(a, b);
     }
 
@@ -139,7 +139,7 @@ public class CpuEngine : IEngine
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã¢â‚¬â€ speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
         return TensorPrimitivesHelper<T>.Sqrt(vector);
     }
 
@@ -222,7 +222,7 @@ public class CpuEngine : IEngine
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã¢â‚¬â€ speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
         return TensorPrimitivesHelper<T>.Exp(vector);
     }
 
@@ -231,7 +231,7 @@ public class CpuEngine : IEngine
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã¢â‚¬â€ speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
         return TensorPrimitivesHelper<T>.Log(vector);
     }
 
@@ -392,7 +392,7 @@ public class CpuEngine : IEngine
         if (vector == null) throw new ArgumentNullException(nameof(vector));
         if (vector.Length == 0) throw new ArgumentException("Cannot compute softmax of empty vector.");
 
-        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã¢â‚¬â€ speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
         return TensorPrimitivesHelper<T>.Softmax(vector);
     }
 
@@ -404,7 +404,7 @@ public class CpuEngine : IEngine
         if (a.Length != b.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        // Use SIMD-optimized TensorPrimitivesHelper (10-15ÃƒÆ’Ã¢â‚¬â€ speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (10-15ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
         return TensorPrimitivesHelper<T>.CosineSimilarity(a, b);
     }
 
@@ -413,7 +413,7 @@ public class CpuEngine : IEngine
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã¢â‚¬â€ speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
         return TensorPrimitivesHelper<T>.Log2(vector);
     }
 
@@ -1411,7 +1411,7 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Matrix<T>(a.Rows, b.Columns);
 
-        // Standard O(nÃƒâ€šÃ‚Â³) matrix multiplication
+        // Standard O(nÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³) matrix multiplication
         for (int i = 0; i < a.Rows; i++)
         {
             for (int j = 0; j < b.Columns; j++)
@@ -1552,7 +1552,7 @@ public class CpuEngine : IEngine
         for (int i = 0; i < matrix.Rows; i++)
         {
             var row = matrix.GetRow(i);
-            T rowSumSquares = DotProduct(row, row); // row Ãƒâ€šÃ‚Â· row = sum of squares for row
+            T rowSumSquares = DotProduct(row, row); // row ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· row = sum of squares for row
             sum = numOps.Add(sum, rowSumSquares);
         }
 
@@ -3234,7 +3234,7 @@ public class CpuEngine : IEngine
         if (vector == null)
             throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized Tanh (3-6ÃƒÆ’Ã¢â‚¬â€ speedup for float)
+        // Use SIMD-optimized Tanh (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
         return TensorPrimitivesHelper<T>.Tanh(vector);
     }
 
@@ -3243,7 +3243,7 @@ public class CpuEngine : IEngine
         if (vector == null)
             throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized Sigmoid (3-6ÃƒÆ’Ã¢â‚¬â€ speedup for float)
+        // Use SIMD-optimized Sigmoid (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
         return TensorPrimitivesHelper<T>.Sigmoid(vector);
     }
 
@@ -7920,7 +7920,7 @@ public class CpuEngine : IEngine
         var centersData = centers.ToArray();
         var epsilonsData = epsilons.ToArray();
 
-        // Compute exp(-epsilon * ||x - center||²) for each (sample, center) pair
+        // Compute exp(-epsilon * ||x - center||Ã‚Â²) for each (sample, center) pair
         for (int b = 0; b < batchSize; b++)
         {
             int inputOffset = b * features;
@@ -7929,7 +7929,7 @@ public class CpuEngine : IEngine
                 int centerOffset = c * features;
                 T distSquared = numOps.Zero;
 
-                // Compute ||x - center||²
+                // Compute ||x - center||Ã‚Â²
                 for (int f = 0; f < features; f++)
                 {
                     T diff = numOps.Subtract(inputData[inputOffset + f], centersData[centerOffset + f]);
@@ -7990,10 +7990,10 @@ public class CpuEngine : IEngine
         var outputData = output.ToArray();
         var gradOutputData = gradOutput.ToArray();
 
-        // For RBF: K = exp(-epsilon * ||x - c||²)
+        // For RBF: K = exp(-epsilon * ||x - c||Ã‚Â²)
         // dK/dx = K * (-epsilon) * 2 * (x - c) = -2 * epsilon * K * (x - c)
         // dK/dc = K * (-epsilon) * (-2) * (x - c) = 2 * epsilon * K * (x - c) = -dK/dx
-        // dK/depsilon = K * (-||x - c||²)
+        // dK/depsilon = K * (-||x - c||Ã‚Â²)
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -8006,7 +8006,7 @@ public class CpuEngine : IEngine
                 T eps = epsilonsData[c];
                 T dL_dK = gradOutputData[outIdx];
 
-                // Compute ||x - c||² for epsilon gradient
+                // Compute ||x - c||Ã‚Â² for epsilon gradient
                 T distSquared = numOps.Zero;
                 for (int f = 0; f < features; f++)
                 {
@@ -9987,6 +9987,370 @@ public class CpuEngine : IEngine
         int spiralLength)
     {
         return MeshConvolutionOperations.GenerateSpiralIndices(vertices, faces, spiralLength);
+    }
+
+    #endregion
+
+    #region Advanced Vectorization Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> PairwiseDistanceSquared<T>(Tensor<T> x, Tensor<T> y)
+    {
+        if (x.Shape.Length != 2 || y.Shape.Length != 2)
+            throw new ArgumentException("Input tensors must be 2D [N, D]");
+        if (x.Shape[1] != y.Shape[1])
+            throw new ArgumentException("Input tensors must have the same dimensionality");
+
+        int n = x.Shape[0];
+        int m = y.Shape[0];
+        int d = x.Shape[1];
+
+        var result = new Tensor<T>([n, m]);
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Use the identity: ||x - y||^2 = ||x||^2 + ||y||^2 - 2 * x.y
+        // Compute ||x||^2 for each row of x
+        var xNormSq = new T[n];
+        for (int i = 0; i < n; i++)
+        {
+            T sum = numOps.Zero;
+            for (int k = 0; k < d; k++)
+            {
+                T val = x[i, k];
+                sum = numOps.Add(sum, numOps.Multiply(val, val));
+            }
+            xNormSq[i] = sum;
+        }
+
+        // Compute ||y||^2 for each row of y
+        var yNormSq = new T[m];
+        for (int j = 0; j < m; j++)
+        {
+            T sum = numOps.Zero;
+            for (int k = 0; k < d; k++)
+            {
+                T val = y[j, k];
+                sum = numOps.Add(sum, numOps.Multiply(val, val));
+            }
+            yNormSq[j] = sum;
+        }
+
+        // Compute result[i,j] = ||x[i]||^2 + ||y[j]||^2 - 2 * x[i].y[j]
+        T two = numOps.FromDouble(2.0);
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < m; j++)
+            {
+                // Compute dot product x[i].y[j]
+                T dot = numOps.Zero;
+                for (int k = 0; k < d; k++)
+                {
+                    dot = numOps.Add(dot, numOps.Multiply(x[i, k], y[j, k]));
+                }
+                // ||x - y||^2 = ||x||^2 + ||y||^2 - 2 * x.y
+                T dist = numOps.Subtract(numOps.Add(xNormSq[i], yNormSq[j]), numOps.Multiply(two, dot));
+                result[i, j] = dist;
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> PairwiseDistance<T>(Tensor<T> x, Tensor<T> y)
+    {
+        var distSq = PairwiseDistanceSquared(x, y);
+        return TensorSqrt(distSq);
+    }
+
+    /// <inheritdoc/>
+    public (Tensor<T> values, Tensor<int> indices) TopK<T>(Tensor<T> input, int k, int axis = -1, bool largest = true)
+    {
+        if (axis < 0) axis = input.Shape.Length + axis;
+        if (axis < 0 || axis >= input.Shape.Length)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {input.Shape.Length} dimensions");
+
+        int axisSize = input.Shape[axis];
+        if (k > axisSize)
+            throw new ArgumentException($"k ({k}) cannot be greater than axis size ({axisSize})");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Calculate output shape (same as input but with axis dimension = k)
+        var outputShape = (int[])input.Shape.Clone();
+        outputShape[axis] = k;
+
+        var values = new Tensor<T>(outputShape);
+        var indices = new Tensor<int>(outputShape);
+
+        // Calculate strides for axis iteration
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= input.Shape[i];
+        int innerSize = 1;
+        for (int i = axis + 1; i < input.Shape.Length; i++) innerSize *= input.Shape[i];
+
+        // Process each "slice" along the axis
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int inner = 0; inner < innerSize; inner++)
+            {
+                // Extract values along axis
+                var axisValues = new (T value, int index)[axisSize];
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int flatIndex = outer * axisSize * innerSize + a * innerSize + inner;
+                    axisValues[a] = (input.GetFlat(flatIndex), a);
+                }
+
+                // Sort by value
+                if (largest)
+                {
+                    Array.Sort(axisValues, (x, y) => numOps.Compare(y.value, x.value));
+                }
+                else
+                {
+                    Array.Sort(axisValues, (x, y) => numOps.Compare(x.value, y.value));
+                }
+
+                // Take top k
+                for (int i = 0; i < k; i++)
+                {
+                    int outputFlatIndex = outer * k * innerSize + i * innerSize + inner;
+                    values.SetFlat(outputFlatIndex, axisValues[i].value);
+                    indices.SetFlat(outputFlatIndex, axisValues[i].index);
+                }
+            }
+        }
+
+        return (values, indices);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<int> ArgSort<T>(Tensor<T> input, int axis = -1, bool descending = false)
+    {
+        if (axis < 0) axis = input.Shape.Length + axis;
+        if (axis < 0 || axis >= input.Shape.Length)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {input.Shape.Length} dimensions");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<int>(input.Shape);
+
+        int axisSize = input.Shape[axis];
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= input.Shape[i];
+        int innerSize = 1;
+        for (int i = axis + 1; i < input.Shape.Length; i++) innerSize *= input.Shape[i];
+
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int inner = 0; inner < innerSize; inner++)
+            {
+                var axisValues = new (T value, int index)[axisSize];
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int flatIndex = outer * axisSize * innerSize + a * innerSize + inner;
+                    axisValues[a] = (input.GetFlat(flatIndex), a);
+                }
+
+                if (descending)
+                {
+                    Array.Sort(axisValues, (x, y) => numOps.Compare(y.value, x.value));
+                }
+                else
+                {
+                    Array.Sort(axisValues, (x, y) => numOps.Compare(x.value, y.value));
+                }
+
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int flatIndex = outer * axisSize * innerSize + a * innerSize + inner;
+                    result.SetFlat(flatIndex, axisValues[a].index);
+                }
+            }
+        }
+
+        return result;
+    }
+
+/// <inheritdoc/>
+    public Tensor<T> Gather<T>(Tensor<T> input, Tensor<int> indices, int axis)
+    {
+        if (axis < 0) axis = input.Shape.Length + axis;
+        if (axis < 0 || axis >= input.Shape.Length)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {input.Shape.Length} dimensions");
+
+        // Output shape: input.Shape with axis dimension replaced by indices.Length
+        var outputShape = new int[input.Shape.Length];
+        for (int i = 0; i < input.Shape.Length; i++)
+        {
+            outputShape[i] = i == axis ? indices.Length : input.Shape[i];
+        }
+
+        var result = new Tensor<T>(outputShape);
+
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= input.Shape[i];
+        int axisSize = input.Shape[axis];
+        int innerSize = 1;
+        for (int i = axis + 1; i < input.Shape.Length; i++) innerSize *= input.Shape[i];
+
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int idx = 0; idx < indices.Length; idx++)
+            {
+                int srcIdx = indices.GetFlat(idx);
+                if (srcIdx < 0 || srcIdx >= axisSize)
+                    throw new ArgumentException($"Index {srcIdx} is out of bounds for axis size {axisSize}");
+
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int srcFlatIndex = outer * axisSize * innerSize + srcIdx * innerSize + inner;
+                    int dstFlatIndex = outer * indices.Length * innerSize + idx * innerSize + inner;
+                    result.SetFlat(dstFlatIndex, input.GetFlat(srcFlatIndex));
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Scatter<T>(Tensor<T> input, Tensor<int> indices, Tensor<T> values, int axis)
+    {
+        if (axis < 0) axis = input.Shape.Length + axis;
+        if (axis < 0 || axis >= input.Shape.Length)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {input.Shape.Length} dimensions");
+
+        // Create a copy of input
+        var result = new Tensor<T>(input.Shape);
+        for (int i = 0; i < input.Length; i++)
+        {
+            result.SetFlat(i, input.GetFlat(i));
+        }
+
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= input.Shape[i];
+        int axisSize = input.Shape[axis];
+        int innerSize = 1;
+        for (int i = axis + 1; i < input.Shape.Length; i++) innerSize *= input.Shape[i];
+
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int idx = 0; idx < indices.Length; idx++)
+            {
+                int dstIdx = indices.GetFlat(idx);
+                if (dstIdx < 0 || dstIdx >= axisSize)
+                    throw new ArgumentException($"Index {dstIdx} is out of bounds for axis size {axisSize}");
+
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int dstFlatIndex = outer * axisSize * innerSize + dstIdx * innerSize + inner;
+                    int srcFlatIndex = outer * indices.Length * innerSize + idx * innerSize + inner;
+                    result.SetFlat(dstFlatIndex, values.GetFlat(srcFlatIndex));
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ScatterAdd<T>(Tensor<T> input, Tensor<int> indices, Tensor<T> values, int axis)
+    {
+        if (axis < 0) axis = input.Shape.Length + axis;
+        if (axis < 0 || axis >= input.Shape.Length)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {input.Shape.Length} dimensions");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Create a copy of input
+        var result = new Tensor<T>(input.Shape);
+        for (int i = 0; i < input.Length; i++)
+        {
+            result.SetFlat(i, input.GetFlat(i));
+        }
+
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= input.Shape[i];
+        int axisSize = input.Shape[axis];
+        int innerSize = 1;
+        for (int i = axis + 1; i < input.Shape.Length; i++) innerSize *= input.Shape[i];
+
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int idx = 0; idx < indices.Length; idx++)
+            {
+                int dstIdx = indices.GetFlat(idx);
+                if (dstIdx < 0 || dstIdx >= axisSize)
+                    throw new ArgumentException($"Index {dstIdx} is out of bounds for axis size {axisSize}");
+
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int dstFlatIndex = outer * axisSize * innerSize + dstIdx * innerSize + inner;
+                    int srcFlatIndex = outer * indices.Length * innerSize + idx * innerSize + inner;
+                    T current = result.GetFlat(dstFlatIndex);
+                    T addition = values.GetFlat(srcFlatIndex);
+                    result.SetFlat(dstFlatIndex, numOps.Add(current, addition));
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorCosh<T>(Tensor<T> tensor)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+
+        int length = tensor.Length;
+        for (int i = 0; i < length; i++)
+        {
+            double val = numOps.ToDouble(tensor.GetFlat(i));
+            result.SetFlat(i, numOps.FromDouble(Math.Cosh(val)));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSinh<T>(Tensor<T> tensor)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+
+        int length = tensor.Length;
+        for (int i = 0; i < length; i++)
+        {
+            double val = numOps.ToDouble(tensor.GetFlat(i));
+            result.SetFlat(i, numOps.FromDouble(Math.Sinh(val)));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorOuter<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Shape.Length != 1 || b.Shape.Length != 1)
+            throw new ArgumentException("Both inputs must be 1D tensors");
+
+        int n = a.Shape[0];
+        int m = b.Shape[0];
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>([n, m]);
+
+        for (int i = 0; i < n; i++)
+        {
+            T aVal = a[i];
+            for (int j = 0; j < m; j++)
+            {
+                result[i, j] = numOps.Multiply(aVal, b[j]);
+            }
+        }
+
+        return result;
     }
 
     #endregion
