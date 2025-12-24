@@ -1966,11 +1966,17 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
             // Get current parameters
             Vector<T> currentParams = layer.GetParameters();
 
-            // Update parameters: params = params - learningRate * gradients
-            for (int i = 0; i < gradients.Length && i < currentParams.Length; i++)
+            // Update parameters using vectorized operations: params = params - learningRate * gradients
+            int updateLength = Math.Min(gradients.Length, currentParams.Length);
+            var gradientSlice = gradients.GetSubVector(0, updateLength);
+            var paramSlice = currentParams.GetSubVector(0, updateLength);
+            var scaledGradients = (Vector<T>)Engine.Multiply(gradientSlice, learningRate);
+            var updatedSlice = (Vector<T>)Engine.Subtract(paramSlice, scaledGradients);
+
+            // Copy updated values back
+            for (int i = 0; i < updateLength; i++)
             {
-                currentParams[i] = NumOps.Subtract(currentParams[i],
-                    NumOps.Multiply(learningRate, gradients[i]));
+                currentParams[i] = updatedSlice[i];
             }
 
             // Apply updated parameters to the layer
