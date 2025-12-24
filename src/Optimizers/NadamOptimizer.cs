@@ -110,16 +110,14 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// the ball should roll (gradient), how fast it's moving (momentum), and how it should adapt its speed (adaptive learning rates).
     /// You keep doing this until the ball finds the lowest point or you've rolled it enough times.
     /// </para>
-    /// </remarks>
-    /// <param name="inputData">The input data for the optimization process.</param>
-    /// <returns>The result of the optimization process.</returns>
-    /// <remarks>
     /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
     /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
     /// and notifies the sampler of epoch starts using
     /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>.
     /// </para>
     /// </remarks>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The result of the optimization process.</returns>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);

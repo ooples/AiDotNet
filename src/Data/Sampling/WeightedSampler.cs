@@ -88,7 +88,7 @@ public class WeightedSampler<T> : WeightedSamplerBase<T>
 
                 // Build cumulative distribution over available indices
                 double cumulative = 0;
-                int selectedLocalIndex = 0;
+                int selectedLocalIndex = availableIndices.Count - 1; // Default to last if none selected
                 double u = Random.NextDouble();
 
                 for (int j = 0; j < availableIndices.Count; j++)
@@ -143,14 +143,10 @@ public class WeightedSampler<T> : WeightedSamplerBase<T>
         int totalSamples = labels.Count;
         for (int c = 0; c < numClasses; c++)
         {
-            if (classCounts[c] > 0)
-            {
-                classWeights[c] = (double)totalSamples / (numClasses * classCounts[c]);
-            }
-            else
-            {
-                classWeights[c] = 0;
-            }
+            // Cast to double before multiplication to prevent integer overflow
+            classWeights[c] = classCounts[c] > 0
+                ? (double)totalSamples / ((double)numClasses * classCounts[c])
+                : 0;
         }
 
         // Assign weight to each sample based on its class
@@ -158,14 +154,9 @@ public class WeightedSampler<T> : WeightedSamplerBase<T>
         for (int i = 0; i < labels.Count; i++)
         {
             int label = labels[i];
-            if (label >= 0 && label < numClasses)
-            {
-                weights[i] = NumOps.FromDouble(classWeights[label]);
-            }
-            else
-            {
-                weights[i] = NumOps.Zero;
-            }
+            weights[i] = (label >= 0 && label < numClasses)
+                ? NumOps.FromDouble(classWeights[label])
+                : NumOps.Zero;
         }
 
         return weights;

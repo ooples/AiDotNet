@@ -41,8 +41,8 @@ public class ImportanceSampler<T> : DataSamplerBase
     /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    private T[] _importanceScores;
-    private double[] _cumulativeProbabilities;
+    private readonly T[] _importanceScores;
+    private readonly double[] _cumulativeProbabilities;
     private readonly double _smoothingFactor;
     private readonly bool _stabilize;
     private bool _needsUpdate = true;

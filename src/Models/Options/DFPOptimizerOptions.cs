@@ -22,7 +22,7 @@ public class DFPOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOpt
     /// <summary>
     /// Gets or sets the batch size for gradient computation.
     /// </summary>
-    /// <value>A positive integer, defaulting to -1 (full batch).</value>
+    /// <value>A positive integer for mini-batch size, or -1 for full batch (default).</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> The batch size controls how many examples are used to calculate gradients.
     /// DFP traditionally uses full-batch gradients (batch size -1) because it builds an approximation of

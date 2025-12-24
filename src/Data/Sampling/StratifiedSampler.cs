@@ -311,9 +311,8 @@ public class StratifiedBatchSampler : DataSamplerBase, IBatchSampler, IStratifie
             var batch = new List<int>();
 
             // Take samples from each class
-            foreach (int c in shuffledQueues.Keys)
+            foreach (var queue in shuffledQueues.Values)
             {
-                var queue = shuffledQueues[c];
                 for (int i = 0; i < samplesPerClassPerBatch && queue.Count > 0 && batch.Count < _batchSize; i++)
                 {
                     batch.Add(queue.Dequeue());
@@ -323,17 +322,12 @@ public class StratifiedBatchSampler : DataSamplerBase, IBatchSampler, IStratifie
             // Fill remaining slots from any available class
             while (batch.Count < _batchSize)
             {
-                bool found = false;
-                foreach (int c in shuffledQueues.Keys)
+                var availableQueue = shuffledQueues.Values.FirstOrDefault(q => q.Count > 0);
+                if (availableQueue is null)
                 {
-                    if (shuffledQueues[c].Count > 0)
-                    {
-                        batch.Add(shuffledQueues[c].Dequeue());
-                        found = true;
-                        break;
-                    }
+                    break;
                 }
-                if (!found) break;
+                batch.Add(availableQueue.Dequeue());
             }
 
             if (batch.Count == _batchSize)

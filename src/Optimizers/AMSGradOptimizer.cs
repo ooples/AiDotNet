@@ -87,8 +87,6 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// <para><b>For Beginners:</b> This is the main optimization process. It repeatedly updates the solution
     /// using the AMSGrad steps until it reaches the best possible solution or hits a stopping condition.
     /// </para>
-    /// </remarks>
-    /// <remarks>
     /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
     /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
     /// and notifies the sampler of epoch starts using
@@ -115,7 +113,7 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
 
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
-                _t++;
+                // Note: _t is incremented inside UpdateParameters, not here
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 var newSolution = UpdateSolution(currentSolution, gradient);
                 currentSolution = newSolution;

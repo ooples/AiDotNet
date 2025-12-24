@@ -134,8 +134,6 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// 
     /// This process repeats until we reach the maximum number of iterations or find a good enough solution.
     /// </para>
-    /// </remarks>
-    /// <remarks>
     /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
     /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
     /// and notifies the sampler of epoch starts using

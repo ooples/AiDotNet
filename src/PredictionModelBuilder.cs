@@ -1219,8 +1219,11 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             return (TInput)(object)result;
         }
 
-        // Fallback: return first element (single sample case)
-        return inputs[0];
+        // Unsupported type - throw exception to prevent silent data loss
+        throw new NotSupportedException(
+            $"Cannot aggregate {inputs.Count} inputs of type {typeof(TInput).Name}. " +
+            $"Supported types are Matrix<T>, Vector<T>, and Tensor<T>. " +
+            $"For other types, use a pre-batched data loader or implement custom aggregation.");
     }
 
     /// <summary>
@@ -1297,8 +1300,11 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             return (TOutput)(object)result;
         }
 
-        // Fallback: return first element
-        return outputs[0];
+        // Unsupported type - throw exception to prevent silent data loss
+        throw new NotSupportedException(
+            $"Cannot aggregate {outputs.Count} outputs of type {typeof(TOutput).Name}. " +
+            $"Supported types are Matrix<T>, Vector<T>, and Tensor<T>. " +
+            $"For other types, use a pre-batched data loader or implement custom aggregation.");
     }
 
     /// <summary>

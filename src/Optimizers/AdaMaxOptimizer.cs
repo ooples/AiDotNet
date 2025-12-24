@@ -176,8 +176,6 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
     /// It's like playing a game where you're trying to find a hidden treasure, and after each step,
     /// you get a hint about which direction to go next.
     /// </para>
-    /// </remarks>
-    /// <remarks>
     /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
     /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
     /// and notifies the sampler of epoch starts using

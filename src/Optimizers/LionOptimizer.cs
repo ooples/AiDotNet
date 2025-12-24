@@ -107,8 +107,6 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <para><b>For Beginners:</b> This is the main learning process. It repeatedly improves the model's
     /// parameters using the Lion algorithm. Lion's sign-based updates make it particularly efficient
     /// for large-scale optimization problems, often converging faster than Adam while using less memory.</para>
-    /// </remarks>
-    /// <remarks>
     /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
     /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
     /// and notifies the sampler of epoch starts using

@@ -158,8 +158,6 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// This approach efficiently finds good solutions by adapting its behavior based on the shape
     /// of the optimization landscape.
     /// </para>
-    /// </remarks>
-    /// <remarks>
     /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
     /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
     /// and notifies the sampler of epoch starts using

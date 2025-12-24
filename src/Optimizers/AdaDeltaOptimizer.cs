@@ -168,8 +168,6 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// 
     /// This is like practicing a skill over and over, getting a little better each time, until you're satisfied with your performance.
     /// </para>
-    /// </remarks>
-    /// <remarks>
     /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
     /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
     /// and notifies the sampler of epoch starts using

@@ -66,16 +66,14 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// 
     /// It's like repeatedly adjusting your path as you hike, always trying to move towards lower ground.
     /// </para>
-    /// </remarks>
-    /// <param name="inputData">The input data for the optimization process.</param>
-    /// <returns>The result of the optimization process.</returns>
-    /// <remarks>
     /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
     /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
     /// and notifies the sampler of epoch starts using
     /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>.
     /// </para>
     /// </remarks>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The result of the optimization process.</returns>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
