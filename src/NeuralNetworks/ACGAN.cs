@@ -506,21 +506,8 @@ public class ACGAN<T> : NeuralNetworkBase<T>
             return discOutput;
         }
 
-        // Apply sigmoid transformation: p = 1 / (1 + exp(-x))
-        var normalized = new Tensor<T>(discOutput.Shape);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                T logit = discOutput[i, j];
-                T negLogit = NumOps.Negate(logit);
-                T expNegLogit = NumOps.Exp(negLogit);
-                T denominator = NumOps.Add(one, expNegLogit);
-                normalized[i, j] = NumOps.Divide(one, denominator);
-            }
-        }
-
-        return normalized;
+        // === Vectorized sigmoid using IEngine (Phase B: US-GPU-015) ===
+        return Engine.Sigmoid(discOutput);
     }
 
     /// <summary>

@@ -875,14 +875,21 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
     /// </summary>
     private T CalculateKLDivergence(Vector<T> mean, Vector<T> logVariance)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < mean.Length; i++)
-        {
-            T term1 = NumOps.Exp(logVariance[i]);
-            T term2 = NumOps.Multiply(mean[i], mean[i]);
-            T term3 = logVariance[i];
-            sum = NumOps.Add(sum, NumOps.Subtract(NumOps.Add(term1, term2), NumOps.Add(NumOps.One, term3)));
-        }
+        // === Vectorized KL divergence using IEngine (Phase B: US-GPU-015) ===
+        // KL = 0.5 * sum(exp(logVar) + mean^2 - 1 - logVar)
+        // Breaking into: sum(exp(logVar)) + sum(mean^2) - n - sum(logVar)
+        var expLogVar = Engine.Exp(logVariance);
+        var meanSquared = Engine.Multiply(mean, mean);
+
+        T sumExpLogVar = Engine.Sum(expLogVar);
+        T sumMeanSquared = Engine.Sum(meanSquared);
+        T sumLogVar = Engine.Sum(logVariance);
+        T n = NumOps.FromDouble(mean.Length);
+
+        // sum(exp(logVar) + mean^2 - 1 - logVar)
+        T sum = NumOps.Subtract(
+            NumOps.Add(sumExpLogVar, sumMeanSquared),
+            NumOps.Add(n, sumLogVar));
 
         return NumOps.Multiply(NumOps.FromDouble(0.5), sum);
     }

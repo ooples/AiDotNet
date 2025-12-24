@@ -594,26 +594,11 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
-        var gradients = new Tensor<T>(predictions.Shape);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            T logit = predictions[i, 0];
-            T target = targets[i, 0];
-
-            // sigmoid(logit) = 1 / (1 + exp(-logit))
-            T negLogit = NumOps.Negate(logit);
-            T expNegLogit = NumOps.Exp(negLogit);
-            T sigmoid = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegLogit));
-
-            // Gradient = (sigmoid(logit) - target) / batchSize
-            gradients[i, 0] = NumOps.Divide(
-                NumOps.Subtract(sigmoid, target),
-                NumOps.FromDouble(batchSize)
-            );
-        }
-
-        return gradients;
+        // === Vectorized BCE gradients using IEngine (Phase B: US-GPU-015) ===
+        // Gradient of BCE with logits: dL/dz = (sigmoid(z) - target) / batchSize
+        var sigmoid = Engine.Sigmoid(predictions);
+        var diff = Engine.TensorSubtract(sigmoid, targets);
+        return Engine.TensorDivideScalar(diff, NumOps.FromDouble(batchSize));
     }
 
     /// <summary>
