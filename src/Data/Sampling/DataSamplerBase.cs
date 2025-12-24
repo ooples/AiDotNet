@@ -162,7 +162,8 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
         NumSamplesOverride = numSamples;
         ReplacementEnabled = replacement;
         CumulativeProbabilities = new double[WeightsArray.Length];
-        ComputeCumulativeProbabilities();
+        // Call the private core method directly to avoid virtual call in constructor
+        ComputeCumulativeProbabilitiesCore();
     }
 
     /// <inheritdoc/>
@@ -195,8 +196,18 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
 
     /// <summary>
     /// Computes cumulative probability distribution from weights.
+    /// Override this method to customize probability computation in derived classes.
     /// </summary>
     protected virtual void ComputeCumulativeProbabilities()
+    {
+        ComputeCumulativeProbabilitiesCore();
+    }
+
+    /// <summary>
+    /// Core implementation of cumulative probability computation.
+    /// This method is called directly from the constructor to avoid virtual call issues.
+    /// </summary>
+    private void ComputeCumulativeProbabilitiesCore()
     {
         CumulativeProbabilities = new double[WeightsArray.Length];
 
