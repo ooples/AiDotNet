@@ -493,6 +493,27 @@ public static class GaussianSplattingOperations
                             double dWeight_dMy = weight * (invB * dx + invC * dy);
                             means2DGradData[idx * 2] += dL_dalpha * opacity * dWeight_dMx;
                             means2DGradData[idx * 2 + 1] += dL_dalpha * opacity * dWeight_dMy;
+
+                            // Gradient w.r.t. 2D covariance [a, b, c] where matrix is [[a,b],[b,c]]
+                            // Chain rule through: exponent = -0.5 * (invA*dx^2 + 2*invB*dx*dy + invC*dy^2)
+                            // where invA = c/det, invB = -b/det, invC = a/det, det = a*c - b^2
+                            double dL_dWeight = dL_dalpha * opacity;
+                            double dL_dExp = dL_dWeight * weight;
+
+                            // Gradients w.r.t. inverse covariance elements
+                            double dL_dInvA = dL_dExp * (-0.5) * dx * dx;
+                            double dL_dInvB = dL_dExp * (-1.0) * dx * dy;
+                            double dL_dInvC = dL_dExp * (-0.5) * dy * dy;
+
+                            // Gradients w.r.t. original covariance elements via inverse derivatives
+                            double invDet2 = invDet * invDet;
+                            double dL_da = invDet2 * (-dL_dInvA * c * c + dL_dInvB * b * c - dL_dInvC * b * b);
+                            double dL_db = invDet2 * (2.0 * dL_dInvA * b * c + dL_dInvB * (-a * c - b * b) + 2.0 * dL_dInvC * a * b);
+                            double dL_dc = invDet2 * (-dL_dInvA * b * b + dL_dInvB * a * b - dL_dInvC * a * a);
+
+                            cov2DGradData[idx * 3] += dL_da;
+                            cov2DGradData[idx * 3 + 1] += dL_db;
+                            cov2DGradData[idx * 3 + 2] += dL_dc;
                         }
 
                         transmittance *= (1.0 - alpha);

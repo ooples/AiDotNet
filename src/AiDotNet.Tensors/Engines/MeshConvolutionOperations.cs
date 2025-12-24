@@ -853,11 +853,11 @@ public static class MeshConvolutionOperations
         var vertexData = vertices.ToArray();
         var faceData = faces.ToArray();
 
-        // Build adjacency list
-        var adjacency = new List<int>[numVertices];
+        // Build adjacency list using HashSet for O(1) lookups during construction
+        var adjacencySet = new HashSet<int>[numVertices];
         for (int i = 0; i < numVertices; i++)
         {
-            adjacency[i] = new List<int>();
+            adjacencySet[i] = new HashSet<int>();
         }
 
         for (int f = 0; f < numFaces; f++)
@@ -866,12 +866,19 @@ public static class MeshConvolutionOperations
             int v1 = faceData[f * 3 + 1];
             int v2 = faceData[f * 3 + 2];
 
-            if (!adjacency[v0].Contains(v1)) adjacency[v0].Add(v1);
-            if (!adjacency[v0].Contains(v2)) adjacency[v0].Add(v2);
-            if (!adjacency[v1].Contains(v0)) adjacency[v1].Add(v0);
-            if (!adjacency[v1].Contains(v2)) adjacency[v1].Add(v2);
-            if (!adjacency[v2].Contains(v0)) adjacency[v2].Add(v0);
-            if (!adjacency[v2].Contains(v1)) adjacency[v2].Add(v1);
+            adjacencySet[v0].Add(v1);
+            adjacencySet[v0].Add(v2);
+            adjacencySet[v1].Add(v0);
+            adjacencySet[v1].Add(v2);
+            adjacencySet[v2].Add(v0);
+            adjacencySet[v2].Add(v1);
+        }
+
+        // Convert to List for spiral generation (needs ordering)
+        var adjacency = new List<int>[numVertices];
+        for (int i = 0; i < numVertices; i++)
+        {
+            adjacency[i] = new List<int>(adjacencySet[i]);
         }
 
         var spiralIndices = new int[numVertices * spiralLength];
@@ -944,6 +951,7 @@ public static class MeshConvolutionOperations
         while (spiralIdx < spiralLength && currentRing.Count > 0)
         {
             var nextRing = new List<int>();
+            var nextRingSet = new HashSet<int>();  // O(1) lookup for deduplication
 
             foreach (int neighbor in currentRing)
             {
@@ -956,9 +964,10 @@ public static class MeshConvolutionOperations
                 // Add neighbor's neighbors to next ring
                 foreach (int nn in adjacency[neighbor])
                 {
-                    if (!visited.Contains(nn) && !nextRing.Contains(nn))
+                    if (!visited.Contains(nn) && !nextRingSet.Contains(nn))
                     {
                         nextRing.Add(nn);
+                        nextRingSet.Add(nn);
                     }
                 }
             }
