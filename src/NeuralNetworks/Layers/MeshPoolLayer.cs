@@ -172,16 +172,11 @@ public class MeshPoolLayer<T> : LayerBase<T>
     /// </summary>
     private void InitializeWeights()
     {
-        var random = RandomHelper.CreateSecureRandom();
-        var weightData = new T[InputChannels];
+        // === Vectorized: Weight initialization using TensorRandomUniformRange (Phase C: New IEngine methods) ===
+        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(InputChannels));
 
-        double scale = 1.0 / Math.Sqrt(InputChannels);
-        for (int i = 0; i < InputChannels; i++)
-        {
-            weightData[i] = NumOps.FromDouble((random.NextDouble() * 2.0 - 1.0) * scale);
-        }
-
-        _importanceWeights = new Tensor<T>(weightData, [InputChannels]);
+        // Initialize importance weights in [-scale, scale] range
+        _importanceWeights = Engine.TensorRandomUniformRange<T>([InputChannels], NumOps.Negate(scale), scale);
     }
 
     #endregion

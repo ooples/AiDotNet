@@ -357,27 +357,18 @@ public class Conv3DLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeWeights()
     {
+        // === Vectorized: He initialization using TensorRandomUniformRange (Phase C: New IEngine methods) ===
         int fanIn = InputChannels * KernelSize * KernelSize * KernelSize;
         T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(
             NumOps.FromDouble(2.0),
             NumOps.FromDouble(fanIn)));
-        double scaleDouble = NumOps.ToDouble(scale);
 
-        var random = RandomHelper.CreateSecureRandom();
-        var kernelData = _kernels.ToArray();
-        
-        for (int i = 0; i < kernelData.Length; i++)
-        {
-            kernelData[i] = NumOps.FromDouble((random.NextDouble() * 2.0 - 1.0) * scaleDouble);
-        }
-        _kernels = new Tensor<T>(kernelData, _kernels.Shape);
+        // Initialize kernels in [-scale, scale] range
+        _kernels = Engine.TensorRandomUniformRange<T>(_kernels.Shape, NumOps.Negate(scale), scale);
 
-        var biasData = new T[OutputChannels];
-        for (int i = 0; i < biasData.Length; i++)
-        {
-            biasData[i] = NumOps.Zero;
-        }
-        _biases = new Tensor<T>(biasData, _biases.Shape);
+        // Initialize biases to zero
+        _biases = new Tensor<T>(_biases.Shape);
+        Engine.TensorFill(_biases, NumOps.Zero);
     }
 
     #endregion

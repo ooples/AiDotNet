@@ -1115,24 +1115,18 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             throw new ArgumentOutOfRangeException(nameof(noiseSize), noiseSize, "Noise size must be positive.");
         }
 
-        var random = RandomHelper.CreateSecureRandom();
         int totalElements = batchSize * noiseSize;
-        
-        // Vectorized Box-Muller transform using tensor operations
-        // Generate uniform random numbers
+
+        // === Vectorized Box-Muller transform using new IEngine methods (Phase C) ===
+        // Generate uniform random numbers using TensorRandomUniformRange
         int halfElements = (totalElements + 1) / 2;
-        var u1Data = new T[halfElements];
-        var u2Data = new T[halfElements];
-        
-        for (int i = 0; i < halfElements; i++)
-        {
-            // Use 1 - random to avoid log(0)
-            u1Data[i] = NumOps.FromDouble(1.0 - random.NextDouble());
-            u2Data[i] = NumOps.FromDouble(random.NextDouble());
-        }
-        
-        var u1 = new Tensor<T>(u1Data, [halfElements]);
-        var u2 = new Tensor<T>(u2Data, [halfElements]);
+
+        // u2 is in [0, 1)
+        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+
+        // u1 is 1 - random to get (0, 1] and avoid log(0)
+        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u1 = Engine.ScalarMinusTensor(NumOps.One, u1Temp);
         
         // Vectorized Box-Muller: radius = sqrt(-2 * log(u1)), theta = 2 * pi * u2
         var logU1 = Engine.TensorLog(u1);

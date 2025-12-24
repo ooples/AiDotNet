@@ -104,20 +104,9 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         int inputSize = inputShape.Aggregate(1, (a, b) => a * b);
         int outputSize = outputShape.Aggregate(1, (a, b) => a * b);
 
-        _u = new Tensor<T>([outputSize]);
-        _v = new Tensor<T>([inputSize]);
-
-        // Initialize with random values
-        var random = RandomHelper.ThreadSafeRandom;
-
-        for (int i = 0; i < outputSize; i++)
-        {
-            _u[i] = NumOps.FromDouble(random.NextDouble() * 2 - 1);
-        }
-        for (int i = 0; i < inputSize; i++)
-        {
-            _v[i] = NumOps.FromDouble(random.NextDouble() * 2 - 1);
-        }
+        // === Vectorized: Initialize u and v using TensorRandomUniformRange (Phase C: New IEngine methods) ===
+        _u = Engine.TensorRandomUniformRange<T>([outputSize], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
+        _v = Engine.TensorRandomUniformRange<T>([inputSize], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
 
         // Normalize u and v
         NormalizeVector(ref _u);

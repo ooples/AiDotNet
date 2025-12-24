@@ -241,26 +241,17 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     private void InitializeWeights()
     {
         int fanIn = InputChannels * (1 + NumNeighbors);
+        // === Vectorized: He initialization using TensorRandomUniformRange (Phase C: New IEngine methods) ===
         T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(
             NumOps.FromDouble(2.0),
             NumOps.FromDouble(fanIn)));
-        double scaleDouble = NumOps.ToDouble(scale);
 
-        var random = RandomHelper.CreateSecureRandom();
-        var weightData = _weights.ToArray();
+        // Initialize weights in [-scale, scale] range
+        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape, NumOps.Negate(scale), scale);
 
-        for (int i = 0; i < weightData.Length; i++)
-        {
-            weightData[i] = NumOps.FromDouble((random.NextDouble() * 2.0 - 1.0) * scaleDouble);
-        }
-        _weights = new Tensor<T>(weightData, _weights.Shape);
-
-        var biasData = new T[OutputChannels];
-        for (int i = 0; i < biasData.Length; i++)
-        {
-            biasData[i] = NumOps.Zero;
-        }
-        _biases = new Tensor<T>(biasData, _biases.Shape);
+        // Initialize biases to zero
+        _biases = new Tensor<T>(_biases.Shape);
+        Engine.TensorFill(_biases, NumOps.Zero);
     }
 
     #endregion
