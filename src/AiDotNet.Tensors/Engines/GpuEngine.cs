@@ -1160,6 +1160,158 @@ internal static class VolumeRenderingKernels
 }
 
 /// <summary>
+/// GPU kernel implementations for trilinear interpolation (hash encoding in NeRF).
+/// </summary>
+internal static class TrilinearInterpolateKernels
+{
+    /// <summary>
+    /// Trilinear interpolation kernel for float precision.
+    /// Grid is [D, H, W, C], positions is [N, 3], output is [N, C]
+    /// Each thread computes one output element (one channel for one position).
+    /// </summary>
+    public static void TrilinearInterpolateFloatImpl(
+        Index1D index,
+        ArrayView<float> grid,       // [D, H, W, C] flattened
+        ArrayView<float> positions,  // [N, 3] flattened
+        ArrayView<float> output,     // [N, C] flattened
+        int depth, int height, int width, int channels)
+    {
+        int n = (int)index / channels;
+        int c = (int)index % channels;
+        int numPositions = (int)output.Length / channels;
+        
+        if (n >= numPositions) return;
+
+        // Get position (z, y, x) in [0, dim-1] range
+        float z = positions[n * 3 + 0] * (depth - 1);
+        float y = positions[n * 3 + 1] * (height - 1);
+        float x = positions[n * 3 + 2] * (width - 1);
+
+        // Clamp to valid range
+        z = XMath.Max(0f, XMath.Min(depth - 1.001f, z));
+        y = XMath.Max(0f, XMath.Min(height - 1.001f, y));
+        x = XMath.Max(0f, XMath.Min(width - 1.001f, x));
+
+        // Get integer indices and fractional parts
+        int z0 = (int)XMath.Floor(z);
+        int y0 = (int)XMath.Floor(y);
+        int x0 = (int)XMath.Floor(x);
+        int z1 = z0 + 1;
+        int y1 = y0 + 1;
+        int x1 = x0 + 1;
+
+        // Clamp upper indices
+        z1 = XMath.Min(z1, depth - 1);
+        y1 = XMath.Min(y1, height - 1);
+        x1 = XMath.Min(x1, width - 1);
+
+        float zd = z - z0;
+        float yd = y - y0;
+        float xd = x - x0;
+
+        // Compute weights for 8 corners
+        float w000 = (1 - zd) * (1 - yd) * (1 - xd);
+        float w001 = (1 - zd) * (1 - yd) * xd;
+        float w010 = (1 - zd) * yd * (1 - xd);
+        float w011 = (1 - zd) * yd * xd;
+        float w100 = zd * (1 - yd) * (1 - xd);
+        float w101 = zd * (1 - yd) * xd;
+        float w110 = zd * yd * (1 - xd);
+        float w111 = zd * yd * xd;
+
+        // Get grid values at 8 corners (grid layout is [D, H, W, C])
+        int stride_d = height * width * channels;
+        int stride_h = width * channels;
+        int stride_w = channels;
+
+        float v000 = grid[z0 * stride_d + y0 * stride_h + x0 * stride_w + c];
+        float v001 = grid[z0 * stride_d + y0 * stride_h + x1 * stride_w + c];
+        float v010 = grid[z0 * stride_d + y1 * stride_h + x0 * stride_w + c];
+        float v011 = grid[z0 * stride_d + y1 * stride_h + x1 * stride_w + c];
+        float v100 = grid[z1 * stride_d + y0 * stride_h + x0 * stride_w + c];
+        float v101 = grid[z1 * stride_d + y0 * stride_h + x1 * stride_w + c];
+        float v110 = grid[z1 * stride_d + y1 * stride_h + x0 * stride_w + c];
+        float v111 = grid[z1 * stride_d + y1 * stride_h + x1 * stride_w + c];
+
+        // Interpolate
+        output[index] = w000 * v000 + w001 * v001 + w010 * v010 + w011 * v011 +
+                        w100 * v100 + w101 * v101 + w110 * v110 + w111 * v111;
+    }
+
+    /// <summary>
+    /// Trilinear interpolation kernel for double precision.
+    /// </summary>
+    public static void TrilinearInterpolateDoubleImpl(
+        Index1D index,
+        ArrayView<double> grid,       // [D, H, W, C] flattened
+        ArrayView<double> positions,  // [N, 3] flattened
+        ArrayView<double> output,     // [N, C] flattened
+        int depth, int height, int width, int channels)
+    {
+        int n = (int)index / channels;
+        int c = (int)index % channels;
+        int numPositions = (int)output.Length / channels;
+        
+        if (n >= numPositions) return;
+
+        // Get position (z, y, x) in [0, dim-1] range
+        double z = positions[n * 3 + 0] * (depth - 1);
+        double y = positions[n * 3 + 1] * (height - 1);
+        double x = positions[n * 3 + 2] * (width - 1);
+
+        // Clamp to valid range
+        z = XMath.Max(0.0, XMath.Min(depth - 1.001, z));
+        y = XMath.Max(0.0, XMath.Min(height - 1.001, y));
+        x = XMath.Max(0.0, XMath.Min(width - 1.001, x));
+
+        // Get integer indices and fractional parts
+        int z0 = (int)XMath.Floor(z);
+        int y0 = (int)XMath.Floor(y);
+        int x0 = (int)XMath.Floor(x);
+        int z1 = z0 + 1;
+        int y1 = y0 + 1;
+        int x1 = x0 + 1;
+
+        // Clamp upper indices
+        z1 = XMath.Min(z1, depth - 1);
+        y1 = XMath.Min(y1, height - 1);
+        x1 = XMath.Min(x1, width - 1);
+
+        double zd = z - z0;
+        double yd = y - y0;
+        double xd = x - x0;
+
+        // Compute weights for 8 corners
+        double w000 = (1 - zd) * (1 - yd) * (1 - xd);
+        double w001 = (1 - zd) * (1 - yd) * xd;
+        double w010 = (1 - zd) * yd * (1 - xd);
+        double w011 = (1 - zd) * yd * xd;
+        double w100 = zd * (1 - yd) * (1 - xd);
+        double w101 = zd * (1 - yd) * xd;
+        double w110 = zd * yd * (1 - xd);
+        double w111 = zd * yd * xd;
+
+        // Get grid values at 8 corners (grid layout is [D, H, W, C])
+        int stride_d = height * width * channels;
+        int stride_h = width * channels;
+        int stride_w = channels;
+
+        double v000 = grid[z0 * stride_d + y0 * stride_h + x0 * stride_w + c];
+        double v001 = grid[z0 * stride_d + y0 * stride_h + x1 * stride_w + c];
+        double v010 = grid[z0 * stride_d + y1 * stride_h + x0 * stride_w + c];
+        double v011 = grid[z0 * stride_d + y1 * stride_h + x1 * stride_w + c];
+        double v100 = grid[z1 * stride_d + y0 * stride_h + x0 * stride_w + c];
+        double v101 = grid[z1 * stride_d + y0 * stride_h + x1 * stride_w + c];
+        double v110 = grid[z1 * stride_d + y1 * stride_h + x0 * stride_w + c];
+        double v111 = grid[z1 * stride_d + y1 * stride_h + x1 * stride_w + c];
+
+        // Interpolate
+        output[index] = w000 * v000 + w001 * v001 + w010 * v010 + w011 * v011 +
+                        w100 * v100 + w101 * v101 + w110 * v110 + w111 * v111;
+    }
+}
+
+/// <summary>
 /// GPU-based execution engine using ILGPU for hardware acceleration.
 /// </summary>
 /// <remarks>
@@ -1412,6 +1564,10 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _ceilingKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _truncateKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _truncateKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _fracKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _fracKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>? _trilinearInterpolateKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _trilinearInterpolateKernelDouble;
 
     // Production GPU kernels - Fill operations (Phase C: Production Ready)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, float>? _fillKernelFloat;
@@ -2657,6 +2813,18 @@ public class GpuEngine : IEngine, IDisposable
                 _truncateKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
                     (index, input, result) => result[index] = XMath.Truncate(input[index]));
+                _fracKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, input, result) => result[index] = input[index] - XMath.Floor(input[index]));
+                _fracKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>>(
+                    (index, input, result) => result[index] = input[index] - XMath.Floor(input[index]));
+                _trilinearInterpolateKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>(
+                    TrilinearInterpolateKernels.TrilinearInterpolateFloatImpl);
+                _trilinearInterpolateKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>(
+                    TrilinearInterpolateKernels.TrilinearInterpolateDoubleImpl);
                 Console.WriteLine("[GpuEngine] Rounding kernels pre-compiled");
 
                 // Pre-compile production GPU kernels - Fill operations (Phase C: Production Ready)
@@ -14172,43 +14340,578 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> TensorFloor<T>(Tensor<T> tensor)
     {
-        // Delegate to CPU fallback - GPU kernels can be added later
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        if (tensor.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorFloor(tensor);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorFloorGpu((Tensor<float>)(object)tensor);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorFloorGpuDouble((Tensor<double>)(object)tensor);
+        }
+
         return _cpuFallback.TensorFloor(tensor);
+    }
+
+    private Tensor<float> TensorFloorGpu(Tensor<float> tensor)
+    {
+        try
+        {
+            var result = new Tensor<float>(tensor.Shape);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_floorKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorFloor(tensor);
+        }
+    }
+
+    private Tensor<double> TensorFloorGpuDouble(Tensor<double> tensor)
+    {
+        try
+        {
+            var result = new Tensor<double>(tensor.Shape);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_floorKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorFloor(tensor);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorCeiling<T>(Tensor<T> tensor)
     {
-        // Delegate to CPU fallback - GPU kernels can be added later
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        if (tensor.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorCeiling(tensor);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorCeilingGpu((Tensor<float>)(object)tensor);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorCeilingGpuDouble((Tensor<double>)(object)tensor);
+        }
+
         return _cpuFallback.TensorCeiling(tensor);
+    }
+
+    private Tensor<float> TensorCeilingGpu(Tensor<float> tensor)
+    {
+        try
+        {
+            var result = new Tensor<float>(tensor.Shape);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_ceilingKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorCeiling(tensor);
+        }
+    }
+
+    private Tensor<double> TensorCeilingGpuDouble(Tensor<double> tensor)
+    {
+        try
+        {
+            var result = new Tensor<double>(tensor.Shape);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_ceilingKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorCeiling(tensor);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorFrac<T>(Tensor<T> tensor)
     {
-        // Delegate to CPU fallback - GPU kernels can be added later
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        if (tensor.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorFrac(tensor);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorFracGpu((Tensor<float>)(object)tensor);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorFracGpuDouble((Tensor<double>)(object)tensor);
+        }
+
         return _cpuFallback.TensorFrac(tensor);
+    }
+
+    private Tensor<float> TensorFracGpu(Tensor<float> tensor)
+    {
+        try
+        {
+            var result = new Tensor<float>(tensor.Shape);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_fracKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorFrac(tensor);
+        }
+    }
+
+    private Tensor<double> TensorFracGpuDouble(Tensor<double> tensor)
+    {
+        try
+        {
+            var result = new Tensor<double>(tensor.Shape);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_fracKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorFrac(tensor);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorSin<T>(Tensor<T> tensor)
     {
-        // Delegate to CPU fallback - GPU kernels can be added later
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        if (tensor.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorSin(tensor);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorSinGpu((Tensor<float>)(object)tensor);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorSinGpuDouble((Tensor<double>)(object)tensor);
+        }
+
         return _cpuFallback.TensorSin(tensor);
+    }
+
+    private Tensor<float> TensorSinGpu(Tensor<float> tensor)
+    {
+        try
+        {
+            var result = new Tensor<float>(tensor.Shape);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_sinKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorSin(tensor);
+        }
+    }
+
+    private Tensor<double> TensorSinGpuDouble(Tensor<double> tensor)
+    {
+        try
+        {
+            var result = new Tensor<double>(tensor.Shape);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_sinKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorSin(tensor);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorCos<T>(Tensor<T> tensor)
     {
-        // Delegate to CPU fallback - GPU kernels can be added later
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        if (tensor.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorCos(tensor);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorCosGpu((Tensor<float>)(object)tensor);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorCosGpuDouble((Tensor<double>)(object)tensor);
+        }
+
         return _cpuFallback.TensorCos(tensor);
+    }
+
+    private Tensor<float> TensorCosGpu(Tensor<float> tensor)
+    {
+        try
+        {
+            var result = new Tensor<float>(tensor.Shape);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_cosKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorCos(tensor);
+        }
+    }
+
+    private Tensor<double> TensorCosGpuDouble(Tensor<double> tensor)
+    {
+        try
+        {
+            var result = new Tensor<double>(tensor.Shape);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_cosKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorCos(tensor);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorTrilinearInterpolate<T>(Tensor<T> grid, Tensor<T> positions)
     {
-        // Delegate to CPU fallback - GPU kernels can be added later
+        if (grid == null) throw new ArgumentNullException(nameof(grid));
+        if (positions == null) throw new ArgumentNullException(nameof(positions));
+
+        // Grid should be [D, H, W, C], positions should be [N, 3]
+        if (grid.Rank != 4) throw new ArgumentException("Grid must be 4D [D, H, W, C]", nameof(grid));
+        if (positions.Rank != 2 || positions.Shape[1] != 3) throw new ArgumentException("Positions must be [N, 3]", nameof(positions));
+
+        int numPositions = positions.Shape[0];
+        int channels = grid.Shape[3];
+        int outputLength = numPositions * channels;
+
+        if (outputLength < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorTrilinearInterpolate(grid, positions);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorTrilinearInterpolateGpu(
+                    (Tensor<float>)(object)grid, (Tensor<float>)(object)positions);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorTrilinearInterpolateGpuDouble(
+                    (Tensor<double>)(object)grid, (Tensor<double>)(object)positions);
+        }
+
         return _cpuFallback.TensorTrilinearInterpolate(grid, positions);
+    }
+
+    private Tensor<float> TensorTrilinearInterpolateGpu(Tensor<float> grid, Tensor<float> positions)
+    {
+        try
+        {
+            int depth = grid.Shape[0];
+            int height = grid.Shape[1];
+            int width = grid.Shape[2];
+            int channels = grid.Shape[3];
+            int numPositions = positions.Shape[0];
+
+            var result = new Tensor<float>(new[] { numPositions, channels });
+            var gpuGrid = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(grid.Length);
+            var gpuPositions = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(positions.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(result.Length);
+
+            try
+            {
+                gpuGrid.View.BaseView.CopyFromCPU(grid.AsSpan());
+                gpuPositions.View.BaseView.CopyFromCPU(positions.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_trilinearInterpolateKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        result.Length, gpuGrid.View, gpuPositions.View, gpuOutput.View,
+                        depth, height, width, channels);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGrid);
+                _memoryPoolFloat.Return(gpuPositions);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorTrilinearInterpolate(grid, positions);
+        }
+    }
+
+    private Tensor<double> TensorTrilinearInterpolateGpuDouble(Tensor<double> grid, Tensor<double> positions)
+    {
+        try
+        {
+            int depth = grid.Shape[0];
+            int height = grid.Shape[1];
+            int width = grid.Shape[2];
+            int channels = grid.Shape[3];
+            int numPositions = positions.Shape[0];
+
+            var result = new Tensor<double>(new[] { numPositions, channels });
+            var gpuGrid = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(grid.Length);
+            var gpuPositions = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(positions.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(result.Length);
+
+            try
+            {
+                gpuGrid.View.BaseView.CopyFromCPU(grid.AsSpan());
+                gpuPositions.View.BaseView.CopyFromCPU(positions.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_trilinearInterpolateKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        result.Length, gpuGrid.View, gpuPositions.View, gpuOutput.View,
+                        depth, height, width, channels);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGrid);
+                _memoryPoolDouble.Return(gpuPositions);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorTrilinearInterpolate(grid, positions);
+        }
     }
 
     /// <inheritdoc/>
