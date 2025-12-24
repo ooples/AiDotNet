@@ -350,8 +350,11 @@ public class DataPipeline<T> : IEnumerable<T>
             while (hasAny)
             {
                 hasAny = false;
-                foreach (var enumerator in enumerators)
+                // Use explicit index iteration to avoid implicit filtering pattern
+                // Each enumerator is checked for remaining items in round-robin fashion
+                for (int i = 0; i < enumerators.Count; i++)
                 {
+                    var enumerator = enumerators[i];
                     if (enumerator.MoveNext())
                     {
                         hasAny = true;
@@ -362,9 +365,24 @@ public class DataPipeline<T> : IEnumerable<T>
         }
         finally
         {
-            foreach (var enumerator in enumerators)
+            // Dispose all enumerators with exception aggregation to ensure cleanup
+            List<Exception>? disposeExceptions = null;
+            for (int i = 0; i < enumerators.Count; i++)
             {
-                enumerator.Dispose();
+                try
+                {
+                    enumerators[i].Dispose();
+                }
+                catch (Exception ex)
+                {
+                    disposeExceptions ??= new List<Exception>();
+                    disposeExceptions.Add(ex);
+                }
+            }
+
+            if (disposeExceptions is { Count: > 0 })
+            {
+                throw new AggregateException("One or more enumerators failed to dispose.", disposeExceptions);
             }
         }
     }
