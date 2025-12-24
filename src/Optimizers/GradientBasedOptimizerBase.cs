@@ -1,5 +1,5 @@
+using AiDotNet.Data.Sampling;
 using AiDotNet.Engines;
-
 using AiDotNet.MixedPrecision;
 using AiDotNet.Models.Options;
 
@@ -119,6 +119,98 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         Regularization = options.Regularization;
         // Engine property now returns AiDotNetEngine.Current automatically
     }
+
+    #region DataLoader Integration
+
+    /// <summary>
+    /// Creates a data batcher for the given optimization input data using configured sampling options.
+    /// </summary>
+    /// <param name="inputData">The optimization input data to batch.</param>
+    /// <param name="batchSize">The batch size for training.</param>
+    /// <returns>An OptimizationDataBatcher configured with the optimizer's sampling options.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method creates a helper that splits your training data
+    /// into smaller batches for efficient training. The batching behavior is controlled by:
+    /// - DataSampler (if set): Advanced sampling strategies like weighted/curriculum learning
+    /// - ShuffleData: Whether to randomize the order each epoch
+    /// - DropLastBatch: Whether to discard incomplete final batches
+    /// - RandomSeed: For reproducible randomization
+    ///
+    /// **Example usage:**
+    /// <code>
+    /// var batcher = CreateBatcher(inputData, batchSize: 32);
+    /// foreach (var (xBatch, yBatch, indices) in batcher.GetBatches())
+    /// {
+    ///     var gradient = CalculateGradient(model, xBatch, yBatch);
+    ///     model = UpdateSolution(model, gradient);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected OptimizationDataBatcher<T, TInput, TOutput> CreateBatcher(
+        OptimizationInputData<T, TInput, TOutput> inputData,
+        int batchSize)
+    {
+        return new OptimizationDataBatcher<T, TInput, TOutput>(
+            inputData,
+            batchSize,
+            shuffle: GradientOptions.ShuffleData,
+            dropLast: GradientOptions.DropLastBatch,
+            seed: GradientOptions.RandomSeed,
+            sampler: GradientOptions.DataSampler);
+    }
+
+    /// <summary>
+    /// Creates a data batcher with a custom sampler, overriding the configured options.
+    /// </summary>
+    /// <param name="inputData">The optimization input data to batch.</param>
+    /// <param name="batchSize">The batch size for training.</param>
+    /// <param name="sampler">The custom sampler to use for advanced sampling strategies.</param>
+    /// <returns>An OptimizationDataBatcher with the custom sampler.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this when you want to try a different sampling strategy
+    /// without changing the optimizer's default configuration.
+    ///
+    /// **Example:**
+    /// <code>
+    /// // Create a curriculum learning sampler
+    /// var sampler = Samplers.Curriculum(difficulties, totalEpochs: 100);
+    /// var batcher = CreateBatcher(inputData, batchSize: 32, sampler: sampler);
+    ///
+    /// // Use balanced sampling for class imbalance
+    /// var sampler = Samplers.Balanced(labels, numClasses: 10);
+    /// var batcher = CreateBatcher(inputData, batchSize: 32, sampler: sampler);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected OptimizationDataBatcher<T, TInput, TOutput> CreateBatcher(
+        OptimizationInputData<T, TInput, TOutput> inputData,
+        int batchSize,
+        IDataSampler sampler)
+    {
+        return new OptimizationDataBatcher<T, TInput, TOutput>(
+            inputData,
+            batchSize,
+            shuffle: GradientOptions.ShuffleData,
+            dropLast: GradientOptions.DropLastBatch,
+            seed: GradientOptions.RandomSeed,
+            sampler: sampler);
+    }
+
+    /// <summary>
+    /// Notifies the sampler that a new epoch has started (for epoch-aware samplers).
+    /// </summary>
+    /// <param name="currentEpoch">The current epoch number (0-based).</param>
+    /// <remarks>
+    /// <para>Call this at the beginning of each training epoch when using adaptive samplers
+    /// like curriculum learning or self-paced learning that adjust their behavior over time.</para>
+    /// </remarks>
+    protected void NotifyEpochStart(int currentEpoch)
+    {
+        GradientOptions.DataSampler?.OnEpochStart(currentEpoch);
+    }
+
+    #endregion
 
     /// <inheritdoc/>
     public virtual Vector<T> LastComputedGradients => _lastComputedGradients;

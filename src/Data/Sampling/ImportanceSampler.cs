@@ -1,5 +1,4 @@
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Sampling;
@@ -35,15 +34,17 @@ namespace AiDotNet.Data.Sampling;
 /// </code>
 /// </para>
 /// </remarks>
-public class ImportanceSampler<T> : IDataSampler
+public class ImportanceSampler<T> : DataSamplerBase
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    /// <summary>
+    /// Numeric operations for type T.
+    /// </summary>
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private T[] _importanceScores;
     private double[] _cumulativeProbabilities;
     private readonly double _smoothingFactor;
     private readonly bool _stabilize;
-    private Random _random;
     private bool _needsUpdate = true;
 
     /// <summary>
@@ -58,6 +59,7 @@ public class ImportanceSampler<T> : IDataSampler
         double smoothingFactor = 0.2,
         bool stabilize = true,
         int? seed = null)
+        : base(seed)
     {
         if (datasetSize < 1)
         {
@@ -76,13 +78,10 @@ public class ImportanceSampler<T> : IDataSampler
 
         _smoothingFactor = Math.Max(0.0, Math.Min(1.0, smoothingFactor));
         _stabilize = stabilize;
-        _random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc/>
-    public int Length => _importanceScores.Length;
+    public override int Length => _importanceScores.Length;
 
     /// <summary>
     /// Gets the importance scores for all samples.
@@ -199,7 +198,7 @@ public class ImportanceSampler<T> : IDataSampler
     }
 
     /// <inheritdoc/>
-    public IEnumerable<int> GetIndices()
+    protected override IEnumerable<int> GetIndicesCore()
     {
         RecomputeProbabilities();
 
@@ -248,7 +247,7 @@ public class ImportanceSampler<T> : IDataSampler
 
     private int SampleOne()
     {
-        double u = _random.NextDouble();
+        double u = Random.NextDouble();
 
         // Binary search
         int left = 0;
@@ -268,12 +267,6 @@ public class ImportanceSampler<T> : IDataSampler
         }
 
         return left;
-    }
-
-    /// <inheritdoc/>
-    public void SetSeed(int seed)
-    {
-        _random = RandomHelper.CreateSeededRandom(seed);
     }
 
     /// <summary>
@@ -301,6 +294,32 @@ public class ImportanceSampler<T> : IDataSampler
 }
 
 /// <summary>
+/// Active learning selection strategies.
+/// </summary>
+public enum ActiveLearningStrategy
+{
+    /// <summary>
+    /// Select samples with highest uncertainty (e.g., entropy, margin).
+    /// </summary>
+    Uncertainty,
+
+    /// <summary>
+    /// Select diverse samples using distance-based clustering.
+    /// </summary>
+    Diversity,
+
+    /// <summary>
+    /// Combine uncertainty and diversity.
+    /// </summary>
+    Hybrid,
+
+    /// <summary>
+    /// Random sampling (baseline).
+    /// </summary>
+    Random
+}
+
+/// <summary>
 /// A sampler for active learning that selects the most informative samples for labeling.
 /// </summary>
 /// <typeparam name="T">The numeric type for uncertainty scores.</typeparam>
@@ -319,41 +338,17 @@ public class ImportanceSampler<T> : IDataSampler
 /// This can dramatically reduce labeling costs (50-90% less labels needed)!
 /// </para>
 /// </remarks>
-public class ActiveLearningSampler<T> : IDataSampler
+public class ActiveLearningSampler<T> : DataSamplerBase
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     /// <summary>
-    /// Active learning selection strategies.
+    /// Numeric operations for type T.
     /// </summary>
-    public enum SelectionStrategy
-    {
-        /// <summary>
-        /// Select samples with highest uncertainty (e.g., entropy, margin).
-        /// </summary>
-        Uncertainty,
-
-        /// <summary>
-        /// Select diverse samples using distance-based clustering.
-        /// </summary>
-        Diversity,
-
-        /// <summary>
-        /// Combine uncertainty and diversity.
-        /// </summary>
-        Hybrid,
-
-        /// <summary>
-        /// Random sampling (baseline).
-        /// </summary>
-        Random
-    }
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly T[] _uncertaintyScores;
     private readonly bool[] _isLabeled;
-    private readonly SelectionStrategy _strategy;
+    private readonly ActiveLearningStrategy _strategy;
     private readonly double _diversityWeight;
-    private Random _random;
 
     /// <summary>
     /// Initializes a new instance of the ActiveLearningSampler class.
@@ -364,9 +359,10 @@ public class ActiveLearningSampler<T> : IDataSampler
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public ActiveLearningSampler(
         int datasetSize,
-        SelectionStrategy strategy = SelectionStrategy.Uncertainty,
+        ActiveLearningStrategy strategy = ActiveLearningStrategy.Uncertainty,
         double diversityWeight = 0.3,
         int? seed = null)
+        : base(seed)
     {
         if (datasetSize < 1)
         {
@@ -377,9 +373,6 @@ public class ActiveLearningSampler<T> : IDataSampler
         _isLabeled = new bool[datasetSize];
         _strategy = strategy;
         _diversityWeight = Math.Max(0.0, Math.Min(1.0, diversityWeight));
-        _random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSecureRandom();
 
         // Initialize with uniform uncertainty
         T initialUncertainty = NumOps.FromDouble(0.5);
@@ -390,7 +383,7 @@ public class ActiveLearningSampler<T> : IDataSampler
     }
 
     /// <inheritdoc/>
-    public int Length => _uncertaintyScores.Length;
+    public override int Length => _uncertaintyScores.Length;
 
     /// <summary>
     /// Gets the number of labeled samples.
@@ -453,7 +446,7 @@ public class ActiveLearningSampler<T> : IDataSampler
     }
 
     /// <inheritdoc/>
-    public IEnumerable<int> GetIndices()
+    protected override IEnumerable<int> GetIndicesCore()
     {
         // For active learning, we typically only return labeled samples for training
         var labeledIndices = new List<int>();
@@ -466,13 +459,10 @@ public class ActiveLearningSampler<T> : IDataSampler
         }
 
         // Shuffle labeled indices
-        for (int i = labeledIndices.Count - 1; i > 0; i--)
-        {
-            int j = _random.Next(i + 1);
-            (labeledIndices[i], labeledIndices[j]) = (labeledIndices[j], labeledIndices[i]);
-        }
+        int[] shuffled = labeledIndices.ToArray();
+        ShuffleIndices(shuffled);
 
-        foreach (int idx in labeledIndices)
+        foreach (int idx in shuffled)
         {
             yield return idx;
         }
@@ -503,38 +493,35 @@ public class ActiveLearningSampler<T> : IDataSampler
 
         switch (_strategy)
         {
-            case SelectionStrategy.Uncertainty:
+            case ActiveLearningStrategy.Uncertainty:
                 foreach (int idx in SelectByUncertainty(unlabeledIndices, numToSelect))
                 {
                     yield return idx;
                 }
                 break;
 
-            case SelectionStrategy.Diversity:
+            case ActiveLearningStrategy.Diversity:
                 foreach (int idx in SelectByDiversity(unlabeledIndices, numToSelect))
                 {
                     yield return idx;
                 }
                 break;
 
-            case SelectionStrategy.Hybrid:
+            case ActiveLearningStrategy.Hybrid:
                 foreach (int idx in SelectHybrid(unlabeledIndices, numToSelect))
                 {
                     yield return idx;
                 }
                 break;
 
-            case SelectionStrategy.Random:
+            case ActiveLearningStrategy.Random:
             default:
                 // Shuffle and take first N
-                for (int i = unlabeledIndices.Count - 1; i > 0; i--)
-                {
-                    int j = _random.Next(i + 1);
-                    (unlabeledIndices[i], unlabeledIndices[j]) = (unlabeledIndices[j], unlabeledIndices[i]);
-                }
+                int[] shuffled = unlabeledIndices.ToArray();
+                ShuffleIndices(shuffled);
                 for (int i = 0; i < numToSelect; i++)
                 {
-                    yield return unlabeledIndices[i];
+                    yield return shuffled[i];
                 }
                 break;
         }
@@ -596,11 +583,5 @@ public class ActiveLearningSampler<T> : IDataSampler
         }
 
         return selected;
-    }
-
-    /// <inheritdoc/>
-    public void SetSeed(int seed)
-    {
-        _random = RandomHelper.CreateSeededRandom(seed);
     }
 }

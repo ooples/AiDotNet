@@ -1,5 +1,4 @@
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Sampling;
@@ -33,16 +32,8 @@ namespace AiDotNet.Data.Sampling;
 /// </code>
 /// </para>
 /// </remarks>
-public class WeightedSampler<T> : IWeightedSampler<T>
+public class WeightedSampler<T> : WeightedSamplerBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
-    private T[] _weights;
-    private double[] _cumulativeProbabilities;
-    private bool _replacement;
-    private int? _numSamples;
-    private Random _random;
-
     /// <summary>
     /// Initializes a new instance of the WeightedSampler class.
     /// </summary>
@@ -57,121 +48,37 @@ public class WeightedSampler<T> : IWeightedSampler<T>
         int? numSamples = null,
         bool replacement = true,
         int? seed = null)
+        : base(weights, numSamples, replacement, seed)
     {
-        if (weights == null)
-        {
-            throw new ArgumentNullException(nameof(weights));
-        }
-
-        _weights = weights.ToArray();
-        if (_weights.Length == 0)
-        {
-            throw new ArgumentException("Weights cannot be empty.", nameof(weights));
-        }
-
-        _numSamples = numSamples;
-        _replacement = replacement;
-        _random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSecureRandom();
-
-        _cumulativeProbabilities = new double[_weights.Length];
-        ComputeCumulativeProbabilities();
     }
 
     /// <inheritdoc/>
-    public int Length => _numSamples ?? _weights.Length;
-
-    /// <inheritdoc/>
-    public IReadOnlyList<T> Weights
+    protected override IEnumerable<int> GetIndicesCore()
     {
-        get => _weights;
-        set
-        {
-            _weights = value?.ToArray() ?? throw new ArgumentNullException(nameof(value));
-            ComputeCumulativeProbabilities();
-        }
-    }
+        int numToSample = NumSamplesOverride ?? WeightsArray.Length;
 
-    /// <inheritdoc/>
-    public bool Replacement
-    {
-        get => _replacement;
-        set => _replacement = value;
-    }
-
-    /// <inheritdoc/>
-    public int? NumSamples
-    {
-        get => _numSamples;
-        set => _numSamples = value;
-    }
-
-    /// <summary>
-    /// Computes cumulative probability distribution from weights.
-    /// </summary>
-    private void ComputeCumulativeProbabilities()
-    {
-        _cumulativeProbabilities = new double[_weights.Length];
-
-        // Convert weights to doubles and compute sum
-        double sum = 0;
-        for (int i = 0; i < _weights.Length; i++)
-        {
-            double w = NumOps.ToDouble(_weights[i]);
-            if (w < 0)
-            {
-                throw new ArgumentException($"Weight at index {i} is negative ({w}). Weights must be non-negative.");
-            }
-            sum += w;
-        }
-
-        if (sum <= 0)
-        {
-            throw new ArgumentException("Total weight must be greater than zero.");
-        }
-
-        // Compute cumulative probabilities
-        double cumulative = 0;
-        for (int i = 0; i < _weights.Length; i++)
-        {
-            cumulative += NumOps.ToDouble(_weights[i]) / sum;
-            _cumulativeProbabilities[i] = cumulative;
-        }
-
-        // Ensure last element is exactly 1.0 to avoid floating point issues
-        _cumulativeProbabilities[_weights.Length - 1] = 1.0;
-    }
-
-    /// <inheritdoc/>
-    public IEnumerable<int> GetIndices()
-    {
-        int numToSample = _numSamples ?? _weights.Length;
-
-        if (_replacement)
+        if (ReplacementEnabled)
         {
             // Sampling with replacement using inverse transform sampling
             for (int i = 0; i < numToSample; i++)
             {
-                yield return SampleOne();
+                yield return SampleWeightedIndex();
             }
         }
         else
         {
             // Sampling without replacement
             // For efficiency, we track which indices have been selected
-            var selected = new HashSet<int>();
-            var availableIndices = Enumerable.Range(0, _weights.Length).ToList();
-            double[] currentProbabilities = new double[_weights.Length];
+            var availableIndices = Enumerable.Range(0, WeightsArray.Length).ToList();
 
-            for (int i = 0; i < Math.Min(numToSample, _weights.Length); i++)
+            for (int i = 0; i < Math.Min(numToSample, WeightsArray.Length); i++)
             {
                 // Recompute probabilities excluding selected indices
                 double sum = 0;
                 for (int j = 0; j < availableIndices.Count; j++)
                 {
                     int idx = availableIndices[j];
-                    sum += NumOps.ToDouble(_weights[idx]);
+                    sum += NumOps.ToDouble(WeightsArray[idx]);
                 }
 
                 if (sum <= 0)
@@ -182,12 +89,12 @@ public class WeightedSampler<T> : IWeightedSampler<T>
                 // Build cumulative distribution over available indices
                 double cumulative = 0;
                 int selectedLocalIndex = 0;
-                double u = _random.NextDouble();
+                double u = Random.NextDouble();
 
                 for (int j = 0; j < availableIndices.Count; j++)
                 {
                     int idx = availableIndices[j];
-                    cumulative += NumOps.ToDouble(_weights[idx]) / sum;
+                    cumulative += NumOps.ToDouble(WeightsArray[idx]) / sum;
                     if (u <= cumulative)
                     {
                         selectedLocalIndex = j;
@@ -202,39 +109,6 @@ public class WeightedSampler<T> : IWeightedSampler<T>
                 availableIndices.RemoveAt(selectedLocalIndex);
             }
         }
-    }
-
-    /// <summary>
-    /// Samples a single index using inverse transform sampling.
-    /// </summary>
-    private int SampleOne()
-    {
-        double u = _random.NextDouble();
-
-        // Binary search for the index
-        int left = 0;
-        int right = _cumulativeProbabilities.Length - 1;
-
-        while (left < right)
-        {
-            int mid = (left + right) / 2;
-            if (_cumulativeProbabilities[mid] < u)
-            {
-                left = mid + 1;
-            }
-            else
-            {
-                right = mid;
-            }
-        }
-
-        return left;
-    }
-
-    /// <inheritdoc/>
-    public void SetSeed(int seed)
-    {
-        _random = RandomHelper.CreateSeededRandom(seed);
     }
 
     /// <summary>

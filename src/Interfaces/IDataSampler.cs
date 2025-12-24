@@ -61,6 +61,24 @@ public interface IDataSampler
     /// which is important for reproducibility and debugging.
     /// </remarks>
     void SetSeed(int seed);
+
+    /// <summary>
+    /// Called at the start of each epoch to allow the sampler to adjust its behavior.
+    /// </summary>
+    /// <param name="epoch">The current epoch number (0-based).</param>
+    /// <remarks>
+    /// <para>
+    /// This method allows samplers to implement epoch-dependent behavior such as:
+    /// - Curriculum learning: adjusting difficulty thresholds as training progresses
+    /// - Self-paced learning: updating sample inclusion thresholds
+    /// - Active learning: refreshing uncertainty estimates
+    /// </para>
+    /// <para><b>For Beginners:</b> Some sampling strategies change over time. For example,
+    /// curriculum learning starts with easy examples and gradually adds harder ones.
+    /// This method tells the sampler "we're starting epoch N" so it can adjust accordingly.
+    /// </para>
+    /// </remarks>
+    void OnEpochStart(int epoch);
 }
 
 /// <summary>

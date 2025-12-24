@@ -1,5 +1,4 @@
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Sampling;
 
@@ -24,11 +23,10 @@ namespace AiDotNet.Data.Sampling;
 /// </code>
 /// </para>
 /// </remarks>
-public class StratifiedSampler : IStratifiedSampler
+public class StratifiedSampler : DataSamplerBase, IStratifiedSampler
 {
     private int[] _labels;
     private readonly int _numClasses;
-    private Random _random;
     private Dictionary<int, List<int>>? _classIndices;
 
     /// <summary>
@@ -40,6 +38,7 @@ public class StratifiedSampler : IStratifiedSampler
     /// <exception cref="ArgumentNullException">Thrown when labels is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when numClasses is less than 2.</exception>
     public StratifiedSampler(IEnumerable<int> labels, int numClasses, int? seed = null)
+        : base(seed)
     {
         if (labels == null)
         {
@@ -53,15 +52,11 @@ public class StratifiedSampler : IStratifiedSampler
 
         _labels = labels.ToArray();
         _numClasses = numClasses;
-        _random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSecureRandom();
-
         BuildClassIndices();
     }
 
     /// <inheritdoc/>
-    public int Length => _labels.Length;
+    public override int Length => _labels.Length;
 
     /// <inheritdoc/>
     public int NumClasses => _numClasses;
@@ -99,7 +94,7 @@ public class StratifiedSampler : IStratifiedSampler
     }
 
     /// <inheritdoc/>
-    public IEnumerable<int> GetIndices()
+    protected override IEnumerable<int> GetIndicesCore()
     {
         if (_classIndices == null)
         {
@@ -114,11 +109,7 @@ public class StratifiedSampler : IStratifiedSampler
             List<int> indices = kvp.Value;
 
             int[] shuffled = indices.ToArray();
-            for (int i = shuffled.Length - 1; i > 0; i--)
-            {
-                int j = _random.Next(i + 1);
-                (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
-            }
+            ShuffleIndices(shuffled);
             shuffledClassIndices[classLabel] = shuffled;
         }
 
@@ -156,22 +147,13 @@ public class StratifiedSampler : IStratifiedSampler
         }
 
         // Shuffle the final order to avoid class-based patterns
-        for (int i = allIndices.Count - 1; i > 0; i--)
-        {
-            int j = _random.Next(i + 1);
-            (allIndices[i], allIndices[j]) = (allIndices[j], allIndices[i]);
-        }
+        var finalArray = allIndices.ToArray();
+        ShuffleIndices(finalArray);
 
-        foreach (int index in allIndices)
+        foreach (int index in finalArray)
         {
             yield return index;
         }
-    }
-
-    /// <inheritdoc/>
-    public void SetSeed(int seed)
-    {
-        _random = RandomHelper.CreateSeededRandom(seed);
     }
 }
 
@@ -191,13 +173,12 @@ public class StratifiedSampler : IStratifiedSampler
 /// - Doing contrastive learning (needs diverse samples in each batch)
 /// </para>
 /// </remarks>
-public class StratifiedBatchSampler : IBatchSampler, IStratifiedSampler
+public class StratifiedBatchSampler : DataSamplerBase, IBatchSampler, IStratifiedSampler
 {
     private int[] _labels;
     private readonly int _numClasses;
     private int _batchSize;
     private bool _dropLast;
-    private Random _random;
     private Dictionary<int, List<int>>? _classIndices;
 
     /// <summary>
@@ -214,6 +195,7 @@ public class StratifiedBatchSampler : IBatchSampler, IStratifiedSampler
         int batchSize,
         bool dropLast = false,
         int? seed = null)
+        : base(seed)
     {
         if (labels == null)
         {
@@ -234,15 +216,11 @@ public class StratifiedBatchSampler : IBatchSampler, IStratifiedSampler
         _numClasses = numClasses;
         _batchSize = batchSize;
         _dropLast = dropLast;
-        _random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSecureRandom();
-
         BuildClassIndices();
     }
 
     /// <inheritdoc/>
-    public int Length => _labels.Length;
+    public override int Length => _labels.Length;
 
     /// <inheritdoc/>
     public int NumClasses => _numClasses;
@@ -291,7 +269,7 @@ public class StratifiedBatchSampler : IBatchSampler, IStratifiedSampler
     }
 
     /// <inheritdoc/>
-    public IEnumerable<int> GetIndices()
+    protected override IEnumerable<int> GetIndicesCore()
     {
         foreach (var batch in GetBatchIndices())
         {
@@ -318,11 +296,7 @@ public class StratifiedBatchSampler : IBatchSampler, IStratifiedSampler
             List<int> indices = kvp.Value;
 
             int[] shuffled = indices.ToArray();
-            for (int i = shuffled.Length - 1; i > 0; i--)
-            {
-                int j = _random.Next(i + 1);
-                (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
-            }
+            ShuffleIndices(shuffled);
             shuffledQueues[classLabel] = new Queue<int>(shuffled);
         }
 
@@ -366,11 +340,7 @@ public class StratifiedBatchSampler : IBatchSampler, IStratifiedSampler
             {
                 // Shuffle within batch
                 var batchArray = batch.ToArray();
-                for (int i = batchArray.Length - 1; i > 0; i--)
-                {
-                    int j = _random.Next(i + 1);
-                    (batchArray[i], batchArray[j]) = (batchArray[j], batchArray[i]);
-                }
+                ShuffleIndices(batchArray);
                 yield return batchArray;
             }
         }
@@ -390,19 +360,9 @@ public class StratifiedBatchSampler : IBatchSampler, IStratifiedSampler
             if (remaining.Count > 0)
             {
                 var batchArray = remaining.ToArray();
-                for (int i = batchArray.Length - 1; i > 0; i--)
-                {
-                    int j = _random.Next(i + 1);
-                    (batchArray[i], batchArray[j]) = (batchArray[j], batchArray[i]);
-                }
+                ShuffleIndices(batchArray);
                 yield return batchArray;
             }
         }
-    }
-
-    /// <inheritdoc/>
-    public void SetSeed(int seed)
-    {
-        _random = RandomHelper.CreateSeededRandom(seed);
     }
 }

@@ -33,7 +33,7 @@ namespace AiDotNet.Optimizers;
 /// </code>
 /// </para>
 /// </remarks>
-internal class OptimizationDataBatcher<T, TInput, TOutput>
+public class OptimizationDataBatcher<T, TInput, TOutput>
 {
     private readonly OptimizationInputData<T, TInput, TOutput> _inputData;
     private readonly int _batchSize;
@@ -338,7 +338,7 @@ internal class OptimizationDataBatcher<T, TInput, TOutput>
     public OptimizationDataBatcher<T, TInput, TOutput> WithCurriculumLearning<TDifficulty>(
         IEnumerable<TDifficulty> difficulties,
         int totalEpochs,
-        CurriculumSampler<TDifficulty>.CurriculumStrategy strategy = CurriculumSampler<TDifficulty>.CurriculumStrategy.Linear)
+        CurriculumStrategy strategy = CurriculumStrategy.Linear)
     {
         var sampler = new CurriculumSampler<TDifficulty>(difficulties, totalEpochs, strategy, _seed);
         return WithSampler(sampler);
@@ -348,7 +348,7 @@ internal class OptimizationDataBatcher<T, TInput, TOutput>
 /// <summary>
 /// Extension methods for optimization data batching.
 /// </summary>
-internal static class OptimizationDataBatcherExtensions
+public static class OptimizationDataBatcherExtensions
 {
     /// <summary>
     /// Creates a batcher for the optimization input data.

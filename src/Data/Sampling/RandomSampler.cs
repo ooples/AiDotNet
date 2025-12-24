@@ -1,5 +1,4 @@
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Sampling;
 
@@ -27,10 +26,9 @@ namespace AiDotNet.Data.Sampling;
 /// </code>
 /// </para>
 /// </remarks>
-public class RandomSampler : IDataSampler
+public class RandomSampler : DataSamplerBase
 {
     private readonly int _datasetSize;
-    private Random _random;
 
     /// <summary>
     /// Initializes a new instance of the RandomSampler class.
@@ -39,6 +37,7 @@ public class RandomSampler : IDataSampler
     /// <param name="seed">Optional random seed for reproducibility.</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when datasetSize is less than 1.</exception>
     public RandomSampler(int datasetSize, int? seed = null)
+        : base(seed)
     {
         if (datasetSize < 1)
         {
@@ -46,42 +45,23 @@ public class RandomSampler : IDataSampler
         }
 
         _datasetSize = datasetSize;
-        _random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc/>
-    public int Length => _datasetSize;
+    public override int Length => _datasetSize;
 
     /// <inheritdoc/>
-    public IEnumerable<int> GetIndices()
+    protected override IEnumerable<int> GetIndicesCore()
     {
         // Create and shuffle indices using Fisher-Yates algorithm
-        int[] indices = new int[_datasetSize];
-        for (int i = 0; i < _datasetSize; i++)
-        {
-            indices[i] = i;
-        }
-
-        // Fisher-Yates shuffle
-        for (int i = _datasetSize - 1; i > 0; i--)
-        {
-            int j = _random.Next(i + 1);
-            (indices[i], indices[j]) = (indices[j], indices[i]);
-        }
+        int[] indices = CreateSequentialIndices(_datasetSize);
+        ShuffleIndices(indices);
 
         // Yield shuffled indices
         for (int i = 0; i < _datasetSize; i++)
         {
             yield return indices[i];
         }
-    }
-
-    /// <inheritdoc/>
-    public void SetSeed(int seed)
-    {
-        _random = RandomHelper.CreateSeededRandom(seed);
     }
 }
 
@@ -100,7 +80,7 @@ public class RandomSampler : IDataSampler
 /// - Debugging to isolate issues from randomness
 /// </para>
 /// </remarks>
-public class SequentialSampler : IDataSampler
+public class SequentialSampler : DataSamplerBase
 {
     private readonly int _datasetSize;
 
@@ -110,6 +90,7 @@ public class SequentialSampler : IDataSampler
     /// <param name="datasetSize">The total number of samples in the dataset.</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when datasetSize is less than 1.</exception>
     public SequentialSampler(int datasetSize)
+        : base(null)
     {
         if (datasetSize < 1)
         {
@@ -120,21 +101,15 @@ public class SequentialSampler : IDataSampler
     }
 
     /// <inheritdoc/>
-    public int Length => _datasetSize;
+    public override int Length => _datasetSize;
 
     /// <inheritdoc/>
-    public IEnumerable<int> GetIndices()
+    protected override IEnumerable<int> GetIndicesCore()
     {
         for (int i = 0; i < _datasetSize; i++)
         {
             yield return i;
         }
-    }
-
-    /// <inheritdoc/>
-    public void SetSeed(int seed)
-    {
-        // No-op for sequential sampler
     }
 }
 
@@ -147,10 +122,9 @@ public class SequentialSampler : IDataSampler
 /// such as a validation split or a filtered dataset.
 /// </para>
 /// </remarks>
-public class SubsetSampler : IDataSampler
+public class SubsetSampler : DataSamplerBase
 {
     private readonly int[] _indices;
-    private Random _random;
     private bool _shuffle;
 
     /// <summary>
@@ -160,16 +134,14 @@ public class SubsetSampler : IDataSampler
     /// <param name="shuffle">Whether to shuffle the indices each epoch.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public SubsetSampler(IEnumerable<int> indices, bool shuffle = false, int? seed = null)
+        : base(seed)
     {
         _indices = indices?.ToArray() ?? throw new ArgumentNullException(nameof(indices));
         _shuffle = shuffle;
-        _random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc/>
-    public int Length => _indices.Length;
+    public override int Length => _indices.Length;
 
     /// <summary>
     /// Gets or sets whether to shuffle the indices each epoch.
@@ -181,19 +153,13 @@ public class SubsetSampler : IDataSampler
     }
 
     /// <inheritdoc/>
-    public IEnumerable<int> GetIndices()
+    protected override IEnumerable<int> GetIndicesCore()
     {
         if (_shuffle)
         {
             int[] shuffled = new int[_indices.Length];
             Array.Copy(_indices, shuffled, _indices.Length);
-
-            // Fisher-Yates shuffle
-            for (int i = shuffled.Length - 1; i > 0; i--)
-            {
-                int j = _random.Next(i + 1);
-                (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
-            }
+            ShuffleIndices(shuffled);
 
             for (int i = 0; i < shuffled.Length; i++)
             {
@@ -207,11 +173,5 @@ public class SubsetSampler : IDataSampler
                 yield return _indices[i];
             }
         }
-    }
-
-    /// <inheritdoc/>
-    public void SetSeed(int seed)
-    {
-        _random = RandomHelper.CreateSeededRandom(seed);
     }
 }

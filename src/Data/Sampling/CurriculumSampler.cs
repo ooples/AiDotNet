@@ -1,8 +1,33 @@
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Sampling;
+
+/// <summary>
+/// Defines how the curriculum progresses over epochs.
+/// </summary>
+public enum CurriculumStrategy
+{
+    /// <summary>
+    /// Linear progression from easy to all samples.
+    /// </summary>
+    Linear,
+
+    /// <summary>
+    /// Exponential progression (faster ramp-up of difficulty).
+    /// </summary>
+    Exponential,
+
+    /// <summary>
+    /// Step-wise progression with discrete difficulty levels.
+    /// </summary>
+    Stepped,
+
+    /// <summary>
+    /// Competence-based: difficulty threshold based on current performance.
+    /// </summary>
+    CompetenceBased
+}
 
 /// <summary>
 /// A sampler that implements curriculum learning by progressively introducing harder samples.
@@ -31,7 +56,7 @@ namespace AiDotNet.Data.Sampling;
 ///
 /// for (int epoch = 0; epoch &lt; 20; epoch++)
 /// {
-///     sampler.SetCurrentEpoch(epoch);
+///     sampler.OnEpochStart(epoch);
 ///     foreach (var idx in sampler.GetIndices())
 ///     {
 ///         // Earlier epochs sample more easy examples
@@ -40,41 +65,11 @@ namespace AiDotNet.Data.Sampling;
 /// </code>
 /// </para>
 /// </remarks>
-public class CurriculumSampler<T> : IDataSampler
+public class CurriculumSampler<T> : EpochAdaptiveSamplerBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly T[] _difficulties;
-    private readonly int _totalEpochs;
     private readonly CurriculumStrategy _strategy;
-    private int _currentEpoch;
-    private Random _random;
-
-    /// <summary>
-    /// Defines how the curriculum progresses over epochs.
-    /// </summary>
-    public enum CurriculumStrategy
-    {
-        /// <summary>
-        /// Linear progression from easy to all samples.
-        /// </summary>
-        Linear,
-
-        /// <summary>
-        /// Exponential progression (faster ramp-up of difficulty).
-        /// </summary>
-        Exponential,
-
-        /// <summary>
-        /// Step-wise progression with discrete difficulty levels.
-        /// </summary>
-        Stepped,
-
-        /// <summary>
-        /// Competence-based: difficulty threshold based on current performance.
-        /// </summary>
-        CompetenceBased
-    }
+    private double _competence;
 
     /// <summary>
     /// Initializes a new instance of the CurriculumSampler class.
@@ -88,27 +83,15 @@ public class CurriculumSampler<T> : IDataSampler
         int totalEpochs,
         CurriculumStrategy strategy = CurriculumStrategy.Linear,
         int? seed = null)
+        : base(totalEpochs, seed)
     {
         _difficulties = difficulties?.ToArray() ?? throw new ArgumentNullException(nameof(difficulties));
-        _totalEpochs = totalEpochs > 0 ? totalEpochs : throw new ArgumentOutOfRangeException(nameof(totalEpochs));
         _strategy = strategy;
-        _currentEpoch = 0;
-        _random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSecureRandom();
+        _competence = 0.0;
     }
 
     /// <inheritdoc/>
-    public int Length => _difficulties.Length;
-
-    /// <summary>
-    /// Gets or sets the current epoch (0-indexed).
-    /// </summary>
-    public int CurrentEpoch
-    {
-        get => _currentEpoch;
-        set => _currentEpoch = Math.Max(0, Math.Min(value, _totalEpochs - 1));
-    }
+    public override int Length => _difficulties.Length;
 
     /// <summary>
     /// Gets the current difficulty threshold based on epoch and strategy.
@@ -117,20 +100,18 @@ public class CurriculumSampler<T> : IDataSampler
     {
         get
         {
-            double progress = (double)(_currentEpoch + 1) / _totalEpochs;
+            double progress = Progress;
 
             return _strategy switch
             {
                 CurriculumStrategy.Linear => progress,
                 CurriculumStrategy.Exponential => Math.Pow(progress, 2),
                 CurriculumStrategy.Stepped => GetSteppedThreshold(progress),
-                CurriculumStrategy.CompetenceBased => progress, // Override with SetCompetence()
+                CurriculumStrategy.CompetenceBased => _competence,
                 _ => progress
             };
         }
     }
-
-    private double _competence = 0.0;
 
     /// <summary>
     /// Sets the model's current competence level for competence-based curriculum.
@@ -152,11 +133,9 @@ public class CurriculumSampler<T> : IDataSampler
     }
 
     /// <inheritdoc/>
-    public IEnumerable<int> GetIndices()
+    protected override IEnumerable<int> GetIndicesCore()
     {
-        double threshold = _strategy == CurriculumStrategy.CompetenceBased
-            ? _competence
-            : CurrentDifficultyThreshold;
+        double threshold = CurrentDifficultyThreshold;
 
         // Filter samples that are below the current difficulty threshold
         var eligibleIndices = new List<int>();
@@ -191,30 +170,12 @@ public class CurriculumSampler<T> : IDataSampler
 
         // Shuffle eligible indices
         int[] shuffled = eligibleIndices.ToArray();
-        for (int i = shuffled.Length - 1; i > 0; i--)
-        {
-            int j = _random.Next(i + 1);
-            (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
-        }
+        ShuffleIndices(shuffled);
 
         foreach (int idx in shuffled)
         {
             yield return idx;
         }
-    }
-
-    /// <inheritdoc/>
-    public void SetSeed(int seed)
-    {
-        _random = RandomHelper.CreateSeededRandom(seed);
-    }
-
-    /// <summary>
-    /// Advances to the next epoch.
-    /// </summary>
-    public void NextEpoch()
-    {
-        _currentEpoch = Math.Min(_currentEpoch + 1, _totalEpochs - 1);
     }
 }
 
@@ -237,14 +198,11 @@ public class CurriculumSampler<T> : IDataSampler
 /// This is adaptive curriculum learning - the curriculum adjusts based on the model!
 /// </para>
 /// </remarks>
-public class SelfPacedSampler<T> : IDataSampler
+public class SelfPacedSampler<T> : EpochAdaptiveSamplerBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly T[] _losses;
     private T _lambda; // Pace parameter
     private readonly T _lambdaGrowthRate;
-    private Random _random;
 
     /// <summary>
     /// Initializes a new instance of the SelfPacedSampler class.
@@ -252,12 +210,15 @@ public class SelfPacedSampler<T> : IDataSampler
     /// <param name="datasetSize">The total number of samples.</param>
     /// <param name="initialLambda">Initial pace parameter (lower = stricter selection).</param>
     /// <param name="lambdaGrowthRate">How much lambda increases each epoch.</param>
+    /// <param name="totalEpochs">Total epochs for training (used for progress tracking).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public SelfPacedSampler(
         int datasetSize,
         T initialLambda,
         T lambdaGrowthRate,
+        int totalEpochs = 100,
         int? seed = null)
+        : base(totalEpochs, seed)
     {
         _losses = new T[datasetSize];
         for (int i = 0; i < datasetSize; i++)
@@ -267,13 +228,10 @@ public class SelfPacedSampler<T> : IDataSampler
 
         _lambda = initialLambda;
         _lambdaGrowthRate = lambdaGrowthRate;
-        _random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc/>
-    public int Length => _losses.Length;
+    public override int Length => _losses.Length;
 
     /// <summary>
     /// Gets the current pace parameter lambda.
@@ -307,13 +265,19 @@ public class SelfPacedSampler<T> : IDataSampler
     }
 
     /// <inheritdoc/>
-    public IEnumerable<int> GetIndices()
+    protected override void OnEpochStartCore(int epoch)
+    {
+        // Increase lambda for next epoch
+        _lambda = NumOps.Add(_lambda, _lambdaGrowthRate);
+    }
+
+    /// <inheritdoc/>
+    protected override IEnumerable<int> GetIndicesCore()
     {
         double lambdaValue = NumOps.ToDouble(_lambda);
 
         // Compute selection weight for each sample
         // Weight = 1 if loss < lambda, 0 otherwise (hard thresholding)
-        // Or use soft weighting: weight = max(0, lambda - loss)
         var eligibleIndices = new List<int>();
         for (int i = 0; i < _losses.Length; i++)
         {
@@ -337,29 +301,11 @@ public class SelfPacedSampler<T> : IDataSampler
 
         // Shuffle eligible indices
         int[] shuffled = eligibleIndices.ToArray();
-        for (int i = shuffled.Length - 1; i > 0; i--)
-        {
-            int j = _random.Next(i + 1);
-            (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
-        }
+        ShuffleIndices(shuffled);
 
         foreach (int idx in shuffled)
         {
             yield return idx;
         }
-    }
-
-    /// <summary>
-    /// Increases the pace parameter for the next epoch.
-    /// </summary>
-    public void NextEpoch()
-    {
-        _lambda = NumOps.Add(_lambda, _lambdaGrowthRate);
-    }
-
-    /// <inheritdoc/>
-    public void SetSeed(int seed)
-    {
-        _random = RandomHelper.CreateSeededRandom(seed);
     }
 }

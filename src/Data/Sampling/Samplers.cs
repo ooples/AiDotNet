@@ -188,7 +188,7 @@ public static class Samplers
     public static CurriculumSampler<double> Curriculum(
         IEnumerable<double> difficulties,
         int totalEpochs = 100,
-        CurriculumSampler<double>.CurriculumStrategy strategy = CurriculumSampler<double>.CurriculumStrategy.Linear,
+        CurriculumStrategy strategy = CurriculumStrategy.Linear,
         int? seed = null)
     {
         return new CurriculumSampler<double>(difficulties, totalEpochs, strategy, seed);
@@ -221,7 +221,7 @@ public static class Samplers
     public static CurriculumSampler<T> Curriculum<T>(
         IEnumerable<T> difficulties,
         int totalEpochs,
-        CurriculumSampler<T>.CurriculumStrategy strategy = CurriculumSampler<T>.CurriculumStrategy.Linear,
+        CurriculumStrategy strategy = CurriculumStrategy.Linear,
         int? seed = null)
     {
         return new CurriculumSampler<T>(difficulties, totalEpochs, strategy, seed);
@@ -245,9 +245,10 @@ public static class Samplers
         int datasetSize,
         double initialLambda = 0.1,
         double lambdaGrowthRate = 0.1,
+        int totalEpochs = 100,
         int? seed = null)
     {
-        return new SelfPacedSampler<double>(datasetSize, initialLambda, lambdaGrowthRate, seed);
+        return new SelfPacedSampler<double>(datasetSize, initialLambda, lambdaGrowthRate, totalEpochs, seed);
     }
 
     /// <summary>
@@ -269,9 +270,10 @@ public static class Samplers
         int datasetSize,
         T initialLambda,
         T lambdaGrowthRate,
+        int totalEpochs = 100,
         int? seed = null)
     {
-        return new SelfPacedSampler<T>(datasetSize, initialLambda, lambdaGrowthRate, seed);
+        return new SelfPacedSampler<T>(datasetSize, initialLambda, lambdaGrowthRate, totalEpochs, seed);
     }
 
     /// <summary>
@@ -343,7 +345,7 @@ public static class Samplers
     /// </remarks>
     public static ActiveLearningSampler<double> ActiveLearning(
         int datasetSize,
-        ActiveLearningSampler<double>.SelectionStrategy strategy = ActiveLearningSampler<double>.SelectionStrategy.Uncertainty,
+        ActiveLearningStrategy strategy = ActiveLearningStrategy.Uncertainty,
         double diversityWeight = 0.3,
         int? seed = null)
     {
@@ -373,7 +375,7 @@ public static class Samplers
     /// </remarks>
     public static ActiveLearningSampler<T> ActiveLearning<T>(
         int datasetSize,
-        ActiveLearningSampler<T>.SelectionStrategy strategy = ActiveLearningSampler<T>.SelectionStrategy.Uncertainty,
+        ActiveLearningStrategy strategy = ActiveLearningStrategy.Uncertainty,
         double diversityWeight = 0.3,
         int? seed = null)
     {
