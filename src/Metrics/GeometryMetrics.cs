@@ -84,7 +84,7 @@ public class ChamferDistance<T> where T : struct
         int numTarget = target.Shape[0];
         int dim = source.Shape[1];
 
-        if (numSource == 0)
+        if (numSource == 0 || numTarget == 0)
         {
             return _numOps.Zero;
         }
@@ -267,6 +267,12 @@ public class EarthMoversDistance<T> where T : struct
         int n = pointsA.Shape[0];
         int m = pointsB.Shape[0];
         int dim = pointsA.Shape[1];
+
+        // Handle empty point clouds
+        if (n == 0 || m == 0)
+        {
+            return _numOps.Zero;
+        }
 
         // Compute cost matrix (pairwise distances)
         var costMatrix = new double[n, m];

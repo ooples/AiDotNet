@@ -2555,13 +2555,15 @@ public interface IEngine
     /// <param name="input">The input tensor [batch, channels, depth, height, width].</param>
     /// <param name="poolSize">The pooling window size [poolD, poolH, poolW].</param>
     /// <param name="stride">The stride [strideD, strideH, strideW].</param>
-    /// <param name="maxIndices">Output parameter containing the linear indices of maximum values for each output position.</param>
+    /// <param name="maxIndices">Output parameter containing the 3D coordinates (d, h, w) of maximum values for each output position.</param>
     /// <returns>The pooled tensor [batch, channels, output_depth, output_height, output_width].</returns>
     /// <remarks>
     /// <para>
-    /// The maxIndices array stores the flattened index within each pooling window where the maximum
-    /// value was found. This is essential for the backward pass to route gradients correctly.
-    /// Shape of maxIndices: [batch, channels, output_depth, output_height, output_width]
+    /// The maxIndices array stores the 3D coordinates (depth, height, width) within the input tensor
+    /// where the maximum value was found for each output position. This is essential for the backward
+    /// pass to route gradients correctly.
+    /// Shape of maxIndices: [batch, channels, output_depth, output_height, output_width, 3]
+    /// where the last dimension contains [max_d_index, max_h_index, max_w_index].
     /// </para>
     /// </remarks>
     Tensor<T> MaxPool3DWithIndices<T>(Tensor<T> input, int[] poolSize, int[] stride, out int[,,,,,] maxIndices);

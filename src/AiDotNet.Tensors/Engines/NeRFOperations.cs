@@ -275,7 +275,18 @@ public static class NeRFOperations
             double gradG = numOps.ToDouble(outputGradient.GetFlat(r * 3 + 1));
             double gradB = numOps.ToDouble(outputGradient.GetFlat(r * 3 + 2));
 
-            // Backward pass
+            // Compute weighted colors for all samples (needed for transmittance gradient)
+            var weightedColors = new double[numSamples];
+            for (int s = 0; s < numSamples; s++)
+            {
+                int rgbIdx = (r * numSamples + s) * 3;
+                double rVal = numOps.ToDouble(rgbSamples.GetFlat(rgbIdx));
+                double gVal = numOps.ToDouble(rgbSamples.GetFlat(rgbIdx + 1));
+                double bVal = numOps.ToDouble(rgbSamples.GetFlat(rgbIdx + 2));
+                weightedColors[s] = gradR * rVal + gradG * gVal + gradB * bVal;
+            }
+
+            // Backward pass with full gradient computation
             for (int s = 0; s < numSamples; s++)
             {
                 double Ti = transmittances[s];
@@ -293,15 +304,30 @@ public static class NeRFOperations
                 rgbGrad[rgbIdx + 1] = numOps.FromDouble(dL_dci * gradG);
                 rgbGrad[rgbIdx + 2] = numOps.FromDouble(dL_dci * gradB);
 
-                // dL/d(sigma_i) = sum over j >= i of contribution
-                // Simplified: dL/d(alpha_i) * d(alpha_i)/d(sigma_i)
-                // d(alpha)/d(sigma) = delta * exp(-sigma * delta) = delta * (1 - alpha)
+                // Full gradient for density: dL/dσ_i = dL/dα_i * dα_i/dσ_i + Σ_{j>i} dL/dT_j * dT_j/dα_i * dα_i/dσ_i
+                // where dα/dσ = δ * (1 - α) and dT_j/dα_i = -T_j / (1 - α_i) for j > i
                 double dAlpha_dSigma = di * (1.0 - ai);
-                double dL_dAlpha = Ti * (gradR * rVal + gradG * gVal + gradB * bVal);
 
-                // Also need to account for transmittance effect on subsequent samples
-                // This is a simplified approximation
-                densityGrad[r * numSamples + s] = numOps.FromDouble(dL_dAlpha * dAlpha_dSigma);
+                // Direct contribution: gradient through this sample's alpha
+                double dL_dAlpha_direct = Ti * weightedColors[s];
+
+                // Indirect contribution: effect on subsequent samples through transmittance
+                // dL/dα_i (indirect) = -Σ_{j>i} T_j * α_j * (dL/dC · c_j) / (1 - α_i)
+                double dL_dAlpha_indirect = 0.0;
+                if (Math.Abs(1.0 - ai) > 1e-10) // Avoid division by zero
+                {
+                    double Tj = Ti * (1.0 - ai); // T_{i+1}
+                    for (int j = s + 1; j < numSamples; j++)
+                    {
+                        double aj = alphas[j];
+                        dL_dAlpha_indirect -= Tj * aj * weightedColors[j];
+                        Tj *= (1.0 - aj);
+                    }
+                    dL_dAlpha_indirect /= (1.0 - ai);
+                }
+
+                double dL_dSigma = (dL_dAlpha_direct + dL_dAlpha_indirect) * dAlpha_dSigma;
+                densityGrad[r * numSamples + s] = numOps.FromDouble(dL_dSigma);
             }
         });
 

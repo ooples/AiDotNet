@@ -4965,20 +4965,22 @@ public class CpuEngine : IEngine
         var gradInputData = new T[batch * channels * depth * height * width];
         var gradOutputData = gradOutput.ToArray();
 
-        // Use thread-local accumulators to avoid contention
-        int numThreads = Environment.ProcessorCount;
-        var localGradInputs = new T[numThreads][];
-        for (int t = 0; t < numThreads; t++)
+        // Initialize gradient input to zero
+        for (int i = 0; i < gradInputData.Length; i++)
         {
-            localGradInputs[t] = new T[gradInputData.Length];
+            gradInputData[i] = numOps.Zero;
         }
 
+        // Each (b, c) iteration writes to a disjoint slice of gradInputData,
+        // so no synchronization is needed - direct writes are thread-safe
         Parallel.For(0, batch * channels, bc =>
         {
-            int threadId = Environment.CurrentManagedThreadId % numThreads;
-            var localGrad = localGradInputs[threadId];
             int b = bc / channels;
             int c = bc % channels;
+
+            // Base offset for this (b, c) slice in gradInputData
+            int inputBaseOffset = (b * channels + c) * depth * height * width;
+            int outputBaseOffset = (b * channels + c) * outDepth * outHeight * outWidth;
 
             for (int od = 0; od < outDepth; od++)
             {
@@ -4990,22 +4992,13 @@ public class CpuEngine : IEngine
                     {
                         int iw = ow / scaleW;
 
-                        int inputIdx = (((b * channels + c) * depth + id) * height + ih) * width + iw;
-                        int outputIdx = (((b * channels + c) * outDepth + od) * outHeight + oh) * outWidth + ow;
-                        localGrad[inputIdx] = numOps.Add(localGrad[inputIdx], gradOutputData[outputIdx]);
+                        int inputIdx = inputBaseOffset + (id * height + ih) * width + iw;
+                        int outputIdx = outputBaseOffset + (od * outHeight + oh) * outWidth + ow;
+                        gradInputData[inputIdx] = numOps.Add(gradInputData[inputIdx], gradOutputData[outputIdx]);
                     }
                 }
             }
         });
-
-        // Merge thread-local results
-        for (int t = 0; t < numThreads; t++)
-        {
-            for (int i = 0; i < gradInputData.Length; i++)
-            {
-                gradInputData[i] = numOps.Add(gradInputData[i], localGradInputs[t][i]);
-            }
-        }
 
         return new Tensor<T>(inputShape, new Vector<T>(gradInputData));
     }
@@ -5050,70 +5043,68 @@ public class CpuEngine : IEngine
         var outputData = new T[batch * outChannels * outDepth * outHeight * outWidth];
         var inputData = input.ToArray();
         var kernelData = kernel.ToArray();
+        var mergeLock = new object();
 
-        // Use thread-local accumulators
-        int numThreads = Environment.ProcessorCount;
-        var localOutputs = new T[numThreads][];
-        for (int t = 0; t < numThreads; t++)
-        {
-            localOutputs[t] = new T[outputData.Length];
-        }
-
-        Parallel.For(0, batch * inChannels, bic =>
-        {
-            int threadId = Environment.CurrentManagedThreadId % numThreads;
-            var localOutput = localOutputs[threadId];
-            int b = bic / inChannels;
-            int ic = bic % inChannels;
-
-            for (int id = 0; id < inDepth; id++)
+        // Use Parallel.For with true per-task local accumulators to avoid race conditions
+        Parallel.For(
+            0, batch * inChannels,
+            () => new T[outputData.Length], // localInit: create per-task buffer
+            (bic, state, localOutput) =>
             {
-                for (int ih = 0; ih < inHeight; ih++)
+                int b = bic / inChannels;
+                int ic = bic % inChannels;
+
+                for (int id = 0; id < inDepth; id++)
                 {
-                    for (int iw = 0; iw < inWidth; iw++)
+                    for (int ih = 0; ih < inHeight; ih++)
                     {
-                        int inputIdx = (((b * inChannels + ic) * inDepth + id) * inHeight + ih) * inWidth + iw;
-                        T inputVal = inputData[inputIdx];
-
-                        for (int oc = 0; oc < outChannels; oc++)
+                        for (int iw = 0; iw < inWidth; iw++)
                         {
-                            for (int kd = 0; kd < kD; kd++)
+                            int inputIdx = (((b * inChannels + ic) * inDepth + id) * inHeight + ih) * inWidth + iw;
+                            T inputVal = inputData[inputIdx];
+
+                            for (int oc = 0; oc < outChannels; oc++)
                             {
-                                int od = id * strideD - padD + kd;
-                                if (od < 0 || od >= outDepth) continue;
-
-                                for (int kh = 0; kh < kH; kh++)
+                                for (int kd = 0; kd < kD; kd++)
                                 {
-                                    int oh = ih * strideH - padH + kh;
-                                    if (oh < 0 || oh >= outHeight) continue;
+                                    int od = id * strideD - padD + kd;
+                                    if (od < 0 || od >= outDepth) continue;
 
-                                    for (int kw = 0; kw < kW; kw++)
+                                    for (int kh = 0; kh < kH; kh++)
                                     {
-                                        int ow = iw * strideW - padW + kw;
-                                        if (ow < 0 || ow >= outWidth) continue;
+                                        int oh = ih * strideH - padH + kh;
+                                        if (oh < 0 || oh >= outHeight) continue;
 
-                                        int kernelIdx = (((ic * outChannels + oc) * kD + kd) * kH + kh) * kW + kw;
-                                        int outputIdx = (((b * outChannels + oc) * outDepth + od) * outHeight + oh) * outWidth + ow;
+                                        for (int kw = 0; kw < kW; kw++)
+                                        {
+                                            int ow = iw * strideW - padW + kw;
+                                            if (ow < 0 || ow >= outWidth) continue;
 
-                                        localOutput[outputIdx] = numOps.Add(localOutput[outputIdx],
-                                            numOps.Multiply(inputVal, kernelData[kernelIdx]));
+                                            int kernelIdx = (((ic * outChannels + oc) * kD + kd) * kH + kh) * kW + kw;
+                                            int outputIdx = (((b * outChannels + oc) * outDepth + od) * outHeight + oh) * outWidth + ow;
+
+                                            localOutput[outputIdx] = numOps.Add(localOutput[outputIdx],
+                                                numOps.Multiply(inputVal, kernelData[kernelIdx]));
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
-        });
-
-        // Merge thread-local results
-        for (int t = 0; t < numThreads; t++)
-        {
-            for (int i = 0; i < outputData.Length; i++)
+                return localOutput;
+            },
+            localOutput =>
             {
-                outputData[i] = numOps.Add(outputData[i], localOutputs[t][i]);
-            }
-        }
+                // localFinally: merge per-task results under lock
+                lock (mergeLock)
+                {
+                    for (int i = 0; i < outputData.Length; i++)
+                    {
+                        outputData[i] = numOps.Add(outputData[i], localOutput[i]);
+                    }
+                }
+            });
 
         return new Tensor<T>([batch, outChannels, outDepth, outHeight, outWidth], new Vector<T>(outputData));
     }
@@ -5158,69 +5149,69 @@ public class CpuEngine : IEngine
         var inputData = input.ToArray();
         var gradOutputData = gradOutput.ToArray();
 
-        // Use thread-local accumulators
-        int numThreads = Environment.ProcessorCount;
-        var localGradKernels = new T[numThreads][];
-        for (int t = 0; t < numThreads; t++)
-        {
-            localGradKernels[t] = new T[gradKernelData.Length];
-        }
+        // Use Parallel.For with localInit/localFinally for thread-safe accumulation
+        var mergeLock = new object();
 
-        Parallel.For(0, batch * inChannels, bic =>
-        {
-            int threadId = Environment.CurrentManagedThreadId % numThreads;
-            var localGradKernel = localGradKernels[threadId];
-            int b = bic / inChannels;
-            int ic = bic % inChannels;
-
-            for (int id = 0; id < inDepth; id++)
+        Parallel.For(
+            0, batch * inChannels,
+            () => new T[gradKernelData.Length], // localInit: create per-task buffer
+            (bic, state, localGradKernel) =>
             {
-                for (int ih = 0; ih < inHeight; ih++)
+                int b = bic / inChannels;
+                int ic = bic % inChannels;
+
+                for (int id = 0; id < inDepth; id++)
                 {
-                    for (int iw = 0; iw < inWidth; iw++)
+                    for (int ih = 0; ih < inHeight; ih++)
                     {
-                        int inputIdx = (((b * inChannels + ic) * inDepth + id) * inHeight + ih) * inWidth + iw;
-                        T inputVal = inputData[inputIdx];
-
-                        for (int oc = 0; oc < outChannels; oc++)
+                        for (int iw = 0; iw < inWidth; iw++)
                         {
-                            for (int kd = 0; kd < kD; kd++)
+                            int inputIdx = (((b * inChannels + ic) * inDepth + id) * inHeight + ih) * inWidth + iw;
+                            T inputVal = inputData[inputIdx];
+
+                            for (int oc = 0; oc < outChannels; oc++)
                             {
-                                int od = id * strideD - padD + kd;
-                                if (od < 0 || od >= outDepth) continue;
-
-                                for (int kh = 0; kh < kH; kh++)
+                                for (int kd = 0; kd < kD; kd++)
                                 {
-                                    int oh = ih * strideH - padH + kh;
-                                    if (oh < 0 || oh >= outHeight) continue;
+                                    int od = id * strideD - padD + kd;
+                                    if (od < 0 || od >= outDepth) continue;
 
-                                    for (int kw = 0; kw < kW; kw++)
+                                    for (int kh = 0; kh < kH; kh++)
                                     {
-                                        int ow = iw * strideW - padW + kw;
-                                        if (ow < 0 || ow >= outWidth) continue;
+                                        int oh = ih * strideH - padH + kh;
+                                        if (oh < 0 || oh >= outHeight) continue;
 
-                                        int gradOutputIdx = (((b * outChannels + oc) * outDepth + od) * outHeight + oh) * outWidth + ow;
-                                        int kernelIdx = (((ic * outChannels + oc) * kD + kd) * kH + kh) * kW + kw;
+                                        for (int kw = 0; kw < kW; kw++)
+                                        {
+                                            int ow = iw * strideW - padW + kw;
+                                            if (ow < 0 || ow >= outWidth) continue;
 
-                                        localGradKernel[kernelIdx] = numOps.Add(localGradKernel[kernelIdx],
-                                            numOps.Multiply(inputVal, gradOutputData[gradOutputIdx]));
+                                            int gradOutputIdx = (((b * outChannels + oc) * outDepth + od) * outHeight + oh) * outWidth + ow;
+                                            int kernelIdx = (((ic * outChannels + oc) * kD + kd) * kH + kh) * kW + kw;
+
+                                            localGradKernel[kernelIdx] = numOps.Add(localGradKernel[kernelIdx],
+                                                numOps.Multiply(inputVal, gradOutputData[gradOutputIdx]));
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
-        });
 
-        // Merge thread-local results
-        for (int t = 0; t < numThreads; t++)
-        {
-            for (int i = 0; i < gradKernelData.Length; i++)
+                return localGradKernel;
+            },
+            localGradKernel =>
             {
-                gradKernelData[i] = numOps.Add(gradKernelData[i], localGradKernels[t][i]);
-            }
-        }
+                // localFinally: merge per-task results under lock
+                lock (mergeLock)
+                {
+                    for (int i = 0; i < gradKernelData.Length; i++)
+                    {
+                        gradKernelData[i] = numOps.Add(gradKernelData[i], localGradKernel[i]);
+                    }
+                }
+            });
 
         return new Tensor<T>(kernelShape, new Vector<T>(gradKernelData));
     }

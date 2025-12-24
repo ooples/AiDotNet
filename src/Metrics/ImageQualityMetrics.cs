@@ -318,19 +318,31 @@ public class StructuralSimilarity<T> where T : struct
     /// <summary>
     /// Extracts a single channel from a multi-channel image.
     /// </summary>
+    /// <remarks>
+    /// Assumes image is in HWC (Height, Width, Channels) format.
+    /// </remarks>
     private Tensor<T> ExtractChannel(Tensor<T> image, int channel)
     {
         int height = image.Shape[0];
         int width = image.Shape[1];
         int channels = image.Shape[2];
 
+        if (channel < 0 || channel >= channels)
+        {
+            throw new ArgumentOutOfRangeException(nameof(channel),
+                $"Channel index {channel} is out of range [0, {channels - 1}]");
+        }
+
         var data = new T[height * width];
         for (int h = 0; h < height; h++)
         {
             for (int w = 0; w < width; w++)
             {
-                int srcIdx = (h * width + w) * channels + channel;
-                data[h * width + w] = image[srcIdx];
+                // HWC layout: index = (h * width + w) * channels + c
+                int pixelOffset = (h * width + w) * channels;
+                int channelIndex = pixelOffset + channel;
+                int destIndex = h * width + w;
+                data[destIndex] = image.GetFlat(channelIndex);
             }
         }
 

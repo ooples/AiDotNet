@@ -17,9 +17,11 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
     [HtmlExporter]
     public class GemmBenchmark
     {
-        private Tensor<float> _matrixA = null!;
-        private Tensor<float> _matrixB = null!;
-        private GemmKernel _gemmKernel = null!;
+        private Tensor<float>? _matrixA;
+        private Tensor<float>? _matrixB;
+        private float[]? _matrixAData;
+        private float[]? _matrixBData;
+        private GemmKernel? _gemmKernel;
 
         [Params(64, 128, 256, 512, 1024)]
         public int MatrixSize { get; set; }
@@ -47,6 +49,10 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
 
             _matrixA = new Tensor<float>(dataA, new[] { MatrixSize, MatrixSize });
             _matrixB = new Tensor<float>(dataB, new[] { MatrixSize, MatrixSize });
+
+            // Pre-convert to arrays for naive benchmark (avoid ToArray() overhead in benchmark)
+            _matrixAData = _matrixA.ToArray();
+            _matrixBData = _matrixB.ToArray();
         }
 
         private static float DeterministicValue(int i)
@@ -61,10 +67,13 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
         [Benchmark(Baseline = true)]
         public Tensor<float> NaiveGemm()
         {
+            if (_matrixAData is null || _matrixBData is null)
+            {
+                throw new InvalidOperationException("Setup must be called before running benchmarks");
+            }
+
             // Naive triple-nested loop implementation
             var resultData = new float[MatrixSize * MatrixSize];
-            var matrixAData = _matrixA.ToArray();
-            var matrixBData = _matrixB.ToArray();
 
             for (int i = 0; i < MatrixSize; i++)
             {
@@ -73,7 +82,7 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
                     float sum = 0.0f;
                     for (int k = 0; k < MatrixSize; k++)
                     {
-                        sum += matrixAData[i * MatrixSize + k] * matrixBData[k * MatrixSize + j];
+                        sum += _matrixAData[i * MatrixSize + k] * _matrixBData[k * MatrixSize + j];
                     }
                     resultData[i * MatrixSize + j] = sum;
                 }
@@ -85,12 +94,22 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
         [Benchmark]
         public Tensor<float> OptimizedGemm()
         {
+            if (_gemmKernel is null || _matrixA is null || _matrixB is null)
+            {
+                throw new InvalidOperationException("Setup must be called before running benchmarks");
+            }
+
             return _gemmKernel.Execute(_matrixA, _matrixB);
         }
 
         [Benchmark]
         public Tensor<float> OptimizedGemmTranspose()
         {
+            if (_gemmKernel is null || _matrixA is null || _matrixB is null)
+            {
+                throw new InvalidOperationException("Setup must be called before running benchmarks");
+            }
+
             return _gemmKernel.GemmTransposeB(_matrixA, _matrixB);
         }
     }
