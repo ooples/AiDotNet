@@ -122,7 +122,32 @@ Comprehensive unit tests created for the DataLoader infrastructure:
 
 ---
 
+## Performance Benchmarks (Phase 7)
+
+Comprehensive BenchmarkDotNet benchmarks for DataLoader infrastructure:
+
+| Benchmark File | Benchmarks | Description |
+|----------------|------------|-------------|
+| `DataLoaderBenchmarks.cs` | 28 | Tests for batcher creation, iteration, batch sizes, shuffle overhead, samplers |
+
+**Benchmark Categories:**
+- **Batcher Creation**: Measure overhead of creating batchers with/without shuffle
+- **Batch Iteration**: Compare iteration performance across dataset sizes (100, 1000, 10000 samples)
+- **Batch Size Comparison**: Compare batch sizes 1, 16, 32, 64, 128
+- **Shuffle vs No-Shuffle**: Measure shuffle overhead impact
+- **Sampler Performance**: RandomSampler, SequentialSampler, CurriculumSampler
+- **GetBatchIndices vs GetBatches**: Compare lightweight index-only vs full data extraction
+- **DropLast Comparison**: Measure impact of dropping incomplete last batch
+- **WeightedSampler**: Balanced weights creation and weighted sampling
+
+**Running Benchmarks:**
+```bash
+dotnet run -c Release --project AiDotNetBenchmarkTests/AiDotNetBenchmarkTests.csproj -- --filter "*DataLoader*"
+```
+
+---
+
 ## Last Updated
 - Date: 2025-12-24
 - Session: Issue #443 DataLoader Integration
-- Phase: Phase 6 complete (unit tests added)
+- Phase: Phase 7 complete (performance benchmarks added)
