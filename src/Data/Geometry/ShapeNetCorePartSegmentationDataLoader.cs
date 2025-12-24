@@ -443,7 +443,7 @@ public sealed class ShapeNetCorePartSegmentationDataLoader<T> : PointCloudDatase
                 await response.Content.CopyToAsync(fileStream);
             }
 
-            ZipFile.ExtractToDirectory(tempFile, dataPath);
+            SafeZipExtractor.ExtractToDirectory(tempFile, dataPath);
         }
         finally
         {

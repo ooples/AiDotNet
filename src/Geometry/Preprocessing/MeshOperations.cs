@@ -150,7 +150,7 @@ public static class MeshOperations<T>
         bool includeNormals = true)
     {
         int numFaces = mesh.NumFaces;
-        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : new Random();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         var areas = new double[numFaces];
         double totalArea = 0;

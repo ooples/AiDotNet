@@ -31,7 +31,7 @@ public static class PointCloudSampling<T>
             return pointCloud;
         }
 
-        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : new Random();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         
         var indices = Enumerable.Range(0, numPoints).ToArray();
         for (int i = 0; i < numSamples; i++)
@@ -98,7 +98,7 @@ public static class PointCloudSampling<T>
                 nameof(pointCloud));
         }
 
-        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : new Random();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         
         var selectedIndices = new List<int>(numSamples);
         var minDistances = new double[numPoints];
@@ -190,7 +190,7 @@ public static class PointCloudSampling<T>
                 nameof(pointCloud));
         }
 
-        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : new Random();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         double minDistSq = minDistance * minDistance;
 
         var indices = Enumerable.Range(0, numPoints).ToArray();

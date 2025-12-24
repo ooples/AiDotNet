@@ -374,7 +374,7 @@ public sealed class ModelNet40ClassificationDataLoader<T> : PointCloudDatasetLoa
                 await response.Content.CopyToAsync(fileStream);
             }
 
-            ZipFile.ExtractToDirectory(tempFile, dataPath);
+            SafeZipExtractor.ExtractToDirectory(tempFile, dataPath);
         }
         finally
         {
