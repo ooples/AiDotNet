@@ -547,6 +547,11 @@ public class UInt32Operations : INumericOperations<uint>
     /// </remarks>
     public uint Round(uint value) => value;
 
+    public uint Floor(uint value) => value;
+    public uint Ceiling(uint value) => value;
+    public uint Frac(uint value) => 0;
+
+
     /// <summary>
     /// Gets the minimum value that can be represented by a uint.
     /// </summary>
@@ -810,4 +815,9 @@ public class UInt32Operations : INumericOperations<uint>
     public void Clip(ReadOnlySpan<uint> x, uint min, uint max, Span<uint> destination) => VectorizedOperationsFallback.Clip(_instance, x, min, max, destination);
     public void Pow(ReadOnlySpan<uint> x, uint power, Span<uint> destination) => VectorizedOperationsFallback.Pow(_instance, x, power, destination);
     public void Copy(ReadOnlySpan<uint> source, Span<uint> destination) => source.CopyTo(destination);
+
+    public void Floor(ReadOnlySpan<uint> x, Span<uint> destination) => x.CopyTo(destination);
+    public void Ceiling(ReadOnlySpan<uint> x, Span<uint> destination) => x.CopyTo(destination);
+    public void Frac(ReadOnlySpan<uint> x, Span<uint> destination) => destination.Fill(0);
+
 }

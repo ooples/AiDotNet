@@ -547,6 +547,11 @@ public class Int32Operations : INumericOperations<int>
     /// </remarks>
     public int Round(int value) => value;
 
+    public int Floor(int value) => value;
+    public int Ceiling(int value) => value;
+    public int Frac(int value) => 0;
+
+
     /// <summary>
     /// Gets the minimum possible value for an int.
     /// </summary>
@@ -892,4 +897,9 @@ public class Int32Operations : INumericOperations<int>
     public void Copy(ReadOnlySpan<int> source, Span<int> destination) => source.CopyTo(destination);
 
     #endregion
+
+    public void Floor(ReadOnlySpan<int> x, Span<int> destination) => x.CopyTo(destination);
+    public void Ceiling(ReadOnlySpan<int> x, Span<int> destination) => x.CopyTo(destination);
+    public void Frac(ReadOnlySpan<int> x, Span<int> destination) => destination.Fill(0);
+
 }

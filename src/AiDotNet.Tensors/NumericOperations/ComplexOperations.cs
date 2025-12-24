@@ -633,6 +633,11 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// </remarks>
     public Complex<T> Round(Complex<T> value) => new(_ops.Round(value.Real), _ops.Round(value.Imaginary));
 
+    public Complex<T> Floor(Complex<T> value) => new Complex<T>(_ops.Floor(value.Real), _ops.Floor(value.Imaginary));
+    public Complex<T> Ceiling(Complex<T> value) => new Complex<T>(_ops.Ceiling(value.Real), _ops.Ceiling(value.Imaginary));
+    public Complex<T> Frac(Complex<T> value) => new Complex<T>(_ops.Frac(value.Real), _ops.Frac(value.Imaginary));
+
+
     /// <summary>
     /// Gets the minimum value that can be represented using complex numbers with the underlying type T.
     /// </summary>
@@ -1058,4 +1063,23 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
         => source.CopyTo(destination);
 
     #endregion
+
+    public void Floor(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = Floor(x[i]);
+    }
+
+    public void Ceiling(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = Ceiling(x[i]);
+    }
+
+    public void Frac(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = Frac(x[i]);
+    }
+
 }

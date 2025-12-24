@@ -14168,6 +14168,28 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorFloor<T>(Tensor<T> tensor)
+    {
+        // Delegate to CPU fallback - GPU kernels can be added later
+        return _cpuFallback.TensorFloor(tensor);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorCeiling<T>(Tensor<T> tensor)
+    {
+        // Delegate to CPU fallback - GPU kernels can be added later
+        return _cpuFallback.TensorCeiling(tensor);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorFrac<T>(Tensor<T> tensor)
+    {
+        // Delegate to CPU fallback - GPU kernels can be added later
+        return _cpuFallback.TensorFrac(tensor);
+    }
+
     /// <inheritdoc/>
     public Tensor<T> TensorPow<T>(Tensor<T> tensor, T exponent)
     {

@@ -561,6 +561,11 @@ public class UInt64Operations : INumericOperations<ulong>
     /// </remarks>
     public ulong Round(ulong value) => value;
 
+    public ulong Floor(ulong value) => value;
+    public ulong Ceiling(ulong value) => value;
+    public ulong Frac(ulong value) => 0;
+
+
     /// <summary>
     /// Gets the minimum value that can be represented by a ulong.
     /// </summary>
@@ -865,4 +870,9 @@ public class UInt64Operations : INumericOperations<ulong>
     public void Clip(ReadOnlySpan<ulong> x, ulong min, ulong max, Span<ulong> destination) => VectorizedOperationsFallback.Clip(_instance, x, min, max, destination);
     public void Pow(ReadOnlySpan<ulong> x, ulong power, Span<ulong> destination) => VectorizedOperationsFallback.Pow(_instance, x, power, destination);
     public void Copy(ReadOnlySpan<ulong> source, Span<ulong> destination) => source.CopyTo(destination);
+
+    public void Floor(ReadOnlySpan<ulong> x, Span<ulong> destination) => x.CopyTo(destination);
+    public void Ceiling(ReadOnlySpan<ulong> x, Span<ulong> destination) => x.CopyTo(destination);
+    public void Frac(ReadOnlySpan<ulong> x, Span<ulong> destination) => destination.Fill(0);
+
 }

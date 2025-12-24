@@ -571,6 +571,45 @@ public class DoubleOperations : INumericOperations<double>
     public double Round(double value) => Math.Round(value);
 
     /// <summary>
+    /// Returns the largest integer less than or equal to the specified value.
+    /// </summary>
+    /// <param name="value">The number to floor.</param>
+    /// <returns>The largest integer less than or equal to value.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Floor rounds a number down to the nearest whole number.
+    /// For example, Floor(3.7) returns 3.0, Floor(-2.3) returns -3.0.
+    /// </para>
+    /// </remarks>
+    public double Floor(double value) => Math.Floor(value);
+
+    /// <summary>
+    /// Returns the smallest integer greater than or equal to the specified value.
+    /// </summary>
+    /// <param name="value">The number to ceiling.</param>
+    /// <returns>The smallest integer greater than or equal to value.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Ceiling rounds a number up to the nearest whole number.
+    /// For example, Ceiling(3.2) returns 4.0, Ceiling(-2.7) returns -2.0.
+    /// </para>
+    /// </remarks>
+    public double Ceiling(double value) => Math.Ceiling(value);
+
+    /// <summary>
+    /// Returns the fractional part of the specified value.
+    /// </summary>
+    /// <param name="value">The number to get the fractional part of.</param>
+    /// <returns>The fractional part (value - floor(value)).</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Frac returns the portion after the decimal point.
+    /// For example, Frac(3.7) returns 0.7. Note that Frac(-2.3) returns 0.7 (not -0.3),
+    /// since frac is defined as x - floor(x).
+    /// </para>
+    /// </remarks>
+    public double Frac(double value) => value - Math.Floor(value);
+
+
+
+    /// <summary>
     /// Gets the minimum value that can be represented by a double.
     /// </summary>
     /// <value>The minimum value of a double, which is approximately -1.8 ÃƒÆ’Ã¢â‚¬â€ 10^308.</value>
@@ -960,6 +999,32 @@ public class DoubleOperations : INumericOperations<double>
     {
         source.CopyTo(destination);
     }
+
+    /// <summary>
+    /// Computes floor of each element using SIMD-optimized operations.
+    /// </summary>
+    public void Floor(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        Engines.Simd.SimdKernels.Floor(x, destination);
+    }
+
+    /// <summary>
+    /// Computes ceiling of each element using SIMD-optimized operations.
+    /// </summary>
+    public void Ceiling(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        Engines.Simd.SimdKernels.Ceiling(x, destination);
+    }
+
+    /// <summary>
+    /// Computes fractional part of each element using SIMD-optimized operations.
+    /// </summary>
+    public void Frac(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        Engines.Simd.SimdKernels.Frac(x, destination);
+    }
+
+
 
     #endregion
 }

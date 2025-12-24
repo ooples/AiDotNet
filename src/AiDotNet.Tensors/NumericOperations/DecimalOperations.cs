@@ -522,6 +522,11 @@ public class DecimalOperations : INumericOperations<decimal>
     /// </remarks>
     public decimal Round(decimal value) => Math.Round(value);
 
+    public decimal Floor(decimal value) => Math.Floor(value);
+    public decimal Ceiling(decimal value) => Math.Ceiling(value);
+    public decimal Frac(decimal value) => value - Math.Floor(value);
+
+
     /// <summary>
     /// Gets the minimum value that can be represented by a decimal.
     /// </summary>
@@ -849,4 +854,23 @@ public class DecimalOperations : INumericOperations<decimal>
         => source.CopyTo(destination);
 
     #endregion
+
+    public void Floor(ReadOnlySpan<decimal> x, Span<decimal> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = Math.Floor(x[i]);
+    }
+
+    public void Ceiling(ReadOnlySpan<decimal> x, Span<decimal> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = Math.Ceiling(x[i]);
+    }
+
+    public void Frac(ReadOnlySpan<decimal> x, Span<decimal> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = x[i] - Math.Floor(x[i]);
+    }
+
 }

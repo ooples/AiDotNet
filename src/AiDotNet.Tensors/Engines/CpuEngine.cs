@@ -2370,6 +2370,86 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    public Tensor<T> TensorFloor<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+
+        if (tensor.Length > 10000)
+        {
+            Parallel.For(0, tensor.Length, i =>
+            {
+                result.SetFlat(i, numOps.Floor(tensor.GetFlat(i)));
+            });
+        }
+        else
+        {
+            for (int i = 0; i < tensor.Length; i++)
+            {
+                result.SetFlat(i, numOps.Floor(tensor.GetFlat(i)));
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorCeiling<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+
+        if (tensor.Length > 10000)
+        {
+            Parallel.For(0, tensor.Length, i =>
+            {
+                result.SetFlat(i, numOps.Ceiling(tensor.GetFlat(i)));
+            });
+        }
+        else
+        {
+            for (int i = 0; i < tensor.Length; i++)
+            {
+                result.SetFlat(i, numOps.Ceiling(tensor.GetFlat(i)));
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorFrac<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+
+        if (tensor.Length > 10000)
+        {
+            Parallel.For(0, tensor.Length, i =>
+            {
+                result.SetFlat(i, numOps.Frac(tensor.GetFlat(i)));
+            });
+        }
+        else
+        {
+            for (int i = 0; i < tensor.Length; i++)
+            {
+                result.SetFlat(i, numOps.Frac(tensor.GetFlat(i)));
+            }
+        }
+
+        return result;
+    }
+
+
+
+    /// <inheritdoc/>
     public Tensor<T> TensorPow<T>(Tensor<T> tensor, T exponent)
     {
         if (tensor == null) throw new ArgumentNullException(nameof(tensor));

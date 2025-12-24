@@ -348,6 +348,354 @@ namespace AiDotNet.Tensors.Engines.Simd
             return sum;
         }
 
+        /// <summary>
+        /// Computes element-wise floor (largest integer less than or equal to each element).
+        /// Uses AVX/SSE4.1 intrinsics when available, otherwise falls back to scalar Math.Floor.
+        /// </summary>
+        /// <param name="input">Source span of float values.</param>
+        /// <param name="output">Destination span for floor results.</param>
+        /// <exception cref="ArgumentException">Thrown when input and output lengths differ.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Floor(ReadOnlySpan<float> input, Span<float> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = output.Length;
+            int i = 0;
+
+#if NET5_0_OR_GREATER
+            if (Avx.IsSupported && length >= 8)
+            {
+                int simdLength = length & ~7;
+                for (; i < simdLength; i += 8)
+                {
+                    var v = ReadVector256(input, i);
+                    WriteVector256(output, i, Avx.Floor(v));
+                }
+            }
+            else if (Sse41.IsSupported && length >= 4)
+            {
+                int simdLength = length & ~3;
+                for (; i < simdLength; i += 4)
+                {
+                    var v = ReadVector128(input, i);
+                    WriteVector128(output, i, Sse41.Floor(v));
+                }
+            }
+            else if (AdvSimd.Arm64.IsSupported && length >= 4)
+            {
+                int simdLength = length & ~3;
+                for (; i < simdLength; i += 4)
+                {
+                    var v = ReadVector128(input, i);
+                    WriteVector128(output, i, AdvSimd.RoundToNegativeInfinity(v));
+                }
+            }
+#endif
+
+            // Scalar fallback for remaining elements or when SIMD not available
+            for (; i < length; i++)
+            {
+#if NET5_0_OR_GREATER
+                output[i] = MathF.Floor(input[i]);
+#else
+                output[i] = (float)Math.Floor(input[i]);
+#endif
+            }
+        }
+
+        /// <summary>
+        /// Computes element-wise ceiling (smallest integer greater than or equal to each element).
+        /// Uses AVX/SSE4.1 intrinsics when available, otherwise falls back to scalar Math.Ceiling.
+        /// </summary>
+        /// <param name="input">Source span of float values.</param>
+        /// <param name="output">Destination span for ceiling results.</param>
+        /// <exception cref="ArgumentException">Thrown when input and output lengths differ.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Ceiling(ReadOnlySpan<float> input, Span<float> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = output.Length;
+            int i = 0;
+
+#if NET5_0_OR_GREATER
+            if (Avx.IsSupported && length >= 8)
+            {
+                int simdLength = length & ~7;
+                for (; i < simdLength; i += 8)
+                {
+                    var v = ReadVector256(input, i);
+                    WriteVector256(output, i, Avx.Ceiling(v));
+                }
+            }
+            else if (Sse41.IsSupported && length >= 4)
+            {
+                int simdLength = length & ~3;
+                for (; i < simdLength; i += 4)
+                {
+                    var v = ReadVector128(input, i);
+                    WriteVector128(output, i, Sse41.Ceiling(v));
+                }
+            }
+            else if (AdvSimd.Arm64.IsSupported && length >= 4)
+            {
+                int simdLength = length & ~3;
+                for (; i < simdLength; i += 4)
+                {
+                    var v = ReadVector128(input, i);
+                    WriteVector128(output, i, AdvSimd.RoundToPositiveInfinity(v));
+                }
+            }
+#endif
+
+            // Scalar fallback for remaining elements or when SIMD not available
+            for (; i < length; i++)
+            {
+#if NET5_0_OR_GREATER
+                output[i] = MathF.Ceiling(input[i]);
+#else
+                output[i] = (float)Math.Ceiling(input[i]);
+#endif
+            }
+        }
+
+        /// <summary>
+        /// Computes element-wise fractional part (x - floor(x)).
+        /// Uses SIMD floor operation and subtraction when available.
+        /// </summary>
+        /// <param name="input">Source span of float values.</param>
+        /// <param name="output">Destination span for fractional part results.</param>
+        /// <exception cref="ArgumentException">Thrown when input and output lengths differ.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Frac(ReadOnlySpan<float> input, Span<float> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = output.Length;
+            int i = 0;
+
+#if NET5_0_OR_GREATER
+            if (Avx.IsSupported && length >= 8)
+            {
+                int simdLength = length & ~7;
+                for (; i < simdLength; i += 8)
+                {
+                    var v = ReadVector256(input, i);
+                    var floored = Avx.Floor(v);
+                    WriteVector256(output, i, Avx.Subtract(v, floored));
+                }
+            }
+            else if (Sse41.IsSupported && length >= 4)
+            {
+                int simdLength = length & ~3;
+                for (; i < simdLength; i += 4)
+                {
+                    var v = ReadVector128(input, i);
+                    var floored = Sse41.Floor(v);
+                    WriteVector128(output, i, Sse.Subtract(v, floored));
+                }
+            }
+            else if (AdvSimd.Arm64.IsSupported && length >= 4)
+            {
+                int simdLength = length & ~3;
+                for (; i < simdLength; i += 4)
+                {
+                    var v = ReadVector128(input, i);
+                    var floored = AdvSimd.RoundToNegativeInfinity(v);
+                    WriteVector128(output, i, AdvSimd.Subtract(v, floored));
+                }
+            }
+#endif
+
+            // Scalar fallback for remaining elements or when SIMD not available
+            for (; i < length; i++)
+            {
+#if NET5_0_OR_GREATER
+                output[i] = input[i] - MathF.Floor(input[i]);
+#else
+                output[i] = input[i] - (float)Math.Floor(input[i]);
+#endif
+            }
+        }
+
+        /// <summary>
+        /// Computes element-wise floor for double-precision values.
+        /// Uses AVX intrinsics when available, otherwise falls back to scalar Math.Floor.
+        /// </summary>
+        /// <param name="input">Source span of double values.</param>
+        /// <param name="output">Destination span for floor results.</param>
+        /// <exception cref="ArgumentException">Thrown when input and output lengths differ.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Floor(ReadOnlySpan<double> input, Span<double> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = output.Length;
+            int i = 0;
+
+#if NET5_0_OR_GREATER
+            if (Avx.IsSupported && length >= 4)
+            {
+                int simdLength = length & ~3;
+                for (; i < simdLength; i += 4)
+                {
+                    var v = ReadVector256Double(input, i);
+                    WriteVector256Double(output, i, Avx.Floor(v));
+                }
+            }
+            else if (Sse41.IsSupported && length >= 2)
+            {
+                int simdLength = length & ~1;
+                for (; i < simdLength; i += 2)
+                {
+                    var v = ReadVector128Double(input, i);
+                    WriteVector128Double(output, i, Sse41.Floor(v));
+                }
+            }
+            else if (AdvSimd.Arm64.IsSupported && length >= 2)
+            {
+                int simdLength = length & ~1;
+                for (; i < simdLength; i += 2)
+                {
+                    var v = ReadVector128Double(input, i);
+                    WriteVector128Double(output, i, AdvSimd.Arm64.Floor(v));
+                }
+            }
+#endif
+
+            // Scalar fallback for remaining elements or when SIMD not available
+            for (; i < length; i++)
+            {
+                output[i] = Math.Floor(input[i]);
+            }
+        }
+
+        /// <summary>
+        /// Computes element-wise ceiling for double-precision values.
+        /// Uses AVX intrinsics when available, otherwise falls back to scalar Math.Ceiling.
+        /// </summary>
+        /// <param name="input">Source span of double values.</param>
+        /// <param name="output">Destination span for ceiling results.</param>
+        /// <exception cref="ArgumentException">Thrown when input and output lengths differ.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Ceiling(ReadOnlySpan<double> input, Span<double> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = output.Length;
+            int i = 0;
+
+#if NET5_0_OR_GREATER
+            if (Avx.IsSupported && length >= 4)
+            {
+                int simdLength = length & ~3;
+                for (; i < simdLength; i += 4)
+                {
+                    var v = ReadVector256Double(input, i);
+                    WriteVector256Double(output, i, Avx.Ceiling(v));
+                }
+            }
+            else if (Sse41.IsSupported && length >= 2)
+            {
+                int simdLength = length & ~1;
+                for (; i < simdLength; i += 2)
+                {
+                    var v = ReadVector128Double(input, i);
+                    WriteVector128Double(output, i, Sse41.Ceiling(v));
+                }
+            }
+            else if (AdvSimd.Arm64.IsSupported && length >= 2)
+            {
+                int simdLength = length & ~1;
+                for (; i < simdLength; i += 2)
+                {
+                    var v = ReadVector128Double(input, i);
+                    WriteVector128Double(output, i, AdvSimd.Arm64.Ceiling(v));
+                }
+            }
+#endif
+
+            // Scalar fallback for remaining elements or when SIMD not available
+            for (; i < length; i++)
+            {
+                output[i] = Math.Ceiling(input[i]);
+            }
+        }
+
+        /// <summary>
+        /// Computes element-wise fractional part for double-precision values.
+        /// </summary>
+        /// <param name="input">Source span of double values.</param>
+        /// <param name="output">Destination span for fractional part results.</param>
+        /// <exception cref="ArgumentException">Thrown when input and output lengths differ.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Frac(ReadOnlySpan<double> input, Span<double> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = output.Length;
+            int i = 0;
+
+#if NET5_0_OR_GREATER
+            if (Avx.IsSupported && length >= 4)
+            {
+                int simdLength = length & ~3;
+                for (; i < simdLength; i += 4)
+                {
+                    var v = ReadVector256Double(input, i);
+                    var floored = Avx.Floor(v);
+                    WriteVector256Double(output, i, Avx.Subtract(v, floored));
+                }
+            }
+            else if (Sse41.IsSupported && length >= 2)
+            {
+                int simdLength = length & ~1;
+                for (; i < simdLength; i += 2)
+                {
+                    var v = ReadVector128Double(input, i);
+                    var floored = Sse41.Floor(v);
+                    WriteVector128Double(output, i, Sse2.Subtract(v, floored));
+                }
+            }
+            else if (AdvSimd.Arm64.IsSupported && length >= 2)
+            {
+                int simdLength = length & ~1;
+                for (; i < simdLength; i += 2)
+                {
+                    var v = ReadVector128Double(input, i);
+                    var floored = AdvSimd.Arm64.Floor(v);
+                    WriteVector128Double(output, i, AdvSimd.Arm64.Subtract(v, floored));
+                }
+            }
+#endif
+
+            // Scalar fallback for remaining elements or when SIMD not available
+            for (; i < length; i++)
+            {
+                output[i] = input[i] - Math.Floor(input[i]);
+            }
+        }
+
+
 #if NET5_0_OR_GREATER
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector256<float> ReadVector256(ReadOnlySpan<float> data, int offset)
@@ -401,6 +749,54 @@ namespace AiDotNet.Tensors.Engines.Simd
             Span<float> tmp = stackalloc float[4];
             Unsafe.WriteUnaligned(ref Unsafe.As<float, byte>(ref MemoryMarshal.GetReference(tmp)), v);
             return tmp[0] + tmp[1] + tmp[2] + tmp[3];
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector256<double> ReadVector256Double(ReadOnlySpan<double> data, int offset)
+        {
+            ref double start = ref MemoryMarshal.GetReference(data);
+            ref double element = ref Unsafe.Add(ref start, offset);
+            return Unsafe.ReadUnaligned<Vector256<double>>(ref Unsafe.As<double, byte>(ref element));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void WriteVector256Double(Span<double> data, int offset, Vector256<double> value)
+        {
+            ref double start = ref MemoryMarshal.GetReference(data);
+            ref double element = ref Unsafe.Add(ref start, offset);
+            Unsafe.WriteUnaligned(ref Unsafe.As<double, byte>(ref element), value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector128<double> ReadVector128Double(ReadOnlySpan<double> data, int offset)
+        {
+            ref double start = ref MemoryMarshal.GetReference(data);
+            ref double element = ref Unsafe.Add(ref start, offset);
+            return Unsafe.ReadUnaligned<Vector128<double>>(ref Unsafe.As<double, byte>(ref element));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void WriteVector128Double(Span<double> data, int offset, Vector128<double> value)
+        {
+            ref double start = ref MemoryMarshal.GetReference(data);
+            ref double element = ref Unsafe.Add(ref start, offset);
+            Unsafe.WriteUnaligned(ref Unsafe.As<double, byte>(ref element), value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static double HorizontalSum(Vector256<double> v)
+        {
+            Span<double> tmp = stackalloc double[4];
+            Unsafe.WriteUnaligned(ref Unsafe.As<double, byte>(ref MemoryMarshal.GetReference(tmp)), v);
+            return tmp[0] + tmp[1] + tmp[2] + tmp[3];
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static double HorizontalSum(Vector128<double> v)
+        {
+            Span<double> tmp = stackalloc double[2];
+            Unsafe.WriteUnaligned(ref Unsafe.As<double, byte>(ref MemoryMarshal.GetReference(tmp)), v);
+            return tmp[0] + tmp[1];
         }
 #endif
     }

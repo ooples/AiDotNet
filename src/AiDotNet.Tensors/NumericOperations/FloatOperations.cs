@@ -557,6 +557,45 @@ public class FloatOperations : INumericOperations<float>
     public float Round(float value) => (float)Math.Round((double)value);
 
     /// <summary>
+    /// Returns the largest integer less than or equal to the specified value.
+    /// </summary>
+    /// <param name="value">The number to floor.</param>
+    /// <returns>The largest integer less than or equal to value.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Floor rounds a number down to the nearest whole number.
+    /// For example, Floor(3.7) returns 3.0, Floor(-2.3) returns -3.0.
+    /// </para>
+    /// </remarks>
+    public float Floor(float value) => (float)Math.Floor(value);
+
+    /// <summary>
+    /// Returns the smallest integer greater than or equal to the specified value.
+    /// </summary>
+    /// <param name="value">The number to ceiling.</param>
+    /// <returns>The smallest integer greater than or equal to value.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Ceiling rounds a number up to the nearest whole number.
+    /// For example, Ceiling(3.2) returns 4.0, Ceiling(-2.7) returns -2.0.
+    /// </para>
+    /// </remarks>
+    public float Ceiling(float value) => (float)Math.Ceiling(value);
+
+    /// <summary>
+    /// Returns the fractional part of the specified value.
+    /// </summary>
+    /// <param name="value">The number to get the fractional part of.</param>
+    /// <returns>The fractional part (value - floor(value)).</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Frac returns the portion after the decimal point.
+    /// For example, Frac(3.7) returns 0.7. Note that Frac(-2.3) returns 0.7 (not -0.3),
+    /// since frac is defined as x - floor(x).
+    /// </para>
+    /// </remarks>
+    public float Frac(float value) => value - (float)Math.Floor(value);
+
+
+
+    /// <summary>
     /// Gets the minimum possible value for a float.
     /// </summary>
     /// <value>The minimum value of float, approximately -3.4 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 10^38.</value>
@@ -1121,6 +1160,32 @@ public class FloatOperations : INumericOperations<float>
     {
         source.CopyTo(destination);
     }
+
+    /// <summary>
+    /// Computes floor of each element using SIMD-optimized operations.
+    /// </summary>
+    public void Floor(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        Engines.Simd.SimdKernels.Floor(x, destination);
+    }
+
+    /// <summary>
+    /// Computes ceiling of each element using SIMD-optimized operations.
+    /// </summary>
+    public void Ceiling(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        Engines.Simd.SimdKernels.Ceiling(x, destination);
+    }
+
+    /// <summary>
+    /// Computes fractional part of each element using SIMD-optimized operations.
+    /// </summary>
+    public void Frac(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        Engines.Simd.SimdKernels.Frac(x, destination);
+    }
+
+
 
     #endregion
 }

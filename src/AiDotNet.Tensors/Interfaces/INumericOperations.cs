@@ -263,6 +263,45 @@ public interface INumericOperations<T> : IVectorizedOperations<T>
     T Round(T value);
 
     /// <summary>
+    /// Returns the largest integral value less than or equal to the specified value.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Floor rounds a number down to the nearest whole number.
+    /// For example, Floor(3.7) = 3 and Floor(-2.3) = -3.
+    /// Note that for negative numbers, floor rounds away from zero.
+    /// </remarks>
+    /// <param name="value">The value to floor.</param>
+    /// <returns>The largest integral value less than or equal to value.</returns>
+    T Floor(T value);
+
+    /// <summary>
+    /// Returns the smallest integral value greater than or equal to the specified value.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Ceiling rounds a number up to the nearest whole number.
+    /// For example, Ceiling(3.2) = 4 and Ceiling(-2.7) = -2.
+    /// Note that for negative numbers, ceiling rounds toward zero.
+    /// </remarks>
+    /// <param name="value">The value to ceiling.</param>
+    /// <returns>The smallest integral value greater than or equal to value.</returns>
+    T Ceiling(T value);
+
+    /// <summary>
+    /// Returns the fractional part of the specified value (value - floor(value)).
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> The fractional part is the portion after the decimal point.
+    /// For example, Frac(3.7) = 0.7. Note that Frac(-2.3) = 0.7 (not -0.3),
+    /// since frac is defined as x - floor(x).
+    /// This is useful in hash encoding and periodic functions.
+    /// </remarks>
+    /// <param name="value">The value to get the fractional part of.</param>
+    /// <returns>The fractional part of the value.</returns>
+    T Frac(T value);
+
+
+
+    /// <summary>
     /// Gets the minimum possible value for the numeric type.
     /// </summary>
     /// <remarks>

@@ -1992,6 +1992,53 @@ public interface IEngine
     Tensor<T> TensorNegate<T>(Tensor<T> tensor);
 
     /// <summary>
+    /// Computes the element-wise floor of a tensor (largest integer less than or equal to each element).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with floor(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in hash encoding for 3D AI (NeRF, Gaussian Splatting), grid-based calculations,
+    /// and index computation. Essential for converting continuous coordinates to discrete grid indices.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorFloor<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise ceiling of a tensor (smallest integer greater than or equal to each element).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with ceiling(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in ceil mode pooling, index calculations, and grid-based spatial computations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorCeiling<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise fractional part of a tensor (x - floor(x)).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with frac(x) = x - floor(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Essential for hash encoding in neural radiance fields (NeRF) and Instant-NGP.
+    /// The fractional part is used to interpolate between discrete grid corners for
+    /// smooth, differentiable spatial encoding. Also used in periodic functions and texture mapping.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorFrac<T>(Tensor<T> tensor);
+
+
+
+    /// <summary>
     /// Computes the element-wise power of a tensor raised to a scalar exponent.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>

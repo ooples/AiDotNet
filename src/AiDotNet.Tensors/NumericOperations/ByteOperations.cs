@@ -501,6 +501,11 @@ public class ByteOperations : INumericOperations<byte>
     /// </remarks>
     public byte Round(byte value) => value;
 
+    public byte Floor(byte value) => value;
+    public byte Ceiling(byte value) => value;
+    public byte Frac(byte value) => 0;
+
+
     /// <summary>
     /// Gets the minimum value a byte can represent.
     /// </summary>
@@ -771,4 +776,9 @@ public class ByteOperations : INumericOperations<byte>
     public void Copy(ReadOnlySpan<byte> source, Span<byte> destination) => source.CopyTo(destination);
 
     #endregion
+
+    public void Floor(ReadOnlySpan<byte> x, Span<byte> destination) => x.CopyTo(destination);
+    public void Ceiling(ReadOnlySpan<byte> x, Span<byte> destination) => x.CopyTo(destination);
+    public void Frac(ReadOnlySpan<byte> x, Span<byte> destination) => destination.Fill(0);
+
 }

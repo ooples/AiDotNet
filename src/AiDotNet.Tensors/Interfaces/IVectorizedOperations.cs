@@ -247,4 +247,44 @@ public interface IVectorizedOperations<T>
     /// <param name="source">The source span.</param>
     /// <param name="destination">The destination span.</param>
     void Copy(ReadOnlySpan<T> source, Span<T> destination);
+
+    /// <summary>
+    /// Computes the floor of each element: destination[i] = floor(x[i]).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Floor returns the largest integer less than or equal to each value.
+    /// For example, floor(3.7) = 3, floor(-2.3) = -3.
+    /// </para>
+    /// </remarks>
+    /// <param name="x">The source span.</param>
+    /// <param name="destination">The destination span for results.</param>
+    void Floor(ReadOnlySpan<T> x, Span<T> destination);
+
+    /// <summary>
+    /// Computes the ceiling of each element: destination[i] = ceiling(x[i]).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Ceiling returns the smallest integer greater than or equal to each value.
+    /// For example, ceiling(3.2) = 4, ceiling(-2.7) = -2.
+    /// </para>
+    /// </remarks>
+    /// <param name="x">The source span.</param>
+    /// <param name="destination">The destination span for results.</param>
+    void Ceiling(ReadOnlySpan<T> x, Span<T> destination);
+
+    /// <summary>
+    /// Computes the fractional part of each element: destination[i] = x[i] - floor(x[i]).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The fractional part is the portion after the decimal point.
+    /// For example, frac(3.7) = 0.7, frac(-2.3) = 0.7 (not -0.3, since frac = x - floor(x)).
+    /// This is useful in hash encoding and periodic functions.
+    /// </para>
+    /// </remarks>
+    /// <param name="x">The source span.</param>
+    /// <param name="destination">The destination span for results.</param>
+    void Frac(ReadOnlySpan<T> x, Span<T> destination);
 }

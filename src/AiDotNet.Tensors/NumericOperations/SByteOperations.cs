@@ -567,6 +567,11 @@ public class SByteOperations : INumericOperations<sbyte>
     /// </remarks>
     public sbyte Round(sbyte value) => value;
 
+    public sbyte Floor(sbyte value) => value;
+    public sbyte Ceiling(sbyte value) => value;
+    public sbyte Frac(sbyte value) => 0;
+
+
     /// <summary>
     /// Gets the minimum possible value for a signed byte.
     /// </summary>
@@ -842,4 +847,9 @@ public class SByteOperations : INumericOperations<sbyte>
     public void Copy(ReadOnlySpan<sbyte> source, Span<sbyte> destination) => source.CopyTo(destination);
 
     #endregion
+
+    public void Floor(ReadOnlySpan<sbyte> x, Span<sbyte> destination) => x.CopyTo(destination);
+    public void Ceiling(ReadOnlySpan<sbyte> x, Span<sbyte> destination) => x.CopyTo(destination);
+    public void Frac(ReadOnlySpan<sbyte> x, Span<sbyte> destination) => destination.Fill(0);
+
 }

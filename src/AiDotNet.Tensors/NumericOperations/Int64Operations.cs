@@ -580,6 +580,11 @@ public class Int64Operations : INumericOperations<long>
     /// </remarks>
     public long Round(long value) => value;
 
+    public long Floor(long value) => value;
+    public long Ceiling(long value) => value;
+    public long Frac(long value) => 0;
+
+
     /// <summary>
     /// Gets the minimum possible value for a long integer.
     /// </summary>
@@ -939,4 +944,9 @@ public class Int64Operations : INumericOperations<long>
     public void Copy(ReadOnlySpan<long> source, Span<long> destination) => source.CopyTo(destination);
 
     #endregion
+
+    public void Floor(ReadOnlySpan<long> x, Span<long> destination) => x.CopyTo(destination);
+    public void Ceiling(ReadOnlySpan<long> x, Span<long> destination) => x.CopyTo(destination);
+    public void Frac(ReadOnlySpan<long> x, Span<long> destination) => destination.Fill(0);
+
 }
