@@ -322,9 +322,9 @@ For each vectorized layer:
 
 ---
 
-## NEW IENGINE OPERATIONS NEEDED
+## NEW IENGINE OPERATIONS ✅ IMPLEMENTED
 
-The following operations do NOT currently exist in IEngine and need to be added for full vectorization:
+The following operations have been added to IEngine with CPU and GPU (ILGPU) implementations:
 
 ### 1. PairwiseDistance / CDist
 **Needed by:** DGCNN.cs (k-NN computation), PointNet++.cs (ball query)
