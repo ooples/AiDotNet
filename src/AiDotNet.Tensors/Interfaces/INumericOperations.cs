@@ -299,6 +299,30 @@ public interface INumericOperations<T> : IVectorizedOperations<T>
     /// <returns>The fractional part of the value.</returns>
     T Frac(T value);
 
+    /// <summary>
+    /// Computes the sine of a value.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Sine is a trigonometric function used in wave calculations,
+    /// positional encoding, and signal processing. Input should be in radians.
+    /// </remarks>
+    /// <param name="value">The angle in radians.</param>
+    /// <returns>The sine of the value.</returns>
+    T Sin(T value);
+
+    /// <summary>
+    /// Computes the cosine of a value.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Cosine is a trigonometric function used in wave calculations,
+    /// positional encoding, and signal processing. Input should be in radians.
+    /// </remarks>
+    /// <param name="value">The angle in radians.</param>
+    /// <returns>The cosine of the value.</returns>
+    T Cos(T value);
+
+
+
 
 
     /// <summary>

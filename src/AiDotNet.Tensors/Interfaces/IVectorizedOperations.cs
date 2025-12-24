@@ -287,4 +287,30 @@ public interface IVectorizedOperations<T>
     /// <param name="x">The source span.</param>
     /// <param name="destination">The destination span for results.</param>
     void Frac(ReadOnlySpan<T> x, Span<T> destination);
+
+    /// <summary>
+    /// Computes the sine of each element: destination[i] = sin(x[i]).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Sine is a trigonometric function that maps angles to values between -1 and 1.
+    /// Input values should be in radians. Used in positional encoding, spherical harmonics, and signal processing.
+    /// </para>
+    /// </remarks>
+    /// <param name="x">The source span (values in radians).</param>
+    /// <param name="destination">The destination span for results.</param>
+    void Sin(ReadOnlySpan<T> x, Span<T> destination);
+
+    /// <summary>
+    /// Computes the cosine of each element: destination[i] = cos(x[i]).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Cosine is a trigonometric function that maps angles to values between -1 and 1.
+    /// Input values should be in radians. Used in positional encoding, spherical harmonics, and signal processing.
+    /// </para>
+    /// </remarks>
+    /// <param name="x">The source span (values in radians).</param>
+    /// <param name="destination">The destination span for results.</param>
+    void Cos(ReadOnlySpan<T> x, Span<T> destination);
 }

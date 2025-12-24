@@ -607,7 +607,19 @@ public class DoubleOperations : INumericOperations<double>
     /// </remarks>
     public double Frac(double value) => value - Math.Floor(value);
 
+    /// <summary>
+    /// Returns the sine of the specified angle.
+    /// </summary>
+    /// <param name="value">An angle, measured in radians.</param>
+    /// <returns>The sine of value.</returns>
+    public double Sin(double value) => Math.Sin(value);
 
+    /// <summary>
+    /// Returns the cosine of the specified angle.
+    /// </summary>
+    /// <param name="value">An angle, measured in radians.</param>
+    /// <returns>The cosine of value.</returns>
+    public double Cos(double value) => Math.Cos(value);
 
     /// <summary>
     /// Gets the minimum value that can be represented by a double.
@@ -1024,7 +1036,21 @@ public class DoubleOperations : INumericOperations<double>
         Engines.Simd.SimdKernels.Frac(x, destination);
     }
 
+    /// <summary>
+    /// Computes sine of each element using SIMD-optimized operations.
+    /// </summary>
+    public void Sin(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        Engines.Simd.SimdKernels.Sin(x, destination);
+    }
 
+    /// <summary>
+    /// Computes cosine of each element using SIMD-optimized operations.
+    /// </summary>
+    public void Cos(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        Engines.Simd.SimdKernels.Cos(x, destination);
+    }
 
     #endregion
 }

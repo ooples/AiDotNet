@@ -584,6 +584,16 @@ public class Int64Operations : INumericOperations<long>
     public long Ceiling(long value) => value;
     public long Frac(long value) => 0;
 
+    /// <summary>
+    /// Returns the sine of the specified value (truncated to integer).
+    /// </summary>
+    public long Sin(long value) => (long)Math.Sin(value);
+
+    /// <summary>
+    /// Returns the cosine of the specified value (truncated to integer).
+    /// </summary>
+    public long Cos(long value) => (long)Math.Cos(value);
+
 
     /// <summary>
     /// Gets the minimum possible value for a long integer.
@@ -948,5 +958,15 @@ public class Int64Operations : INumericOperations<long>
     public void Floor(ReadOnlySpan<long> x, Span<long> destination) => x.CopyTo(destination);
     public void Ceiling(ReadOnlySpan<long> x, Span<long> destination) => x.CopyTo(destination);
     public void Frac(ReadOnlySpan<long> x, Span<long> destination) => destination.Fill(0);
+    public void Sin(ReadOnlySpan<long> x, Span<long> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (long)Math.Sin(x[i]);
+    }
+    public void Cos(ReadOnlySpan<long> x, Span<long> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (long)Math.Cos(x[i]);
+    }
 
 }

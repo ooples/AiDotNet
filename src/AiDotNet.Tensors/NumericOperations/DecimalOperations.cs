@@ -526,6 +526,9 @@ public class DecimalOperations : INumericOperations<decimal>
     public decimal Ceiling(decimal value) => Math.Ceiling(value);
     public decimal Frac(decimal value) => value - Math.Floor(value);
 
+    public decimal Sin(decimal value) => (decimal)Math.Sin((double)value);
+    public decimal Cos(decimal value) => (decimal)Math.Cos((double)value);
+
 
     /// <summary>
     /// Gets the minimum value that can be represented by a decimal.
@@ -871,6 +874,18 @@ public class DecimalOperations : INumericOperations<decimal>
     {
         for (int i = 0; i < x.Length; i++)
             destination[i] = x[i] - Math.Floor(x[i]);
+    }
+
+    public void Sin(ReadOnlySpan<decimal> x, Span<decimal> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (decimal)Math.Sin((double)x[i]);
+    }
+
+    public void Cos(ReadOnlySpan<decimal> x, Span<decimal> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (decimal)Math.Cos((double)x[i]);
     }
 
 }

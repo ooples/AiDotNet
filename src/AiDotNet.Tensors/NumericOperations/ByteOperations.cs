@@ -505,6 +505,16 @@ public class ByteOperations : INumericOperations<byte>
     public byte Ceiling(byte value) => value;
     public byte Frac(byte value) => 0;
 
+    /// <summary>
+    /// Returns the sine of the specified value (truncated to integer).
+    /// </summary>
+    public byte Sin(byte value) => (byte)Math.Sin(value);
+
+    /// <summary>
+    /// Returns the cosine of the specified value (truncated to integer).
+    /// </summary>
+    public byte Cos(byte value) => (byte)Math.Cos(value);
+
 
     /// <summary>
     /// Gets the minimum value a byte can represent.
@@ -780,5 +790,15 @@ public class ByteOperations : INumericOperations<byte>
     public void Floor(ReadOnlySpan<byte> x, Span<byte> destination) => x.CopyTo(destination);
     public void Ceiling(ReadOnlySpan<byte> x, Span<byte> destination) => x.CopyTo(destination);
     public void Frac(ReadOnlySpan<byte> x, Span<byte> destination) => destination.Fill(0);
+    public void Sin(ReadOnlySpan<byte> x, Span<byte> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (byte)Math.Sin(x[i]);
+    }
+    public void Cos(ReadOnlySpan<byte> x, Span<byte> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (byte)Math.Cos(x[i]);
+    }
 
 }

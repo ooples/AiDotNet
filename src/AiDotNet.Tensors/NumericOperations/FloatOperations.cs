@@ -593,7 +593,19 @@ public class FloatOperations : INumericOperations<float>
     /// </remarks>
     public float Frac(float value) => value - (float)Math.Floor(value);
 
+    /// <summary>
+    /// Returns the sine of the specified angle.
+    /// </summary>
+    /// <param name="value">An angle, measured in radians.</param>
+    /// <returns>The sine of value.</returns>
+    public float Sin(float value) => (float)Math.Sin(value);
 
+    /// <summary>
+    /// Returns the cosine of the specified angle.
+    /// </summary>
+    /// <param name="value">An angle, measured in radians.</param>
+    /// <returns>The cosine of value.</returns>
+    public float Cos(float value) => (float)Math.Cos(value);
 
     /// <summary>
     /// Gets the minimum possible value for a float.
@@ -1185,7 +1197,21 @@ public class FloatOperations : INumericOperations<float>
         Engines.Simd.SimdKernels.Frac(x, destination);
     }
 
+    /// <summary>
+    /// Computes sine of each element using SIMD-optimized operations.
+    /// </summary>
+    public void Sin(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        Engines.Simd.SimdKernels.Sin(x, destination);
+    }
 
+    /// <summary>
+    /// Computes cosine of each element using SIMD-optimized operations.
+    /// </summary>
+    public void Cos(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        Engines.Simd.SimdKernels.Cos(x, destination);
+    }
 
     #endregion
 }

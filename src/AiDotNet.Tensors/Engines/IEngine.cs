@@ -2036,7 +2036,37 @@ public interface IEngine
     /// </remarks>
     Tensor<T> TensorFrac<T>(Tensor<T> tensor);
 
+    /// <summary>
+    /// Computes the element-wise sine of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor with angles in radians.</param>
+    /// <returns>A tensor with sin(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Essential for positional encoding in transformers and neural radiance fields.
+    /// Positional encoding uses sin(position * frequency) to create smooth,
+    /// periodic spatial features that help models understand relative positions.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorSin<T>(Tensor<T> tensor);
 
+    /// <summary>
+    /// Computes the element-wise cosine of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor with angles in radians.</param>
+    /// <returns>A tensor with cos(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Essential for positional encoding in transformers and neural radiance fields.
+    /// Positional encoding uses cos(position * frequency) alongside sin to create
+    /// unique, differentiable position representations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorCos<T>(Tensor<T> tensor);
 
     /// <summary>
     /// Computes the element-wise power of a tensor raised to a scalar exponent.

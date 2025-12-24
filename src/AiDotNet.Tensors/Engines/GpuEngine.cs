@@ -14191,6 +14191,20 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     /// <inheritdoc/>
+    public Tensor<T> TensorSin<T>(Tensor<T> tensor)
+    {
+        // Delegate to CPU fallback - GPU kernels can be added later
+        return _cpuFallback.TensorSin(tensor);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorCos<T>(Tensor<T> tensor)
+    {
+        // Delegate to CPU fallback - GPU kernels can be added later
+        return _cpuFallback.TensorCos(tensor);
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> TensorPow<T>(Tensor<T> tensor, T exponent)
     {
         if (tensor == null) throw new ArgumentNullException(nameof(tensor));

@@ -544,6 +544,16 @@ public class UInt16Operations : INumericOperations<ushort>
     public ushort Ceiling(ushort value) => value;
     public ushort Frac(ushort value) => 0;
 
+    /// <summary>
+    /// Returns the sine of the specified value (truncated to integer).
+    /// </summary>
+    public ushort Sin(ushort value) => (ushort)Math.Sin(value);
+
+    /// <summary>
+    /// Returns the cosine of the specified value (truncated to integer).
+    /// </summary>
+    public ushort Cos(ushort value) => (ushort)Math.Cos(value);
+
 
     /// <summary>
     /// Gets the minimum value that can be represented by a ushort.
@@ -810,5 +820,15 @@ public class UInt16Operations : INumericOperations<ushort>
     public void Floor(ReadOnlySpan<ushort> x, Span<ushort> destination) => x.CopyTo(destination);
     public void Ceiling(ReadOnlySpan<ushort> x, Span<ushort> destination) => x.CopyTo(destination);
     public void Frac(ReadOnlySpan<ushort> x, Span<ushort> destination) => destination.Fill(0);
+    public void Sin(ReadOnlySpan<ushort> x, Span<ushort> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (ushort)Math.Sin(x[i]);
+    }
+    public void Cos(ReadOnlySpan<ushort> x, Span<ushort> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (ushort)Math.Cos(x[i]);
+    }
 
 }

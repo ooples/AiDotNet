@@ -2447,7 +2447,57 @@ public class CpuEngine : IEngine
         return result;
     }
 
+    /// <inheritdoc/>
+    public Tensor<T> TensorSin<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
 
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+
+        if (tensor.Length > 10000)
+        {
+            Parallel.For(0, tensor.Length, i =>
+            {
+                result.SetFlat(i, numOps.Sin(tensor.GetFlat(i)));
+            });
+        }
+        else
+        {
+            for (int i = 0; i < tensor.Length; i++)
+            {
+                result.SetFlat(i, numOps.Sin(tensor.GetFlat(i)));
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorCos<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+
+        if (tensor.Length > 10000)
+        {
+            Parallel.For(0, tensor.Length, i =>
+            {
+                result.SetFlat(i, numOps.Cos(tensor.GetFlat(i)));
+            });
+        }
+        else
+        {
+            for (int i = 0; i < tensor.Length; i++)
+            {
+                result.SetFlat(i, numOps.Cos(tensor.GetFlat(i)));
+            }
+        }
+
+        return result;
+    }
 
     /// <inheritdoc/>
     public Tensor<T> TensorPow<T>(Tensor<T> tensor, T exponent)

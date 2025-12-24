@@ -571,6 +571,16 @@ public class SByteOperations : INumericOperations<sbyte>
     public sbyte Ceiling(sbyte value) => value;
     public sbyte Frac(sbyte value) => 0;
 
+    /// <summary>
+    /// Returns the sine of the specified value (truncated to integer).
+    /// </summary>
+    public sbyte Sin(sbyte value) => (sbyte)Math.Sin(value);
+
+    /// <summary>
+    /// Returns the cosine of the specified value (truncated to integer).
+    /// </summary>
+    public sbyte Cos(sbyte value) => (sbyte)Math.Cos(value);
+
 
     /// <summary>
     /// Gets the minimum possible value for a signed byte.
@@ -851,5 +861,15 @@ public class SByteOperations : INumericOperations<sbyte>
     public void Floor(ReadOnlySpan<sbyte> x, Span<sbyte> destination) => x.CopyTo(destination);
     public void Ceiling(ReadOnlySpan<sbyte> x, Span<sbyte> destination) => x.CopyTo(destination);
     public void Frac(ReadOnlySpan<sbyte> x, Span<sbyte> destination) => destination.Fill(0);
+    public void Sin(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (sbyte)Math.Sin(x[i]);
+    }
+    public void Cos(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (sbyte)Math.Cos(x[i]);
+    }
 
 }

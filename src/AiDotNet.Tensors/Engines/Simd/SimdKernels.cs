@@ -695,6 +695,150 @@ namespace AiDotNet.Tensors.Engines.Simd
             }
         }
 
+        /// <summary>
+        /// Computes element-wise sine for single-precision values.
+        /// </summary>
+        /// <param name="input">Source span of float values in radians.</param>
+        /// <param name="output">Destination span for sine results.</param>
+        /// <exception cref="ArgumentException">Thrown when input and output lengths differ.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Sin(ReadOnlySpan<float> input, Span<float> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            for (int i = 0; i < input.Length; i++)
+            {
+#if NET5_0_OR_GREATER
+                output[i] = MathF.Sin(input[i]);
+#else
+                output[i] = (float)Math.Sin(input[i]);
+#endif
+            }
+        }
+
+        /// <summary>
+        /// Computes element-wise cosine for single-precision values.
+        /// </summary>
+        /// <param name="input">Source span of float values in radians.</param>
+        /// <param name="output">Destination span for cosine results.</param>
+        /// <exception cref="ArgumentException">Thrown when input and output lengths differ.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Cos(ReadOnlySpan<float> input, Span<float> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            for (int i = 0; i < input.Length; i++)
+            {
+#if NET5_0_OR_GREATER
+                output[i] = MathF.Cos(input[i]);
+#else
+                output[i] = (float)Math.Cos(input[i]);
+#endif
+            }
+        }
+
+        /// <summary>
+        /// Computes element-wise sine and cosine simultaneously for single-precision values.
+        /// More efficient than computing sin and cos separately.
+        /// </summary>
+        /// <param name="input">Source span of float values in radians.</param>
+        /// <param name="sinOutput">Destination span for sine results.</param>
+        /// <param name="cosOutput">Destination span for cosine results.</param>
+        /// <exception cref="ArgumentException">Thrown when span lengths differ.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void SinCos(ReadOnlySpan<float> input, Span<float> sinOutput, Span<float> cosOutput)
+        {
+            if (input.Length != sinOutput.Length || input.Length != cosOutput.Length)
+            {
+                throw new ArgumentException("All spans must have the same length.");
+            }
+
+            for (int i = 0; i < input.Length; i++)
+            {
+#if NET5_0_OR_GREATER
+                (sinOutput[i], cosOutput[i]) = MathF.SinCos(input[i]);
+#else
+                sinOutput[i] = (float)Math.Sin(input[i]);
+                cosOutput[i] = (float)Math.Cos(input[i]);
+#endif
+            }
+        }
+
+        /// <summary>
+        /// Computes element-wise sine for double-precision values.
+        /// </summary>
+        /// <param name="input">Source span of double values in radians.</param>
+        /// <param name="output">Destination span for sine results.</param>
+        /// <exception cref="ArgumentException">Thrown when input and output lengths differ.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Sin(ReadOnlySpan<double> input, Span<double> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            for (int i = 0; i < input.Length; i++)
+            {
+                output[i] = Math.Sin(input[i]);
+            }
+        }
+
+        /// <summary>
+        /// Computes element-wise cosine for double-precision values.
+        /// </summary>
+        /// <param name="input">Source span of double values in radians.</param>
+        /// <param name="output">Destination span for cosine results.</param>
+        /// <exception cref="ArgumentException">Thrown when input and output lengths differ.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Cos(ReadOnlySpan<double> input, Span<double> output)
+        {
+            if (input.Length != output.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            for (int i = 0; i < input.Length; i++)
+            {
+                output[i] = Math.Cos(input[i]);
+            }
+        }
+
+        /// <summary>
+        /// Computes element-wise sine and cosine simultaneously for double-precision values.
+        /// More efficient than computing sin and cos separately.
+        /// </summary>
+        /// <param name="input">Source span of double values in radians.</param>
+        /// <param name="sinOutput">Destination span for sine results.</param>
+        /// <param name="cosOutput">Destination span for cosine results.</param>
+        /// <exception cref="ArgumentException">Thrown when span lengths differ.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void SinCos(ReadOnlySpan<double> input, Span<double> sinOutput, Span<double> cosOutput)
+        {
+            if (input.Length != sinOutput.Length || input.Length != cosOutput.Length)
+            {
+                throw new ArgumentException("All spans must have the same length.");
+            }
+
+            for (int i = 0; i < input.Length; i++)
+            {
+#if NET7_0_OR_GREATER
+                (sinOutput[i], cosOutput[i]) = Math.SinCos(input[i]);
+#else
+                sinOutput[i] = Math.Sin(input[i]);
+                cosOutput[i] = Math.Cos(input[i]);
+#endif
+            }
+        }
+
+
+
 
 #if NET5_0_OR_GREATER
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

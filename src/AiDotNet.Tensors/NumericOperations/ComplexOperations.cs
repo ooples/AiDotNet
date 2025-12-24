@@ -637,6 +637,17 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     public Complex<T> Ceiling(Complex<T> value) => new Complex<T>(_ops.Ceiling(value.Real), _ops.Ceiling(value.Imaginary));
     public Complex<T> Frac(Complex<T> value) => new Complex<T>(_ops.Frac(value.Real), _ops.Frac(value.Imaginary));
 
+    /// <summary>
+    /// Returns the sine of the specified complex value.
+    /// Note: This applies Sin to real and imaginary parts separately, not true complex Sin.
+    /// </summary>
+    public Complex<T> Sin(Complex<T> value) => new Complex<T>(_ops.Sin(value.Real), _ops.Sin(value.Imaginary));
+
+    /// <summary>
+    /// Returns the cosine of the specified complex value.
+    /// Note: This applies Cos to real and imaginary parts separately, not true complex Cos.
+    /// </summary>
+    public Complex<T> Cos(Complex<T> value) => new Complex<T>(_ops.Cos(value.Real), _ops.Cos(value.Imaginary));
 
     /// <summary>
     /// Gets the minimum value that can be represented using complex numbers with the underlying type T.
@@ -1080,6 +1091,18 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     {
         for (int i = 0; i < x.Length; i++)
             destination[i] = Frac(x[i]);
+    }
+
+    public void Sin(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = Sin(x[i]);
+    }
+
+    public void Cos(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = Cos(x[i]);
     }
 
 }

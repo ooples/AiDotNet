@@ -180,6 +180,9 @@ public class HalfOperations : INumericOperations<Half>
     public Half Ceiling(Half value) => (Half)Math.Ceiling((float)value);
     public Half Frac(Half value) => (Half)((float)value - Math.Floor((float)value));
 
+    public Half Sin(Half value) => (Half)Math.Sin((float)value);
+    public Half Cos(Half value) => (Half)Math.Cos((float)value);
+
 
     /// <summary>
     /// Determines whether a Half value is NaN (Not a Number).
@@ -533,6 +536,18 @@ public class HalfOperations : INumericOperations<Half>
     {
         for (int i = 0; i < x.Length; i++)
             destination[i] = (Half)((float)x[i] - Math.Floor((float)x[i]));
+    }
+
+    public void Sin(ReadOnlySpan<Half> x, Span<Half> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (Half)Math.Sin((float)x[i]);
+    }
+
+    public void Cos(ReadOnlySpan<Half> x, Span<Half> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (Half)Math.Cos((float)x[i]);
     }
 
 }

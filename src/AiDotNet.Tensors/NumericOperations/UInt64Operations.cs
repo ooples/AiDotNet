@@ -565,6 +565,16 @@ public class UInt64Operations : INumericOperations<ulong>
     public ulong Ceiling(ulong value) => value;
     public ulong Frac(ulong value) => 0;
 
+    /// <summary>
+    /// Returns the sine of the specified value (truncated to integer).
+    /// </summary>
+    public ulong Sin(ulong value) => (ulong)Math.Sin(value);
+
+    /// <summary>
+    /// Returns the cosine of the specified value (truncated to integer).
+    /// </summary>
+    public ulong Cos(ulong value) => (ulong)Math.Cos(value);
+
 
     /// <summary>
     /// Gets the minimum value that can be represented by a ulong.
@@ -874,5 +884,15 @@ public class UInt64Operations : INumericOperations<ulong>
     public void Floor(ReadOnlySpan<ulong> x, Span<ulong> destination) => x.CopyTo(destination);
     public void Ceiling(ReadOnlySpan<ulong> x, Span<ulong> destination) => x.CopyTo(destination);
     public void Frac(ReadOnlySpan<ulong> x, Span<ulong> destination) => destination.Fill(0);
+    public void Sin(ReadOnlySpan<ulong> x, Span<ulong> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (ulong)Math.Sin(x[i]);
+    }
+    public void Cos(ReadOnlySpan<ulong> x, Span<ulong> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (ulong)Math.Cos(x[i]);
+    }
 
 }
