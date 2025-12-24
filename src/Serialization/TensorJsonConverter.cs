@@ -161,26 +161,21 @@ namespace AiDotNet.Serialization
                 return tensorConstructor.Invoke(new object[] { shape, vector });
             }
 
-            // Fallback: Tensor(int[] dimensions) + copy into Data.
+            // Fallback: Tensor(int[] dimensions) + CopyFromArray.
             tensorConstructor = objectType.GetConstructor(new[] { typeof(int[]) });
             if (tensorConstructor != null)
             {
                 var tensor = tensorConstructor.Invoke(new object[] { shape })
                     ?? throw new JsonSerializationException($"Constructor for {objectType.Name} returned null.");
 
-                var dataProperty = objectType.GetProperty("Data");
-                if (dataProperty == null)
+                // Use the public CopyFromArray method to populate the tensor data
+                var copyFromArrayMethod = objectType.GetMethod("CopyFromArray", new[] { dataArray.GetType() });
+                if (copyFromArrayMethod == null)
                 {
-                    throw new JsonSerializationException($"Cannot deserialize tensor type {objectType.Name}: missing Data property.");
+                    throw new JsonSerializationException($"Cannot deserialize tensor type {objectType.Name}: missing CopyFromArray method.");
                 }
 
-                var destination = dataProperty.GetValue(tensor) as Array;
-                if (destination == null)
-                {
-                    throw new JsonSerializationException($"Cannot deserialize tensor type {objectType.Name}: Data property returned null.");
-                }
-
-                Array.Copy(dataArray, destination, dataArray.Length);
+                copyFromArrayMethod.Invoke(tensor, new object[] { dataArray });
                 return tensor;
             }
 

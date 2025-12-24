@@ -580,37 +580,30 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         T epsilon = NumOps.FromDouble(1e-10);  // For numerical stability
         T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
 
-        // Compute negative entropy for read addressing weights
+        // Compute negative entropy for read addressing weights (vectorized)
         foreach (var readWeighting in _readWeightings)
         {
-            T entropy = NumOps.Zero;
-            for (int i = 0; i < readWeighting.Length; i++)
-            {
-                T p = readWeighting[i];
-                // Entropy: H = -Σ(p * log(p))
-                // Clamp p to [epsilon, 1-epsilon] to avoid log(0) and log(>1)
-                T pClamped = MathHelper.Clamp(p, epsilon, oneMinusEpsilon);
-                T logP = NumOps.Log(pClamped);
-                T pLogP = NumOps.Multiply(pClamped, logP);
-                entropy = NumOps.Add(entropy, pLogP);
-            }
+            // Vectorized entropy: H = -Σ(p * log(p))
+            var pTensor = new Tensor<T>(readWeighting.ToArray(), [readWeighting.Length]);
+            // Clamp p to [epsilon, 1-epsilon] to avoid log(0) and log(>1)
+            var pClamped = Engine.TensorClamp(pTensor, epsilon, oneMinusEpsilon);
+            var logP = Engine.TensorLog(pClamped);
+            var pLogP = Engine.TensorMultiply(pClamped, logP);
+            T entropy = Engine.TensorSum(pLogP);
             // Negative entropy (we want to minimize this, encouraging sharp peaks)
             totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
         }
 
-        // Compute negative entropy for write addressing weights
+        // Compute negative entropy for write addressing weights (vectorized)
         if (_writeWeighting != null)
         {
-            T entropy = NumOps.Zero;
-            for (int i = 0; i < _writeWeighting.Length; i++)
-            {
-                T p = _writeWeighting[i];
-                // Clamp p to [epsilon, 1-epsilon] to avoid log(0) and log(>1)
-                T pClamped = MathHelper.Clamp(p, epsilon, oneMinusEpsilon);
-                T logP = NumOps.Log(pClamped);
-                T pLogP = NumOps.Multiply(pClamped, logP);
-                entropy = NumOps.Add(entropy, pLogP);
-            }
+            // Vectorized entropy: H = -Σ(p * log(p))
+            var pTensor = new Tensor<T>(_writeWeighting.ToArray(), [_writeWeighting.Length]);
+            // Clamp p to [epsilon, 1-epsilon] to avoid log(0) and log(>1)
+            var pClamped = Engine.TensorClamp(pTensor, epsilon, oneMinusEpsilon);
+            var logP = Engine.TensorLog(pClamped);
+            var pLogP = Engine.TensorMultiply(pClamped, logP);
+            T entropy = Engine.TensorSum(pLogP);
             totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
         }
 
@@ -1391,23 +1384,24 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// <returns>The cosine similarity between the vectors.</returns>
     private T CosineSimilarity(Vector<T> a, Vector<T> b)
     {
-        // Calculate dot product
-        T dotProduct = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(a[i], b[i]));
-        }
+        // Vectorized cosine similarity using IEngine tensor operations
+        var tensorA = new Tensor<T>(a.ToArray(), [a.Length]);
+        var tensorB = new Tensor<T>(b.ToArray(), [b.Length]);
 
-        // Calculate magnitudes
-        T magnitudeA = NumOps.Zero;
-        T magnitudeB = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            magnitudeA = NumOps.Add(magnitudeA, NumOps.Multiply(a[i], a[i]));
-            magnitudeB = NumOps.Add(magnitudeB, NumOps.Multiply(b[i], b[i]));
-        }
-        magnitudeA = NumOps.Sqrt(magnitudeA);
-        magnitudeB = NumOps.Sqrt(magnitudeB);
+        // Calculate dot product: sum(a * b)
+        var product = Engine.TensorMultiply(tensorA, tensorB);
+        T dotProduct = Engine.TensorSum(product);
+
+        // Calculate magnitudes using vectorized operations
+        // magnitudeA = sqrt(sum(a * a))
+        var aSquared = Engine.TensorMultiply(tensorA, tensorA);
+        T sumASquared = Engine.TensorSum(aSquared);
+        T magnitudeA = NumOps.Sqrt(sumASquared);
+
+        // magnitudeB = sqrt(sum(b * b))
+        var bSquared = Engine.TensorMultiply(tensorB, tensorB);
+        T sumBSquared = Engine.TensorSum(bSquared);
+        T magnitudeB = NumOps.Sqrt(sumBSquared);
 
         // Avoid division by zero
         if (MathHelper.AlmostEqual(magnitudeA, NumOps.Zero) || MathHelper.AlmostEqual(magnitudeB, NumOps.Zero))
@@ -1426,37 +1420,36 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// <returns>The softmax of the input vector.</returns>
     private Vector<T> Softmax(Vector<T> vector)
     {
-        // Find maximum value for numerical stability
-        T maxVal = vector[0];
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], maxVal))
-            {
-                maxVal = vector[i];
-            }
-        }
-
-        // Calculate exp of each element (shifted by max)
-        Vector<T> expVector = new Vector<T>(vector.Length);
+        // Vectorized softmax using IEngine tensor operations
+        // Convert vector to tensor for vectorized operations
+        var inputTensor = new Tensor<T>(vector.ToArray(), [vector.Length]);
+        
+        // Find maximum for numerical stability using ReduceMax (empty array = reduce all)
+        var maxTensor = Engine.ReduceMax(inputTensor, [], keepDims: true, out _);
+        T maxVal = maxTensor[0];
+        
+        // Create max tensor for broadcasting
+        var maxBroadcast = new Tensor<T>([vector.Length]);
+        Engine.TensorFill(maxBroadcast, maxVal);
+        
+        // Compute exp(x - max) using vectorized operations
+        var shifted = Engine.TensorSubtract(inputTensor, maxBroadcast);
+        var expTensor = Engine.TensorExp(shifted);
+        
+        // Compute sum of exponentials
+        T sum = Engine.TensorSum(expTensor);
+        
+        // Normalize by dividing by sum
+        var result = Engine.TensorDivideScalar(expTensor, sum);
+        
+        // Convert back to Vector
+        var resultArray = result.ToArray();
+        var expVector = new Vector<T>(vector.Length);
         for (int i = 0; i < vector.Length; i++)
         {
-            double expVal = Math.Exp(Convert.ToDouble(NumOps.Subtract(vector[i], maxVal)));
-            expVector[i] = NumOps.FromDouble(expVal);
+            expVector[i] = resultArray[i];
         }
-
-        // Calculate sum of exp values
-        T sum = NumOps.Zero;
-        for (int i = 0; i < expVector.Length; i++)
-        {
-            sum = NumOps.Add(sum, expVector[i]);
-        }
-
-        // Normalize by sum
-        for (int i = 0; i < expVector.Length; i++)
-        {
-            expVector[i] = NumOps.Divide(expVector[i], sum);
-        }
-
+        
         return expVector;
     }
 
@@ -1547,28 +1540,30 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             allocationWeighting[index] = NumOps.Multiply(usageFree[index], phi[index]);
         }
 
-        // Normalize the allocation weights to ensure they sum to 1
-        T sum = NumOps.Zero;
-        for (int i = 0; i < _memorySize; i++)
-        {
-            sum = NumOps.Add(sum, allocationWeighting[i]);
-        }
+        // Normalize the allocation weights to ensure they sum to 1 (vectorized)
+        var allocationTensor = new Tensor<T>(allocationWeighting.ToArray(), [_memorySize]);
+        T sum = Engine.TensorSum(allocationTensor);
 
         // Avoid division by zero
         if (!MathHelper.AlmostEqual(sum, NumOps.Zero))
         {
+            // Vectorized division by sum
+            var normalizedTensor = Engine.TensorDivideScalar(allocationTensor, sum);
+            var normalizedArray = normalizedTensor.ToArray();
             for (int i = 0; i < _memorySize; i++)
             {
-                allocationWeighting[i] = NumOps.Divide(allocationWeighting[i], sum);
+                allocationWeighting[i] = normalizedArray[i];
             }
         }
         else
         {
-            // If all weights are zero, use a uniform distribution
+            // If all weights are zero, use a uniform distribution (vectorized)
             T uniformWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(_memorySize));
+            Engine.TensorFill(allocationTensor, uniformWeight);
+            var uniformArray = allocationTensor.ToArray();
             for (int i = 0; i < _memorySize; i++)
             {
-                allocationWeighting[i] = uniformWeight;
+                allocationWeighting[i] = uniformArray[i];
             }
         }
 

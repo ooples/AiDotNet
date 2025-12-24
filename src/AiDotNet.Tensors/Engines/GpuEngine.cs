@@ -30377,42 +30377,804 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public (Tensor<T> values, Tensor<int> indices) TopK<T>(Tensor<T> input, int k, int axis = -1, bool largest = true)
     {
-        // TopK involves sorting which is complex on GPU
-        // For now, use CPU fallback. GPU partial sort can be added later.
+        if (axis < 0) axis = input.Shape.Length + axis;
+        if (axis < 0 || axis >= input.Shape.Length)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {input.Shape.Length} dimensions");
+
+        int axisSize = input.Shape[axis];
+        if (k > axisSize)
+            throw new ArgumentException($"k ({k}) cannot be greater than axis size ({axisSize})");
+
+        // Calculate output shape
+        var outputShape = (int[])input.Shape.Clone();
+        outputShape[axis] = k;
+
+        var values = new Tensor<T>(outputShape);
+        var indices = new Tensor<int>(outputShape);
+
+        // Calculate strides
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= input.Shape[i];
+        int innerSize = 1;
+        for (int i = axis + 1; i < input.Shape.Length; i++) innerSize *= input.Shape[i];
+
+        int numSlices = outerSize * innerSize;
+
+        if (numSlices >= 64 && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                TopKGpuFloat(
+                    (Tensor<float>)(object)input,
+                    (Tensor<float>)(object)values,
+                    indices, k, axis, largest, outerSize, axisSize, innerSize);
+                return (values, indices);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                TopKGpuDouble(
+                    (Tensor<double>)(object)input,
+                    (Tensor<double>)(object)values,
+                    indices, k, axis, largest, outerSize, axisSize, innerSize);
+                return (values, indices);
+            }
+        }
+
         return _cpuFallback.TopK(input, k, axis, largest);
+    }
+
+    private void TopKGpuFloat(Tensor<float> input, Tensor<float> values, Tensor<int> indices,
+        int k, int axis, bool largest, int outerSize, int axisSize, int innerSize)
+    {
+        int numSlices = outerSize * innerSize;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<float>(input.Length);
+            using var valuesBuffer = _accelerator!.Allocate1D<float>(values.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>,
+                ArrayView1D<int, Stride1D.Dense>, int, int, int, int, int>(TopKKernelFloat);
+
+            kernel(numSlices, inputBuffer.View, valuesBuffer.View, indicesBuffer.View,
+                   k, outerSize, axisSize, innerSize, largest ? 1 : 0);
+            _accelerator!.Synchronize();
+
+            valuesBuffer.CopyToCPU(values.Data);
+            indicesBuffer.CopyToCPU(indices.Data);
+        }
+    }
+
+    private void TopKGpuDouble(Tensor<double> input, Tensor<double> values, Tensor<int> indices,
+        int k, int axis, bool largest, int outerSize, int axisSize, int innerSize)
+    {
+        int numSlices = outerSize * innerSize;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<double>(input.Length);
+            using var valuesBuffer = _accelerator!.Allocate1D<double>(values.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>,
+                ArrayView1D<int, Stride1D.Dense>, int, int, int, int, int>(TopKKernelDouble);
+
+            kernel(numSlices, inputBuffer.View, valuesBuffer.View, indicesBuffer.View,
+                   k, outerSize, axisSize, innerSize, largest ? 1 : 0);
+            _accelerator!.Synchronize();
+
+            valuesBuffer.CopyToCPU(values.Data);
+            indicesBuffer.CopyToCPU(indices.Data);
+        }
+    }
+
+    // TopK kernel - each thread processes one slice along the axis
+    // Uses simple O(n*k) selection algorithm suitable for small k
+    private static void TopKKernelFloat(
+        Index1D sliceIdx,
+        ArrayView1D<float, Stride1D.Dense> input,
+        ArrayView1D<float, Stride1D.Dense> values,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        int k, int outerSize, int axisSize, int innerSize, int largest)
+    {
+        int outer = sliceIdx / innerSize;
+        int inner = sliceIdx % innerSize;
+
+        // Find top-k using simple selection (suitable for small k)
+        // For each of k positions, find the best remaining element
+        for (int ki = 0; ki < k; ki++)
+        {
+            float bestVal = largest == 1 ? float.MinValue : float.MaxValue;
+            int bestIdx = 0;
+
+            for (int a = 0; a < axisSize; a++)
+            {
+                int srcIdx = outer * axisSize * innerSize + a * innerSize + inner;
+                float val = input[srcIdx];
+
+                // Check if this index was already selected
+                bool alreadySelected = false;
+                for (int pi = 0; pi < ki; pi++)
+                {
+                    int prevDstIdx = outer * k * innerSize + pi * innerSize + inner;
+                    if (indices[prevDstIdx] == a)
+                    {
+                        alreadySelected = true;
+                        break;
+                    }
+                }
+
+                if (!alreadySelected)
+                {
+                    bool isBetter = largest == 1 ? val > bestVal : val < bestVal;
+                    if (isBetter)
+                    {
+                        bestVal = val;
+                        bestIdx = a;
+                    }
+                }
+            }
+
+            int dstIdx = outer * k * innerSize + ki * innerSize + inner;
+            values[dstIdx] = bestVal;
+            indices[dstIdx] = bestIdx;
+        }
+    }
+
+    private static void TopKKernelDouble(
+        Index1D sliceIdx,
+        ArrayView1D<double, Stride1D.Dense> input,
+        ArrayView1D<double, Stride1D.Dense> values,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        int k, int outerSize, int axisSize, int innerSize, int largest)
+    {
+        int outer = sliceIdx / innerSize;
+        int inner = sliceIdx % innerSize;
+
+        for (int ki = 0; ki < k; ki++)
+        {
+            double bestVal = largest == 1 ? double.MinValue : double.MaxValue;
+            int bestIdx = 0;
+
+            for (int a = 0; a < axisSize; a++)
+            {
+                int srcIdx = outer * axisSize * innerSize + a * innerSize + inner;
+                double val = input[srcIdx];
+
+                bool alreadySelected = false;
+                for (int pi = 0; pi < ki; pi++)
+                {
+                    int prevDstIdx = outer * k * innerSize + pi * innerSize + inner;
+                    if (indices[prevDstIdx] == a)
+                    {
+                        alreadySelected = true;
+                        break;
+                    }
+                }
+
+                if (!alreadySelected)
+                {
+                    bool isBetter = largest == 1 ? val > bestVal : val < bestVal;
+                    if (isBetter)
+                    {
+                        bestVal = val;
+                        bestIdx = a;
+                    }
+                }
+            }
+
+            int dstIdx = outer * k * innerSize + ki * innerSize + inner;
+            values[dstIdx] = bestVal;
+            indices[dstIdx] = bestIdx;
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<int> ArgSort<T>(Tensor<T> input, int axis = -1, bool descending = false)
     {
-        // ArgSort involves sorting which is complex on GPU
-        // For now, use CPU fallback. GPU radix sort can be added later.
+        if (axis < 0) axis = input.Shape.Length + axis;
+        if (axis < 0 || axis >= input.Shape.Length)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {input.Shape.Length} dimensions");
+
+        var result = new Tensor<int>(input.Shape);
+        int axisSize = input.Shape[axis];
+
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= input.Shape[i];
+        int innerSize = 1;
+        for (int i = axis + 1; i < input.Shape.Length; i++) innerSize *= input.Shape[i];
+
+        int numSlices = outerSize * innerSize;
+
+        if (numSlices >= 64 && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                ArgSortGpuFloat((Tensor<float>)(object)input, result, axis, descending,
+                    outerSize, axisSize, innerSize);
+                return result;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                ArgSortGpuDouble((Tensor<double>)(object)input, result, axis, descending,
+                    outerSize, axisSize, innerSize);
+                return result;
+            }
+        }
+
         return _cpuFallback.ArgSort(input, axis, descending);
     }
 
-/// <inheritdoc/>
+    private void ArgSortGpuFloat(Tensor<float> input, Tensor<int> result, int axis, bool descending,
+        int outerSize, int axisSize, int innerSize)
+    {
+        int numSlices = outerSize * innerSize;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<float>(input.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<int>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<int, Stride1D.Dense>,
+                int, int, int, int>(ArgSortKernelFloat);
+
+            kernel(numSlices, inputBuffer.View, resultBuffer.View,
+                   outerSize, axisSize, innerSize, descending ? 1 : 0);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    private void ArgSortGpuDouble(Tensor<double> input, Tensor<int> result, int axis, bool descending,
+        int outerSize, int axisSize, int innerSize)
+    {
+        int numSlices = outerSize * innerSize;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<double>(input.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<int>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<int, Stride1D.Dense>,
+                int, int, int, int>(ArgSortKernelDouble);
+
+            kernel(numSlices, inputBuffer.View, resultBuffer.View,
+                   outerSize, axisSize, innerSize, descending ? 1 : 0);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    // ArgSort kernel using insertion sort (suitable for small axis sizes)
+    // Each thread sorts one slice along the axis
+    private static void ArgSortKernelFloat(
+        Index1D sliceIdx,
+        ArrayView1D<float, Stride1D.Dense> input,
+        ArrayView1D<int, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int descending)
+    {
+        int outer = sliceIdx / innerSize;
+        int inner = sliceIdx % innerSize;
+
+        // Initialize indices
+        for (int a = 0; a < axisSize; a++)
+        {
+            int dstIdx = outer * axisSize * innerSize + a * innerSize + inner;
+            result[dstIdx] = a;
+        }
+
+        // Insertion sort on indices based on values
+        for (int i = 1; i < axisSize; i++)
+        {
+            int keyIdxPos = outer * axisSize * innerSize + i * innerSize + inner;
+            int keyIdx = result[keyIdxPos];
+            int keySrcPos = outer * axisSize * innerSize + keyIdx * innerSize + inner;
+            float keyVal = input[keySrcPos];
+
+            int j = i - 1;
+            while (j >= 0)
+            {
+                int jIdxPos = outer * axisSize * innerSize + j * innerSize + inner;
+                int jIdx = result[jIdxPos];
+                int jSrcPos = outer * axisSize * innerSize + jIdx * innerSize + inner;
+                float jVal = input[jSrcPos];
+
+                bool shouldSwap = descending == 1 ? jVal < keyVal : jVal > keyVal;
+                if (!shouldSwap) break;
+
+                // Shift
+                int nextIdxPos = outer * axisSize * innerSize + (j + 1) * innerSize + inner;
+                result[nextIdxPos] = jIdx;
+                j--;
+            }
+
+            int insertPos = outer * axisSize * innerSize + (j + 1) * innerSize + inner;
+            result[insertPos] = keyIdx;
+        }
+    }
+
+    private static void ArgSortKernelDouble(
+        Index1D sliceIdx,
+        ArrayView1D<double, Stride1D.Dense> input,
+        ArrayView1D<int, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int descending)
+    {
+        int outer = sliceIdx / innerSize;
+        int inner = sliceIdx % innerSize;
+
+        for (int a = 0; a < axisSize; a++)
+        {
+            int dstIdx = outer * axisSize * innerSize + a * innerSize + inner;
+            result[dstIdx] = a;
+        }
+
+        for (int i = 1; i < axisSize; i++)
+        {
+            int keyIdxPos = outer * axisSize * innerSize + i * innerSize + inner;
+            int keyIdx = result[keyIdxPos];
+            int keySrcPos = outer * axisSize * innerSize + keyIdx * innerSize + inner;
+            double keyVal = input[keySrcPos];
+
+            int j = i - 1;
+            while (j >= 0)
+            {
+                int jIdxPos = outer * axisSize * innerSize + j * innerSize + inner;
+                int jIdx = result[jIdxPos];
+                int jSrcPos = outer * axisSize * innerSize + jIdx * innerSize + inner;
+                double jVal = input[jSrcPos];
+
+                bool shouldSwap = descending == 1 ? jVal < keyVal : jVal > keyVal;
+                if (!shouldSwap) break;
+
+                int nextIdxPos = outer * axisSize * innerSize + (j + 1) * innerSize + inner;
+                result[nextIdxPos] = jIdx;
+                j--;
+            }
+
+            int insertPos = outer * axisSize * innerSize + (j + 1) * innerSize + inner;
+            result[insertPos] = keyIdx;
+        }
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> Gather<T>(Tensor<T> input, Tensor<int> indices, int axis)
     {
-        // Gather is memory-bound and CPU implementation is efficient
-        // GPU version would require complex index calculations
+        if (axis < 0) axis = input.Shape.Length + axis;
+        if (axis < 0 || axis >= input.Shape.Length)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {input.Shape.Length} dimensions");
+
+        var outputShape = new int[input.Shape.Length];
+        for (int i = 0; i < input.Shape.Length; i++)
+            outputShape[i] = i == axis ? indices.Length : input.Shape[i];
+
+        var result = new Tensor<T>(outputShape);
+
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= input.Shape[i];
+        int axisSize = input.Shape[axis];
+        int innerSize = 1;
+        for (int i = axis + 1; i < input.Shape.Length; i++) innerSize *= input.Shape[i];
+
+        int outputLen = result.Length;
+
+        if (outputLen >= 1024 && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                GatherGpuFloat((Tensor<float>)(object)input, indices, (Tensor<float>)(object)result,
+                    outerSize, axisSize, innerSize);
+                return result;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                GatherGpuDouble((Tensor<double>)(object)input, indices, (Tensor<double>)(object)result,
+                    outerSize, axisSize, innerSize);
+                return result;
+            }
+        }
+
         return _cpuFallback.Gather(input, indices, axis);
+    }
+
+    private void GatherGpuFloat(Tensor<float> input, Tensor<int> indices, Tensor<float> result,
+        int outerSize, int axisSize, int innerSize)
+    {
+        int numIndices = indices.Length;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<float>(input.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<float>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+            indicesBuffer.CopyFromCPU(indices.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<int, Stride1D.Dense>,
+                ArrayView1D<float, Stride1D.Dense>, int, int, int, int>(GatherKernelFloat);
+
+            kernel(result.Length, inputBuffer.View, indicesBuffer.View, resultBuffer.View,
+                   outerSize, axisSize, innerSize, numIndices);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    private void GatherGpuDouble(Tensor<double> input, Tensor<int> indices, Tensor<double> result,
+        int outerSize, int axisSize, int innerSize)
+    {
+        int numIndices = indices.Length;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<double>(input.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<double>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+            indicesBuffer.CopyFromCPU(indices.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<int, Stride1D.Dense>,
+                ArrayView1D<double, Stride1D.Dense>, int, int, int, int>(GatherKernelDouble);
+
+            kernel(result.Length, inputBuffer.View, indicesBuffer.View, resultBuffer.View,
+                   outerSize, axisSize, innerSize, numIndices);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    // Gather kernel - each thread copies one output element
+    private static void GatherKernelFloat(
+        Index1D index,
+        ArrayView1D<float, Stride1D.Dense> input,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        ArrayView1D<float, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int numIndices)
+    {
+        // Compute which outer, index, inner this element corresponds to
+        int outer = index / (numIndices * innerSize);
+        int remainder = index % (numIndices * innerSize);
+        int idx = remainder / innerSize;
+        int inner = remainder % innerSize;
+
+        int srcIdx = indices[idx];
+        int srcFlatIndex = outer * axisSize * innerSize + srcIdx * innerSize + inner;
+        result[index] = input[srcFlatIndex];
+    }
+
+    private static void GatherKernelDouble(
+        Index1D index,
+        ArrayView1D<double, Stride1D.Dense> input,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        ArrayView1D<double, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int numIndices)
+    {
+        int outer = index / (numIndices * innerSize);
+        int remainder = index % (numIndices * innerSize);
+        int idx = remainder / innerSize;
+        int inner = remainder % innerSize;
+
+        int srcIdx = indices[idx];
+        int srcFlatIndex = outer * axisSize * innerSize + srcIdx * innerSize + inner;
+        result[index] = input[srcFlatIndex];
     }
 
     /// <inheritdoc/>
     public Tensor<T> Scatter<T>(Tensor<T> input, Tensor<int> indices, Tensor<T> values, int axis)
     {
-        // Scatter has potential race conditions on GPU
-        // CPU implementation is safer
+        if (axis < 0) axis = input.Shape.Length + axis;
+        if (axis < 0 || axis >= input.Shape.Length)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {input.Shape.Length} dimensions");
+
+        // Create copy of input
+        var result = new Tensor<T>(input.Shape);
+
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= input.Shape[i];
+        int axisSize = input.Shape[axis];
+        int innerSize = 1;
+        for (int i = axis + 1; i < input.Shape.Length; i++) innerSize *= input.Shape[i];
+
+        if (input.Length >= 1024 && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                ScatterGpuFloat((Tensor<float>)(object)input, indices, (Tensor<float>)(object)values,
+                    (Tensor<float>)(object)result, outerSize, axisSize, innerSize);
+                return result;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                ScatterGpuDouble((Tensor<double>)(object)input, indices, (Tensor<double>)(object)values,
+                    (Tensor<double>)(object)result, outerSize, axisSize, innerSize);
+                return result;
+            }
+        }
+
         return _cpuFallback.Scatter(input, indices, values, axis);
+    }
+
+    private void ScatterGpuFloat(Tensor<float> input, Tensor<int> indices, Tensor<float> values,
+        Tensor<float> result, int outerSize, int axisSize, int innerSize)
+    {
+        int numIndices = indices.Length;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<float>(input.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+            using var valuesBuffer = _accelerator!.Allocate1D<float>(values.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<float>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+            indicesBuffer.CopyFromCPU(indices.Data);
+            valuesBuffer.CopyFromCPU(values.Data);
+
+            // First copy input to result
+            var copyKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>>(CopyKernelFloat);
+            copyKernel(input.Length, inputBuffer.View, resultBuffer.View);
+            _accelerator!.Synchronize();
+
+            // Then scatter values
+            var scatterKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>,
+                ArrayView1D<float, Stride1D.Dense>, int, int, int, int>(ScatterKernelFloat);
+
+            scatterKernel(values.Length, indicesBuffer.View, valuesBuffer.View, resultBuffer.View,
+                          outerSize, axisSize, innerSize, numIndices);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    private void ScatterGpuDouble(Tensor<double> input, Tensor<int> indices, Tensor<double> values,
+        Tensor<double> result, int outerSize, int axisSize, int innerSize)
+    {
+        int numIndices = indices.Length;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<double>(input.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+            using var valuesBuffer = _accelerator!.Allocate1D<double>(values.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<double>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+            indicesBuffer.CopyFromCPU(indices.Data);
+            valuesBuffer.CopyFromCPU(values.Data);
+
+            var copyKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>>(CopyKernelDouble);
+            copyKernel(input.Length, inputBuffer.View, resultBuffer.View);
+            _accelerator!.Synchronize();
+
+            var scatterKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>,
+                ArrayView1D<double, Stride1D.Dense>, int, int, int, int>(ScatterKernelDouble);
+
+            scatterKernel(values.Length, indicesBuffer.View, valuesBuffer.View, resultBuffer.View,
+                          outerSize, axisSize, innerSize, numIndices);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    private static void CopyKernelFloat(
+        Index1D index,
+        ArrayView1D<float, Stride1D.Dense> input,
+        ArrayView1D<float, Stride1D.Dense> output)
+    {
+        output[index] = input[index];
+    }
+
+    private static void CopyKernelDouble(
+        Index1D index,
+        ArrayView1D<double, Stride1D.Dense> input,
+        ArrayView1D<double, Stride1D.Dense> output)
+    {
+        output[index] = input[index];
+    }
+
+    // Scatter kernel - writes values to indexed positions
+    // Note: If multiple indices point to same location, last write wins (no atomics for simple scatter)
+    private static void ScatterKernelFloat(
+        Index1D index,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        ArrayView1D<float, Stride1D.Dense> values,
+        ArrayView1D<float, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int numIndices)
+    {
+        // Compute which outer, index, inner this value corresponds to
+        int outer = index / (numIndices * innerSize);
+        int remainder = index % (numIndices * innerSize);
+        int idx = remainder / innerSize;
+        int inner = remainder % innerSize;
+
+        int dstIdx = indices[idx];
+        int dstFlatIndex = outer * axisSize * innerSize + dstIdx * innerSize + inner;
+        result[dstFlatIndex] = values[index];
+    }
+
+    private static void ScatterKernelDouble(
+        Index1D index,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        ArrayView1D<double, Stride1D.Dense> values,
+        ArrayView1D<double, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int numIndices)
+    {
+        int outer = index / (numIndices * innerSize);
+        int remainder = index % (numIndices * innerSize);
+        int idx = remainder / innerSize;
+        int inner = remainder % innerSize;
+
+        int dstIdx = indices[idx];
+        int dstFlatIndex = outer * axisSize * innerSize + dstIdx * innerSize + inner;
+        result[dstFlatIndex] = values[index];
     }
 
     /// <inheritdoc/>
     public Tensor<T> ScatterAdd<T>(Tensor<T> input, Tensor<int> indices, Tensor<T> values, int axis)
     {
-        // ScatterAdd has potential race conditions on GPU (atomic operations needed)
-        // CPU implementation is safer
+        if (axis < 0) axis = input.Shape.Length + axis;
+        if (axis < 0 || axis >= input.Shape.Length)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {input.Shape.Length} dimensions");
+
+        var result = new Tensor<T>(input.Shape);
+
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= input.Shape[i];
+        int axisSize = input.Shape[axis];
+        int innerSize = 1;
+        for (int i = axis + 1; i < input.Shape.Length; i++) innerSize *= input.Shape[i];
+
+        if (input.Length >= 1024 && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                ScatterAddGpuFloat((Tensor<float>)(object)input, indices, (Tensor<float>)(object)values,
+                    (Tensor<float>)(object)result, outerSize, axisSize, innerSize);
+                return result;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                ScatterAddGpuDouble((Tensor<double>)(object)input, indices, (Tensor<double>)(object)values,
+                    (Tensor<double>)(object)result, outerSize, axisSize, innerSize);
+                return result;
+            }
+        }
+
         return _cpuFallback.ScatterAdd(input, indices, values, axis);
     }
+
+    private void ScatterAddGpuFloat(Tensor<float> input, Tensor<int> indices, Tensor<float> values,
+        Tensor<float> result, int outerSize, int axisSize, int innerSize)
+    {
+        int numIndices = indices.Length;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<float>(input.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+            using var valuesBuffer = _accelerator!.Allocate1D<float>(values.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<float>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+            indicesBuffer.CopyFromCPU(indices.Data);
+            valuesBuffer.CopyFromCPU(values.Data);
+
+            // First copy input to result
+            var copyKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>>(CopyKernelFloat);
+            copyKernel(input.Length, inputBuffer.View, resultBuffer.View);
+            _accelerator!.Synchronize();
+
+            // Use atomic add for scatter add
+            var scatterAddKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>,
+                ArrayView1D<float, Stride1D.Dense>, int, int, int, int>(ScatterAddKernelFloat);
+
+            scatterAddKernel(values.Length, indicesBuffer.View, valuesBuffer.View, resultBuffer.View,
+                             outerSize, axisSize, innerSize, numIndices);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    private void ScatterAddGpuDouble(Tensor<double> input, Tensor<int> indices, Tensor<double> values,
+        Tensor<double> result, int outerSize, int axisSize, int innerSize)
+    {
+        int numIndices = indices.Length;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<double>(input.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+            using var valuesBuffer = _accelerator!.Allocate1D<double>(values.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<double>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+            indicesBuffer.CopyFromCPU(indices.Data);
+            valuesBuffer.CopyFromCPU(values.Data);
+
+            var copyKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>>(CopyKernelDouble);
+            copyKernel(input.Length, inputBuffer.View, resultBuffer.View);
+            _accelerator!.Synchronize();
+
+            var scatterAddKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>,
+                ArrayView1D<double, Stride1D.Dense>, int, int, int, int>(ScatterAddKernelDouble);
+
+            scatterAddKernel(values.Length, indicesBuffer.View, valuesBuffer.View, resultBuffer.View,
+                             outerSize, axisSize, innerSize, numIndices);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    // ScatterAdd kernel using atomic operations
+    private static void ScatterAddKernelFloat(
+        Index1D index,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        ArrayView1D<float, Stride1D.Dense> values,
+        ArrayView1D<float, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int numIndices)
+    {
+        int outer = index / (numIndices * innerSize);
+        int remainder = index % (numIndices * innerSize);
+        int idx = remainder / innerSize;
+        int inner = remainder % innerSize;
+
+        int dstIdx = indices[idx];
+        int dstFlatIndex = outer * axisSize * innerSize + dstIdx * innerSize + inner;
+
+        // Use atomic add to handle concurrent writes
+        Atomic.Add(ref result[dstFlatIndex], values[index]);
+    }
+
+    private static void ScatterAddKernelDouble(
+        Index1D index,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        ArrayView1D<double, Stride1D.Dense> values,
+        ArrayView1D<double, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int numIndices)
+    {
+        int outer = index / (numIndices * innerSize);
+        int remainder = index % (numIndices * innerSize);
+        int idx = remainder / innerSize;
+        int inner = remainder % innerSize;
+
+        int dstIdx = indices[idx];
+        int dstFlatIndex = outer * axisSize * innerSize + dstIdx * innerSize + inner;
+
+        Atomic.Add(ref result[dstFlatIndex], values[index]);
+    }
+
 
     /// <inheritdoc/>
     public Tensor<T> TensorCosh<T>(Tensor<T> tensor)

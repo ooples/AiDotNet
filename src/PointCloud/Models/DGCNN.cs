@@ -3,6 +3,7 @@ using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -689,37 +690,27 @@ internal class EdgeConvLayer<T> : LayerBase<T>
     {
         int numPoints = features.Shape[0];
         var knnIndices = new int[numPoints, k];
-        var numOps = NumOps;
 
-        // For each point, find k nearest neighbors
+        // Vectorized k-NN using IEngine operations
+        // Compute pairwise squared distances: [numPoints, numPoints]
+        var distancesSq = Engine.PairwiseDistanceSquared(features, features);
+
+        // Set diagonal to large value to exclude self-connections
+        T largeVal = NumOps.FromDouble(1e30);
         for (int i = 0; i < numPoints; i++)
         {
-            var distances = new List<(double dist, int idx)>();
+            distancesSq[i, i] = largeVal;
+        }
 
-            for (int j = 0; j < numPoints; j++)
+        // Get k smallest distances per row (largest=false)
+        var (_, indices) = Engine.TopK(distancesSq, k, axis: 1, largest: false);
+
+        // Copy to int[,] result array
+        for (int i = 0; i < numPoints; i++)
+        {
+            for (int j = 0; j < k; j++)
             {
-                if (i == j) continue;
-
-                // Compute Euclidean distance in feature space
-                double distSq = 0;
-                for (int c = 0; c < _inputChannels; c++)
-                {
-                    var diff = numOps.Subtract(
-                        features.Data[i * _inputChannels + c],
-                        features.Data[j * _inputChannels + c]
-                    );
-                    var diffDouble = numOps.ToDouble(diff);
-                    distSq += diffDouble * diffDouble;
-                }
-
-                distances.Add((Math.Sqrt(distSq), j));
-            }
-
-            // Sort by distance and take top k
-            var topK = distances.OrderBy(d => d.dist).Take(k).ToArray();
-            for (int kIdx = 0; kIdx < k && kIdx < topK.Length; kIdx++)
-            {
-                knnIndices[i, kIdx] = topK[kIdx].idx;
+                knnIndices[i, j] = indices[i, j];
             }
         }
 

@@ -503,14 +503,31 @@ The codebase has extensive use of `.Sort()`, `.OrderBy()`, and `.Take()` pattern
 ## Implementation Status
 
 ### Completed
-- [x] PositionalEncodingLayer.cs vectorized with TensorSin/TensorCos
+- [x] PositionalEncodingLayer.cs vectorized with TensorSin/TensorCos/TensorOuter
 - [x] ILGPU GPU kernels for Floor/Ceiling/Frac/Sin/Cos/TrilinearInterpolate
+- [x] ILGPU GPU kernels for TopK (production-ready, per-slice selection algorithm)
+- [x] ILGPU GPU kernels for ArgSort (production-ready, insertion sort per slice)
+- [x] ILGPU GPU kernels for Gather (production-ready, parallel indexed reads)
+- [x] ILGPU GPU kernels for Scatter (production-ready, copy + indexed writes)
+- [x] ILGPU GPU kernels for ScatterAdd (production-ready, uses Atomic.Add)
+- [x] ILGPU GPU kernels for TensorCosh/TensorSinh
+- [x] ILGPU GPU kernels for TensorOuter
+- [x] ILGPU GPU kernels for PairwiseDistanceSquared/PairwiseDistance
+- [x] SpikingLayer.cs surrogate gradient vectorized with TensorCosh
+- [x] DGCNN.cs k-NN vectorized with PairwiseDistanceSquared + TopK
 
 ### In Progress
-- [ ] SpikingLayer.cs - Needs TensorCosh, TensorWhere
-- [ ] DGCNN.cs - Needs PairwiseDistance, TopK
+(None - all major items completed)
 
-### Blocked (Needs New IEngine Operations)
-- [ ] TopK operation (blocks 50+ files)
-- [ ] PairwiseDistance operation (blocks point cloud models)
-- [ ] TensorWhere/Select operation (blocks conditional logic)
+### Recently Completed (Session 2)
+- [x] SpikingLayer.cs Hodgkin-Huxley neuron model vectorized with TensorExp
+- [x] SpikingLayer.cs AdEx model vectorized with TensorExp/TensorWhere
+- [x] DiffusionConvLayer.cs spectral decay vectorized with TensorExp
+- [x] DiffusionConvLayer.cs direct heat kernel vectorized with TensorExp
+- [x] GenerativeAdversarialNetwork.cs Box-Muller noise generation vectorized
+- [x] GenerativeAdversarialNetwork.cs gradient penalty vectorized with ReduceSum
+
+### No Longer Blocked
+- [x] TopK operation - NOW AVAILABLE with ILGPU GPU kernel
+- [x] PairwiseDistance operation - NOW AVAILABLE with ILGPU GPU kernel
+- [x] TensorWhere/Select operation - Already exists in IEngine

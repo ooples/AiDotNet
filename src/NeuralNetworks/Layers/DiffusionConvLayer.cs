@@ -519,17 +519,20 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         // Transpose eigenvectors for spectral projection: [numEig, numVertices]
         var eigenvectorsTransposed = Engine.TensorTranspose(_eigenvectors);
 
+        // Create eigenvalue tensor for vectorized decay computation
+        // Use explicit array copy instead of slice syntax for net471 compatibility
+        var eigenvalueArray = new T[numEig];
+        Array.Copy(_eigenvalues, eigenvalueArray, numEig);
+        var eigenvalueTensor = new Tensor<T>(eigenvalueArray, [numEig]);
+
         for (int t = 0; t < NumTimeScales; t++)
         {
             T time = DiffusionTimes[t];
 
-            // Compute decay factors: exp(-eigenvalue * time) for each eigenvalue
-            var decayFactors = new T[numEig];
-            for (int k = 0; k < numEig; k++)
-            {
-                decayFactors[k] = NumOps.Exp(NumOps.Negate(NumOps.Multiply(_eigenvalues[k], time)));
-            }
-            var decayTensor = new Tensor<T>(decayFactors, [numEig, 1]);
+            // Vectorized decay factor computation: exp(-eigenvalue * time)
+            var negEigTimesTime = Engine.TensorMultiplyScalar(Engine.TensorNegate(eigenvalueTensor), time);
+            var decayVector = Engine.TensorExp(negEigTimesTime);
+            var decayTensor = decayVector.Reshape([numEig, 1]);
 
             // Step 1: Project input to spectral domain
             // spectralCoeffs = eigenvectors^T @ input -> [numEig, InputChannels]
@@ -580,16 +583,10 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         {
             T time = DiffusionTimes[t];
 
-            // Compute heat kernel matrix: K[v,u] = exp(-L[v,u] * t)
-            var laplacianArray = _laplacian.ToArray();
-            var heatKernelArray = new T[numVertices * numVertices];
-
-            // Vectorize the exponential computation
-            for (int i = 0; i < laplacianArray.Length; i++)
-            {
-                heatKernelArray[i] = NumOps.Exp(NumOps.Multiply(NumOps.Negate(laplacianArray[i]), time));
-            }
-            var heatKernel = new Tensor<T>(heatKernelArray, [numVertices, numVertices]);
+            // Vectorized heat kernel computation: K[v,u] = exp(-L[v,u] * t)
+            var negLaplacian = Engine.TensorNegate(_laplacian);
+            var scaledLaplacian = Engine.TensorMultiplyScalar(negLaplacian, time);
+            var heatKernel = Engine.TensorExp(scaledLaplacian);
 
             // Compute diffused output: output = heatKernel @ input -> [numVertices, InputChannels]
             var output = Engine.TensorMatMul(heatKernel, input);
@@ -930,6 +927,12 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         // Transpose eigenvectors for projection: [numEig, numVertices]
         var eigenvectorsTransposed = Engine.TensorTranspose(_eigenvectors);
 
+        // Create eigenvalue tensor for vectorized decay computation
+        // Use explicit array copy instead of slice syntax for net471 compatibility
+        var eigenvalueArray = new T[numEig];
+        Array.Copy(_eigenvalues, eigenvalueArray, numEig);
+        var eigenvalueTensor = new Tensor<T>(eigenvalueArray, [numEig]);
+
         for (int t = 0; t < NumTimeScales; t++)
         {
             T time = DiffusionTimes[t];
@@ -938,13 +941,10 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             // Extract gradient slice for this time scale
             var timeGrad = Engine.TensorSlice(diffusedGrad, [0, baseOffset], [numVertices, InputChannels]);
 
-            // Compute decay factors
-            var decayFactors = new T[numEig];
-            for (int k = 0; k < numEig; k++)
-            {
-                decayFactors[k] = NumOps.Exp(NumOps.Negate(NumOps.Multiply(_eigenvalues[k], time)));
-            }
-            var decayTensor = new Tensor<T>(decayFactors, [numEig, 1]);
+            // Vectorized decay factor computation: exp(-eigenvalue * time)
+            var negEigTimesTime = Engine.TensorMultiplyScalar(Engine.TensorNegate(eigenvalueTensor), time);
+            var decayVector = Engine.TensorExp(negEigTimesTime);
+            var decayTensor = decayVector.Reshape([numEig, 1]);
 
             // Project gradient to spectral domain
             var spectralGrad = Engine.TensorMatMul(eigenvectorsTransposed, timeGrad);
@@ -983,16 +983,11 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             // Extract gradient slice for this time scale
             var timeGrad = Engine.TensorSlice(diffusedGrad, [0, baseOffset], [numVertices, InputChannels]);
 
-            // Compute heat kernel matrix transposed: K^T[v,u] = exp(-L[u,v] * t)
-            // For symmetric Laplacian, K^T = K, so we can reuse forward computation
-            var laplacianArray = _laplacian.ToArray();
-            var heatKernelArray = new T[numVertices * numVertices];
-
-            for (int i = 0; i < laplacianArray.Length; i++)
-            {
-                heatKernelArray[i] = NumOps.Exp(NumOps.Multiply(NumOps.Negate(laplacianArray[i]), time));
-            }
-            var heatKernel = new Tensor<T>(heatKernelArray, [numVertices, numVertices]);
+            // Vectorized heat kernel computation: K[v,u] = exp(-L[v,u] * t)
+            // For symmetric Laplacian, K^T = K
+            var negLaplacian = Engine.TensorNegate(_laplacian);
+            var scaledLaplacian = Engine.TensorMultiplyScalar(negLaplacian, time);
+            var heatKernel = Engine.TensorExp(scaledLaplacian);
 
             // For backward pass, we need K^T @ grad
             var heatKernelTransposed = Engine.TensorTranspose(heatKernel);

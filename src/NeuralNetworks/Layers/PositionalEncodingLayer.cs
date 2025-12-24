@@ -176,14 +176,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
 
         // Compute all angles: angles[pos, i] = pos * divTerms[i]
         // This is an outer product: [maxSequenceLength] x [halfEmbedding] -> [maxSequenceLength, halfEmbedding]
-        var angles = new Tensor<T>(new[] { maxSequenceLength, halfEmbedding });
-        for (int pos = 0; pos < maxSequenceLength; pos++)
-        {
-            for (int i = 0; i < halfEmbedding; i++)
-            {
-                angles[pos, i] = NumOps.Multiply(positions[pos], divTerms[i]);
-            }
-        }
+        var angles = Engine.TensorOuter(positions, divTerms);
 
         // Apply vectorized sin and cos using IEngine
         var sinValues = Engine.TensorSin(angles);
@@ -200,16 +193,21 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
             }
         }
 
-        // Handle odd embeddingSize (last dimension uses sin if odd)
+        // Handle odd embeddingSize (last dimension uses sin if odd) - vectorized
         if (embeddingSize % 2 == 1)
         {
             int lastDimIdx = embeddingSize - 1;
             double exponent = NumericalStabilityHelper.SafeDiv(2.0 * (lastDimIdx / 2), embeddingSize);
-            double divTerm = 1.0 / Math.Pow(10000, exponent);
+            T divTerm = NumOps.FromDouble(1.0 / Math.Pow(10000, exponent));
+
+            // Vectorized: angles = positions * divTerm, then sin(angles)
+            var lastAngles = Engine.TensorMultiplyScalar(positions, divTerm);
+            var lastSinValues = Engine.TensorSin(lastAngles);
+
+            // Copy vectorized results to encodings
             for (int pos = 0; pos < maxSequenceLength; pos++)
             {
-                double angle = pos * divTerm;
-                encodings[pos, lastDimIdx] = NumOps.FromDouble(Math.Sin(angle));
+                encodings[pos, lastDimIdx] = lastSinValues[pos];
             }
         }
     }

@@ -337,12 +337,8 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Vector<T> GetClassEmbedding(int classIndex)
     {
-        var embedding = new Vector<T>(ClassEmbeddingDim);
-        for (int i = 0; i < ClassEmbeddingDim; i++)
-        {
-            embedding[i] = _classEmbeddings[classIndex, i];
-        }
-        return embedding;
+        // Vectorized row extraction using Engine
+        return Engine.GetRow(_classEmbeddings, classIndex);
     }
 
     /// <summary>
@@ -423,16 +419,18 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         // Apply truncation if enabled
         var truncatedCodes = ApplyTruncation(latentCodes);
 
-        // Create class embeddings tensor
-        var classEmbeddings = new Tensor<T>([classIndices.Length, ClassEmbeddingDim]);
-        for (int i = 0; i < classIndices.Length; i++)
+        // Vectorized batch embedding lookup using Engine
+        // Convert Matrix to Tensor for embedding lookup
+        var embeddingsTensor = new Tensor<T>([NumClasses, ClassEmbeddingDim]);
+        for (int i = 0; i < NumClasses; i++)
         {
-            var embedding = GetClassEmbedding(classIndices[i]);
             for (int j = 0; j < ClassEmbeddingDim; j++)
             {
-                classEmbeddings[i, j] = embedding[j];
+                embeddingsTensor[i, j] = _classEmbeddings[i, j];
             }
         }
+        var indicesTensor = new Tensor<int>(classIndices, [classIndices.Length]);
+        var classEmbeddings = Engine.TensorEmbeddingLookup(embeddingsTensor, indicesTensor);
 
         // Concatenate latent codes and class embeddings
         var input = ConcatenateTensors(truncatedCodes, classEmbeddings);
@@ -635,16 +633,18 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> GenerateWithGradients(Tensor<T> noise, int[] classIndices)
     {
-        // Create class embeddings tensor
-        var classEmbeddings = new Tensor<T>([classIndices.Length, ClassEmbeddingDim]);
-        for (int i = 0; i < classIndices.Length; i++)
+        // Vectorized batch embedding lookup using Engine
+        // Convert Matrix to Tensor for embedding lookup
+        var embeddingsTensor = new Tensor<T>([NumClasses, ClassEmbeddingDim]);
+        for (int i = 0; i < NumClasses; i++)
         {
-            var embedding = GetClassEmbedding(classIndices[i]);
             for (int j = 0; j < ClassEmbeddingDim; j++)
             {
-                classEmbeddings[i, j] = embedding[j];
+                embeddingsTensor[i, j] = _classEmbeddings[i, j];
             }
         }
+        var indicesTensor = new Tensor<int>(classIndices, [classIndices.Length]);
+        var classEmbeddings = Engine.TensorEmbeddingLookup(embeddingsTensor, indicesTensor);
 
         // Concatenate latent codes and class embeddings
         var input = ConcatenateTensors(noise, classEmbeddings);

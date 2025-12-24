@@ -1009,39 +1009,72 @@ public class SpikingLayer<T> : LayerBase<T>
         if (_adaptationVariable == null)
             throw new InvalidOperationException("Adaptation variable not initialized for AdEx model");
 
-        // Adaptive Exponential Integrate-and-Fire model
-        // Complex biophysical dynamics with exponential terms require element-wise computation
-        for (int i = 0; i < _membranePotential.Length; i++)
-        {
-            double v = Convert.ToDouble(_membranePotential[i]);
-            double w = Convert.ToDouble(_adaptationVariable[i]);
-            double I = Convert.ToDouble(current[i]);
+        // Vectorized Adaptive Exponential Integrate-and-Fire model using IEngine
+        T vT = NumOps.FromDouble(_vT);
+        T deltaT = NumOps.FromDouble(_deltaT);
+        T tau = NumOps.FromDouble(_tau);
+        T tauw = NumOps.FromDouble(_tauw);
+        T aAdex = NumOps.FromDouble(_a_adex);
+        T bAdex = NumOps.FromDouble(_b_adex);
+        T one = NumOps.One;
+        T zero = NumOps.Zero;
+        T resetV = NumOps.FromDouble(-70.0);
+        T spikeThreshold = NumOps.FromDouble(-1e-10); // Small negative for >= 0 check
 
-            // Exponential term for spike initiation
-            double expTerm = _deltaT * Math.Exp((v - _vT) / _deltaT);
+        // Flatten tensors for vectorized operations
+        var vFlat = _membranePotential.Length == _membranePotential.Shape[0]
+            ? _membranePotential : _membranePotential.Reshape([_membranePotential.Length]);
+        var wFlat = _adaptationVariable.Length == _adaptationVariable.Shape[0]
+            ? _adaptationVariable : _adaptationVariable.Reshape([_adaptationVariable.Length]);
+        var iFlat = current.Length == current.Shape[0]
+            ? current : current.Reshape([current.Length]);
 
-            // Update membrane potential and adaptation variable
-            double dv = (-v + expTerm - w + I) / _tau;
-            double dw = (_a_adex * (v - _vT) - w) / _tauw;
+        // Create scalar tensors for broadcasting
+        var vTTensor = new Tensor<T>([vFlat.Length]);
+        Engine.TensorFill(vTTensor, vT);
 
-            v += dv;
-            w += dw;
+        // Compute (v - vT) / deltaT
+        var vMinusVT = Engine.TensorSubtract(vFlat, vTTensor);
+        var scaledV = Engine.TensorDivideScalar(vMinusVT, deltaT);
 
-            // Check for spike
-            if (v >= 0) // Spike threshold
-            {
-                _spikes[i] = NumOps.One;
-                v = -70.0; // Reset potential
-                w += _b_adex; // Spike-triggered adaptation
-            }
-            else
-            {
-                _spikes[i] = NumOps.Zero;
-            }
+        // Compute exp((v - vT) / deltaT)
+        var expVals = Engine.TensorExp(scaledV);
 
-            _membranePotential[i] = NumOps.FromDouble(v);
-            _adaptationVariable[i] = NumOps.FromDouble(w);
-        }
+        // Compute expTerm = deltaT * exp(...)
+        var expTerm = Engine.TensorMultiplyScalar(expVals, deltaT);
+
+        // Compute dv = (-v + expTerm - w + I) / tau
+        var negV = Engine.TensorMultiplyScalar(vFlat, NumOps.FromDouble(-1.0));
+        var dvNumerator = Engine.TensorAdd(negV, expTerm);
+        dvNumerator = Engine.TensorSubtract(dvNumerator, wFlat);
+        dvNumerator = Engine.TensorAdd(dvNumerator, iFlat);
+        var dv = Engine.TensorDivideScalar(dvNumerator, tau);
+
+        // Compute dw = (a_adex * (v - vT) - w) / tauw
+        var aTimesVDiff = Engine.TensorMultiplyScalar(vMinusVT, aAdex);
+        var dwNumerator = Engine.TensorSubtract(aTimesVDiff, wFlat);
+        var dw = Engine.TensorDivideScalar(dwNumerator, tauw);
+
+        // Update v and w
+        var vNew = Engine.TensorAdd(vFlat, dv);
+        var wNew = Engine.TensorAdd(wFlat, dw);
+
+        // Spike detection: v >= 0 (use v > -epsilon for floating point)
+        var spikeCondition = Engine.TensorGreaterThan(vNew, spikeThreshold);
+
+        // Prepare spike and no-spike values
+        var vResetTensor = new Tensor<T>([vFlat.Length]);
+        Engine.TensorFill(vResetTensor, resetV);
+        var wSpiked = Engine.TensorAdd(wNew, Engine.TensorMultiplyScalar(spikeCondition, bAdex));
+        var spikesOne = new Tensor<T>([vFlat.Length]);
+        Engine.TensorFill(spikesOne, one);
+        var spikesZero = new Tensor<T>([vFlat.Length]);
+        Engine.TensorFill(spikesZero, zero);
+
+        // Apply conditional updates using TensorWhere
+        _membranePotential = Engine.TensorWhere(spikeCondition, vResetTensor, vNew);
+        _adaptationVariable = Engine.TensorWhere(spikeCondition, wSpiked, wNew);
+        _spikes = Engine.TensorWhere(spikeCondition, spikesOne, spikesZero);
 
         return _spikes;
     }
@@ -1080,68 +1113,141 @@ public class SpikingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Gate variables not initialized for Hodgkin-Huxley model");
 
         // Constants for Hodgkin-Huxley model
-        double ENa = 50.0;   // Sodium reversal potential (mV)
-        double EK = -77.0;   // Potassium reversal potential (mV)
-        double EL = -54.387; // Leak reversal potential (mV)
-        double gNa = 120.0;  // Maximum sodium conductance (mS/cm²)
-        double gK = 36.0;    // Maximum potassium conductance (mS/cm²)
-        double gL = 0.3;     // Leak conductance (mS/cm²)
-        double dt = 0.01;    // Time step (ms)
+        T ENa = NumOps.FromDouble(50.0);      // Sodium reversal potential (mV)
+        T EK = NumOps.FromDouble(-77.0);      // Potassium reversal potential (mV)
+        T EL = NumOps.FromDouble(-54.387);    // Leak reversal potential (mV)
+        T gNa = NumOps.FromDouble(120.0);     // Maximum sodium conductance
+        T gK = NumOps.FromDouble(36.0);       // Maximum potassium conductance
+        T gL = NumOps.FromDouble(0.3);        // Leak conductance
+        T dt = NumOps.FromDouble(0.01);       // Time step (ms)
 
-        // Hodgkin-Huxley model - complex biophysical ion channel dynamics require element-wise computation
-        // These differential equations with exponentials and powers are inherently non-vectorizable
-        for (int i = 0; i < _membranePotential.Length; i++)
-        {
-            double v = Convert.ToDouble(_membranePotential[i]);
-            double n = Convert.ToDouble(_nGate[i]);
-            double m = Convert.ToDouble(_mGate[i]);
-            double h = Convert.ToDouble(_hGate[i]);
-            double I = Convert.ToDouble(current[i]);
+        // Flatten tensors for vectorized operations
+        int len = _membranePotential.Length;
+        var vFlat = _membranePotential.Length == _membranePotential.Shape[0]
+            ? _membranePotential : _membranePotential.Reshape([len]);
+        var nFlat = _nGate.Length == _nGate.Shape[0]
+            ? _nGate : _nGate.Reshape([len]);
+        var mFlat = _mGate.Length == _mGate.Shape[0]
+            ? _mGate : _mGate.Reshape([len]);
+        var hFlat = _hGate.Length == _hGate.Shape[0]
+            ? _hGate : _hGate.Reshape([len]);
+        var iFlat = current.Length == current.Shape[0]
+            ? current : current.Reshape([len]);
 
-            // Calculate alpha and beta values for each gate
-            double alphaM = 0.1 * (v + 40.0) / (1.0 - Math.Exp(-(v + 40.0) / 10.0));
-            double betaM = 4.0 * Math.Exp(-(v + 65.0) / 18.0);
+        // Create helper tensors for broadcasting
+        var onesTensor = new Tensor<T>([len]);
+        Engine.TensorFill(onesTensor, NumOps.One);
 
-            double alphaN = 0.01 * (v + 55.0) / (1.0 - Math.Exp(-(v + 55.0) / 10.0));
-            double betaN = 0.125 * Math.Exp(-(v + 65.0) / 80.0);
+        // Vectorized Hodgkin-Huxley ion channel gate dynamics
+        // Compute intermediate values for gate variable rate constants
+        var vPlus40 = Engine.TensorAddScalar(vFlat, NumOps.FromDouble(40.0));
+        var vPlus55 = Engine.TensorAddScalar(vFlat, NumOps.FromDouble(55.0));
+        var vPlus65 = Engine.TensorAddScalar(vFlat, NumOps.FromDouble(65.0));
+        var vPlus35 = Engine.TensorAddScalar(vFlat, NumOps.FromDouble(35.0));
 
-            double alphaH = 0.07 * Math.Exp(-(v + 65.0) / 20.0);
-            double betaH = 1.0 / (1.0 + Math.Exp(-(v + 35.0) / 10.0));
+        // alphaM = 0.1 * (v + 40) / (1 - exp(-(v + 40) / 10))
+        var negVPlus40Over10 = Engine.TensorDivideScalar(Engine.TensorNegate(vPlus40), NumOps.FromDouble(10.0));
+        var expNegVPlus40Over10 = Engine.TensorExp(negVPlus40Over10);
+        // denomAlphaM = 1 - exp(...) = onesTensor - expVal
+        var denomAlphaM = Engine.TensorSubtract(onesTensor, expNegVPlus40Over10);
+        // Add small epsilon to avoid division by zero
+        denomAlphaM = Engine.TensorAddScalar(denomAlphaM, NumOps.FromDouble(1e-10));
+        var alphaMNumer = Engine.TensorMultiplyScalar(vPlus40, NumOps.FromDouble(0.1));
+        var alphaM = Engine.TensorDivide(alphaMNumer, denomAlphaM);
 
-            // Update gate variables
-            double dn = alphaN * (1 - n) - betaN * n;
-            double dm = alphaM * (1 - m) - betaM * m;
-            double dh = alphaH * (1 - h) - betaH * h;
+        // betaM = 4 * exp(-(v + 65) / 18)
+        var negVPlus65Over18 = Engine.TensorDivideScalar(Engine.TensorNegate(vPlus65), NumOps.FromDouble(18.0));
+        var betaM = Engine.TensorMultiplyScalar(Engine.TensorExp(negVPlus65Over18), NumOps.FromDouble(4.0));
 
-            n += dt * dn;
-            m += dt * dm;
-            h += dt * dh;
+        // alphaN = 0.01 * (v + 55) / (1 - exp(-(v + 55) / 10))
+        var negVPlus55Over10 = Engine.TensorDivideScalar(Engine.TensorNegate(vPlus55), NumOps.FromDouble(10.0));
+        var expNegVPlus55Over10 = Engine.TensorExp(negVPlus55Over10);
+        var denomAlphaN = Engine.TensorSubtract(onesTensor, expNegVPlus55Over10);
+        denomAlphaN = Engine.TensorAddScalar(denomAlphaN, NumOps.FromDouble(1e-10));
+        var alphaNNumer = Engine.TensorMultiplyScalar(vPlus55, NumOps.FromDouble(0.01));
+        var alphaN = Engine.TensorDivide(alphaNNumer, denomAlphaN);
 
-            // Calculate ionic currents
-            double INa = gNa * Math.Pow(m, 3) * h * (v - ENa);
-            double IK = gK * Math.Pow(n, 4) * (v - EK);
-            double IL = gL * (v - EL);
+        // betaN = 0.125 * exp(-(v + 65) / 80)
+        var negVPlus65Over80 = Engine.TensorDivideScalar(Engine.TensorNegate(vPlus65), NumOps.FromDouble(80.0));
+        var betaN = Engine.TensorMultiplyScalar(Engine.TensorExp(negVPlus65Over80), NumOps.FromDouble(0.125));
 
-            // Update membrane potential
-            double dv = I - INa - IK - IL;
-            v += dt * dv;
+        // alphaH = 0.07 * exp(-(v + 65) / 20)
+        var negVPlus65Over20 = Engine.TensorDivideScalar(Engine.TensorNegate(vPlus65), NumOps.FromDouble(20.0));
+        var alphaH = Engine.TensorMultiplyScalar(Engine.TensorExp(negVPlus65Over20), NumOps.FromDouble(0.07));
 
-            // Check for spike (threshold crossing)
-            if (v > 0 && NumOps.Equals(_spikes[i], NumOps.Zero))
-            {
-                _spikes[i] = NumOps.One;
-            }
-            else if (v < -30)
-            {
-                _spikes[i] = NumOps.Zero;
-            }
+        // betaH = 1 / (1 + exp(-(v + 35) / 10))
+        var negVPlus35Over10 = Engine.TensorDivideScalar(Engine.TensorNegate(vPlus35), NumOps.FromDouble(10.0));
+        var onePlusExpBetaH = Engine.TensorAddScalar(Engine.TensorExp(negVPlus35Over10), NumOps.One);
+        var betaH = Engine.TensorDivide(onesTensor, onePlusExpBetaH);
 
-            // Update state variables
-            _membranePotential[i] = NumOps.FromDouble(v);
-            _nGate[i] = NumOps.FromDouble(n);
-            _mGate[i] = NumOps.FromDouble(m);
-            _hGate[i] = NumOps.FromDouble(h);
-        }
+        // Update gate variables: dg = alpha * (1 - g) - beta * g
+        // dn = alphaN * (1 - n) - betaN * n
+        var oneMinusN = Engine.TensorSubtract(onesTensor, nFlat);
+        var dn = Engine.TensorSubtract(Engine.TensorMultiply(alphaN, oneMinusN), Engine.TensorMultiply(betaN, nFlat));
+
+        // dm = alphaM * (1 - m) - betaM * m
+        var oneMinusM = Engine.TensorSubtract(onesTensor, mFlat);
+        var dm = Engine.TensorSubtract(Engine.TensorMultiply(alphaM, oneMinusM), Engine.TensorMultiply(betaM, mFlat));
+
+        // dh = alphaH * (1 - h) - betaH * h
+        var oneMinusH = Engine.TensorSubtract(onesTensor, hFlat);
+        var dh = Engine.TensorSubtract(Engine.TensorMultiply(alphaH, oneMinusH), Engine.TensorMultiply(betaH, hFlat));
+
+        // n += dt * dn; m += dt * dm; h += dt * dh
+        var nNew = Engine.TensorAdd(nFlat, Engine.TensorMultiplyScalar(dn, dt));
+        var mNew = Engine.TensorAdd(mFlat, Engine.TensorMultiplyScalar(dm, dt));
+        var hNew = Engine.TensorAdd(hFlat, Engine.TensorMultiplyScalar(dh, dt));
+
+        // Calculate ionic currents: m^3 and n^4
+        var mSquared = Engine.TensorMultiply(mNew, mNew);
+        var mCubed = Engine.TensorMultiply(mSquared, mNew);
+        var nSquared = Engine.TensorMultiply(nNew, nNew);
+        var nFourth = Engine.TensorMultiply(nSquared, nSquared);
+
+        // INa = gNa * m^3 * h * (v - ENa)
+        var vMinusENa = Engine.TensorSubtractScalar(vFlat, ENa);
+        var mCubedH = Engine.TensorMultiply(mCubed, hNew);
+        var INaCurrent = Engine.TensorMultiplyScalar(Engine.TensorMultiply(mCubedH, vMinusENa), gNa);
+
+        // IK = gK * n^4 * (v - EK)
+        var vMinusEK = Engine.TensorSubtractScalar(vFlat, EK);
+        var IKCurrent = Engine.TensorMultiplyScalar(Engine.TensorMultiply(nFourth, vMinusEK), gK);
+
+        // IL = gL * (v - EL)
+        var vMinusEL = Engine.TensorSubtractScalar(vFlat, EL);
+        var ILCurrent = Engine.TensorMultiplyScalar(vMinusEL, gL);
+
+        // dv = I - INa - IK - IL
+        var dvTotal = Engine.TensorSubtract(
+            Engine.TensorSubtract(Engine.TensorSubtract(iFlat, INaCurrent), IKCurrent), ILCurrent);
+
+        // v += dt * dv
+        var vNew = Engine.TensorAdd(vFlat, Engine.TensorMultiplyScalar(dvTotal, dt));
+
+        // Spike detection using vectorized conditionals
+        var zeroTensor = new Tensor<T>([len]);
+        Engine.TensorFill(zeroTensor, NumOps.Zero);
+        var resetThresholdTensor = new Tensor<T>([len]);
+        Engine.TensorFill(resetThresholdTensor, NumOps.FromDouble(-30.0));
+        var spikesOneTensor = new Tensor<T>([_spikes.Length]);
+        Engine.TensorFill(spikesOneTensor, NumOps.One);
+        var spikesZeroTensor = new Tensor<T>([_spikes.Length]);
+        Engine.TensorFill(spikesZeroTensor, NumOps.Zero);
+
+        // Check v > 0 for spike onset
+        var aboveZero = Engine.TensorGreaterThan(vNew, zeroTensor);
+        // Check v < -30 for reset
+        var belowReset = Engine.TensorLessThan(vNew, resetThresholdTensor);
+
+        // Apply spike logic: set spike if above zero, clear if below reset
+        var newSpikes = Engine.TensorWhere(aboveZero, spikesOneTensor, _spikes);
+        _spikes = Engine.TensorWhere(belowReset, spikesZeroTensor, newSpikes);
+
+        // Update state variables (reshape back if needed)
+        _membranePotential = vNew.Reshape(_membranePotential.Shape);
+        _nGate = nNew.Reshape(_nGate.Shape);
+        _mGate = mNew.Reshape(_mGate.Shape);
+        _hGate = hNew.Reshape(_hGate.Shape);
 
         return _spikes;
     }
@@ -1507,14 +1613,33 @@ public class SpikingLayer<T> : LayerBase<T>
         double beta = 10.0;
         var surrogateGradient = new Tensor<T>([_membranePotential.Length]);
 
-        // Surrogate gradient computation - element-wise because of cosh^2
-        for (int i = 0; i < _membranePotential.Length; i++)
-        {
-            double v = Convert.ToDouble(_membranePotential[i]);
-            double coshVal = Math.Cosh(v / beta);
-            double surrogate = 1.0 / (beta * coshVal * coshVal);
-            surrogateGradient[i] = NumOps.FromDouble(surrogate);
-        }
+        // Vectorized surrogate gradient computation using IEngine
+        // surrogate(v) = 1 / (beta * cosh^2(v/beta))
+        T invBeta = NumOps.FromDouble(1.0 / beta);
+        T betaT = NumOps.FromDouble(beta);
+        T one = NumOps.FromDouble(1.0);
+
+        // Reshape membrane potential to 1D for tensor operations
+        var vFlat = _membranePotential.Length == _membranePotential.Shape[0]
+            ? _membranePotential
+            : _membranePotential.Reshape([_membranePotential.Length]);
+
+        // Compute v/beta
+        var scaledV = Engine.TensorMultiplyScalar(vFlat, invBeta);
+
+        // Compute cosh(v/beta)
+        var coshVals = Engine.TensorCosh(scaledV);
+
+        // Compute cosh^2
+        var coshSquared = Engine.TensorMultiply(coshVals, coshVals);
+
+        // Compute beta * cosh^2
+        var denominator = Engine.TensorMultiplyScalar(coshSquared, betaT);
+
+        // Compute 1 / (beta * cosh^2) using ones tensor and divide
+        var ones = new Tensor<T>([coshSquared.Length]);
+        Engine.TensorFill(ones, one);
+        surrogateGradient = Engine.TensorDivide(ones, denominator);
 
         // Scaled gradient = outputGradient * surrogateGradient (element-wise)
         var scaledGrad = Engine.TensorMultiply(gradFlat, surrogateGradient);

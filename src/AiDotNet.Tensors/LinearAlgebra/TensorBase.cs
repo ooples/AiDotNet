@@ -82,6 +82,25 @@ public abstract class TensorBase<T>
     }
 
     /// <summary>
+    /// Copies data from a source array into this tensor's internal storage.
+    /// </summary>
+    /// <param name="source">The source array to copy from. Must have the same length as the tensor.</param>
+    /// <exception cref="ArgumentException">Thrown when source array length doesn't match tensor length.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method copies values from a regular array into the tensor.
+    /// The array must have exactly the same number of elements as the tensor (the product of all dimensions).
+    /// This is useful for deserialization and bulk data loading.</para>
+    /// </remarks>
+    public virtual void CopyFromArray(T[] source)
+    {
+        if (source.Length != _data.Length)
+        {
+            throw new ArgumentException($"Source array length ({source.Length}) must match tensor length ({_data.Length}).");
+        }
+        Array.Copy(source, _data.Data, source.Length);
+    }
+
+    /// <summary>
     /// Initializes a new instance of the TensorBase class with the specified shape.
     /// </summary>
     /// <param name="shape">The shape of the tensor.</param>
