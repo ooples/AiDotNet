@@ -239,17 +239,12 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         // Compute bias-corrected second moment: vHat = v / (1 - beta2^t)
         var vHat = (Vector<T>)Engine.Divide(_v, biasCorrection2);
 
-        // Handle AMSGrad variant
+        // Handle AMSGrad variant using vectorized max operation
         Vector<T> vHatEffective;
         if (_options.UseAMSGrad && _vMax != null)
         {
-            // Update vMax = max(vMax, vHat)
-            var newVMax = new Vector<T>(_vMax.Length);
-            for (int i = 0; i < _vMax.Length; i++)
-            {
-                newVMax[i] = MathHelper.Max(_vMax[i], vHat[i]);
-            }
-            _vMax = newVMax;
+            // Update vMax = max(vMax, vHat) using vectorized operation
+            _vMax = (Vector<T>)Engine.Max(_vMax, vHat);
             vHatEffective = _vMax;
         }
         else
@@ -338,16 +333,12 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         // Compute bias-corrected second moment: vHat = v / (1 - beta2^t)
         var vHat = (Vector<T>)Engine.Divide(_v, biasCorrection2);
 
-        // Handle AMSGrad variant
+        // Handle AMSGrad variant using vectorized max operation
         Vector<T> vHatEffective;
         if (_options.UseAMSGrad && _vMax != null)
         {
-            var newVMax = new Vector<T>(_vMax.Length);
-            for (int i = 0; i < _vMax.Length; i++)
-            {
-                newVMax[i] = MathHelper.Max(_vMax[i], vHat[i]);
-            }
-            _vMax = newVMax;
+            // Update vMax = max(vMax, vHat) using vectorized operation
+            _vMax = (Vector<T>)Engine.Max(_vMax, vHat);
             vHatEffective = _vMax;
         }
         else
