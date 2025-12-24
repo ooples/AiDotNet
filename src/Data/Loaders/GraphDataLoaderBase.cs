@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using AiDotNet.Data.Structures;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
@@ -420,4 +422,228 @@ public abstract class GraphDataLoaderBase<T> : DataLoaderBase<T>, IGraphDataLoad
 
         return result;
     }
+
+    #region PyTorch-Style Batch Iteration
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// For graph datasets, this method iterates through individual graphs (for multi-graph datasets)
+    /// or returns the single graph (for single-graph datasets like citation networks).
+    /// </para>
+    /// <para>
+    /// <b>Performance Notes:</b>
+    /// - For multi-graph datasets, uses Fisher-Yates shuffle for O(n) shuffling
+    /// - Each graph is yielded lazily, minimizing memory overhead
+    /// - Batch size parameter controls how many graphs per batch (typically 1 for GNNs)
+    /// </para>
+    /// </remarks>
+    public virtual IEnumerable<GraphData<T>> GetBatches(
+        int? batchSize = null,
+        bool shuffle = true,
+        bool dropLast = false,
+        int? seed = null)
+    {
+        EnsureLoaded();
+
+        int effectiveBatchSize = batchSize ?? BatchSize;
+        if (effectiveBatchSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be at least 1.");
+        }
+
+        // Single-graph dataset case
+        if (LoadedGraphs == null || LoadedGraphs.Count == 0)
+        {
+            if (LoadedGraphData != null)
+            {
+                yield return LoadedGraphData;
+            }
+            yield break;
+        }
+
+        // Multi-graph dataset case
+        int totalGraphs = LoadedGraphs.Count;
+        if (totalGraphs == 0)
+        {
+            yield break;
+        }
+
+        // Create fresh indices for this iteration
+        int[] iterationIndices = new int[totalGraphs];
+        for (int i = 0; i < totalGraphs; i++)
+        {
+            iterationIndices[i] = i;
+        }
+
+        // Shuffle if requested using Fisher-Yates algorithm
+        if (shuffle)
+        {
+            var random = seed.HasValue
+                ? RandomHelper.CreateSeededRandom(seed.Value)
+                : RandomHelper.CreateSecureRandom();
+
+            for (int i = totalGraphs - 1; i > 0; i--)
+            {
+                int j = random.Next(i + 1);
+                (iterationIndices[i], iterationIndices[j]) = (iterationIndices[j], iterationIndices[i]);
+            }
+        }
+
+        // Calculate number of batches
+        int numCompleteBatches = totalGraphs / effectiveBatchSize;
+        int remainingGraphs = totalGraphs % effectiveBatchSize;
+        int numBatches = dropLast || remainingGraphs == 0
+            ? numCompleteBatches
+            : numCompleteBatches + 1;
+
+        // Yield graphs (for graph-level tasks, typically batch size is 1)
+        // For batch size > 1, we yield individual graphs sequentially
+        for (int batchIdx = 0; batchIdx < numBatches; batchIdx++)
+        {
+            int startIdx = batchIdx * effectiveBatchSize;
+            int currentBatchSize = batchIdx < numCompleteBatches
+                ? effectiveBatchSize
+                : remainingGraphs;
+
+            // Yield each graph in the batch
+            for (int i = 0; i < currentBatchSize; i++)
+            {
+                int graphIdx = iterationIndices[startIdx + i];
+                yield return LoadedGraphs[graphIdx];
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// This async implementation uses a bounded Channel for prefetching graphs,
+    /// allowing background preparation while the current graph is being processed by the GNN.
+    /// </para>
+    /// <para>
+    /// <b>Implementation Details:</b>
+    /// - Uses System.Threading.Channels for thread-safe producer-consumer pattern
+    /// - Bounded channel capacity = prefetchCount to limit memory usage
+    /// - Particularly useful when graphs require preprocessing before GNN consumption
+    /// </para>
+    /// </remarks>
+    public virtual async IAsyncEnumerable<GraphData<T>> GetBatchesAsync(
+        int? batchSize = null,
+        bool shuffle = true,
+        bool dropLast = false,
+        int? seed = null,
+        int prefetchCount = 2,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        EnsureLoaded();
+
+        if (prefetchCount < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(prefetchCount), "Prefetch count must be at least 1.");
+        }
+
+        int effectiveBatchSize = batchSize ?? BatchSize;
+        if (effectiveBatchSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be at least 1.");
+        }
+
+        // Single-graph dataset case
+        if (LoadedGraphs == null || LoadedGraphs.Count == 0)
+        {
+            if (LoadedGraphData != null)
+            {
+                yield return LoadedGraphData;
+            }
+            yield break;
+        }
+
+        // Multi-graph dataset case
+        int totalGraphs = LoadedGraphs.Count;
+        if (totalGraphs == 0)
+        {
+            yield break;
+        }
+
+        // Create bounded channel for prefetching
+        var channel = Channel.CreateBounded<GraphData<T>>(
+            new BoundedChannelOptions(prefetchCount)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = true
+            });
+
+        // Start producer task
+        var producerTask = Task.Run(async () =>
+        {
+            try
+            {
+                // Create fresh indices for this iteration
+                int[] iterationIndices = new int[totalGraphs];
+                for (int i = 0; i < totalGraphs; i++)
+                {
+                    iterationIndices[i] = i;
+                }
+
+                // Shuffle if requested
+                if (shuffle)
+                {
+                    var random = seed.HasValue
+                        ? RandomHelper.CreateSeededRandom(seed.Value)
+                        : RandomHelper.CreateSecureRandom();
+
+                    for (int i = totalGraphs - 1; i > 0; i--)
+                    {
+                        int j = random.Next(i + 1);
+                        (iterationIndices[i], iterationIndices[j]) = (iterationIndices[j], iterationIndices[i]);
+                    }
+                }
+
+                // Calculate batch counts
+                int numCompleteBatches = totalGraphs / effectiveBatchSize;
+                int remainingGraphs = totalGraphs % effectiveBatchSize;
+                int numBatches = dropLast || remainingGraphs == 0
+                    ? numCompleteBatches
+                    : numCompleteBatches + 1;
+
+                // Produce graphs
+                for (int batchIdx = 0; batchIdx < numBatches; batchIdx++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    int startIdx = batchIdx * effectiveBatchSize;
+                    int currentBatchSize = batchIdx < numCompleteBatches
+                        ? effectiveBatchSize
+                        : remainingGraphs;
+
+                    for (int i = 0; i < currentBatchSize; i++)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        int graphIdx = iterationIndices[startIdx + i];
+                        await channel.Writer.WriteAsync(LoadedGraphs[graphIdx], cancellationToken);
+                    }
+                }
+            }
+            finally
+            {
+                channel.Writer.Complete();
+            }
+        }, cancellationToken);
+
+        // Consume graphs (net471 compatible - no ReadAllAsync)
+        while (await channel.Reader.WaitToReadAsync(cancellationToken))
+        {
+            while (channel.Reader.TryRead(out var graph))
+            {
+                yield return graph;
+            }
+        }
+
+        // Ensure producer task completed without errors
+        await producerTask;
+    }
+
+    #endregion
 }

@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using AiDotNet.Data.Structures;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -446,4 +448,127 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
             $"Conversion from Vector<T> to {typeof(TOutput).Name} is not supported. " +
             $"Supported types: Vector<T>, Tensor<T>");
     }
+
+    #region PyTorch-Style Batch Iteration for Meta-Learning
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// For episodic data loaders, each "batch" is a meta-learning task. This method yields
+    /// the specified number of tasks using lazy evaluation.
+    /// </para>
+    /// <para><b>For Beginners:</b> In meta-learning, each batch is a complete learning task:
+    ///
+    /// <code>
+    /// foreach (var task in episodicLoader.GetBatches(batchSize: 10))
+    /// {
+    ///     // Each task has support and query sets
+    ///     var (supportX, supportY) = (task.SupportSetX, task.SupportSetY);
+    ///     var (queryX, queryY) = (task.QuerySetX, task.QuerySetY);
+    ///
+    ///     // Train inner loop on support, evaluate on query
+    ///     model.Adapt(supportX, supportY);
+    ///     var loss = model.Evaluate(queryX, queryY);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public virtual IEnumerable<MetaLearningTask<T, TInput, TOutput>> GetBatches(
+        int? batchSize = null,
+        bool shuffle = true,
+        bool dropLast = false,
+        int? seed = null)
+    {
+        int numTasks = batchSize ?? BatchSize;
+        if (numTasks < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Number of tasks must be at least 1.");
+        }
+
+        // Set seed if provided for reproducible task sampling
+        if (seed.HasValue)
+        {
+            SetSeed(seed.Value);
+        }
+
+        // Yield tasks using lazy evaluation
+        for (int i = 0; i < numTasks; i++)
+        {
+            yield return GetNextTaskCore();
+        }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Asynchronously generates meta-learning tasks with prefetching support.
+    /// Tasks are generated in the background while the current task is being processed.
+    /// </para>
+    /// </remarks>
+    public virtual async IAsyncEnumerable<MetaLearningTask<T, TInput, TOutput>> GetBatchesAsync(
+        int? batchSize = null,
+        bool shuffle = true,
+        bool dropLast = false,
+        int? seed = null,
+        int prefetchCount = 2,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (prefetchCount < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(prefetchCount), "Prefetch count must be at least 1.");
+        }
+
+        int numTasks = batchSize ?? BatchSize;
+        if (numTasks < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Number of tasks must be at least 1.");
+        }
+
+        // Set seed if provided
+        if (seed.HasValue)
+        {
+            SetSeed(seed.Value);
+        }
+
+        // Create bounded channel for prefetching
+        var channel = Channel.CreateBounded<MetaLearningTask<T, TInput, TOutput>>(
+            new BoundedChannelOptions(prefetchCount)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = true
+            });
+
+        // Start producer task
+        var producerTask = Task.Run(async () =>
+        {
+            try
+            {
+                for (int i = 0; i < numTasks; i++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var task = GetNextTaskCore();
+                    await channel.Writer.WriteAsync(task, cancellationToken);
+                }
+            }
+            finally
+            {
+                channel.Writer.Complete();
+            }
+        }, cancellationToken);
+
+        // Consume tasks (net471 compatible - no ReadAllAsync)
+        while (await channel.Reader.WaitToReadAsync(cancellationToken))
+        {
+            while (channel.Reader.TryRead(out var task))
+            {
+                yield return task;
+            }
+        }
+
+        // Ensure producer completed without errors
+        await producerTask;
+    }
+
+    #endregion
 }
