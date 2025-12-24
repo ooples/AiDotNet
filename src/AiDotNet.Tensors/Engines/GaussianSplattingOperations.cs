@@ -15,6 +15,24 @@ public static class GaussianSplattingOperations
     /// <summary>
     /// Projects 3D Gaussians to 2D screen space for rasterization.
     /// </summary>
+    /// <typeparam name="T">The numeric type for tensor elements.</typeparam>
+    /// <param name="means3D">3D Gaussian center positions in world space, shape [N, 3].</param>
+    /// <param name="covariances3D">
+    /// 3D covariance matrices in CAMERA SPACE (must be pre-transformed by view matrix rotation).
+    /// Shape [N, 6] for upper-triangular storage (c00, c01, c02, c11, c12, c22) or [N, 3, 3] for full matrix.
+    /// </param>
+    /// <param name="viewMatrix">4x4 view matrix to transform world coordinates to camera space.</param>
+    /// <param name="projMatrix">4x4 projection matrix containing focal lengths (p00=fx, p11=fy).</param>
+    /// <param name="imageWidth">Output image width in pixels.</param>
+    /// <param name="imageHeight">Output image height in pixels.</param>
+    /// <param name="means2D">Output 2D screen positions, shape [N, 2].</param>
+    /// <param name="covariances2D">Output 2D covariances (a, b, c for ax² + 2bxy + cy²), shape [N, 3].</param>
+    /// <param name="depths">Output depth values in camera space, shape [N].</param>
+    /// <param name="visible">Output visibility flags, shape [N].</param>
+    /// <remarks>
+    /// The 2D covariance is computed using the Jacobian of perspective projection: Σ_2D = J * Σ_3D * J^T.
+    /// This is the standard approach used in 3D Gaussian Splatting (Kerbl et al., 2023).
+    /// </remarks>
     public static void ProjectGaussians3DTo2D<T>(
         Tensor<T> means3D,
         Tensor<T> covariances3D,
@@ -131,18 +149,25 @@ public static class GaussianSplattingOperations
                     nameof(covariances3D));
             }
 
-            // Transform covariance to camera space: Σ_cam = R * Σ * R^T
-            // Then project to 2D using Jacobian of projection
-            double j00 = p00 * invZ;
-            double j02 = -p00 * camX * invZ * invZ;
-            double j11 = p11 * invZ;
-            double j12 = -p11 * camY * invZ * invZ;
+            // Project 3D covariance to 2D using Jacobian of perspective projection
+            // NOTE: Input covariances must already be in camera space (pre-transformed by view matrix)
+            //
+            // Jacobian J of perspective projection (u = fx*X/Z, v = fy*Y/Z):
+            //   J = [[fx/Z,    0, -fx*X/Z²],
+            //        [   0, fy/Z, -fy*Y/Z²]]
+            double j00 = p00 * invZ;                    // ∂u/∂X = fx/Z
+            double j02 = -p00 * camX * invZ * invZ;     // ∂u/∂Z = -fx*X/Z²
+            double j11 = p11 * invZ;                    // ∂v/∂Y = fy/Z
+            double j12 = -p11 * camY * invZ * invZ;     // ∂v/∂Z = -fy*Y/Z²
 
-            // Simplified 2D covariance projection (approximation)
-            // Full derivation involves J * Σ_cam * J^T where J is 2x3 Jacobian
-            double cov2D_00 = j00 * j00 * c00 + 2 * j00 * j02 * c02 + j02 * j02 * c22;
-            double cov2D_01 = j00 * j11 * c01 + j00 * j12 * c12 + j02 * j11 * c02 + j02 * j12 * c22;
-            double cov2D_11 = j11 * j11 * c11 + 2 * j11 * j12 * c12 + j12 * j12 * c22;
+            // Full 2D covariance projection: Σ_2D = J * Σ_3D * J^T
+            // For symmetric 3x3 Σ with elements [c00,c01,c02; c01,c11,c12; c02,c12,c22]:
+            //   Σ_2D[0,0] = j00²*c00 + 2*j00*j02*c02 + j02²*c22
+            //   Σ_2D[0,1] = j00*j11*c01 + j00*j12*c02 + j02*j11*c12 + j02*j12*c22
+            //   Σ_2D[1,1] = j11²*c11 + 2*j11*j12*c12 + j12²*c22
+            double cov2D_00 = j00 * j00 * c00 + 2.0 * j00 * j02 * c02 + j02 * j02 * c22;
+            double cov2D_01 = j00 * j11 * c01 + j00 * j12 * c02 + j02 * j11 * c12 + j02 * j12 * c22;
+            double cov2D_11 = j11 * j11 * c11 + 2.0 * j11 * j12 * c12 + j12 * j12 * c22;
 
             // Add small regularization for numerical stability
             cov2D_00 += 0.3;
