@@ -1540,6 +1540,10 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _log1PKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _negateKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _negateKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, float, ArrayView<float>>? _powerScalarKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, double, ArrayView<double>>? _powerScalarKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, float, ArrayView<float>>? _scalarMinusTensorKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, double, ArrayView<double>>? _scalarMinusTensorKernelDouble;
 
     // Production GPU kernels - Utility functions (Phase C: Production Ready)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, float, float, ArrayView<float>>? _clampKernelFloat;
@@ -2727,6 +2731,18 @@ public class GpuEngine : IEngine, IDisposable
                 _negateKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
                     (index, input, result) => result[index] = -input[index]);
+                _powerScalarKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, float, ArrayView<float>>(
+                    (index, input, exponent, result) => result[index] = XMath.Pow(input[index], exponent));
+                _powerScalarKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, double, ArrayView<double>>(
+                    (index, input, exponent, result) => result[index] = XMath.Pow(input[index], exponent));
+                _scalarMinusTensorKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, float, ArrayView<float>>(
+                    (index, input, scalar, result) => result[index] = scalar - input[index]);
+                _scalarMinusTensorKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, double, ArrayView<double>>(
+                    (index, input, scalar, result) => result[index] = scalar - input[index]);
                 Console.WriteLine("[GpuEngine] Mathematical kernels pre-compiled");
 
                 // Pre-compile production GPU kernels - Utility functions (Phase C: Production Ready)
@@ -14336,6 +14352,112 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
+    public Tensor<T> TensorPower<T>(Tensor<T> tensor, T exponent)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        // TensorPower with scalar exponent - fall back to CPU for now
+        // GPU implementation would require a dedicated kernel with scalar parameter
+        if (tensor.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorPower(tensor, exponent);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var exponentObj = (object?)exponent; float exp = exponentObj is float fexp ? fexp : Convert.ToSingle(exponent);
+                return (Tensor<T>)(object)TensorPowerGpu((Tensor<float>)(object)tensor, exp);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var exponentObj = (object?)exponent; double exp = exponentObj is double dexp ? dexp : Convert.ToDouble(exponent);
+                return (Tensor<T>)(object)TensorPowerGpuDouble((Tensor<double>)(object)tensor, exp);
+            }
+        }
+
+        return _cpuFallback.TensorPower(tensor, exponent);
+    }
+
+    private Tensor<float> TensorPowerGpu(Tensor<float> tensor, float exponent)
+    {
+        try
+        {
+            var result = new Tensor<float>(tensor.Shape);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    // Use power kernel with scalar exponent
+                    (_powerScalarKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, exponent, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorPower(tensor, exponent);
+        }
+    }
+
+    private Tensor<double> TensorPowerGpuDouble(Tensor<double> tensor, double exponent)
+    {
+        try
+        {
+            var result = new Tensor<double>(tensor.Shape);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_powerScalarKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, exponent, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorPower(tensor, exponent);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorPower<T>(Tensor<T> bases, Tensor<T> exponents)
+    {
+        // Element-wise power - fall back to CPU as this requires element-wise kernel
+        return _cpuFallback.TensorPower(bases, exponents);
+    }
 
     /// <inheritdoc/>
     public Tensor<T> TensorFloor<T>(Tensor<T> tensor)
@@ -26196,6 +26318,261 @@ public class GpuEngine : IEngine, IDisposable
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
         {
             return _cpuFallback.TensorRandomNormal(shape, mean, stddev);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorRandomUniformRange<T>(int[] shape, T min, T max, int? seed = null)
+    {
+        int totalSize = 1; foreach (var d in shape) totalSize *= d;
+        if (totalSize >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var minObj = (object?)min; float minF = minObj is float fm ? fm : Convert.ToSingle(min);
+                var maxObj = (object?)max; float maxF = maxObj is float fmx ? fmx : Convert.ToSingle(max);
+                return (Tensor<T>)(object)TensorRandomUniformRangeGpu(shape, minF, maxF, seed);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var minObj = (object?)min; double minD = minObj is double dm ? dm : Convert.ToDouble(min);
+                var maxObj = (object?)max; double maxD = maxObj is double dmx ? dmx : Convert.ToDouble(max);
+                return (Tensor<T>)(object)TensorRandomUniformRangeGpuDouble(shape, minD, maxD, seed);
+            }
+        }
+        return _cpuFallback.TensorRandomUniformRange(shape, min, max, seed);
+    }
+
+    private Tensor<float> TensorRandomUniformRangeGpu(int[] shape, float min, float max, int? seed)
+    {
+        try
+        {
+            int totalSize = 1; foreach (var d in shape) totalSize *= d;
+            var result = new float[totalSize];
+            float range = max - min;
+            var baseSeed = seed ?? RandomHelper.GenerateCryptographicSeed();
+
+            int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
+            System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
+            {
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
+                int start = batchIdx * batchSize;
+                int end = Math.Min(start + batchSize, totalSize);
+                for (int i = start; i < end; i++)
+                {
+                    result[i] = (float)(localRandom.NextDouble() * range + min);
+                }
+            });
+
+            return new Tensor<float>(shape, new Vector<float>(result));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorRandomUniformRange(shape, min, max, seed);
+        }
+    }
+
+    private Tensor<double> TensorRandomUniformRangeGpuDouble(int[] shape, double min, double max, int? seed)
+    {
+        try
+        {
+            int totalSize = 1; foreach (var d in shape) totalSize *= d;
+            var result = new double[totalSize];
+            double range = max - min;
+            var baseSeed = seed ?? RandomHelper.GenerateCryptographicSeed();
+
+            int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
+            System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
+            {
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
+                int start = batchIdx * batchSize;
+                int end = Math.Min(start + batchSize, totalSize);
+                for (int i = start; i < end; i++)
+                {
+                    result[i] = localRandom.NextDouble() * range + min;
+                }
+            });
+
+            return new Tensor<double>(shape, new Vector<double>(result));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorRandomUniformRange(shape, min, max, seed);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorDropoutMask<T>(int[] shape, T dropoutRate, T scale, int? seed = null)
+    {
+        int totalSize = 1; foreach (var d in shape) totalSize *= d;
+        if (totalSize >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var rateObj = (object?)dropoutRate; float rateF = rateObj is float fr ? fr : Convert.ToSingle(dropoutRate);
+                var scaleObj = (object?)scale; float scaleF = scaleObj is float fs ? fs : Convert.ToSingle(scale);
+                return (Tensor<T>)(object)TensorDropoutMaskGpu(shape, rateF, scaleF, seed);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var rateObj = (object?)dropoutRate; double rateD = rateObj is double dr ? dr : Convert.ToDouble(dropoutRate);
+                var scaleObj = (object?)scale; double scaleD = scaleObj is double ds ? ds : Convert.ToDouble(scale);
+                return (Tensor<T>)(object)TensorDropoutMaskGpuDouble(shape, rateD, scaleD, seed);
+            }
+        }
+        return _cpuFallback.TensorDropoutMask(shape, dropoutRate, scale, seed);
+    }
+
+    private Tensor<float> TensorDropoutMaskGpu(int[] shape, float dropoutRate, float scale, int? seed)
+    {
+        try
+        {
+            int totalSize = 1; foreach (var d in shape) totalSize *= d;
+            var result = new float[totalSize];
+            var baseSeed = seed ?? RandomHelper.GenerateCryptographicSeed();
+
+            int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
+            System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
+            {
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
+                int start = batchIdx * batchSize;
+                int end = Math.Min(start + batchSize, totalSize);
+                for (int i = start; i < end; i++)
+                {
+                    result[i] = localRandom.NextDouble() < dropoutRate ? 0.0f : scale;
+                }
+            });
+
+            return new Tensor<float>(shape, new Vector<float>(result));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorDropoutMask(shape, dropoutRate, scale, seed);
+        }
+    }
+
+    private Tensor<double> TensorDropoutMaskGpuDouble(int[] shape, double dropoutRate, double scale, int? seed)
+    {
+        try
+        {
+            int totalSize = 1; foreach (var d in shape) totalSize *= d;
+            var result = new double[totalSize];
+            var baseSeed = seed ?? RandomHelper.GenerateCryptographicSeed();
+
+            int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
+            System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
+            {
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
+                int start = batchIdx * batchSize;
+                int end = Math.Min(start + batchSize, totalSize);
+                for (int i = start; i < end; i++)
+                {
+                    result[i] = localRandom.NextDouble() < dropoutRate ? 0.0 : scale;
+                }
+            });
+
+            return new Tensor<double>(shape, new Vector<double>(result));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorDropoutMask(shape, dropoutRate, scale, seed);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ScalarMinusTensor<T>(T scalar, Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        if (tensor.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.ScalarMinusTensor(scalar, tensor);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var scalarObj = (object?)scalar; float s = scalarObj is float fs ? fs : Convert.ToSingle(scalar);
+                return (Tensor<T>)(object)ScalarMinusTensorGpu(s, (Tensor<float>)(object)tensor);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var scalarObj = (object?)scalar; double s = scalarObj is double ds ? ds : Convert.ToDouble(scalar);
+                return (Tensor<T>)(object)ScalarMinusTensorGpuDouble(s, (Tensor<double>)(object)tensor);
+            }
+        }
+
+        return _cpuFallback.ScalarMinusTensor(scalar, tensor);
+    }
+
+    private Tensor<float> ScalarMinusTensorGpu(float scalar, Tensor<float> tensor)
+    {
+        try
+        {
+            var result = new Tensor<float>(tensor.Shape);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_scalarMinusTensorKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, scalar, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.ScalarMinusTensor(scalar, tensor);
+        }
+    }
+
+    private Tensor<double> ScalarMinusTensorGpuDouble(double scalar, Tensor<double> tensor)
+    {
+        try
+        {
+            var result = new Tensor<double>(tensor.Shape);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_scalarMinusTensorKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, scalar, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.ScalarMinusTensor(scalar, tensor);
         }
     }
 

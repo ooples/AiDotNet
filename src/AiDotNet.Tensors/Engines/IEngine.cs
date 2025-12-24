@@ -1992,6 +1992,37 @@ public interface IEngine
     Tensor<T> TensorNegate<T>(Tensor<T> tensor);
 
     /// <summary>
+    /// Computes the element-wise power of a tensor raised to a scalar exponent.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor (base values).</param>
+    /// <param name="exponent">The scalar exponent to raise each element to.</param>
+    /// <returns>A tensor with pow(x, exponent) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in attention sharpening (Neural Turing Machines), gamma correction,
+    /// polynomial features, and various normalization operations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorPower<T>(Tensor<T> tensor, T exponent);
+
+    /// <summary>
+    /// Computes the element-wise power of a tensor raised to another tensor (element-wise exponents).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="bases">The input tensor of base values.</param>
+    /// <param name="exponents">The tensor of exponents (must have same shape as bases).</param>
+    /// <returns>A tensor with pow(bases[i], exponents[i]) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used for element-wise power operations where exponents vary per element.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorPower<T>(Tensor<T> bases, Tensor<T> exponents);
+
+    /// <summary>
     /// Computes the element-wise floor of a tensor (largest integer less than or equal to each element).
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
@@ -3664,6 +3695,61 @@ public interface IEngine
     /// </para>
     /// </remarks>
     Tensor<T> TensorRandomNormal<T>(int[] shape, T mean, T stddev);
+
+    /// <summary>
+    /// Generates a tensor filled with random values from a uniform distribution within a specified range.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="shape">The shape of the output tensor.</param>
+    /// <param name="min">The minimum value (inclusive).</param>
+    /// <param name="max">The maximum value (exclusive).</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <returns>A tensor filled with random values in [min, max).</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Random Operations</b></para>
+    /// <para>
+    /// Used for weight initialization with specific ranges (e.g., Xavier uniform [-limit, limit]),
+    /// embedding initialization, and data augmentation. More flexible than TensorRandomUniform
+    /// which only generates values in [0, 1).
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorRandomUniformRange<T>(int[] shape, T min, T max, int? seed = null);
+
+    /// <summary>
+    /// Generates a dropout mask tensor where each element is either zero or a scale value.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="shape">The shape of the output tensor.</param>
+    /// <param name="dropoutRate">Probability of dropping each element (0 to 1).</param>
+    /// <param name="scale">The scale factor for non-dropped elements (typically 1/(1-dropoutRate)).</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <returns>A tensor containing the dropout mask.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Dropout Operations</b></para>
+    /// <para>
+    /// Used in dropout layers during training. Elements are randomly set to zero with probability
+    /// dropoutRate, and remaining elements are scaled to maintain expected values.
+    /// The mask can be multiplied element-wise with activations: output = input * mask.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorDropoutMask<T>(int[] shape, T dropoutRate, T scale, int? seed = null);
+
+    /// <summary>
+    /// Subtracts a tensor from a scalar value element-wise (scalar - tensor).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="scalar">The scalar value to subtract from.</param>
+    /// <param name="tensor">The tensor to subtract.</param>
+    /// <returns>A tensor with (scalar - x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Arithmetic Operations</b></para>
+    /// <para>
+    /// Used for computing (1 - p) in probability calculations, BCE loss gradients,
+    /// and other operations where the subtraction order matters.
+    /// More efficient than TensorNegate(TensorSubtractScalar(tensor, scalar)).
+    /// </para>
+    /// </remarks>
+    Tensor<T> ScalarMinusTensor<T>(T scalar, Tensor<T> tensor);
 
     /// <summary>
     /// Creates an identity matrix as a tensor.

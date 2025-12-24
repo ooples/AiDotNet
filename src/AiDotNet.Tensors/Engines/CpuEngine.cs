@@ -2370,6 +2370,61 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    public Tensor<T> TensorPower<T>(Tensor<T> tensor, T exponent)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+
+        if (tensor.Length > 10000)
+        {
+            Parallel.For(0, tensor.Length, i =>
+            {
+                result.SetFlat(i, numOps.Power(tensor.GetFlat(i), exponent));
+            });
+        }
+        else
+        {
+            for (int i = 0; i < tensor.Length; i++)
+            {
+                result.SetFlat(i, numOps.Power(tensor.GetFlat(i), exponent));
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorPower<T>(Tensor<T> bases, Tensor<T> exponents)
+    {
+        if (bases == null) throw new ArgumentNullException(nameof(bases));
+        if (exponents == null) throw new ArgumentNullException(nameof(exponents));
+        if (!bases.Shape.SequenceEqual(exponents.Shape))
+            throw new ArgumentException("Tensors must have the same shape for element-wise power.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(bases.Shape);
+
+        if (bases.Length > 10000)
+        {
+            Parallel.For(0, bases.Length, i =>
+            {
+                result.SetFlat(i, numOps.Power(bases.GetFlat(i), exponents.GetFlat(i)));
+            });
+        }
+        else
+        {
+            for (int i = 0; i < bases.Length; i++)
+            {
+                result.SetFlat(i, numOps.Power(bases.GetFlat(i), exponents.GetFlat(i)));
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> TensorFloor<T>(Tensor<T> tensor)
     {
         if (tensor == null) throw new ArgumentNullException(nameof(tensor));
@@ -8605,6 +8660,139 @@ public class CpuEngine : IEngine
             result.SetFlat(i, numOps.FromDouble(z0 * stdD + meanD));
             if (i + 1 < totalElements)
                 result.SetFlat(i + 1, numOps.FromDouble(z1 * stdD + meanD));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorRandomUniformRange<T>(int[] shape, T min, T max, int? seed = null)
+    {
+        if (shape == null) throw new ArgumentNullException(nameof(shape));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.ThreadSafeRandom;
+        var result = new Tensor<T>(shape);
+        int totalElements = shape.Aggregate(1, (a, b) => a * b);
+
+        double minD = numOps.ToDouble(min);
+        double maxD = numOps.ToDouble(max);
+        double range = maxD - minD;
+
+        if (totalElements > 10000)
+        {
+            // For seeded random with parallelism, we need thread-local randoms
+            if (seed.HasValue)
+            {
+                var baseRandom = RandomHelper.CreateSeededRandom(seed.Value);
+                var seeds = new int[Environment.ProcessorCount];
+                for (int i = 0; i < seeds.Length; i++)
+                    seeds[i] = baseRandom.Next();
+
+                Parallel.For(0, totalElements, () => RandomHelper.CreateSeededRandom(seeds[Thread.CurrentThread.ManagedThreadId % seeds.Length]),
+                    (i, state, localRandom) =>
+                    {
+                        double value = localRandom.NextDouble() * range + minD;
+                        result.SetFlat(i, numOps.FromDouble(value));
+                        return localRandom;
+                    },
+                    _ => { });
+            }
+            else
+            {
+                Parallel.For(0, totalElements, i =>
+                {
+                    double value = RandomHelper.ThreadSafeRandom.NextDouble() * range + minD;
+                    result.SetFlat(i, numOps.FromDouble(value));
+                });
+            }
+        }
+        else
+        {
+            for (int i = 0; i < totalElements; i++)
+            {
+                double value = random.NextDouble() * range + minD;
+                result.SetFlat(i, numOps.FromDouble(value));
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorDropoutMask<T>(int[] shape, T dropoutRate, T scale, int? seed = null)
+    {
+        if (shape == null) throw new ArgumentNullException(nameof(shape));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.ThreadSafeRandom;
+        var result = new Tensor<T>(shape);
+        int totalElements = shape.Aggregate(1, (a, b) => a * b);
+
+        double dropoutRateD = numOps.ToDouble(dropoutRate);
+        T zero = numOps.Zero;
+
+        if (totalElements > 10000)
+        {
+            // For seeded random with parallelism, we need thread-local randoms
+            if (seed.HasValue)
+            {
+                var baseRandom = RandomHelper.CreateSeededRandom(seed.Value);
+                var seeds = new int[Environment.ProcessorCount];
+                for (int i = 0; i < seeds.Length; i++)
+                    seeds[i] = baseRandom.Next();
+
+                Parallel.For(0, totalElements, () => RandomHelper.CreateSeededRandom(seeds[Thread.CurrentThread.ManagedThreadId % seeds.Length]),
+                    (i, state, localRandom) =>
+                    {
+                        T value = localRandom.NextDouble() < dropoutRateD ? zero : scale;
+                        result.SetFlat(i, value);
+                        return localRandom;
+                    },
+                    _ => { });
+            }
+            else
+            {
+                Parallel.For(0, totalElements, i =>
+                {
+                    T value = RandomHelper.ThreadSafeRandom.NextDouble() < dropoutRateD ? zero : scale;
+                    result.SetFlat(i, value);
+                });
+            }
+        }
+        else
+        {
+            for (int i = 0; i < totalElements; i++)
+            {
+                T value = random.NextDouble() < dropoutRateD ? zero : scale;
+                result.SetFlat(i, value);
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ScalarMinusTensor<T>(T scalar, Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+
+        if (tensor.Length > 10000)
+        {
+            Parallel.For(0, tensor.Length, i =>
+            {
+                result.SetFlat(i, numOps.Subtract(scalar, tensor.GetFlat(i)));
+            });
+        }
+        else
+        {
+            for (int i = 0; i < tensor.Length; i++)
+            {
+                result.SetFlat(i, numOps.Subtract(scalar, tensor.GetFlat(i)));
+            }
         }
 
         return result;
