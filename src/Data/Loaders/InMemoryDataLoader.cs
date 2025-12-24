@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 
@@ -196,7 +197,7 @@ public class InMemoryDataLoader<T, TInput, TOutput> : InputOutputDataLoaderBase<
 
             for (int i = 0; i < indices.Length; i++)
             {
-                CopyTensorSample(tensor, result, indices[i], i);
+                TensorCopyHelper.CopySample(tensor, result, indices[i], i);
             }
             return (TInput)(object)result;
         }
@@ -228,7 +229,7 @@ public class InMemoryDataLoader<T, TInput, TOutput> : InputOutputDataLoaderBase<
 
             for (int i = 0; i < indices.Length; i++)
             {
-                CopyTensorSample(tensor, result, indices[i], i);
+                TensorCopyHelper.CopySample(tensor, result, indices[i], i);
             }
             return (TOutput)(object)result;
         }
@@ -272,48 +273,5 @@ public class InMemoryDataLoader<T, TInput, TOutput> : InputOutputDataLoaderBase<
         }
 
         throw new NotSupportedException($"Unsupported output type: {typeof(TOutput).Name}");
-    }
-
-    /// <summary>
-    /// Copies a single sample from source tensor to destination tensor.
-    /// </summary>
-    private static void CopyTensorSample(Tensor<T> source, Tensor<T> dest, int srcIndex, int destIndex)
-    {
-        if (source.Shape.Length == 1)
-        {
-            dest[destIndex] = source[srcIndex];
-            return;
-        }
-
-        // For multi-dimensional tensors, copy the entire sample
-        CopyTensorSampleRecursive(source, dest, srcIndex, destIndex, 1, new int[source.Rank]);
-    }
-
-    /// <summary>
-    /// Recursively copies tensor values across multiple dimensions.
-    /// </summary>
-    private static void CopyTensorSampleRecursive(
-        Tensor<T> source,
-        Tensor<T> dest,
-        int srcIndex,
-        int destIndex,
-        int currentDim,
-        int[] indices)
-    {
-        if (currentDim == source.Rank)
-        {
-            indices[0] = srcIndex;
-            T value = source[indices];
-            indices[0] = destIndex;
-            dest[indices] = value;
-        }
-        else
-        {
-            for (int i = 0; i < source.Shape[currentDim]; i++)
-            {
-                indices[currentDim] = i;
-                CopyTensorSampleRecursive(source, dest, srcIndex, destIndex, currentDim + 1, indices);
-            }
-        }
     }
 }

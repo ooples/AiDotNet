@@ -1213,7 +1213,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             {
                 for (int s = 0; s < tensor.Shape[0]; s++)
                 {
-                    CopyTensorSample(tensor, result, s, currentSample++);
+                    TensorCopyHelper.CopySample(tensor, result, s, currentSample++);
                 }
             }
             return (TInput)(object)result;
@@ -1294,7 +1294,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             {
                 for (int s = 0; s < tensor.Shape[0]; s++)
                 {
-                    CopyTensorSample(tensor, result, s, currentSample++);
+                    TensorCopyHelper.CopySample(tensor, result, s, currentSample++);
                 }
             }
             return (TOutput)(object)result;
@@ -1305,46 +1305,6 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             $"Cannot aggregate {outputs.Count} outputs of type {typeof(TOutput).Name}. " +
             $"Supported types are Matrix<T>, Vector<T>, and Tensor<T>. " +
             $"For other types, use a pre-batched data loader or implement custom aggregation.");
-    }
-
-    /// <summary>
-    /// Copies a single sample from one tensor to another.
-    /// </summary>
-    private static void CopyTensorSample(Tensor<T> source, Tensor<T> dest, int sourceIndex, int destIndex)
-    {
-        if (source.Shape.Length == 1)
-        {
-            dest[destIndex] = source[sourceIndex];
-            return;
-        }
-
-        // Calculate elements per sample (product of dimensions after the first)
-        int elementsPerSample = 1;
-        for (int d = 1; d < source.Shape.Length; d++)
-        {
-            elementsPerSample *= source.Shape[d];
-        }
-
-        // Create index arrays for multi-dimensional access
-        var sourceIndices = new int[source.Shape.Length];
-        var destIndices = new int[dest.Shape.Length];
-        sourceIndices[0] = sourceIndex;
-        destIndices[0] = destIndex;
-
-        // Copy all elements for this sample
-        for (int i = 0; i < elementsPerSample; i++)
-        {
-            // Convert flat index to multi-dimensional indices
-            int remaining = i;
-            for (int d = source.Shape.Length - 1; d >= 1; d--)
-            {
-                sourceIndices[d] = remaining % source.Shape[d];
-                destIndices[d] = remaining % dest.Shape[d];
-                remaining /= source.Shape[d];
-            }
-
-            dest[destIndices] = source[sourceIndices];
-        }
     }
 
     /// <summary>
