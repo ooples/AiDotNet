@@ -96,5 +96,104 @@ public class SimdKernelsTests
 
         Assert.Equal(15f, sum);
     }
+
+    [Fact]
+    public void Floor_MatchesMathFloor()
+    {
+        var input = new float[] { 1.5f, 2.3f, -1.7f, 3.9f, -0.5f };
+        var output = new float[input.Length];
+
+        SimdKernels.Floor(input, output);
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            Assert.Equal((float)Math.Floor(input[i]), output[i]);
+        }
+    }
+
+    [Fact]
+    public void Ceiling_MatchesMathCeiling()
+    {
+        var input = new float[] { 1.5f, 2.3f, -1.7f, 3.9f, -0.5f };
+        var output = new float[input.Length];
+
+        SimdKernels.Ceiling(input, output);
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            Assert.Equal((float)Math.Ceiling(input[i]), output[i]);
+        }
+    }
+
+    [Fact]
+    public void Frac_ReturnsFractionalPart()
+    {
+        var input = new float[] { 1.5f, 2.3f, 3.9f };
+        var output = new float[input.Length];
+
+        SimdKernels.Frac(input, output);
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            float expected = input[i] - (float)Math.Floor(input[i]);
+            Assert.Equal(expected, output[i], precision: 5);
+        }
+    }
+
+    [Fact]
+    public void Sin_MatchesMathSin()
+    {
+        var input = new float[] { 0f, (float)(Math.PI / 2), (float)Math.PI, (float)(3 * Math.PI / 2) };
+        var output = new float[input.Length];
+
+        SimdKernels.Sin(input, output);
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            Assert.Equal((float)Math.Sin(input[i]), output[i], precision: 5);
+        }
+    }
+
+    [Fact]
+    public void Cos_MatchesMathCos()
+    {
+        var input = new float[] { 0f, (float)(Math.PI / 2), (float)Math.PI, (float)(3 * Math.PI / 2) };
+        var output = new float[input.Length];
+
+        SimdKernels.Cos(input, output);
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            Assert.Equal((float)Math.Cos(input[i]), output[i], precision: 5);
+        }
+    }
+
+    [Fact]
+    public void FloorDouble_MatchesMathFloor()
+    {
+        var input = new double[] { 1.5, 2.3, -1.7, 3.9, -0.5 };
+        var output = new double[input.Length];
+
+        SimdKernels.Floor(input, output);
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            Assert.Equal(Math.Floor(input[i]), output[i]);
+        }
+    }
+
+    [Fact]
+    public void CeilingDouble_MatchesMathCeiling()
+    {
+        var input = new double[] { 1.5, 2.3, -1.7, 3.9, -0.5 };
+        var output = new double[input.Length];
+
+        SimdKernels.Ceiling(input, output);
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            Assert.Equal(Math.Ceiling(input[i]), output[i]);
+        }
+    }
 }
 
