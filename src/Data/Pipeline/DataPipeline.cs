@@ -373,7 +373,7 @@ public class DataPipeline<T> : IEnumerable<T>
                 {
                     enumerators[i].Dispose();
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
                     disposeExceptions ??= new List<Exception>();
                     disposeExceptions.Add(ex);
@@ -527,7 +527,7 @@ internal class MapAsyncIterator<TSource, TResult> : IAsyncEnumerableProvider<TRe
                 {
                     throw;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
                     Interlocked.CompareExchange(ref workerException, ex, null);
                 }

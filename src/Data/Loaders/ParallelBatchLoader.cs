@@ -181,7 +181,7 @@ public class ParallelBatchLoader<TBatch> : IDisposable
                     // Cancellation is expected, don't treat as error
                     throw;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
                     // Capture the first worker exception to propagate
                     Interlocked.CompareExchange(ref workerException, ex, null);
