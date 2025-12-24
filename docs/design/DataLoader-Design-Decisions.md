@@ -52,8 +52,8 @@ GitHub Issue: #443
 ### Phase 2: Sampling Strategies
 | Task | Status | Commit |
 |------|--------|--------|
-| 2A: IDataSampler interface + Random/Stratified/Weighted | IN PROGRESS | - |
-| 2B: Curriculum/Importance/Active learning | PENDING | - |
+| 2A: IDataSampler interface + Random/Stratified/Weighted | COMPLETE | 9ff9833 |
+| 2B: Curriculum/Importance/Active learning | IN PROGRESS | - |
 
 ### Phase 3: Async and Parallel Support
 | Task | Status | Commit |
@@ -95,6 +95,12 @@ GitHub Issue: #443
 
 ### Extension Methods
 - `src/Extensions/DataLoaderExtensions.cs` - Fluent API builders
+
+### Sampling Infrastructure
+- `src/Interfaces/IDataSampler.cs` - Sampler interfaces
+- `src/Data/Sampling/RandomSampler.cs` - Random, Sequential, Subset samplers
+- `src/Data/Sampling/StratifiedSampler.cs` - Stratified and StratifiedBatch samplers
+- `src/Data/Sampling/WeightedSampler.cs` - Weighted sampling with class balancing
 
 ## API Design
 
