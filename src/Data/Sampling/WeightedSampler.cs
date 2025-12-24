@@ -128,14 +128,11 @@ public class WeightedSampler<T> : WeightedSamplerBase<T>
     /// </remarks>
     public static T[] CreateBalancedWeights(IReadOnlyList<int> labels, int numClasses)
     {
-        // Count samples per class
+        // Count samples per class - filter to valid labels explicitly
         int[] classCounts = new int[numClasses];
-        foreach (int label in labels)
+        foreach (int label in labels.Where(l => l >= 0 && l < numClasses))
         {
-            if (label >= 0 && label < numClasses)
-            {
-                classCounts[label]++;
-            }
+            classCounts[label]++;
         }
 
         // Compute weight per class (inverse of frequency)
