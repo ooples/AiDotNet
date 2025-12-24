@@ -79,10 +79,11 @@ namespace AiDotNet.Data.Loaders;
 /// </example>
 public class UniformEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderBase<T, TInput, TOutput>
 {
-    private const int MaxResampleAttempts = 8;
+    private const int MaxResampleAttempts = 32;
 
     private bool _hasLastTaskSignature;
     private ulong _lastTaskSignature;
+    private ulong _lastClassSignature;
     private int _lastFirstSupportIndex;
 
     /// <summary>
@@ -167,7 +168,7 @@ public class UniformEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderB
     /// </remarks>
     protected override MetaLearningTask<T, TInput, TOutput> GetNextTaskCore()
     {
-        (MetaLearningTask<T, TInput, TOutput> Task, ulong Signature, int FirstSupportIndex) SampleTaskCandidate()
+        (MetaLearningTask<T, TInput, TOutput> Task, ulong Signature, ulong ClassSignature, int FirstSupportIndex) SampleTaskCandidate()
         {
             // Step 1: Randomly select nWay unique classes
             var selectedClasses = _availableClasses
@@ -229,31 +230,72 @@ public class UniformEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderB
                 }
             }
 
-            return (BuildMetaLearningTask(supportExamples, supportLabels, queryExamples, queryLabels), signature, firstSupportIndex);
+            return (
+                BuildMetaLearningTask(supportExamples, supportLabels, queryExamples, queryLabels),
+                signature,
+                ComputeClassSignature(selectedClasses),
+                firstSupportIndex);
+        }
+
+        bool IsDistinctFromLast(in (MetaLearningTask<T, TInput, TOutput> Task, ulong Signature, ulong ClassSignature, int FirstSupportIndex) candidate)
+        {
+            if (!_hasLastTaskSignature)
+            {
+                return true;
+            }
+
+            if (candidate.Signature == _lastTaskSignature)
+            {
+                return false;
+            }
+
+            return !(candidate.ClassSignature == _lastClassSignature &&
+                     candidate.FirstSupportIndex == _lastFirstSupportIndex);
+        }
+
+        void UpdateLast(in (MetaLearningTask<T, TInput, TOutput> Task, ulong Signature, ulong ClassSignature, int FirstSupportIndex) candidate)
+        {
+            _lastTaskSignature = candidate.Signature;
+            _lastClassSignature = candidate.ClassSignature;
+            _hasLastTaskSignature = true;
+            _lastFirstSupportIndex = candidate.FirstSupportIndex;
         }
 
         for (int attempt = 0; attempt < MaxResampleAttempts; attempt++)
         {
             var candidate = SampleTaskCandidate();
 
-            if (_hasLastTaskSignature &&
-                (candidate.Signature == _lastTaskSignature || candidate.FirstSupportIndex == _lastFirstSupportIndex))
+            if (!IsDistinctFromLast(candidate))
             {
                 continue;
             }
 
-            _lastTaskSignature = candidate.Signature;
-            _hasLastTaskSignature = true;
-            _lastFirstSupportIndex = candidate.FirstSupportIndex;
+            UpdateLast(candidate);
             return candidate.Task;
         }
 
-        // Fallback: allow repetition to guarantee progress.
         var fallbackCandidate = SampleTaskCandidate();
-        _lastTaskSignature = fallbackCandidate.Signature;
-        _hasLastTaskSignature = true;
-        _lastFirstSupportIndex = fallbackCandidate.FirstSupportIndex;
+        for (int attempt = 0; attempt < MaxResampleAttempts && !IsDistinctFromLast(fallbackCandidate); attempt++)
+        {
+            fallbackCandidate = SampleTaskCandidate();
+        }
+
+        UpdateLast(fallbackCandidate);
         return fallbackCandidate.Task;
+    }
+
+    private static ulong ComputeClassSignature(int[] selectedClasses)
+    {
+        var sorted = (int[])selectedClasses.Clone();
+        System.Array.Sort(sorted);
+
+        ulong signature = 14695981039346656037UL;
+        for (int i = 0; i < sorted.Length; i++)
+        {
+            signature = HashCombine(signature, sorted[i]);
+        }
+
+        return signature;
     }
 
     private static ulong HashCombine(ulong hash, int value)

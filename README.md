@@ -189,6 +189,7 @@ To run the examples:
 - **[Distributed Training](docs/DistributedTrainingImplementations.md)** - Scale your training workloads
 - **[Autodiff Integration](AUTODIFF_INTEGRATION.md)** - Understanding automatic differentiation
 - **[Mixed Precision Architecture](MIXED_PRECISION_ARCHITECTURE.md)** - Optimize performance with mixed precision
+- **[Physics-Informed Benchmarks](docs/PhysicsInformedBenchmarks.md)** - PDE and operator-learning benchmark harnesses
 
 ## Platform Support
 

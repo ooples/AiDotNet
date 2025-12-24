@@ -1,3 +1,4 @@
+using System.Globalization;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.JitCompiler;
@@ -271,7 +272,8 @@ public class JitCompilerTests
         Assert.Contains("10", str);
         Assert.Contains("6", str);
         Assert.Contains("Constant Folding", str);
-        Assert.Matches(@"Compilation time:\s+\d+(\.\d{2})?ms", str);
+        string expectedMs = stats.CompilationTime.TotalMilliseconds.ToString("0.0#", CultureInfo.InvariantCulture);
+        Assert.Contains(expectedMs, str);
         Assert.Contains("False", str);
     }
 

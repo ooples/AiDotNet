@@ -261,6 +261,11 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    public override int ParameterCount => _weights.Length + _bias.Length;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GraphConvolutionalLayer{T}"/> class with the specified dimensions and activation function.
     /// </summary>
     /// <param name="inputFeatures">The number of features in the input data for each node.</param>
@@ -909,6 +914,38 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         // Set bias using Tensor.FromVector
         var biasParams = parameters.SubVector(index, biasSize);
         _bias = Tensor<T>.FromVector(biasParams);
+    }
+
+    /// <summary>
+    /// Gets the gradients of all trainable parameters in this layer.
+    /// </summary>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_weightsGradient == null || _biasGradient == null)
+        {
+            return new Vector<T>(ParameterCount);
+        }
+
+        return Vector<T>.Concatenate(
+            new Vector<T>(_weightsGradient.ToArray()),
+            new Vector<T>(_biasGradient.ToArray())
+        );
+    }
+
+    /// <summary>
+    /// Clears the stored gradients for this layer.
+    /// </summary>
+    public override void ClearGradients()
+    {
+        if (_weightsGradient != null)
+        {
+            _weightsGradient.Fill(NumOps.Zero);
+        }
+
+        if (_biasGradient != null)
+        {
+            _biasGradient.Fill(NumOps.Zero);
+        }
     }
 
     /// <summary>
