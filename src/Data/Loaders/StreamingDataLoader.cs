@@ -1,3 +1,4 @@
+using System.IO.MemoryMappedFiles;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using AiDotNet.Interfaces;
@@ -214,7 +215,8 @@ public class CsvStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBas
     private readonly Func<string, int, (TInput, TOutput)> _lineParser;
     private readonly bool _hasHeader;
     private readonly int _lineCount;
-    private string[]? _cachedLines;
+    private readonly object _cacheLock = new object();
+    private volatile string[]? _cachedLines;
 
     /// <summary>
     /// Initializes a new instance of the CsvStreamingDataLoader class.
@@ -266,30 +268,48 @@ public class CsvStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBas
     public override int SampleCount => _lineCount;
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// For efficient random access, this method caches all lines on first access.
+    /// This is a tradeoff: memory for speed. For truly streaming without random access,
+    /// use <see cref="GetSequentialBatches"/> with shuffle=false.
+    /// </para>
+    /// <para>
+    /// <b>Thread Safety:</b> This method uses double-checked locking to ensure
+    /// thread-safe lazy initialization of the line cache. Multiple threads can
+    /// safely call this method concurrently.
+    /// </para>
+    /// </remarks>
     protected override Task<(TInput Input, TOutput Output)> ReadSampleAsync(
         int index,
         CancellationToken cancellationToken = default)
     {
-        // For efficient random access, we cache all lines on first access
-        // This is a tradeoff: memory for speed. For truly streaming without
-        // random access, use sequential iteration with shuffle=false.
+        // Thread-safe lazy initialization using double-checked locking pattern
+        // First check without lock for fast path when cache is already populated
         if (_cachedLines == null)
         {
-            var lines = new List<string>(_lineCount);
-            using (var reader = new StreamReader(_filePath))
+            lock (_cacheLock)
             {
-                if (_hasHeader)
+                // Second check inside lock to prevent multiple threads from populating cache
+                if (_cachedLines == null)
                 {
-                    reader.ReadLine();
-                }
+                    var lines = new List<string>(_lineCount);
+                    using (var reader = new StreamReader(_filePath))
+                    {
+                        if (_hasHeader)
+                        {
+                            reader.ReadLine();
+                        }
 
-                string? line;
-                while ((line = reader.ReadLine()) != null)
-                {
-                    lines.Add(line);
+                        string? line;
+                        while ((line = reader.ReadLine()) != null)
+                        {
+                            lines.Add(line);
+                        }
+                    }
+                    _cachedLines = lines.ToArray();
                 }
             }
-            _cachedLines = lines.ToArray();
         }
 
         var result = _lineParser(_cachedLines[index], index);
@@ -356,39 +376,300 @@ public class CsvStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBas
 }
 
 /// <summary>
-/// A streaming data loader that uses memory-mapped files for efficient random access.
+/// A streaming data loader that uses memory-mapped files for efficient random access
+/// to large binary datasets.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The type of input data.</typeparam>
 /// <typeparam name="TOutput">The type of output/label data.</typeparam>
 /// <remarks>
 /// <para>
-/// MemoryMappedStreamingDataLoader uses memory-mapped files for efficient random access
-/// to large datasets stored in binary format. The operating system handles paging data
-/// in and out of memory as needed.
+/// MemoryMappedStreamingDataLoader uses <see cref="System.IO.MemoryMappedFiles.MemoryMappedFile"/>
+/// for efficient random access to large datasets stored in binary format. The operating system
+/// handles paging data in and out of physical memory as needed, enabling efficient access to
+/// datasets larger than available RAM.
+/// </para>
+/// <para>
+/// <b>File Format Requirements:</b>
+/// <list type="bullet">
+/// <item><description>Binary file with fixed-size samples</description></item>
+/// <item><description>Each sample is <c>inputSizeBytes + outputSizeBytes</c> bytes</description></item>
+/// <item><description>Samples are stored contiguously with optional header</description></item>
+/// </list>
 /// </para>
 /// <para><b>For Beginners:</b> Memory-mapped files let the operating system manage
-/// which parts of a large file are in memory. This is very efficient for random access
-/// patterns like shuffled batch iteration.
+/// which parts of a large file are in memory. When you access a sample, the OS automatically
+/// loads that portion of the file into RAM. This is very efficient for random access
+/// patterns like shuffled batch iteration on datasets too large to fit in memory.
+///
+/// Example:
+/// <code>
+/// // Create a memory-mapped loader for binary image data
+/// var loader = new MemoryMappedStreamingDataLoader&lt;float, float[], int&gt;(
+///     filePath: "images.bin",
+///     sampleCount: 60000,
+///     inputSizeBytes: 784 * sizeof(float),   // 28x28 image
+///     outputSizeBytes: sizeof(int),           // Label
+///     inputDeserializer: (bytes) =&gt; {
+///         var floats = new float[784];
+///         for (int i = 0; i &lt; 784; i++)
+///             floats[i] = BitConverter.ToSingle(bytes, i * 4);
+///         return floats;
+///     },
+///     outputDeserializer: (bytes) =&gt; BitConverter.ToInt32(bytes, 0),
+///     batchSize: 32
+/// );
+///
+/// await foreach (var batch in loader.GetBatchesAsync())
+/// {
+///     await model.TrainOnBatchAsync(batch.Inputs, batch.Outputs);
+/// }
+/// </code>
 /// </para>
 /// </remarks>
-public class MemoryMappedStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoader<T, TInput, TOutput>
+public class MemoryMappedStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBase<T, TInput, TOutput>, IDisposable
 {
+    private readonly string _filePath;
+    private readonly int _sampleCount;
+    private readonly int _inputSizeBytes;
+    private readonly int _outputSizeBytes;
+    private readonly int _sampleSizeBytes;
+    private readonly long _headerSizeBytes;
+    private readonly Func<byte[], TInput> _inputDeserializer;
+    private readonly Func<byte[], TOutput> _outputDeserializer;
+
+    private MemoryMappedFile? _memoryMappedFile;
+    private MemoryMappedViewAccessor? _viewAccessor;
+    private readonly object _initLock = new object();
+    private volatile bool _initialized;
+    private bool _disposed;
+
     /// <summary>
     /// Initializes a new instance of the MemoryMappedStreamingDataLoader class.
     /// </summary>
+    /// <param name="filePath">Path to the binary data file.</param>
     /// <param name="sampleCount">Total number of samples in the dataset.</param>
-    /// <param name="sampleReader">Async function that reads a sample by index.</param>
+    /// <param name="inputSizeBytes">Size of input data per sample in bytes.</param>
+    /// <param name="outputSizeBytes">Size of output/label data per sample in bytes.</param>
+    /// <param name="inputDeserializer">Function to deserialize input bytes to TInput.</param>
+    /// <param name="outputDeserializer">Function to deserialize output bytes to TOutput.</param>
     /// <param name="batchSize">Number of samples per batch.</param>
-    /// <param name="prefetchCount">Number of batches to prefetch.</param>
-    /// <param name="numWorkers">Number of parallel workers.</param>
+    /// <param name="headerSizeBytes">Size of file header to skip in bytes. Default is 0.</param>
+    /// <param name="prefetchCount">Number of batches to prefetch. Default is 2.</param>
+    /// <param name="numWorkers">Number of parallel workers. Default is 4.</param>
+    /// <exception cref="ArgumentNullException">Thrown when filePath or deserializers are null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when sizes are invalid.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
     public MemoryMappedStreamingDataLoader(
+        string filePath,
         int sampleCount,
-        Func<int, CancellationToken, Task<(TInput, TOutput)>> sampleReader,
+        int inputSizeBytes,
+        int outputSizeBytes,
+        Func<byte[], TInput> inputDeserializer,
+        Func<byte[], TOutput> outputDeserializer,
         int batchSize,
+        long headerSizeBytes = 0,
         int prefetchCount = 2,
         int numWorkers = 4)
-        : base(sampleCount, sampleReader, batchSize, "MemoryMappedStreamingDataLoader", prefetchCount, numWorkers)
+        : base(prefetchCount, numWorkers)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentNullException(nameof(filePath));
+        }
+
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Binary data file not found: {filePath}", filePath);
+        }
+
+        _filePath = filePath;
+        _sampleCount = sampleCount > 0 ? sampleCount : throw new ArgumentOutOfRangeException(nameof(sampleCount), "Sample count must be positive.");
+        _inputSizeBytes = inputSizeBytes > 0 ? inputSizeBytes : throw new ArgumentOutOfRangeException(nameof(inputSizeBytes), "Input size must be positive.");
+        _outputSizeBytes = outputSizeBytes > 0 ? outputSizeBytes : throw new ArgumentOutOfRangeException(nameof(outputSizeBytes), "Output size must be positive.");
+        _sampleSizeBytes = _inputSizeBytes + _outputSizeBytes;
+        _headerSizeBytes = headerSizeBytes >= 0 ? headerSizeBytes : throw new ArgumentOutOfRangeException(nameof(headerSizeBytes), "Header size cannot be negative.");
+        _inputDeserializer = inputDeserializer ?? throw new ArgumentNullException(nameof(inputDeserializer));
+        _outputDeserializer = outputDeserializer ?? throw new ArgumentNullException(nameof(outputDeserializer));
+        BatchSize = batchSize > 0 ? batchSize : throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be positive.");
+
+        // Validate file size matches expected data size
+        var fileInfo = new FileInfo(filePath);
+        long expectedSize = _headerSizeBytes + ((long)_sampleCount * _sampleSizeBytes);
+        if (fileInfo.Length < expectedSize)
+        {
+            throw new ArgumentException(
+                $"File size ({fileInfo.Length} bytes) is smaller than expected ({expectedSize} bytes) for {sampleCount} samples of {_sampleSizeBytes} bytes each plus {headerSizeBytes} header bytes.",
+                nameof(filePath));
+        }
+    }
+
+    /// <inheritdoc/>
+    public override string Name => "MemoryMappedStreamingDataLoader";
+
+    /// <inheritdoc/>
+    public override int SampleCount => _sampleCount;
+
+    /// <summary>
+    /// Gets the size of each sample in bytes (input + output).
+    /// </summary>
+    public int SampleSizeBytes => _sampleSizeBytes;
+
+    /// <summary>
+    /// Gets the size of the file header in bytes.
+    /// </summary>
+    public long HeaderSizeBytes => _headerSizeBytes;
+
+    /// <summary>
+    /// Gets the view accessor for reading from the memory-mapped file.
+    /// Thread-safe initialization with proper null checking.
+    /// </summary>
+    /// <returns>The initialized view accessor.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown if the loader has been disposed.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if initialization fails.</exception>
+    private MemoryMappedViewAccessor GetViewAccessor()
+    {
+        if (_initialized)
+        {
+            var accessor = _viewAccessor;
+            if (accessor is not null)
+            {
+                return accessor;
+            }
+        }
+
+        lock (_initLock)
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(MemoryMappedStreamingDataLoader<T, TInput, TOutput>));
+            }
+
+            if (_initialized && _viewAccessor is not null)
+            {
+                return _viewAccessor;
+            }
+
+            // Create memory-mapped file with read-only access
+            _memoryMappedFile = MemoryMappedFile.CreateFromFile(
+                _filePath,
+                FileMode.Open,
+                mapName: null,
+                capacity: 0,
+                MemoryMappedFileAccess.Read);
+
+            // Create a view accessor for the entire file
+            _viewAccessor = _memoryMappedFile.CreateViewAccessor(
+                offset: 0,
+                size: 0,
+                MemoryMappedFileAccess.Read);
+
+            _initialized = true;
+
+            return _viewAccessor;
+        }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Reads a sample directly from the memory-mapped file. The operating system
+    /// handles paging the data into memory as needed, making this efficient for
+    /// datasets larger than available RAM.
+    /// </remarks>
+    protected override Task<(TInput Input, TOutput Output)> ReadSampleAsync(
+        int index,
+        CancellationToken cancellationToken = default)
+    {
+        if (index < 0 || index >= _sampleCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), $"Sample index {index} is out of range [0, {_sampleCount}).");
+        }
+
+        // Get the view accessor with proper null checking
+        var viewAccessor = GetViewAccessor();
+
+        // Calculate offset for this sample
+        long offset = _headerSizeBytes + ((long)index * _sampleSizeBytes);
+
+        // Read bytes for input and output
+        byte[] inputBytes = new byte[_inputSizeBytes];
+        byte[] outputBytes = new byte[_outputSizeBytes];
+
+        // Read from memory-mapped file (thread-safe as we're reading from different positions)
+        int inputBytesRead = viewAccessor.ReadArray(offset, inputBytes, 0, _inputSizeBytes);
+        if (inputBytesRead != _inputSizeBytes)
+        {
+            throw new InvalidOperationException(
+                $"Failed to read input data for sample {index}. Expected {_inputSizeBytes} bytes, got {inputBytesRead}.");
+        }
+
+        int outputBytesRead = viewAccessor.ReadArray(offset + _inputSizeBytes, outputBytes, 0, _outputSizeBytes);
+        if (outputBytesRead != _outputSizeBytes)
+        {
+            throw new InvalidOperationException(
+                $"Failed to read output data for sample {index}. Expected {_outputSizeBytes} bytes, got {outputBytesRead}.");
+        }
+
+        // Deserialize
+        TInput input = _inputDeserializer(inputBytes);
+        TOutput output = _outputDeserializer(outputBytes);
+
+        return Task.FromResult((input, output));
+    }
+
+    /// <inheritdoc/>
+    protected override void UnloadDataCore()
+    {
+        // Don't unload memory-mapped file - let OS manage the pages
+        base.UnloadDataCore();
+    }
+
+    /// <summary>
+    /// Releases all resources used by the memory-mapped data loader.
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases the unmanaged resources and optionally releases the managed resources.
+    /// </summary>
+    /// <param name="disposing">True to release both managed and unmanaged resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            lock (_initLock)
+            {
+                if (_viewAccessor is not null)
+                {
+                    _viewAccessor.Dispose();
+                    _viewAccessor = null;
+                }
+
+                if (_memoryMappedFile is not null)
+                {
+                    _memoryMappedFile.Dispose();
+                    _memoryMappedFile = null;
+                }
+            }
+        }
+
+        _disposed = true;
+    }
+
+    /// <summary>
+    /// Finalizer to ensure resources are released.
+    /// </summary>
+    ~MemoryMappedStreamingDataLoader()
+    {
+        Dispose(disposing: false);
     }
 }

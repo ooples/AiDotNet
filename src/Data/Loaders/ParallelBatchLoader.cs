@@ -41,7 +41,7 @@ namespace AiDotNet.Data.Loaders;
 public class ParallelBatchLoader<TBatch> : IDisposable
 {
     private readonly Func<IEnumerable<int>> _indexProvider;
-    private readonly Func<int, TBatch> _batchFactory;
+    private readonly Func<int[], TBatch> _batchFactory;
     private readonly int _numWorkers;
     private readonly int _prefetchCount;
     private readonly int _batchSize;
@@ -51,13 +51,43 @@ public class ParallelBatchLoader<TBatch> : IDisposable
     /// Initializes a new instance of the ParallelBatchLoader class.
     /// </summary>
     /// <param name="indexProvider">Function that provides indices for each epoch.</param>
-    /// <param name="batchFactory">Function that creates a batch from an index.</param>
+    /// <param name="batchFactory">
+    /// Function that creates a batch from an array of sample indices.
+    /// The factory receives all indices for a single batch and should aggregate them
+    /// into a single batch (e.g., by stacking samples into a matrix).
+    /// </param>
     /// <param name="batchSize">Number of samples per batch.</param>
     /// <param name="numWorkers">Number of parallel workers. Default is processor count.</param>
     /// <param name="prefetchCount">Number of batches to prefetch. Default is 2 * numWorkers.</param>
+    /// <remarks>
+    /// <para>
+    /// The batchFactory function is responsible for:
+    /// <list type="bullet">
+    /// <item><description>Loading samples at the given indices from the dataset</description></item>
+    /// <item><description>Aggregating them into a single batch structure</description></item>
+    /// <item><description>Applying any preprocessing or augmentation</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Example batchFactory for Matrix/Vector data:
+    /// <code>
+    /// batchFactory: indices => {
+    ///     var xBatch = new Matrix&lt;float&gt;(indices.Length, numFeatures);
+    ///     var yBatch = new Vector&lt;float&gt;(indices.Length);
+    ///     for (int i = 0; i &lt; indices.Length; i++) {
+    ///         int idx = indices[i];
+    ///         for (int j = 0; j &lt; numFeatures; j++)
+    ///             xBatch[i, j] = dataset.X[idx, j];
+    ///         yBatch[i] = dataset.Y[idx];
+    ///     }
+    ///     return (xBatch, yBatch);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
     public ParallelBatchLoader(
         Func<IEnumerable<int>> indexProvider,
-        Func<int, TBatch> batchFactory,
+        Func<int[], TBatch> batchFactory,
         int batchSize,
         int? numWorkers = null,
         int? prefetchCount = null)
@@ -121,8 +151,9 @@ public class ParallelBatchLoader<TBatch> : IDisposable
             workQueue.Enqueue(batchIndices);
         }
 
-        // Track completed workers
+        // Track completed workers and capture any worker exceptions
         int completedWorkers = 0;
+        Exception? workerException = null;
 
         // Start worker tasks
         var workerTasks = new Task[_numWorkers];
@@ -136,22 +167,32 @@ public class ParallelBatchLoader<TBatch> : IDisposable
                     {
                         cancellationToken.ThrowIfCancellationRequested();
 
-                        // Process each index in the batch
-                        // Note: For simplicity, we process the first index
-                        // In a full implementation, you'd aggregate multiple indices
+                        // Pass all indices to the batch factory so it can properly
+                        // aggregate all samples into a single batch
                         if (batchIndices.Length > 0)
                         {
-                            var batch = _batchFactory(batchIndices[0]);
+                            var batch = _batchFactory(batchIndices);
                             await outputChannel.Writer.WriteAsync(batch, cancellationToken);
                         }
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    // Cancellation is expected, don't treat as error
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // Capture the first worker exception to propagate
+                    Interlocked.CompareExchange(ref workerException, ex, null);
+                }
                 finally
                 {
-                    // Track worker completion
+                    // Track worker completion - complete channel when last worker finishes
                     if (Interlocked.Increment(ref completedWorkers) == _numWorkers)
                     {
-                        outputChannel.Writer.Complete();
+                        // Complete the channel, passing any captured exception
+                        outputChannel.Writer.Complete(workerException);
                     }
                 }
             }, cancellationToken);
@@ -166,8 +207,15 @@ public class ParallelBatchLoader<TBatch> : IDisposable
             }
         }
 
-        // Wait for all workers to complete
+        // Wait for all workers and propagate any exceptions
         await Task.WhenAll(workerTasks);
+
+        // If a worker exception was captured but not propagated through the channel,
+        // throw it now to ensure no silent failures
+        if (workerException != null)
+        {
+            throw new AggregateException("One or more parallel batch workers failed.", workerException);
+        }
     }
 
     /// <summary>
@@ -235,14 +283,37 @@ public static class ParallelBatchLoaderExtensions
     /// </summary>
     /// <typeparam name="TBatch">The batch type.</typeparam>
     /// <param name="source">The source batch iterable.</param>
-    /// <param name="numWorkers">Number of parallel workers.</param>
-    /// <param name="prefetchCount">Number of batches to prefetch.</param>
-    /// <param name="batchSize">The batch size.</param>
-    /// <param name="batchFactory">Function to create batch from index.</param>
-    /// <returns>A parallel batch loader.</returns>
+    /// <param name="batchFactory">
+    /// Function to create a batch from an array of sample indices.
+    /// The factory receives all indices for a single batch and should aggregate them.
+    /// </param>
+    /// <param name="batchSize">The batch size (number of samples per batch).</param>
+    /// <param name="numWorkers">Number of parallel workers. Default is processor count.</param>
+    /// <param name="prefetchCount">Number of batches to prefetch. Default is 2 * numWorkers.</param>
+    /// <returns>A parallel batch loader configured with the specified parameters.</returns>
+    /// <example>
+    /// <code>
+    /// var parallelLoader = dataLoader.WithParallelLoading(
+    ///     batchFactory: indices => {
+    ///         var xBatch = new Matrix&lt;float&gt;(indices.Length, numFeatures);
+    ///         var yBatch = new Vector&lt;float&gt;(indices.Length);
+    ///         for (int i = 0; i &lt; indices.Length; i++) {
+    ///             int idx = indices[i];
+    ///             // Copy sample data at idx to position i in batch
+    ///             for (int j = 0; j &lt; numFeatures; j++)
+    ///                 xBatch[i, j] = fullDataset.X[idx, j];
+    ///             yBatch[i] = fullDataset.Y[idx];
+    ///         }
+    ///         return (xBatch, yBatch);
+    ///     },
+    ///     batchSize: 32,
+    ///     numWorkers: 4
+    /// );
+    /// </code>
+    /// </example>
     public static ParallelBatchLoader<TBatch> WithParallelLoading<TBatch>(
         this IBatchIterable<TBatch> source,
-        Func<int, TBatch> batchFactory,
+        Func<int[], TBatch> batchFactory,
         int batchSize,
         int? numWorkers = null,
         int? prefetchCount = null)

@@ -153,9 +153,12 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                 SingleWriter = true
             });
 
-        // Start producer task
+        // Start producer task with bounded parallelism
         var producerTask = Task.Run(async () =>
         {
+            // Use semaphore to limit concurrent sample reads to _numWorkers
+            using var semaphore = new SemaphoreSlim(_numWorkers, _numWorkers);
+
             try
             {
                 for (int b = 0; b < numBatches; b++)
@@ -170,7 +173,7 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                         continue;
                     }
 
-                    // Read samples for this batch using parallel workers
+                    // Read samples for this batch using parallel workers with bounded concurrency
                     var samples = new (TInput Input, TOutput Output)[endIdx - startIdx];
                     var tasks = new Task[endIdx - startIdx];
 
@@ -178,9 +181,20 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                     {
                         int localIdx = i - startIdx;
                         int sampleIdx = indices[i];
+
+                        // Wait for semaphore slot before starting task
+                        await semaphore.WaitAsync(cancellationToken);
+
                         tasks[localIdx] = Task.Run(async () =>
                         {
-                            samples[localIdx] = await ReadSampleAsync(sampleIdx, cancellationToken);
+                            try
+                            {
+                                samples[localIdx] = await ReadSampleAsync(sampleIdx, cancellationToken);
+                            }
+                            finally
+                            {
+                                semaphore.Release();
+                            }
                         }, cancellationToken);
                     }
 
