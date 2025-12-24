@@ -64,11 +64,10 @@ public class StreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBase<T
         string? name = null,
         int prefetchCount = 2,
         int numWorkers = 4)
-        : base(prefetchCount, numWorkers)
+        : base(batchSize, prefetchCount, numWorkers)
     {
         _sampleCount = sampleCount > 0 ? sampleCount : throw new ArgumentOutOfRangeException(nameof(sampleCount));
         _sampleReader = sampleReader ?? throw new ArgumentNullException(nameof(sampleReader));
-        BatchSize = batchSize > 0 ? batchSize : throw new ArgumentOutOfRangeException(nameof(batchSize));
         _name = name ?? "StreamingDataLoader";
     }
 
@@ -140,7 +139,7 @@ public class FileStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBa
         SearchOption searchOption = SearchOption.TopDirectoryOnly,
         int prefetchCount = 2,
         int numWorkers = 4)
-        : base(prefetchCount, numWorkers)
+        : base(batchSize, prefetchCount, numWorkers)
     {
         if (string.IsNullOrWhiteSpace(directory))
         {
@@ -154,8 +153,6 @@ public class FileStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBa
         {
             throw new ArgumentException($"No files matching pattern '{filePattern}' found in directory '{directory}'.", nameof(directory));
         }
-
-        BatchSize = batchSize > 0 ? batchSize : throw new ArgumentOutOfRangeException(nameof(batchSize));
     }
 
     /// <inheritdoc/>
@@ -234,7 +231,7 @@ public class CsvStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBas
         bool hasHeader = true,
         int prefetchCount = 2,
         int numWorkers = 4)
-        : base(prefetchCount, numWorkers)
+        : base(batchSize, prefetchCount, numWorkers)
     {
         _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
         _lineParser = lineParser ?? throw new ArgumentNullException(nameof(lineParser));
@@ -247,7 +244,6 @@ public class CsvStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBas
 
         // Count lines (expensive but necessary for proper iteration)
         _lineCount = CountLines() - (hasHeader ? 1 : 0);
-        BatchSize = batchSize > 0 ? batchSize : throw new ArgumentOutOfRangeException(nameof(batchSize));
     }
 
     private int CountLines()
@@ -471,7 +467,7 @@ public class MemoryMappedStreamingDataLoader<T, TInput, TOutput> : StreamingData
         long headerSizeBytes = 0,
         int prefetchCount = 2,
         int numWorkers = 4)
-        : base(prefetchCount, numWorkers)
+        : base(batchSize, prefetchCount, numWorkers)
     {
         if (string.IsNullOrWhiteSpace(filePath))
         {
@@ -491,7 +487,6 @@ public class MemoryMappedStreamingDataLoader<T, TInput, TOutput> : StreamingData
         _headerSizeBytes = headerSizeBytes >= 0 ? headerSizeBytes : throw new ArgumentOutOfRangeException(nameof(headerSizeBytes), "Header size cannot be negative.");
         _inputDeserializer = inputDeserializer ?? throw new ArgumentNullException(nameof(inputDeserializer));
         _outputDeserializer = outputDeserializer ?? throw new ArgumentNullException(nameof(outputDeserializer));
-        BatchSize = batchSize > 0 ? batchSize : throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be positive.");
 
         // Validate file size matches expected data size
         var fileInfo = new FileInfo(filePath);
@@ -637,7 +632,7 @@ public class MemoryMappedStreamingDataLoader<T, TInput, TOutput> : StreamingData
     /// Releases the unmanaged resources and optionally releases the managed resources.
     /// </summary>
     /// <param name="disposing">True to release both managed and unmanaged resources.</param>
-    protected virtual void Dispose(bool disposing)
+    protected void Dispose(bool disposing)
     {
         if (_disposed)
         {
