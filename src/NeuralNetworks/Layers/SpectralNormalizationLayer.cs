@@ -129,23 +129,14 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     /// </summary>
     private void NormalizeVector(ref Tensor<T> vector)
     {
-        // Compute L2 norm using vectorized operations
-        var squared = vector.Multiply(vector);
-        T sumSquared = NumOps.Zero;
-        for (int i = 0; i < squared.Length; i++)
-        {
-            sumSquared = NumOps.Add(sumSquared, squared[i]);
-        }
+        // === Vectorized L2 normalization using IEngine (Phase B: US-GPU-015) ===
+        var squared = Engine.TensorMultiply(vector, vector);
+        T sumSquared = Engine.TensorSum(squared);
         T norm = NumOps.Sqrt(sumSquared);
         T normPlusEps = NumOps.Add(norm, _epsilon);
 
-        // Divide by norm - element-wise division
-        var result = new Tensor<T>(vector.Shape);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            result[i] = NumOps.Divide(vector[i], normPlusEps);
-        }
-        vector = result;
+        // Vectorized division by scalar
+        vector = Engine.TensorDivideScalar(vector, normPlusEps);
     }
 
     /// <summary>
