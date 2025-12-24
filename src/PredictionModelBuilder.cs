@@ -839,6 +839,26 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             return result;
         }
 
+        // STREAMING DATA LOADER PATH - check if data loader is a streaming loader
+        if (_dataLoader is IStreamingDataLoader<T, TInput, TOutput> streamingLoader)
+        {
+            // Load/prepare the streaming loader if not already loaded
+            if (!_dataLoader.IsLoaded)
+            {
+                await _dataLoader.LoadAsync();
+            }
+
+            // Collect all batches into aggregated features and labels
+            // This allows streaming loaders to work with the existing training infrastructure
+            // while still benefiting from on-demand data loading (e.g., from files)
+            var (features, labels) = await CollectStreamingDataAsync(streamingLoader);
+
+            // Delegate to the internal supervised training method
+            result = await BuildSupervisedInternalAsync(features, labels);
+            await RunBenchmarksIfConfiguredAsync(result).ConfigureAwait(false);
+            return result;
+        }
+
         // META-LEARNING PATH - check if meta-learner is configured
         if (_metaLearner is not null)
         {
@@ -926,6 +946,246 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         }
 
         return result.EvaluateBenchmarksAsync(_benchmarkingOptions);
+    }
+
+    /// <summary>
+    /// Collects all data from a streaming data loader into aggregated features and labels.
+    /// </summary>
+    /// <param name="streamingLoader">The streaming data loader to collect from.</param>
+    /// <returns>A tuple containing the aggregated features and labels.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method reads all batches from a streaming data loader
+    /// and combines them into single feature and label collections. This allows streaming
+    /// loaders to work with the existing training infrastructure while preserving the
+    /// benefit of on-demand data loading from files or other sources.
+    /// </para>
+    /// </remarks>
+    private async Task<(TInput Features, TOutput Labels)> CollectStreamingDataAsync(
+        IStreamingDataLoader<T, TInput, TOutput> streamingLoader)
+    {
+        var allInputs = new List<TInput>();
+        var allOutputs = new List<TOutput>();
+
+        // Collect all batches asynchronously
+        await foreach (var (inputs, outputs) in streamingLoader.GetBatchesAsync(shuffle: false))
+        {
+            foreach (var input in inputs)
+            {
+                allInputs.Add(input);
+            }
+            foreach (var output in outputs)
+            {
+                allOutputs.Add(output);
+            }
+        }
+
+        if (allInputs.Count == 0)
+        {
+            throw new InvalidOperationException("Streaming data loader returned no data.");
+        }
+
+        // Aggregate the collected samples into single feature/label structures
+        var aggregatedFeatures = AggregateStreamingInputs(allInputs);
+        var aggregatedLabels = AggregateStreamingOutputs(allOutputs);
+
+        return (aggregatedFeatures, aggregatedLabels);
+    }
+
+    /// <summary>
+    /// Aggregates a list of input samples into a single TInput structure.
+    /// </summary>
+    private TInput AggregateStreamingInputs(List<TInput> inputs)
+    {
+        if (inputs.Count == 0)
+        {
+            throw new InvalidOperationException("Cannot aggregate empty input list.");
+        }
+
+        // If inputs are already in the right format (e.g., single Matrix from a pre-batched loader)
+        if (inputs.Count == 1)
+        {
+            return inputs[0];
+        }
+
+        // Handle Matrix<T> aggregation
+        if (inputs[0] is Matrix<T>)
+        {
+            var matrices = inputs.Cast<Matrix<T>>().ToList();
+            int totalRows = matrices.Sum(m => m.Rows);
+            int cols = matrices[0].Columns;
+
+            var result = new Matrix<T>(totalRows, cols);
+            int currentRow = 0;
+            foreach (var matrix in matrices)
+            {
+                for (int r = 0; r < matrix.Rows; r++)
+                {
+                    result.SetRow(currentRow++, matrix.GetRow(r));
+                }
+            }
+            return (TInput)(object)result;
+        }
+
+        // Handle Vector<T> aggregation
+        if (inputs[0] is Vector<T>)
+        {
+            var vectors = inputs.Cast<Vector<T>>().ToList();
+            int totalLength = vectors.Sum(v => v.Length);
+
+            var result = new Vector<T>(totalLength);
+            int currentIdx = 0;
+            foreach (var vector in vectors)
+            {
+                for (int i = 0; i < vector.Length; i++)
+                {
+                    result[currentIdx++] = vector[i];
+                }
+            }
+            return (TInput)(object)result;
+        }
+
+        // Handle Tensor<T> aggregation
+        if (inputs[0] is Tensor<T>)
+        {
+            var tensors = inputs.Cast<Tensor<T>>().ToList();
+            int totalSamples = tensors.Sum(t => t.Shape[0]);
+
+            // Create new shape with updated first dimension
+            var newShape = (int[])tensors[0].Shape.Clone();
+            newShape[0] = totalSamples;
+
+            var result = new Tensor<T>(newShape);
+            int currentSample = 0;
+            foreach (var tensor in tensors)
+            {
+                for (int s = 0; s < tensor.Shape[0]; s++)
+                {
+                    CopyTensorSample(tensor, result, s, currentSample++);
+                }
+            }
+            return (TInput)(object)result;
+        }
+
+        // Fallback: return first element (single sample case)
+        return inputs[0];
+    }
+
+    /// <summary>
+    /// Aggregates a list of output samples into a single TOutput structure.
+    /// </summary>
+    private TOutput AggregateStreamingOutputs(List<TOutput> outputs)
+    {
+        if (outputs.Count == 0)
+        {
+            throw new InvalidOperationException("Cannot aggregate empty output list.");
+        }
+
+        // If outputs are already in the right format
+        if (outputs.Count == 1)
+        {
+            return outputs[0];
+        }
+
+        // Handle Matrix<T> aggregation
+        if (outputs[0] is Matrix<T>)
+        {
+            var matrices = outputs.Cast<Matrix<T>>().ToList();
+            int totalRows = matrices.Sum(m => m.Rows);
+            int cols = matrices[0].Columns;
+
+            var result = new Matrix<T>(totalRows, cols);
+            int currentRow = 0;
+            foreach (var matrix in matrices)
+            {
+                for (int r = 0; r < matrix.Rows; r++)
+                {
+                    result.SetRow(currentRow++, matrix.GetRow(r));
+                }
+            }
+            return (TOutput)(object)result;
+        }
+
+        // Handle Vector<T> aggregation
+        if (outputs[0] is Vector<T>)
+        {
+            var vectors = outputs.Cast<Vector<T>>().ToList();
+            int totalLength = vectors.Sum(v => v.Length);
+
+            var result = new Vector<T>(totalLength);
+            int currentIdx = 0;
+            foreach (var vector in vectors)
+            {
+                for (int i = 0; i < vector.Length; i++)
+                {
+                    result[currentIdx++] = vector[i];
+                }
+            }
+            return (TOutput)(object)result;
+        }
+
+        // Handle Tensor<T> aggregation
+        if (outputs[0] is Tensor<T>)
+        {
+            var tensors = outputs.Cast<Tensor<T>>().ToList();
+            int totalSamples = tensors.Sum(t => t.Shape[0]);
+
+            var newShape = (int[])tensors[0].Shape.Clone();
+            newShape[0] = totalSamples;
+
+            var result = new Tensor<T>(newShape);
+            int currentSample = 0;
+            foreach (var tensor in tensors)
+            {
+                for (int s = 0; s < tensor.Shape[0]; s++)
+                {
+                    CopyTensorSample(tensor, result, s, currentSample++);
+                }
+            }
+            return (TOutput)(object)result;
+        }
+
+        // Fallback: return first element
+        return outputs[0];
+    }
+
+    /// <summary>
+    /// Copies a single sample from one tensor to another.
+    /// </summary>
+    private static void CopyTensorSample(Tensor<T> source, Tensor<T> dest, int sourceIndex, int destIndex)
+    {
+        if (source.Shape.Length == 1)
+        {
+            dest[destIndex] = source[sourceIndex];
+            return;
+        }
+
+        // Calculate elements per sample (product of dimensions after the first)
+        int elementsPerSample = 1;
+        for (int d = 1; d < source.Shape.Length; d++)
+        {
+            elementsPerSample *= source.Shape[d];
+        }
+
+        // Create index arrays for multi-dimensional access
+        var sourceIndices = new int[source.Shape.Length];
+        var destIndices = new int[dest.Shape.Length];
+        sourceIndices[0] = sourceIndex;
+        destIndices[0] = destIndex;
+
+        // Copy all elements for this sample
+        for (int i = 0; i < elementsPerSample; i++)
+        {
+            // Convert flat index to multi-dimensional indices
+            int remaining = i;
+            for (int d = source.Shape.Length - 1; d >= 1; d--)
+            {
+                sourceIndices[d] = remaining % source.Shape[d];
+                destIndices[d] = remaining % dest.Shape[d];
+                remaining /= source.Shape[d];
+            }
+
+            dest[destIndices] = source[sourceIndices];
+        }
     }
 
     /// <summary>

@@ -839,6 +839,115 @@ public static class DataPipelineExtensions
     }
 
     /// <summary>
+    /// Creates a DataPipeline from a streaming data loader.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <typeparam name="TInput">The input type.</typeparam>
+    /// <typeparam name="TOutput">The output type.</typeparam>
+    /// <param name="loader">The streaming data loader.</param>
+    /// <param name="shuffle">Whether to shuffle the data.</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <returns>A new DataPipeline of input/output tuples.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a pipeline from a streaming data loader,
+    /// allowing you to chain operations like Map, Filter, Batch, etc.
+    ///
+    /// Example:
+    /// <code>
+    /// var pipeline = streamingLoader.ToPipeline()
+    ///     .Map(batch => NormalizeBatch(batch))
+    ///     .Shuffle(1000)
+    ///     .Prefetch(2);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public static DataPipeline<(TInput[] Inputs, TOutput[] Outputs)> ToPipeline<T, TInput, TOutput>(
+        this IStreamingDataLoader<T, TInput, TOutput> loader,
+        bool shuffle = true,
+        int? seed = null)
+    {
+        return new DataPipeline<(TInput[] Inputs, TOutput[] Outputs)>(
+            () => loader.GetBatches(shuffle, dropLast: false, seed));
+    }
+
+    /// <summary>
+    /// Creates an async DataPipeline from a streaming data loader.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <typeparam name="TInput">The input type.</typeparam>
+    /// <typeparam name="TOutput">The output type.</typeparam>
+    /// <param name="loader">The streaming data loader.</param>
+    /// <param name="shuffle">Whether to shuffle the data.</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <returns>A new async DataPipeline of input/output tuples.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates an async pipeline from a streaming data loader,
+    /// enabling efficient prefetching and parallel processing.
+    ///
+    /// Example:
+    /// <code>
+    /// await foreach (var batch in streamingLoader.ToAsyncPipeline().Prefetch(2))
+    /// {
+    ///     await model.TrainOnBatchAsync(batch);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public static AsyncDataPipeline<(TInput[] Inputs, TOutput[] Outputs)> ToAsyncPipeline<T, TInput, TOutput>(
+        this IStreamingDataLoader<T, TInput, TOutput> loader,
+        bool shuffle = true,
+        int? seed = null)
+    {
+        return new AsyncDataPipeline<(TInput[] Inputs, TOutput[] Outputs)>(
+            new StreamingLoaderAsyncProvider<T, TInput, TOutput>(loader, shuffle, seed));
+    }
+
+    /// <summary>
+    /// Creates a DataPipeline of individual samples from a streaming data loader.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <typeparam name="TInput">The input type.</typeparam>
+    /// <typeparam name="TOutput">The output type.</typeparam>
+    /// <param name="loader">The streaming data loader.</param>
+    /// <param name="shuffle">Whether to shuffle the data.</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <returns>A new DataPipeline of individual input/output samples.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Unlike ToPipeline which yields batches, this yields
+    /// individual samples. Useful when you want to apply per-sample operations before
+    /// re-batching.
+    ///
+    /// Example:
+    /// <code>
+    /// var pipeline = streamingLoader.ToSamplePipeline()
+    ///     .Map(sample => AugmentSample(sample))
+    ///     .Shuffle(5000)
+    ///     .Batch(64);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public static DataPipeline<(TInput Input, TOutput Output)> ToSamplePipeline<T, TInput, TOutput>(
+        this IStreamingDataLoader<T, TInput, TOutput> loader,
+        bool shuffle = true,
+        int? seed = null)
+    {
+        return new DataPipeline<(TInput Input, TOutput Output)>(
+            () => FlattenBatches(loader.GetBatches(shuffle, dropLast: false, seed)));
+    }
+
+    private static IEnumerable<(TInput Input, TOutput Output)> FlattenBatches<TInput, TOutput>(
+        IEnumerable<(TInput[] Inputs, TOutput[] Outputs)> batches)
+    {
+        foreach (var (inputs, outputs) in batches)
+        {
+            for (int i = 0; i < inputs.Length && i < outputs.Length; i++)
+            {
+                yield return (inputs[i], outputs[i]);
+            }
+        }
+    }
+
+    /// <summary>
     /// Creates batches with padding to ensure uniform batch sizes.
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
@@ -997,6 +1106,36 @@ public static class DataPipelineExtensions
             if (idx < 0) idx = ~idx;
             if (idx >= source.Count) idx = source.Count - 1;
             yield return source[idx];
+        }
+    }
+}
+
+/// <summary>
+/// Internal provider for async streaming data loader iteration.
+/// </summary>
+internal class StreamingLoaderAsyncProvider<T, TInput, TOutput> :
+    IAsyncEnumerableProvider<(TInput[] Inputs, TOutput[] Outputs)>
+{
+    private readonly IStreamingDataLoader<T, TInput, TOutput> _loader;
+    private readonly bool _shuffle;
+    private readonly int? _seed;
+
+    public StreamingLoaderAsyncProvider(
+        IStreamingDataLoader<T, TInput, TOutput> loader,
+        bool shuffle,
+        int? seed)
+    {
+        _loader = loader;
+        _shuffle = shuffle;
+        _seed = seed;
+    }
+
+    public async IAsyncEnumerable<(TInput[] Inputs, TOutput[] Outputs)> GetAsyncEnumerable(
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    {
+        await foreach (var batch in _loader.GetBatchesAsync(_shuffle, dropLast: false, _seed, ct))
+        {
+            yield return batch;
         }
     }
 }

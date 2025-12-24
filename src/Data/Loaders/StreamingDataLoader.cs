@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
@@ -7,6 +8,7 @@ namespace AiDotNet.Data.Loaders;
 /// <summary>
 /// A data loader that streams data from disk or other sources without loading all data into memory.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <typeparam name="TInput">The type of input data.</typeparam>
 /// <typeparam name="TOutput">The type of output/label data.</typeparam>
 /// <remarks>
@@ -21,7 +23,7 @@ namespace AiDotNet.Data.Loaders;
 /// Example:
 /// <code>
 /// // Define how to read individual samples
-/// var loader = new StreamingDataLoader&lt;Tensor&lt;float&gt;, int&gt;(
+/// var loader = new StreamingDataLoader&lt;float, Tensor&lt;float&gt;, int&gt;(
 ///     sampleCount: 1000000,  // 1 million samples
 ///     sampleReader: async (index, ct) =&gt;
 ///     {
@@ -39,19 +41,11 @@ namespace AiDotNet.Data.Loaders;
 /// </code>
 /// </para>
 /// </remarks>
-public class StreamingDataLoader<TInput, TOutput> : IBatchIterable<(TInput[], TOutput[])>, IDisposable
+public class StreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBase<T, TInput, TOutput>
 {
     private readonly int _sampleCount;
     private readonly Func<int, CancellationToken, Task<(TInput, TOutput)>> _sampleReader;
-    private int _batchSize;
-    private readonly int _prefetchCount;
-    private readonly int _numWorkers;
-    private bool _disposed;
-
-    // State for imperative API (GetNextBatch/HasNext)
-    private IEnumerator<(TInput[], TOutput[])>? _currentEnumerator;
-    private bool _hasNextBatch;
-    private (TInput[], TOutput[])? _nextBatch;
+    private readonly string _name;
 
     /// <summary>
     /// Initializes a new instance of the StreamingDataLoader class.
@@ -59,277 +53,43 @@ public class StreamingDataLoader<TInput, TOutput> : IBatchIterable<(TInput[], TO
     /// <param name="sampleCount">Total number of samples in the dataset.</param>
     /// <param name="sampleReader">Async function that reads a single sample by index.</param>
     /// <param name="batchSize">Number of samples per batch.</param>
+    /// <param name="name">Optional name for the data loader.</param>
     /// <param name="prefetchCount">Number of batches to prefetch. Default is 2.</param>
     /// <param name="numWorkers">Number of parallel workers for sample loading. Default is 4.</param>
     public StreamingDataLoader(
         int sampleCount,
         Func<int, CancellationToken, Task<(TInput, TOutput)>> sampleReader,
         int batchSize,
+        string? name = null,
         int prefetchCount = 2,
         int numWorkers = 4)
+        : base(prefetchCount, numWorkers)
     {
         _sampleCount = sampleCount > 0 ? sampleCount : throw new ArgumentOutOfRangeException(nameof(sampleCount));
         _sampleReader = sampleReader ?? throw new ArgumentNullException(nameof(sampleReader));
-        _batchSize = batchSize > 0 ? batchSize : throw new ArgumentOutOfRangeException(nameof(batchSize));
-        _prefetchCount = Math.Max(1, prefetchCount);
-        _numWorkers = Math.Max(1, numWorkers);
-    }
-
-    /// <summary>
-    /// Gets the total number of samples in the dataset.
-    /// </summary>
-    public int SampleCount => _sampleCount;
-
-    /// <summary>
-    /// Gets or sets the batch size.
-    /// </summary>
-    public int BatchSize
-    {
-        get => _batchSize;
-        set
-        {
-            _batchSize = value > 0 ? value : throw new ArgumentOutOfRangeException(nameof(value));
-            ResetIteration();
-        }
-    }
-
-    /// <summary>
-    /// Gets whether there are more batches available in the current iteration.
-    /// </summary>
-    public bool HasNext
-    {
-        get
-        {
-            EnsureIteratorInitialized();
-            return _hasNextBatch;
-        }
-    }
-
-    /// <summary>
-    /// Gets the next batch of data.
-    /// </summary>
-    /// <returns>The next batch of data.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when no more batches are available.</exception>
-    public (TInput[], TOutput[]) GetNextBatch()
-    {
-        if (!TryGetNextBatch(out var batch))
-        {
-            throw new InvalidOperationException("No more batches available. Call Reset() to start a new iteration.");
-        }
-        return batch;
-    }
-
-    /// <summary>
-    /// Attempts to get the next batch without throwing if unavailable.
-    /// </summary>
-    /// <param name="batch">The batch if available, default otherwise.</param>
-    /// <returns>True if a batch was available, false if iteration is complete.</returns>
-    public bool TryGetNextBatch(out (TInput[], TOutput[]) batch)
-    {
-        EnsureIteratorInitialized();
-
-        if (!_hasNextBatch || _nextBatch == null)
-        {
-            batch = default;
-            return false;
-        }
-
-        batch = _nextBatch.Value;
-
-        // Advance to next batch
-        if (_currentEnumerator != null && _currentEnumerator.MoveNext())
-        {
-            _nextBatch = _currentEnumerator.Current;
-            _hasNextBatch = true;
-        }
-        else
-        {
-            _nextBatch = null;
-            _hasNextBatch = false;
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Resets the iteration to the beginning.
-    /// </summary>
-    public void ResetIteration()
-    {
-        _currentEnumerator?.Dispose();
-        _currentEnumerator = null;
-        _nextBatch = null;
-        _hasNextBatch = false;
-    }
-
-    private void EnsureIteratorInitialized()
-    {
-        if (_currentEnumerator == null)
-        {
-            _currentEnumerator = GetBatches().GetEnumerator();
-            if (_currentEnumerator.MoveNext())
-            {
-                _nextBatch = _currentEnumerator.Current;
-                _hasNextBatch = true;
-            }
-            else
-            {
-                _hasNextBatch = false;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets the number of batches per epoch.
-    /// </summary>
-    public int BatchCount => (_sampleCount + _batchSize - 1) / _batchSize;
-
-    /// <inheritdoc/>
-    public IEnumerable<(TInput[], TOutput[])> GetBatches(
-        int? batchSize = null,
-        bool shuffle = true,
-        bool dropLast = false,
-        int? seed = null)
-    {
-        // For streaming, we use async version internally but block for sync API
-        var asyncEnumerable = GetBatchesAsync(batchSize, shuffle, dropLast, seed, _prefetchCount);
-
-        // Convert async enumerable to sync enumerable (blocking)
-        var enumerator = asyncEnumerable.GetAsyncEnumerator();
-        try
-        {
-            while (enumerator.MoveNextAsync().AsTask().GetAwaiter().GetResult())
-            {
-                yield return enumerator.Current;
-            }
-        }
-        finally
-        {
-            enumerator.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
+        BatchSize = batchSize > 0 ? batchSize : throw new ArgumentOutOfRangeException(nameof(batchSize));
+        _name = name ?? "StreamingDataLoader";
     }
 
     /// <inheritdoc/>
-    public async IAsyncEnumerable<(TInput[], TOutput[])> GetBatchesAsync(
-        int? batchSize = null,
-        bool shuffle = true,
-        bool dropLast = false,
-        int? seed = null,
-        int prefetchCount = 2,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public override string Name => _name;
+
+    /// <inheritdoc/>
+    public override int SampleCount => _sampleCount;
+
+    /// <inheritdoc/>
+    protected override Task<(TInput Input, TOutput Output)> ReadSampleAsync(
+        int index,
+        CancellationToken cancellationToken = default)
     {
-        if (_disposed)
-        {
-            throw new ObjectDisposedException(nameof(StreamingDataLoader<TInput, TOutput>));
-        }
-
-        int actualBatchSize = batchSize ?? _batchSize;
-        int actualPrefetchCount = prefetchCount > 0 ? prefetchCount : _prefetchCount;
-
-        // Generate indices
-        int[] indices = new int[_sampleCount];
-        for (int i = 0; i < _sampleCount; i++)
-        {
-            indices[i] = i;
-        }
-
-        // Shuffle if requested
-        if (shuffle)
-        {
-            Random random = seed.HasValue
-                ? RandomHelper.CreateSeededRandom(seed.Value)
-                : RandomHelper.CreateSecureRandom();
-
-            for (int i = indices.Length - 1; i > 0; i--)
-            {
-                int j = random.Next(i + 1);
-                (indices[i], indices[j]) = (indices[j], indices[i]);
-            }
-        }
-
-        // Calculate number of batches
-        int numBatches = indices.Length / actualBatchSize;
-        if (!dropLast && indices.Length % actualBatchSize > 0)
-        {
-            numBatches++;
-        }
-
-        // Create output channel
-        var outputChannel = Channel.CreateBounded<(TInput[], TOutput[])>(
-            new BoundedChannelOptions(actualPrefetchCount)
-            {
-                FullMode = BoundedChannelFullMode.Wait,
-                SingleReader = true,
-                SingleWriter = false
-            });
-
-        // Start producer task
-        var producerTask = Task.Run(async () =>
-        {
-            try
-            {
-                for (int b = 0; b < numBatches; b++)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    int startIdx = b * actualBatchSize;
-                    int endIdx = Math.Min(startIdx + actualBatchSize, indices.Length);
-                    int currentBatchSize = endIdx - startIdx;
-
-                    // Load samples in parallel
-                    var loadTasks = new Task<(TInput, TOutput)>[currentBatchSize];
-                    for (int i = 0; i < currentBatchSize; i++)
-                    {
-                        int sampleIndex = indices[startIdx + i];
-                        loadTasks[i] = _sampleReader(sampleIndex, cancellationToken);
-                    }
-
-                    // Wait for all samples to load
-                    var samples = await Task.WhenAll(loadTasks);
-
-                    // Separate inputs and outputs
-                    var inputs = new TInput[currentBatchSize];
-                    var outputs = new TOutput[currentBatchSize];
-                    for (int i = 0; i < currentBatchSize; i++)
-                    {
-                        inputs[i] = samples[i].Item1;
-                        outputs[i] = samples[i].Item2;
-                    }
-
-                    await outputChannel.Writer.WriteAsync((inputs, outputs), cancellationToken);
-                }
-            }
-            finally
-            {
-                outputChannel.Writer.Complete();
-            }
-        }, cancellationToken);
-
-        // Consume batches (net471 compatible)
-        while (await outputChannel.Reader.WaitToReadAsync(cancellationToken))
-        {
-            while (outputChannel.Reader.TryRead(out var batch))
-            {
-                yield return batch;
-            }
-        }
-
-        await producerTask;
-    }
-
-    /// <summary>
-    /// Disposes the streaming data loader.
-    /// </summary>
-    public void Dispose()
-    {
-        _disposed = true;
-        GC.SuppressFinalize(this);
+        return _sampleReader(index, cancellationToken);
     }
 }
 
 /// <summary>
 /// A streaming data loader that reads from files in a directory.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The type of input data.</typeparam>
 /// <typeparam name="TOutput">The type of output/label data.</typeparam>
 /// <remarks>
@@ -342,7 +102,7 @@ public class StreamingDataLoader<TInput, TOutput> : IBatchIterable<(TInput[], TO
 ///
 /// Example:
 /// <code>
-/// var loader = new FileStreamingDataLoader&lt;float[], int&gt;(
+/// var loader = new FileStreamingDataLoader&lt;float, float[], int&gt;(
 ///     directory: "path/to/images",
 ///     filePattern: "*.png",
 ///     fileProcessor: async (filePath, ct) =&gt;
@@ -356,9 +116,10 @@ public class StreamingDataLoader<TInput, TOutput> : IBatchIterable<(TInput[], TO
 /// </code>
 /// </para>
 /// </remarks>
-public class FileStreamingDataLoader<TInput, TOutput> : StreamingDataLoader<TInput, TOutput>
+public class FileStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBase<T, TInput, TOutput>
 {
     private readonly string[] _filePaths;
+    private readonly Func<string, CancellationToken, Task<(TInput, TOutput)>> _fileProcessor;
 
     /// <summary>
     /// Initializes a new instance of the FileStreamingDataLoader class.
@@ -378,40 +139,48 @@ public class FileStreamingDataLoader<TInput, TOutput> : StreamingDataLoader<TInp
         SearchOption searchOption = SearchOption.TopDirectoryOnly,
         int prefetchCount = 2,
         int numWorkers = 4)
-        : base(
-            GetFileCount(directory, filePattern, searchOption),
-            CreateFileReader(directory, filePattern, searchOption, fileProcessor),
-            batchSize,
-            prefetchCount,
-            numWorkers)
+        : base(prefetchCount, numWorkers)
     {
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            throw new ArgumentNullException(nameof(directory));
+        }
+
+        _fileProcessor = fileProcessor ?? throw new ArgumentNullException(nameof(fileProcessor));
         _filePaths = Directory.GetFiles(directory, filePattern, searchOption);
+
+        if (_filePaths.Length == 0)
+        {
+            throw new ArgumentException($"No files matching pattern '{filePattern}' found in directory '{directory}'.", nameof(directory));
+        }
+
+        BatchSize = batchSize > 0 ? batchSize : throw new ArgumentOutOfRangeException(nameof(batchSize));
     }
 
-    private static int GetFileCount(string directory, string filePattern, SearchOption searchOption)
-    {
-        return Directory.GetFiles(directory, filePattern, searchOption).Length;
-    }
+    /// <inheritdoc/>
+    public override string Name => "FileStreamingDataLoader";
 
-    private static Func<int, CancellationToken, Task<(TInput, TOutput)>> CreateFileReader(
-        string directory,
-        string filePattern,
-        SearchOption searchOption,
-        Func<string, CancellationToken, Task<(TInput, TOutput)>> fileProcessor)
-    {
-        var filePaths = Directory.GetFiles(directory, filePattern, searchOption);
-        return async (index, ct) => await fileProcessor(filePaths[index], ct);
-    }
+    /// <inheritdoc/>
+    public override int SampleCount => _filePaths.Length;
 
     /// <summary>
     /// Gets all file paths in the dataset.
     /// </summary>
     public IReadOnlyList<string> FilePaths => _filePaths;
+
+    /// <inheritdoc/>
+    protected override Task<(TInput Input, TOutput Output)> ReadSampleAsync(
+        int index,
+        CancellationToken cancellationToken = default)
+    {
+        return _fileProcessor(_filePaths[index], cancellationToken);
+    }
 }
 
 /// <summary>
 /// A streaming data loader that reads from a CSV file line by line.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The type of input data.</typeparam>
 /// <typeparam name="TOutput">The type of output/label data.</typeparam>
 /// <remarks>
@@ -424,7 +193,7 @@ public class FileStreamingDataLoader<TInput, TOutput> : StreamingDataLoader<TInp
 ///
 /// Example:
 /// <code>
-/// var loader = new CsvStreamingDataLoader&lt;float[], float&gt;(
+/// var loader = new CsvStreamingDataLoader&lt;float, float[], float&gt;(
 ///     filePath: "large_dataset.csv",
 ///     lineParser: (line, lineNumber) =&gt;
 ///     {
@@ -439,20 +208,13 @@ public class FileStreamingDataLoader<TInput, TOutput> : StreamingDataLoader<TInp
 /// </code>
 /// </para>
 /// </remarks>
-public class CsvStreamingDataLoader<TInput, TOutput> : IBatchIterable<(TInput[], TOutput[])>, IDisposable
+public class CsvStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBase<T, TInput, TOutput>
 {
     private readonly string _filePath;
     private readonly Func<string, int, (TInput, TOutput)> _lineParser;
-    private int _batchSize;
     private readonly bool _hasHeader;
     private readonly int _lineCount;
-    private readonly int _prefetchCount;
-    private bool _disposed;
-
-    // State for imperative API (GetNextBatch/HasNext)
-    private IEnumerator<(TInput[], TOutput[])>? _currentEnumerator;
-    private bool _hasNextBatch;
-    private (TInput[], TOutput[])? _nextBatch;
+    private string[]? _cachedLines;
 
     /// <summary>
     /// Initializes a new instance of the CsvStreamingDataLoader class.
@@ -462,21 +224,28 @@ public class CsvStreamingDataLoader<TInput, TOutput> : IBatchIterable<(TInput[],
     /// <param name="batchSize">Number of samples per batch.</param>
     /// <param name="hasHeader">Whether the CSV has a header row to skip.</param>
     /// <param name="prefetchCount">Number of batches to prefetch.</param>
+    /// <param name="numWorkers">Number of parallel workers.</param>
     public CsvStreamingDataLoader(
         string filePath,
         Func<string, int, (TInput, TOutput)> lineParser,
         int batchSize,
         bool hasHeader = true,
-        int prefetchCount = 2)
+        int prefetchCount = 2,
+        int numWorkers = 4)
+        : base(prefetchCount, numWorkers)
     {
         _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
         _lineParser = lineParser ?? throw new ArgumentNullException(nameof(lineParser));
-        _batchSize = batchSize > 0 ? batchSize : throw new ArgumentOutOfRangeException(nameof(batchSize));
         _hasHeader = hasHeader;
-        _prefetchCount = Math.Max(1, prefetchCount);
 
-        // Count lines (expensive but necessary for shuffling)
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"CSV file not found: {filePath}", filePath);
+        }
+
+        // Count lines (expensive but necessary for proper iteration)
         _lineCount = CountLines() - (hasHeader ? 1 : 0);
+        BatchSize = batchSize > 0 ? batchSize : throw new ArgumentOutOfRangeException(nameof(batchSize));
     }
 
     private int CountLines()
@@ -490,140 +259,66 @@ public class CsvStreamingDataLoader<TInput, TOutput> : IBatchIterable<(TInput[],
         return count;
     }
 
-    /// <summary>
-    /// Gets the total number of samples in the dataset.
-    /// </summary>
-    public int SampleCount => _lineCount;
+    /// <inheritdoc/>
+    public override string Name => "CsvStreamingDataLoader";
 
-    /// <summary>
-    /// Gets or sets the batch size.
-    /// </summary>
-    public int BatchSize
+    /// <inheritdoc/>
+    public override int SampleCount => _lineCount;
+
+    /// <inheritdoc/>
+    protected override Task<(TInput Input, TOutput Output)> ReadSampleAsync(
+        int index,
+        CancellationToken cancellationToken = default)
     {
-        get => _batchSize;
-        set
+        // For efficient random access, we cache all lines on first access
+        // This is a tradeoff: memory for speed. For truly streaming without
+        // random access, use sequential iteration with shuffle=false.
+        if (_cachedLines == null)
         {
-            _batchSize = value > 0 ? value : throw new ArgumentOutOfRangeException(nameof(value));
-            ResetIteration();
-        }
-    }
-
-    /// <summary>
-    /// Gets whether there are more batches available in the current iteration.
-    /// </summary>
-    public bool HasNext
-    {
-        get
-        {
-            EnsureIteratorInitialized();
-            return _hasNextBatch;
-        }
-    }
-
-    /// <summary>
-    /// Gets the next batch of data.
-    /// </summary>
-    /// <returns>The next batch of data.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when no more batches are available.</exception>
-    public (TInput[], TOutput[]) GetNextBatch()
-    {
-        if (!TryGetNextBatch(out var batch))
-        {
-            throw new InvalidOperationException("No more batches available. Call Reset() to start a new iteration.");
-        }
-        return batch;
-    }
-
-    /// <summary>
-    /// Attempts to get the next batch without throwing if unavailable.
-    /// </summary>
-    /// <param name="batch">The batch if available, default otherwise.</param>
-    /// <returns>True if a batch was available, false if iteration is complete.</returns>
-    public bool TryGetNextBatch(out (TInput[], TOutput[]) batch)
-    {
-        EnsureIteratorInitialized();
-
-        if (!_hasNextBatch || _nextBatch == null)
-        {
-            batch = default;
-            return false;
-        }
-
-        batch = _nextBatch.Value;
-
-        // Advance to next batch
-        if (_currentEnumerator != null && _currentEnumerator.MoveNext())
-        {
-            _nextBatch = _currentEnumerator.Current;
-            _hasNextBatch = true;
-        }
-        else
-        {
-            _nextBatch = null;
-            _hasNextBatch = false;
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Resets the iteration to the beginning.
-    /// </summary>
-    public void ResetIteration()
-    {
-        _currentEnumerator?.Dispose();
-        _currentEnumerator = null;
-        _nextBatch = null;
-        _hasNextBatch = false;
-    }
-
-    private void EnsureIteratorInitialized()
-    {
-        if (_currentEnumerator == null)
-        {
-            _currentEnumerator = GetBatches().GetEnumerator();
-            if (_currentEnumerator.MoveNext())
+            var lines = new List<string>(_lineCount);
+            using (var reader = new StreamReader(_filePath))
             {
-                _nextBatch = _currentEnumerator.Current;
-                _hasNextBatch = true;
+                if (_hasHeader)
+                {
+                    reader.ReadLine();
+                }
+
+                string? line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    lines.Add(line);
+                }
             }
-            else
-            {
-                _hasNextBatch = false;
-            }
+            _cachedLines = lines.ToArray();
         }
+
+        var result = _lineParser(_cachedLines[index], index);
+        return Task.FromResult(result);
     }
 
     /// <inheritdoc/>
-    public IEnumerable<(TInput[], TOutput[])> GetBatches(
-        int? batchSize = null,
-        bool shuffle = true,
-        bool dropLast = false,
-        int? seed = null)
+    protected override void UnloadDataCore()
     {
-        int actualBatchSize = batchSize ?? _batchSize;
-
-        if (shuffle)
-        {
-            // For shuffled iteration, we need random access which requires reading all lines
-            // For true streaming without full load, use GetBatchesAsync with shuffle=false
-            foreach (var batch in GetShuffledBatches(actualBatchSize, dropLast, seed))
-            {
-                yield return batch;
-            }
-        }
-        else
-        {
-            // Sequential streaming - true memory-efficient iteration
-            foreach (var batch in GetSequentialBatches(actualBatchSize, dropLast))
-            {
-                yield return batch;
-            }
-        }
+        _cachedLines = null;
+        base.UnloadDataCore();
     }
 
-    private IEnumerable<(TInput[], TOutput[])> GetSequentialBatches(int batchSize, bool dropLast)
+    /// <summary>
+    /// Iterates through the CSV file sequentially without loading all lines into memory.
+    /// </summary>
+    /// <param name="batchSize">Batch size to use.</param>
+    /// <param name="dropLast">Whether to drop the last incomplete batch.</param>
+    /// <returns>An enumerable of batches.</returns>
+    /// <remarks>
+    /// This method provides true streaming iteration without caching all lines.
+    /// Use this when memory is constrained and you don't need shuffling.
+    /// </remarks>
+    public IEnumerable<(TInput[] Inputs, TOutput[] Outputs)> GetSequentialBatches(
+        int? batchSize = null,
+        bool dropLast = false)
     {
+        int actualBatchSize = batchSize ?? BatchSize;
+
         using var reader = new StreamReader(_filePath);
 
         // Skip header if present
@@ -632,8 +327,8 @@ public class CsvStreamingDataLoader<TInput, TOutput> : IBatchIterable<(TInput[],
             reader.ReadLine();
         }
 
-        var inputBatch = new List<TInput>(batchSize);
-        var outputBatch = new List<TOutput>(batchSize);
+        var inputBatch = new List<TInput>(actualBatchSize);
+        var outputBatch = new List<TOutput>(actualBatchSize);
         int lineNumber = 0;
         string? line;
 
@@ -644,7 +339,7 @@ public class CsvStreamingDataLoader<TInput, TOutput> : IBatchIterable<(TInput[],
             outputBatch.Add(output);
             lineNumber++;
 
-            if (inputBatch.Count == batchSize)
+            if (inputBatch.Count == actualBatchSize)
             {
                 yield return (inputBatch.ToArray(), outputBatch.ToArray());
                 inputBatch.Clear();
@@ -658,136 +353,12 @@ public class CsvStreamingDataLoader<TInput, TOutput> : IBatchIterable<(TInput[],
             yield return (inputBatch.ToArray(), outputBatch.ToArray());
         }
     }
-
-    private IEnumerable<(TInput[], TOutput[])> GetShuffledBatches(int batchSize, bool dropLast, int? seed)
-    {
-        // Read all lines for shuffling (memory cost for shuffled iteration)
-        var lines = new List<string>(_lineCount);
-        using (var reader = new StreamReader(_filePath))
-        {
-            if (_hasHeader)
-            {
-                reader.ReadLine();
-            }
-
-            string? line;
-            while ((line = reader.ReadLine()) != null)
-            {
-                lines.Add(line);
-            }
-        }
-
-        // Shuffle indices
-        int[] indices = new int[lines.Count];
-        for (int i = 0; i < indices.Length; i++)
-        {
-            indices[i] = i;
-        }
-
-        Random random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSecureRandom();
-
-        for (int i = indices.Length - 1; i > 0; i--)
-        {
-            int j = random.Next(i + 1);
-            (indices[i], indices[j]) = (indices[j], indices[i]);
-        }
-
-        // Yield batches
-        int numBatches = indices.Length / batchSize;
-        if (!dropLast && indices.Length % batchSize > 0)
-        {
-            numBatches++;
-        }
-
-        for (int b = 0; b < numBatches; b++)
-        {
-            int startIdx = b * batchSize;
-            int endIdx = Math.Min(startIdx + batchSize, indices.Length);
-            int currentBatchSize = endIdx - startIdx;
-
-            var inputs = new TInput[currentBatchSize];
-            var outputs = new TOutput[currentBatchSize];
-
-            for (int i = 0; i < currentBatchSize; i++)
-            {
-                int idx = indices[startIdx + i];
-                var (input, output) = _lineParser(lines[idx], idx);
-                inputs[i] = input;
-                outputs[i] = output;
-            }
-
-            yield return (inputs, outputs);
-        }
-    }
-
-    /// <inheritdoc/>
-    public async IAsyncEnumerable<(TInput[], TOutput[])> GetBatchesAsync(
-        int? batchSize = null,
-        bool shuffle = true,
-        bool dropLast = false,
-        int? seed = null,
-        int prefetchCount = 2,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        if (_disposed)
-        {
-            throw new ObjectDisposedException(nameof(CsvStreamingDataLoader<TInput, TOutput>));
-        }
-
-        // Use sync version wrapped in Task.Run for prefetching
-        var syncEnumerable = GetBatches(batchSize, shuffle, dropLast, seed);
-
-        var outputChannel = Channel.CreateBounded<(TInput[], TOutput[])>(
-            new BoundedChannelOptions(prefetchCount > 0 ? prefetchCount : _prefetchCount)
-            {
-                FullMode = BoundedChannelFullMode.Wait,
-                SingleReader = true,
-                SingleWriter = true
-            });
-
-        var producerTask = Task.Run(async () =>
-        {
-            try
-            {
-                foreach (var batch in syncEnumerable)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    await outputChannel.Writer.WriteAsync(batch, cancellationToken);
-                }
-            }
-            finally
-            {
-                outputChannel.Writer.Complete();
-            }
-        }, cancellationToken);
-
-        // Consume batches (net471 compatible)
-        while (await outputChannel.Reader.WaitToReadAsync(cancellationToken))
-        {
-            while (outputChannel.Reader.TryRead(out var batch))
-            {
-                yield return batch;
-            }
-        }
-
-        await producerTask;
-    }
-
-    /// <summary>
-    /// Disposes the CSV streaming data loader.
-    /// </summary>
-    public void Dispose()
-    {
-        _disposed = true;
-        GC.SuppressFinalize(this);
-    }
 }
 
 /// <summary>
 /// A streaming data loader that uses memory-mapped files for efficient random access.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The type of input data.</typeparam>
 /// <typeparam name="TOutput">The type of output/label data.</typeparam>
 /// <remarks>
@@ -801,7 +372,7 @@ public class CsvStreamingDataLoader<TInput, TOutput> : IBatchIterable<(TInput[],
 /// patterns like shuffled batch iteration.
 /// </para>
 /// </remarks>
-public class MemoryMappedStreamingDataLoader<TInput, TOutput> : StreamingDataLoader<TInput, TOutput>
+public class MemoryMappedStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoader<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the MemoryMappedStreamingDataLoader class.
@@ -817,7 +388,7 @@ public class MemoryMappedStreamingDataLoader<TInput, TOutput> : StreamingDataLoa
         int batchSize,
         int prefetchCount = 2,
         int numWorkers = 4)
-        : base(sampleCount, sampleReader, batchSize, prefetchCount, numWorkers)
+        : base(sampleCount, sampleReader, batchSize, "MemoryMappedStreamingDataLoader", prefetchCount, numWorkers)
     {
     }
 }
