@@ -64,8 +64,8 @@ GitHub Issue: #443
 ### Phase 4: Advanced Features
 | Task | Status | Commit |
 |------|--------|--------|
-| 4A: StreamingDataLoader | PENDING | - |
-| 4B: TensorFlow-style operators | PENDING | - |
+| 4A: StreamingDataLoader | COMPLETE | 32879d3 |
+| 4B: TensorFlow-style operators | IN PROGRESS | - |
 
 ### Phase 5: Optimizer Integration
 | Task | Status | Commit |
@@ -106,6 +106,9 @@ GitHub Issue: #443
 
 ### Parallel Loading
 - `src/Data/Loaders/ParallelBatchLoader.cs` - Multi-worker batch loading with prefetch
+
+### Streaming Data Loaders
+- `src/Data/Loaders/StreamingDataLoader.cs` - Streaming, File, CSV, and MemoryMapped loaders
 
 ## API Design
 
