@@ -65,7 +65,7 @@ GitHub Issue: #443
 | Task | Status | Commit |
 |------|--------|--------|
 | 4A: StreamingDataLoader | COMPLETE | 32879d3 |
-| 4B: TensorFlow-style operators | IN PROGRESS | - |
+| 4B: TensorFlow-style operators | COMPLETE | 4cd9a11 |
 
 ### Phase 5: Optimizer Integration
 | Task | Status | Commit |
@@ -109,6 +109,9 @@ GitHub Issue: #443
 
 ### Streaming Data Loaders
 - `src/Data/Loaders/StreamingDataLoader.cs` - Streaming, File, CSV, and MemoryMapped loaders
+
+### Pipeline Operators
+- `src/Data/Pipeline/DataPipeline.cs` - TensorFlow-style pipeline operators
 
 ## API Design
 
