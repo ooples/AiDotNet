@@ -848,13 +848,8 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
                 await _dataLoader.LoadAsync();
             }
 
-            // Collect all batches into aggregated features and labels
-            // This allows streaming loaders to work with the existing training infrastructure
-            // while still benefiting from on-demand data loading (e.g., from files)
-            var (features, labels) = await CollectStreamingDataAsync(streamingLoader);
-
-            // Delegate to the internal supervised training method
-            result = await BuildSupervisedInternalAsync(features, labels);
+            // True streaming training - train on batches without materializing all data
+            result = await BuildStreamingSupervisedAsync(streamingLoader);
             await RunBenchmarksIfConfiguredAsync(result).ConfigureAwait(false);
             return result;
         }
@@ -946,6 +941,164 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         }
 
         return result.EvaluateBenchmarksAsync(_benchmarkingOptions);
+    }
+
+    /// <summary>
+    /// Performs true streaming supervised training without materializing all data in memory.
+    /// </summary>
+    /// <param name="streamingLoader">The streaming data loader to train from.</param>
+    /// <returns>The result of training including the trained model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements true streaming training by iterating through the streaming loader's
+    /// batches and training on each batch individually. This allows training on datasets that
+    /// are too large to fit in memory.
+    /// </para>
+    /// <para><b>For Beginners:</b> Unlike the regular training path which loads all data into memory,
+    /// this method processes one batch at a time, trains on it, then moves to the next batch.
+    /// This is essential for large datasets like ImageNet or large text corpora.
+    /// </para>
+    /// </remarks>
+    private async Task<PredictionModelResult<T, TInput, TOutput>> BuildStreamingSupervisedAsync(
+        IStreamingDataLoader<T, TInput, TOutput> streamingLoader)
+    {
+        // Apply GPU configuration first
+        ApplyGpuConfiguration();
+
+        // Ensure we have a model configured
+        if (_model is null)
+        {
+            throw new InvalidOperationException(
+                "Streaming training requires a model to be configured. Use ConfigureModel() before calling BuildAsync().");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Get optimizer options for training parameters
+        var optimizerOptions = _optimizer?.GetOptions();
+        int epochs = optimizerOptions?.MaxIterations ?? 100;
+        T learningRate = optimizerOptions is not null
+            ? numOps.FromDouble(optimizerOptions.InitialLearningRate)
+            : numOps.FromDouble(0.01);
+        T learningRateDecay = optimizerOptions is not null
+            ? numOps.FromDouble(optimizerOptions.LearningRateDecay)
+            : numOps.FromDouble(0.99);
+        T minLearningRate = optimizerOptions is not null
+            ? numOps.FromDouble(optimizerOptions.MinLearningRate)
+            : numOps.FromDouble(1e-6);
+
+        // Get loss function
+        var lossFunction = _model.DefaultLossFunction;
+
+        // Training metrics
+        T totalLoss = numOps.Zero;
+        int totalBatches = 0;
+        var trainingStartTime = DateTime.UtcNow;
+
+        // Train for the specified number of epochs
+        for (int epoch = 0; epoch < epochs; epoch++)
+        {
+            T epochLoss = numOps.Zero;
+            int epochBatches = 0;
+
+            // Iterate through all batches in the streaming loader
+            await foreach (var (inputs, outputs) in streamingLoader.GetBatchesAsync(shuffle: true))
+            {
+                // Process each sample in the batch
+                for (int i = 0; i < inputs.Length; i++)
+                {
+                    var input = inputs[i];
+                    var target = outputs[i];
+
+                    // Compute gradients without updating parameters
+                    var gradients = _model.ComputeGradients(input, target, lossFunction);
+
+                    // Apply gradients with current learning rate
+                    _model.ApplyGradients(gradients, learningRate);
+
+                    // Accumulate loss for monitoring (optional - compute prediction loss)
+                    var prediction = _model.Predict(input);
+                    var predictionVector = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
+                    var targetVector = ConversionsHelper.ConvertToVector<T, TOutput>(target);
+                    var loss = lossFunction.CalculateLoss(predictionVector, targetVector);
+                    epochLoss = numOps.Add(epochLoss, loss);
+                    epochBatches++;
+                }
+            }
+
+            totalLoss = numOps.Add(totalLoss, epochLoss);
+            totalBatches += epochBatches;
+
+            // Decay learning rate
+            if (optimizerOptions is not null && optimizerOptions.UseAdaptiveLearningRate)
+            {
+                learningRate = numOps.Multiply(learningRate, learningRateDecay);
+                if (numOps.Compare(learningRate, minLearningRate) < 0)
+                {
+                    learningRate = minLearningRate;
+                }
+            }
+
+            // Check for early stopping if configured
+            if (_optimizer is not null && _optimizer.ShouldEarlyStop())
+            {
+                break;
+            }
+        }
+
+        // Calculate average loss
+        T avgLoss = totalBatches > 0
+            ? numOps.Divide(totalLoss, numOps.FromDouble(totalBatches))
+            : numOps.Zero;
+
+        // Build the result
+        var optimizationResult = new OptimizationResult<T, TInput, TOutput>
+        {
+            BestSolution = _model,
+            BestFitnessScore = avgLoss,
+            FitnessHistory = new Vector<T>(new[] { avgLoss }),
+            Iterations = totalBatches
+        };
+
+        // Create deployment configuration from individual configs
+        var deploymentConfig = DeploymentConfiguration.Create(
+            _quantizationConfig,
+            _cacheConfig,
+            _versioningConfig,
+            _abTestingConfig,
+            _telemetryConfig,
+            _exportConfig,
+            _gpuAccelerationConfig,
+            _compressionConfig,
+            _profilingConfig);
+
+        // Build result using options pattern like other Build methods
+        var options = new PredictionModelResultOptions<T, TInput, TOutput>
+        {
+            OptimizationResult = optimizationResult,
+            NormalizationInfo = new NormalizationInfo<T, TInput, TOutput>(),
+            Tokenizer = _tokenizer,
+            TokenizationConfig = _tokenizationConfig,
+            ProgramSynthesisModel = _programSynthesisModel,
+            ProgramSynthesisServingClient = _programSynthesisServingClient,
+            ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
+            InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            ReasoningConfig = _reasoningConfig,
+            DeploymentConfiguration = deploymentConfig,
+            BiasDetector = _biasDetector,
+            FairnessEvaluator = _fairnessEvaluator,
+            RagRetriever = _ragRetriever,
+            RagReranker = _ragReranker,
+            RagGenerator = _ragGenerator,
+            QueryProcessors = _queryProcessors,
+            KnowledgeGraph = _knowledgeGraph,
+            GraphStore = _graphStore,
+            HybridGraphRetriever = _hybridGraphRetriever,
+            LoRAConfiguration = _loraConfiguration,
+            AgentConfig = _agentConfig
+        };
+
+        return new PredictionModelResult<T, TInput, TOutput>(options);
     }
 
     /// <summary>

@@ -19,8 +19,9 @@ namespace AiDotNet.Interfaces;
 /// Example usage:
 /// <code>
 /// var loader = DataLoaders.FromCsv&lt;float&gt;("huge_dataset.csv", parseRow);
+/// loader.BatchSize = 32; // Set batch size before iteration
 ///
-/// await foreach (var (inputs, labels) in loader.GetBatchesAsync(batchSize: 32))
+/// await foreach (var (inputs, labels) in loader.GetBatchesAsync())
 /// {
 ///     await model.TrainOnBatchAsync(inputs, labels);
 /// }

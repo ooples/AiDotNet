@@ -51,6 +51,11 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
     private Random _random;
 
     /// <summary>
+    /// Lock object for thread-safe access to _random during batch generation.
+    /// </summary>
+    private readonly object _randomLock = new object();
+
+    /// <summary>
     /// Initializes a new instance of the RLDataLoaderBase class.
     /// </summary>
     /// <param name="environment">The RL environment to interact with.</param>
@@ -268,7 +273,10 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
     /// <inheritdoc/>
     public void SetSeed(int seed)
     {
-        _random = RandomHelper.CreateSeededRandom(seed);
+        lock (_randomLock)
+        {
+            _random = RandomHelper.CreateSeededRandom(seed);
+        }
         _environment.Seed(seed);
     }
 
@@ -297,25 +305,34 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
     /// Selects a random action for exploration.
     /// </summary>
     /// <returns>A random action vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Thread Safety:</b> This method uses locking to ensure thread-safe access
+    /// to the random number generator.
+    /// </para>
+    /// </remarks>
     protected virtual Vector<T> SelectRandomAction()
     {
-        if (_environment.IsContinuousActionSpace)
+        lock (_randomLock)
         {
-            // Random continuous action in [-1, 1] range
-            var action = new Vector<T>(_environment.ActionSpaceSize);
-            for (int i = 0; i < _environment.ActionSpaceSize; i++)
+            if (_environment.IsContinuousActionSpace)
             {
-                action[i] = NumOps.FromDouble(_random.NextDouble() * 2 - 1);
+                // Random continuous action in [-1, 1] range
+                var action = new Vector<T>(_environment.ActionSpaceSize);
+                for (int i = 0; i < _environment.ActionSpaceSize; i++)
+                {
+                    action[i] = NumOps.FromDouble(_random.NextDouble() * 2 - 1);
+                }
+                return action;
             }
-            return action;
-        }
-        else
-        {
-            // Random discrete action (one-hot encoded)
-            var action = new Vector<T>(_environment.ActionSpaceSize);
-            int randomAction = _random.Next(_environment.ActionSpaceSize);
-            action[randomAction] = NumOps.One;
-            return action;
+            else
+            {
+                // Random discrete action (one-hot encoded)
+                var action = new Vector<T>(_environment.ActionSpaceSize);
+                int randomAction = _random.Next(_environment.ActionSpaceSize);
+                action[randomAction] = NumOps.One;
+                return action;
+            }
         }
     }
 
@@ -353,11 +370,10 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
             yield break;
         }
 
-        // Optionally update random seed for this iteration
-        if (seed.HasValue)
-        {
-            _random = RandomHelper.CreateSeededRandom(seed.Value);
-        }
+        // Note: The seed parameter is not used for RL batch iteration because
+        // the replay buffer performs its own random sampling. Seeding for RL
+        // should be done at construction time via the seed constructor parameter,
+        // which seeds both the random instance (for action selection) and the environment.
 
         // Calculate how many batches we can provide
         // For RL, we typically do multiple passes through the data
@@ -443,11 +459,9 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
         {
             try
             {
-                // Optionally update random seed
-                if (seed.HasValue)
-                {
-                    _random = RandomHelper.CreateSeededRandom(seed.Value);
-                }
+                // Note: The seed parameter is not used for RL batch iteration because
+                // the replay buffer performs its own random sampling. Seeding for RL
+                // should be done at construction time via the seed constructor parameter.
 
                 // Calculate number of batches
                 int numBatches = bufferCount / effectiveBatchSize;

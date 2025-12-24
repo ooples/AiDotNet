@@ -67,6 +67,11 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
     protected Random RandomInstance;
 
     /// <summary>
+    /// Lock object for thread-safe access to RandomInstance during batch generation.
+    /// </summary>
+    private readonly object _randomLock = new object();
+
+    /// <summary>
     /// Mapping from class label to list of example indices for that class.
     /// </summary>
     protected readonly Dictionary<int, List<int>> ClassToIndices;
@@ -207,7 +212,7 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
     {
         if (!HasNext)
         {
-            batch = default!;
+            batch = new MetaLearningTask<T, TInput, TOutput>();
             return false;
         }
 
@@ -479,22 +484,42 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
         bool dropLast = false,
         int? seed = null)
     {
+        // Validate that shuffle and dropLast are default values - episodic loaders
+        // generate inherently random tasks, so these parameters don't apply
+        if (!shuffle)
+        {
+            throw new ArgumentException(
+                "Episodic data loaders generate inherently random tasks. The shuffle parameter must be true (default).",
+                nameof(shuffle));
+        }
+
+        if (dropLast)
+        {
+            throw new ArgumentException(
+                "Episodic data loaders generate tasks on-demand. The dropLast parameter must be false (default).",
+                nameof(dropLast));
+        }
+
         int numTasks = batchSize ?? BatchSize;
         if (numTasks < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(batchSize), "Number of tasks must be at least 1.");
         }
 
-        // Set seed if provided for reproducible task sampling
-        if (seed.HasValue)
+        // Use lock for thread-safe random access when seed is provided
+        // This ensures concurrent enumerations don't interfere with each other
+        lock (_randomLock)
         {
-            SetSeed(seed.Value);
-        }
+            if (seed.HasValue)
+            {
+                SetSeed(seed.Value);
+            }
 
-        // Yield tasks using lazy evaluation
-        for (int i = 0; i < numTasks; i++)
-        {
-            yield return GetNextTaskCore();
+            // Yield tasks using lazy evaluation
+            for (int i = 0; i < numTasks; i++)
+            {
+                yield return GetNextTaskCore();
+            }
         }
     }
 
@@ -503,6 +528,11 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
     /// <para>
     /// Asynchronously generates meta-learning tasks with prefetching support.
     /// Tasks are generated in the background while the current task is being processed.
+    /// </para>
+    /// <para>
+    /// <b>Thread Safety:</b> Task generation uses locking to ensure thread-safe
+    /// access to the random number generator. This prevents interference between
+    /// concurrent enumerations.
     /// </para>
     /// </remarks>
     public virtual async IAsyncEnumerable<MetaLearningTask<T, TInput, TOutput>> GetBatchesAsync(
@@ -513,6 +543,22 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
         int prefetchCount = 2,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        // Validate that shuffle and dropLast are default values - episodic loaders
+        // generate inherently random tasks, so these parameters don't apply
+        if (!shuffle)
+        {
+            throw new ArgumentException(
+                "Episodic data loaders generate inherently random tasks. The shuffle parameter must be true (default).",
+                nameof(shuffle));
+        }
+
+        if (dropLast)
+        {
+            throw new ArgumentException(
+                "Episodic data loaders generate tasks on-demand. The dropLast parameter must be false (default).",
+                nameof(dropLast));
+        }
+
         if (prefetchCount < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(prefetchCount), "Prefetch count must be at least 1.");
@@ -524,12 +570,6 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
             throw new ArgumentOutOfRangeException(nameof(batchSize), "Number of tasks must be at least 1.");
         }
 
-        // Set seed if provided
-        if (seed.HasValue)
-        {
-            SetSeed(seed.Value);
-        }
-
         // Create bounded channel for prefetching
         var channel = Channel.CreateBounded<MetaLearningTask<T, TInput, TOutput>>(
             new BoundedChannelOptions(prefetchCount)
@@ -539,16 +579,28 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
                 SingleWriter = true
             });
 
-        // Start producer task
+        // Start producer task with thread-safe random access
         var producerTask = Task.Run(async () =>
         {
             try
             {
-                for (int i = 0; i < numTasks; i++)
+                // Use lock for thread-safe random access
+                lock (_randomLock)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var task = GetNextTaskCore();
-                    await channel.Writer.WriteAsync(task, cancellationToken);
+                    if (seed.HasValue)
+                    {
+                        SetSeed(seed.Value);
+                    }
+
+                    for (int i = 0; i < numTasks; i++)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var task = GetNextTaskCore();
+                        // Note: We hold the lock while generating all tasks to ensure
+                        // reproducibility when a seed is provided. This is acceptable
+                        // because task generation is typically fast compared to model training.
+                        channel.Writer.TryWrite(task);
+                    }
                 }
             }
             finally

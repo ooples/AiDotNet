@@ -470,19 +470,74 @@ internal class MapAsyncIterator<TSource, TResult> : IAsyncEnumerableProvider<TRe
     public async IAsyncEnumerable<TResult> GetAsyncEnumerable(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
-        var semaphore = new SemaphoreSlim(_maxConcurrency);
+        // Use a bounded channel for output with capacity = maxConcurrency to limit memory
+        var outputChannel = Channel.CreateBounded<TResult>(
+            new BoundedChannelOptions(_maxConcurrency)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = false
+            });
+
+        // Create a work queue from the source
+        var workQueue = new ConcurrentQueue<TSource>();
         foreach (var item in _source())
         {
-            ct.ThrowIfCancellationRequested();
-            await semaphore.WaitAsync(ct);
-            try
+            workQueue.Enqueue(item);
+        }
+
+        // Track completed workers
+        int completedWorkers = 0;
+        Exception? workerException = null;
+
+        // Start worker tasks
+        var workerTasks = new Task[_maxConcurrency];
+        for (int w = 0; w < _maxConcurrency; w++)
+        {
+            workerTasks[w] = Task.Run(async () =>
             {
-                yield return await _selector(item, ct);
-            }
-            finally
+                try
+                {
+                    while (workQueue.TryDequeue(out var item))
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        var result = await _selector(item, ct);
+                        await outputChannel.Writer.WriteAsync(result, ct);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    Interlocked.CompareExchange(ref workerException, ex, null);
+                }
+                finally
+                {
+                    if (Interlocked.Increment(ref completedWorkers) == _maxConcurrency)
+                    {
+                        outputChannel.Writer.Complete(workerException);
+                    }
+                }
+            }, ct);
+        }
+
+        // Consume results from channel (net471 compatible - no ReadAllAsync)
+        while (await outputChannel.Reader.WaitToReadAsync(ct))
+        {
+            while (outputChannel.Reader.TryRead(out var result))
             {
-                semaphore.Release();
+                yield return result;
             }
+        }
+
+        // Wait for all workers and propagate any exceptions
+        await Task.WhenAll(workerTasks);
+
+        if (workerException is not null)
+        {
+            throw new AggregateException("One or more parallel map workers failed.", workerException);
         }
     }
 }
@@ -1043,8 +1098,8 @@ public static class DataPipelineExtensions
             }
         }
 
-        // Optionally yield partial windows at the end
-        if (buffer.Count > 0 && buffer.Count == windowSize)
+        // Yield final window only if it's complete (partial windows are discarded)
+        if (buffer.Count == windowSize)
         {
             yield return buffer.ToArray();
         }
