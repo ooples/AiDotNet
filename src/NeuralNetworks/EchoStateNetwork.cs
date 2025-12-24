@@ -691,13 +691,9 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// <returns>The normalized vector.</returns>
     private Vector<T> NormalizeVector(Vector<T> vector)
     {
-        T norm = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            norm = NumOps.Add(norm, NumOps.Multiply(vector[i], vector[i]));
-        }
-
-        norm = NumOps.Sqrt(norm);
+        // Compute L2 norm using vectorized dot product: sqrt(sum(vector^2))
+        T normSquared = Engine.DotProduct(vector, vector);
+        T norm = NumOps.Sqrt(normSquared);
 
         // Avoid division by zero
         if (MathHelper.AlmostEqual(norm, NumOps.Zero))
@@ -705,13 +701,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             return new Vector<T>(vector.Length); // Return zero vector
         }
 
-        Vector<T> normalized = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            normalized[i] = NumOps.Divide(vector[i], norm);
-        }
-
-        return normalized;
+        // Vectorized normalization: vector / norm
+        return (Vector<T>)Engine.Divide(vector, norm);
     }
 
     /// <summary>
