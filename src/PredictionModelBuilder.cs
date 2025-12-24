@@ -993,7 +993,6 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         // Training metrics
         T totalLoss = numOps.Zero;
         int totalBatches = 0;
-        var trainingStartTime = DateTime.UtcNow;
 
         // Train for the specified number of epochs
         for (int epoch = 0; epoch < epochs; epoch++)
