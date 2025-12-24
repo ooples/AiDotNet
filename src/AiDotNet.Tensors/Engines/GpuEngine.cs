@@ -2044,7 +2044,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            // Create ILGPU context with Algorithms extension enabled for RoundToEven support
+            // Create ILGPU context
             _context = Context.Create(builder => builder.Default().EnableAlgorithms());
 
             // Try to get preferred device (GPU over CPU)

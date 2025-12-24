@@ -101,7 +101,7 @@ var baseTokenizer = WordPieceTokenizer.Train(corpus, vocabSize: 5000);
 // Create code tokenizer
 var codeTokenizer = new CodeTokenizer(
     baseTokenizer,
-    CodeTokenizer.ProgrammingLanguage.CSharp,
+    ProgrammingLanguage.CSharp,
     splitIdentifiers: true
 );
 
@@ -112,7 +112,7 @@ var tokens = codeTokenizer.Tokenize("getUserNameById");
 // Use CodeBERT for code + natural language
 var codeBert = new CodeBertTokenizer(
     vocabulary,
-    CodeTokenizer.ProgrammingLanguage.Python
+    ProgrammingLanguage.Python
 );
 
 var result = codeBert.EncodeCodeAndNL(

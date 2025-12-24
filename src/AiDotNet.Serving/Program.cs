@@ -1,7 +1,9 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Persistence;
+using AiDotNet.Serving.ProgramSynthesis;
+using AiDotNet.Serving.Sandboxing.Docker;
+using AiDotNet.Serving.Sandboxing.Execution;
+using AiDotNet.Serving.Sandboxing.Sql;
 using AiDotNet.Serving.Security;
 using AiDotNet.Serving.Security.ApiKeys;
 using AiDotNet.Serving.Security.Attestation;
@@ -9,6 +11,8 @@ using AiDotNet.Serving.Services;
 using AiDotNet.Serving.Services.Federated;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Serialization;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 
 namespace AiDotNet.Serving;
@@ -33,6 +37,12 @@ public class Program
             builder.Configuration.GetSection("ServingPersistenceOptions"));
         builder.Services.Configure<AttestationOptions>(
             builder.Configuration.GetSection("AttestationOptions"));
+        builder.Services.Configure<ServingSandboxOptions>(
+            builder.Configuration.GetSection("ServingSandbox"));
+        builder.Services.Configure<ServingSqlSandboxOptions>(
+            builder.Configuration.GetSection("ServingSqlSandbox"));
+        builder.Services.Configure<ServingProgramSynthesisOptions>(
+            builder.Configuration.GetSection("ServingProgramSynthesis"));
 
         // Get serving options to configure Kestrel
         var servingOptions = new ServingOptions();
@@ -123,16 +133,31 @@ public class Program
         builder.Services.AddSingleton<IFederatedRunStore, InMemoryFederatedRunStore>();
         builder.Services.AddSingleton<IFederatedCoordinatorService, FederatedCoordinatorService>();
 
+        // Program synthesis + sandboxing (opt-in endpoints for sandboxed execution via AiDotNet.Serving).
+        builder.Services.AddSingleton<IServingRequestContextAccessor, ServingRequestContextAccessor>();
+        builder.Services.AddSingleton<IServingRequestContextResolver, ServingRequestContextResolver>();
+        builder.Services.AddSingleton<IDockerRunner, DockerRunner>();
+        builder.Services.AddSingleton<IProgramSandboxExecutor, DockerProgramSandboxExecutor>();
+        builder.Services.AddSingleton<ISqlSandboxExecutor, SqlSandboxExecutor>();
+        builder.Services.AddSingleton<IServingSqlExecuteResponseRedactor, ServingSqlExecuteResponseRedactor>();
+        builder.Services.AddSingleton<IServingProgramSynthesisConcurrencyLimiter, ServingProgramSynthesisConcurrencyLimiter>();
+        builder.Services.AddSingleton<IServingProgramExecuteResponseRedactor, ServingProgramExecuteResponseRedactor>();
+        builder.Services.AddSingleton<IServingProgramEvaluateIoResponseRedactor, ServingProgramEvaluateIoResponseRedactor>();
+        builder.Services.AddSingleton<IServingProgramEvaluator, ServingProgramEvaluator>();
+        builder.Services.AddSingleton<IServingCodeTaskRequestValidator, ServingCodeTaskRequestValidator>();
+        builder.Services.AddSingleton<IServingCodeTaskResultRedactor, ServingCodeTaskResultRedactor>();
+        builder.Services.AddSingleton<IServingCodeTaskExecutor, ServingCodeTaskExecutor>();
+
         // Register hosted service to load startup models at application start
         builder.Services.AddHostedService<ModelStartupService>();
 
         // Add controllers and API documentation
-        builder.Services.AddControllers().AddJsonOptions(options =>
+        builder.Services.AddControllers().AddNewtonsoftJson(options =>
         {
-            options.JsonSerializerOptions.Converters.Add(
-                new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
+            options.SerializerSettings.Converters.Add(new StringEnumConverter(new CamelCaseNamingStrategy(), allowIntegerValues: false));
         });
         builder.Services.AddEndpointsApiExplorer();
+
         builder.Services.AddSwaggerGen(options =>
         {
             options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
@@ -190,6 +215,7 @@ public class Program
 
         app.UseCors();
         app.UseAuthentication();
+        app.UseMiddleware<ServingRequestContextMiddleware>();
         app.UseAuthorization();
         app.MapControllers();
 

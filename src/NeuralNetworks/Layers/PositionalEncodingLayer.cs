@@ -469,13 +469,4 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     }
 
     public override bool SupportsJitCompilation => true;
-
-    internal override Dictionary<string, string> GetMetadata()
-    {
-        return new Dictionary<string, string>
-        {
-            ["MaxSequenceLength"] = maxSequenceLength.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["EmbeddingSize"] = embeddingSize.ToString(System.Globalization.CultureInfo.InvariantCulture)
-        };
-    }
 }

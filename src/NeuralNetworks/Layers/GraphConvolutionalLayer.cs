@@ -285,6 +285,16 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
+        if (inputFeatures <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(inputFeatures), "Input features must be positive.");
+        }
+
+        if (outputFeatures <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(outputFeatures), "Output features must be positive.");
+        }
+
         InputFeatures = inputFeatures;
         OutputFeatures = outputFeatures;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
@@ -323,6 +333,16 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([inputFeatures], [outputFeatures], vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        if (inputFeatures <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(inputFeatures), "Input features must be positive.");
+        }
+
+        if (outputFeatures <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(outputFeatures), "Output features must be positive.");
+        }
+
         InputFeatures = inputFeatures;
         OutputFeatures = outputFeatures;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);

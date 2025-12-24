@@ -1,10 +1,7 @@
 using System.Net;
-using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Serving.Configuration;
@@ -16,6 +13,9 @@ using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Serialization;
 using Xunit;
 
 namespace AiDotNet.Serving.Tests;
@@ -28,9 +28,9 @@ namespace AiDotNet.Serving.Tests;
 [Collection("ServingIntegrationTests")]
 public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Program>>, IAsyncLifetime
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    private static readonly JsonSerializerSettings JsonSettings = new()
     {
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) }
+        Converters = { new StringEnumConverter(new CamelCaseNamingStrategy(), allowIntegerValues: false) }
     };
 
     private readonly WebApplicationFactory<Program> _factory;
@@ -40,6 +40,18 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     {
         _factory = factory;
         _client = _factory.CreateClient();
+    }
+
+    private static async Task<T?> ReadAsJsonAsync<T>(HttpContent content)
+    {
+        var stringContent = await content.ReadAsStringAsync();
+        return JsonConvert.DeserializeObject<T>(stringContent, JsonSettings);
+    }
+
+    private async Task<HttpResponseMessage> PostAsJsonAsync<T>(string requestUri, T value, CancellationToken cancellationToken = default)
+    {
+        var content = new StringContent(JsonConvert.SerializeObject(value, JsonSettings), Encoding.UTF8, "application/json");
+        return await _client.PostAsync(requestUri, content, cancellationToken);
     }
 
     /// <summary>
@@ -91,7 +103,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         // Assert
         response.EnsureSuccessStatusCode();
-        var models = await response.Content.ReadFromJsonAsync<List<ModelInfo>>(JsonOptions);
+        var models = await ReadAsJsonAsync<List<ModelInfo>>(response.Content);
         Assert.NotNull(models);
         Assert.Empty(models);
     }
@@ -114,7 +126,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         // Assert
         response.EnsureSuccessStatusCode();
-        var models = await response.Content.ReadFromJsonAsync<List<ModelInfo>>(JsonOptions);
+        var models = await ReadAsJsonAsync<List<ModelInfo>>(response.Content);
         Assert.NotNull(models);
         Assert.Single(models);
         Assert.Equal("test-model-1", models[0].Name);
@@ -144,7 +156,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         // Assert
         response.EnsureSuccessStatusCode();
-        var modelInfo = await response.Content.ReadFromJsonAsync<ModelInfo>(JsonOptions);
+        var modelInfo = await ReadAsJsonAsync<ModelInfo>(response.Content);
         Assert.NotNull(modelInfo);
         Assert.Equal("test-model-2", modelInfo.Name);
 
@@ -212,11 +224,11 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/inference/predict/test-model-4", request, JsonOptions);
+        var response = await PostAsJsonAsync("/api/inference/predict/test-model-4", request);
 
         // Assert
         response.EnsureSuccessStatusCode();
-        var result = await response.Content.ReadFromJsonAsync<PredictionResponse>(JsonOptions);
+        var result = await ReadAsJsonAsync<PredictionResponse>(response.Content);
         Assert.NotNull(result);
         Assert.Equal("test-request-1", result.RequestId);
         Assert.NotNull(result.Predictions);
@@ -270,7 +282,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         // Act
         var message = new HttpRequestMessage(HttpMethod.Post, $"/api/inference/predict/{baseName}")
         {
-            Content = JsonContent.Create(request)
+            Content = new StringContent(JsonConvert.SerializeObject(request, JsonSettings), Encoding.UTF8, "application/json")
         };
         message.Headers.Add("X-AiDotNet-Lora", adapterId);
 
@@ -278,7 +290,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         // Assert
         response.EnsureSuccessStatusCode();
-        var result = await response.Content.ReadFromJsonAsync<PredictionResponse>(JsonOptions);
+        var result = await ReadAsJsonAsync<PredictionResponse>(response.Content);
         Assert.NotNull(result);
         Assert.Equal("test-request-variant", result.RequestId);
         Assert.NotNull(result.Predictions);
@@ -319,7 +331,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         // Using 90 seconds to allow for slow CI environments
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
         var tasks = requests.Select(req =>
-            _client.PostAsJsonAsync("/api/inference/predict/batch-test-model", req, JsonOptions, cts.Token)
+            PostAsJsonAsync("/api/inference/predict/batch-test-model", req, cts.Token)
         ).ToArray();
 
         var responses = await Task.WhenAll(tasks);
@@ -354,7 +366,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         // since the batch requests may have consumed most of the CTS timeout
         var statsResponse = await _client.GetAsync("/api/inference/stats");
         statsResponse.EnsureSuccessStatusCode();
-        var stats = await statsResponse.Content.ReadFromJsonAsync<Dictionary<string, object>>(JsonOptions);
+        var stats = await ReadAsJsonAsync<Dictionary<string, object>>(statsResponse.Content);
 
         Assert.NotNull(stats);
         Assert.True(stats.TryGetValue("totalRequests", out var totalRequestsObj));
@@ -362,7 +374,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         Assert.True(stats.TryGetValue("averageBatchSize", out _));
 
         // Verify the total requests is at least 10
-        var totalRequests = ((JsonElement)totalRequestsObj).GetInt64();
+        var totalRequests = Convert.ToInt64(totalRequestsObj);
         Assert.True(totalRequests >= 10);
 
         // Cleanup
@@ -382,7 +394,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/inference/predict/non-existent-model", request, JsonOptions);
+        var response = await PostAsJsonAsync("/api/inference/predict/non-existent-model", request);
 
         // Assert
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
@@ -407,7 +419,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/inference/predict/test-model-5", request, JsonOptions);
+        var response = await PostAsJsonAsync("/api/inference/predict/test-model-5", request);
 
         // Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -474,12 +486,10 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         var keyRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/models/{modelName}/artifact/key");
         keyRequest.Headers.Add("X-AiDotNet-ApiKey", proApiKey);
-        keyRequest.Content = new StringContent("null", Encoding.UTF8, "application/json");
-
         var keyResponse = await _client.SendAsync(keyRequest);
         keyResponse.EnsureSuccessStatusCode();
 
-        var keyPayload = await keyResponse.Content.ReadFromJsonAsync<ModelArtifactKeyResponse>(JsonOptions);
+        var keyPayload = await ReadAsJsonAsync<ModelArtifactKeyResponse>(keyResponse.Content);
         Assert.NotNull(keyPayload);
         Assert.False(string.IsNullOrWhiteSpace(keyPayload!.KeyId));
         Assert.False(string.IsNullOrWhiteSpace(keyPayload.KeyBase64));
@@ -524,18 +534,18 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         var keyRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/models/{modelName}/artifact/key");
         keyRequest.Headers.Add("X-AiDotNet-ApiKey", enterpriseApiKey);
-        keyRequest.Content = JsonContent.Create(new AttestationEvidence
+        keyRequest.Content = new StringContent(JsonConvert.SerializeObject(new AttestationEvidence
         {
             Platform = "Windows",
             TeeType = "Test",
             Nonce = "nonce",
             AttestationToken = "token"
-        });
+        }, JsonSettings), Encoding.UTF8, "application/json");
 
         var keyResponse = await _client.SendAsync(keyRequest);
         keyResponse.EnsureSuccessStatusCode();
 
-        var keyPayload = await keyResponse.Content.ReadFromJsonAsync<ModelArtifactKeyResponse>(JsonOptions);
+        var keyPayload = await ReadAsJsonAsync<ModelArtifactKeyResponse>(keyResponse.Content);
         Assert.NotNull(keyPayload);
         Assert.False(string.IsNullOrWhiteSpace(keyPayload!.KeyId));
         Assert.False(string.IsNullOrWhiteSpace(keyPayload.KeyBase64));

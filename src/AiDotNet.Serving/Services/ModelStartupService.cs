@@ -5,6 +5,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
 
 namespace AiDotNet.Serving.Services;
 
@@ -160,6 +161,17 @@ public class ModelStartupService : IHostedService
             throw new FileNotFoundException($"Model file not found: {modelPath}");
         }
 
+        if (!string.IsNullOrWhiteSpace(modelConfig.Sha256))
+        {
+            var expected = NormalizeHex(modelConfig.Sha256);
+            var actual = NormalizeHex(ComputeFileSha256Hex(modelPath));
+            if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Model '{modelConfig.Name}' failed SHA-256 verification. Expected={expected}, Actual={actual}.");
+            }
+        }
+
         _logger.LogInformation("Loading model '{Name}' from '{Path}' (type: {Type})",
             modelConfig.Name, modelPath, modelConfig.NumericType);
 
@@ -199,10 +211,6 @@ public class ModelStartupService : IHostedService
         // This is accessible via InternalsVisibleTo
         var modelResult = new PredictionModelResult<T, Matrix<T>, Vector<T>>();
         modelResult.LoadFromFile(path);
-
-        var inferenceConfig = modelResult.GetInferenceOptimizationConfigForServing();
-        bool enableBatching = inferenceConfig?.EnableBatching ?? true;
-        bool enableSpeculativeDecoding = inferenceConfig?.EnableSpeculativeDecoding ?? false;
 
         // Get dimensions from the model metadata
         var metadata = modelResult.GetModelMetadata();
@@ -271,9 +279,7 @@ public class ModelStartupService : IHostedService
             inputDim,
             outputDim,
             predictFunc,
-            predictBatchFunc,
-            enableBatching: enableBatching,
-            enableSpeculativeDecoding: enableSpeculativeDecoding);
+            predictBatchFunc);
 
         // Register with the repository
         var success = _modelRepository.LoadModel(name, servableModel, path);
@@ -286,4 +292,15 @@ public class ModelStartupService : IHostedService
         _logger.LogDebug("Model '{Name}' registered with {InputDim} input dimensions and {OutputDim} output dimensions",
             name, inputDim, outputDim);
     }
+
+    private static string ComputeFileSha256Hex(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var sha256 = SHA256.Create();
+        var hash = sha256.ComputeHash(stream);
+        return Convert.ToHexString(hash);
+    }
+
+    private static string NormalizeHex(string value)
+        => (value ?? string.Empty).Replace(" ", string.Empty).Trim();
 }

@@ -29,9 +29,9 @@ internal class PagedKVCache<T> : IDisposable
     private readonly BlockManager<T> _blockManager;
     private readonly BlockTableManager<T> _blockTableManager;
 
-    // Physical storage for K and V tensors
-    // Shape: [num_blocks, num_layers, 2 (K/V), block_size, num_heads, head_dim]
-    private readonly T[] _kvStorage;
+    // Physical storage for K and V tensors, split by block to avoid very large single-object allocations.
+    // Shape per block: [num_layers, 2 (K/V), block_size, num_heads, head_dim]
+    private readonly T[][] _kvBlocks;
     private readonly long _elementsPerBlock;
 
     // Tracking
@@ -85,22 +85,24 @@ internal class PagedKVCache<T> : IDisposable
         // Each block stores: block_size tokens x num_layers x 2 (K,V) x num_heads x head_dim
         _elementsPerBlock = (long)config.BlockSize * config.NumLayers * 2 * config.NumHeads * config.HeadDimension;
 
-        // Allocate physical storage
-        long totalElements = _elementsPerBlock * config.NumBlocks;
-        if (totalElements > int.MaxValue)
-            throw new ArgumentOutOfRangeException(nameof(config), $"PagedKVCache requires totalElements <= {int.MaxValue}, but got {totalElements}. Reduce NumBlocks or memory size.");
+        if (_elementsPerBlock > int.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(config), $"PagedKVCache requires elementsPerBlock <= {int.MaxValue}, but got {_elementsPerBlock}. Reduce BlockSize/model dimensions.");
 
-        try
+        // Allocate physical storage per block to avoid single large allocations (notably on .NET Framework).
+        _kvBlocks = new T[config.NumBlocks][];
+        for (int i = 0; i < _kvBlocks.Length; i++)
         {
-            _kvStorage = new T[(int)totalElements];
-        }
-        catch (OutOfMemoryException ex)
-        {
-            throw new InvalidOperationException(
-                $"Failed to allocate PagedKVCache storage ({totalElements} elements). " +
-                "This can happen when requesting very large contiguous memory blocks (e.g., multi-GB) in environments with tighter single-object limits. " +
-                "Reduce available memory/NumBlocks or use a runtime that supports larger allocations.",
-                ex);
+            try
+            {
+                _kvBlocks[i] = new T[(int)_elementsPerBlock];
+            }
+            catch (OutOfMemoryException ex)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to allocate PagedKVCache block storage ({_elementsPerBlock} elements per block, {config.NumBlocks} blocks). " +
+                    "Reduce available memory/NumBlocks or use a runtime that supports larger allocations.",
+                    ex);
+            }
         }
 
         _sequenceMetadata = new Dictionary<long, SequenceMetadata>();
@@ -217,24 +219,19 @@ internal class PagedKVCache<T> : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets the storage offset for a specific position in the cache.
-    /// </summary>
-    /// <param name="blockId">Physical block ID.</param>
-    /// <param name="layer">Layer index.</param>
-    /// <param name="isValue">True for V, false for K.</param>
-    /// <param name="tokenOffset">Offset within the block.</param>
-    /// <param name="head">Head index.</param>
-    /// <returns>The offset into the storage array.</returns>
-    public long GetStorageOffset(int blockId, int layer, bool isValue, int tokenOffset, int head)
+    private int GetBlockStorageOffset(int layer, bool isValue, int tokenOffset, int head)
     {
-        // Layout: [block][layer][kv][token][head][dim]
-        long offset = blockId * _elementsPerBlock;
+        // Layout (within block): [layer][kv][token][head][dim]
+        long offset = 0;
         offset += (long)layer * 2 * _config.BlockSize * _config.NumHeads * _config.HeadDimension;
         offset += (isValue ? 1 : 0) * (long)_config.BlockSize * _config.NumHeads * _config.HeadDimension;
         offset += (long)tokenOffset * _config.NumHeads * _config.HeadDimension;
         offset += (long)head * _config.HeadDimension;
-        return offset;
+
+        if (offset > int.MaxValue)
+            throw new InvalidOperationException($"Computed storage offset exceeds {int.MaxValue}: {offset}");
+
+        return (int)offset;
     }
 
     /// <summary>
@@ -257,12 +254,13 @@ internal class PagedKVCache<T> : IDisposable
         }
 
         // Write key data for all heads
+        var blockStorage = _kvBlocks[blockId];
         for (int head = 0; head < _config.NumHeads; head++)
         {
-            long storageOffset = GetStorageOffset(blockId, layer, isValue: false, offset, head);
+            int storageOffset = GetBlockStorageOffset(layer, isValue: false, offset, head);
             int dataOffset = head * _config.HeadDimension;
             keyData.Slice(dataOffset, _config.HeadDimension).CopyTo(
-                _kvStorage.AsSpan((int)storageOffset, _config.HeadDimension));
+                blockStorage.AsSpan(storageOffset, _config.HeadDimension));
         }
     }
 
@@ -286,12 +284,13 @@ internal class PagedKVCache<T> : IDisposable
         }
 
         // Write value data for all heads
+        var blockStorage = _kvBlocks[blockId];
         for (int head = 0; head < _config.NumHeads; head++)
         {
-            long storageOffset = GetStorageOffset(blockId, layer, isValue: true, offset, head);
+            int storageOffset = GetBlockStorageOffset(layer, isValue: true, offset, head);
             int dataOffset = head * _config.HeadDimension;
             valueData.Slice(dataOffset, _config.HeadDimension).CopyTo(
-                _kvStorage.AsSpan((int)storageOffset, _config.HeadDimension));
+                blockStorage.AsSpan(storageOffset, _config.HeadDimension));
         }
     }
 
@@ -306,11 +305,12 @@ internal class PagedKVCache<T> : IDisposable
 
         var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
 
+        var blockStorage = _kvBlocks[blockId];
         for (int head = 0; head < _config.NumHeads; head++)
         {
-            long storageOffset = GetStorageOffset(blockId, layer, isValue: false, offset, head);
+            int storageOffset = GetBlockStorageOffset(layer, isValue: false, offset, head);
             int dataOffset = head * _config.HeadDimension;
-            _kvStorage.AsSpan((int)storageOffset, _config.HeadDimension).CopyTo(
+            blockStorage.AsSpan(storageOffset, _config.HeadDimension).CopyTo(
                 keyData.Slice(dataOffset, _config.HeadDimension));
         }
     }
@@ -326,11 +326,12 @@ internal class PagedKVCache<T> : IDisposable
 
         var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
 
+        var blockStorage = _kvBlocks[blockId];
         for (int head = 0; head < _config.NumHeads; head++)
         {
-            long storageOffset = GetStorageOffset(blockId, layer, isValue: true, offset, head);
+            int storageOffset = GetBlockStorageOffset(layer, isValue: true, offset, head);
             int dataOffset = head * _config.HeadDimension;
-            _kvStorage.AsSpan((int)storageOffset, _config.HeadDimension).CopyTo(
+            blockStorage.AsSpan(storageOffset, _config.HeadDimension).CopyTo(
                 valueData.Slice(dataOffset, _config.HeadDimension));
         }
     }
@@ -400,9 +401,9 @@ internal class PagedKVCache<T> : IDisposable
     }
 
     /// <summary>
-    /// Gets the underlying storage array (for GPU transfer).
+    /// Gets the underlying storage blocks (for GPU transfer).
     /// </summary>
-    public T[] GetStorage() => _kvStorage;
+    public IReadOnlyList<T[]> GetStorageBlocks() => _kvBlocks;
 
     /// <summary>
     /// Releases resources.
@@ -421,10 +422,7 @@ internal class PagedKVCache<T> : IDisposable
 
     private void CopyBlockData(int sourceBlockId, int destBlockId)
     {
-        long sourceOffset = sourceBlockId * _elementsPerBlock;
-        long destOffset = destBlockId * _elementsPerBlock;
-
-        Array.Copy(_kvStorage, sourceOffset, _kvStorage, destOffset, _elementsPerBlock);
+        Array.Copy(_kvBlocks[sourceBlockId], 0, _kvBlocks[destBlockId], 0, (int)_elementsPerBlock);
     }
 
     private double CalculateMemoryEfficiency()

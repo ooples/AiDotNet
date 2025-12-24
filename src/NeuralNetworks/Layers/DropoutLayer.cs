@@ -552,12 +552,4 @@ public class DropoutLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsJitCompilation => true;
-
-    internal override Dictionary<string, string> GetMetadata()
-    {
-        return new Dictionary<string, string>
-        {
-            ["DropoutRate"] = Convert.ToDouble(_dropoutRate).ToString(System.Globalization.CultureInfo.InvariantCulture)
-        };
-    }
 }

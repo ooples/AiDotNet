@@ -138,10 +138,10 @@ Once the server is running, you can make predictions via HTTP:
 
 ```bash
 # List loaded models
-curl http://localhost:5000/api/models
+curl http://localhost:52432/api/models
 
 # Make a prediction
-curl -X POST http://localhost:5000/api/inference/predict/my-linear-model \
+curl -X POST http://localhost:52432/api/inference/predict/my-linear-model \
   -H "Content-Type: application/json" \
   -d '{
     "features": [[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]],
@@ -149,15 +149,15 @@ curl -X POST http://localhost:5000/api/inference/predict/my-linear-model \
   }'
 
 # Get batching statistics
-curl http://localhost:5000/api/inference/stats
+curl http://localhost:52432/api/inference/stats
 
 # Unload a model
-curl -X DELETE http://localhost:5000/api/models/my-linear-model
+curl -X DELETE http://localhost:52432/api/models/my-linear-model
 ```
 
 ### 4. Using the Swagger UI
 
-Navigate to `http://localhost:5000` to access the interactive Swagger UI where you can:
+Navigate to `http://localhost:52432` to access the interactive Swagger UI where you can:
 - View all available endpoints
 - Test API calls directly in the browser
 - See request/response schemas
@@ -170,7 +170,7 @@ Configure the serving framework in `appsettings.json`:
 ```json
 {
   "ServingOptions": {
-    "Port": 5000,
+    "Port": 52432,
     "BatchingWindowMs": 10,
     "MaxBatchSize": 100,
     "StartupModels": []
@@ -182,7 +182,7 @@ Configure the serving framework in `appsettings.json`:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `Port` | int | 5000 | Port number for the HTTP server |
+| `Port` | int | 52432 | Port number for the HTTP server |
 | `BatchingWindowMs` | int | 10 | Time window in milliseconds to collect requests before processing |
 | `MaxBatchSize` | int | 100 | Maximum number of requests to batch together (0 = unlimited) |
 | `StartupModels` | array | [] | Models to load at startup (requires custom implementation) |
@@ -225,7 +225,7 @@ dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
 Monitor the performance of the request batcher:
 
 ```bash
-curl http://localhost:5000/api/inference/stats
+curl http://localhost:52432/api/inference/stats
 ```
 
 Response:
@@ -296,7 +296,7 @@ repository.LoadModel("my-neural-net", servable);
 ```csharp
 using System.Net.Http.Json;
 
-var client = new HttpClient { BaseAddress = new Uri("http://localhost:5000") };
+var client = new HttpClient { BaseAddress = new Uri("http://localhost:52432") };
 
 // Send 100 concurrent requests - they'll be automatically batched
 var tasks = Enumerable.Range(0, 100).Select(async i =>
@@ -373,7 +373,7 @@ This project is part of the AiDotNet library. See the main repository for licens
 
 - Check `BatchingWindowMs` is not too low (< 5ms)
 - Ensure you're sending concurrent requests
-- Check statistics: `curl http://localhost:5000/api/inference/stats`
+- Check statistics: `curl http://localhost:52432/api/inference/stats`
 
 ### High latency
 
@@ -382,7 +382,7 @@ This project is part of the AiDotNet library. See the main repository for licens
 
 ### Model not found errors
 
-- Verify the model is loaded: `curl http://localhost:5000/api/models`
+- Verify the model is loaded: `curl http://localhost:52432/api/models`
 - Check the model name matches exactly (case-sensitive)
 - Ensure the numeric type matches (double/float/decimal)
 

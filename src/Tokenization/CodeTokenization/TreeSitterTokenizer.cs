@@ -35,51 +35,15 @@ namespace AiDotNet.Tokenization.CodeTokenization
     /// </remarks>
     public sealed class TreeSitterTokenizer : TokenizerBase, IDisposable
     {
-        private readonly Language _language;
-        private readonly Parser _parser;
+        private readonly (string LibraryName, string FunctionName) _languageSpec;
+        private Language? _language;
+        private Parser? _parser;
         private readonly ITokenizer _baseTokenizer;
         private readonly TreeSitterLanguage _languageType;
         private readonly bool _includeNodeTypes;
         private readonly bool _flattenTree;
+        private bool _treeSitterAvailable = true;
         private bool _disposed;
-
-        /// <summary>
-        /// Supported programming languages for Tree-sitter parsing.
-        /// </summary>
-        /// <remarks>
-        /// <para><b>For Beginners:</b> Each language has its own grammar rules that Tree-sitter
-        /// uses to understand the code structure. Choose the language that matches your source code.
-        /// </para>
-        /// </remarks>
-        public enum TreeSitterLanguage
-        {
-            /// <summary>C# programming language.</summary>
-            CSharp,
-            /// <summary>Python programming language.</summary>
-            Python,
-            /// <summary>JavaScript programming language.</summary>
-            JavaScript,
-            /// <summary>TypeScript programming language.</summary>
-            TypeScript,
-            /// <summary>Java programming language.</summary>
-            Java,
-            /// <summary>C programming language.</summary>
-            C,
-            /// <summary>C++ programming language.</summary>
-            Cpp,
-            /// <summary>Go programming language.</summary>
-            Go,
-            /// <summary>Rust programming language.</summary>
-            Rust,
-            /// <summary>Ruby programming language.</summary>
-            Ruby,
-            /// <summary>JSON data format.</summary>
-            Json,
-            /// <summary>HTML markup language.</summary>
-            Html,
-            /// <summary>CSS stylesheet language.</summary>
-            Css
-        }
 
         /// <summary>
         /// Creates a new Tree-sitter tokenizer for the specified programming language.
@@ -112,34 +76,32 @@ namespace AiDotNet.Tokenization.CodeTokenization
             _includeNodeTypes = includeNodeTypes;
             _flattenTree = flattenTree;
 
-            var languageName = GetTreeSitterLanguageName(language);
-            _language = new Language(languageName);
-            _parser = new Parser(_language);
+            _languageSpec = GetTreeSitterLanguageSpec(language);
         }
 
         /// <summary>
-        /// Gets the Tree-sitter language name string for a language enum value.
+        /// Gets the Tree-sitter language library/function spec for a language enum value.
         /// </summary>
         /// <param name="language">The language enum value.</param>
-        /// <returns>The Tree-sitter language name string.</returns>
-        private static string GetTreeSitterLanguageName(TreeSitterLanguage language)
+        /// <returns>The Tree-sitter language library and function names.</returns>
+        private static (string LibraryName, string FunctionName) GetTreeSitterLanguageSpec(TreeSitterLanguage language)
         {
             return language switch
             {
-                TreeSitterLanguage.CSharp => "c_sharp",
-                TreeSitterLanguage.Python => "python",
-                TreeSitterLanguage.JavaScript => "javascript",
-                TreeSitterLanguage.TypeScript => "typescript",
-                TreeSitterLanguage.Java => "java",
-                TreeSitterLanguage.C => "c",
-                TreeSitterLanguage.Cpp => "cpp",
-                TreeSitterLanguage.Go => "go",
-                TreeSitterLanguage.Rust => "rust",
-                TreeSitterLanguage.Ruby => "ruby",
-                TreeSitterLanguage.Json => "json",
-                TreeSitterLanguage.Html => "html",
-                TreeSitterLanguage.Css => "css",
-                _ => "python"
+                TreeSitterLanguage.CSharp => ("tree-sitter-c-sharp", "tree_sitter_c_sharp"),
+                TreeSitterLanguage.Python => ("tree-sitter-python", "tree_sitter_python"),
+                TreeSitterLanguage.JavaScript => ("tree-sitter-javascript", "tree_sitter_javascript"),
+                TreeSitterLanguage.TypeScript => ("tree-sitter-typescript", "tree_sitter_typescript"),
+                TreeSitterLanguage.Java => ("tree-sitter-java", "tree_sitter_java"),
+                TreeSitterLanguage.C => ("tree-sitter-c", "tree_sitter_c"),
+                TreeSitterLanguage.Cpp => ("tree-sitter-cpp", "tree_sitter_cpp"),
+                TreeSitterLanguage.Go => ("tree-sitter-go", "tree_sitter_go"),
+                TreeSitterLanguage.Rust => ("tree-sitter-rust", "tree_sitter_rust"),
+                TreeSitterLanguage.Ruby => ("tree-sitter-ruby", "tree_sitter_ruby"),
+                TreeSitterLanguage.Json => ("tree-sitter-json", "tree_sitter_json"),
+                TreeSitterLanguage.Html => ("tree-sitter-html", "tree_sitter_html"),
+                TreeSitterLanguage.Css => ("tree-sitter-css", "tree_sitter_css"),
+                _ => ("tree-sitter-python", "tree_sitter_python")
             };
         }
 
@@ -172,9 +134,14 @@ namespace AiDotNet.Tokenization.CodeTokenization
 
             var tokens = new List<string>();
 
+            if (!TryEnsureParser())
+            {
+                return _baseTokenizer.Tokenize(text).ToList();
+            }
+
             try
             {
-                using var tree = _parser.Parse(text);
+                using var tree = _parser!.Parse(text);
                 if (tree is not null)
                 {
                     var rootNode = tree.RootNode;
@@ -206,6 +173,55 @@ namespace AiDotNet.Tokenization.CodeTokenization
             return tokens;
         }
 
+        private bool TryEnsureParser()
+        {
+            if (_parser is not null)
+            {
+                return true;
+            }
+
+            if (!_treeSitterAvailable)
+            {
+                return false;
+            }
+
+            try
+            {
+                var language = new Language(_languageSpec.LibraryName, _languageSpec.FunctionName);
+                try
+                {
+                    _parser = new Parser(language);
+                    _language = language;
+                }
+                catch
+                {
+                    language.Dispose();
+                    throw;
+                }
+                return true;
+            }
+            catch (DllNotFoundException)
+            {
+                _treeSitterAvailable = false;
+                return false;
+            }
+            catch (BadImageFormatException)
+            {
+                _treeSitterAvailable = false;
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                _treeSitterAvailable = false;
+                return false;
+            }
+            catch (ArgumentException)
+            {
+                _treeSitterAvailable = false;
+                return false;
+            }
+        }
+
         /// <summary>
         /// Extracts tokens from the AST using Tree-sitter queries.
         /// </summary>
@@ -218,6 +234,11 @@ namespace AiDotNet.Tokenization.CodeTokenization
 
             try
             {
+                if (_language is null)
+                {
+                    return;
+                }
+
                 using var query = new Query(_language, queryPattern);
                 var queryResult = query.Execute(rootNode);
 
