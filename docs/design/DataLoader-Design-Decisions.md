@@ -70,7 +70,12 @@ GitHub Issue: #443
 ### Phase 5: Optimizer Integration
 | Task | Status | Commit |
 |------|--------|--------|
-| 5: Refactor optimizers | PENDING | - |
+| 5A: Create DataSamplerBase, WeightedSamplerBase, EpochAdaptiveSamplerBase | COMPLETE | 7e3bf51 |
+| 5B: Refactor all samplers to use base classes | COMPLETE | 7e3bf51 |
+| 5C: Add OnEpochStart to IDataSampler interface | COMPLETE | 7e3bf51 |
+| 5D: Add DataLoader options to GradientBasedOptimizerOptions | COMPLETE | 7e3bf51 |
+| 5E: Add CreateBatcher helpers to GradientBasedOptimizerBase | COMPLETE | 7e3bf51 |
+| 5F: Refactor MiniBatchGradientDescentOptimizer to use batcher | COMPLETE | 7e3bf51 |
 
 ### Phase 6: Testing
 | Task | Status | Commit |
@@ -97,12 +102,20 @@ GitHub Issue: #443
 - `src/Extensions/DataLoaderExtensions.cs` - Fluent API builders
 
 ### Sampling Infrastructure
-- `src/Interfaces/IDataSampler.cs` - Sampler interfaces
+- `src/Interfaces/IDataSampler.cs` - Sampler interfaces (IDataSampler, IBatchSampler, IWeightedSampler, IStratifiedSampler)
+- `src/Data/Sampling/DataSamplerBase.cs` - Base classes (DataSamplerBase, WeightedSamplerBase<T>, EpochAdaptiveSamplerBase<T>)
 - `src/Data/Sampling/RandomSampler.cs` - Random, Sequential, Subset samplers
 - `src/Data/Sampling/StratifiedSampler.cs` - Stratified and StratifiedBatch samplers
 - `src/Data/Sampling/WeightedSampler.cs` - Weighted sampling with class balancing
 - `src/Data/Sampling/CurriculumSampler.cs` - Curriculum and Self-paced learning
 - `src/Data/Sampling/ImportanceSampler.cs` - Importance and Active learning samplers
+- `src/Data/Sampling/Samplers.cs` - Static facade with factory methods
+
+### Optimizer Integration
+- `src/Models/Options/GradientBasedOptimizerOptions.cs` - Added DataSampler, ShuffleData, DropLastBatch, RandomSeed
+- `src/Optimizers/GradientBasedOptimizerBase.cs` - Added CreateBatcher helpers, NotifyEpochStart
+- `src/Optimizers/MiniBatchGradientDescentOptimizer.cs` - Refactored to use DataLoader batcher
+- `src/Optimizers/OptimizationDataBatcher.cs` - Made public for optimizer access
 
 ### Parallel Loading
 - `src/Data/Loaders/ParallelBatchLoader.cs` - Multi-worker batch loading with prefetch

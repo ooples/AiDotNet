@@ -88,6 +88,13 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// using the AMSGrad steps until it reaches the best possible solution or hits a stopping condition.
     /// </para>
     /// </remarks>
+    /// <remarks>
+    /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
+    /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
+    /// and notifies the sampler of epoch starts using
+    /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>.
+    /// </para>
+    /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -101,17 +108,25 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         _vHat = new Vector<T>(parameters.Length);
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            var newSolution = UpdateSolution(currentSolution, gradient);
+            NotifyEpochStart(epoch);
+            var batcher = CreateBatcher(inputData, _options.BatchSize);
 
-            var currentStepData = EvaluateSolution(newSolution, inputData);
+            foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+            {
+                _t++;
+                var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+                var newSolution = UpdateSolution(currentSolution, gradient);
+                currentSolution = newSolution;
+            }
+
+            var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
 
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }
@@ -121,7 +136,6 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            currentSolution = newSolution;
             previousStepData = currentStepData;
         }
 

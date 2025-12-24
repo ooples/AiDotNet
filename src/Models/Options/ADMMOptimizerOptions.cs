@@ -18,6 +18,18 @@ namespace AiDotNet.Models.Options;
 public class ADMMOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Gets or sets the batch size for mini-batch processing within each ADMM iteration.
+    /// </summary>
+    /// <value>A positive integer, defaulting to -1 (full batch).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The batch size controls how many examples the optimizer looks at
+    /// in each iteration. ADMM traditionally operates on the full dataset (batch size -1) because it
+    /// solves linear systems that involve the entire data matrix. Use -1 for standard ADMM behavior,
+    /// or set a positive value for stochastic ADMM variants that may be implemented in the future.</para>
+    /// </remarks>
+    public int BatchSize { get; set; } = -1;
+
+    /// <summary>
     /// Gets or sets the penalty parameter that controls the balance between the original objective and the constraint satisfaction.
     /// </summary>
     /// <value>The penalty parameter, defaulting to 1.0.</value>
