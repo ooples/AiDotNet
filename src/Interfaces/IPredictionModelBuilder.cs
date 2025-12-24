@@ -9,6 +9,8 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.PromptEngineering.FewShot;
+using AiDotNet.ProgramSynthesis.Options;
+using AiDotNet.ProgramSynthesis.Serving;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using AiDotNet.Tokenization.Configuration;
@@ -1096,6 +1098,20 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizer(ITokenizer? tokenizer = null, TokenizationConfig? config = null);
 
     /// <summary>
+    /// Configures built-in Program Synthesis defaults for code tasks.
+    /// </summary>
+    /// <remarks>
+    /// This method is available on the generic builder interface and can be used with any
+    /// <typeparamref name="TInput"/> and <typeparamref name="TOutput"/> (for example <c>Tensor&lt;T&gt;</c>,
+    /// <c>Vector&lt;T&gt;</c>, or <c>Matrix&lt;T&gt;</c>).
+    /// Implementations should use sensible defaults and ensure the program-synthesis capabilities are available
+    /// through <c>PredictionModelResult</c> without requiring users to manually wire low-level components.
+    /// </remarks>
+    /// <param name="options">Optional configuration options.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureProgramSynthesis(ProgramSynthesisOptions? options = null);
+
+    /// <summary>
     /// Configures tokenization using a pretrained tokenizer from HuggingFace Hub.
     /// </summary>
     /// <remarks>
@@ -1496,6 +1512,28 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="selector">The few-shot example selector to use. If null, no selector is configured.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureFewShotExampleSelector(IFewShotExampleSelector<T>? selector = null);
+
+    /// <summary>
+    /// Configures Program Synthesis to prefer calling <c>AiDotNet.Serving</c> for sandboxed execution and evaluation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When configured, Program Synthesis inference (code tasks, sandboxed execution, evaluation) can be routed through
+    /// <c>AiDotNet.Serving</c> by default to isolate untrusted code and keep proprietary logic on the server side.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This lets your app call a secure server to run code tasks safely.
+    ///
+    /// Instead of running code on your machine (which can be unsafe), you can point AiDotNet to a Serving instance that
+    /// runs everything in a sandbox.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">Serving client options. If null, Serving is not used unless a client is provided.</param>
+    /// <param name="client">Optional custom client implementation. When provided, this takes precedence over <paramref name="options"/>.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureProgramSynthesisServing(
+        ProgramSynthesisServingClientOptions? options = null,
+        IProgramSynthesisServingClient? client = null);
 
     /// <summary>
     /// Configures curriculum learning for training models with progressively harder samples.

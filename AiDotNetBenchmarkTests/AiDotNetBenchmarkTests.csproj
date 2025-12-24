@@ -6,7 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 	  <LangVersion>latest</LangVersion>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- CA1822: BenchmarkDotNet requires instance methods for benchmarks -->
     <NoWarn>$(NoWarn);CA1822</NoWarn>
   </PropertyGroup>

@@ -220,6 +220,20 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private int _headDimension;
 
     /// <summary>
+    /// Returns layer-specific metadata required for cloning/serialization.
+    /// </summary>
+    /// <remarks>
+    /// Self-attention requires the configured head count to reconstruct the layer correctly during
+    /// serialization-based cloning. This mirrors <see cref="MultiHeadAttentionLayer{T}"/> metadata.
+    /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["HeadCount"] = _headCount.ToString();
+        return metadata;
+    }
+
+    /// <summary>
     /// The dimension of the input and output embeddings.
     /// </summary>
     /// <remarks>
@@ -1370,13 +1384,5 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                    _keyWeights.Shape.Length >= 2 && _keyWeights.Shape[0] > 0 &&
                    _valueWeights.Shape.Length >= 2 && _valueWeights.Shape[0] > 0;
         }
-    }
-
-    internal override Dictionary<string, string> GetMetadata()
-    {
-        return new Dictionary<string, string>
-        {
-            ["HeadCount"] = _headCount.ToString(System.Globalization.CultureInfo.InvariantCulture)
-        };
     }
 }

@@ -8,9 +8,9 @@ public class ServingOptions
 {
     /// <summary>
     /// Gets or sets the port number on which the server will listen.
-    /// Default is 5000.
+    /// Default is 52432.
     /// </summary>
-    public int Port { get; set; } = 5000;
+    public int Port { get; set; } = 52432;
 
     /// <summary>
     /// Gets or sets the batching window in milliseconds.
@@ -117,4 +117,3 @@ public class ServingOptions
     /// </summary>
     public List<StartupModel> StartupModels { get; set; } = new();
 }
-

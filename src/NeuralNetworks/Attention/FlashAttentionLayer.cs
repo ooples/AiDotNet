@@ -27,7 +27,7 @@ namespace AiDotNet.NeuralNetworks.Attention;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations (typically float or double).</typeparam>
-internal class FlashAttentionLayer<T> : LayerBase<T>
+public class FlashAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _headCount;
     private readonly int _headDimension;
@@ -519,13 +519,4 @@ internal class FlashAttentionLayer<T> : LayerBase<T>
     /// Gets the output projection weights.
     /// </summary>
     public Matrix<T> GetOutputWeights() => _outputWeights;
-
-    internal override Dictionary<string, string> GetMetadata()
-    {
-        return new Dictionary<string, string>
-        {
-            ["HeadCount"] = _headCount.ToString(),
-            ["UseCausalMask"] = _config.UseCausalMask.ToString()
-        };
-    }
 }

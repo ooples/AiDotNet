@@ -21,5 +21,15 @@ public class StartupModel
     /// Default is Double.
     /// </summary>
     public NumericType NumericType { get; set; } = NumericType.Double;
+
+    /// <summary>
+    /// Gets or sets the expected SHA-256 hash (hex) of the model file.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When specified, AiDotNet.Serving validates the model file hash before loading.
+    /// </para>
+    /// </remarks>
+    public string? Sha256 { get; set; }
 }
 

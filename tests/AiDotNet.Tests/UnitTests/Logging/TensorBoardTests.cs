@@ -247,7 +247,11 @@ public class SummaryWriterTests : IDisposable
             logDir = writer.LogDir;
 
             // Assert
-            Assert.StartsWith("runs", writer.LogDir);
+            Assert.False(string.IsNullOrWhiteSpace(writer.LogDir));
+
+            var trimmedLogDir = writer.LogDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var parentDir = Path.GetDirectoryName(trimmedLogDir);
+            Assert.Equal("runs", Path.GetFileName(parentDir));
         }
 
         // Cleanup - only after writer is disposed

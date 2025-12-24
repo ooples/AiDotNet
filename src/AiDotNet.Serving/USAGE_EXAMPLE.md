@@ -57,7 +57,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Configure serving options
 builder.Services.Configure<ServingOptions>(options =>
 {
-    options.Port = 5000;
+    options.Port = 52432;
     options.BatchingWindowMs = 10;
     options.MaxBatchSize = 100;
 });
@@ -93,8 +93,8 @@ if (app.Environment.IsDevelopment())
 app.UseAuthorization();
 app.MapControllers();
 
-Console.WriteLine("🚀 AiDotNet Serving API is running on http://localhost:5000");
-Console.WriteLine("📖 Swagger UI: http://localhost:5000/swagger");
+Console.WriteLine("🚀 AiDotNet Serving API is running on http://localhost:52432");
+Console.WriteLine("📖 Swagger UI: http://localhost:52432/swagger");
 Console.WriteLine("📊 Model loaded: house-price-predictor");
 
 app.Run();
@@ -106,10 +106,10 @@ app.Run();
 
 ```bash
 # Get list of loaded models
-curl http://localhost:5000/api/models
+curl http://localhost:52432/api/models
 
 # Make a prediction for a house with 1600 sq ft, 3 bedrooms, 2 bathrooms
-curl -X POST http://localhost:5000/api/inference/predict/house-price-predictor \
+curl -X POST http://localhost:52432/api/inference/predict/house-price-predictor \
   -H "Content-Type: application/json" \
   -d '{
     "features": [[1600, 3, 2]],
@@ -132,7 +132,7 @@ using System.Net.Http.Json;
 
 var client = new HttpClient
 {
-    BaseAddress = new Uri("http://localhost:5000")
+    BaseAddress = new Uri("http://localhost:52432")
 };
 
 // Create a prediction request
@@ -165,7 +165,7 @@ import json
 
 # Make a prediction
 response = requests.post(
-    'http://localhost:5000/api/inference/predict/house-price-predictor',
+    'http://localhost:52432/api/inference/predict/house-price-predictor',
     json={
         'features': [[1600, 3, 2]],
         'requestId': 'house-1'
@@ -377,7 +377,7 @@ await Task.WhenAll(tasks);
 
 1. Review the [README.md](README.md) for complete API documentation
 2. Check out the [integration tests](../../tests/AiDotNet.Serving.Tests/ServingIntegrationTests.cs) for more examples
-3. Explore the [Swagger UI](http://localhost:5000/swagger) for interactive API testing
+3. Explore the [Swagger UI](http://localhost:52432/swagger) for interactive API testing
 
 ---
 

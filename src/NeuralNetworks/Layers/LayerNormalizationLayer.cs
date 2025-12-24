@@ -91,6 +91,21 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     private Tensor<T>? _betaGradient;
 
     /// <summary>
+    /// Returns layer-specific metadata required for cloning/serialization.
+    /// </summary>
+    /// <remarks>
+    /// Layer normalization requires its epsilon value to be preserved to reconstruct numerically stable behavior
+    /// during serialization-based cloning.
+    /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["Epsilon"] = Convert.ToDouble(_epsilon, System.Globalization.CultureInfo.InvariantCulture)
+            .ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -593,13 +608,5 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
             // No running statistics needed (unlike BatchNorm)
             return _gamma != null && _beta != null;
         }
-    }
-
-    internal override Dictionary<string, string> GetMetadata()
-    {
-        return new Dictionary<string, string>
-        {
-            ["Epsilon"] = Convert.ToDouble(_epsilon).ToString(System.Globalization.CultureInfo.InvariantCulture)
-        };
     }
 }

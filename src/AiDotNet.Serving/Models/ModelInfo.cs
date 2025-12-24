@@ -51,5 +51,10 @@ public class ModelInfo
     /// Gets or sets whether this model was loaded from a model registry.
     /// </summary>
     public bool IsFromRegistry { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether batching is enabled for this model.
+    /// </summary>
+    public bool EnableBatching { get; set; } = true;
 }
 

@@ -1,7 +1,9 @@
 using System.Diagnostics;
+using System.Linq;
 using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Reasoning.Benchmarks.Data;
 using AiDotNet.Reasoning.Benchmarks.Models;
 using AiDotNet.Tensors.Helpers;
 
@@ -44,11 +46,13 @@ public class HumanEvalBenchmark<T> : IBenchmark<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly INumericOperations<T> _numOps;
+    private readonly HumanEvalBenchmarkOptions _options;
     private List<BenchmarkProblem>? _cachedProblems;
 
-    public HumanEvalBenchmark()
+    public HumanEvalBenchmark(HumanEvalBenchmarkOptions? options = null)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
+        _options = options ?? HumanEvalBenchmarkOptions.FromEnvironment();
     }
 
     /// <inheritdoc/>
@@ -65,6 +69,13 @@ public class HumanEvalBenchmark<T> : IBenchmark<T>
     /// <inheritdoc/>
     public async Task<BenchmarkResult<T>> EvaluateAsync(
         Func<string, Task<string>> evaluateFunction,
+        int? sampleSize = null,
+        CancellationToken cancellationToken = default)
+        => await EvaluateAsync(evaluateFunction, executionEvaluator: null, sampleSize, cancellationToken).ConfigureAwait(false);
+
+    public async Task<BenchmarkResult<T>> EvaluateAsync(
+        Func<string, Task<string>> evaluateFunction,
+        Func<string, string[], CancellationToken, Task<bool>>? executionEvaluator,
         int? sampleSize = null,
         CancellationToken cancellationToken = default)
     {
@@ -128,8 +139,28 @@ public class HumanEvalBenchmark<T> : IBenchmark<T>
             // Extract code from response
             string? extractedCode = ExtractPythonCode(systemAnswer);
 
-            // Check if correct (in production, would execute tests)
-            bool isCorrect = CheckCodeCorrectness(extractedCode, problem.CorrectAnswer);
+            bool isCorrect;
+            string evaluationMode;
+
+            if (executionEvaluator is not null && !string.IsNullOrWhiteSpace(extractedCode))
+            {
+                var testCases = ExtractDoctestAssertions(problem.Problem);
+                if (testCases.Length > 0)
+                {
+                    evaluationMode = "execution";
+                    isCorrect = await executionEvaluator(problem.Problem, testCases, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    evaluationMode = "heuristic_no_tests";
+                    isCorrect = CheckCodeCorrectness(extractedCode, problem.CorrectAnswer);
+                }
+            }
+            else
+            {
+                evaluationMode = "heuristic";
+                isCorrect = CheckCodeCorrectness(extractedCode, problem.CorrectAnswer);
+            }
 
             if (isCorrect)
             {
@@ -160,7 +191,12 @@ public class HumanEvalBenchmark<T> : IBenchmark<T>
                 IsCorrect = isCorrect,
                 Confidence = _numOps.FromDouble(0.75),
                 Duration = problemStopwatch.Elapsed,
-                Category = category
+                Category = category,
+                Metadata = new Dictionary<string, object>
+                {
+                    { "evaluation_mode", evaluationMode },
+                    { "execution_enabled", executionEvaluator is not null }
+                }
             };
 
             problemResults.Add(evaluation);
@@ -198,19 +234,111 @@ public class HumanEvalBenchmark<T> : IBenchmark<T>
     {
         if (_cachedProblems == null)
         {
-            _cachedProblems = GenerateSampleProblems();
+            var datasetPath = _options.DatasetPath;
+            if (!string.IsNullOrWhiteSpace(datasetPath))
+            {
+                var loaded = await HumanEvalDataLoader.LoadFromFileAsync(datasetPath!).ConfigureAwait(false);
+                _cachedProblems = loaded
+                    .Where(p => !string.IsNullOrWhiteSpace(p.Prompt))
+                    .Select(p => new BenchmarkProblem
+                    {
+                        Id = string.IsNullOrWhiteSpace(p.TaskId) ? string.Empty : p.TaskId,
+                        Problem = p.Prompt,
+                        CorrectAnswer = p.CanonicalSolution ?? string.Empty,
+                        Category = "python"
+                    })
+                    .ToList();
+            }
+            else
+            {
+                _cachedProblems = GenerateSampleProblems();
+            }
         }
 
         var problems = _cachedProblems;
 
         if (count.HasValue && count.Value < problems.Count)
         {
-            var random = RandomHelper.CreateSeededRandom(42);
+            var random = RandomHelper.CreateSeededRandom(_options.SampleSeed);
             problems = problems.OrderBy(_ => random.Next()).Take(count.Value).ToList();
         }
 
         return await Task.FromResult(problems);
     }
+
+    internal static string[] ExtractDoctestAssertions(string problemText)
+    {
+        if (string.IsNullOrWhiteSpace(problemText))
+        {
+            return Array.Empty<string>();
+        }
+
+        var assertions = new List<string>();
+        var lines = problemText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            var trimmed = line.TrimStart();
+            if (!trimmed.StartsWith(">>>", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var expression = trimmed.Substring(3).Trim();
+            if (string.IsNullOrWhiteSpace(expression))
+            {
+                continue;
+            }
+
+            string? expected = null;
+            if (i + 1 < lines.Length)
+            {
+                var next = lines[i + 1].Trim();
+                if (!next.StartsWith(">>>", StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(next))
+                {
+                    expected = next;
+                    i++;
+                }
+            }
+
+            if (expected is null)
+            {
+                assertions.Add(expression);
+                continue;
+            }
+
+            if (expected.StartsWith("Traceback", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            assertions.Add($"assert ({expression}) == ({expected})");
+        }
+
+        return assertions.ToArray();
+    }
+
+    internal static string ComposePythonSubmission(string prompt, string completion)
+    {
+        if (string.IsNullOrWhiteSpace(completion))
+        {
+            return prompt ?? string.Empty;
+        }
+
+        var normalizedCompletion = completion.Replace("\r\n", "\n").Trim();
+        if (Regex.IsMatch(normalizedCompletion, @"(?m)^\s*def\s+\w+\s*\(", RegexOptions.None, RegexTimeout))
+        {
+            return normalizedCompletion;
+        }
+
+        var normalizedPrompt = (prompt ?? string.Empty).Replace("\r\n", "\n").TrimEnd();
+        var indented = string.Join("\n", normalizedCompletion.Split('\n').Select(l => "    " + l.TrimEnd()));
+
+        return normalizedPrompt + "\n" + indented + "\n";
+    }
+
+    // Note: execution is orchestrated by higher-level components (e.g. PredictionModelResult) so benchmarks stay safe-by-default.
 
     private List<BenchmarkProblem> GenerateSampleProblems()
     {
@@ -291,7 +419,7 @@ def separate_paren_groups(paren_string: str) -> List[str]:
         };
     }
 
-    private string? ExtractPythonCode(string text)
+    internal static string? ExtractPythonCode(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
             return null;
@@ -324,5 +452,21 @@ def separate_paren_groups(paren_string: str) -> List[str]:
         bool hasLogic = generatedCode.Length > 20;
 
         return hasReturn && hasLogic;
+    }
+}
+
+public sealed class HumanEvalBenchmarkOptions
+{
+    public string? DatasetPath { get; init; }
+
+    public int SampleSeed { get; init; } = 42;
+
+    internal static HumanEvalBenchmarkOptions FromEnvironment()
+    {
+        var datasetPath = Environment.GetEnvironmentVariable("AIDOTNET_HUMANEVAL_DATASET");
+        return new HumanEvalBenchmarkOptions
+        {
+            DatasetPath = string.IsNullOrWhiteSpace(datasetPath) ? null : datasetPath.Trim()
+        };
     }
 }

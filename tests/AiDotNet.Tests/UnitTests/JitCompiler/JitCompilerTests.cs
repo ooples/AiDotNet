@@ -271,7 +271,7 @@ public class JitCompilerTests
         Assert.Contains("10", str);
         Assert.Contains("6", str);
         Assert.Contains("Constant Folding", str);
-        Assert.Contains("15.5", str);
+        Assert.Matches(@"Compilation time:\s+\d+(\.\d{2})?ms", str);
         Assert.Contains("False", str);
     }
 

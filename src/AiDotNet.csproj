@@ -3,7 +3,6 @@
 	  <TargetFrameworks>net8.0;net471</TargetFrameworks>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Version>0.0.5-preview</Version>
 		<Title>Ai for .Net</Title>
@@ -34,6 +33,7 @@
     <InternalsVisibleTo Include="AiDotNetTests" />
     <InternalsVisibleTo Include="AiDotNetTestConsole" />
     <InternalsVisibleTo Include="AiDotNet.Serving" />
+    <InternalsVisibleTo Include="AiDotNet.ProgramSynthesis.Tooling" />
   </ItemGroup>
 
 	<ItemGroup>

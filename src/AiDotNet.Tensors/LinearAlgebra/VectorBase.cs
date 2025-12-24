@@ -75,12 +75,13 @@ public abstract class VectorBase<T>
     public int Length => _data.Length;
 
     /// <summary>
-    /// Gets direct access to the underlying data array for high-performance operations.
+    /// Gets the underlying array that stores the vector's elements.
     /// </summary>
     /// <remarks>
-    /// <para><b>Warning:</b> This property provides direct access to internal storage.
-    /// Modifications to this array will affect the vector. Use with caution in
-    /// performance-critical code paths like SIMD operations.</para>
+    /// <para>
+    /// This property exists for performance-sensitive internal code paths (e.g., kernels and SIMD routines) that require direct array access.
+    /// </para>
+    /// <para><b>For Beginners:</b> This exposes the raw list of numbers inside the vector.</para>
     /// </remarks>
     public T[] Data => _data;
 
