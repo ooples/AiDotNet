@@ -1,7 +1,10 @@
 using System.Net;
-using System.Net.Http.Json;
+using System.Text;
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Execution;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Serialization;
 using Xunit;
 
 namespace AiDotNet.Serving.Tests;
@@ -9,10 +12,28 @@ namespace AiDotNet.Serving.Tests;
 public class SqlSandboxTests : IClassFixture<SqlSandboxTestFactory>
 {
     private readonly HttpClient _client;
+    private static readonly JsonSerializerSettings JsonSettings = new()
+    {
+        ContractResolver = new CamelCasePropertyNamesContractResolver(),
+        Converters = { new StringEnumConverter(new CamelCaseNamingStrategy(), allowIntegerValues: false) }
+    };
 
     public SqlSandboxTests(SqlSandboxTestFactory factory)
     {
         _client = factory.CreateClient();
+    }
+
+    private async Task<HttpResponseMessage> PostAsJsonAsync<T>(string requestUri, T value)
+    {
+        var json = JsonConvert.SerializeObject(value, JsonSettings);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        return await _client.PostAsync(requestUri, content);
+    }
+
+    private static async Task<T?> ReadFromJsonAsync<T>(HttpContent content)
+    {
+        var json = await content.ReadAsStringAsync();
+        return JsonConvert.DeserializeObject<T>(json, JsonSettings);
     }
 
     [Fact]
@@ -26,10 +47,10 @@ public class SqlSandboxTests : IClassFixture<SqlSandboxTestFactory>
             Query = "SELECT id, name FROM t ORDER BY id"
         };
 
-        var response = await _client.PostAsJsonAsync("/api/program-synthesis/sql/execute", request);
+        var response = await PostAsJsonAsync("/api/program-synthesis/sql/execute", request);
         response.EnsureSuccessStatusCode();
 
-        var result = await response.Content.ReadFromJsonAsync<SqlExecuteResponse>();
+        var result = await ReadFromJsonAsync<SqlExecuteResponse>(response.Content);
         Assert.NotNull(result);
         Assert.True(result.Success);
         Assert.Equal(SqlDialect.SQLite, result.Dialect);
@@ -55,11 +76,11 @@ public class SqlSandboxTests : IClassFixture<SqlSandboxTestFactory>
             Query = "SELECT 1"
         };
 
-        var response = await _client.PostAsJsonAsync("/api/program-synthesis/sql/execute", request);
+        var response = await PostAsJsonAsync("/api/program-synthesis/sql/execute", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
-        var result = await response.Content.ReadFromJsonAsync<SqlExecuteResponse>();
+        var result = await ReadFromJsonAsync<SqlExecuteResponse>(response.Content);
         Assert.NotNull(result);
         Assert.False(result.Success);
         Assert.Equal(SqlDialect.Postgres, result.Dialect);

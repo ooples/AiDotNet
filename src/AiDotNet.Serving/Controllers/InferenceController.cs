@@ -17,6 +17,9 @@ namespace AiDotNet.Serving.Controllers;
 [Produces("application/json")]
 public class InferenceController : ControllerBase
 {
+    private const int MaxBatchSizeWhenBatchingDisabled = 1000;
+    private const string LoraAdapterHeader = "X-AiDotNet-Lora";
+
     private readonly IModelRepository _modelRepository;
     private readonly IRequestBatcher _requestBatcher;
     private readonly ILogger<InferenceController> _logger;
@@ -52,6 +55,7 @@ public class InferenceController : ControllerBase
     [ProducesResponseType(typeof(PredictionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status413PayloadTooLarge)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> Predict(string modelName, [FromBody] PredictionRequest request)
     {
@@ -67,12 +71,36 @@ public class InferenceController : ControllerBase
                 return BadRequest(new { error = "Features array is required and cannot be empty" });
             }
 
-            // Check if model exists
-            var modelInfo = _modelRepository.GetModelInfo(modelName);
+            // Check for LoRA adapter header and resolve to variant model name
+            var effectiveModelName = modelName;
+            if (Request?.Headers != null && Request.Headers.TryGetValue(LoraAdapterHeader, out var adapterIdValues))
+            {
+                var adapterId = adapterIdValues.FirstOrDefault();
+                if (!string.IsNullOrEmpty(adapterId))
+                {
+                    effectiveModelName = $"{modelName}__{adapterId}";
+                    _logger.LogDebug("Routing to model variant '{VariantName}' via adapter header", effectiveModelName);
+                }
+            }
+
+            // Check if model exists (use effective model name for variant routing)
+            var modelInfo = _modelRepository.GetModelInfo(effectiveModelName);
             if (modelInfo == null)
             {
-                _logger.LogWarning("Model '{ModelName}' not found", modelName);
-                return NotFound(new { error = $"Model '{modelName}' not found" });
+                _logger.LogWarning("Model '{ModelName}' not found", effectiveModelName);
+                return NotFound(new { error = $"Model '{effectiveModelName}' not found" });
+            }
+
+            // Check batch size when batching is disabled
+            if (!modelInfo.EnableBatching && request.Features.Length > MaxBatchSizeWhenBatchingDisabled)
+            {
+                _logger.LogWarning(
+                    "Request batch size {BatchSize} exceeds maximum {MaxSize} for model '{ModelName}' with batching disabled",
+                    request.Features.Length, MaxBatchSizeWhenBatchingDisabled, effectiveModelName);
+                return StatusCode(StatusCodes.Status413PayloadTooLarge, new
+                {
+                    error = $"Request batch size {request.Features.Length} exceeds maximum allowed ({MaxBatchSizeWhenBatchingDisabled}) when batching is disabled. Reduce the batch size or enable batching."
+                });
             }
 
             // Validate feature dimensions
@@ -83,7 +111,7 @@ public class InferenceController : ControllerBase
                     return BadRequest(new
                     {
                         error = $"Feature vector at index {i} has {request.Features[i].Length} dimensions, " +
-                                $"but model '{modelName}' expects {modelInfo.InputDimension} dimensions"
+                                $"but model '{effectiveModelName}' expects {modelInfo.InputDimension} dimensions"
                     });
                 }
             }
@@ -95,13 +123,13 @@ public class InferenceController : ControllerBase
             switch (modelInfo.NumericType)
             {
                 case NumericType.Double:
-                    predictions = await PredictWithType<double>(modelName, request.Features);
+                    predictions = await PredictWithType<double>(effectiveModelName, request.Features);
                     break;
                 case NumericType.Float:
-                    predictions = await PredictWithType<float>(modelName, request.Features);
+                    predictions = await PredictWithType<float>(effectiveModelName, request.Features);
                     break;
                 case NumericType.Decimal:
-                    predictions = await PredictWithType<decimal>(modelName, request.Features);
+                    predictions = await PredictWithType<decimal>(effectiveModelName, request.Features);
                     break;
                 default:
                     return BadRequest(new { error = "Unsupported numeric type." });
@@ -119,7 +147,7 @@ public class InferenceController : ControllerBase
 
             _logger.LogInformation(
                 "Prediction completed for model '{ModelName}' in {ElapsedMs}ms (batch size: {BatchSize})",
-                modelName, sw.ElapsedMilliseconds, batchSize);
+                effectiveModelName, sw.ElapsedMilliseconds, batchSize);
 
             return Ok(response);
         }

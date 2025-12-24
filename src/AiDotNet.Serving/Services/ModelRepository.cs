@@ -125,6 +125,13 @@ public class ModelRepository : IModelRepository
         var inputDimProperty = modelType.GetProperty("InputDimension");
         var outputDimProperty = modelType.GetProperty("OutputDimension");
 
+        // Check if model implements IServableModelInferenceOptions for batching flag
+        var enableBatching = true;
+        if (entry.Model is IServableModelInferenceOptions inferenceOptions)
+        {
+            enableBatching = inferenceOptions.EnableBatching;
+        }
+
         return new ModelInfo
         {
             Name = name,
@@ -135,7 +142,8 @@ public class ModelRepository : IModelRepository
             SourcePath = entry.SourcePath,
             IsFromRegistry = entry.IsFromRegistry,
             RegistryVersion = entry.RegistryVersion,
-            RegistryStage = entry.RegistryStage
+            RegistryStage = entry.RegistryStage,
+            EnableBatching = enableBatching
         };
     }
 
