@@ -1760,14 +1760,15 @@ public abstract class LayerBase<T> : ILayer<T>
     {
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal);
 
+        // Use AssemblyQualifiedName so deserialization can recreate the exact type.
         if (ScalarActivation != null)
         {
-            metadata["ActivationFunction"] = GetActivationTypeFromFunction(ScalarActivation).ToString();
+            metadata["ScalarActivationType"] = ScalarActivation.GetType().AssemblyQualifiedName ?? ScalarActivation.GetType().FullName ?? string.Empty;
         }
 
         if (VectorActivation != null)
         {
-            metadata["VectorActivationFunction"] = GetActivationTypeFromFunction(VectorActivation).ToString();
+            metadata["VectorActivationType"] = VectorActivation.GetType().AssemblyQualifiedName ?? VectorActivation.GetType().FullName ?? string.Empty;
         }
 
         return metadata;
