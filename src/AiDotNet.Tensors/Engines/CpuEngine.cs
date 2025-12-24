@@ -2630,6 +2630,113 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    public Tensor<T> TensorTrilinearInterpolateBackward<T>(Tensor<T> gradOutput, Tensor<T> grid, Tensor<T> positions)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (grid == null) throw new ArgumentNullException(nameof(grid));
+        if (positions == null) throw new ArgumentNullException(nameof(positions));
+        if (grid.Shape.Length != 4)
+            throw new ArgumentException("Grid must be 4D tensor of shape [D, H, W, C]", nameof(grid));
+        if (positions.Shape.Length != 2 || positions.Shape[1] != 3)
+            throw new ArgumentException("Positions must be 2D tensor of shape [N, 3]", nameof(positions));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int depth = grid.Shape[0];
+        int height = grid.Shape[1];
+        int width = grid.Shape[2];
+        int channels = grid.Shape[3];
+        int numPositions = positions.Shape[0];
+
+        // Initialize gradient grid with zeros
+        var gradGrid = new Tensor<T>(grid.Shape);
+
+        // Use thread-local gradients to avoid contention, then combine
+        int numThreads = Environment.ProcessorCount;
+        var threadLocalGrads = new double[numThreads][];
+        for (int t = 0; t < numThreads; t++)
+        {
+            threadLocalGrads[t] = new double[depth * height * width * channels];
+        }
+
+        Parallel.For(0, numPositions, () => Thread.CurrentThread.ManagedThreadId % numThreads, (n, _, threadIndex) =>
+        {
+            var localGrad = threadLocalGrads[threadIndex];
+
+            // Get position (z, y, x)
+            T pz = positions[n, 0];
+            T py = positions[n, 1];
+            T px = positions[n, 2];
+
+            // Clamp to valid range and get integer and fractional parts
+            double z = Math.Max(0, Math.Min(depth - 1.001, numOps.ToDouble(pz)));
+            double y = Math.Max(0, Math.Min(height - 1.001, numOps.ToDouble(py)));
+            double x = Math.Max(0, Math.Min(width - 1.001, numOps.ToDouble(px)));
+
+            int z0 = (int)Math.Floor(z);
+            int y0 = (int)Math.Floor(y);
+            int x0 = (int)Math.Floor(x);
+            int z1 = Math.Min(z0 + 1, depth - 1);
+            int y1 = Math.Min(y0 + 1, height - 1);
+            int x1 = Math.Min(x0 + 1, width - 1);
+
+            double fz = z - z0;
+            double fy = y - y0;
+            double fx = x - x0;
+
+            // Trilinear interpolation weights for 8 corners (same as forward pass)
+            double w000 = (1 - fz) * (1 - fy) * (1 - fx);
+            double w001 = (1 - fz) * (1 - fy) * fx;
+            double w010 = (1 - fz) * fy * (1 - fx);
+            double w011 = (1 - fz) * fy * fx;
+            double w100 = fz * (1 - fy) * (1 - fx);
+            double w101 = fz * (1 - fy) * fx;
+            double w110 = fz * fy * (1 - fx);
+            double w111 = fz * fy * fx;
+
+            for (int c = 0; c < channels; c++)
+            {
+                double grad = numOps.ToDouble(gradOutput[n, c]);
+
+                // Scatter gradient to 8 corners weighted by interpolation weights
+                int stride = height * width * channels;
+                int idx000 = z0 * stride + y0 * width * channels + x0 * channels + c;
+                int idx001 = z0 * stride + y0 * width * channels + x1 * channels + c;
+                int idx010 = z0 * stride + y1 * width * channels + x0 * channels + c;
+                int idx011 = z0 * stride + y1 * width * channels + x1 * channels + c;
+                int idx100 = z1 * stride + y0 * width * channels + x0 * channels + c;
+                int idx101 = z1 * stride + y0 * width * channels + x1 * channels + c;
+                int idx110 = z1 * stride + y1 * width * channels + x0 * channels + c;
+                int idx111 = z1 * stride + y1 * width * channels + x1 * channels + c;
+
+                localGrad[idx000] += w000 * grad;
+                localGrad[idx001] += w001 * grad;
+                localGrad[idx010] += w010 * grad;
+                localGrad[idx011] += w011 * grad;
+                localGrad[idx100] += w100 * grad;
+                localGrad[idx101] += w101 * grad;
+                localGrad[idx110] += w110 * grad;
+                localGrad[idx111] += w111 * grad;
+            }
+
+            return threadIndex;
+        }, _ => { });
+
+        // Combine thread-local gradients
+        int totalElements = depth * height * width * channels;
+        Parallel.For(0, totalElements, i =>
+        {
+            double sum = 0;
+            for (int t = 0; t < numThreads; t++)
+            {
+                sum += threadLocalGrads[t][i];
+            }
+            gradGrid.SetFlat(i, numOps.FromDouble(sum));
+        });
+
+        return gradGrid;
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> TensorPow<T>(Tensor<T> tensor, T exponent)
     {
         if (tensor == null) throw new ArgumentNullException(nameof(tensor));
@@ -4896,22 +5003,10 @@ public class CpuEngine : IEngine
         for (int i = 0; i < gradInputData.Length; i++)
             gradInputData[i] = numOps.Zero;
 
-        // Use thread-local accumulators for thread safety
-        int numThreads = Environment.ProcessorCount;
-        var localGradInputs = new T[numThreads][];
-        for (int t = 0; t < numThreads; t++)
-        {
-            localGradInputs[t] = new T[gradInputData.Length];
-            for (int i = 0; i < gradInputData.Length; i++)
-                localGradInputs[t][i] = numOps.Zero;
-        }
-
-        // Parallel over batch * channels
+        // Parallel over batch * channels - each (b, c) pair writes to a unique slice of gradInputData
+        // so no thread-local buffers are needed (avoiding racy thread-ID based indexing)
         Parallel.For(0, batch * channels, idx =>
         {
-            int threadId = Environment.CurrentManagedThreadId % numThreads;
-            var localGrad = localGradInputs[threadId];
-
             int b = idx / channels;
             int c = idx % channels;
 
@@ -4929,20 +5024,11 @@ public class CpuEngine : IEngine
                         int iw = maxIndices[b, c, od, oh, ow, 2];
 
                         int inputIdx = (((b * channels + c) * depth + id) * height + ih) * width + iw;
-                        localGrad[inputIdx] = numOps.Add(localGrad[inputIdx], gradVal);
+                        gradInputData[inputIdx] = numOps.Add(gradInputData[inputIdx], gradVal);
                     }
                 }
             }
         });
-
-        // Merge thread-local results
-        for (int t = 0; t < numThreads; t++)
-        {
-            for (int i = 0; i < gradInputData.Length; i++)
-            {
-                gradInputData[i] = numOps.Add(gradInputData[i], localGradInputs[t][i]);
-            }
-        }
 
         return new Tensor<T>(inputShape, new Vector<T>(gradInputData));
     }
@@ -5069,22 +5155,10 @@ public class CpuEngine : IEngine
         for (int i = 0; i < gradInputData.Length; i++)
             gradInputData[i] = numOps.Zero;
 
-        // Use thread-local accumulators for thread safety
-        int numThreads = Environment.ProcessorCount;
-        var localGradInputs = new T[numThreads][];
-        for (int t = 0; t < numThreads; t++)
-        {
-            localGradInputs[t] = new T[gradInputData.Length];
-            for (int i = 0; i < gradInputData.Length; i++)
-                localGradInputs[t][i] = numOps.Zero;
-        }
-
-        // Parallel over batch * channels
+        // Parallel over batch * channels - each (b, c) pair writes to a unique slice of gradInputData
+        // so no thread-local buffers are needed (avoiding racy thread-ID based indexing)
         Parallel.For(0, batch * channels, idx =>
         {
-            int threadId = Environment.CurrentManagedThreadId % numThreads;
-            var localGrad = localGradInputs[threadId];
-
             int b = idx / channels;
             int c = idx % channels;
 
@@ -5135,7 +5209,7 @@ public class CpuEngine : IEngine
                                     if (iw < 0 || iw >= width) continue;
 
                                     int inputIdx = (((b * channels + c) * depth + id) * height + ih) * width + iw;
-                                    localGrad[inputIdx] = numOps.Add(localGrad[inputIdx], gradVal);
+                                    gradInputData[inputIdx] = numOps.Add(gradInputData[inputIdx], gradVal);
                                 }
                             }
                         }
@@ -5143,15 +5217,6 @@ public class CpuEngine : IEngine
                 }
             }
         });
-
-        // Merge thread-local results
-        for (int t = 0; t < numThreads; t++)
-        {
-            for (int i = 0; i < gradInputData.Length; i++)
-            {
-                gradInputData[i] = numOps.Add(gradInputData[i], localGradInputs[t][i]);
-            }
-        }
 
         return new Tensor<T>(inputShape, new Vector<T>(gradInputData));
     }
@@ -10085,7 +10150,7 @@ public class CpuEngine : IEngine
     public (Tensor<T> positions, Tensor<T> directions, Tensor<bool> validMask, Tensor<T> tValues) SampleRaysWithOccupancy<T>(
         Tensor<T> rayOrigins,
         Tensor<T> rayDirections,
-        uint[] occupancyBitfield,
+        Tensor<uint> occupancyBitfield,
         int gridSize,
         Vector<T> sceneBoundsMin,
         Vector<T> sceneBoundsMax,
@@ -10163,7 +10228,7 @@ public class CpuEngine : IEngine
     public Tensor<T> ComputeMeshLaplacian<T>(
         Tensor<T> vertices,
         Tensor<int> faces,
-        string laplacianType = "cotangent")
+        LaplacianType laplacianType = LaplacianType.Cotangent)
     {
         return MeshConvolutionOperations.ComputeMeshLaplacian(vertices, faces, laplacianType);
     }

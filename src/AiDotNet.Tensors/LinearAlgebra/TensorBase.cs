@@ -93,6 +93,10 @@ public abstract class TensorBase<T>
     /// </remarks>
     public virtual void CopyFromArray(T[] source)
     {
+        if (source == null)
+        {
+            throw new ArgumentNullException(nameof(source));
+        }
         if (source.Length != _data.Length)
         {
             throw new ArgumentException($"Source array length ({source.Length}) must match tensor length ({_data.Length}).");

@@ -794,21 +794,18 @@ public static class GaussianSplattingOperations
 
         Parallel.For(0, numGaussians, i =>
         {
-            // Get quaternion (w, x, y, z) and normalize
-            double qw = numOps.ToDouble(rotations.GetFlat(i * 4));
-            double qx = numOps.ToDouble(rotations.GetFlat(i * 4 + 1));
-            double qy = numOps.ToDouble(rotations.GetFlat(i * 4 + 2));
-            double qz = numOps.ToDouble(rotations.GetFlat(i * 4 + 3));
+            // Get quaternion (w, x, y, z) and normalize in a single expression
+            double rawQw = numOps.ToDouble(rotations.GetFlat(i * 4));
+            double rawQx = numOps.ToDouble(rotations.GetFlat(i * 4 + 1));
+            double rawQy = numOps.ToDouble(rotations.GetFlat(i * 4 + 2));
+            double rawQz = numOps.ToDouble(rotations.GetFlat(i * 4 + 3));
 
-            double qNorm = Math.Sqrt(qw * qw + qx * qx + qy * qy + qz * qz);
-            if (qNorm > 1e-10)
-            {
-                double inv = 1.0 / qNorm;
-                qw *= inv;
-                qx *= inv;
-                qy *= inv;
-                qz *= inv;
-            }
+            double qNorm = Math.Sqrt(rawQw * rawQw + rawQx * rawQx + rawQy * rawQy + rawQz * rawQz);
+            double normInv = qNorm > 1e-10 ? 1.0 / qNorm : 1.0;
+            double qw = rawQw * normInv;
+            double qx = rawQx * normInv;
+            double qy = rawQy * normInv;
+            double qz = rawQz * normInv;
 
             // Get scales with minimum threshold
             double sx = Math.Max(1e-6, Math.Abs(numOps.ToDouble(scales.GetFlat(i * 3))));

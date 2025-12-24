@@ -638,16 +638,66 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     public Complex<T> Frac(Complex<T> value) => new Complex<T>(_ops.Frac(value.Real), _ops.Frac(value.Imaginary));
 
     /// <summary>
-    /// Returns the sine of the specified complex value.
-    /// Note: This applies Sin to real and imaginary parts separately, not true complex Sin.
+    /// Returns the sine of the specified complex value using the correct mathematical formula.
     /// </summary>
-    public Complex<T> Sin(Complex<T> value) => new Complex<T>(_ops.Sin(value.Real), _ops.Sin(value.Imaginary));
+    /// <remarks>
+    /// For a complex number z = x + iy, the complex sine is:
+    /// sin(z) = sin(x)·cosh(y) + i·cos(x)·sinh(y)
+    /// where cosh(y) = (e^y + e^(-y))/2 and sinh(y) = (e^y - e^(-y))/2
+    /// </remarks>
+    public Complex<T> Sin(Complex<T> value)
+    {
+        // sin(x + iy) = sin(x)·cosh(y) + i·cos(x)·sinh(y)
+        T x = value.Real;
+        T y = value.Imaginary;
+
+        T sinX = _ops.Sin(x);
+        T cosX = _ops.Cos(x);
+
+        // Compute cosh(y) and sinh(y) using exponentials:
+        // cosh(y) = (e^y + e^(-y))/2, sinh(y) = (e^y - e^(-y))/2
+        T expY = _ops.Exp(y);
+        T expNegY = _ops.Exp(_ops.Negate(y));
+        T two = _ops.FromDouble(2.0);
+        T coshY = _ops.Divide(_ops.Add(expY, expNegY), two);
+        T sinhY = _ops.Divide(_ops.Subtract(expY, expNegY), two);
+
+        T realPart = _ops.Multiply(sinX, coshY);
+        T imagPart = _ops.Multiply(cosX, sinhY);
+
+        return new Complex<T>(realPart, imagPart);
+    }
 
     /// <summary>
-    /// Returns the cosine of the specified complex value.
-    /// Note: This applies Cos to real and imaginary parts separately, not true complex Cos.
+    /// Returns the cosine of the specified complex value using the correct mathematical formula.
     /// </summary>
-    public Complex<T> Cos(Complex<T> value) => new Complex<T>(_ops.Cos(value.Real), _ops.Cos(value.Imaginary));
+    /// <remarks>
+    /// For a complex number z = x + iy, the complex cosine is:
+    /// cos(z) = cos(x)·cosh(y) - i·sin(x)·sinh(y)
+    /// where cosh(y) = (e^y + e^(-y))/2 and sinh(y) = (e^y - e^(-y))/2
+    /// </remarks>
+    public Complex<T> Cos(Complex<T> value)
+    {
+        // cos(x + iy) = cos(x)·cosh(y) - i·sin(x)·sinh(y)
+        T x = value.Real;
+        T y = value.Imaginary;
+
+        T sinX = _ops.Sin(x);
+        T cosX = _ops.Cos(x);
+
+        // Compute cosh(y) and sinh(y) using exponentials:
+        // cosh(y) = (e^y + e^(-y))/2, sinh(y) = (e^y - e^(-y))/2
+        T expY = _ops.Exp(y);
+        T expNegY = _ops.Exp(_ops.Negate(y));
+        T two = _ops.FromDouble(2.0);
+        T coshY = _ops.Divide(_ops.Add(expY, expNegY), two);
+        T sinhY = _ops.Divide(_ops.Subtract(expY, expNegY), two);
+
+        T realPart = _ops.Multiply(cosX, coshY);
+        T imagPart = _ops.Negate(_ops.Multiply(sinX, sinhY));
+
+        return new Complex<T>(realPart, imagPart);
+    }
 
     /// <summary>
     /// Gets the minimum value that can be represented using complex numbers with the underlying type T.

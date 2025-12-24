@@ -315,11 +315,11 @@ public static class InstantNGPOperations
     /// <summary>
     /// Samples rays while skipping empty space using occupancy grid.
     /// </summary>
-    public static (Tensor<T> positions, Tensor<T> directions, Tensor<bool> validMask, Tensor<T> tValues) 
+    public static (Tensor<T> positions, Tensor<T> directions, Tensor<bool> validMask, Tensor<T> tValues)
         SampleRaysWithOccupancy<T>(
         Tensor<T> rayOrigins,
         Tensor<T> rayDirections,
-        uint[] occupancyBitfield,
+        Tensor<uint> occupancyBitfield,
         int gridSize,
         Vector<T> sceneBoundsMin,
         Vector<T> sceneBoundsMax,
@@ -446,12 +446,12 @@ public static class InstantNGPOperations
         }
     }
 
-    private static bool IsBitSet(uint[] bitfield, int index)
+    private static bool IsBitSet(Tensor<uint> bitfield, int index)
     {
         int word = index >> 5;  // index / 32
         int bit = index & 31;   // index % 32
         if (word >= bitfield.Length) return false;
-        return (bitfield[word] & (1u << bit)) != 0;
+        return (bitfield.GetFlat(word) & (1u << bit)) != 0;
     }
 
     private static bool ComputeRayBounds(

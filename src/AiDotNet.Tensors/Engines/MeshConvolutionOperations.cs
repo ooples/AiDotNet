@@ -470,26 +470,29 @@ public static class MeshConvolutionOperations
         var weightsData = weights.ToArray();
         var biasData = biases.ToArray();
 
+        // Extract sparse structure once (O(E) where E = edges) to avoid O(V²) in each multiply
+        var sparseStructure = ExtractSparseStructure(lapData, numVertices, numOps);
+
         // Step 1: Apply diffusion using Taylor series
         var diffused = new T[numVertices * inputChannels];
 
-        // Compute L*x, L²*x, L³*x, L⁴*x
+        // Compute L*x, L²*x, L³*x, L⁴*x using sparse multiplication
         var Lx = new T[numVertices * inputChannels];
         var L2x = new T[numVertices * inputChannels];
         var L3x = new T[numVertices * inputChannels];
         var L4x = new T[numVertices * inputChannels];
 
         // L*x
-        ComputeLaplacianProduct(lapData, vertexData, Lx, numVertices, inputChannels, numOps);
-        
+        ComputeSparseLaplacianProduct(sparseStructure, vertexData, Lx, numVertices, inputChannels, numOps);
+
         // L²*x = L*(L*x)
-        ComputeLaplacianProduct(lapData, Lx, L2x, numVertices, inputChannels, numOps);
-        
+        ComputeSparseLaplacianProduct(sparseStructure, Lx, L2x, numVertices, inputChannels, numOps);
+
         // L³*x = L*(L²*x)
-        ComputeLaplacianProduct(lapData, L2x, L3x, numVertices, inputChannels, numOps);
-        
+        ComputeSparseLaplacianProduct(sparseStructure, L2x, L3x, numVertices, inputChannels, numOps);
+
         // L⁴*x = L*(L³*x)
-        ComputeLaplacianProduct(lapData, L3x, L4x, numVertices, inputChannels, numOps);
+        ComputeSparseLaplacianProduct(sparseStructure, L3x, L4x, numVertices, inputChannels, numOps);
 
         // Combine: exp(-t*L)*x ≈ x - t*L*x + (t²/2)*L²*x - (t³/6)*L³*x + (t⁴/24)*L⁴*x
         Parallel.For(0, numVertices * inputChannels, i =>
@@ -526,29 +529,73 @@ public static class MeshConvolutionOperations
     }
 
     /// <summary>
+    /// Extracts sparse structure from a dense Laplacian matrix.
+    /// The sparse structure stores only non-zero entries for each row.
+    /// </summary>
+    /// <returns>Array of neighbor lists, where each list contains (index, weight) tuples.</returns>
+    private static List<(int index, double weight)>[] ExtractSparseStructure<T>(
+        T[] laplacian, int numVertices, INumericOperations<T> numOps)
+    {
+        var neighbors = new List<(int index, double weight)>[numVertices];
+
+        Parallel.For(0, numVertices, v =>
+        {
+            var vertexNeighbors = new List<(int index, double weight)>();
+            for (int j = 0; j < numVertices; j++)
+            {
+                double w = numOps.ToDouble(laplacian[v * numVertices + j]);
+                if (Math.Abs(w) > 1e-15)
+                {
+                    vertexNeighbors.Add((j, w));
+                }
+            }
+            neighbors[v] = vertexNeighbors;
+        });
+
+        return neighbors;
+    }
+
+    /// <summary>
+    /// Computes sparse matrix-vector product using pre-computed sparse structure.
+    /// Complexity is O(E*C) where E is edges and C is channels, instead of O(V²*C).
+    /// </summary>
+    private static void ComputeSparseLaplacianProduct<T>(
+        List<(int index, double weight)>[] sparseStructure,
+        T[] input, T[] output,
+        int numVertices, int channels,
+        INumericOperations<T> numOps)
+    {
+        Parallel.For(0, numVertices, v =>
+        {
+            var vertexNeighbors = sparseStructure[v];
+
+            for (int c = 0; c < channels; c++)
+            {
+                double sum = 0.0;
+
+                foreach (var (j, w) in vertexNeighbors)
+                {
+                    sum += w * numOps.ToDouble(input[j * channels + c]);
+                }
+
+                output[v * channels + c] = numOps.FromDouble(sum);
+            }
+        });
+    }
+
+    /// <summary>
     /// Computes the product of Laplacian matrix with a feature matrix.
+    /// Uses sparse-aware multiplication that skips zero entries for O(E) complexity
+    /// instead of O(V²) where E is the number of edges.
     /// </summary>
     private static void ComputeLaplacianProduct<T>(
         T[] laplacian, T[] input, T[] output,
         int numVertices, int channels,
         INumericOperations<T> numOps)
     {
-        Parallel.For(0, numVertices, v =>
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                T sum = numOps.Zero;
-                
-                for (int j = 0; j < numVertices; j++)
-                {
-                    sum = numOps.Add(sum, numOps.Multiply(
-                        laplacian[v * numVertices + j],
-                        input[j * channels + c]));
-                }
-
-                output[v * channels + c] = sum;
-            }
-        });
+        // Extract sparse structure and compute product
+        var sparseStructure = ExtractSparseStructure(laplacian, numVertices, numOps);
+        ComputeSparseLaplacianProduct(sparseStructure, input, output, numVertices, channels, numOps);
     }
 
     /// <summary>
@@ -691,12 +738,12 @@ public static class MeshConvolutionOperations
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
     /// <param name="vertices">Vertex positions [numVertices, 3].</param>
     /// <param name="faces">Face indices [numFaces, 3] for triangular mesh.</param>
-    /// <param name="laplacianType">Type of Laplacian: "uniform", "cotangent", or "normalized".</param>
+    /// <param name="laplacianType">Type of Laplacian operator to compute.</param>
     /// <returns>Laplacian matrix [numVertices, numVertices].</returns>
     public static Tensor<T> ComputeMeshLaplacian<T>(
         Tensor<T> vertices,
         Tensor<int> faces,
-        string laplacianType = "cotangent")
+        LaplacianType laplacianType = LaplacianType.Cotangent)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         int numVertices = vertices.Shape[0];
@@ -708,7 +755,7 @@ public static class MeshConvolutionOperations
         var lapLocks = new object[numVertices];
         for (int i = 0; i < numVertices; i++) lapLocks[i] = new object();
 
-        bool useCotangent = laplacianType.ToLowerInvariant() != "uniform";
+        bool useCotangent = laplacianType != LaplacianType.Uniform;
 
         // Process faces in parallel
         Parallel.For(0, numFaces, f =>
@@ -764,7 +811,7 @@ public static class MeshConvolutionOperations
         });
 
         // Normalize if requested
-        if (laplacianType.ToLowerInvariant() == "normalized")
+        if (laplacianType == LaplacianType.Normalized)
         {
             // Compute D^(-1/2) * L * D^(-1/2) where D is diagonal of -L
             var diagInvSqrt = new double[numVertices];
@@ -816,6 +863,18 @@ public static class MeshConvolutionOperations
         double[] laplacian, object[] locks,
         int i, int j, double weight, int numVertices)
     {
+        // Handle degenerate case where i == j (prevents self-deadlock)
+        if (i == j)
+        {
+            lock (locks[i])
+            {
+                // For diagonal elements in a symmetric matrix update
+                laplacian[i * numVertices + i] += weight;
+            }
+            return;
+        }
+
+        // Use consistent lock ordering (min before max) to prevent deadlock
         int minIdx = Math.Min(i, j);
         int maxIdx = Math.Max(i, j);
 

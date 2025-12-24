@@ -2122,6 +2122,24 @@ public interface IEngine
     Tensor<T> TensorTrilinearInterpolate<T>(Tensor<T> grid, Tensor<T> positions);
 
     /// <summary>
+    /// Computes the backward pass for trilinear interpolation, returning gradients for the grid.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the upstream layer [numPositions, channels].</param>
+    /// <param name="grid">The original 3D grid [depth, height, width, channels].</param>
+    /// <param name="positions">The positions at which interpolation was performed [numPositions, 3].</param>
+    /// <returns>The gradient with respect to the grid [depth, height, width, channels].</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-017: 3D Spatial Operations</b></para>
+    /// <para>
+    /// Essential for training neural radiance fields (NeRF) and Instant-NGP with backpropagation.
+    /// The backward pass scatters gradients to the 8 surrounding voxel corners using the same
+    /// trilinear interpolation weights computed during the forward pass.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorTrilinearInterpolateBackward<T>(Tensor<T> gradOutput, Tensor<T> grid, Tensor<T> positions);
+
+    /// <summary>
     /// Computes the element-wise power of a tensor raised to a scalar exponent.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
@@ -4634,7 +4652,7 @@ public interface IEngine
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
     /// <param name="rayOrigins">Ray origins [numRays, 3].</param>
     /// <param name="rayDirections">Ray directions [numRays, 3].</param>
-    /// <param name="occupancyBitfield">Packed occupancy bits for fast lookup.</param>
+    /// <param name="occupancyBitfield">Packed occupancy bits for fast lookup as a 1D tensor.</param>
     /// <param name="gridSize">Size of the occupancy grid.</param>
     /// <param name="sceneBoundsMin">Minimum scene bounds [3].</param>
     /// <param name="sceneBoundsMax">Maximum scene bounds [3].</param>
@@ -4645,7 +4663,7 @@ public interface IEngine
     (Tensor<T> positions, Tensor<T> directions, Tensor<bool> validMask, Tensor<T> tValues) SampleRaysWithOccupancy<T>(
         Tensor<T> rayOrigins,
         Tensor<T> rayDirections,
-        uint[] occupancyBitfield,
+        Tensor<uint> occupancyBitfield,
         int gridSize,
         Vector<T> sceneBoundsMin,
         Vector<T> sceneBoundsMax,
@@ -4802,20 +4820,20 @@ public interface IEngine
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
     /// <param name="vertices">Vertex positions [numVertices, 3].</param>
     /// <param name="faces">Face indices [numFaces, 3] for triangular mesh.</param>
-    /// <param name="laplacianType">Type of Laplacian: "uniform", "cotangent", or "normalized".</param>
+    /// <param name="laplacianType">Type of Laplacian operator to compute.</param>
     /// <returns>Laplacian matrix [numVertices, numVertices].</returns>
     /// <remarks>
     /// <para>
     /// <b>Laplacian Types:</b>
-    /// - Uniform: Simple adjacency-based, ignores geometry
-    /// - Cotangent: Geometry-aware, preserves angles
-    /// - Normalized: Cotangent normalized by vertex areas
+    /// - <see cref="LaplacianType.Uniform"/>: Simple adjacency-based, ignores geometry
+    /// - <see cref="LaplacianType.Cotangent"/>: Geometry-aware, preserves angles
+    /// - <see cref="LaplacianType.Normalized"/>: Cotangent normalized by vertex areas
     /// </para>
     /// </remarks>
     Tensor<T> ComputeMeshLaplacian<T>(
         Tensor<T> vertices,
         Tensor<int> faces,
-        string laplacianType = "cotangent");
+        LaplacianType laplacianType = LaplacianType.Cotangent);
 
     /// <summary>
     /// Generates spiral indices for mesh vertices based on connectivity.

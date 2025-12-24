@@ -15037,6 +15037,13 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     /// <inheritdoc/>
+    public Tensor<T> TensorTrilinearInterpolateBackward<T>(Tensor<T> gradOutput, Tensor<T> grid, Tensor<T> positions)
+    {
+        // Fallback to CPU implementation - GPU version can be added later for performance
+        return _cpuFallback.TensorTrilinearInterpolateBackward(gradOutput, grid, positions);
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> TensorPow<T>(Tensor<T> tensor, T exponent)
     {
         if (tensor == null) throw new ArgumentNullException(nameof(tensor));
@@ -30533,7 +30540,7 @@ public class GpuEngine : IEngine, IDisposable
     public (Tensor<T> positions, Tensor<T> directions, Tensor<bool> validMask, Tensor<T> tValues) SampleRaysWithOccupancy<T>(
         Tensor<T> rayOrigins,
         Tensor<T> rayDirections,
-        uint[] occupancyBitfield,
+        Tensor<uint> occupancyBitfield,
         int gridSize,
         Vector<T> sceneBoundsMin,
         Vector<T> sceneBoundsMax,
@@ -30619,7 +30626,7 @@ public class GpuEngine : IEngine, IDisposable
     public Tensor<T> ComputeMeshLaplacian<T>(
         Tensor<T> vertices,
         Tensor<int> faces,
-        string laplacianType = "cotangent")
+        LaplacianType laplacianType = LaplacianType.Cotangent)
     {
         // Laplacian computation is a one-time preprocessing step per mesh.
         // CPU implementation is sufficient and avoids GPU memory transfer overhead.
