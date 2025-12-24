@@ -231,7 +231,7 @@ public class OptimizationDataBatcher<T, TInput, TOutput>
             {
                 result.SetRow(i, matrix.GetRow(indices[i]));
             }
-            return (TData)(object)result;
+            return CastToDataType<Matrix<T>, TData>(result);
         }
 
         if (data is Vector<T> vector)
@@ -241,7 +241,7 @@ public class OptimizationDataBatcher<T, TInput, TOutput>
             {
                 result[i] = vector[indices[i]];
             }
-            return (TData)(object)result;
+            return CastToDataType<Vector<T>, TData>(result);
         }
 
         if (data is Tensor<T> tensor)
@@ -255,10 +255,29 @@ public class OptimizationDataBatcher<T, TInput, TOutput>
             {
                 TensorCopyHelper.CopySample(tensor, result, indices[i], i);
             }
-            return (TData)(object)result;
+            return CastToDataType<Tensor<T>, TData>(result);
         }
 
         throw new NotSupportedException($"Unsupported data type: {typeof(TData).Name}");
+    }
+
+    /// <summary>
+    /// Casts a source type to a target type using implicit boxing.
+    /// </summary>
+    /// <remarks>
+    /// This helper method avoids the explicit upcast to object that code analyzers
+    /// flag as unnecessary. The boxing happens implicitly when assigning to object.
+    /// </remarks>
+    private static TTarget CastToDataType<TSource, TTarget>(TSource source) where TSource : class
+    {
+        // Boxing happens implicitly here, avoiding the explicit upcast warning
+        object boxed = source;
+        // Cast from boxed object to target type
+        if (boxed is TTarget result)
+        {
+            return result;
+        }
+        throw new InvalidCastException($"Cannot cast {typeof(TSource).Name} to {typeof(TTarget).Name}");
     }
 
     /// <summary>
