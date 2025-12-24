@@ -2500,6 +2500,81 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    public Tensor<T> TensorTrilinearInterpolate<T>(Tensor<T> grid, Tensor<T> positions)
+    {
+        if (grid == null) throw new ArgumentNullException(nameof(grid));
+        if (positions == null) throw new ArgumentNullException(nameof(positions));
+        if (grid.Shape.Length != 4)
+            throw new ArgumentException("Grid must be 4D tensor of shape [D, H, W, C]", nameof(grid));
+        if (positions.Shape.Length != 2 || positions.Shape[1] != 3)
+            throw new ArgumentException("Positions must be 2D tensor of shape [N, 3]", nameof(positions));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int depth = grid.Shape[0];
+        int height = grid.Shape[1];
+        int width = grid.Shape[2];
+        int channels = grid.Shape[3];
+        int numPositions = positions.Shape[0];
+
+        var result = new Tensor<T>(new[] { numPositions, channels });
+
+        Parallel.For(0, numPositions, n =>
+        {
+            // Get position (z, y, x)
+            T pz = positions[n, 0];
+            T py = positions[n, 1];
+            T px = positions[n, 2];
+
+            // Clamp to valid range and get integer and fractional parts
+            double z = Math.Max(0, Math.Min(depth - 1.001, numOps.ToDouble(pz)));
+            double y = Math.Max(0, Math.Min(height - 1.001, numOps.ToDouble(py)));
+            double x = Math.Max(0, Math.Min(width - 1.001, numOps.ToDouble(px)));
+
+            int z0 = (int)Math.Floor(z);
+            int y0 = (int)Math.Floor(y);
+            int x0 = (int)Math.Floor(x);
+            int z1 = Math.Min(z0 + 1, depth - 1);
+            int y1 = Math.Min(y0 + 1, height - 1);
+            int x1 = Math.Min(x0 + 1, width - 1);
+
+            double fz = z - z0;
+            double fy = y - y0;
+            double fx = x - x0;
+
+            // Trilinear interpolation weights for 8 corners
+            double w000 = (1 - fz) * (1 - fy) * (1 - fx);
+            double w001 = (1 - fz) * (1 - fy) * fx;
+            double w010 = (1 - fz) * fy * (1 - fx);
+            double w011 = (1 - fz) * fy * fx;
+            double w100 = fz * (1 - fy) * (1 - fx);
+            double w101 = fz * (1 - fy) * fx;
+            double w110 = fz * fy * (1 - fx);
+            double w111 = fz * fy * fx;
+
+            for (int c = 0; c < channels; c++)
+            {
+                // Get values at 8 corners
+                double v000 = numOps.ToDouble(grid[z0, y0, x0, c]);
+                double v001 = numOps.ToDouble(grid[z0, y0, x1, c]);
+                double v010 = numOps.ToDouble(grid[z0, y1, x0, c]);
+                double v011 = numOps.ToDouble(grid[z0, y1, x1, c]);
+                double v100 = numOps.ToDouble(grid[z1, y0, x0, c]);
+                double v101 = numOps.ToDouble(grid[z1, y0, x1, c]);
+                double v110 = numOps.ToDouble(grid[z1, y1, x0, c]);
+                double v111 = numOps.ToDouble(grid[z1, y1, x1, c]);
+
+                // Weighted sum
+                double interpolated = w000 * v000 + w001 * v001 + w010 * v010 + w011 * v011 +
+                                     w100 * v100 + w101 * v101 + w110 * v110 + w111 * v111;
+
+                result[n, c] = numOps.FromDouble(interpolated);
+            }
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> TensorPow<T>(Tensor<T> tensor, T exponent)
     {
         if (tensor == null) throw new ArgumentNullException(nameof(tensor));

@@ -14205,6 +14205,13 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     /// <inheritdoc/>
+    public Tensor<T> TensorTrilinearInterpolate<T>(Tensor<T> grid, Tensor<T> positions)
+    {
+        // Delegate to CPU fallback - GPU kernels can be added later
+        return _cpuFallback.TensorTrilinearInterpolate(grid, positions);
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> TensorPow<T>(Tensor<T> tensor, T exponent)
     {
         if (tensor == null) throw new ArgumentNullException(nameof(tensor));

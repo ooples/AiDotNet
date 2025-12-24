@@ -2069,6 +2069,28 @@ public interface IEngine
     Tensor<T> TensorCos<T>(Tensor<T> tensor);
 
     /// <summary>
+    /// Performs trilinear interpolation on a 3D grid.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="grid">The 3D feature grid of shape [D, H, W, C] where D=depth, H=height, W=width, C=channels.</param>
+    /// <param name="positions">The 3D coordinates to sample at, shape [N, 3] where each row is (z, y, x) in range [0, D-1], [0, H-1], [0, W-1].</param>
+    /// <returns>Interpolated values of shape [N, C].</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-017: 3D Spatial Operations</b></para>
+    /// <para>
+    /// Essential for hash encoding in neural radiance fields (NeRF) and Instant-NGP.
+    /// Trilinear interpolation samples from a discrete 3D grid using continuous coordinates,
+    /// computing weighted averages of the 8 surrounding voxel corners. The fractional part
+    /// of each coordinate determines the interpolation weights.
+    /// 
+    /// Formula for weights at position (z, y, x):
+    /// - fz, fy, fx = fractional parts of z, y, x
+    /// - Corners weighted by (1-fz)*(1-fy)*(1-fx), fz*(1-fy)*(1-fx), etc.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorTrilinearInterpolate<T>(Tensor<T> grid, Tensor<T> positions);
+
+    /// <summary>
     /// Computes the element-wise power of a tensor raised to a scalar exponent.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
