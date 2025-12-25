@@ -165,8 +165,20 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _schedulerStepMode = options.SchedulerStepMode;
 
         // Use scheduler's current learning rate if available, otherwise use initial rate
-        _currentLearningRate = _learningRateScheduler?.CurrentLearningRate
-            ?? GradientOptions.InitialLearningRate;
+        // Sync both learning rate fields so derived classes using either will get the correct value
+        SetLearningRate(_learningRateScheduler?.CurrentLearningRate
+            ?? GradientOptions.InitialLearningRate);
+    }
+
+    /// <summary>
+    /// Sets the current learning rate, synchronizing both the double field (_currentLearningRate)
+    /// and the generic T field (CurrentLearningRate) used by derived optimizers.
+    /// </summary>
+    /// <param name="learningRate">The new learning rate value.</param>
+    private void SetLearningRate(double learningRate)
+    {
+        _currentLearningRate = learningRate;
+        CurrentLearningRate = NumOps.FromDouble(learningRate);
     }
 
     /// <inheritdoc/>
@@ -913,9 +925,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _currentStep = 0;
         _currentEpoch = 0;
 
-        // Restore initial learning rate
-        _currentLearningRate = _learningRateScheduler?.CurrentLearningRate
-            ?? GradientOptions.InitialLearningRate;
+        // Restore initial learning rate (synced to both fields)
+        SetLearningRate(_learningRateScheduler?.CurrentLearningRate
+            ?? GradientOptions.InitialLearningRate);
     }
 
     /// <summary>
@@ -936,7 +948,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         if (_learningRateScheduler != null)
         {
-            _currentLearningRate = _learningRateScheduler.Step();
+            // Step the scheduler and sync both learning rate fields
+            SetLearningRate(_learningRateScheduler.Step());
         }
         return _currentLearningRate;
     }

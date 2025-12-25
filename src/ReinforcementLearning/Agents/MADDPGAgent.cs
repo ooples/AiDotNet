@@ -64,7 +64,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Issue #3 fix: Use configured actor learning rate for default optimizer
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
-            LearningRate = NumOps.ToDouble(_options.ActorLearningRate),
+            InitialLearningRate = NumOps.ToDouble(_options.ActorLearningRate),
             Beta1 = 0.9,
             Beta2 = 0.999,
             Epsilon = 1e-8

@@ -18,7 +18,7 @@ namespace AiDotNet.Models.Options;
 public class LionOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
-    /// Gets or sets the learning rate for the Lion optimizer.
+    /// Gets or sets the initial learning rate for the Lion optimizer.
     /// </summary>
     /// <value>The learning rate, defaulting to 0.0001.</value>
     /// <remarks>
@@ -28,7 +28,7 @@ public class LionOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// Lion moves more carefully but more reliably. You may need to tune this based on your problem,
     /// but 0.0001 (or 1e-4) is a good starting point for most applications.</para>
     /// </remarks>
-    public double LearningRate { get; set; } = 1e-4;
+    public new double InitialLearningRate { get; set; } = 1e-4;
 
     /// <summary>
     /// Gets or sets the exponential decay rate for the momentum interpolation (used for computing the update).

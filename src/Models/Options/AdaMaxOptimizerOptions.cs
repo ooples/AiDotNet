@@ -25,7 +25,7 @@ public class AdaMaxOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizer
     /// A smaller value (like 0.001) means taking smaller steps, which is slower but more precise.
     /// The default of 0.002 is a good balance for most problems when using AdaMax.</para>
     /// </remarks>
-    public double LearningRate { get; set; } = 0.002;
+    public new double InitialLearningRate { get; set; } = 0.002;
 
     /// <summary>
     /// Gets or sets the exponential decay rate for the first moment estimates.
