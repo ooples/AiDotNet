@@ -559,11 +559,23 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         var width = shape[4];
         var frameSize = channels * height * width;
 
+        // Create a copy to read from while writing to original
+        // This prevents cascading effects where modified frames affect subsequent reads
+        var originalNoise = new Tensor<T>(shape);
+        var originalSpan = originalNoise.AsWritableSpan();
         var noiseSpan = noise.AsWritableSpan();
+
+        // Copy the original values
+        for (int i = 0; i < noiseSpan.Length; i++)
+        {
+            originalSpan[i] = noiseSpan[i];
+        }
+
         var smoothingWeight = NumOps.FromDouble(_motionConfig.TemporalSmoothing);
         var mainWeight = NumOps.FromDouble(1.0 - _motionConfig.TemporalSmoothing);
 
         // Simple 1D temporal convolution (average with neighbors)
+        // Read from original copy, write to noise tensor
         for (int b = 0; b < batchSize; b++)
         {
             for (int f = 1; f < numFrames - 1; f++)
@@ -574,12 +586,13 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
                     var currIdx = b * numFrames * frameSize + f * frameSize + i;
                     var nextIdx = b * numFrames * frameSize + (f + 1) * frameSize + i;
 
+                    // Read from original copy to avoid cascading modifications
                     var avg = NumOps.Multiply(
                         NumOps.FromDouble(0.5),
-                        NumOps.Add(noiseSpan[prevIdx], noiseSpan[nextIdx]));
+                        NumOps.Add(originalSpan[prevIdx], originalSpan[nextIdx]));
 
                     noiseSpan[currIdx] = NumOps.Add(
-                        NumOps.Multiply(mainWeight, noiseSpan[currIdx]),
+                        NumOps.Multiply(mainWeight, originalSpan[currIdx]),
                         NumOps.Multiply(smoothingWeight, avg));
                 }
             }
