@@ -347,9 +347,10 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
         var motionEmbedding = CreateMotionEmbedding(effectiveMotionBucket, effectiveFPS);
 
         // Calculate video latent dimensions
+        // TemporalVAE expects [batch, channels, frames, height, width]
         var latentHeight = height / _temporalVAE.DownsampleFactor;
         var latentWidth = width / _temporalVAE.DownsampleFactor;
-        var videoLatentShape = new[] { 1, effectiveNumFrames, LatentChannels, latentHeight, latentWidth };
+        var videoLatentShape = new[] { 1, LatentChannels, effectiveNumFrames, latentHeight, latentWidth };
 
         // Generate initial noise for all frames
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
@@ -379,7 +380,7 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
     /// <summary>
     /// Predicts noise for video frames conditioned on image and motion.
     /// </summary>
-    /// <param name="latents">Current video latents [batch, frames, channels, height, width].</param>
+    /// <param name="latents">Current video latents [batch, channels, frames, height, width].</param>
     /// <param name="timestep">Current diffusion timestep.</param>
     /// <param name="imageEmbedding">Encoded conditioning image.</param>
     /// <param name="motionEmbedding">Motion embedding for motion intensity control.</param>
