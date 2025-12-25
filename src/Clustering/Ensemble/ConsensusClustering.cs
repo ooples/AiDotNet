@@ -248,6 +248,9 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         var clusterDist = new double[n, n];
         Array.Copy(distMatrix, clusterDist, n * n);
 
+        // Track merge history: when cluster B merges into A, record mergedInto[B] = A
+        var mergedInto = new Dictionary<int, int>();
+
         // Merge until we have the desired number of clusters
         while (activeClusters.Count > numClusters)
         {
@@ -273,6 +276,9 @@ public class ConsensusClustering<T> : ClusteringBase<T>
             }
 
             if (merge1 < 0) break;
+
+            // Track the merge before updating assignments
+            mergedInto[merge2] = merge1;
 
             // Merge cluster2 into cluster1
             for (int i = 0; i < n; i++)
@@ -307,28 +313,21 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         var result = new int[n];
         for (int i = 0; i < n; i++)
         {
-            int originalCluster = clusterAssignments[i];
-            // Find the active cluster this belongs to
-            while (!activeClusters.Contains(originalCluster))
+            int cluster = clusterAssignments[i];
+
+            // Follow the merge chain to find the final active cluster
+            while (!activeClusters.Contains(cluster) && mergedInto.ContainsKey(cluster))
             {
-                // Find which cluster it merged into
-                for (int j = 0; j < n; j++)
-                {
-                    if (clusterAssignments[j] == originalCluster && j != i)
-                    {
-                        originalCluster = clusterAssignments[j];
-                        break;
-                    }
-                }
-                if (!activeClusters.Contains(originalCluster))
-                {
-                    // Fallback: assign to first active cluster
-                    originalCluster = activeClusters.First();
-                    break;
-                }
+                cluster = mergedInto[cluster];
             }
 
-            result[i] = clusterMap.ContainsKey(originalCluster) ? clusterMap[originalCluster] : 0;
+            // Fallback if still not in active clusters (should not happen normally)
+            if (!activeClusters.Contains(cluster))
+            {
+                cluster = activeClusters.First();
+            }
+
+            result[i] = clusterMap.ContainsKey(cluster) ? clusterMap[cluster] : 0;
         }
 
         return result;

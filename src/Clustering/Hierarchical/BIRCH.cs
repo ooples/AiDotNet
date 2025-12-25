@@ -344,6 +344,9 @@ public class BIRCH<T> : ClusteringBase<T>
         // Agglomerative merging until numClusters remain
         var activeClusters = new HashSet<int>(Enumerable.Range(0, n));
 
+        // Track merge history: when cluster B merges into A, record mergedInto[B] = A
+        var mergedInto = new Dictionary<int, int>();
+
         while (activeClusters.Count > numClusters)
         {
             // Find closest pair
@@ -368,6 +371,9 @@ public class BIRCH<T> : ClusteringBase<T>
             }
 
             if (merge1 < 0) break;
+
+            // Track the merge before updating assignments
+            mergedInto[merge2] = merge1;
 
             // Merge cluster2 into cluster1
             for (int i = 0; i < n; i++)
@@ -402,25 +408,21 @@ public class BIRCH<T> : ClusteringBase<T>
         for (int i = 0; i < n; i++)
         {
             // Find the active cluster this point belongs to
-            int originalCluster = clusterAssignments[i];
-            while (!activeClusters.Contains(originalCluster))
+            int cluster = clusterAssignments[i];
+
+            // Follow the merge chain to find the final active cluster
+            while (!activeClusters.Contains(cluster) && mergedInto.ContainsKey(cluster))
             {
-                // Find which cluster it merged into
-                for (int j = 0; j < n; j++)
-                {
-                    if (clusterAssignments[j] == originalCluster && j != i)
-                    {
-                        originalCluster = clusterAssignments[j];
-                        break;
-                    }
-                }
-                break; // Prevent infinite loop
+                cluster = mergedInto[cluster];
             }
 
-            if (clusterMap.ContainsKey(originalCluster))
+            // Fallback if still not in active clusters (should not happen normally)
+            if (!activeClusters.Contains(cluster))
             {
-                clusterAssignments[i] = clusterMap[originalCluster];
+                cluster = activeClusters.First();
             }
+
+            clusterAssignments[i] = clusterMap.ContainsKey(cluster) ? clusterMap[cluster] : 0;
         }
 
         // Compute cluster centers from entries

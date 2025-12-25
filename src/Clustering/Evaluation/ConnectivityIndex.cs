@@ -1,4 +1,7 @@
+using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.Clustering.Evaluation;
 
@@ -39,14 +42,19 @@ namespace AiDotNet.Clustering.Evaluation;
 public class ConnectivityIndex<T> : IClusterMetric<T>
 {
     private readonly int _numNeighbors;
+    private readonly IDistanceMetric<T>? _distanceMetric;
+    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Initializes a new ConnectivityIndex instance.
     /// </summary>
     /// <param name="numNeighbors">Number of nearest neighbors to consider. Default is 10.</param>
-    public ConnectivityIndex(int numNeighbors = 10)
+    /// <param name="distanceMetric">Distance metric to use, or null for Euclidean (default).</param>
+    public ConnectivityIndex(int numNeighbors = 10, IDistanceMetric<T>? distanceMetric = null)
     {
         _numNeighbors = numNeighbors;
+        _distanceMetric = distanceMetric;
+        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <inheritdoc />
@@ -58,25 +66,26 @@ public class ConnectivityIndex<T> : IClusterMetric<T>
     /// <inheritdoc />
     public double Compute(Matrix<T> data, Vector<T> labels)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
         int n = data.Rows;
-        int d = data.Columns;
 
         int L = Math.Min(_numNeighbors, n - 1);
         double connectivity = 0;
 
+        // Use configured distance metric or default to Euclidean
+        var metric = _distanceMetric ?? new EuclideanDistance<T>();
+
         for (int i = 0; i < n; i++)
         {
-            int iLabel = (int)numOps.ToDouble(labels[i]);
+            int iLabel = (int)_numOps.ToDouble(labels[i]);
 
             // Find L nearest neighbors
-            var neighbors = FindNearestNeighbors(data, i, L, n, d, numOps);
+            var neighbors = FindNearestNeighbors(data, i, L, n, metric);
 
             // Add penalty for neighbors in different clusters
             for (int j = 0; j < neighbors.Length; j++)
             {
                 int neighborIdx = neighbors[j];
-                int neighborLabel = (int)numOps.ToDouble(labels[neighborIdx]);
+                int neighborLabel = (int)_numOps.ToDouble(labels[neighborIdx]);
 
                 if (neighborLabel != iLabel)
                 {
@@ -88,22 +97,19 @@ public class ConnectivityIndex<T> : IClusterMetric<T>
         return connectivity;
     }
 
-    private int[] FindNearestNeighbors(Matrix<T> data, int pointIdx, int L, int n, int d, INumericOperations<T> numOps)
+    private int[] FindNearestNeighbors(Matrix<T> data, int pointIdx, int L, int n, IDistanceMetric<T> metric)
     {
         var distances = new List<(int idx, double dist)>();
+        var pointI = data.GetRow(pointIdx);
 
         for (int j = 0; j < n; j++)
         {
             if (j == pointIdx) continue;
 
-            double dist = 0;
-            for (int k = 0; k < d; k++)
-            {
-                double diff = numOps.ToDouble(data[pointIdx, k]) - numOps.ToDouble(data[j, k]);
-                dist += diff * diff;
-            }
+            var pointJ = data.GetRow(j);
+            double dist = _numOps.ToDouble(metric.Compute(pointI, pointJ));
 
-            distances.Add((j, Math.Sqrt(dist)));
+            distances.Add((j, dist));
         }
 
         return distances.OrderBy(x => x.dist).Take(L).Select(x => x.idx).ToArray();
