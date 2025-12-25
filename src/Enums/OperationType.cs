@@ -406,6 +406,131 @@ public enum OperationType
     /// </summary>
     ComplexMultiply,
 
+    // Octonion Operations
+
+    /// <summary>
+    /// Octonion multiplication (non-associative).
+    /// </summary>
+    OctonionMultiply,
+
+    /// <summary>
+    /// Octonion matrix multiplication for neural networks.
+    /// </summary>
+    OctonionMatMul,
+
+    /// <summary>
+    /// Octonion conjugation.
+    /// </summary>
+    OctonionConjugate,
+
+    /// <summary>
+    /// Octonion addition.
+    /// </summary>
+    OctonionAdd,
+
+    // Clifford/Geometric Algebra Operations
+
+    /// <summary>
+    /// Geometric product of multivectors.
+    /// </summary>
+    GeometricProduct,
+
+    /// <summary>
+    /// Wedge (outer) product of multivectors.
+    /// </summary>
+    WedgeProduct,
+
+    /// <summary>
+    /// Inner (contraction) product of multivectors.
+    /// </summary>
+    CliffordInnerProduct,
+
+    /// <summary>
+    /// Multivector addition.
+    /// </summary>
+    MultivectorAdd,
+
+    /// <summary>
+    /// Multivector reverse operation.
+    /// </summary>
+    MultivectorReverse,
+
+    /// <summary>
+    /// Grade projection of multivectors.
+    /// </summary>
+    GradeProject,
+
+    // Hyperbolic Geometry Operations
+
+    /// <summary>
+    /// Mobius addition in Poincare ball model.
+    /// </summary>
+    MobiusAdd,
+
+    /// <summary>
+    /// Poincare exponential map.
+    /// </summary>
+    PoincareExpMap,
+
+    /// <summary>
+    /// Poincare logarithmic map.
+    /// </summary>
+    PoincareLogMap,
+
+    /// <summary>
+    /// Poincare ball distance metric.
+    /// </summary>
+    PoincareDistance,
+
+    /// <summary>
+    /// Hyperboloid distance metric.
+    /// </summary>
+    HyperboloidDistance,
+
+    // Sparse Operations
+
+    /// <summary>
+    /// Sparse matrix-vector multiplication.
+    /// </summary>
+    SpMV,
+
+    /// <summary>
+    /// Sparse matrix-matrix multiplication.
+    /// </summary>
+    SpMM,
+
+    /// <summary>
+    /// Sparse gather operation.
+    /// </summary>
+    SparseGather,
+
+    /// <summary>
+    /// Sparse scatter operation.
+    /// </summary>
+    SparseScatter,
+
+    // Lie Group Operations
+
+    /// <summary>
+    /// SO(3) exponential map.
+    /// </summary>
+    So3Exp,
+
+    /// <summary>
+    /// SO(3) logarithmic map.
+    /// </summary>
+    So3Log,
+
+    /// <summary>
+    /// SE(3) exponential map.
+    /// </summary>
+    Se3Exp,
+
+    /// <summary>
+    /// SE(3) logarithmic map.
+    /// </summary>
+    Se3Log,
+
     // Fused Operations (for JIT optimization)
 
     /// <summary>

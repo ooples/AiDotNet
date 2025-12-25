@@ -396,4 +396,64 @@ internal static class VectorizedOperationsFallback
 
         source.CopyTo(destination);
     }
+
+    /// <summary>
+    /// Computes floor of each element using sequential loops.
+    /// </summary>
+    public static void Floor<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = ops.Floor(x[i]);
+    }
+
+    /// <summary>
+    /// Computes ceiling of each element using sequential loops.
+    /// </summary>
+    public static void Ceiling<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = ops.Ceiling(x[i]);
+    }
+
+    /// <summary>
+    /// Computes fractional part of each element using sequential loops.
+    /// </summary>
+    public static void Frac<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = ops.Frac(x[i]);
+    }
+
+    /// <summary>
+    /// Computes sine of each element using sequential loops.
+    /// </summary>
+    public static void Sin<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = ops.Sin(x[i]);
+    }
+
+    /// <summary>
+    /// Computes cosine of each element using sequential loops.
+    /// </summary>
+    public static void Cos<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = ops.Cos(x[i]);
+    }
 }

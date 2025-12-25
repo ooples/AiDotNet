@@ -1,4 +1,5 @@
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.PhysicsInformed.NeuralOperators;
 
 namespace AiDotNet.Helpers;
 
@@ -2747,6 +2748,486 @@ public static class LayerHelper<T>
                 activationFunction: new ReLUActivation<T>());
             currentInputDim = hiddenDim;
         }
+    }
+
+    /// <summary>
+    /// Creates default layers for a Hamiltonian Neural Network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration that defines input and output shapes.</param>
+    /// <param name="hiddenLayerCount">Number of hidden layers (default: 3).</param>
+    /// <param name="hiddenLayerSize">Number of neurons in each hidden layer (default: 64).</param>
+    /// <returns>A collection of layers forming a Hamiltonian neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Hamiltonian Neural Networks (HNNs) learn the energy function (Hamiltonian)
+    /// of a physical system. The network takes a state vector [q, p] (positions and momenta) as input
+    /// and outputs a scalar energy value.
+    /// </para>
+    /// <para>
+    /// Key design choices:
+    /// - Uses Tanh activation in hidden layers for smooth, bounded outputs that help with gradient computation
+    /// - Output layer has linear activation since the Hamiltonian can be any real number
+    /// - Architecture is designed for computing gradients (∂H/∂q, ∂H/∂p) to derive dynamics
+    ///
+    /// The network structure enables Hamilton's equations:
+    /// - dq/dt = ∂H/∂p (velocity from momentum gradient)
+    /// - dp/dt = -∂H/∂q (force from position gradient)
+    ///
+    /// This guarantees energy conservation by construction.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultHamiltonianLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenLayerCount = 3,
+        int hiddenLayerSize = 64)
+    {
+        ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, architecture.OutputSize);
+
+        if (architecture.OutputSize != 1)
+        {
+            throw new ArgumentException(
+                "Hamiltonian networks require a scalar output (OutputSize = 1).",
+                nameof(architecture));
+        }
+
+        var inputShape = architecture.GetInputShape();
+        int inputSize = inputShape.Aggregate((a, b) => a * b);
+
+        // Hamiltonian networks use Tanh for smooth gradients
+        var hiddenActivation = new TanhActivation<T>() as IActivationFunction<T>;
+
+        // First hidden layer
+        yield return new DenseLayer<T>(inputSize, hiddenLayerSize, hiddenActivation);
+
+        // Additional hidden layers
+        for (int i = 1; i < hiddenLayerCount; i++)
+        {
+            yield return new DenseLayer<T>(hiddenLayerSize, hiddenLayerSize, hiddenActivation);
+        }
+
+        // Output layer - linear activation for unbounded energy output
+        yield return new DenseLayer<T>(hiddenLayerSize, 1, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Lagrangian Neural Network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration that defines input and output shapes.</param>
+    /// <param name="hiddenLayerCount">Number of hidden layers (default: 3).</param>
+    /// <param name="hiddenLayerSize">Number of neurons in each hidden layer (default: 64).</param>
+    /// <returns>A collection of layers forming a Lagrangian neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Lagrangian Neural Networks (LNNs) learn the Lagrangian function L(q, q̇)
+    /// of a physical system. The Lagrangian is typically L = T - V (kinetic minus potential energy).
+    /// </para>
+    /// <para>
+    /// Key design choices:
+    /// - Uses Tanh activation in hidden layers for smooth derivatives needed in Euler-Lagrange equations
+    /// - Output is scalar (the Lagrangian value)
+    /// - Structure supports computing second derivatives for equations of motion
+    ///
+    /// The Euler-Lagrange equation: d/dt(∂L/∂q̇) = ∂L/∂q
+    /// This gives the equations of motion while automatically respecting conservation laws.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultLagrangianLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenLayerCount = 3,
+        int hiddenLayerSize = 64)
+    {
+        ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, architecture.OutputSize);
+
+        if (architecture.OutputSize != 1)
+        {
+            throw new ArgumentException(
+                "Lagrangian networks require a scalar output (OutputSize = 1).",
+                nameof(architecture));
+        }
+
+        var inputShape = architecture.GetInputShape();
+        int inputSize = inputShape.Aggregate((a, b) => a * b);
+
+        // Lagrangian networks use Tanh for smooth second derivatives
+        var hiddenActivation = new TanhActivation<T>() as IActivationFunction<T>;
+
+        // First hidden layer
+        yield return new DenseLayer<T>(inputSize, hiddenLayerSize, hiddenActivation);
+
+        // Additional hidden layers
+        for (int i = 1; i < hiddenLayerCount; i++)
+        {
+            yield return new DenseLayer<T>(hiddenLayerSize, hiddenLayerSize, hiddenActivation);
+        }
+
+        // Output layer - linear activation for unbounded Lagrangian output
+        yield return new DenseLayer<T>(hiddenLayerSize, 1, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Universal Differential Equation (UDE) network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="hiddenLayerCount">Number of hidden layers (default: 2).</param>
+    /// <param name="hiddenLayerSize">Number of neurons in each hidden layer (default: 32).</param>
+    /// <returns>A collection of layers forming a UDE neural network component.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Universal Differential Equations combine known physics with neural networks.
+    /// The neural network learns the unknown parts of the dynamics while known physics equations
+    /// are added explicitly. This is perfect for scientific applications where you know some
+    /// of the physics but not all of it.
+    /// </para>
+    /// <para>
+    /// The network takes [state, time] as input and outputs the learned correction to the dynamics.
+    /// Uses Tanh activation for smooth derivatives needed in ODE integration.
+    /// Output uses linear (identity) activation since corrections can be positive or negative.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultUniversalDELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenLayerCount = 2,
+        int hiddenLayerSize = 32)
+    {
+        ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, architecture.OutputSize);
+
+        var inputShape = architecture.GetInputShape();
+        int inputSize = inputShape.Aggregate((a, b) => a * b);
+        int outputSize = architecture.OutputSize;
+
+        // UDE networks use Tanh for smooth derivatives in ODE integration
+        var hiddenActivation = new TanhActivation<T>() as IActivationFunction<T>;
+
+        // First hidden layer
+        yield return new DenseLayer<T>(inputSize, hiddenLayerSize, hiddenActivation);
+
+        // Additional hidden layers
+        for (int i = 1; i < hiddenLayerCount; i++)
+        {
+            yield return new DenseLayer<T>(hiddenLayerSize, hiddenLayerSize, hiddenActivation);
+        }
+
+        // Output layer - linear activation for learned dynamics corrections
+        yield return new DenseLayer<T>(hiddenLayerSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Deep Operator Network (DeepONet).
+    /// </summary>
+    /// <param name="branchInputSize">Size of the branch network input (function samples).</param>
+    /// <param name="trunkInputSize">Size of the trunk network input (query locations).</param>
+    /// <param name="outputSize">
+    /// Number of output components (default: 1 for scalar operators).
+    /// For multi-output operators, each output component uses <paramref name="hiddenLayerSize"/> basis functions,
+    /// so the final layer outputs <c>hiddenLayerSize * outputSize</c> values that are reshaped and summed.
+    /// </param>
+    /// <param name="hiddenLayerCount">Number of hidden layers in each sub-network (default: 3).</param>
+    /// <param name="hiddenLayerSize">
+    /// Number of neurons in each hidden layer, and the number of basis functions per output component (default: 64).
+    /// </param>
+    /// <returns>A tuple of (branchLayers, trunkLayers) for the DeepONet architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DeepONet learns operators - functions that take functions as input.
+    /// For example, an operator might take a temperature distribution as input and output
+    /// the resulting heat flow. The branch network encodes the input function, while the
+    /// trunk network handles where you want to evaluate the output.
+    /// </para>
+    /// <para>
+    /// <b>Architecture:</b> Branch encodes input function, Trunk encodes query location.
+    /// Output = sum(Branch * Trunk) + bias, allowing learning of complex operators.
+    /// </para>
+    /// <para>
+    /// <b>Multi-output handling:</b> For operators with multiple output components (e.g., velocity
+    /// with x,y,z components), set <paramref name="outputSize"/> to the number of components.
+    /// Each component gets its own set of basis functions. The branch and trunk networks
+    /// output <c>hiddenLayerSize * outputSize</c> values, which are grouped as
+    /// [component1_basis1..p, component2_basis1..p, ...] where p = <paramref name="hiddenLayerSize"/>.
+    /// </para>
+    /// </remarks>
+    public static (IEnumerable<ILayer<T>> BranchLayers, IEnumerable<ILayer<T>> TrunkLayers) CreateDefaultDeepOperatorNetworkLayers(
+        int branchInputSize,
+        int trunkInputSize,
+        int outputSize = 1,
+        int hiddenLayerCount = 3,
+        int hiddenLayerSize = 64)
+    {
+        if (hiddenLayerCount < 1)
+            throw new ArgumentException("Must have at least 1 hidden layer.", nameof(hiddenLayerCount));
+        if (hiddenLayerSize < 1)
+            throw new ArgumentException("Hidden layer size must be positive.", nameof(hiddenLayerSize));
+        if (outputSize < 1)
+            throw new ArgumentException("Output size must be positive.", nameof(outputSize));
+
+        return (
+            CreateDeepONetBranchLayers(branchInputSize, hiddenLayerCount, hiddenLayerSize, outputSize),
+            CreateDeepONetTrunkLayers(trunkInputSize, hiddenLayerCount, hiddenLayerSize, outputSize)
+        );
+    }
+
+    /// <summary>
+    /// Creates branch network layers for DeepONet using yield pattern.
+    /// </summary>
+    private static IEnumerable<ILayer<T>> CreateDeepONetBranchLayers(
+        int branchInputSize,
+        int hiddenLayerCount,
+        int hiddenLayerSize,
+        int outputSize)
+    {
+        var hiddenActivation = new TanhActivation<T>() as IActivationFunction<T>;
+        int finalOutputDim = hiddenLayerSize * outputSize;
+
+        // First hidden layer
+        yield return new DenseLayer<T>(branchInputSize, hiddenLayerSize, hiddenActivation);
+
+        // Additional hidden layers
+        for (int i = 1; i < hiddenLayerCount; i++)
+        {
+            yield return new DenseLayer<T>(hiddenLayerSize, hiddenLayerSize, hiddenActivation);
+        }
+
+        // Branch output dimension: p * outputSize for multi-output support
+        yield return new DenseLayer<T>(hiddenLayerSize, finalOutputDim, hiddenActivation);
+    }
+
+    /// <summary>
+    /// Creates trunk network layers for DeepONet using yield pattern.
+    /// </summary>
+    private static IEnumerable<ILayer<T>> CreateDeepONetTrunkLayers(
+        int trunkInputSize,
+        int hiddenLayerCount,
+        int hiddenLayerSize,
+        int outputSize)
+    {
+        var hiddenActivation = new TanhActivation<T>() as IActivationFunction<T>;
+        int finalOutputDim = hiddenLayerSize * outputSize;
+
+        // First hidden layer
+        yield return new DenseLayer<T>(trunkInputSize, hiddenLayerSize, hiddenActivation);
+
+        // Additional hidden layers
+        for (int i = 1; i < hiddenLayerCount; i++)
+        {
+            yield return new DenseLayer<T>(hiddenLayerSize, hiddenLayerSize, hiddenActivation);
+        }
+
+        // Trunk output dimension: p * outputSize to match branch for element-wise product
+        yield return new DenseLayer<T>(hiddenLayerSize, finalOutputDim, hiddenActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Fourier Neural Operator (FNO).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="spatialDimensions">
+    /// Dimensions of the spatial domain (e.g., [64, 64] for 2D grid, [32] for 1D).
+    /// This determines the FFT size for spectral operations.
+    /// </param>
+    /// <param name="numFourierLayers">Number of Fourier layers (default: 4).</param>
+    /// <param name="hiddenChannels">Number of hidden channels/width (default: 64).</param>
+    /// <param name="numModes">
+    /// Number of Fourier modes to retain (default: 12). Lower = smoother, higher = more detail.
+    /// Should be less than or equal to smallest spatial dimension.
+    /// </param>
+    /// <returns>A collection of layers forming a Fourier Neural Operator.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Fourier Neural Operators learn mappings between function spaces
+    /// by operating in frequency domain. They're especially powerful for PDEs because
+    /// many physical phenomena have simple representations in frequency space.
+    /// </para>
+    /// <para>
+    /// <b>Architecture:</b>
+    /// <list type="number">
+    /// <item><description>Lifting layer: Projects input to higher-dimensional channel space</description></item>
+    /// <item><description>Fourier layers: Apply spectral convolution (FFT → learnable weights → IFFT) + local linear transform</description></item>
+    /// <item><description>Projection layers: Map back to output dimension</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Key FNO Properties:</b>
+    /// <list type="bullet">
+    /// <item><description>Resolution-invariant: Train at one resolution, evaluate at another</description></item>
+    /// <item><description>Global receptive field through spectral operations</description></item>
+    /// <item><description>Efficient for smooth functions (low-frequency dominated)</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Note:</b> For full FNO functionality with training, use the <see cref="FourierNeuralOperator{T}"/>
+    /// class directly, which provides a complete neural operator implementation.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when spatialDimensions is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when spatialDimensions is empty.</exception>
+    public static IEnumerable<ILayer<T>> CreateDefaultFourierNeuralOperatorLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int[] spatialDimensions,
+        int numFourierLayers = 4,
+        int hiddenChannels = 64,
+        int numModes = 12)
+    {
+        if (spatialDimensions is null)
+        {
+            throw new ArgumentNullException(nameof(spatialDimensions));
+        }
+
+        if (spatialDimensions.Length == 0)
+        {
+            throw new ArgumentException("Spatial dimensions cannot be empty.", nameof(spatialDimensions));
+        }
+
+        var inputShape = architecture.GetInputShape();
+        int inputSize = inputShape.Aggregate((a, b) => a * b);
+        int outputSize = architecture.OutputSize;
+
+        var hiddenActivation = new GELUActivation<T>() as IActivationFunction<T>;
+
+        // Lifting layer: project input to higher dimension
+        yield return new DenseLayer<T>(inputSize, hiddenChannels, hiddenActivation);
+
+        // Fourier layers with spectral convolution (FFT-based)
+        for (int i = 0; i < numFourierLayers; i++)
+        {
+            yield return new FourierLayer<T>(hiddenChannels, numModes, spatialDimensions, hiddenActivation);
+        }
+
+        // Projection layers: project back to output dimension
+        yield return new DenseLayer<T>(hiddenChannels, hiddenChannels, hiddenActivation);
+        yield return new DenseLayer<T>(hiddenChannels, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Variational Physics-Informed Neural Network (VPINN).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="hiddenLayerCount">Number of hidden layers (default: 4).</param>
+    /// <param name="hiddenLayerSize">Number of neurons in each hidden layer (default: 50).</param>
+    /// <returns>A collection of layers forming a VPINN.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Variational PINNs solve PDEs using the weak (variational) form
+    /// instead of the strong form. This is similar to Finite Element Methods but using
+    /// neural networks. Often more stable for complex PDEs than standard PINNs.
+    /// </para>
+    /// <para>
+    /// Uses Tanh activation throughout for smooth derivatives needed in variational formulation.
+    /// Linear output layer since PDE solutions can take any real value.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVariationalPINNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenLayerCount = 4,
+        int hiddenLayerSize = 50)
+    {
+        ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, architecture.OutputSize);
+
+        var inputShape = architecture.GetInputShape();
+        int inputSize = inputShape.Aggregate((a, b) => a * b);
+        int outputSize = architecture.OutputSize;
+
+        var hiddenActivation = new TanhActivation<T>() as IActivationFunction<T>;
+
+        // First hidden layer
+        yield return new DenseLayer<T>(inputSize, hiddenLayerSize, hiddenActivation);
+
+        // Additional hidden layers
+        for (int i = 1; i < hiddenLayerCount; i++)
+        {
+            yield return new DenseLayer<T>(hiddenLayerSize, hiddenLayerSize, hiddenActivation);
+        }
+
+        // Output layer - linear for PDE solution values
+        yield return new DenseLayer<T>(hiddenLayerSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates default layers for the Deep Ritz Method network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="hiddenLayerCount">Number of hidden layers (default: 4).</param>
+    /// <param name="hiddenLayerSize">Number of neurons in each hidden layer (default: 50).</param>
+    /// <returns>A collection of layers forming a Deep Ritz network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The Deep Ritz Method solves PDEs by minimizing an energy functional
+    /// instead of directly enforcing the PDE. This is based on the Ritz method from
+    /// calculus of variations. The network learns the function that minimizes the energy.
+    /// </para>
+    /// <para>
+    /// Similar architecture to VPINN but used with energy-based loss functions.
+    /// Tanh activation provides smooth second derivatives needed for energy computations.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultDeepRitzLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenLayerCount = 4,
+        int hiddenLayerSize = 50)
+    {
+        ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, architecture.OutputSize);
+
+        var inputShape = architecture.GetInputShape();
+        int inputSize = inputShape.Aggregate((a, b) => a * b);
+        int outputSize = architecture.OutputSize;
+
+        var hiddenActivation = new TanhActivation<T>() as IActivationFunction<T>;
+
+        // First hidden layer
+        yield return new DenseLayer<T>(inputSize, hiddenLayerSize, hiddenActivation);
+
+        // Additional hidden layers
+        for (int i = 1; i < hiddenLayerCount; i++)
+        {
+            yield return new DenseLayer<T>(hiddenLayerSize, hiddenLayerSize, hiddenActivation);
+        }
+
+        // Output layer - linear for energy/solution values
+        yield return new DenseLayer<T>(hiddenLayerSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Physics-Informed Neural Network (PINN).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="hiddenLayerCount">Number of hidden layers (default: 4).</param>
+    /// <param name="hiddenLayerSize">Number of neurons in each hidden layer (default: 32).</param>
+    /// <returns>A collection of layers forming a PINN.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Physics-Informed Neural Networks (PINNs) solve PDEs by training
+    /// a neural network to minimize the PDE residual at collocation points. The network
+    /// learns the solution function u(x,t) while respecting the physics (PDE, boundary
+    /// conditions, and initial conditions).
+    /// </para>
+    /// <para>
+    /// Uses Tanh activation for smooth derivatives (important for computing PDE residuals).
+    /// Multiple hidden layers capture complex solution behavior.
+    /// Linear output layer since PDE solutions can take any real value.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultPINNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenLayerCount = 4,
+        int hiddenLayerSize = 32)
+    {
+        ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, architecture.OutputSize);
+
+        var inputShape = architecture.GetInputShape();
+        int inputSize = inputShape.Aggregate((a, b) => a * b);
+        int outputSize = architecture.OutputSize;
+
+        var hiddenActivation = new TanhActivation<T>() as IActivationFunction<T>;
+
+        // First hidden layer
+        yield return new DenseLayer<T>(inputSize, hiddenLayerSize, hiddenActivation);
+
+        // Additional hidden layers - deeper networks for complex PDE solutions
+        for (int i = 1; i < hiddenLayerCount; i++)
+        {
+            yield return new DenseLayer<T>(hiddenLayerSize, hiddenLayerSize, hiddenActivation);
+        }
+
+        // Output layer - linear for PDE solution values
+        yield return new DenseLayer<T>(hiddenLayerSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>

@@ -74,6 +74,28 @@ public static class MathHelper
             }
             return instance;
         }
+        if (typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(Octonion<>))
+        {
+            var innerType = typeof(T).GetGenericArguments()[0];
+            var octonionOpsType = typeof(OctonionOperations<>).MakeGenericType(innerType);
+            var instance = Activator.CreateInstance(octonionOpsType);
+            if (instance is null)
+            {
+                throw new InvalidOperationException($"Failed to create OctonionOperations instance for type {typeof(T)}");
+            }
+            return instance;
+        }
+        if (typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(Multivector<>))
+        {
+            var innerType = typeof(T).GetGenericArguments()[0];
+            var multivectorOpsType = typeof(MultivectorOperations<>).MakeGenericType(innerType);
+            var instance = Activator.CreateInstance(multivectorOpsType);
+            if (instance is null)
+            {
+                throw new InvalidOperationException($"Failed to create MultivectorOperations instance for type {typeof(T)}");
+            }
+            return instance;
+        }
         if (typeof(T) == typeof(byte))
             return new ByteOperations();
         if (typeof(T) == typeof(sbyte))

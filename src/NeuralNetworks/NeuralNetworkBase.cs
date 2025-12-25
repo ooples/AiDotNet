@@ -657,9 +657,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <exception cref="ArgumentException">Thrown when the layer configuration is invalid.</exception>
     protected virtual void ValidateCustomLayers(List<ILayer<T>> layers)
     {
-        if (layers == null || layers.Count < 2)
+        if (layers == null || layers.Count == 0)
         {
-            throw new ArgumentException("Neural network must have at least 2 layers (1 input layer and 1 output layer).");
+            throw new ArgumentException("Neural network must have at least 1 layer.");
         }
 
         var errors = new List<string>();
@@ -671,14 +671,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         // Check layer connections
-        for (int i = 1; i < layers.Count; i++)
+        if (layers.Count > 1)
         {
-            var prevLayer = layers[i - 1];
-            var currentLayer = layers[i];
-
-            if (!AreLayersCompatible(prevLayer, currentLayer))
+            for (int i = 1; i < layers.Count; i++)
             {
-                errors.Add($"Layer {i - 1} is not compatible with Layer {i}.");
+                var prevLayer = layers[i - 1];
+                var currentLayer = layers[i];
+
+                if (!AreLayersCompatible(prevLayer, currentLayer))
+                {
+                    errors.Add($"Layer {i - 1} is not compatible with Layer {i}.");
+                }
             }
         }
 
