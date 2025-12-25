@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
