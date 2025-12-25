@@ -111,6 +111,12 @@ public class FactorAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nFeaturesIn = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+
+        if (n < 2)
+        {
+            throw new ArgumentException("Factor Analysis requires at least 2 samples.", nameof(data));
+        }
+
         int k = Math.Min(_nComponents, p);
 
         // Center the data
@@ -562,7 +568,8 @@ public class FactorAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             double pivot = temp[i, i];
             if (Math.Abs(pivot) < 1e-10)
             {
-                pivot = 1e-10;
+                throw new InvalidOperationException(
+                    $"Matrix is singular or near-singular at row {i}. Factor Analysis may not be applicable to this data.");
             }
 
             for (int j = 0; j < 2 * n; j++)

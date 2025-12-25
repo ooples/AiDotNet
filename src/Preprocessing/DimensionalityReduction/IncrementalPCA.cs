@@ -123,6 +123,12 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nFeaturesIn = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+
+        if (n < 2)
+        {
+            throw new ArgumentException("At least 2 samples are required to fit IncrementalPCA.", nameof(data));
+        }
+
         int k = Math.Min(_nComponents, Math.Min(n, p));
 
         // Initialize running statistics
@@ -239,6 +245,11 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="batch">A batch of training data.</param>
     public void PartialFit(Matrix<T> batch)
     {
+        if (batch.Rows < 1)
+        {
+            throw new ArgumentException("Batch must contain at least 1 sample.", nameof(batch));
+        }
+
         if (_mean is null)
         {
             // First call - initialize

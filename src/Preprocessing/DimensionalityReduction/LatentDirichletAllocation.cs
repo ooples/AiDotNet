@@ -362,6 +362,9 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
         {
             var oldGamma = (double[])gamma.Clone();
 
+            // Compute digamma sum before reset (using previous iteration's gamma values)
+            double digammaGammaSum = Digamma(oldGamma.Sum());
+
             // Reset gamma
             for (int t = 0; t < k; t++)
             {
@@ -369,7 +372,6 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
             }
 
             // Update phi and gamma
-            double digammaGammaSum = Digamma(gamma.Sum());
 
             for (int w = 0; w < _nVocab; w++)
             {

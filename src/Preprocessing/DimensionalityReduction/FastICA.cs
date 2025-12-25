@@ -590,6 +590,13 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("FastICA has not been fitted.");
         }
 
+        if (data.Columns != _nFeaturesIn)
+        {
+            throw new ArgumentException(
+                $"Input data has {data.Columns} features, but FastICA was fitted with {_nFeaturesIn} features.",
+                nameof(data));
+        }
+
         int n = data.Rows;
         int p = data.Columns;
         int k = _components.GetLength(0);
@@ -648,6 +655,14 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = _nFeaturesIn;
         int k = _mixing.GetLength(1);
+
+        if (data.Columns != k)
+        {
+            throw new ArgumentException(
+                $"Input data has {data.Columns} columns, but expected {k} independent components.",
+                nameof(data));
+        }
+
         var result = new T[n, p];
 
         for (int i = 0; i < n; i++)

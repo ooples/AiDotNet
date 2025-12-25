@@ -142,6 +142,13 @@ public class InteractionFeatures<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("InteractionFeatures has not been fitted.");
         }
 
+        if (data.Columns != _nInputFeatures)
+        {
+            throw new ArgumentException(
+                $"Input data has {data.Columns} columns, but the transformer was fitted with {_nInputFeatures} columns.",
+                nameof(data));
+        }
+
         int numRows = data.Rows;
         var result = new T[numRows, _nOutputFeatures];
         int colIdx = 0;

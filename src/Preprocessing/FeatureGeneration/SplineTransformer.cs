@@ -238,6 +238,13 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Transformer has not been fitted.");
         }
 
+        if (data.Columns != _nInputFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {data.Columns} features, but SplineTransformer was fitted with {_nInputFeatures} features.",
+                nameof(data));
+        }
+
         int numRows = data.Rows;
         var result = new T[numRows, _nOutputFeatures];
         var columnsToProcess = GetColumnsToProcess(data.Columns);

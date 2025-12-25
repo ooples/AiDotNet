@@ -90,12 +90,62 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     }
 
     /// <summary>
-    /// Fits the selector by computing scores (requires target via specialized Fit method).
+    /// Fits the selector using variance-based scoring when no target is provided.
     /// </summary>
+    /// <remarks>
+    /// When called without target values, this method falls back to variance-based
+    /// feature selection. Features with higher variance are scored higher.
+    /// For supervised selection, use Fit(Matrix&lt;T&gt; data, Vector&lt;T&gt; target) instead.
+    /// </remarks>
     protected override void FitCore(Matrix<T> data)
     {
-        throw new InvalidOperationException(
-            "SelectKBest requires target values for fitting. Use Fit(Matrix<T> data, Vector<T> target) instead.");
+        _nInputFeatures = data.Columns;
+        var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
+        int n = data.Rows;
+
+        _scores = new double[_nInputFeatures];
+        _pvalues = new double[_nInputFeatures];
+
+        // Use variance as the score for unsupervised selection
+        for (int col = 0; col < _nInputFeatures; col++)
+        {
+            if (!columnsToProcess.Contains(col))
+            {
+                _scores[col] = double.NegativeInfinity;
+                _pvalues[col] = 1.0;
+                continue;
+            }
+
+            // Compute variance for this column
+            double sum = 0;
+            for (int i = 0; i < n; i++)
+            {
+                sum += NumOps.ToDouble(data[i, col]);
+            }
+            double mean = sum / n;
+
+            double variance = 0;
+            for (int i = 0; i < n; i++)
+            {
+                double diff = NumOps.ToDouble(data[i, col]) - mean;
+                variance += diff * diff;
+            }
+            variance /= (n > 1) ? (n - 1) : 1;
+
+            _scores[col] = variance;
+            _pvalues[col] = 0.0; // Not applicable for variance-based selection
+        }
+
+        // Select top K features by variance
+        _selectedFeatures = _scores
+            .Select((score, idx) => (score, idx))
+            .OrderByDescending(x => x.score)
+            .Take(Math.Min(_k, _nInputFeatures))
+            .Select(x => x.idx)
+            .OrderBy(x => x) // Maintain original order
+            .ToArray();
+
+        IsFitted = true;
     }
 
     /// <summary>
