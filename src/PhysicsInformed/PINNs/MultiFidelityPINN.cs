@@ -280,7 +280,7 @@ public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
         // Configure optimizer
         var options = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
-            LearningRate = learningRate
+            InitialLearningRate = learningRate
         };
         _multiFidelityOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, options);
 

@@ -303,7 +303,14 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
             T minPivot = NumOps.FromDouble(1e-12);
             if (NumOps.Compare(NumOps.Abs(pivot), minPivot) < 0)
             {
-                pivot = minPivot;
+                // Matrix may be singular or ill-conditioned
+                // Preserve sign of original pivot for numerical stability, or use positive minPivot if zero
+                T sign = NumOps.Compare(pivot, NumOps.Zero) >= 0 ? NumOps.One : NumOps.Negate(NumOps.One);
+                if (NumOps.Compare(pivot, NumOps.Zero) == 0)
+                {
+                    sign = NumOps.One;
+                }
+                pivot = NumOps.Multiply(sign, minPivot);
             }
 
             for (int j = 0; j < 2 * n; j++)
