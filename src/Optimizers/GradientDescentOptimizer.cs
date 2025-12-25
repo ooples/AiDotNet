@@ -66,6 +66,11 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// 
     /// It's like repeatedly adjusting your path as you hike, always trying to move towards lower ground.
     /// </para>
+    /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
+    /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
+    /// and notifies the sampler of epoch starts using
+    /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>.
+    /// </para>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
@@ -78,12 +83,17 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         var previousStepData = bestStepData;
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _gdOptions.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _gdOptions.MaxIterations; epoch++)
         {
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            gradient = ApplyMomentum(gradient);
+            NotifyEpochStart(epoch);
+            var batcher = CreateBatcher(inputData, _gdOptions.BatchSize);
 
-            currentSolution = UpdateSolution(currentSolution, gradient);
+            foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+            {
+                var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+                gradient = ApplyMomentum(gradient);
+                currentSolution = UpdateSolution(currentSolution, gradient);
+            }
 
             var currentStepData = EvaluateSolution(currentSolution, inputData);
 
@@ -91,7 +101,7 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
 
             UpdateBestSolution(currentStepData, ref bestStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 break;
             }

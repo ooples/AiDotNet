@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 
@@ -251,4 +253,213 @@ public abstract class InputOutputDataLoaderBase<T, TInput, TOutput> :
 
         return (trainSize, validationSize, testSize);
     }
+
+    #region PyTorch-Style Batch Iteration
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// This implementation uses yield return for lazy evaluation, matching PyTorch's DataLoader behavior.
+    /// The method creates a fresh shuffled index array for each call, ensuring reproducible results
+    /// when a seed is provided.
+    /// </para>
+    /// <para>
+    /// <b>Performance Notes:</b>
+    /// - Uses Fisher-Yates shuffle (O(n) time, O(1) extra space for in-place shuffle)
+    /// - Batch extraction is O(batchSize) per batch
+    /// - Memory overhead is minimal: only the shuffled indices array is allocated upfront
+    /// </para>
+    /// </remarks>
+    public virtual IEnumerable<(TInput Features, TOutput Labels)> GetBatches(
+        int? batchSize = null,
+        bool shuffle = true,
+        bool dropLast = false,
+        int? seed = null)
+    {
+        EnsureLoaded();
+
+        int effectiveBatchSize = batchSize ?? BatchSize;
+        if (effectiveBatchSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be at least 1.");
+        }
+
+        int totalSamples = TotalCount;
+        if (totalSamples == 0)
+        {
+            yield break;
+        }
+
+        // Create a fresh indices array for this iteration (don't modify the shared Indices)
+        int[] iterationIndices = new int[totalSamples];
+        for (int i = 0; i < totalSamples; i++)
+        {
+            iterationIndices[i] = i;
+        }
+
+        // Shuffle if requested using Fisher-Yates algorithm
+        if (shuffle)
+        {
+            var random = seed.HasValue
+                ? RandomHelper.CreateSeededRandom(seed.Value)
+                : RandomHelper.CreateSecureRandom();
+
+            for (int i = totalSamples - 1; i > 0; i--)
+            {
+                int j = random.Next(i + 1);
+                (iterationIndices[i], iterationIndices[j]) = (iterationIndices[j], iterationIndices[i]);
+            }
+        }
+
+        // Calculate number of batches
+        int numCompleteBatches = totalSamples / effectiveBatchSize;
+        int remainingSamples = totalSamples % effectiveBatchSize;
+        int numBatches = dropLast || remainingSamples == 0
+            ? numCompleteBatches
+            : numCompleteBatches + 1;
+
+        // Yield batches using lazy evaluation
+        for (int batchIdx = 0; batchIdx < numBatches; batchIdx++)
+        {
+            int startIdx = batchIdx * effectiveBatchSize;
+            int currentBatchSize = batchIdx < numCompleteBatches
+                ? effectiveBatchSize
+                : remainingSamples;
+
+            // Extract batch indices
+            int[] batchIndices = new int[currentBatchSize];
+            Array.Copy(iterationIndices, startIdx, batchIndices, 0, currentBatchSize);
+
+            // Extract and yield batch data
+            yield return ExtractBatch(batchIndices);
+        }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// This implementation uses a bounded Channel for prefetching, similar to PyTorch's prefetch_factor.
+    /// A background task prepares batches ahead of consumption, hiding data preparation latency.
+    /// </para>
+    /// <para>
+    /// <b>Implementation Details:</b>
+    /// - Uses System.Threading.Channels for thread-safe producer-consumer pattern
+    /// - Bounded channel capacity = prefetchCount to limit memory usage
+    /// - Producer runs in background task, consumer yields via async enumerable
+    /// - Proper cancellation support via CancellationToken
+    /// </para>
+    /// <para>
+    /// <b>Performance Considerations:</b>
+    /// - Optimal prefetchCount depends on batch preparation time vs consumption time
+    /// - Too low: consumer waits for producer (underutilization)
+    /// - Too high: excessive memory usage
+    /// - Default of 2 is a good balance for most scenarios
+    /// </para>
+    /// </remarks>
+    public virtual async IAsyncEnumerable<(TInput Features, TOutput Labels)> GetBatchesAsync(
+        int? batchSize = null,
+        bool shuffle = true,
+        bool dropLast = false,
+        int? seed = null,
+        int prefetchCount = 2,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        EnsureLoaded();
+
+        if (prefetchCount < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(prefetchCount), "Prefetch count must be at least 1.");
+        }
+
+        int effectiveBatchSize = batchSize ?? BatchSize;
+        if (effectiveBatchSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be at least 1.");
+        }
+
+        int totalSamples = TotalCount;
+        if (totalSamples == 0)
+        {
+            yield break;
+        }
+
+        // Create bounded channel for prefetching
+        var channel = Channel.CreateBounded<(TInput Features, TOutput Labels)>(
+            new BoundedChannelOptions(prefetchCount)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = true
+            });
+
+        // Start producer task
+        var producerTask = Task.Run(async () =>
+        {
+            try
+            {
+                // Create fresh indices for this iteration
+                int[] iterationIndices = new int[totalSamples];
+                for (int i = 0; i < totalSamples; i++)
+                {
+                    iterationIndices[i] = i;
+                }
+
+                // Shuffle if requested
+                if (shuffle)
+                {
+                    var random = seed.HasValue
+                        ? RandomHelper.CreateSeededRandom(seed.Value)
+                        : RandomHelper.CreateSecureRandom();
+
+                    for (int i = totalSamples - 1; i > 0; i--)
+                    {
+                        int j = random.Next(i + 1);
+                        (iterationIndices[i], iterationIndices[j]) = (iterationIndices[j], iterationIndices[i]);
+                    }
+                }
+
+                // Calculate batch counts
+                int numCompleteBatches = totalSamples / effectiveBatchSize;
+                int remainingSamples = totalSamples % effectiveBatchSize;
+                int numBatches = dropLast || remainingSamples == 0
+                    ? numCompleteBatches
+                    : numCompleteBatches + 1;
+
+                // Produce batches
+                for (int batchIdx = 0; batchIdx < numBatches; batchIdx++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    int startIdx = batchIdx * effectiveBatchSize;
+                    int currentBatchSize = batchIdx < numCompleteBatches
+                        ? effectiveBatchSize
+                        : remainingSamples;
+
+                    int[] batchIndices = new int[currentBatchSize];
+                    Array.Copy(iterationIndices, startIdx, batchIndices, 0, currentBatchSize);
+
+                    var batch = ExtractBatch(batchIndices);
+                    await channel.Writer.WriteAsync(batch, cancellationToken);
+                }
+            }
+            finally
+            {
+                channel.Writer.Complete();
+            }
+        }, cancellationToken);
+
+        // Consume batches (net471 compatible - no ReadAllAsync)
+        while (await channel.Reader.WaitToReadAsync(cancellationToken))
+        {
+            while (channel.Reader.TryRead(out var batch))
+            {
+                yield return batch;
+            }
+        }
+
+        // Ensure producer task completed without errors
+        await producerTask;
+    }
+
+    #endregion
 }

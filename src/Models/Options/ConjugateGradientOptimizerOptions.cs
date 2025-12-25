@@ -18,6 +18,18 @@ namespace AiDotNet.Models.Options;
 public class ConjugateGradientOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Gets or sets the batch size for gradient computation.
+    /// </summary>
+    /// <value>A positive integer for mini-batch size, or -1 for full batch (default).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The batch size controls how many examples are used to calculate gradients.
+    /// Conjugate Gradient traditionally uses full-batch gradients (batch size -1) because the conjugate
+    /// direction calculation (Fletcher-Reeves formula) requires consistent gradients between iterations.
+    /// Using mini-batches can introduce noise that disrupts the conjugate property.</para>
+    /// </remarks>
+    public int BatchSize { get; set; } = -1;
+
+    /// <summary>
     /// Gets or sets the initial learning rate, which controls the size of the first optimization steps.
     /// </summary>
     /// <value>The initial learning rate, defaulting to 0.1.</value>
