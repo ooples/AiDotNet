@@ -796,4 +796,255 @@ public class ConfusionMatrix<T> : MatrixBase<T>
 
         return _numOps.Equals(totalSupport, _numOps.Zero) ? _numOps.Zero : _numOps.Divide(weightedSum, totalSupport);
     }
+
+    /// <summary>
+    /// Gets the Matthews Correlation Coefficient (MCC) for binary classification.
+    /// </summary>
+    /// <returns>The MCC value between -1 and 1.</returns>
+    /// <remarks>
+    /// <para>
+    /// MCC is calculated as: (TP × TN - FP × FN) / sqrt((TP+FP)(TP+FN)(TN+FP)(TN+FN))
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> The Matthews Correlation Coefficient is considered one of the best metrics
+    /// for binary classification, especially when classes are imbalanced. Unlike accuracy, it takes into
+    /// account all four values in the confusion matrix.
+    ///
+    /// The MCC ranges from -1 to +1:
+    /// - +1: Perfect prediction (your model is always correct)
+    /// - 0: No better than random prediction
+    /// - -1: Total disagreement (your model is always wrong)
+    ///
+    /// MCC is particularly useful because it only produces a high score if your model performs well
+    /// on both positive and negative classes.
+    /// </para>
+    /// </remarks>
+    public T GetMatthewsCorrelationCoefficient()
+    {
+        T tp = _numOps.Zero;
+        T tn = _numOps.Zero;
+        T fp = _numOps.Zero;
+        T fn = _numOps.Zero;
+
+        // For multi-class, aggregate TP, TN, FP, FN across all classes
+        for (int i = 0; i < ClassCount; i++)
+        {
+            tp = _numOps.Add(tp, GetTruePositives(i));
+            tn = _numOps.Add(tn, GetTrueNegatives(i));
+            fp = _numOps.Add(fp, GetFalsePositives(i));
+            fn = _numOps.Add(fn, GetFalseNegatives(i));
+        }
+
+        // MCC = (TP × TN - FP × FN) / sqrt((TP+FP)(TP+FN)(TN+FP)(TN+FN))
+        T numerator = _numOps.Subtract(
+            _numOps.Multiply(tp, tn),
+            _numOps.Multiply(fp, fn));
+
+        T tpPlusFp = _numOps.Add(tp, fp);
+        T tpPlusFn = _numOps.Add(tp, fn);
+        T tnPlusFp = _numOps.Add(tn, fp);
+        T tnPlusFn = _numOps.Add(tn, fn);
+
+        T denomProduct = _numOps.Multiply(
+            _numOps.Multiply(tpPlusFp, tpPlusFn),
+            _numOps.Multiply(tnPlusFp, tnPlusFn));
+
+        if (_numOps.Equals(denomProduct, _numOps.Zero))
+        {
+            return _numOps.Zero;
+        }
+
+        T denominator = _numOps.Sqrt(denomProduct);
+        return _numOps.Divide(numerator, denominator);
+    }
+
+    /// <summary>
+    /// Gets the Cohen's Kappa coefficient, measuring inter-rater agreement.
+    /// </summary>
+    /// <returns>The Kappa value between -1 and 1.</returns>
+    /// <remarks>
+    /// <para>
+    /// Cohen's Kappa is calculated as: (observed agreement - expected agreement) / (1 - expected agreement)
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Cohen's Kappa measures how much better your model is compared to random chance.
+    /// It accounts for the possibility of agreement occurring by accident.
+    ///
+    /// The Kappa value ranges from -1 to +1:
+    /// - 1.0: Perfect agreement
+    /// - 0.81-1.0: Almost perfect agreement
+    /// - 0.61-0.80: Substantial agreement
+    /// - 0.41-0.60: Moderate agreement
+    /// - 0.21-0.40: Fair agreement
+    /// - 0.0-0.20: Slight agreement
+    /// - Less than 0: Less than chance agreement
+    ///
+    /// Kappa is especially useful when you have imbalanced classes, as it adjusts for the expected
+    /// agreement that would occur by chance.
+    /// </para>
+    /// </remarks>
+    public T GetCohenKappa()
+    {
+        // Calculate total predictions
+        T total = _numOps.Zero;
+        for (int i = 0; i < Rows; i++)
+        {
+            for (int j = 0; j < Columns; j++)
+            {
+                total = _numOps.Add(total, this[i, j]);
+            }
+        }
+
+        if (_numOps.Equals(total, _numOps.Zero))
+        {
+            return _numOps.Zero;
+        }
+
+        // Observed agreement (accuracy)
+        T observedAgreement = GetAccuracy();
+
+        // Expected agreement by chance
+        T expectedAgreement = _numOps.Zero;
+        for (int k = 0; k < ClassCount; k++)
+        {
+            // Row sum (predicted as class k)
+            T rowSum = _numOps.Zero;
+            for (int j = 0; j < Columns; j++)
+            {
+                rowSum = _numOps.Add(rowSum, this[k, j]);
+            }
+
+            // Column sum (actually class k)
+            T colSum = _numOps.Zero;
+            for (int i = 0; i < Rows; i++)
+            {
+                colSum = _numOps.Add(colSum, this[i, k]);
+            }
+
+            // Expected count for class k = (rowSum × colSum) / total
+            T expectedCount = _numOps.Divide(_numOps.Multiply(rowSum, colSum), total);
+            expectedAgreement = _numOps.Add(expectedAgreement, expectedCount);
+        }
+
+        expectedAgreement = _numOps.Divide(expectedAgreement, total);
+
+        // Kappa = (observed - expected) / (1 - expected)
+        T numerator = _numOps.Subtract(observedAgreement, expectedAgreement);
+        T denominator = _numOps.Subtract(_numOps.One, expectedAgreement);
+
+        if (_numOps.Equals(denominator, _numOps.Zero))
+        {
+            return _numOps.One; // Perfect agreement when expected = 1
+        }
+
+        return _numOps.Divide(numerator, denominator);
+    }
+
+    /// <summary>
+    /// Gets the Hamming Loss, measuring the fraction of incorrect predictions.
+    /// </summary>
+    /// <returns>The Hamming Loss value between 0 and 1.</returns>
+    /// <remarks>
+    /// <para>
+    /// Hamming Loss is calculated as: (number of incorrect predictions) / (total predictions)
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Hamming Loss is simply 1 minus accuracy. It measures the fraction of
+    /// labels that are incorrectly predicted. While this seems redundant with accuracy, it's the
+    /// standard metric in multi-label classification where each sample can have multiple labels.
+    ///
+    /// The Hamming Loss ranges from 0 to 1:
+    /// - 0: Perfect prediction (no errors)
+    /// - 1: Complete failure (all predictions wrong)
+    ///
+    /// Lower values are better. A Hamming Loss of 0.1 means 10% of your predictions are wrong.
+    /// </para>
+    /// </remarks>
+    public T GetHammingLoss()
+    {
+        return _numOps.Subtract(_numOps.One, GetAccuracy());
+    }
+
+    /// <summary>
+    /// Gets the Jaccard Score (Jaccard Index) for classification.
+    /// </summary>
+    /// <returns>The macro-averaged Jaccard Score between 0 and 1.</returns>
+    /// <remarks>
+    /// <para>
+    /// Jaccard Score for each class is calculated as: TP / (TP + FP + FN)
+    /// This returns the macro-averaged Jaccard Score across all classes.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> The Jaccard Score (also known as Jaccard Index or Intersection over Union)
+    /// measures the similarity between predicted and actual labels. It's the size of the intersection
+    /// divided by the size of the union of the predicted and actual label sets.
+    ///
+    /// The Jaccard Score ranges from 0 to 1:
+    /// - 1: Perfect overlap (prediction exactly matches actual)
+    /// - 0: No overlap at all
+    ///
+    /// Unlike F1 Score, Jaccard Score doesn't double-count true positives, making it a more
+    /// conservative measure. It's commonly used in image segmentation and multi-label classification.
+    /// </para>
+    /// </remarks>
+    public T GetJaccardScore()
+    {
+        T sum = _numOps.Zero;
+        int validClasses = 0;
+
+        for (int i = 0; i < ClassCount; i++)
+        {
+            T tp = GetTruePositives(i);
+            T fp = GetFalsePositives(i);
+            T fn = GetFalseNegatives(i);
+
+            T denominator = _numOps.Add(_numOps.Add(tp, fp), fn);
+
+            if (!_numOps.Equals(denominator, _numOps.Zero))
+            {
+                sum = _numOps.Add(sum, _numOps.Divide(tp, denominator));
+                validClasses++;
+            }
+        }
+
+        if (validClasses == 0)
+        {
+            return _numOps.Zero;
+        }
+
+        return _numOps.Divide(sum, _numOps.FromDouble(validClasses));
+    }
+
+    /// <summary>
+    /// Gets the Jaccard Score for a specific class.
+    /// </summary>
+    /// <param name="classIndex">The class index (0-based).</param>
+    /// <returns>The Jaccard Score for the specified class.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when class index is out of range.</exception>
+    /// <remarks>
+    /// <para>
+    /// Jaccard Score for class i is calculated as: TP / (TP + FP + FN)
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This calculates the Jaccard Score for a single class. It measures
+    /// how well your model predicts this specific class by comparing the overlap between
+    /// predicted and actual instances of this class.
+    /// </para>
+    /// </remarks>
+    public T GetJaccardScore(int classIndex)
+    {
+        if (classIndex < 0 || classIndex >= ClassCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(classIndex),
+                $"Class index {classIndex} is out of range [0, {ClassCount - 1}]");
+        }
+
+        T tp = GetTruePositives(classIndex);
+        T fp = GetFalsePositives(classIndex);
+        T fn = GetFalseNegatives(classIndex);
+
+        T denominator = _numOps.Add(_numOps.Add(tp, fp), fn);
+
+        return _numOps.Equals(denominator, _numOps.Zero) ? _numOps.Zero : _numOps.Divide(tp, denominator);
+    }
 }
