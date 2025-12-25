@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Enums;
 using Xunit;
 
