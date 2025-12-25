@@ -124,6 +124,11 @@ namespace AiDotNet.PhysicsInformed.PDEs
                 throw new ArgumentException("Maxwell's equations expect 3 outputs: [Ex, Ey, Bz].");
             }
 
+            if (inputs.Length != 3)
+            {
+                throw new ArgumentException("Maxwell's equations expect 3 inputs: [x, y, t].");
+            }
+
             // outputs = [Ex, Ey, Bz]
             // inputs = [x, y, t]
 
