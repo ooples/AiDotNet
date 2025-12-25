@@ -92,8 +92,7 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
-
-        CurrentLearningRate = NumOps.FromDouble(_options.LearningRate);
+        // Learning rate is now set by base class from options.InitialLearningRate
         _t = 0;
     }
 

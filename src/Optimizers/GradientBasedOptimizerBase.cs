@@ -1,5 +1,6 @@
 using AiDotNet.Data.Sampling;
 using AiDotNet.Engines;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.MixedPrecision;
 using AiDotNet.Models.Options;
 
@@ -89,9 +90,52 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected MixedPrecisionContext? _mixedPrecisionContext;
 
     /// <summary>
+    /// The learning rate scheduler to use for adjusting learning rate during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A learning rate scheduler automatically adjusts how fast your model
+    /// learns during training. Common strategies include starting high and decreasing over time,
+    /// or using warmup to slowly increase the learning rate at the beginning.
+    /// </para>
+    /// </remarks>
+    protected ILearningRateScheduler? _learningRateScheduler;
+
+    /// <summary>
+    /// Specifies when to step the learning rate scheduler.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Controls whether the scheduler updates after each batch, each epoch, or uses warmup
+    /// followed by per-epoch stepping.
+    /// </para>
+    /// </remarks>
+    protected SchedulerStepMode _schedulerStepMode;
+
+    /// <summary>
+    /// The current step (batch) number for scheduler tracking.
+    /// </summary>
+    protected int _currentStep = 0;
+
+    /// <summary>
+    /// The current epoch number for scheduler tracking.
+    /// </summary>
+    protected int _currentEpoch = 0;
+
+    /// <summary>
     /// Gets whether mixed-precision training is enabled for this optimizer.
     /// </summary>
     public bool IsMixedPrecisionEnabled => _mixedPrecisionContext != null;
+
+    /// <summary>
+    /// Gets the current learning rate scheduler, if one is configured.
+    /// </summary>
+    public ILearningRateScheduler? LearningRateScheduler => _learningRateScheduler;
+
+    /// <summary>
+    /// Gets the current scheduler step mode.
+    /// </summary>
+    public SchedulerStepMode SchedulerStepMode => _schedulerStepMode;
 
     /// <summary>
     /// Initializes a new instance of the GradientBasedOptimizerBase class.
@@ -110,14 +154,32 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         base(model, options)
     {
         GradientOptions = options;
-        _currentLearningRate = GradientOptions.InitialLearningRate;
         _currentMomentum = GradientOptions.InitialMomentum;
         _previousGradient = Vector<T>.Empty();
         _lastComputedGradients = Vector<T>.Empty();
         LossFunction = options.LossFunction;
         GradientCache = options.GradientCache;
         Regularization = options.Regularization;
-        // Engine property now returns AiDotNetEngine.Current automatically
+
+        // Initialize learning rate scheduler from options
+        _learningRateScheduler = options.LearningRateScheduler;
+        _schedulerStepMode = options.SchedulerStepMode;
+
+        // Use scheduler's current learning rate if available, otherwise use initial rate
+        // Sync both learning rate fields so derived classes using either will get the correct value
+        SetLearningRate(_learningRateScheduler?.CurrentLearningRate
+            ?? GradientOptions.InitialLearningRate);
+    }
+
+    /// <summary>
+    /// Sets the current learning rate, synchronizing both the double field (_currentLearningRate)
+    /// and the generic T field (CurrentLearningRate) used by derived optimizers.
+    /// </summary>
+    /// <param name="learningRate">The new learning rate value.</param>
+    private void SetLearningRate(double learningRate)
+    {
+        _currentLearningRate = learningRate;
+        CurrentLearningRate = NumOps.FromDouble(learningRate);
     }
 
     #region DataLoader Integration
@@ -950,7 +1012,172 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         base.Reset();
         GradientCache.ClearCache();
+
+        // Reset learning rate scheduler state
+        _learningRateScheduler?.Reset();
+        _currentStep = 0;
+        _currentEpoch = 0;
+
+        // Restore initial learning rate (synced to both fields)
+        SetLearningRate(_learningRateScheduler?.CurrentLearningRate
+            ?? GradientOptions.InitialLearningRate);
     }
+
+    /// <summary>
+    /// Steps the learning rate scheduler and updates the current learning rate.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method advances the scheduler by one step and synchronizes the optimizer's
+    /// learning rate with the scheduler's current value.
+    /// </para>
+    /// <para><b>For Beginners:</b> Call this method to update the learning rate according
+    /// to the scheduler's policy. The scheduler will automatically adjust the learning rate
+    /// based on how many steps have been taken.
+    /// </para>
+    /// </remarks>
+    /// <returns>The new learning rate after stepping.</returns>
+    public double StepScheduler()
+    {
+        if (_learningRateScheduler != null)
+        {
+            // Step the scheduler and sync both learning rate fields
+            SetLearningRate(_learningRateScheduler.Step());
+        }
+        return _currentLearningRate;
+    }
+
+    /// <summary>
+    /// Called at the end of each training epoch to update scheduler state if applicable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>When to call this method:</b> This method must be called at the end of each epoch if you are using
+    /// <see cref="SchedulerStepMode.StepPerEpoch"/> or <see cref="SchedulerStepMode.WarmupThenEpoch"/>.
+    /// Failure to call this method will prevent the learning rate scheduler from advancing, resulting
+    /// in a constant learning rate throughout training.
+    /// </para>
+    /// <para><b>For Beginners:</b> An epoch is one complete pass through all your training data.
+    /// Many learning rate schedules (like step decay or cosine annealing) work on an epoch basis,
+    /// reducing the learning rate after each complete pass through the data.
+    /// </para>
+    /// </remarks>
+    public virtual void OnEpochEnd()
+    {
+        _currentEpoch++;
+
+        if (_learningRateScheduler != null)
+        {
+            bool shouldStep = _schedulerStepMode switch
+            {
+                SchedulerStepMode.StepPerEpoch => true,
+                SchedulerStepMode.WarmupThenEpoch => !IsInWarmupPhase(),
+                _ => false
+            };
+
+            if (shouldStep)
+            {
+                StepScheduler();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Called at the end of each training batch to update scheduler state if applicable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>When to call this method:</b> This method must be called after each batch if you are using
+    /// <see cref="SchedulerStepMode.StepPerBatch"/>, or during the warmup phase when using
+    /// <see cref="SchedulerStepMode.WarmupThenEpoch"/>. Failure to call this method will prevent
+    /// the learning rate scheduler from advancing on a per-batch basis.
+    /// </para>
+    /// <para><b>For Beginners:</b> A batch is a small subset of your training data processed at once.
+    /// Some schedulers (like warmup or cyclical learning rates) need to update after every batch
+    /// for smooth, fine-grained control of the learning rate.
+    /// </para>
+    /// </remarks>
+    public virtual void OnBatchEnd()
+    {
+        _currentStep++;
+
+        if (_learningRateScheduler != null)
+        {
+            bool shouldStep = _schedulerStepMode switch
+            {
+                SchedulerStepMode.StepPerBatch => true,
+                SchedulerStepMode.WarmupThenEpoch => IsInWarmupPhase(),
+                _ => false
+            };
+
+            if (shouldStep)
+            {
+                StepScheduler();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Determines whether the scheduler is currently in the warmup phase.
+    /// </summary>
+    /// <returns>True if in warmup phase, false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// Warmup is a technique where the learning rate starts very low and gradually increases
+    /// to the base learning rate over a specified number of steps. This helps stabilize
+    /// training in the early phases.
+    /// </para>
+    /// <para>
+    /// <b>Detection Logic:</b> For <see cref="LinearWarmupScheduler"/>, this method uses the
+    /// explicit warmup step count for accurate detection. For other schedulers, warmup detection
+    /// is not supported and this method returns false. The heuristic of comparing current LR to
+    /// base LR was removed because it incorrectly identifies decay phases (e.g., cosine annealing)
+    /// as warmup when the learning rate drops below the base learning rate.
+    /// </para>
+    /// </remarks>
+    protected virtual bool IsInWarmupPhase()
+    {
+        if (_learningRateScheduler == null)
+        {
+            return false;
+        }
+
+        // Check if the scheduler is a LinearWarmupScheduler with explicit warmup steps
+        if (_learningRateScheduler is LinearWarmupScheduler warmupScheduler)
+        {
+            // Use the scheduler's explicit warmup step count for accurate detection
+            return _learningRateScheduler.CurrentStep < warmupScheduler.WarmupSteps;
+        }
+
+        // For other schedulers, we cannot reliably detect warmup
+        // The heuristic currentLr < baseLr is flawed as it triggers during decay phases
+        // Return false to avoid incorrect behavior with WarmupThenEpoch mode
+        return false;
+    }
+
+    /// <summary>
+    /// Gets the current learning rate being used by this optimizer.
+    /// </summary>
+    /// <returns>The current learning rate.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The learning rate controls how big each update step is.
+    /// This value may change during training if a learning rate scheduler is configured.
+    /// </para>
+    /// </remarks>
+    public double GetCurrentLearningRate()
+    {
+        return _currentLearningRate;
+    }
+
+    /// <summary>
+    /// Gets the current training step (batch count).
+    /// </summary>
+    public int CurrentStep => _currentStep;
+
+    /// <summary>
+    /// Gets the current training epoch.
+    /// </summary>
+    public int CurrentEpoch => _currentEpoch;
 
     /// <summary>
     /// Applies momentum to the gradient calculation.

@@ -240,6 +240,75 @@ public enum ModelType
     KernelRidgeRegression,
 
     /// <summary>
+    /// Ridge Regression (L2 regularized linear regression) that adds a penalty for large coefficients.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Ridge Regression is a safer version of linear regression that prevents overfitting.
+    ///
+    /// It works by adding a penalty for large coefficient values (L2 regularization), which:
+    /// - Shrinks coefficients toward zero (but never exactly to zero)
+    /// - Makes the model more stable when features are correlated
+    /// - Reduces sensitivity to noise in the data
+    ///
+    /// Ridge Regression has a closed-form solution, making it fast to train. Use it when:
+    /// - You have correlated features
+    /// - You want to prevent overfitting
+    /// - You expect all features to contribute to the prediction
+    /// </para>
+    /// </remarks>
+    RidgeRegression,
+
+    /// <summary>
+    /// Lasso Regression (L1 regularized linear regression) that can eliminate unimportant features.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Lasso Regression performs automatic feature selection by shrinking some
+    /// coefficients exactly to zero.
+    ///
+    /// Unlike Ridge Regression which only shrinks coefficients, Lasso can completely eliminate features:
+    /// - L1 regularization can set coefficients to exactly zero
+    /// - Creates sparse models with fewer non-zero coefficients
+    /// - Useful for identifying the most important features
+    ///
+    /// Lasso uses coordinate descent optimization (iterative). Use it when:
+    /// - You have many features and want to identify the most important ones
+    /// - You want a simpler, more interpretable model
+    /// - You suspect only a subset of features actually matter
+    ///
+    /// Note: Lasso may arbitrarily select one feature from a group of correlated features.
+    /// Consider ElasticNet for better handling of correlated features.
+    /// </para>
+    /// </remarks>
+    LassoRegression,
+
+    /// <summary>
+    /// Elastic Net Regression (combined L1 and L2 regularization) for balanced feature selection and stability.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Elastic Net combines the best of Ridge and Lasso regression.
+    ///
+    /// It uses both L1 (Lasso) and L2 (Ridge) penalties, controlled by the L1Ratio parameter:
+    /// - L1Ratio = 1.0: Pure Lasso (maximum feature selection)
+    /// - L1Ratio = 0.0: Pure Ridge (maximum stability)
+    /// - L1Ratio = 0.5: Balanced mix (default)
+    ///
+    /// Key benefits over Lasso alone:
+    /// - Groups correlated features together instead of picking one arbitrarily
+    /// - Can select more than n features when n samples are available
+    /// - More stable when features are highly correlated
+    ///
+    /// Use Elastic Net when:
+    /// - You want feature selection AND have correlated features
+    /// - Lasso's behavior on correlated features is problematic
+    /// - You're not sure whether Ridge or Lasso is better for your problem
+    /// </para>
+    /// </remarks>
+    ElasticNetRegression,
+
+    /// <summary>
     /// A probabilistic model that provides uncertainty estimates along with predictions.
     /// </summary>
     /// <remarks>

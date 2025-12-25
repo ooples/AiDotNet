@@ -29,23 +29,47 @@ namespace AiDotNet.JitCompiler.IR;
 public abstract class IROp
 {
     /// <summary>
-    /// Gets or sets the unique identifier for the output of this operation.
+    /// Gets or sets the identifiers for the outputs of this operation.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The output ID identifies the tensor produced by this operation.
-    /// It's used by subsequent operations to reference this result.
+    /// The output IDs identify the tensors produced by this operation.
+    /// They're used by subsequent operations to reference these results.
+    /// Most operations produce a single output, but gradient operations
+    /// may produce multiple outputs (one gradient per input).
     /// </para>
-    /// <para><b>For Beginners:</b> This is like a variable name for the result.
+    /// <para><b>For Beginners:</b> These are like variable names for the results.
     ///
     /// For example, if this operation computes "c = a + b":
-    /// - OutputId might be 2 (representing "c")
+    /// - OutputIds might be [2] (representing "c")
     /// - InputIds might be [0, 1] (representing "a" and "b")
     ///
-    /// Later operations can use tensor 2 as their input.
+    /// For gradient operations like "grad(a * b)":
+    /// - OutputIds might be [3, 4] (representing "d_a" and "d_b")
+    /// - InputIds might be [0, 1, 2] (representing "a", "b", "d_c")
+    ///
+    /// Later operations can use these tensor IDs as their inputs.
     /// </para>
     /// </remarks>
-    public int OutputId { get; set; }
+    public int[] OutputIds { get; set; } = Array.Empty<int>();
+
+    /// <summary>
+    /// Gets or sets the primary output ID (first element of OutputIds).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is a convenience property for operations that produce a single output.
+    /// For multi-output operations like gradient ops, use OutputIds directly.
+    /// </para>
+    /// <para><b>For Beginners:</b> Most operations produce just one result.
+    /// This property makes it easy to work with the common case.
+    /// </para>
+    /// </remarks>
+    public int OutputId
+    {
+        get => OutputIds.Length > 0 ? OutputIds[0] : -1;
+        set => OutputIds = [value];
+    }
 
     /// <summary>
     /// Gets or sets the identifiers of the input tensors to this operation.
@@ -161,9 +185,16 @@ public abstract class IROp
     /// </remarks>
     public virtual bool Validate()
     {
-        // Basic validation: output ID should be non-negative
-        if (OutputId < 0)
+        // Basic validation: must have at least one output
+        if (OutputIds == null || OutputIds.Length == 0)
             return false;
+
+        // All output IDs should be non-negative
+        foreach (var outputId in OutputIds)
+        {
+            if (outputId < 0)
+                return false;
+        }
 
         // Output shape should be valid
         if (OutputShape == null || !OutputShape.IsValidShape())
@@ -194,7 +225,8 @@ public abstract class IROp
     public override string ToString()
     {
         var inputs = string.Join(", ", InputIds.Select(id => $"t{id}"));
-        return $"t{OutputId} = {OpType}({inputs}) : {OutputType} {OutputShape.ShapeToString()}";
+        var outputs = string.Join(", ", OutputIds.Select(id => $"t{id}"));
+        return $"{outputs} = {OpType}({inputs}) : {OutputType} {OutputShape.ShapeToString()}";
     }
 }
 

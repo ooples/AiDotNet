@@ -51,7 +51,7 @@ public class TimeSeriesExample
             // Configure optimizer
             var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
             {
-                LearningRate = 0.01,
+                InitialLearningRate = 0.01,
                 MaxIterations = 1000
             };
             var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(null, adamOptions);

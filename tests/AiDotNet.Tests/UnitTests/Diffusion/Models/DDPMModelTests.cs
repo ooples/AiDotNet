@@ -1,5 +1,5 @@
-using AiDotNet.Diffusion;
-using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks.Diffusion;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Interfaces;
 using Xunit;
 

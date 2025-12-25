@@ -254,6 +254,16 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     private T _bestFitness;
 
     /// <summary>
+    /// Gets the best symbolic model discovered during optimization.
+    /// </summary>
+    public IFullModel<T, Matrix<T>, Vector<T>>? BestModel => _bestModel;
+
+    /// <summary>
+    /// Gets the fitness score of the best model discovered during optimization.
+    /// </summary>
+    public T BestFitness => _bestFitness;
+
+    /// <summary>
     /// Creates a new symbolic regression model.
     /// </summary>
     /// <param name="options">

@@ -36,7 +36,7 @@ public class AdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     public int BatchSize { get; set; } = 32;
 
     /// <summary>
-    /// Gets or sets the learning rate for the Adam optimizer.
+    /// Gets or sets the initial learning rate for the Adam optimizer.
     /// </summary>
     /// <value>The learning rate, defaulting to 0.001.</value>
     /// <remarks>
@@ -45,7 +45,7 @@ public class AdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// by stepping too far. If it's too small, training will take a very long time. The default of 0.001 works well for most problems,
     /// which is why Adam is popular - it doesn't require much tuning of this value.</para>
     /// </remarks>
-    public double LearningRate { get; set; } = 0.001;
+    public new double InitialLearningRate { get; set; } = 0.001;
 
     /// <summary>
     /// Gets or sets the exponential decay rate for the first moment estimates.

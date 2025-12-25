@@ -33,7 +33,7 @@ namespace AiDotNet.Interfaces;
 /// <para>
 /// <b>Key components:</b>
 /// - Noise prediction model: A neural network that predicts noise in images
-/// - Step scheduler: Controls the noise schedule (see <see cref="IStepScheduler{T}"/>)
+/// - Noise scheduler: Controls the noise schedule (see <see cref="INoiseScheduler{T}"/>)
 /// - Loss function: Measures how well the model predicts noise (usually MSE)
 /// </para>
 /// <para>
@@ -56,7 +56,7 @@ public interface IDiffusionModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// - PNDM: Fast multi-step scheduler (20-50 steps)
     /// </para>
     /// </remarks>
-    IStepScheduler<T> Scheduler { get; }
+    INoiseScheduler<T> Scheduler { get; }
 
     /// <summary>
     /// Generates samples by iteratively denoising from random noise.

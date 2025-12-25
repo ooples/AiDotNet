@@ -25,7 +25,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
                 throw new InvalidOperationException("Options should not be null after assertion.");
             }
 
-            Assert.Equal(0.001, options.LearningRate);
+            Assert.Equal(0.001, options.InitialLearningRate);
             Assert.Equal(0.9, options.Beta1);
             Assert.Equal(0.999, options.Beta2);
             Assert.Equal(1e-8, options.Epsilon);
@@ -38,7 +38,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var customOptions = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.01,
+                InitialLearningRate =0.01,
                 Beta1 = 0.85,
                 Beta2 = 0.9999,
                 Epsilon = 1e-7,
@@ -51,7 +51,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
             // Assert
             Assert.NotNull(options);
-            Assert.Equal(0.01, options!.LearningRate);
+            Assert.Equal(0.01, options!.InitialLearningRate);
             Assert.Equal(0.85, options.Beta1);
             Assert.Equal(0.9999, options.Beta2);
             Assert.Equal(1e-7, options.Epsilon);
@@ -64,7 +64,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.999,
                 WeightDecay = 0.0
@@ -88,7 +88,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.999,
                 WeightDecay = 0.0
@@ -112,7 +112,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.999,
                 WeightDecay = 0.1 // Large weight decay for visibility
@@ -138,7 +138,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.999,
                 WeightDecay = 0.0
@@ -172,7 +172,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.01,
+                InitialLearningRate =0.01,
                 Beta1 = 0.9,
                 Beta2 = 0.999,
                 WeightDecay = 0.0
@@ -205,7 +205,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.01,
+                InitialLearningRate =0.01,
                 Beta1 = 0.9,
                 Beta2 = 0.999,
                 WeightDecay = 0.1
@@ -231,7 +231,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.999
             };
@@ -260,7 +260,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.002,
+                InitialLearningRate =0.002,
                 Beta1 = 0.85,
                 Beta2 = 0.9999,
                 WeightDecay = 0.05
@@ -285,7 +285,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
             // Assert
             Assert.NotNull(deserializedOptions);
-            Assert.Equal(options.LearningRate, deserializedOptions!.LearningRate);
+            Assert.Equal(options.InitialLearningRate, deserializedOptions!.InitialLearningRate);
             Assert.Equal(options.WeightDecay, deserializedOptions.WeightDecay);
         }
 
@@ -295,7 +295,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.01,
+                InitialLearningRate =0.01,
                 Beta1 = 0.9,
                 Beta2 = 0.999,
                 UseAMSGrad = true
@@ -319,7 +319,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new AdamWOptimizerOptions<float, Vector<float>, Vector<float>>
             {
-                LearningRate = 0.1f,
+                InitialLearningRate =0.1f,
                 Beta1 = 0.9,
                 Beta2 = 0.999,
                 WeightDecay = 0.0
@@ -343,7 +343,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.005,
+                InitialLearningRate =0.005,
                 Beta1 = 0.92,
                 Beta2 = 0.9995,
                 WeightDecay = 0.02
@@ -355,7 +355,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
             // Assert
             Assert.NotNull(retrievedOptions);
-            Assert.Equal(0.005, retrievedOptions!.LearningRate);
+            Assert.Equal(0.005, retrievedOptions!.InitialLearningRate);
             Assert.Equal(0.92, retrievedOptions.Beta1);
             Assert.Equal(0.9995, retrievedOptions.Beta2);
             Assert.Equal(0.02, retrievedOptions.WeightDecay);
@@ -365,8 +365,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
         public void UpdateParameters_DifferentBeta1Values_ProducesDifferentResults()
         {
             // Arrange
-            var options1 = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>> { LearningRate = 0.1, Beta1 = 0.5, Beta2 = 0.999 };
-            var options2 = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>> { LearningRate = 0.1, Beta1 = 0.99, Beta2 = 0.999 };
+            var options1 = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>> { InitialLearningRate =0.1, Beta1 = 0.5, Beta2 = 0.999 };
+            var options2 = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>> { InitialLearningRate =0.1, Beta1 = 0.99, Beta2 = 0.999 };
 
             var optimizer1 = new AdamWOptimizer<double, Vector<double>, Vector<double>>(null, options1);
             var optimizer2 = new AdamWOptimizer<double, Vector<double>, Vector<double>>(null, options2);

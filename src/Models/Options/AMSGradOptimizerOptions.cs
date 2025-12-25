@@ -42,7 +42,7 @@ public class AMSGradOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimize
     /// A larger value means taking bigger steps - learning might be faster, but the model might step too far and miss
     /// the best solution. The default value is generally a good starting point for most problems.</para>
     /// </remarks>
-    public double LearningRate { get; set; } = 0.001;
+    public new double InitialLearningRate { get; set; } = 0.001;
 
     /// <summary>
     /// Gets or sets the exponential decay rate for the first moment estimates (momentum).
