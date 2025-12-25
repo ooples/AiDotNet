@@ -4,6 +4,7 @@ using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Diffusion;
 
@@ -468,7 +469,10 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
     protected virtual Tensor<T> BlendLatentsWithMask(Tensor<T> generated, Tensor<T> original, Tensor<T> mask, int timestep)
     {
         // Add noise to original latents at current timestep
-        var noise = SampleNoiseTensor(original.Shape, RandomGenerator);
+        // Use a seeded RNG based on timestep for consistency across calls
+        // This ensures the same noise is used for the same timestep during denoising
+        var seededRng = RandomHelper.CreateSeededRandom(timestep);
+        var noise = SampleNoiseTensor(original.Shape, seededRng);
         var noisyOriginal = Scheduler.AddNoise(original.ToVector(), noise.ToVector(), timestep);
 
         var result = new Tensor<T>(generated.Shape);
