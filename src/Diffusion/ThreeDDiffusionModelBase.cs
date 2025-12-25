@@ -217,7 +217,6 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
             throw new NotSupportedException("This model does not support novel view synthesis.");
 
         var novelViews = new Tensor<T>[targetAngles.Length];
-        var imageShape = inputImage.Shape;
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
 
         // Encode input image
@@ -289,8 +288,6 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
         var gradSpan = gradient.AsWritableSpan();
         var condSpan = condNoisePred.AsSpan();
         var uncondSpan = uncondNoisePred.AsSpan();
-        var noiseSpan = noise.AsSpan();
-
         var scale = NumOps.FromDouble(guidanceScale);
 
         for (int i = 0; i < gradSpan.Length; i++)

@@ -406,11 +406,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
             throw new InvalidOperationException("Encoder layers not initialized.");
         }
 
-        int batch = video.Shape[0];
-        int channels = video.Shape[1];
         int frames = video.Shape[2];
-        int height = video.Shape[3];
-        int width = video.Shape[4];
 
         // Process each frame through spatial encoder
         var frameLatents = new List<Tensor<T>>();
