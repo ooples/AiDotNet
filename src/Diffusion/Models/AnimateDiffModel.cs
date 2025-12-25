@@ -316,10 +316,17 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         var latentWidth = width / _vae.DownsampleFactor;
 
         // Use context windowing for longer videos
-        if (effectiveNumFrames <= ContextLength)
-        {
-            // Generate all frames at once
-            return GenerateVideoWindow(
+        return effectiveNumFrames <= ContextLength
+            ? GenerateVideoWindow(
+                effectiveNumFrames,
+                latentHeight,
+                latentWidth,
+                promptEmbedding,
+                negativeEmbedding,
+                guidanceScale,
+                numInferenceSteps,
+                seed)
+            : GenerateWithSlidingWindow(
                 effectiveNumFrames,
                 latentHeight,
                 latentWidth,
@@ -328,20 +335,6 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
                 guidanceScale,
                 numInferenceSteps,
                 seed);
-        }
-        else
-        {
-            // Use sliding window approach for longer videos
-            return GenerateWithSlidingWindow(
-                effectiveNumFrames,
-                latentHeight,
-                latentWidth,
-                promptEmbedding,
-                negativeEmbedding,
-                guidanceScale,
-                numInferenceSteps,
-                seed);
-        }
     }
 
     /// <summary>
@@ -700,14 +693,9 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         for (int i = 0; i < resultSpan.Length; i++)
         {
             var weight = weightSpan[i];
-            if (NumOps.ToDouble(weight) > 1e-8)
-            {
-                resultSpan[i] = NumOps.Divide(accSpan[i], weight);
-            }
-            else
-            {
-                resultSpan[i] = accSpan[i];
-            }
+            resultSpan[i] = NumOps.ToDouble(weight) > 1e-8
+                ? NumOps.Divide(accSpan[i], weight)
+                : accSpan[i];
         }
 
         return result;

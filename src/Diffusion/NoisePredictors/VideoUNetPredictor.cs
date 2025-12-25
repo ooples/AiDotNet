@@ -446,14 +446,9 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         int numFrames = isVideo ? x.Shape[2] : 1;
 
         // Process each frame through input conv (or use 3D conv in production)
-        if (isVideo)
-        {
-            x = ProcessVideoFrames(x, frame => _inputConv.Forward(frame));
-        }
-        else
-        {
-            x = _inputConv.Forward(x);
-        }
+        x = isVideo
+            ? ProcessVideoFrames(x, frame => _inputConv.Forward(frame))
+            : _inputConv.Forward(x);
 
         // Add image condition (for image-to-video)
         if (imageCondition != null && _imageCondProjection != null)
@@ -507,14 +502,9 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         }
 
         // Output convolution
-        if (isVideo)
-        {
-            x = ProcessVideoFrames(x, frame => _outputConv.Forward(frame));
-        }
-        else
-        {
-            x = _outputConv.Forward(x);
-        }
+        x = isVideo
+            ? ProcessVideoFrames(x, frame => _outputConv.Forward(frame))
+            : _outputConv.Forward(x);
 
         return x;
     }
@@ -532,14 +522,9 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // Spatial ResBlock
         if (block.SpatialResBlock != null)
         {
-            if (isVideo)
-            {
-                x = ProcessVideoFrames(x, frame => block.SpatialResBlock.Forward(frame));
-            }
-            else
-            {
-                x = block.SpatialResBlock.Forward(x);
-            }
+            x = isVideo
+                ? ProcessVideoFrames(x, frame => block.SpatialResBlock.Forward(frame))
+                : block.SpatialResBlock.Forward(x);
         }
 
         // Temporal ResBlock (only for video)
@@ -551,14 +536,9 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // Spatial attention
         if (block.SpatialAttention != null)
         {
-            if (isVideo)
-            {
-                x = ProcessVideoFrames(x, frame => block.SpatialAttention.Forward(frame));
-            }
-            else
-            {
-                x = block.SpatialAttention.Forward(x);
-            }
+            x = isVideo
+                ? ProcessVideoFrames(x, frame => block.SpatialAttention.Forward(frame))
+                : block.SpatialAttention.Forward(x);
         }
 
         // Temporal attention (only for video)
@@ -570,14 +550,9 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // Cross-attention with text conditioning
         if (block.CrossAttention != null && conditioning != null)
         {
-            if (isVideo)
-            {
-                x = ProcessVideoFrames(x, frame => block.CrossAttention.Forward(frame));
-            }
-            else
-            {
-                x = block.CrossAttention.Forward(x);
-            }
+            x = isVideo
+                ? ProcessVideoFrames(x, frame => block.CrossAttention.Forward(frame))
+                : block.CrossAttention.Forward(x);
         }
 
         return x;
