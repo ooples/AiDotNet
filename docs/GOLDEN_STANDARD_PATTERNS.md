@@ -6,6 +6,9 @@ This document defines the production-ready patterns that ALL models and layers i
 
 1. [Layer Pattern](#layer-pattern)
 2. [Model Pattern](#model-pattern)
+   - [Neural Network Model Pattern](#neural-network-model-pattern-primary---feedforwardneuralnetwork-as-golden-standard)
+   - [Layer Creation Pattern](#layer-creation-pattern-critical)
+   - [Standalone Model Pattern](#standalone-model-pattern-for-non-layer-based-models)
 3. [Common Conventions](#common-conventions)
 4. [Documentation Standards](#documentation-standards)
 5. [Interface Implementation Checklist](#interface-implementation-checklist)
@@ -274,6 +277,162 @@ public ExampleNeuralNetwork(
 
     // Initialize layers from architecture
     InitializeLayers();
+}
+```
+
+### Layer Creation Pattern (CRITICAL)
+
+**All neural network models MUST support both user-provided layers AND default industry-standard layers.**
+
+The layer creation pattern uses a dual approach:
+1. **User-Provided Layers**: If the user supplies layers via `Architecture.Layers`, use those
+2. **Default Layers**: If no layers provided, use `LayerHelper<T>.CreateDefault<ModelType>Layers()` for industry-standard defaults
+
+#### The InitializeLayers() Pattern
+
+```csharp
+/// <summary>
+/// Initializes the layers of the neural network based on the architecture.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This method follows the dual-approach pattern:
+/// 1. If the user provides custom layers, use those (with validation)
+/// 2. Otherwise, use LayerHelper to create industry-standard default layers
+/// </para>
+/// </remarks>
+protected override void InitializeLayers()
+{
+    if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+    {
+        // Use the layers provided by the user
+        Layers.AddRange(Architecture.Layers);
+        ValidateCustomLayers(Layers);
+    }
+    else
+    {
+        // Use default layer configuration if no layers are provided
+        // Each model type has its own CreateDefault<ModelType>Layers method
+        Layers.AddRange(LayerHelper<T>.CreateDefaultFeedForwardLayers(Architecture));
+    }
+}
+```
+
+#### LayerHelper Factory Methods
+
+The `LayerHelper<T>` class is a static factory that creates industry-standard layer configurations:
+
+```csharp
+// Located at: src/Helpers/LayerHelper.cs
+public static class LayerHelper<T>
+{
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    // Feed-forward networks
+    public static IEnumerable<ILayer<T>> CreateDefaultLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenLayerCount = 1,
+        int hiddenLayerSize = 64,
+        int outputSize = 1);
+
+    // Alias for CreateDefaultLayers (feed-forward)
+    public static IEnumerable<ILayer<T>> CreateDefaultFeedForwardLayers(
+        NeuralNetworkArchitecture<T> architecture) =>
+        CreateDefaultLayers(architecture);
+
+    // Convolutional Neural Networks
+    public static IEnumerable<ILayer<T>> CreateDefaultCNNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int convLayerCount = 2,
+        int filterCount = 32,
+        int kernelSize = 3,
+        int denseLayerCount = 1,
+        int denseLayerSize = 64,
+        int outputSize = 1);
+
+    // ResNet architectures
+    public static IEnumerable<ILayer<T>> CreateDefaultResNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int blockCount = 3,
+        int blockSize = 2);
+
+    // LSTM-based temporal networks
+    public static IEnumerable<ILayer<T>> CreateDefaultOccupancyTemporalLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int historyWindowSize);
+
+    // Deep Boltzmann Machines
+    public static IEnumerable<ILayer<T>> CreateDefaultDeepBoltzmannMachineLayers(
+        NeuralNetworkArchitecture<T> architecture);
+
+    // Attention-based (Transformer) networks
+    public static IEnumerable<ILayer<T>> CreateDefaultAttentionLayers(
+        NeuralNetworkArchitecture<T> architecture);
+}
+```
+
+#### Naming Convention for LayerHelper Methods
+
+When adding a new model type, add a corresponding method to `LayerHelper<T>`:
+
+```
+CreateDefault<ModelName>Layers(NeuralNetworkArchitecture<T> architecture, [optional params])
+```
+
+Examples:
+- `CreateDefaultFeedForwardLayers` → FeedForwardNeuralNetwork
+- `CreateDefaultCNNLayers` → ConvolutionalNeuralNetwork
+- `CreateDefaultResNetLayers` → ResNetNeuralNetwork
+- `CreateDefaultTransformerLayers` → TransformerNeuralNetwork
+- `CreateDefaultDiffusionLayers` → DiffusionNeuralNetwork (future)
+
+#### Industry-Standard Defaults
+
+Each LayerHelper method should use industry-standard defaults:
+
+| Model Type | Default Activations | Default Sizes |
+|------------|---------------------|---------------|
+| Feed-Forward | ReLU (hidden), Softmax (output) | 64 neurons per hidden layer |
+| CNN | ReLU + MaxPool | 32 filters, 3x3 kernel |
+| ResNet | ReLU + BatchNorm | 64 initial channels |
+| LSTM/Temporal | Tanh + Sigmoid (recurrent) | 64-32 hidden sizes |
+| Attention | ReLU | 4-8 heads |
+
+#### Complete Example: FeedForwardNeuralNetwork
+
+```csharp
+public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
+{
+    public FeedForwardNeuralNetwork(
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 1.0)
+        : base(architecture,
+               lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType),
+               maxGradNorm)
+    {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+
+        // CRITICAL: Always call InitializeLayers() at end of constructor
+        InitializeLayers();
+    }
+
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            // User provided custom layers - use them
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
+        }
+        else
+        {
+            // No layers provided - use LayerHelper for defaults
+            Layers.AddRange(LayerHelper<T>.CreateDefaultFeedForwardLayers(Architecture));
+        }
+    }
 }
 ```
 
@@ -649,6 +808,11 @@ SomeWeight = NumOps.FromDouble(0.01);
 - [ ] Calls `InitializeLayers()` at end of constructor
 - [ ] Overrides `SupportsTraining` property
 - [ ] Overrides `InitializeLayers()` method
+- [ ] **InitializeLayers() uses dual approach:**
+  - [ ] Checks `Architecture.Layers != null && Architecture.Layers.Count > 0`
+  - [ ] If user provided layers: Uses `Layers.AddRange(Architecture.Layers)` and `ValidateCustomLayers(Layers)`
+  - [ ] If no layers provided: Uses `LayerHelper<T>.CreateDefault<ModelType>Layers(Architecture)`
+- [ ] **Has corresponding LayerHelper method** (e.g., `CreateDefaultMyModelLayers`)
 - [ ] Overrides `Predict(Tensor<T>)` method
 - [ ] Implements `Forward(Tensor<T>)` method
 - [ ] Implements `Backward(Tensor<T>)` method
@@ -708,11 +872,28 @@ Located at: `src/NeuralNetworks/FeedForwardNeuralNetwork.cs`
 Key patterns demonstrated:
 - Extends `NeuralNetworkBase<T>` (THE GOLDEN STANDARD)
 - Constructor with nullable optimizer and loss function
-- Proper layer initialization from architecture
+- Proper layer initialization from architecture using dual approach
 - Forward/Backward pass implementation
 - Training loop with auxiliary loss support
 - Model metadata generation
 - Network-specific serialization
+
+### Reference Helper: LayerHelper
+
+Located at: `src/Helpers/LayerHelper.cs`
+
+Key patterns demonstrated:
+- Static factory class for creating default layer configurations
+- Uses `IEnumerable<ILayer<T>>` with `yield return` for lazy evaluation
+- Takes `NeuralNetworkArchitecture<T>` as first parameter
+- Industry-standard defaults for each model type:
+  - `CreateDefaultLayers` / `CreateDefaultFeedForwardLayers` - Feed-forward networks
+  - `CreateDefaultCNNLayers` - Convolutional Neural Networks
+  - `CreateDefaultResNetLayers` - Residual Networks
+  - `CreateDefaultOccupancyTemporalLayers` - LSTM-based temporal networks
+  - `CreateDefaultDeepBoltzmannMachineLayers` - DBMs
+  - `CreateDefaultAttentionLayers` - Transformer-style networks
+- ValidateLayerParameters helper for input validation
 
 ### Reference Base Class: NoisePredictorBase
 
