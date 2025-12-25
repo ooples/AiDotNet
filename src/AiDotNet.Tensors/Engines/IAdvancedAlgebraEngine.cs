@@ -37,7 +37,7 @@ public interface IAdvancedAlgebraEngine
     /// </para>
     /// <para>
     /// Warning: Octonion multiplication is non-associative: (a*b)*c != a*(b*c).
-    /// This implementation uses left-to-right evaluation order.
+    /// Implementations should use left-to-right evaluation order for consistency.
     /// </para>
     /// </remarks>
     Octonion<T>[] OctonionMultiplyBatch<T>(Octonion<T>[] left, Octonion<T>[] right);

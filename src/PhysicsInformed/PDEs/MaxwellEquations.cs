@@ -145,13 +145,14 @@ namespace AiDotNet.PhysicsInformed.PDEs
             // Residual: ∂Bz/∂t + ∂Ey/∂x - ∂Ex/∂y = 0
             T faraday = NumOps.Add(dBzdt, NumOps.Subtract(dEydx, dExdy));
 
-            // Ampere's Law (x-component): ε ∂Ex/∂t = ∂Bz/∂y
-            // Residual: ε ∂Ex/∂t - ∂Bz/∂y = 0
-            T ampereX = NumOps.Subtract(NumOps.Multiply(_permittivity, dExdt), dBzdy);
+            // Ampere's Law (x-component): ε μ ∂Ex/∂t = ∂Bz/∂y
+            // Residual: ε μ ∂Ex/∂t - ∂Bz/∂y = 0
+            T epsilonMu = NumOps.Multiply(_permittivity, _permeability);
+            T ampereX = NumOps.Subtract(NumOps.Multiply(epsilonMu, dExdt), dBzdy);
 
-            // Ampere's Law (y-component): ε ∂Ey/∂t = -∂Bz/∂x
-            // Residual: ε ∂Ey/∂t + ∂Bz/∂x = 0
-            T ampereY = NumOps.Add(NumOps.Multiply(_permittivity, dEydt), dBzdx);
+            // Ampere's Law (y-component): ε μ ∂Ey/∂t = -∂Bz/∂x
+            // Residual: ε μ ∂Ey/∂t + ∂Bz/∂x = 0
+            T ampereY = NumOps.Add(NumOps.Multiply(epsilonMu, dEydt), dBzdx);
 
             // Total residual: sum of squared residuals
             T residual = NumOps.Add(
@@ -187,20 +188,21 @@ namespace AiDotNet.PhysicsInformed.PDEs
 
             // Compute residuals for gradient scaling
             T faraday = NumOps.Add(dBzdt, NumOps.Subtract(dEydx, dExdy));
-            T ampereX = NumOps.Subtract(NumOps.Multiply(_permittivity, dExdt), dBzdy);
-            T ampereY = NumOps.Add(NumOps.Multiply(_permittivity, dEydt), dBzdx);
+            T epsilonMu = NumOps.Multiply(_permittivity, _permeability);
+            T ampereX = NumOps.Subtract(NumOps.Multiply(epsilonMu, dExdt), dBzdy);
+            T ampereY = NumOps.Add(NumOps.Multiply(epsilonMu, dEydt), dBzdx);
 
             // Gradients w.r.t. first derivatives
             // Faraday: R = dBzdt + dEydx - dExdy
             // ∂R²/∂(dExdy) = 2*faraday*(-1) = -2*faraday
             gradient.FirstDerivatives[0, 1] = NumOps.Multiply(two, NumOps.Negate(faraday));
-            // ∂R²/∂(dExdt) = 2*ampereX*ε
-            gradient.FirstDerivatives[0, 2] = NumOps.Multiply(two, NumOps.Multiply(ampereX, _permittivity));
+            // ∂R²/∂(dExdt) = 2*ampereX*εμ
+            gradient.FirstDerivatives[0, 2] = NumOps.Multiply(two, NumOps.Multiply(ampereX, epsilonMu));
 
             // ∂R²/∂(dEydx) = 2*faraday
             gradient.FirstDerivatives[1, 0] = NumOps.Multiply(two, faraday);
-            // ∂R²/∂(dEydt) = 2*ampereY*ε
-            gradient.FirstDerivatives[1, 2] = NumOps.Multiply(two, NumOps.Multiply(ampereY, _permittivity));
+            // ∂R²/∂(dEydt) = 2*ampereY*εμ
+            gradient.FirstDerivatives[1, 2] = NumOps.Multiply(two, NumOps.Multiply(ampereY, epsilonMu));
 
             // ∂R²/∂(dBzdx) = 2*ampereY
             gradient.FirstDerivatives[2, 0] = NumOps.Multiply(two, ampereY);

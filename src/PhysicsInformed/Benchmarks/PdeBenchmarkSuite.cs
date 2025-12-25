@@ -90,6 +90,17 @@ namespace AiDotNet.PhysicsInformed.Benchmarks
             double invDx = 1.0 / dx;
             double invDx2 = invDx * invDx;
 
+            // CFL stability check for diffusion: viscosity * dt / dx² ≤ 0.5
+            double diffusionCfl = options.Viscosity * dt * invDx2;
+            if (diffusionCfl > 0.5)
+            {
+                throw new InvalidOperationException(
+                    $"CFL condition violated for Burgers equation. " +
+                    $"Diffusion stability requires viscosity * dt / dx² ≤ 0.5, " +
+                    $"but got {diffusionCfl:F4}. " +
+                    $"Increase TimeSteps or decrease domain resolution.");
+            }
+
             var current = new double[n];
             var next = new double[n];
 
@@ -130,6 +141,17 @@ namespace AiDotNet.PhysicsInformed.Benchmarks
             double dt = options.FinalTime / options.TimeSteps;
             double invDx2 = 1.0 / (dx * dx);
             double epsilonSquared = options.Epsilon * options.Epsilon;
+
+            // CFL stability check for diffusion: epsilon² * dt / dx² ≤ 0.5
+            double diffusionCfl = epsilonSquared * dt * invDx2;
+            if (diffusionCfl > 0.5)
+            {
+                throw new InvalidOperationException(
+                    $"CFL condition violated for Allen-Cahn equation. " +
+                    $"Diffusion stability requires epsilon² * dt / dx² ≤ 0.5, " +
+                    $"but got {diffusionCfl:F4}. " +
+                    $"Increase TimeSteps or decrease domain resolution.");
+            }
 
             var current = new double[n];
             var next = new double[n];

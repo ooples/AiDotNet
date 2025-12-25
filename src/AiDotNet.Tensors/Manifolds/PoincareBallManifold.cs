@@ -82,7 +82,11 @@ public sealed class PoincareBallManifold<T>
         T sqrtC = _ops.Sqrt(Curvature);
         T lambda = Lambda(basePoint);
         T arg = _ops.Multiply(sqrtC, norm);
-        double atanh = MathHelper.Atanh(Convert.ToDouble(arg));
+        // Clamp to valid atanh domain: |arg| < 1
+        double argDouble = Convert.ToDouble(arg);
+        double maxArg = 1.0 - 1e-10;
+        argDouble = Math.Max(-maxArg, Math.Min(maxArg, argDouble));
+        double atanh = MathHelper.Atanh(argDouble);
         T factor = _ops.Divide(_ops.Multiply(_ops.FromDouble(2.0), _ops.FromDouble(atanh)), _ops.Multiply(sqrtC, lambda));
         T scale = _ops.Divide(factor, norm);
         return Scale(diff, scale);
@@ -94,7 +98,11 @@ public sealed class PoincareBallManifold<T>
         var diff = MobiusAdd(Negate(x), y);
         T norm = Norm(diff);
         T sqrtC = _ops.Sqrt(Curvature);
-        double atanh = MathHelper.Atanh(Convert.ToDouble(_ops.Multiply(sqrtC, norm)));
+        // Clamp to valid atanh domain: |arg| < 1
+        double argDouble = Convert.ToDouble(_ops.Multiply(sqrtC, norm));
+        double maxArg = 1.0 - 1e-10;
+        argDouble = Math.Max(-maxArg, Math.Min(maxArg, argDouble));
+        double atanh = MathHelper.Atanh(argDouble);
         T factor = _ops.Multiply(_ops.FromDouble(2.0), _ops.FromDouble(atanh));
         return _ops.Divide(factor, sqrtC);
     }

@@ -9,9 +9,14 @@ namespace AiDotNet.Tensors.Topology;
 /// </summary>
 public sealed class Simplex : IEquatable<Simplex>
 {
-    public int[] Vertices { get; }
+    private readonly int[] _vertices;
 
-    public int Dimension => Vertices.Length - 1;
+    /// <summary>
+    /// Gets a copy of the vertex indices to prevent external mutation.
+    /// </summary>
+    public int[] Vertices => (int[])_vertices.Clone();
+
+    public int Dimension => _vertices.Length - 1;
 
     public Simplex(IEnumerable<int> vertices)
     {
@@ -29,24 +34,24 @@ public sealed class Simplex : IEquatable<Simplex>
                 throw new ArgumentException("Simplex vertices must be unique.", nameof(vertices));
         }
 
-        Vertices = [.. list];
+        _vertices = [.. list];
     }
 
     public IReadOnlyList<(int Sign, Simplex Face)> Boundary()
     {
-        if (Vertices.Length <= 1)
+        if (_vertices.Length <= 1)
             return Array.Empty<(int, Simplex)>();
 
-        var faces = new List<(int, Simplex)>(Vertices.Length);
-        for (int i = 0; i < Vertices.Length; i++)
+        var faces = new List<(int, Simplex)>(_vertices.Length);
+        for (int i = 0; i < _vertices.Length; i++)
         {
-            var faceVertices = new int[Vertices.Length - 1];
+            var faceVertices = new int[_vertices.Length - 1];
             int index = 0;
-            for (int j = 0; j < Vertices.Length; j++)
+            for (int j = 0; j < _vertices.Length; j++)
             {
                 if (j == i)
                     continue;
-                faceVertices[index++] = Vertices[j];
+                faceVertices[index++] = _vertices[j];
             }
 
             int sign = (i % 2 == 0) ? 1 : -1;
@@ -60,12 +65,12 @@ public sealed class Simplex : IEquatable<Simplex>
     {
         if (other is null)
             return false;
-        if (Vertices.Length != other.Vertices.Length)
+        if (_vertices.Length != other._vertices.Length)
             return false;
 
-        for (int i = 0; i < Vertices.Length; i++)
+        for (int i = 0; i < _vertices.Length; i++)
         {
-            if (Vertices[i] != other.Vertices[i])
+            if (_vertices[i] != other._vertices[i])
                 return false;
         }
         return true;
@@ -78,8 +83,8 @@ public sealed class Simplex : IEquatable<Simplex>
         unchecked
         {
             int hash = 17;
-            for (int i = 0; i < Vertices.Length; i++)
-                hash = hash * 23 + Vertices[i].GetHashCode();
+            for (int i = 0; i < _vertices.Length; i++)
+                hash = hash * 23 + _vertices[i].GetHashCode();
             return hash;
         }
     }

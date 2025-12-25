@@ -124,7 +124,7 @@ public interface IHyperbolicManifoldEngine
     /// <typeparam name="T">The numeric type.</typeparam>
     /// <param name="point">The point to project.</param>
     /// <param name="curvature">The curvature parameter.</param>
-    /// <param name="epsilon">Small value to stay away from the boundary (default 1e-5).</param>
+    /// <param name="epsilon">Small value to stay away from the boundary (recommended: 1e-5).</param>
     /// <returns>The projected point inside the ball.</returns>
     /// <remarks>
     /// <para>

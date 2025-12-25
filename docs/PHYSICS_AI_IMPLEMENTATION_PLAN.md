@@ -296,7 +296,7 @@ This is the correct design because:
 | Allen-Cahn Equation | Phase transitions | Yes |
 | Navier-Stokes | 2D incompressible fluid dynamics | Yes |
 | Maxwell's Equations | 2D TE mode electromagnetics | Yes |
-| Schrodinger Equation | 1D time-dependent quantum mechanics | Yes |
+| Schrödinger Equation | 1D time-dependent quantum mechanics | Yes |
 | Black-Scholes | Option pricing in finance | Yes |
 | Linear Elasticity | 2D Navier-Cauchy solid mechanics | Yes |
 | Advection-Diffusion | 1D/2D transport phenomena | Yes |
@@ -336,7 +336,7 @@ All physics networks now use the standard pattern:
 ### Sprint 2: Core PDEs (COMPLETED)
 - [x] Implement Navier-Stokes equation
 - [x] Implement Maxwell's equations
-- [x] Implement Schrodinger equation
+- [x] Implement Schrödinger equation
 - [x] Add PDE unit tests with known analytical solutions
 
 ### Sprint 3: Advanced Features (COMPLETED)

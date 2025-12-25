@@ -100,6 +100,27 @@ public sealed class So3Group<T> : ILieGroup<T, So3<T>>
             });
         }
 
+        // Handle θ near π where sin(θ) approaches 0
+        if (theta > Math.PI - 1e-6)
+        {
+            // For θ ≈ π, extract axis from diagonal of (R + I)/2
+            // The axis is the eigenvector with eigenvalue 1
+            double rx = Math.Sqrt(Math.Max(0.0, (r00 + 1.0) / 2.0));
+            double ry = Math.Sqrt(Math.Max(0.0, (r11 + 1.0) / 2.0));
+            double rz = Math.Sqrt(Math.Max(0.0, (r22 + 1.0) / 2.0));
+
+            // Determine signs from off-diagonal elements
+            if (Convert.ToDouble(value.Matrix[0, 1]) + Convert.ToDouble(value.Matrix[1, 0]) < 0) ry = -ry;
+            if (Convert.ToDouble(value.Matrix[0, 2]) + Convert.ToDouble(value.Matrix[2, 0]) < 0) rz = -rz;
+
+            return new Vector<T>(new[]
+            {
+                _ops.FromDouble(rx * theta),
+                _ops.FromDouble(ry * theta),
+                _ops.FromDouble(rz * theta)
+            });
+        }
+
         double factor = theta / (2.0 * Math.Sin(theta));
         double wx = factor * (Convert.ToDouble(value.Matrix[2, 1]) - Convert.ToDouble(value.Matrix[1, 2]));
         double wy = factor * (Convert.ToDouble(value.Matrix[0, 2]) - Convert.ToDouble(value.Matrix[2, 0]));

@@ -367,32 +367,32 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
 
         for (int o = 0; o < OutputFeatures; o++)
         {
+            // Update weights in tangent space (per-element update)
             for (int i = 0; i < InputFeatures; i++)
             {
-                // Update weights in tangent space
                 var grad = _weightsGradient[o, i];
                 var scaledGrad = _numOps.Multiply(learningRate, grad);
                 _weights[o, i] = _numOps.Subtract(_weights[o, i], scaledGrad);
+            }
 
-                // Update biases using Riemannian gradient descent
-                // Move along geodesic in direction of negative gradient
-                var biasPoint = new Vector<T>(InputFeatures);
-                var tangentVec = new Vector<T>(InputFeatures);
-                for (int j = 0; j < InputFeatures; j++)
-                {
-                    biasPoint[j] = _biases[o, j];
-                    tangentVec[j] = j == i ? _numOps.Negate(_numOps.Multiply(learningRate, _biasesGradient[o, j])) : _numOps.Zero;
-                }
+            // Update biases using Riemannian gradient descent
+            // Build the full tangent vector from all bias gradients at once
+            var biasPoint = new Vector<T>(InputFeatures);
+            var tangentVec = new Vector<T>(InputFeatures);
+            for (int j = 0; j < InputFeatures; j++)
+            {
+                biasPoint[j] = _biases[o, j];
+                tangentVec[j] = _numOps.Negate(_numOps.Multiply(learningRate, _biasesGradient[o, j]));
+            }
 
-                // Project bias to valid region and apply update
-                var projectedBias = _engine.PoincareProject(biasPoint, _curvature, epsilon);
-                var updatedBias = _engine.PoincareExpMap(projectedBias, tangentVec, _curvature);
-                updatedBias = _engine.PoincareProject(updatedBias, _curvature, epsilon);
+            // Project bias to valid region and apply exponential map update once per output
+            var projectedBias = _engine.PoincareProject(biasPoint, _curvature, epsilon);
+            var updatedBias = _engine.PoincareExpMap(projectedBias, tangentVec, _curvature);
+            updatedBias = _engine.PoincareProject(updatedBias, _curvature, epsilon);
 
-                for (int j = 0; j < InputFeatures; j++)
-                {
-                    _biases[o, j] = updatedBias[j];
-                }
+            for (int j = 0; j < InputFeatures; j++)
+            {
+                _biases[o, j] = updatedBias[j];
             }
         }
     }

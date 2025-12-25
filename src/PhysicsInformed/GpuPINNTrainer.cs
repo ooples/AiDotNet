@@ -241,6 +241,20 @@ public class GpuPINNTrainer<T>
         T loss;
         if (batchTargets is not null)
         {
+            // Validate tensor dimensions before accessing shape
+            if (outputs.Shape.Length < 2)
+            {
+                throw new ArgumentException(
+                    $"Output tensor must have at least 2 dimensions, but got {outputs.Shape.Length}.",
+                    nameof(outputs));
+            }
+            if (batchTargets.Shape.Length < 2)
+            {
+                throw new ArgumentException(
+                    $"Target tensor must have at least 2 dimensions, but got {batchTargets.Shape.Length}.",
+                    nameof(batchTargets));
+            }
+
             // Validate shapes match
             if (outputs.Shape[0] != batchTargets.Shape[0] || outputs.Shape[1] != batchTargets.Shape[1])
             {
