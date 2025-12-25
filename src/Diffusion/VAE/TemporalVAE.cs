@@ -563,54 +563,115 @@ public class TemporalVAE<T> : VAEModelBase<T>
     /// </summary>
     private List<Tensor<T>> ApplyTemporalLayers(List<ILayer<T>> temporalLayers, List<Tensor<T>> frameFeatures)
     {
-        if (temporalLayers.Count == 0)
+        if (temporalLayers.Count == 0 || frameFeatures.Count == 0)
         {
             return frameFeatures;
         }
 
-        // For simplicity, apply temporal processing by averaging neighboring frames
-        // A full implementation would use 1D temporal convolutions or attention
-        var processed = new List<Tensor<T>>();
+        // Stack frames into a 5D tensor: [batch, channels, frames, height, width]
+        var stacked = StackFramesToVideo(frameFeatures);
 
-        for (int f = 0; f < frameFeatures.Count; f++)
+        // Apply each temporal layer
+        var processed = stacked;
+        foreach (var layer in temporalLayers)
         {
-            var current = frameFeatures[f];
-            var shape = current.Shape;
-            var result = new Tensor<T>(shape);
-            var resultSpan = result.AsWritableSpan();
-            var currentSpan = current.AsSpan();
-
-            // Temporal blending with neighbors
-            int kernelHalf = _temporalKernelSize / 2;
-            var weight = NumOps.FromDouble(1.0 / _temporalKernelSize);
-
-            for (int i = 0; i < resultSpan.Length; i++)
+            if (layer is LayerBase<T> layerBase)
             {
-                var sum = NumOps.Zero;
-                int count = 0;
-
-                for (int k = -kernelHalf; k <= kernelHalf; k++)
-                {
-                    int neighborIdx = f + k;
-                    if (_causalMode && k > 0) continue; // Causal: only look at past
-
-                    if (neighborIdx >= 0 && neighborIdx < frameFeatures.Count)
-                    {
-                        var neighborSpan = frameFeatures[neighborIdx].AsSpan();
-                        sum = NumOps.Add(sum, neighborSpan[i]);
-                        count++;
-                    }
-                }
-
-                resultSpan[i] = count > 0
-                    ? NumOps.Divide(sum, NumOps.FromDouble(count))
-                    : currentSpan[i];
+                processed = layerBase.Forward(processed);
             }
-
-            processed.Add(result);
+            else
+            {
+                processed = layer.Forward(processed);
+            }
         }
 
-        return processed;
+        // Unstack back to individual frames
+        return UnstackVideoToFrames(processed, frameFeatures.Count);
+    }
+
+    /// <summary>
+    /// Stacks frame features into a video tensor.
+    /// </summary>
+    private Tensor<T> StackFramesToVideo(List<Tensor<T>> frames)
+    {
+        if (frames.Count == 0)
+        {
+            throw new ArgumentException("No frames to stack.");
+        }
+
+        int batch = frames[0].Shape[0];
+        int channels = frames[0].Shape[1];
+        int numFrames = frames.Count;
+        int height = frames[0].Shape[2];
+        int width = frames[0].Shape[3];
+
+        var video = new Tensor<T>(new[] { batch, channels, numFrames, height, width });
+        var videoSpan = video.AsWritableSpan();
+        int spatialSize = height * width;
+
+        for (int f = 0; f < numFrames; f++)
+        {
+            var frameSpan = frames[f].AsSpan();
+
+            for (int b = 0; b < batch; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    int srcOffset = b * channels * spatialSize + c * spatialSize;
+                    int dstOffset = b * channels * numFrames * spatialSize +
+                                    c * numFrames * spatialSize +
+                                    f * spatialSize;
+
+                    for (int i = 0; i < spatialSize; i++)
+                    {
+                        videoSpan[dstOffset + i] = frameSpan[srcOffset + i];
+                    }
+                }
+            }
+        }
+
+        return video;
+    }
+
+    /// <summary>
+    /// Unstacks a video tensor back to individual frames.
+    /// </summary>
+    private List<Tensor<T>> UnstackVideoToFrames(Tensor<T> video, int numFrames)
+    {
+        int batch = video.Shape[0];
+        int channels = video.Shape[1];
+        int height = video.Shape[3];
+        int width = video.Shape[4];
+
+        var frames = new List<Tensor<T>>();
+        var videoSpan = video.AsSpan();
+        int spatialSize = height * width;
+
+        for (int f = 0; f < numFrames; f++)
+        {
+            var frame = new Tensor<T>(new[] { batch, channels, height, width });
+            var frameSpan = frame.AsWritableSpan();
+
+            for (int b = 0; b < batch; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    int srcOffset = b * channels * numFrames * spatialSize +
+                                    c * numFrames * spatialSize +
+                                    f * spatialSize;
+                    int dstOffset = b * channels * spatialSize + c * spatialSize;
+
+                    for (int i = 0; i < spatialSize; i++)
+                    {
+                        frameSpan[dstOffset + i] = videoSpan[srcOffset + i];
+                    }
+                }
+            }
+
+            frames.Add(frame);
+        }
+
+        return frames;
     }
 
     /// <summary>
