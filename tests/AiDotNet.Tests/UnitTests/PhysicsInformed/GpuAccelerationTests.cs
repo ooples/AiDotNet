@@ -418,7 +418,7 @@ public class GpuAccelerationTests
         // Act
         history.UseGpuAcceleration = true;
         history.TotalTrainingTimeMs = 5000;
-        history.PeakMemoryBytes = 1024 * 1024 * 100; // 100 MB
+        history.PeakManagedMemoryBytes = 1024 * 1024 * 100; // 100 MB
         history.AddEpoch(1.0);
         history.AddEpoch(0.5);
         history.AddEpoch(0.25);
@@ -427,7 +427,7 @@ public class GpuAccelerationTests
         Assert.True(history.UseGpuAcceleration);
         Assert.Equal(5000, history.TotalTrainingTimeMs);
         Assert.Equal(3, history.Losses.Count);
-        Assert.Equal(1024 * 1024 * 100, history.PeakMemoryBytes);
+        Assert.Equal(1024 * 1024 * 100, history.PeakManagedMemoryBytes);
     }
 
     [Fact]
