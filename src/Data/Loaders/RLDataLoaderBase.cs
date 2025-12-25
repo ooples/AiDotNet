@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -47,6 +49,11 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
     private int _batchSize = 32;
     private int _currentBatchIndex;
     private Random _random;
+
+    /// <summary>
+    /// Lock object for thread-safe access to _random during batch generation.
+    /// </summary>
+    private readonly object _randomLock = new object();
 
     /// <summary>
     /// Initializes a new instance of the RLDataLoaderBase class.
@@ -266,7 +273,10 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
     /// <inheritdoc/>
     public void SetSeed(int seed)
     {
-        _random = RandomHelper.CreateSeededRandom(seed);
+        lock (_randomLock)
+        {
+            _random = RandomHelper.CreateSeededRandom(seed);
+        }
         _environment.Seed(seed);
     }
 
@@ -295,25 +305,212 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
     /// Selects a random action for exploration.
     /// </summary>
     /// <returns>A random action vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Thread Safety:</b> This method uses locking to ensure thread-safe access
+    /// to the random number generator.
+    /// </para>
+    /// </remarks>
     protected virtual Vector<T> SelectRandomAction()
     {
-        if (_environment.IsContinuousActionSpace)
+        lock (_randomLock)
         {
-            // Random continuous action in [-1, 1] range
-            var action = new Vector<T>(_environment.ActionSpaceSize);
-            for (int i = 0; i < _environment.ActionSpaceSize; i++)
+            if (_environment.IsContinuousActionSpace)
             {
-                action[i] = NumOps.FromDouble(_random.NextDouble() * 2 - 1);
+                // Random continuous action in [-1, 1] range
+                var action = new Vector<T>(_environment.ActionSpaceSize);
+                for (int i = 0; i < _environment.ActionSpaceSize; i++)
+                {
+                    action[i] = NumOps.FromDouble(_random.NextDouble() * 2 - 1);
+                }
+                return action;
             }
-            return action;
-        }
-        else
-        {
-            // Random discrete action (one-hot encoded)
-            var action = new Vector<T>(_environment.ActionSpaceSize);
-            int randomAction = _random.Next(_environment.ActionSpaceSize);
-            action[randomAction] = NumOps.One;
-            return action;
+            else
+            {
+                // Random discrete action (one-hot encoded)
+                var action = new Vector<T>(_environment.ActionSpaceSize);
+                int randomAction = _random.Next(_environment.ActionSpaceSize);
+                action[randomAction] = NumOps.One;
+                return action;
+            }
         }
     }
+
+    #region PyTorch-Style Batch Iteration
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// For RL data loaders, this method samples experiences from the replay buffer.
+    /// Unlike supervised learning, RL uses random sampling from the buffer rather than
+    /// sequential iteration, which helps break temporal correlations.
+    /// </para>
+    /// <para>
+    /// <b>Performance Notes:</b>
+    /// - Each batch is independently sampled from the replay buffer
+    /// - The shuffle parameter is ignored since RL inherently uses random sampling
+    /// - Uses lazy evaluation via yield return for memory efficiency
+    /// </para>
+    /// </remarks>
+    public virtual IEnumerable<Experience<T, Vector<T>, Vector<T>>> GetBatches(
+        int? batchSize = null,
+        bool shuffle = true,
+        bool dropLast = false,
+        int? seed = null)
+    {
+        int effectiveBatchSize = batchSize ?? BatchSize;
+        if (effectiveBatchSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be at least 1.");
+        }
+
+        int bufferCount = _replayBuffer.Count;
+        if (bufferCount == 0 || !_replayBuffer.CanSample(1))
+        {
+            yield break;
+        }
+
+        // Note: The seed parameter is not used for RL batch iteration because
+        // the replay buffer performs its own random sampling. Seeding for RL
+        // should be done at construction time via the seed constructor parameter,
+        // which seeds both the random instance (for action selection) and the environment.
+
+        // Calculate how many batches we can provide
+        // For RL, we typically do multiple passes through the data
+        int numBatches = bufferCount / effectiveBatchSize;
+        if (!dropLast && bufferCount % effectiveBatchSize > 0)
+        {
+            numBatches++;
+        }
+
+        // Yield sampled batches
+        for (int batchIdx = 0; batchIdx < numBatches; batchIdx++)
+        {
+            // Calculate actual batch size for this iteration
+            int currentBatchSize = (batchIdx == numBatches - 1 && !dropLast)
+                ? Math.Min(effectiveBatchSize, bufferCount - batchIdx * effectiveBatchSize)
+                : effectiveBatchSize;
+
+            if (currentBatchSize <= 0 || !_replayBuffer.CanSample(currentBatchSize))
+            {
+                yield break;
+            }
+
+            // Sample batch from replay buffer (RL uses random sampling)
+            var samples = _replayBuffer.Sample(currentBatchSize);
+
+            // Yield each experience in the batch
+            foreach (var experience in samples)
+            {
+                yield return experience;
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// This async implementation uses a bounded Channel for prefetching sampled experiences,
+    /// allowing background sampling while the current batch is being used for training.
+    /// </para>
+    /// <para>
+    /// <b>Implementation Details:</b>
+    /// - Uses System.Threading.Channels for thread-safe producer-consumer pattern
+    /// - Bounded channel capacity = prefetchCount to limit memory usage
+    /// - Particularly useful when training is GPU-bound and sampling is CPU-bound
+    /// </para>
+    /// </remarks>
+    public virtual async IAsyncEnumerable<Experience<T, Vector<T>, Vector<T>>> GetBatchesAsync(
+        int? batchSize = null,
+        bool shuffle = true,
+        bool dropLast = false,
+        int? seed = null,
+        int prefetchCount = 2,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (prefetchCount < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(prefetchCount), "Prefetch count must be at least 1.");
+        }
+
+        int effectiveBatchSize = batchSize ?? BatchSize;
+        if (effectiveBatchSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be at least 1.");
+        }
+
+        int bufferCount = _replayBuffer.Count;
+        if (bufferCount == 0 || !_replayBuffer.CanSample(1))
+        {
+            yield break;
+        }
+
+        // Create bounded channel for prefetching
+        var channel = Channel.CreateBounded<Experience<T, Vector<T>, Vector<T>>>(
+            new BoundedChannelOptions(prefetchCount * effectiveBatchSize)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = true
+            });
+
+        // Start producer task
+        var producerTask = Task.Run(async () =>
+        {
+            try
+            {
+                // Note: The seed parameter is not used for RL batch iteration because
+                // the replay buffer performs its own random sampling. Seeding for RL
+                // should be done at construction time via the seed constructor parameter.
+
+                // Calculate number of batches
+                int numBatches = bufferCount / effectiveBatchSize;
+                if (!dropLast && bufferCount % effectiveBatchSize > 0)
+                {
+                    numBatches++;
+                }
+
+                // Produce sampled experiences
+                for (int batchIdx = 0; batchIdx < numBatches; batchIdx++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    int currentBatchSize = (batchIdx == numBatches - 1 && !dropLast)
+                        ? Math.Min(effectiveBatchSize, bufferCount - batchIdx * effectiveBatchSize)
+                        : effectiveBatchSize;
+
+                    if (currentBatchSize <= 0 || !_replayBuffer.CanSample(currentBatchSize))
+                    {
+                        break;
+                    }
+
+                    var samples = _replayBuffer.Sample(currentBatchSize);
+
+                    foreach (var experience in samples)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await channel.Writer.WriteAsync(experience, cancellationToken);
+                    }
+                }
+            }
+            finally
+            {
+                channel.Writer.Complete();
+            }
+        }, cancellationToken);
+
+        // Consume experiences (net471 compatible - no ReadAllAsync)
+        while (await channel.Reader.WaitToReadAsync(cancellationToken))
+        {
+            while (channel.Reader.TryRead(out var experience))
+            {
+                yield return experience;
+            }
+        }
+
+        // Ensure producer task completed without errors
+        await producerTask;
+    }
+
+    #endregion
 }

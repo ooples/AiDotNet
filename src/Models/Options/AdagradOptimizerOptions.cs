@@ -17,6 +17,16 @@ namespace AiDotNet.Models.Options;
 public class AdagradOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Gets or sets the batch size for mini-batch gradient descent.
+    /// </summary>
+    /// <value>A positive integer, defaulting to 32.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The batch size controls how many examples the optimizer looks at
+    /// before making an update to the model. The default of 32 is a good balance for Adagrad.</para>
+    /// </remarks>
+    public int BatchSize { get; set; } = 32;
+
+    /// <summary>
     /// Gets or sets a small constant added to the denominator to prevent division by zero.
     /// </summary>
     /// <value>The epsilon value, defaulting to 0.00000001.</value>

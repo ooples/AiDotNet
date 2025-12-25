@@ -89,6 +89,12 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <para><b>For Beginners:</b> This is the main optimization process. It repeatedly updates the solution
     /// using the ADMM steps until it reaches the best possible solution or hits a stopping condition.
     /// </para>
+    /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for epoch management.
+    /// ADMM typically operates on the full dataset for the X update (which involves solving linear systems),
+    /// but notifies the sampler of epoch starts using
+    /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/> for compatibility with
+    /// curriculum learning and sampling strategies.
+    /// </para>
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
@@ -104,11 +110,12 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
+            NotifyEpochStart(epoch);
             _iteration++;
 
-            // ADMM steps
+            // ADMM steps - operates on full dataset for linear system solving
             currentSolution = UpdateX(currentSolution, inputData.XTrain, inputData.YTrain);
             parameters = currentSolution.GetParameters();
             UpdateZ(parameters);
@@ -119,7 +126,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }

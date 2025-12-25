@@ -58,7 +58,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _numPoints = input.Shape[0];
-        
+
         // Use vectorized ReduceMax along axis 0 (points dimension)
         // This reduces [numPoints, numFeatures] to [1, numFeatures] taking max across all points
         var pooledOutput = Engine.ReduceMax(input, [0], true, out int[] maxIndices);

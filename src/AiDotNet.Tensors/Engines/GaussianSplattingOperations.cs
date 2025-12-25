@@ -670,7 +670,7 @@ public static class GaussianSplattingOperations
                 for (int b = 0; b < basisCount; b++)
                 {
                     // dL/d(coeff) = dL/dcolor * basis
-                    shGrad[i * basisCount * numChannels + b * numChannels + ch] = 
+                    shGrad[i * basisCount * numChannels + b * numChannels + ch] =
                         numOps.FromDouble(colorGrad * basis[b]);
                 }
             }
@@ -839,27 +839,27 @@ public static class GaussianSplattingOperations
             // Compute scale gradients: dL/ds_k = 2 * s_k * sum_ij(dL/dΣ_ij * R_ik * R_jk)
             // For scale x (k=0): dL/ds_x = 2*s_x * (gc00*r00*r00 + 2*gc01*r00*r10 + 2*gc02*r00*r20 + gc11*r10*r10 + 2*gc12*r10*r20 + gc22*r20*r20)
             double dL_dsx = 2.0 * sx * (
-                gc00 * r00 * r00 + 
-                2.0 * gc01 * r00 * r10 + 
-                2.0 * gc02 * r00 * r20 + 
-                gc11 * r10 * r10 + 
-                2.0 * gc12 * r10 * r20 + 
+                gc00 * r00 * r00 +
+                2.0 * gc01 * r00 * r10 +
+                2.0 * gc02 * r00 * r20 +
+                gc11 * r10 * r10 +
+                2.0 * gc12 * r10 * r20 +
                 gc22 * r20 * r20);
 
             double dL_dsy = 2.0 * sy * (
-                gc00 * r01 * r01 + 
-                2.0 * gc01 * r01 * r11 + 
-                2.0 * gc02 * r01 * r21 + 
-                gc11 * r11 * r11 + 
-                2.0 * gc12 * r11 * r21 + 
+                gc00 * r01 * r01 +
+                2.0 * gc01 * r01 * r11 +
+                2.0 * gc02 * r01 * r21 +
+                gc11 * r11 * r11 +
+                2.0 * gc12 * r11 * r21 +
                 gc22 * r21 * r21);
 
             double dL_dsz = 2.0 * sz * (
-                gc00 * r02 * r02 + 
-                2.0 * gc01 * r02 * r12 + 
-                2.0 * gc02 * r02 * r22 + 
-                gc11 * r12 * r12 + 
-                2.0 * gc12 * r12 * r22 + 
+                gc00 * r02 * r02 +
+                2.0 * gc01 * r02 * r12 +
+                2.0 * gc02 * r02 * r22 +
+                gc11 * r12 * r12 +
+                2.0 * gc12 * r12 * r22 +
                 gc22 * r22 * r22);
 
             scaleGrad[i * 3] = numOps.FromDouble(dL_dsx);
@@ -894,9 +894,9 @@ public static class GaussianSplattingOperations
 
             // Derivatives of rotation matrix elements w.r.t. quaternion components
             // r00 = 1 - 2(qy² + qz²), r01 = 2(qx*qy - qw*qz), r02 = 2(qx*qz + qw*qy), etc.
-            
+
             // dL/dqw
-            double dL_dqw = 
+            double dL_dqw =
                 dL_dr01 * (-2.0 * qz) +  // dr01/dqw = -2qz
                 dL_dr02 * (2.0 * qy) +   // dr02/dqw = 2qy
                 dL_dr10 * (2.0 * qz) +   // dr10/dqw = 2qz
@@ -905,7 +905,7 @@ public static class GaussianSplattingOperations
                 dL_dr21 * (2.0 * qx);    // dr21/dqw = 2qx
 
             // dL/dqx
-            double dL_dqx = 
+            double dL_dqx =
                 dL_dr01 * (2.0 * qy) +   // dr01/dqx = 2qy
                 dL_dr02 * (2.0 * qz) +   // dr02/dqx = 2qz
                 dL_dr10 * (2.0 * qy) +   // dr10/dqx = 2qy
@@ -916,7 +916,7 @@ public static class GaussianSplattingOperations
                 dL_dr22 * (-4.0 * qx);   // dr22/dqx = -4qx
 
             // dL/dqy
-            double dL_dqy = 
+            double dL_dqy =
                 dL_dr00 * (-4.0 * qy) +  // dr00/dqy = -4qy
                 dL_dr01 * (2.0 * qx) +   // dr01/dqy = 2qx
                 dL_dr02 * (2.0 * qw) +   // dr02/dqy = 2qw
@@ -927,7 +927,7 @@ public static class GaussianSplattingOperations
                 dL_dr22 * (-4.0 * qy);   // dr22/dqy = -4qy
 
             // dL/dqz
-            double dL_dqz = 
+            double dL_dqz =
                 dL_dr00 * (-4.0 * qz) +  // dr00/dqz = -4qz
                 dL_dr01 * (-2.0 * qw) +  // dr01/dqz = -2qw
                 dL_dr02 * (2.0 * qx) +   // dr02/dqz = 2qx

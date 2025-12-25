@@ -20,7 +20,7 @@ public static class PointCloudNormalization<T>
     {
         int numPoints = pointCloud.NumPoints;
         int numFeatures = pointCloud.NumFeatures;
-        
+
         if (numPoints == 0)
         {
             return pointCloud;
@@ -87,7 +87,7 @@ public static class PointCloudNormalization<T>
                 NumOps.Multiply(x, x),
                 NumOps.Multiply(y, y)),
                 NumOps.Multiply(z, z));
-            
+
             if (NumOps.GreaterThan(distSq, maxDistSq))
             {
                 maxDistSq = distSq;
@@ -207,7 +207,7 @@ public static class PointCloudNormalization<T>
         for (int i = 0; i < numPoints; i++)
         {
             int baseIdx = i * numFeatures;
-            
+
             for (int f = 0; f < colorOffset; f++)
             {
                 normalizedData[baseIdx + f] = pointCloud.Points[i, f];

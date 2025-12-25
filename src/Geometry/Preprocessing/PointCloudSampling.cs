@@ -32,7 +32,7 @@ public static class PointCloudSampling<T>
         }
 
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        
+
         var indices = Enumerable.Range(0, numPoints).ToArray();
         for (int i = 0; i < numSamples; i++)
         {
@@ -42,7 +42,7 @@ public static class PointCloudSampling<T>
 
         var sampledData = new T[numSamples * numFeatures];
         Vector<T>? sampledLabels = null;
-        
+
         if (pointCloud.Labels != null)
         {
             var labelData = new T[numSamples];
@@ -57,7 +57,7 @@ public static class PointCloudSampling<T>
         {
             int srcIdx = indices[i];
             int dstBase = i * numFeatures;
-            
+
             for (int f = 0; f < numFeatures; f++)
             {
                 sampledData[dstBase + f] = pointCloud.Points[srcIdx, f];
@@ -99,7 +99,7 @@ public static class PointCloudSampling<T>
         }
 
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        
+
         var selectedIndices = new List<int>(numSamples);
         var minDistances = new double[numPoints];
         for (int fillIdx = 0; fillIdx < minDistances.Length; fillIdx++) minDistances[fillIdx] = double.MaxValue;
@@ -128,7 +128,7 @@ public static class PointCloudSampling<T>
 
         var sampledData = new T[numSamples * numFeatures];
         Vector<T>? sampledLabels = null;
-        
+
         if (pointCloud.Labels != null)
         {
             var labelData = new T[numSamples];
@@ -239,7 +239,7 @@ public static class PointCloudSampling<T>
         int numSamples = selectedIndices.Count;
         var sampledData = new T[numSamples * numFeatures];
         Vector<T>? sampledLabels = null;
-        
+
         if (pointCloud.Labels != null)
         {
             var labelData = new T[numSamples];
@@ -319,7 +319,7 @@ public static class PointCloudSampling<T>
         foreach (var (_, indices) in voxelMap)
         {
             int dstBase = sampleIdx * numFeatures;
-            
+
             for (int f = 0; f < numFeatures; f++)
             {
                 double sum = 0;
