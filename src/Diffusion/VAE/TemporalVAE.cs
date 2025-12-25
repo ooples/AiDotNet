@@ -708,13 +708,43 @@ public class TemporalVAE<T> : VAEModelBase<T>
 
     private ILayer<T> CreateSpatialBlock(int inChannels, int outChannels)
     {
-        return new DenseLayer<T>(inChannels, outChannels, (IActivationFunction<T>)new SiLUActivation<T>());
+        // Convolutional block that preserves spatial structure
+        var conv = new ConvolutionalLayer<T>(
+            inputDepth: inChannels,
+            outputDepth: outChannels,
+            kernelSize: 3,
+            inputHeight: 32,  // Placeholder - actual size handled dynamically
+            inputWidth: 32,
+            stride: 1,
+            padding: 1,
+            activation: new SiLUActivation<T>());
+
+        if (inChannels == outChannels)
+        {
+            // Can use residual connection
+            return new ResidualLayer<T>(
+                inputShape: new[] { 1, inChannels, 32, 32 },
+                innerLayer: conv,
+                activation: new SiLUActivation<T>());
+        }
+
+        return conv;
     }
 
     private ILayer<T> CreateTemporalBlock(int channels)
     {
-        // Temporal block - uses same dimension in and out
-        return new DenseLayer<T>(channels, channels, (IActivationFunction<T>)new SiLUActivation<T>());
+        // Temporal block using 3D convolution across time dimension
+        // For temporal consistency, use Conv3D with temporal kernel
+        return new Conv3DLayer<T>(
+            inputChannels: channels,
+            outputChannels: channels,
+            kernelSize: 3,
+            inputDepth: 8,   // Number of frames (temporal dimension)
+            inputHeight: 32,
+            inputWidth: 32,
+            stride: 1,
+            padding: 1,
+            activation: new SiLUActivation<T>());
     }
 
     private ILayer<T> CreateDownsample(int channels)
