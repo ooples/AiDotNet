@@ -262,7 +262,6 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
 
         // Encode input video to latents
         var latents = EncodeVideoToLatent(inputVideo);
-        var videoLatentShape = latents.Shape;
 
         // Encode text prompts
         var promptTokens = Conditioner.Tokenize(prompt);

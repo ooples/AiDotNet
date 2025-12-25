@@ -313,7 +313,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>
         var savedInputChannels = reader.ReadInt32();
         var savedLatentChannels = reader.ReadInt32();
         var savedDownsampleFactor = reader.ReadInt32();
-        var savedLatentScaleFactor = reader.ReadDouble();
+        _ = reader.ReadDouble(); // Read latent scale factor (compatible across versions)
 
         if (savedInputChannels != InputChannels || savedLatentChannels != LatentChannels ||
             savedDownsampleFactor != DownsampleFactor)
