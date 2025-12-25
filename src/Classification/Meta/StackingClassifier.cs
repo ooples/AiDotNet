@@ -157,7 +157,7 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
 
         var random = Options.RandomState.HasValue
             ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
-            : RandomHelper.CreateSeededRandom(42);
+            : new Random();
 
         // Create fold assignments
         var foldAssignments = new int[n];
@@ -500,6 +500,24 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
         if (_finalEstimator is IFullModel<T, Matrix<T>, Vector<T>> finalFullModel)
         {
             clone._finalEstimator = (IClassifier<T>)finalFullModel.Clone();
+        }
+
+        // Clone trained base estimators
+        if (_estimators is not null)
+        {
+            clone._estimators = new List<IClassifier<T>>(_estimators.Count);
+            for (int e = 0; e < _estimators.Count; e++)
+            {
+                if (_estimators[e] is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
+                {
+                    clone._estimators.Add((IClassifier<T>)fullModel.Clone());
+                }
+                else
+                {
+                    // Cannot clone, just reference the same instance
+                    clone._estimators.Add(_estimators[e]);
+                }
+            }
         }
 
         return clone;
