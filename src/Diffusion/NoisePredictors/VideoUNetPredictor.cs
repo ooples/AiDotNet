@@ -750,55 +750,11 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b, bool isVideo)
     {
-        if (isVideo)
-        {
-            // 5D concatenation
-            var aShape = a.Shape;
-            var bShape = b.Shape;
-            var outputShape = new[] { aShape[0], aShape[1] + bShape[1], aShape[2], aShape[3], aShape[4] };
-            var output = new Tensor<T>(outputShape);
+        var engine = AiDotNetEngine.Current;
 
-            // Copy tensors (simplified)
-            var outSpan = output.AsWritableSpan();
-            var aSpan = a.AsSpan();
-            var bSpan = b.AsSpan();
-
-            int idx = 0;
-            for (int i = 0; i < aSpan.Length; i++)
-            {
-                outSpan[idx++] = aSpan[i];
-            }
-            for (int i = 0; i < bSpan.Length; i++)
-            {
-                outSpan[idx++] = bSpan[i];
-            }
-
-            return output;
-        }
-        else
-        {
-            // 4D concatenation
-            var aShape = a.Shape;
-            var bShape = b.Shape;
-            var outputShape = new[] { aShape[0], aShape[1] + bShape[1], aShape[2], aShape[3] };
-            var output = new Tensor<T>(outputShape);
-
-            var outSpan = output.AsWritableSpan();
-            var aSpan = a.AsSpan();
-            var bSpan = b.AsSpan();
-
-            int idx = 0;
-            for (int i = 0; i < aSpan.Length; i++)
-            {
-                outSpan[idx++] = aSpan[i];
-            }
-            for (int i = 0; i < bSpan.Length; i++)
-            {
-                outSpan[idx++] = bSpan[i];
-            }
-
-            return output;
-        }
+        // Concatenate along axis 1 (channel dimension) for both NCFHW (5D) and NCHW (4D)
+        // The engine handles proper interleaving of data along the specified axis
+        return engine.TensorConcatenate(new[] { a, b }, axis: 1);
     }
 
     /// <summary>
@@ -940,15 +896,16 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateUpsample(int channels)
     {
-        return new ConvolutionalLayer<T>(
-            inputDepth: channels,
+        // Transposed convolution (deconvolution) for upsampling
+        // With stride=2, kernel=4, padding=1: output = (input - 1) * 2 + 4 - 2*1 = 2*input
+        // This doubles the spatial dimensions
+        return new DeconvolutionalLayer<T>(
+            inputShape: new[] { 1, channels, 32, 32 },  // [batch, channels, height, width]
             outputDepth: channels,
-            kernelSize: 3,
-            inputHeight: 32,
-            inputWidth: 32,
-            stride: 1,
+            kernelSize: 4,
+            stride: 2,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
     }
 
     #endregion
