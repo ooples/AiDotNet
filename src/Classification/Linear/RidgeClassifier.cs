@@ -65,6 +65,14 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
+        // Validate binary classification
+        if (NumClasses != 2)
+        {
+            throw new NotSupportedException(
+                "RidgeClassifier currently supports binary classification. " +
+                "Use OneVsRestClassifier for multi-class problems.");
+        }
+
         // Convert labels to +1/-1 for binary classification
         T positiveClass = ClassLabels[ClassLabels.Length - 1];
         var yRegression = new Vector<T>(y.Length);
@@ -252,10 +260,17 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
 
             // Eliminate below
             T pivot = aug[col, col];
-            if (NumOps.Compare(NumOps.Abs(pivot), NumOps.FromDouble(1e-12)) < 0)
+            T minPivot = NumOps.FromDouble(1e-12);
+            if (NumOps.Compare(NumOps.Abs(pivot), minPivot) < 0)
             {
-                // Near-zero pivot, add small value for stability
-                pivot = NumOps.FromDouble(1e-12);
+                // Matrix may be singular or ill-conditioned
+                // Preserve sign of original pivot for numerical stability, or use positive minPivot if zero
+                T sign = NumOps.Compare(pivot, NumOps.Zero) >= 0 ? NumOps.One : NumOps.Negate(NumOps.One);
+                if (NumOps.Compare(pivot, NumOps.Zero) == 0)
+                {
+                    sign = NumOps.One;
+                }
+                pivot = NumOps.Multiply(sign, minPivot);
             }
 
             for (int row = col + 1; row < n; row++)

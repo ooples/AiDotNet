@@ -89,7 +89,9 @@ public class SGDClassifier<T> : LinearClassifierBase<T>
         // Training loop
         for (int epoch = 0; epoch < Options.MaxIterations; epoch++)
         {
-            int[] indices = ShuffleIndices(x.Rows);
+            int[] indices = Options.Shuffle
+                ? ShuffleIndices(x.Rows)
+                : Enumerable.Range(0, x.Rows).ToArray();
             T epochLoss = NumOps.Zero;
 
             foreach (int i in indices)

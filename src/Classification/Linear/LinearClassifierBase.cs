@@ -152,6 +152,15 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
     /// <inheritdoc/>
     public override Matrix<T> PredictProbabilities(Matrix<T> input)
     {
+        // Linear classifiers use sigmoid for binary classification
+        // For multi-class (NumClasses > 2), use OneVsRestClassifier wrapper
+        if (NumClasses > 2)
+        {
+            throw new NotSupportedException(
+                $"PredictProbabilities only supports binary classification (NumClasses=2). " +
+                $"Current NumClasses={NumClasses}. Use OneVsRestClassifier for multi-class problems.");
+        }
+
         // Convert decision function to probabilities using sigmoid
         var probabilities = new Matrix<T>(input.Rows, NumClasses);
         var decisions = DecisionFunctionBatch(input);

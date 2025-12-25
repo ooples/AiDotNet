@@ -72,6 +72,14 @@ public class PerceptronClassifier<T> : LinearClassifierBase<T>
             throw new InvalidOperationException("Failed to initialize weights.");
         }
 
+        // Validate binary classification
+        if (NumClasses != 2)
+        {
+            throw new NotSupportedException(
+                "PerceptronClassifier only supports binary classification. " +
+                "Use OneVsRestClassifier for multi-class problems.");
+        }
+
         // Convert labels to +1/-1 for binary classification
         T positiveClass = ClassLabels[ClassLabels.Length - 1];
         var yBinary = new Vector<T>(y.Length);
