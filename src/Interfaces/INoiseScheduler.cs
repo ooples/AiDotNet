@@ -1,19 +1,24 @@
-using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 
 namespace AiDotNet.Interfaces;
 
 /// <summary>
-/// Interface for diffusion model step schedulers that control the noise schedule during inference.
+/// Interface for diffusion model noise schedulers that control the noise schedule during inference.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// Step schedulers are a core component of diffusion models that control how noise is gradually
+/// Noise schedulers are a core component of diffusion models that control how noise is gradually
 /// added to or removed from data during the diffusion process. They define the noise schedule
 /// (how much noise at each timestep) and provide the mathematical operations to denoise samples.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> Think of a step scheduler like a recipe for gradually revealing a hidden picture.
+/// <b>Note:</b> This interface was renamed from IStepScheduler to INoiseScheduler to avoid
+/// confusion with learning rate schedulers (ILearningRateScheduler). Noise schedulers are
+/// specific to diffusion models, while learning rate schedulers control optimization dynamics.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Think of a noise scheduler like a recipe for gradually revealing a hidden picture.
 ///
 /// Imagine you have a clear photograph that you've covered with many layers of static (noise).
 /// The scheduler tells you:
@@ -30,7 +35,7 @@ namespace AiDotNet.Interfaces;
 /// - Step function: Takes a noisy sample and model prediction, returns a slightly less noisy sample
 /// </para>
 /// </remarks>
-public interface IStepScheduler<T>
+public interface INoiseScheduler<T>
 {
     /// <summary>
     /// Gets the timesteps for the current inference schedule.

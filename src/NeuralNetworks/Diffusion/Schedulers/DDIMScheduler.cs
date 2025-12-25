@@ -1,4 +1,4 @@
-namespace AiDotNet.Diffusion.Schedulers;
+namespace AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 
 /// <summary>
 /// DDIM (Denoising Diffusion Implicit Models) scheduler implementation.
@@ -31,7 +31,7 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// <b>Reference:</b> "Denoising Diffusion Implicit Models" by Song et al., 2020
 /// </para>
 /// </remarks>
-public sealed class DDIMScheduler<T> : StepSchedulerBase<T>
+public sealed class DDIMScheduler<T> : NoiseSchedulerBase<T>
 {
     /// <summary>
     /// Initializes a new instance of the DDIM scheduler.

@@ -1,6 +1,6 @@
 using AiDotNet.Enums;
 
-namespace AiDotNet.Diffusion.Schedulers;
+namespace AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 
 /// <summary>
 /// Configuration options for diffusion model step schedulers.

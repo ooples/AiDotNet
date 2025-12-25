@@ -1,6 +1,6 @@
 using System.Linq;
 using AiDotNet.Autodiff;
-using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -9,7 +9,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.NeuralNetworks.Diffusion;
 
 /// <summary>
 /// Base class for diffusion-based generative models providing common functionality.
@@ -46,7 +46,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     /// <summary>
     /// The step scheduler controlling the diffusion process.
     /// </summary>
-    private readonly IStepScheduler<T> _scheduler;
+    private readonly INoiseScheduler<T> _scheduler;
 
     /// <summary>
     /// The loss function used for training (typically MSE for noise prediction).
@@ -69,7 +69,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     protected T LearningRate;
 
     /// <inheritdoc />
-    public IStepScheduler<T> Scheduler => _scheduler;
+    public INoiseScheduler<T> Scheduler => _scheduler;
 
     /// <inheritdoc />
     public abstract int ParameterCount { get; }
@@ -85,7 +85,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     /// </summary>
     /// <param name="options">Configuration options for the diffusion model. If null, uses default options.</param>
     /// <param name="scheduler">Optional custom scheduler. If null, creates one from options.</param>
-    protected DiffusionModelBase(DiffusionModelOptions<T>? options = null, IStepScheduler<T>? scheduler = null)
+    protected DiffusionModelBase(DiffusionModelOptions<T>? options = null, INoiseScheduler<T>? scheduler = null)
     {
         _options = options ?? new DiffusionModelOptions<T>();
 

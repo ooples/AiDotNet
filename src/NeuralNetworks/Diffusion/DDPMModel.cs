@@ -1,8 +1,8 @@
-using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.NeuralNetworks.Diffusion;
 
 /// <summary>
 /// DDPM (Denoising Diffusion Probabilistic Models) implementation.
@@ -101,7 +101,7 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     /// </code>
     /// </example>
     /// </remarks>
-    public DDPMModel(DiffusionModelOptions<T>? options = null, IStepScheduler<T>? scheduler = null, Func<Tensor<T>, int, Tensor<T>>? noisePredictor = null)
+    public DDPMModel(DiffusionModelOptions<T>? options = null, INoiseScheduler<T>? scheduler = null, Func<Tensor<T>, int, Tensor<T>>? noisePredictor = null)
         : base(options, scheduler)
     {
         _noisePredictor = noisePredictor;
@@ -116,7 +116,7 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     /// <remarks>
     /// Convenience constructor for creating a model with a specific scheduler.
     /// </remarks>
-    public DDPMModel(IStepScheduler<T> scheduler, Func<Tensor<T>, int, Tensor<T>>? noisePredictor = null)
+    public DDPMModel(INoiseScheduler<T> scheduler, Func<Tensor<T>, int, Tensor<T>>? noisePredictor = null)
         : this(null, scheduler, noisePredictor)
     {
     }
@@ -201,7 +201,7 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
         // Clone the scheduler preserving its actual type
-        IStepScheduler<T> newScheduler = Scheduler switch
+        INoiseScheduler<T> newScheduler = Scheduler switch
         {
             PNDMScheduler<T> => new PNDMScheduler<T>(Scheduler.Config),
             DDIMScheduler<T> => new DDIMScheduler<T>(Scheduler.Config),

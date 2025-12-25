@@ -1,20 +1,24 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
-namespace AiDotNet.Diffusion.Schedulers;
+namespace AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 
 /// <summary>
-/// Base class for diffusion model step schedulers providing common functionality.
+/// Base class for diffusion model noise schedulers providing common functionality.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// This abstract base class implements the common behavior for all step schedulers,
+/// This abstract base class implements the common behavior for all noise schedulers,
 /// including beta schedule computation, alpha cumulative product calculation, noise addition,
 /// and state management for checkpointing.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> This is the foundation that all step schedulers build upon.
+/// <b>Note:</b> This class was renamed from StepSchedulerBase to NoiseSchedulerBase to avoid
+/// confusion with learning rate schedulers. Noise schedulers are specific to diffusion models.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> This is the foundation that all noise schedulers build upon.
 /// It handles the common math and state management that every scheduler needs:
 /// - Computing the noise schedule (how much noise at each step)
 /// - Tracking the current state for saving/loading
@@ -24,7 +28,7 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// their unique denoising strategies.
 /// </para>
 /// </remarks>
-public abstract class StepSchedulerBase<T> : IStepScheduler<T>
+public abstract class NoiseSchedulerBase<T> : INoiseScheduler<T>
 {
     /// <summary>
     /// Provides numeric operations for the specific type T.
@@ -82,12 +86,12 @@ public abstract class StepSchedulerBase<T> : IStepScheduler<T>
     public int TrainTimesteps => Config.TrainTimesteps;
 
     /// <summary>
-    /// Initializes a new instance of the StepSchedulerBase class.
+    /// Initializes a new instance of the NoiseSchedulerBase class.
     /// </summary>
     /// <param name="config">Configuration for the scheduler including beta schedule parameters.</param>
     /// <exception cref="ArgumentNullException">Thrown when config is null.</exception>
     /// <exception cref="NotSupportedException">Thrown when an unsupported beta schedule is specified.</exception>
-    protected StepSchedulerBase(SchedulerConfig<T> config)
+    protected NoiseSchedulerBase(SchedulerConfig<T> config)
     {
         Config = config ?? throw new ArgumentNullException(nameof(config));
 
