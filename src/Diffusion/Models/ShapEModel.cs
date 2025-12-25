@@ -832,10 +832,20 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        // Clone the predictor to preserve trained weights
+        var clonedPredictor = new DiTNoisePredictor<T>(
+            inputChannels: SHAPE_LATENT_DIM,
+            hiddenSize: 768,
+            numLayers: 16,
+            numHeads: 12,
+            patchSize: 1,
+            contextDim: 1024);
+        clonedPredictor.SetParameters(_latentPredictor.GetParameters());
+
         return new ShapEModel<T>(
             options: null,
             scheduler: null,
-            latentPredictor: null,
+            latentPredictor: clonedPredictor,
             conditioner: _conditioner,
             useSDFMode: _useSDFMode,
             defaultPointCount: DefaultPointCount);
