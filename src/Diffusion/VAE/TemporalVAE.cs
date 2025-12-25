@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -518,17 +519,12 @@ public class TemporalVAE<T> : VAEModelBase<T>
         // Apply temporal processing
         var processedLatents = ApplyTemporalLayers(_decoderTemporalLayers, frameLatents);
 
-        // Decode each frame
-        var decodedFrames = new List<Tensor<T>>();
-        foreach (var x in processedLatents)
+        // Decode each frame using LINQ Select for explicit transformation
+        var decodedFrames = processedLatents.Select(x =>
         {
-            var decoded = x;
-            foreach (var layer in _decoderSpatialLayers)
-            {
-                decoded = layer.Forward(decoded);
-            }
-            decodedFrames.Add(_outputConv.Forward(decoded));
-        }
+            var decoded = _decoderSpatialLayers.Aggregate(x, (current, layer) => layer.Forward(current));
+            return _outputConv.Forward(decoded);
+        }).ToList();
 
         return StackFrames(decodedFrames);
     }
