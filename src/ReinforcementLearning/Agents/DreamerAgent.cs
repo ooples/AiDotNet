@@ -65,7 +65,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         // FIX ISSUE 6: Use learning rate from options consistently
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
-            LearningRate = _options.LearningRate is not null ? NumOps.ToDouble(_options.LearningRate) : 0.001,
+            InitialLearningRate = _options.LearningRate is not null ? NumOps.ToDouble(_options.LearningRate) : 0.001,
             Beta1 = 0.9,
             Beta2 = 0.999,
             Epsilon = 1e-8

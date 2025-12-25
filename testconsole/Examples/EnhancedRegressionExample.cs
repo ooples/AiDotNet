@@ -86,7 +86,7 @@ public class EnhancedRegressionExample
                 .ConfigureDataPreprocessor(dataPreprocessor)
                 .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(null, new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
                 {
-                    LearningRate = 0.01,
+                    InitialLearningRate = 0.01,
                     MaxIterations = 2000,
                     Tolerance = 1e-6,
                     UseAdaptiveLearningRate = true
@@ -111,7 +111,7 @@ public class EnhancedRegressionExample
                 }))
                 .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(null, new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
                 {
-                    LearningRate = 0.01,
+                    InitialLearningRate = 0.01,
                     MaxIterations = 2000,
                     Tolerance = 1e-6,
                     UseAdaptiveLearningRate = true

@@ -1,4 +1,4 @@
-namespace AiDotNet.Diffusion.Schedulers;
+namespace AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 
 /// <summary>
 /// PNDM (Pseudo Numerical Methods for Diffusion Models) scheduler implementation.
@@ -35,7 +35,7 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// <b>Reference:</b> "Pseudo Numerical Methods for Diffusion Models on Manifolds" by Liu et al., 2022
 /// </para>
 /// </remarks>
-public sealed class PNDMScheduler<T> : StepSchedulerBase<T>
+public sealed class PNDMScheduler<T> : NoiseSchedulerBase<T>
 {
     /// <summary>
     /// History of model outputs for multi-step methods.

@@ -32,7 +32,7 @@ public class AdamWOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     public int BatchSize { get; set; } = 32;
 
     /// <summary>
-    /// Gets or sets the learning rate for the AdamW optimizer.
+    /// Gets or sets the initial learning rate for the AdamW optimizer.
     /// </summary>
     /// <value>The learning rate, defaulting to 0.001.</value>
     /// <remarks>
@@ -40,7 +40,7 @@ public class AdamWOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// AdamW typically uses similar learning rates to Adam (0.001 is a good starting point).
     /// For fine-tuning pre-trained models, smaller values like 2e-5 to 5e-5 are common.</para>
     /// </remarks>
-    public double LearningRate { get; set; } = 0.001;
+    public new double InitialLearningRate { get; set; } = 0.001;
 
     /// <summary>
     /// Gets or sets the exponential decay rate for the first moment estimates (momentum).
