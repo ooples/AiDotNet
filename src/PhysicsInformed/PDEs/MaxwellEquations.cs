@@ -27,8 +27,9 @@ namespace AiDotNet.PhysicsInformed.PDEs
     /// ∂Bz/∂t = -(∂Ey/∂x - ∂Ex/∂y)
     ///
     /// **Ampere's Law** (changing electric field creates magnetic field):
-    /// ∂Ex/∂t = (1/ε) ∂Bz/∂y
-    /// ∂Ey/∂t = -(1/ε) ∂Bz/∂x
+    /// Using B = μH, the curl of B gives: ∇×B = εμ ∂E/∂t
+    /// ∂Ex/∂t = (1/εμ) ∂Bz/∂y
+    /// ∂Ey/∂t = -(1/εμ) ∂Bz/∂x
     ///
     /// Key Parameters:
     /// - ε (epsilon): Electric permittivity - how easily a material polarizes
