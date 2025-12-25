@@ -6698,6 +6698,229 @@ public class CpuEngine : IEngine
         return new Tensor<T>(input.Shape, new Vector<T>(gradInputData));
     }
 
+    /// <inheritdoc/>
+    public Tensor<T> GroupNorm<T>(Tensor<T> input, int numGroups, Tensor<T> gamma, Tensor<T> beta, double epsilon, out Tensor<T> mean, out Tensor<T> variance)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (gamma == null) throw new ArgumentNullException(nameof(gamma));
+        if (beta == null) throw new ArgumentNullException(nameof(beta));
+        if (numGroups <= 0) throw new ArgumentOutOfRangeException(nameof(numGroups), "Number of groups must be positive.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T eps = numOps.FromDouble(epsilon);
+
+        // Input shape: [batch, channels, ...spatial]
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+
+        if (channels % numGroups != 0)
+        {
+            throw new ArgumentException($"Number of channels ({channels}) must be divisible by number of groups ({numGroups}).");
+        }
+
+        int channelsPerGroup = channels / numGroups;
+
+        // Compute spatial size (product of all dimensions after batch and channels)
+        int spatialSize = 1;
+        for (int i = 2; i < input.Shape.Length; i++)
+        {
+            spatialSize *= input.Shape[i];
+        }
+
+        int groupSize = channelsPerGroup * spatialSize;  // Elements per group
+
+        var inputData = input.ToArray();
+        var gammaData = gamma.ToArray();
+        var betaData = beta.ToArray();
+
+        // Mean and variance are computed per batch per group
+        var meanData = new T[batch * numGroups];
+        var varData = new T[batch * numGroups];
+        var outputData = new T[input.Length];
+
+        // Compute mean per group
+        for (int b = 0; b < batch; b++)
+        {
+            for (int g = 0; g < numGroups; g++)
+            {
+                T sum = numOps.Zero;
+                int startChannel = g * channelsPerGroup;
+
+                for (int c = 0; c < channelsPerGroup; c++)
+                {
+                    int channel = startChannel + c;
+                    for (int s = 0; s < spatialSize; s++)
+                    {
+                        int idx = b * (channels * spatialSize) + channel * spatialSize + s;
+                        sum = numOps.Add(sum, inputData[idx]);
+                    }
+                }
+
+                meanData[b * numGroups + g] = numOps.Divide(sum, numOps.FromDouble(groupSize));
+            }
+        }
+
+        // Compute variance per group
+        for (int b = 0; b < batch; b++)
+        {
+            for (int g = 0; g < numGroups; g++)
+            {
+                T sumSq = numOps.Zero;
+                T groupMean = meanData[b * numGroups + g];
+                int startChannel = g * channelsPerGroup;
+
+                for (int c = 0; c < channelsPerGroup; c++)
+                {
+                    int channel = startChannel + c;
+                    for (int s = 0; s < spatialSize; s++)
+                    {
+                        int idx = b * (channels * spatialSize) + channel * spatialSize + s;
+                        T diff = numOps.Subtract(inputData[idx], groupMean);
+                        sumSq = numOps.Add(sumSq, numOps.Multiply(diff, diff));
+                    }
+                }
+
+                varData[b * numGroups + g] = numOps.Divide(sumSq, numOps.FromDouble(groupSize));
+            }
+        }
+
+        // Normalize and apply scale/shift (gamma/beta are per-channel)
+        Parallel.For(0, batch, b =>
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                int g = c / channelsPerGroup;
+                T groupMean = meanData[b * numGroups + g];
+                T groupVar = varData[b * numGroups + g];
+                T invStd = numOps.Divide(numOps.One, numOps.Sqrt(numOps.Add(groupVar, eps)));
+
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    int idx = b * (channels * spatialSize) + c * spatialSize + s;
+                    T normalized = numOps.Multiply(numOps.Subtract(inputData[idx], groupMean), invStd);
+                    outputData[idx] = numOps.Add(numOps.Multiply(gammaData[c], normalized), betaData[c]);
+                }
+            }
+        });
+
+        mean = new Tensor<T>([batch, numGroups], new Vector<T>(meanData));
+        variance = new Tensor<T>([batch, numGroups], new Vector<T>(varData));
+        return new Tensor<T>(input.Shape, new Vector<T>(outputData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GroupNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int numGroups, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (gamma == null) throw new ArgumentNullException(nameof(gamma));
+        if (mean == null) throw new ArgumentNullException(nameof(mean));
+        if (variance == null) throw new ArgumentNullException(nameof(variance));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T eps = numOps.FromDouble(epsilon);
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int channelsPerGroup = channels / numGroups;
+
+        // Compute spatial size
+        int spatialSize = 1;
+        for (int i = 2; i < input.Shape.Length; i++)
+        {
+            spatialSize *= input.Shape[i];
+        }
+
+        int groupSize = channelsPerGroup * spatialSize;
+        T groupSizeT = numOps.FromDouble(groupSize);
+
+        var gradOutputData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var gammaData = gamma.ToArray();
+        var meanData = mean.ToArray();
+        var varData = variance.ToArray();
+
+        var gradGammaData = new T[channels];
+        var gradBetaData = new T[channels];
+        var gradInputData = new T[input.Length];
+
+        // Initialize gradGamma and gradBeta to zero
+        for (int c = 0; c < channels; c++)
+        {
+            gradGammaData[c] = numOps.Zero;
+            gradBetaData[c] = numOps.Zero;
+        }
+
+        // Compute gradGamma and gradBeta (sum across batch and spatial)
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                int g = c / channelsPerGroup;
+                T groupMean = meanData[b * numGroups + g];
+                T groupVar = varData[b * numGroups + g];
+                T invStd = numOps.Divide(numOps.One, numOps.Sqrt(numOps.Add(groupVar, eps)));
+
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    int idx = b * (channels * spatialSize) + c * spatialSize + s;
+                    T normalized = numOps.Multiply(numOps.Subtract(inputData[idx], groupMean), invStd);
+                    gradGammaData[c] = numOps.Add(gradGammaData[c], numOps.Multiply(gradOutputData[idx], normalized));
+                    gradBetaData[c] = numOps.Add(gradBetaData[c], gradOutputData[idx]);
+                }
+            }
+        }
+
+        // Compute gradInput using the group norm backward formula
+        Parallel.For(0, batch, b =>
+        {
+            for (int g = 0; g < numGroups; g++)
+            {
+                T groupMean = meanData[b * numGroups + g];
+                T groupVar = varData[b * numGroups + g];
+                T invStd = numOps.Divide(numOps.One, numOps.Sqrt(numOps.Add(groupVar, eps)));
+
+                // Compute sum of scaled gradients and sum of scaled gradients times normalized values for this group
+                T sumGrad = numOps.Zero;
+                T sumGradNorm = numOps.Zero;
+
+                int startChannel = g * channelsPerGroup;
+                for (int c = 0; c < channelsPerGroup; c++)
+                {
+                    int channel = startChannel + c;
+                    for (int s = 0; s < spatialSize; s++)
+                    {
+                        int idx = b * (channels * spatialSize) + channel * spatialSize + s;
+                        T scaledGrad = numOps.Multiply(gammaData[channel], gradOutputData[idx]);
+                        T normalized = numOps.Multiply(numOps.Subtract(inputData[idx], groupMean), invStd);
+                        sumGrad = numOps.Add(sumGrad, scaledGrad);
+                        sumGradNorm = numOps.Add(sumGradNorm, numOps.Multiply(scaledGrad, normalized));
+                    }
+                }
+
+                // Compute gradient for each element in this group
+                for (int c = 0; c < channelsPerGroup; c++)
+                {
+                    int channel = startChannel + c;
+                    for (int s = 0; s < spatialSize; s++)
+                    {
+                        int idx = b * (channels * spatialSize) + channel * spatialSize + s;
+                        T normalized = numOps.Multiply(numOps.Subtract(inputData[idx], groupMean), invStd);
+                        T gradNorm = numOps.Multiply(gammaData[channel], gradOutputData[idx]);
+                        T term1 = numOps.Multiply(groupSizeT, gradNorm);
+                        T term2 = sumGrad;
+                        T term3 = numOps.Multiply(normalized, sumGradNorm);
+                        gradInputData[idx] = numOps.Multiply(numOps.Divide(invStd, groupSizeT), numOps.Subtract(numOps.Subtract(term1, term2), term3));
+                    }
+                }
+            }
+        });
+
+        gradGamma = new Tensor<T>([channels], new Vector<T>(gradGammaData));
+        gradBeta = new Tensor<T>([channels], new Vector<T>(gradBetaData));
+        return new Tensor<T>(input.Shape, new Vector<T>(gradInputData));
+    }
+
     #endregion
 
     #region Tensor Reduction Operations
