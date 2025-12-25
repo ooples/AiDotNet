@@ -36,6 +36,39 @@ public static class TensorCopyHelper
     /// </remarks>
     public static void CopySample<T>(Tensor<T> source, Tensor<T> dest, int sourceIndex, int destIndex)
     {
+        // Validate tensor compatibility
+        if (source.Shape.Length != dest.Shape.Length)
+        {
+            throw new ArgumentException(
+                $"Source and destination tensors must have the same rank. " +
+                $"Source has rank {source.Shape.Length}, destination has rank {dest.Shape.Length}.");
+        }
+
+        // Validate shapes match for all dimensions except the first (sample dimension)
+        for (int d = 1; d < source.Shape.Length; d++)
+        {
+            if (source.Shape[d] != dest.Shape[d])
+            {
+                throw new ArgumentException(
+                    $"Source and destination tensors must have matching shapes except for the first dimension. " +
+                    $"Source shape: [{string.Join(", ", source.Shape)}], " +
+                    $"Destination shape: [{string.Join(", ", dest.Shape)}].");
+            }
+        }
+
+        // Validate indices are within bounds
+        if (sourceIndex < 0 || sourceIndex >= source.Shape[0])
+        {
+            throw new ArgumentOutOfRangeException(nameof(sourceIndex),
+                $"Source index {sourceIndex} is out of range. Valid range: 0 to {source.Shape[0] - 1}.");
+        }
+
+        if (destIndex < 0 || destIndex >= dest.Shape[0])
+        {
+            throw new ArgumentOutOfRangeException(nameof(destIndex),
+                $"Destination index {destIndex} is out of range. Valid range: 0 to {dest.Shape[0] - 1}.");
+        }
+
         // For 1D tensors, just copy the single element
         if (source.Shape.Length == 1)
         {

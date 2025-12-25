@@ -96,9 +96,20 @@ public static class DataAggregationHelper
     /// </summary>
     private static Matrix<T> AggregateMatrices<T>(List<Matrix<T>> matrices)
     {
-        int totalRows = matrices.Sum(m => m.Rows);
         int cols = matrices[0].Columns;
 
+        // Validate all matrices have the same column count
+        for (int i = 1; i < matrices.Count; i++)
+        {
+            if (matrices[i].Columns != cols)
+            {
+                throw new ArgumentException(
+                    $"Cannot aggregate matrices with different column counts. " +
+                    $"Matrix 0 has {cols} columns, but matrix {i} has {matrices[i].Columns} columns.");
+            }
+        }
+
+        int totalRows = matrices.Sum(m => m.Rows);
         var result = new Matrix<T>(totalRows, cols);
         int currentRow = 0;
         foreach (var matrix in matrices)
@@ -135,10 +146,36 @@ public static class DataAggregationHelper
     /// </summary>
     private static Tensor<T> AggregateTensors<T>(List<Tensor<T>> tensors)
     {
+        var referenceShape = tensors[0].Shape;
+
+        // Validate all tensors have compatible shapes (same dimensions except first)
+        for (int i = 1; i < tensors.Count; i++)
+        {
+            var currentShape = tensors[i].Shape;
+            if (currentShape.Length != referenceShape.Length)
+            {
+                throw new ArgumentException(
+                    $"Cannot aggregate tensors with different ranks. " +
+                    $"Tensor 0 has rank {referenceShape.Length}, but tensor {i} has rank {currentShape.Length}.");
+            }
+
+            for (int d = 1; d < referenceShape.Length; d++)
+            {
+                if (currentShape[d] != referenceShape[d])
+                {
+                    throw new ArgumentException(
+                        $"Cannot aggregate tensors with different shapes. " +
+                        $"Tensor 0 has shape [{string.Join(", ", referenceShape)}], " +
+                        $"but tensor {i} has shape [{string.Join(", ", currentShape)}]. " +
+                        $"Shapes must match for all dimensions except the first.");
+                }
+            }
+        }
+
         int totalSamples = tensors.Sum(t => t.Shape[0]);
 
         // Create new shape with updated first dimension
-        var newShape = (int[])tensors[0].Shape.Clone();
+        var newShape = (int[])referenceShape.Clone();
         newShape[0] = totalSamples;
 
         var result = new Tensor<T>(newShape);
