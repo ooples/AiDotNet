@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
+using AiDotNet.Preprocessing;
 using AiDotNet.ProgramSynthesis.Options;
 using AiDotNet.ProgramSynthesis.Serving;
 using AiDotNet.PromptEngineering.FewShot;
@@ -58,15 +59,75 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <remarks>
     /// A normalizer transforms data to a standard scale, which helps many machine learning
     /// algorithms perform better.
-    /// 
-    /// <b>For Beginners:</b> Different features in your data might use different scales. For example, 
-    /// a person's age (0-100) and income (thousands or millions) are on very different scales. 
-    /// Normalization converts all features to a similar scale (like 0-1), which prevents features 
+    ///
+    /// <b>For Beginners:</b> Different features in your data might use different scales. For example,
+    /// a person's age (0-100) and income (thousands or millions) are on very different scales.
+    /// Normalization converts all features to a similar scale (like 0-1), which prevents features
     /// with larger numbers from dominating the learning process just because they have bigger values.
+    ///
+    /// <b>Note:</b> This method is maintained for backward compatibility. For new code, prefer
+    /// <see cref="ConfigurePreprocessing(IDataTransformer{T, TInput, TInput})"/> which supports
+    /// the full range of preprocessing transformers (scalers, encoders, imputers, etc.).
     /// </remarks>
     /// <param name="normalizer">The normalizer implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureNormalizer(INormalizer<T, TInput, TOutput> normalizer);
+
+    /// <summary>
+    /// Configures the data preprocessing pipeline for the model using a single transformer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Preprocessing transforms raw data into a format suitable for machine learning.
+    /// This includes operations like scaling, encoding categorical variables, imputing
+    /// missing values, and generating polynomial features.
+    /// </para>
+    /// <para><b>For Beginners:</b> Preprocessing is like preparing ingredients before cooking.
+    /// It involves:
+    /// - Scaling data to a standard range (StandardScaler, MinMaxScaler)
+    /// - Encoding categories as numbers (OneHotEncoder, LabelEncoder)
+    /// - Filling in missing values (SimpleImputer)
+    /// - Creating new features (PolynomialFeatures)
+    ///
+    /// Example with a single scaler:
+    /// <code>
+    /// var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigurePreprocessing(new StandardScaler&lt;double&gt;())
+    ///     .ConfigureModel(new LassoRegression&lt;double&gt;())
+    ///     .Build(X, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="transformer">The preprocessing transformer to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(IDataTransformer<T, TInput, TInput> transformer);
+
+    /// <summary>
+    /// Configures the data preprocessing pipeline for the model using a fluent builder.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This overload accepts a configuration action that allows you to build a preprocessing
+    /// pipeline with multiple transformers in a fluent style.
+    /// </para>
+    /// <para><b>For Beginners:</b> Use this when you need multiple preprocessing steps.
+    ///
+    /// Example with multiple steps:
+    /// <code>
+    /// var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigurePreprocessing(pipeline => pipeline
+    ///         .Add(new SimpleImputer&lt;double&gt;(strategy: ImputationStrategy.Mean))
+    ///         .Add(new StandardScaler&lt;double&gt;())
+    ///         .Add(new PolynomialFeatures&lt;double&gt;(degree: 2)))
+    ///     .ConfigureModel(new LassoRegression&lt;double&gt;())
+    ///     .Build(X, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="configure">An action that configures the preprocessing pipeline.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
+        Action<PreprocessingPipeline<T, TInput, TInput>> configure);
 
     /// <summary>
     /// Configures the regularization component for the model.
