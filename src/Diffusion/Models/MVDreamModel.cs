@@ -324,7 +324,7 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
         {
             if (!string.IsNullOrEmpty(negativePrompt))
             {
-                var negTokens = _textConditioner.Tokenize(negativePrompt);
+                var negTokens = _textConditioner.Tokenize(negativePrompt ?? string.Empty);
                 negativeEmbedding = _textConditioner.EncodeText(negTokens);
             }
             else

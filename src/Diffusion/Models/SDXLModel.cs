@@ -364,7 +364,7 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
         if (useCFG)
         {
             negativeEmbedding = !string.IsNullOrEmpty(negativePrompt)
-                ? EncodeTextDual(negativePrompt)
+                ? EncodeTextDual(negativePrompt ?? string.Empty)
                 : GetUnconditionalEmbeddingDual();
         }
 
@@ -843,7 +843,7 @@ public class SDXLRefiner<T>
 
             if (!string.IsNullOrEmpty(negativePrompt))
             {
-                var negTokens = _conditioner.Tokenize(negativePrompt);
+                var negTokens = _conditioner.Tokenize(negativePrompt ?? string.Empty);
                 negativeEmbedding = _conditioner.EncodeText(negTokens);
             }
             else

@@ -195,7 +195,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         {
             if (!string.IsNullOrEmpty(negativePrompt))
             {
-                var negTokens = Conditioner.Tokenize(negativePrompt);
+                var negTokens = Conditioner.Tokenize(negativePrompt ?? string.Empty);
                 negativeEmbedding = Conditioner.EncodeText(negTokens);
             }
             else
@@ -257,7 +257,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         if (Conditioner == null)
             throw new InvalidOperationException("Video-to-video transformation requires a conditioning module.");
 
-        strength = Math.Clamp(strength, 0.0, 1.0);
+        strength = MathPolyfill.Clamp(strength, 0.0, 1.0);
         var useCFG = guidanceScale > 1.0 && NoisePredictor.SupportsCFG;
 
         // Encode input video to latents
@@ -272,7 +272,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         {
             if (!string.IsNullOrEmpty(negativePrompt))
             {
-                var negTokens = Conditioner.Tokenize(negativePrompt);
+                var negTokens = Conditioner.Tokenize(negativePrompt ?? string.Empty);
                 negativeEmbedding = Conditioner.EncodeText(negTokens);
             }
             else

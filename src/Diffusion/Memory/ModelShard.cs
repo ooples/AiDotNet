@@ -185,7 +185,7 @@ public class ModelShard<T>
             int device = 0;
             if (Config.CustomDeviceAssignments != null && i < Config.CustomDeviceAssignments.Length)
             {
-                device = Math.Clamp(Config.CustomDeviceAssignments[i], 0, _numDevices - 1);
+                device = MathPolyfill.Clamp(Config.CustomDeviceAssignments[i], 0, _numDevices - 1);
             }
             else
             {

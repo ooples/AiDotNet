@@ -140,7 +140,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     public double ImagePromptWeight
     {
         get => _imagePromptWeight;
-        set => _imagePromptWeight = Math.Clamp(value, 0.0, 1.0);
+        set => _imagePromptWeight = MathPolyfill.Clamp(value, 0.0, 1.0);
     }
 
     /// <summary>
@@ -306,7 +306,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
             {
                 if (!string.IsNullOrEmpty(negativePrompt))
                 {
-                    var negTokens = _conditioner.Tokenize(negativePrompt);
+                    var negTokens = _conditioner.Tokenize(negativePrompt ?? string.Empty);
                     negativeEmbedding = _conditioner.EncodeText(negTokens);
                 }
                 else
@@ -393,7 +393,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
             {
                 if (!string.IsNullOrEmpty(negativePrompt))
                 {
-                    var negTokens = _conditioner.Tokenize(negativePrompt);
+                    var negTokens = _conditioner.Tokenize(negativePrompt ?? string.Empty);
                     negativeEmbedding = _conditioner.EncodeText(negTokens);
                 }
                 else

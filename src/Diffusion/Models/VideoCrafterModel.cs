@@ -285,7 +285,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         {
             if (!string.IsNullOrEmpty(negativePrompt))
             {
-                var negTokens = _textConditioner.Tokenize(negativePrompt);
+                var negTokens = _textConditioner.Tokenize(negativePrompt ?? string.Empty);
                 negativeEmbedding = _textConditioner.EncodeText(negTokens);
             }
             else
@@ -427,7 +427,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         {
             if (!string.IsNullOrEmpty(negativePrompt))
             {
-                var negTokens = _textConditioner.Tokenize(negativePrompt);
+                var negTokens = _textConditioner.Tokenize(negativePrompt ?? string.Empty);
                 negativeEmbedding = _textConditioner.EncodeText(negTokens);
             }
             else

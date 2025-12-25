@@ -296,7 +296,7 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
             if (useCFG)
             {
                 negativeEmbedding = !string.IsNullOrEmpty(negativePrompt)
-                    ? _conditioner.EncodeText(_conditioner.Tokenize(negativePrompt))
+                    ? _conditioner.EncodeText(_conditioner.Tokenize(negativePrompt ?? string.Empty))
                     : _conditioner.GetUnconditionalEmbedding(1);
             }
         }

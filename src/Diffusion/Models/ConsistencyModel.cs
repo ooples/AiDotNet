@@ -408,7 +408,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
             {
                 if (!string.IsNullOrEmpty(negativePrompt))
                 {
-                    var negTokens = _conditioner.Tokenize(negativePrompt);
+                    var negTokens = _conditioner.Tokenize(negativePrompt ?? string.Empty);
                     negativeEmbedding = _conditioner.EncodeText(negTokens);
                 }
                 else

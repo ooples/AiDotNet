@@ -378,7 +378,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
         int? seed = null)
     {
         // Clamp BPM to reasonable range
-        bpm = Math.Clamp(bpm, 40, 240);
+        bpm = MathPolyfill.Clamp(bpm, 40, 240);
 
         var duration = Math.Min(durationSeconds ?? DefaultDurationSeconds, MUSICGEN_MAX_DURATION);
 
@@ -597,7 +597,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
             {
                 if (!string.IsNullOrEmpty(negativePrompt))
                 {
-                    var negTokens = _textConditioner.Tokenize(negativePrompt);
+                    var negTokens = _textConditioner.Tokenize(negativePrompt ?? string.Empty);
                     negativeEmbedding = _textConditioner.EncodeText(negTokens);
                 }
                 else
@@ -680,7 +680,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
         Tensor<T>? textEmbedding = null;
         if (_textConditioner != null && !string.IsNullOrEmpty(textPrompt))
         {
-            var tokens = _textConditioner.Tokenize(textPrompt);
+            var tokens = _textConditioner.Tokenize(textPrompt ?? string.Empty);
             textEmbedding = _textConditioner.EncodeText(tokens);
         }
 

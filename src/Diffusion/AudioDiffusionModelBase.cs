@@ -144,7 +144,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         {
             if (!string.IsNullOrEmpty(negativePrompt))
             {
-                var negTokens = Conditioner.Tokenize(negativePrompt);
+                var negTokens = Conditioner.Tokenize(negativePrompt ?? string.Empty);
                 negativeEmbedding = Conditioner.EncodeText(negTokens);
             }
             else
@@ -285,7 +285,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         if (Conditioner == null)
             throw new InvalidOperationException("Audio-to-audio transformation requires a conditioning module.");
 
-        strength = Math.Clamp(strength, 0.0, 1.0);
+        strength = MathPolyfill.Clamp(strength, 0.0, 1.0);
         var useCFG = guidanceScale > 1.0 && NoisePredictor.SupportsCFG;
 
         // Convert input audio to mel spectrogram
@@ -304,7 +304,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         {
             if (!string.IsNullOrEmpty(negativePrompt))
             {
-                var negTokens = Conditioner.Tokenize(negativePrompt);
+                var negTokens = Conditioner.Tokenize(negativePrompt ?? string.Empty);
                 negativeEmbedding = Conditioner.EncodeText(negTokens);
             }
             else
@@ -389,7 +389,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         Tensor<T>? promptEmbedding = null;
         if (!string.IsNullOrEmpty(prompt) && Conditioner != null)
         {
-            var promptTokens = Conditioner.Tokenize(prompt);
+            var promptTokens = Conditioner.Tokenize(prompt ?? string.Empty);
             promptEmbedding = Conditioner.EncodeText(promptTokens);
         }
 

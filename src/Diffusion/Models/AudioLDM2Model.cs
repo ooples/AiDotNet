@@ -497,13 +497,13 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
             {
                 if (!string.IsNullOrEmpty(negativePrompt))
                 {
-                    var negClapTokens = _clapConditioner.Tokenize(negativePrompt);
+                    var negClapTokens = _clapConditioner.Tokenize(negativePrompt ?? string.Empty);
                     var negClapEmbed = _clapConditioner.EncodeText(negClapTokens);
 
                     Tensor<T>? negLangEmbed = null;
                     if (_languageConditioner != null)
                     {
-                        var negLangTokens = _languageConditioner.Tokenize(negativePrompt);
+                        var negLangTokens = _languageConditioner.Tokenize(negativePrompt ?? string.Empty);
                         negLangEmbed = _languageConditioner.EncodeText(negLangTokens);
                     }
 
@@ -651,13 +651,13 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
         {
             if (!string.IsNullOrEmpty(negativePrompt))
             {
-                var negClapTokens = _clapConditioner.Tokenize(negativePrompt);
+                var negClapTokens = _clapConditioner.Tokenize(negativePrompt ?? string.Empty);
                 var negClapEmbed = _clapConditioner.EncodeText(negClapTokens);
 
                 Tensor<T>? negLangEmbed = null;
                 if (_languageConditioner != null)
                 {
-                    var negLangTokens = _languageConditioner.Tokenize(negativePrompt);
+                    var negLangTokens = _languageConditioner.Tokenize(negativePrompt ?? string.Empty);
                     negLangEmbed = _languageConditioner.EncodeText(negLangTokens);
                 }
 

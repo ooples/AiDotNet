@@ -102,7 +102,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         {
             if (!string.IsNullOrEmpty(negativePrompt))
             {
-                var negTokens = Conditioner.Tokenize(negativePrompt);
+                var negTokens = Conditioner.Tokenize(negativePrompt ?? string.Empty);
                 negativeEmbedding = Conditioner.EncodeText(negTokens);
             }
             else
@@ -166,7 +166,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         if (Conditioner == null)
             throw new InvalidOperationException("Image-to-image generation requires a conditioning module.");
 
-        strength = Math.Clamp(strength, 0.0, 1.0);
+        strength = MathPolyfill.Clamp(strength, 0.0, 1.0);
         var effectiveGuidanceScale = guidanceScale ?? GuidanceScale;
         var useCFG = effectiveGuidanceScale > 1.0 && NoisePredictor.SupportsCFG;
 
@@ -183,7 +183,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         {
             if (!string.IsNullOrEmpty(negativePrompt))
             {
-                var negTokens = Conditioner.Tokenize(negativePrompt);
+                var negTokens = Conditioner.Tokenize(negativePrompt ?? string.Empty);
                 negativeEmbedding = Conditioner.EncodeText(negTokens);
             }
             else
@@ -260,7 +260,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         {
             if (!string.IsNullOrEmpty(negativePrompt))
             {
-                var negTokens = Conditioner.Tokenize(negativePrompt);
+                var negTokens = Conditioner.Tokenize(negativePrompt ?? string.Empty);
                 negativeEmbedding = Conditioner.EncodeText(negTokens);
             }
             else

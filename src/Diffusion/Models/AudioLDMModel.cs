@@ -399,7 +399,7 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
         if (guidanceScale > 1.0)
         {
             negativeEmbedding = !string.IsNullOrEmpty(negativePrompt)
-                ? _conditioner.EncodeText(_conditioner.Tokenize(negativePrompt))
+                ? _conditioner.EncodeText(_conditioner.Tokenize(negativePrompt ?? string.Empty))
                 : _conditioner.GetUnconditionalEmbedding(1);
         }
 

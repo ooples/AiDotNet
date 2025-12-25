@@ -168,7 +168,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     public double ConditioningStrength
     {
         get => _conditioningStrength;
-        set => _conditioningStrength = Math.Clamp(value, 0.0, 1.0);
+        set => _conditioningStrength = MathPolyfill.Clamp(value, 0.0, 1.0);
     }
 
     /// <summary>
@@ -377,7 +377,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
             {
                 if (!string.IsNullOrEmpty(negativePrompt))
                 {
-                    var negTokens = _conditioner.Tokenize(negativePrompt);
+                    var negTokens = _conditioner.Tokenize(negativePrompt ?? string.Empty);
                     negativeEmbedding = _conditioner.EncodeText(negTokens);
                 }
                 else
@@ -531,7 +531,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
             {
                 if (!string.IsNullOrEmpty(negativePrompt))
                 {
-                    var negTokens = _conditioner.Tokenize(negativePrompt);
+                    var negTokens = _conditioner.Tokenize(negativePrompt ?? string.Empty);
                     negativeEmbedding = _conditioner.EncodeText(negTokens);
                 }
                 else

@@ -292,7 +292,9 @@ public class SafeTensorsLoader<T>
             ushort bf16 = (ushort)(data[i * 2] | (data[i * 2 + 1] << 8));
             // Convert to float32 by shifting left 16 bits
             uint f32Bits = (uint)bf16 << 16;
-            float value = BitConverter.Int32BitsToSingle((int)f32Bits);
+            // Use BitConverter.GetBytes + ToSingle for net471 compatibility
+            byte[] bytes = BitConverter.GetBytes((int)f32Bits);
+            float value = BitConverter.ToSingle(bytes, 0);
             destination[i] = NumOps.FromDouble(value);
         }
     }

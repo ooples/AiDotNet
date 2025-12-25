@@ -283,7 +283,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
             {
                 if (!string.IsNullOrEmpty(negativePrompt))
                 {
-                    var negTokens = _conditioner.Tokenize(negativePrompt);
+                    var negTokens = _conditioner.Tokenize(negativePrompt ?? string.Empty);
                     negativeEmbedding = _conditioner.EncodeText(negTokens);
                 }
                 else
@@ -521,7 +521,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
         double? guidanceScale = null,
         int? seed = null)
     {
-        alpha = Math.Clamp(alpha, 0.0, 1.0);
+        alpha = MathPolyfill.Clamp(alpha, 0.0, 1.0);
 
         if (_conditioner == null)
         {
@@ -617,7 +617,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
         var samplesNeeded = (int)(durationSeconds * _spectrogramConfig.SampleRate);
         var framesNeeded = samplesNeeded / _spectrogramConfig.HopLength;
         // Round up to nearest power of 2 for FFT efficiency
-        return Math.Max(64, (int)Math.Pow(2, Math.Ceiling(Math.Log2(framesNeeded))));
+        return Math.Max(64, (int)Math.Pow(2, Math.Ceiling(MathPolyfill.Log2(framesNeeded))));
     }
 
     /// <summary>

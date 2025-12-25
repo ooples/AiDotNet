@@ -272,7 +272,7 @@ public static class DiffusionNoiseHelper<T>
     /// <returns>Interpolated noise tensor.</returns>
     public static Tensor<T> LerpNoise(Tensor<T> noise1, Tensor<T> noise2, double t)
     {
-        t = Math.Clamp(t, 0.0, 1.0);
+        t = MathPolyfill.Clamp(t, 0.0, 1.0);
         var tVal = NumOps.FromDouble(t);
         var oneMinusT = NumOps.FromDouble(1.0 - t);
 
@@ -308,7 +308,7 @@ public static class DiffusionNoiseHelper<T>
     /// </remarks>
     public static Tensor<T> SlerpNoise(Tensor<T> noise1, Tensor<T> noise2, double t)
     {
-        t = Math.Clamp(t, 0.0, 1.0);
+        t = MathPolyfill.Clamp(t, 0.0, 1.0);
 
         // Flatten tensors to compute dot product
         var span1 = noise1.AsSpan();
@@ -329,7 +329,7 @@ public static class DiffusionNoiseHelper<T>
 
         // Normalize dot product
         dot = dot / (norm1 * norm2 + 1e-10);
-        dot = Math.Clamp(dot, -1.0, 1.0);
+        dot = MathPolyfill.Clamp(dot, -1.0, 1.0);
 
         // Compute angle
         var theta = Math.Acos(dot);

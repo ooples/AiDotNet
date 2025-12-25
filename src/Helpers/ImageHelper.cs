@@ -406,9 +406,9 @@ public static class ImageHelper<T>
                 }
 
                 // BMP is BGR
-                rowBuffer[x * 3 + 0] = (byte)Math.Clamp(b * scale, 0, 255);
-                rowBuffer[x * 3 + 1] = (byte)Math.Clamp(g * scale, 0, 255);
-                rowBuffer[x * 3 + 2] = (byte)Math.Clamp(r * scale, 0, 255);
+                rowBuffer[x * 3 + 0] = (byte)MathPolyfill.Clamp(b * scale, 0, 255);
+                rowBuffer[x * 3 + 1] = (byte)MathPolyfill.Clamp(g * scale, 0, 255);
+                rowBuffer[x * 3 + 2] = (byte)MathPolyfill.Clamp(r * scale, 0, 255);
             }
             writer.Write(rowBuffer, 0, rowSize);
         }
@@ -463,9 +463,9 @@ public static class ImageHelper<T>
                     double g = NumOps.ToDouble(span[1 * height * width + y * width + x]);
                     double b = NumOps.ToDouble(span[2 * height * width + y * width + x]);
 
-                    bw.Write((byte)Math.Clamp(r * scale, 0, 255));
-                    bw.Write((byte)Math.Clamp(g * scale, 0, 255));
-                    bw.Write((byte)Math.Clamp(b * scale, 0, 255));
+                    bw.Write((byte)MathPolyfill.Clamp(r * scale, 0, 255));
+                    bw.Write((byte)MathPolyfill.Clamp(g * scale, 0, 255));
+                    bw.Write((byte)MathPolyfill.Clamp(b * scale, 0, 255));
                 }
             }
         }
@@ -479,9 +479,9 @@ public static class ImageHelper<T>
                     double g = NumOps.ToDouble(span[1 * height * width + y * width + x]);
                     double b = NumOps.ToDouble(span[2 * height * width + y * width + x]);
 
-                    writer.Write($"{(int)Math.Clamp(r * scale, 0, 255)} ");
-                    writer.Write($"{(int)Math.Clamp(g * scale, 0, 255)} ");
-                    writer.Write($"{(int)Math.Clamp(b * scale, 0, 255)} ");
+                    writer.Write($"{(int)MathPolyfill.Clamp(r * scale, 0, 255)} ");
+                    writer.Write($"{(int)MathPolyfill.Clamp(g * scale, 0, 255)} ");
+                    writer.Write($"{(int)MathPolyfill.Clamp(b * scale, 0, 255)} ");
                 }
                 writer.WriteLine();
             }

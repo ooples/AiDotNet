@@ -372,7 +372,7 @@ public static class AudioHelper<T>
 
                 if (denormalize)
                 {
-                    sample = Math.Clamp(sample * maxVal, -maxVal, maxVal);
+                    sample = MathPolyfill.Clamp(sample * maxVal, -maxVal, maxVal);
                 }
 
                 if (bitsPerSample == 16)

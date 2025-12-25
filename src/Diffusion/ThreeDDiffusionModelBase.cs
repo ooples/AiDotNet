@@ -113,7 +113,7 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
         {
             if (!string.IsNullOrEmpty(negativePrompt))
             {
-                var negTokens = Conditioner.Tokenize(negativePrompt);
+                var negTokens = Conditioner.Tokenize(negativePrompt ?? string.Empty);
                 negativeEmbedding = Conditioner.EncodeText(negTokens);
             }
             else
@@ -570,7 +570,7 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
         for (int i = 0; i < span.Length; i++)
         {
             var val = NumOps.ToDouble(span[i]);
-            resultSpan[i] = NumOps.FromDouble(Math.Clamp((val + 1.0) / 2.0, 0.0, 1.0));
+            resultSpan[i] = NumOps.FromDouble(MathPolyfill.Clamp((val + 1.0) / 2.0, 0.0, 1.0));
         }
 
         return result;
