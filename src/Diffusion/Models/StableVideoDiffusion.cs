@@ -644,7 +644,23 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
         var endSpan = endLatent.AsSpan();
 
         var latentShape = latents.Shape;
-        var frameSize = latentShape[2] * latentShape[3] * latentShape[4];
+        // Video latent shape: [batch, frames, channels, height, width]
+        var videoChannels = latentShape[2];
+        var videoHeight = latentShape[3];
+        var videoWidth = latentShape[4];
+        var frameSize = videoChannels * videoHeight * videoWidth;
+
+        // Start/end latent shape: [batch, channels, height, width] (4D)
+        var startShape = startLatent.Shape;
+        var startChannels = startShape[1];
+        var startHeight = startShape[2];
+        var startWidth = startShape[3];
+        var startFrameSize = startChannels * startHeight * startWidth;
+
+        // Verify spatial dimensions match
+        bool dimensionsMatch = startChannels == videoChannels &&
+                               startHeight == videoHeight &&
+                               startWidth == videoWidth;
 
         // Guidance strength decreases as we progress through denoising
         var timestepRatio = timestep / 1000.0;
@@ -660,19 +676,29 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
             for (int i = 0; i < frameSize; i++)
             {
                 var latentIdx = f * frameSize + i;
-                var spatialIdx = i % startSpan.Length;
 
-                // Blend toward target based on frame position (linear interpolation)
-                var frameT = NumOps.FromDouble(frameProgress);
-                var oneMinusFrameT = NumOps.FromDouble(1.0 - frameProgress);
-                var targetLatent = NumOps.Add(
-                    NumOps.Multiply(oneMinusFrameT, startSpan[spatialIdx]),
-                    NumOps.Multiply(frameT, endSpan[spatialIdx]));
+                // If dimensions match, use direct indexing; otherwise fall back to generated latent
+                if (dimensionsMatch && i < startFrameSize)
+                {
+                    var spatialIdx = i;
 
-                // Soft blend with predicted latent
-                resultSpan[latentIdx] = NumOps.Add(
-                    NumOps.Multiply(oneMinusWeight, latentSpan[latentIdx]),
-                    NumOps.Multiply(guidanceWeight, targetLatent));
+                    // Blend toward target based on frame position (linear interpolation)
+                    var frameT = NumOps.FromDouble(frameProgress);
+                    var oneMinusFrameT = NumOps.FromDouble(1.0 - frameProgress);
+                    var targetLatent = NumOps.Add(
+                        NumOps.Multiply(oneMinusFrameT, startSpan[spatialIdx]),
+                        NumOps.Multiply(frameT, endSpan[spatialIdx]));
+
+                    // Soft blend with predicted latent
+                    resultSpan[latentIdx] = NumOps.Add(
+                        NumOps.Multiply(oneMinusWeight, latentSpan[latentIdx]),
+                        NumOps.Multiply(guidanceWeight, targetLatent));
+                }
+                else
+                {
+                    // Dimension mismatch - use generated latent directly
+                    resultSpan[latentIdx] = latentSpan[latentIdx];
+                }
             }
         }
 
