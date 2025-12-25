@@ -157,7 +157,7 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
 
         var random = Options.RandomState.HasValue
             ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
-            : new Random();
+            : RandomHelper.CreateSecureRandom();
 
         // Create fold assignments
         var foldAssignments = new int[n];
