@@ -266,8 +266,9 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             _labelEmbed = new DenseLayer<T>(numClasses, _hiddenSize, activationFunction: null);
         }
 
-        // Transformer blocks
+        // Transformer blocks with self-attention and cross-attention
         var mlpHidden = (int)(_hiddenSize * _mlpRatio);
+
         for (int i = 0; i < _numLayers; i++)
         {
             _blocks.Add(new DiTBlock
@@ -277,7 +278,13 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
                 Norm2 = new LayerNormalizationLayer<T>(_hiddenSize),
                 MLP1 = new DenseLayer<T>(_hiddenSize, mlpHidden, (IActivationFunction<T>)new GELUActivation<T>()),
                 MLP2 = new DenseLayer<T>(mlpHidden, _hiddenSize, activationFunction: null),
-                AdaLNModulation = new DenseLayer<T>(_hiddenSize * 4, _hiddenSize * 6, activationFunction: null)
+                AdaLNModulation = new DenseLayer<T>(_hiddenSize * 4, _hiddenSize * 6, activationFunction: null),
+                // Cross-attention layers for conditioning
+                CrossAttnNorm = new LayerNormalizationLayer<T>(_hiddenSize),
+                CrossAttnQ = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
+                CrossAttnK = new DenseLayer<T>(_contextDim, _hiddenSize, activationFunction: null),
+                CrossAttnV = new DenseLayer<T>(_contextDim, _hiddenSize, activationFunction: null),
+                CrossAttnOut = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null)
             });
         }
 
@@ -571,8 +578,14 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         var normed = block.Norm1.Forward(x);
         normed = ApplyAdaLN(normed, scale1, shift1);
 
-        var attnOut = ApplyAttention(normed, block.Attention, condEmbed);
+        var attnOut = ApplySelfAttention(normed, block.Attention);
         x = AddWithGate(x, attnOut, gate1);
+
+        // Cross-attention to conditioning (if available)
+        if (condEmbed != null)
+        {
+            x = ApplyCrossAttention(x, condEmbed, block);
+        }
 
         // MLP with AdaLN
         normed = block.Norm2.Forward(x);
@@ -633,16 +646,124 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// Applies self-attention with optional cross-attention.
+    /// Applies self-attention.
     /// </summary>
-    private Tensor<T> ApplyAttention(
+    private Tensor<T> ApplySelfAttention(
         Tensor<T> x,
-        SelfAttentionLayer<T> attention,
-        Tensor<T>? conditioning)
+        SelfAttentionLayer<T> attention)
     {
-        // For DiT, we typically use self-attention
-        // Cross-attention to conditioning can be added via additional blocks
         return attention.Forward(x);
+    }
+
+    /// <summary>
+    /// Applies cross-attention between query (from x) and key/value (from conditioning).
+    /// </summary>
+    private Tensor<T> ApplyCrossAttention(
+        Tensor<T> x,
+        Tensor<T> conditioning,
+        DiTBlock block)
+    {
+        if (block.CrossAttnNorm == null || block.CrossAttnQ == null ||
+            block.CrossAttnK == null || block.CrossAttnV == null || block.CrossAttnOut == null)
+        {
+            return x;
+        }
+
+        var shape = x.Shape;
+        var batch = shape[0];
+        var seqLen = shape[1];
+        var hidden = shape[2];
+
+        var condShape = conditioning.Shape;
+        var condSeqLen = condShape.Length > 1 ? condShape[1] : 1;
+
+        // Normalize x
+        var normed = block.CrossAttnNorm.Forward(x);
+
+        // Compute Q from x, K and V from conditioning
+        var q = block.CrossAttnQ.Forward(normed);
+        var k = block.CrossAttnK.Forward(conditioning);
+        var v = block.CrossAttnV.Forward(conditioning);
+
+        // Scaled dot-product attention
+        var headDim = hidden / _numHeads;
+        var scale = 1.0 / Math.Sqrt(headDim);
+
+        var attnOutput = new Tensor<T>(new[] { batch, seqLen, hidden });
+        var attnSpan = attnOutput.AsWritableSpan();
+        var qSpan = q.AsSpan();
+        var kSpan = k.AsSpan();
+        var vSpan = v.AsSpan();
+
+        // Simple multi-head attention implementation
+        for (int b = 0; b < batch; b++)
+        {
+            for (int h = 0; h < _numHeads; h++)
+            {
+                var headOffset = h * headDim;
+
+                // Compute attention scores for this head
+                for (int i = 0; i < seqLen; i++)
+                {
+                    // Compute softmax over keys
+                    var scores = new double[condSeqLen];
+                    var maxScore = double.NegativeInfinity;
+
+                    for (int j = 0; j < condSeqLen; j++)
+                    {
+                        double score = 0;
+                        for (int d = 0; d < headDim; d++)
+                        {
+                            var qIdx = b * seqLen * hidden + i * hidden + headOffset + d;
+                            var kIdx = b * condSeqLen * hidden + j * hidden + headOffset + d;
+                            score += NumOps.ToDouble(qSpan[qIdx]) * NumOps.ToDouble(kSpan[kIdx]);
+                        }
+                        score *= scale;
+                        scores[j] = score;
+                        if (score > maxScore) maxScore = score;
+                    }
+
+                    // Softmax
+                    double sumExp = 0;
+                    for (int j = 0; j < condSeqLen; j++)
+                    {
+                        scores[j] = Math.Exp(scores[j] - maxScore);
+                        sumExp += scores[j];
+                    }
+                    for (int j = 0; j < condSeqLen; j++)
+                    {
+                        scores[j] /= sumExp;
+                    }
+
+                    // Weighted sum of values
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        double weighted = 0;
+                        for (int j = 0; j < condSeqLen; j++)
+                        {
+                            var vIdx = b * condSeqLen * hidden + j * hidden + headOffset + d;
+                            weighted += scores[j] * NumOps.ToDouble(vSpan[vIdx]);
+                        }
+                        var outIdx = b * seqLen * hidden + i * hidden + headOffset + d;
+                        attnSpan[outIdx] = NumOps.FromDouble(weighted);
+                    }
+                }
+            }
+        }
+
+        // Output projection and residual connection
+        var projected = block.CrossAttnOut.Forward(attnOutput);
+        var result = new Tensor<T>(x.Shape);
+        var resultSpan = result.AsWritableSpan();
+        var xSpan = x.AsSpan();
+        var projSpan = projected.AsSpan();
+
+        for (int i = 0; i < resultSpan.Length; i++)
+        {
+            resultSpan[i] = NumOps.Add(xSpan[i], projSpan[i]);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -789,24 +910,147 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        // Simplified: return empty vector
-        // Full implementation would collect from all layers
-        return new Vector<T>(0);
+        var allParams = new List<T>();
+
+        // Collect from patch embed
+        if (_patchEmbed != null)
+        {
+            AddLayerParams(allParams, _patchEmbed);
+        }
+
+        // Collect from time embedding
+        if (_timeEmbed1 != null) AddLayerParams(allParams, _timeEmbed1);
+        if (_timeEmbed2 != null) AddLayerParams(allParams, _timeEmbed2);
+
+        // Collect from label embed (optional)
+        if (_labelEmbed != null) AddLayerParams(allParams, _labelEmbed);
+
+        // Collect from transformer blocks
+        foreach (var block in _blocks)
+        {
+            if (block.Norm1 != null) AddLayerParams(allParams, block.Norm1);
+            if (block.Attention != null) AddLayerParams(allParams, block.Attention);
+            if (block.Norm2 != null) AddLayerParams(allParams, block.Norm2);
+            if (block.MLP1 != null) AddLayerParams(allParams, block.MLP1);
+            if (block.MLP2 != null) AddLayerParams(allParams, block.MLP2);
+            if (block.AdaLNModulation != null) AddLayerParams(allParams, block.AdaLNModulation);
+            // Cross-attention layers
+            if (block.CrossAttnNorm != null) AddLayerParams(allParams, block.CrossAttnNorm);
+            if (block.CrossAttnQ != null) AddLayerParams(allParams, block.CrossAttnQ);
+            if (block.CrossAttnK != null) AddLayerParams(allParams, block.CrossAttnK);
+            if (block.CrossAttnV != null) AddLayerParams(allParams, block.CrossAttnV);
+            if (block.CrossAttnOut != null) AddLayerParams(allParams, block.CrossAttnOut);
+        }
+
+        // Collect from final layers
+        if (_finalNorm != null) AddLayerParams(allParams, _finalNorm);
+        if (_adaln_modulation != null) AddLayerParams(allParams, _adaln_modulation);
+        if (_outputProj != null) AddLayerParams(allParams, _outputProj);
+
+        return new Vector<T>(allParams.ToArray());
+    }
+
+    private void AddLayerParams(List<T> allParams, ILayer<T> layer)
+    {
+        var p = layer.GetParameters();
+        for (int i = 0; i < p.Length; i++)
+        {
+            allParams.Add(p[i]);
+        }
     }
 
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        // Simplified implementation
+        int offset = 0;
+
+        // Set patch embed
+        if (_patchEmbed != null)
+        {
+            offset = SetLayerParams(_patchEmbed, parameters, offset);
+        }
+
+        // Set time embedding
+        if (_timeEmbed1 != null) offset = SetLayerParams(_timeEmbed1, parameters, offset);
+        if (_timeEmbed2 != null) offset = SetLayerParams(_timeEmbed2, parameters, offset);
+
+        // Set label embed (optional)
+        if (_labelEmbed != null) offset = SetLayerParams(_labelEmbed, parameters, offset);
+
+        // Set transformer blocks
+        foreach (var block in _blocks)
+        {
+            if (block.Norm1 != null) offset = SetLayerParams(block.Norm1, parameters, offset);
+            if (block.Attention != null) offset = SetLayerParams(block.Attention, parameters, offset);
+            if (block.Norm2 != null) offset = SetLayerParams(block.Norm2, parameters, offset);
+            if (block.MLP1 != null) offset = SetLayerParams(block.MLP1, parameters, offset);
+            if (block.MLP2 != null) offset = SetLayerParams(block.MLP2, parameters, offset);
+            if (block.AdaLNModulation != null) offset = SetLayerParams(block.AdaLNModulation, parameters, offset);
+            // Cross-attention layers
+            if (block.CrossAttnNorm != null) offset = SetLayerParams(block.CrossAttnNorm, parameters, offset);
+            if (block.CrossAttnQ != null) offset = SetLayerParams(block.CrossAttnQ, parameters, offset);
+            if (block.CrossAttnK != null) offset = SetLayerParams(block.CrossAttnK, parameters, offset);
+            if (block.CrossAttnV != null) offset = SetLayerParams(block.CrossAttnV, parameters, offset);
+            if (block.CrossAttnOut != null) offset = SetLayerParams(block.CrossAttnOut, parameters, offset);
+        }
+
+        // Set final layers
+        if (_finalNorm != null) offset = SetLayerParams(_finalNorm, parameters, offset);
+        if (_adaln_modulation != null) offset = SetLayerParams(_adaln_modulation, parameters, offset);
+        if (_outputProj != null) offset = SetLayerParams(_outputProj, parameters, offset);
+    }
+
+    private int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
+    {
+        var count = layer.ParameterCount;
+        var p = new T[count];
+        for (int i = 0; i < count; i++)
+        {
+            p[i] = parameters[offset + i];
+        }
+        layer.SetParameters(new Vector<T>(p));
+        return offset + count;
     }
 
     /// <inheritdoc />
-    public override int ParameterCount => 0; // Simplified
+    public override int ParameterCount
+    {
+        get
+        {
+            int count = 0;
+
+            if (_patchEmbed != null) count += _patchEmbed.ParameterCount;
+            if (_timeEmbed1 != null) count += _timeEmbed1.ParameterCount;
+            if (_timeEmbed2 != null) count += _timeEmbed2.ParameterCount;
+            if (_labelEmbed != null) count += _labelEmbed.ParameterCount;
+
+            foreach (var block in _blocks)
+            {
+                if (block.Norm1 != null) count += block.Norm1.ParameterCount;
+                if (block.Attention != null) count += block.Attention.ParameterCount;
+                if (block.Norm2 != null) count += block.Norm2.ParameterCount;
+                if (block.MLP1 != null) count += block.MLP1.ParameterCount;
+                if (block.MLP2 != null) count += block.MLP2.ParameterCount;
+                if (block.AdaLNModulation != null) count += block.AdaLNModulation.ParameterCount;
+                if (block.CrossAttnNorm != null) count += block.CrossAttnNorm.ParameterCount;
+                if (block.CrossAttnQ != null) count += block.CrossAttnQ.ParameterCount;
+                if (block.CrossAttnK != null) count += block.CrossAttnK.ParameterCount;
+                if (block.CrossAttnV != null) count += block.CrossAttnV.ParameterCount;
+                if (block.CrossAttnOut != null) count += block.CrossAttnOut.ParameterCount;
+            }
+
+            if (_finalNorm != null) count += _finalNorm.ParameterCount;
+            if (_adaln_modulation != null) count += _adaln_modulation.ParameterCount;
+            if (_outputProj != null) count += _outputProj.ParameterCount;
+
+            return count;
+        }
+    }
 
     /// <inheritdoc />
     public override INoisePredictor<T> Clone()
     {
-        return new DiTNoisePredictor<T>(
+        var clone = new DiTNoisePredictor<T>(
             _inputChannels,
             _hiddenSize,
             _numLayers,
@@ -814,6 +1058,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             _patchSize,
             _contextDim,
             _mlpRatio);
+
+        // Preserve trained weights
+        clone.SetParameters(GetParameters());
+        return clone;
     }
 
     /// <inheritdoc />
@@ -842,5 +1090,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         public DenseLayer<T>? MLP1 { get; set; }
         public DenseLayer<T>? MLP2 { get; set; }
         public DenseLayer<T>? AdaLNModulation { get; set; }
+        public DenseLayer<T>? CrossAttnQ { get; set; }
+        public DenseLayer<T>? CrossAttnK { get; set; }
+        public DenseLayer<T>? CrossAttnV { get; set; }
+        public DenseLayer<T>? CrossAttnOut { get; set; }
+        public LayerNormalizationLayer<T>? CrossAttnNorm { get; set; }
     }
 }
