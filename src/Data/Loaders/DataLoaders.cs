@@ -1,6 +1,6 @@
+using AiDotNet.Data.Geometry;
 using AiDotNet.FederatedLearning.Benchmarks.Leaf;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.Data.Geometry;
 
 namespace AiDotNet.Data.Loaders;
 
@@ -506,5 +506,222 @@ public static class DataLoaders
     }
 
     #endregion
+    #endregion
+
+    #region Streaming Factory Methods
+
+    /// <summary>
+    /// Creates a streaming data loader that reads samples on-demand.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <typeparam name="TInput">The input data type for each sample.</typeparam>
+    /// <typeparam name="TOutput">The output/label data type for each sample.</typeparam>
+    /// <param name="sampleCount">Total number of samples in the dataset.</param>
+    /// <param name="sampleReader">Async function that reads a single sample by index.</param>
+    /// <param name="batchSize">Number of samples per batch.</param>
+    /// <param name="prefetchCount">Number of batches to prefetch. Default is 2.</param>
+    /// <param name="numWorkers">Number of parallel workers. Default is 4.</param>
+    /// <returns>A streaming data loader.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this when your dataset is too large to fit in memory.
+    /// The sampleReader function is called on-demand to load individual samples.
+    ///
+    /// **Example - Loading Images:**
+    /// ```csharp
+    /// var loader = DataLoaders.Streaming&lt;float, float[], int&gt;(
+    ///     sampleCount: 1000000,
+    ///     sampleReader: async (index, ct) =&gt;
+    ///     {
+    ///         var image = await LoadImageAsync($"images/{index}.png", ct);
+    ///         var label = GetLabel(index);
+    ///         return (image, label);
+    ///     },
+    ///     batchSize: 32
+    /// );
+    ///
+    /// await foreach (var batch in loader.GetBatchesAsync())
+    /// {
+    ///     await model.TrainOnBatchAsync(batch.Inputs, batch.Outputs);
+    /// }
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static StreamingDataLoader<T, TInput, TOutput> Streaming<T, TInput, TOutput>(
+        int sampleCount,
+        Func<int, CancellationToken, Task<(TInput, TOutput)>> sampleReader,
+        int batchSize,
+        int prefetchCount = 2,
+        int numWorkers = 4)
+    {
+        if (sampleReader is null)
+        {
+            throw new ArgumentNullException(nameof(sampleReader), "Sample reader function cannot be null.");
+        }
+
+        if (sampleCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(sampleCount), "Sample count must be greater than 0.");
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        if (prefetchCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(prefetchCount), "Prefetch count must be greater than 0.");
+        }
+
+        if (numWorkers <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numWorkers), "Number of workers must be greater than 0.");
+        }
+
+        return new StreamingDataLoader<T, TInput, TOutput>(
+            sampleCount, sampleReader, batchSize, null, prefetchCount, numWorkers);
+    }
+
+    /// <summary>
+    /// Creates a streaming data loader from a directory of files.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <typeparam name="TInput">The input data type for each sample.</typeparam>
+    /// <typeparam name="TOutput">The output/label data type for each sample.</typeparam>
+    /// <param name="directory">The directory containing data files.</param>
+    /// <param name="filePattern">The file pattern to match (e.g., "*.png", "*.csv").</param>
+    /// <param name="fileProcessor">Function that processes a file and returns (input, output).</param>
+    /// <param name="batchSize">Number of samples per batch.</param>
+    /// <param name="searchOption">Whether to search subdirectories. Default is TopDirectoryOnly.</param>
+    /// <param name="prefetchCount">Number of batches to prefetch. Default is 2.</param>
+    /// <param name="numWorkers">Number of parallel workers. Default is 4.</param>
+    /// <returns>A file streaming data loader.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this when you have a folder of data files (images, audio, etc.)
+    /// that you want to stream during training.
+    ///
+    /// **Example - Image Dataset:**
+    /// ```csharp
+    /// var loader = DataLoaders.FromDirectory&lt;float, float[], int&gt;(
+    ///     directory: "data/images",
+    ///     filePattern: "*.png",
+    ///     fileProcessor: async (filePath, ct) =&gt;
+    ///     {
+    ///         var pixels = await LoadImagePixelsAsync(filePath, ct);
+    ///         var label = ParseLabelFromFilename(filePath);
+    ///         return (pixels, label);
+    ///     },
+    ///     batchSize: 64
+    /// );
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static FileStreamingDataLoader<T, TInput, TOutput> FromDirectory<T, TInput, TOutput>(
+        string directory,
+        string filePattern,
+        Func<string, CancellationToken, Task<(TInput, TOutput)>> fileProcessor,
+        int batchSize,
+        SearchOption searchOption = SearchOption.TopDirectoryOnly,
+        int prefetchCount = 2,
+        int numWorkers = 4)
+    {
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            throw new ArgumentNullException(nameof(directory), "Directory path cannot be null or empty.");
+        }
+
+        if (string.IsNullOrWhiteSpace(filePattern))
+        {
+            throw new ArgumentNullException(nameof(filePattern), "File pattern cannot be null or empty.");
+        }
+
+        if (fileProcessor is null)
+        {
+            throw new ArgumentNullException(nameof(fileProcessor), "File processor function cannot be null.");
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        if (prefetchCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(prefetchCount), "Prefetch count must be greater than 0.");
+        }
+
+        if (numWorkers <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numWorkers), "Number of workers must be greater than 0.");
+        }
+
+        return new FileStreamingDataLoader<T, TInput, TOutput>(
+            directory, filePattern, fileProcessor, batchSize, searchOption, prefetchCount, numWorkers);
+    }
+
+    /// <summary>
+    /// Creates a streaming data loader from a CSV file.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <typeparam name="TInput">The input data type for each row.</typeparam>
+    /// <typeparam name="TOutput">The output/label data type for each row.</typeparam>
+    /// <param name="filePath">Path to the CSV file.</param>
+    /// <param name="lineParser">Function that parses a CSV line into (input, output).</param>
+    /// <param name="batchSize">Number of samples per batch.</param>
+    /// <param name="hasHeader">Whether the CSV has a header row to skip. Default is true.</param>
+    /// <param name="prefetchCount">Number of batches to prefetch. Default is 2.</param>
+    /// <returns>A CSV streaming data loader.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this for large CSV files that don't fit in memory.
+    /// The file is read line by line during training.
+    ///
+    /// **Example - Large Tabular Dataset:**
+    /// ```csharp
+    /// var loader = DataLoaders.FromCsv&lt;double, double[], double&gt;(
+    ///     filePath: "data/huge_dataset.csv",
+    ///     lineParser: (line, lineNumber) =&gt;
+    ///     {
+    ///         var parts = line.Split(',');
+    ///         var features = parts.Take(10).Select(double.Parse).ToArray();
+    ///         var label = double.Parse(parts[10]);
+    ///         return (features, label);
+    ///     },
+    ///     batchSize: 256,
+    ///     hasHeader: true
+    /// );
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static CsvStreamingDataLoader<T, TInput, TOutput> FromCsv<T, TInput, TOutput>(
+        string filePath,
+        Func<string, int, (TInput, TOutput)> lineParser,
+        int batchSize,
+        bool hasHeader = true,
+        int prefetchCount = 2)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentNullException(nameof(filePath), "File path cannot be null or empty.");
+        }
+
+        if (lineParser is null)
+        {
+            throw new ArgumentNullException(nameof(lineParser), "Line parser function cannot be null.");
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        if (prefetchCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(prefetchCount), "Prefetch count must be greater than 0.");
+        }
+
+        return new CsvStreamingDataLoader<T, TInput, TOutput>(
+            filePath, lineParser, batchSize, hasHeader, prefetchCount);
+    }
+
     #endregion
 }

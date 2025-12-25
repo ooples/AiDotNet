@@ -958,6 +958,21 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// Gets the gradients of all trainable parameters in this layer.
+    /// </summary>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_weightsGradient == null || _biasesGradient == null)
+        {
+            return new Vector<T>(ParameterCount);
+        }
+
+        return Vector<T>.Concatenate(
+            new Vector<T>(_weightsGradient.ToArray()),
+            new Vector<T>(_biasesGradient.ToArray()));
+    }
+
+    /// <summary>
     /// Sets all trainable parameters of the layer from a single vector.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -993,6 +1008,24 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _weights = new Tensor<T>(_weights.Shape, parameters.Slice(index, _weights.Length));
         index += _weights.Length;
         _biases = new Tensor<T>(_biases.Shape, parameters.Slice(index, _biases.Length));
+    }
+
+    /// <summary>
+    /// Clears stored gradients for weights and biases.
+    /// </summary>
+    public override void ClearGradients()
+    {
+        if (_weightsGradient != null)
+        {
+            _weightsGradient.Fill(NumOps.Zero);
+        }
+
+        if (_biasesGradient != null)
+        {
+            _biasesGradient.Fill(NumOps.Zero);
+        }
+
+        base.ClearGradients();
     }
 
     /// <summary>

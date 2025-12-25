@@ -1,6 +1,6 @@
 using System.Reflection;
-using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.Models;
+using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Models;
 using Xunit;
 

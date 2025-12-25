@@ -16,6 +16,16 @@ namespace AiDotNet.Models.Options;
 public class AdaMaxOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Gets or sets the batch size for mini-batch gradient descent.
+    /// </summary>
+    /// <value>A positive integer, defaulting to 32.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The batch size controls how many examples the optimizer looks at
+    /// before making an update to the model. The default of 32 is a good balance for AdaMax.</para>
+    /// </remarks>
+    public int BatchSize { get; set; } = 32;
+
+    /// <summary>
     /// Gets or sets the learning rate, which controls how quickly the model adapts to the problem.
     /// </summary>
     /// <value>The learning rate, defaulting to 0.002.</value>
@@ -25,7 +35,7 @@ public class AdaMaxOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizer
     /// A smaller value (like 0.001) means taking smaller steps, which is slower but more precise.
     /// The default of 0.002 is a good balance for most problems when using AdaMax.</para>
     /// </remarks>
-    public double LearningRate { get; set; } = 0.002;
+    public new double InitialLearningRate { get; set; } = 0.002;
 
     /// <summary>
     /// Gets or sets the exponential decay rate for the first moment estimates.

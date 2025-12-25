@@ -89,6 +89,12 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// by updating the parameters based on the gradient and the approximated inverse Hessian matrix.
     /// The process continues until it reaches the maximum number of iterations or meets the convergence criteria.
     /// </para>
+    /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for epoch management.
+    /// BFGS typically operates on the full dataset because it builds an approximation of the inverse
+    /// Hessian matrix that requires consistent gradients between iterations. The method notifies the
+    /// sampler of epoch starts using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>
+    /// for compatibility with curriculum learning and sampling strategies.
+    /// </para>
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
@@ -104,9 +110,11 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         _previousParameters = null;
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
+            NotifyEpochStart(epoch);
             _iteration++;
+
             parameters = currentSolution.GetParameters();
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
             var newSolution = UpdateSolution(currentSolution, gradient, inputData);
@@ -116,7 +124,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }

@@ -92,8 +92,7 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
-
-        CurrentLearningRate = NumOps.FromDouble(_options.LearningRate);
+        // Learning rate is now set by base class from options.InitialLearningRate
         _t = 0;
     }
 
@@ -109,6 +108,11 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// This is the actual process of rolling your smart ball down the hill. In each step, you're calculating which way
     /// the ball should roll (gradient), how fast it's moving (momentum), and how it should adapt its speed (adaptive learning rates).
     /// You keep doing this until the ball finds the lowest point or you've rolled it enough times.
+    /// </para>
+    /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
+    /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
+    /// and notifies the sampler of epoch starts using
+    /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>.
     /// </para>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
@@ -126,18 +130,25 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
-            _t++;
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            var newSolution = UpdateSolution(currentSolution, gradient);
+            NotifyEpochStart(epoch);
+            var batcher = CreateBatcher(inputData, _options.BatchSize);
 
-            var currentStepData = EvaluateSolution(newSolution, inputData);
+            foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+            {
+                _t++;
+                var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+                var newSolution = UpdateSolution(currentSolution, gradient);
+                currentSolution = newSolution;
+            }
+
+            var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
 
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }
@@ -147,7 +158,6 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            currentSolution = newSolution;
             previousStepData = currentStepData;
         }
 

@@ -1,7 +1,7 @@
+using System.Net.Http;
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Execution;
 using AiDotNet.ProgramSynthesis.Interfaces;
-using System.Net.Http;
 
 namespace AiDotNet.ProgramSynthesis.Serving;
 

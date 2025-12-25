@@ -37,10 +37,6 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </summary>
     private int _t;
 
-    /// <summary>
-    /// The current learning rate.
-    /// </summary>
-    private T _currentLearningRate;
 
     /// <summary>
     /// The current value of beta1 (exponential decay rate for first moment estimates).
@@ -86,7 +82,6 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         _v = Vector<T>.Empty();
         _t = 0;
         _options = options ?? new();
-        _currentLearningRate = NumOps.Zero;
         _currentBeta1 = NumOps.Zero;
         _currentBeta2 = NumOps.Zero;
 
@@ -103,7 +98,8 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
-        _currentLearningRate = NumOps.FromDouble(_options.LearningRate);
+        // Note: Learning rate is handled by the base class (GradientBasedOptimizerBase)
+        // which syncs CurrentLearningRate with the scheduler. We don't set it here.
         _currentBeta1 = NumOps.FromDouble(_options.Beta1);
         _currentBeta2 = NumOps.FromDouble(_options.Beta2);
     }
@@ -117,9 +113,17 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <para><b>For Beginners:</b> This is the main learning process. It repeatedly tries to improve
     /// the model's parameters, using the Adam algorithm to decide how to change them.
     /// </para>
+    /// <para><b>DataLoader Integration:</b>
+    /// This optimizer now uses the DataLoader batching infrastructure which supports:
+    /// - Custom samplers (weighted, stratified, curriculum, importance, active learning)
+    /// - Reproducible shuffling via RandomSeed
+    /// - Option to drop incomplete final batches
+    /// Set these options via GradientBasedOptimizerOptions.DataSampler, ShuffleData, DropLastBatch, and RandomSeed.
+    /// </para>
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
+        // Initialize with random solution
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var parameters = currentSolution.GetParameters();
@@ -127,31 +131,50 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         _v = new Vector<T>(parameters.Length);
         _t = 0;
 
+        // Initialize parameters
         InitializeAdaptiveParameters();
 
         var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
-            _t++;
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            var newSolution = UpdateSolution(currentSolution, gradient);
+            // Notify sampler of new epoch (for curriculum/self-paced learning)
+            NotifyEpochStart(epoch);
 
-            var currentStepData = EvaluateSolution(newSolution, inputData);
+            // Create batcher for the current epoch using DataLoader infrastructure
+            var batcher = CreateBatcher(inputData, _options.BatchSize);
+
+            foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+            {
+                _t++;
+                // Calculate gradient on the batch
+                var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+
+                // Update solution using Adam algorithm
+                var newSolution = UpdateSolution(currentSolution, gradient);
+
+                currentSolution = newSolution;
+            }
+
+            // Evaluate after processing all batches in the epoch
+            var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            // Check early stopping criteria
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
-                break;
+                return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            // Check convergence
+            if (NumOps.LessThan(
+                NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
+                NumOps.FromDouble(_options.Tolerance)))
             {
-                break;
+                return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            currentSolution = newSolution;
             previousStepData = currentStepData;
         }
 
@@ -175,8 +198,8 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Adam-specific adaptive parameter updates
         if (_options.UseAdaptiveLearningRate)
         {
-            _currentLearningRate = MathHelper.Max(NumOps.FromDouble(_options.MinLearningRate),
-                MathHelper.Min(NumOps.FromDouble(_options.MaxLearningRate), _currentLearningRate));
+            CurrentLearningRate = MathHelper.Max(NumOps.FromDouble(_options.MinLearningRate),
+                MathHelper.Min(NumOps.FromDouble(_options.MaxLearningRate), CurrentLearningRate));
         }
 
         if (_options.UseAdaptiveBetas)
@@ -235,7 +258,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var epsilonVec = Vector<T>.CreateDefault(vHatSqrt.Length, epsilon);
         var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
         var updateDiv = (Vector<T>)Engine.Divide(mHat, denominator);
-        var update = (Vector<T>)Engine.Multiply(updateDiv, _currentLearningRate);
+        var update = (Vector<T>)Engine.Multiply(updateDiv, CurrentLearningRate);
 
         // Apply update: parameters = parameters - update
         var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
@@ -316,7 +339,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var update = (Vector<T>)Engine.Divide(mHat, denominator);
 
         // Apply update: parameters = parameters - learningRate * update
-        var scaledUpdate = (Vector<T>)Engine.Multiply(update, _currentLearningRate);
+        var scaledUpdate = (Vector<T>)Engine.Multiply(update, CurrentLearningRate);
         var updatedParameters = (Vector<T>)Engine.Subtract(parameters, scaledUpdate);
 
         return updatedParameters;
@@ -393,7 +416,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, vHatSqrt.Length));
         var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
         var update = (Vector<T>)Engine.Divide(mHat, denominator);
-        var scaledUpdate = (Vector<T>)Engine.Multiply(update, _currentLearningRate);
+        var scaledUpdate = (Vector<T>)Engine.Multiply(update, CurrentLearningRate);
 
         // Apply update
         var updatedVec = (Vector<T>)Engine.Subtract(paramVec, scaledUpdate);
@@ -483,7 +506,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var epsilonVec = Vector<T>.CreateDefault(vHatSqrt.Length, NumOps.FromDouble(_options.Epsilon));
         var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
         var update = (Vector<T>)Engine.Divide(mHat, denominator);
-        var currentLrVec = Vector<T>.CreateDefault(update.Length, _currentLearningRate);
+        var currentLrVec = Vector<T>.CreateDefault(update.Length, CurrentLearningRate);
         var scaledUpdate = (Vector<T>)Engine.Multiply(update, currentLrVec);
 
         // Reverse: params_old = params_new + scaled_update
@@ -500,6 +523,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     public override void Reset()
     {
+        base.Reset();
         _m = Vector<T>.Empty();
         _v = Vector<T>.Empty();
         _t = 0;
@@ -640,6 +664,6 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
-        return $"{baseKey}_Adam_{_options.LearningRate}_{_options.MaxIterations}";
+        return $"{baseKey}_Adam_{_options.InitialLearningRate}_{_options.MaxIterations}";
     }
 }

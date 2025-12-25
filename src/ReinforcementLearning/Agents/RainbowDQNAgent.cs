@@ -62,7 +62,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         _options = options;
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
-            LearningRate = 0.0001,
+            InitialLearningRate = 0.0001,
             Beta1 = 0.9,
             Beta2 = 0.999,
             Epsilon = 1e-8

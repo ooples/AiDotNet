@@ -1179,7 +1179,7 @@ internal static class TrilinearInterpolateKernels
         int n = (int)index / channels;
         int c = (int)index % channels;
         int numPositions = (int)output.Length / channels;
-        
+
         if (n >= numPositions) return;
 
         // Get position (z, y, x) in [0, dim-1] range
@@ -1251,7 +1251,7 @@ internal static class TrilinearInterpolateKernels
         int n = (int)index / channels;
         int c = (int)index % channels;
         int numPositions = (int)output.Length / channels;
-        
+
         if (n >= numPositions) return;
 
         // Get position (z, y, x) in [0, dim-1] range
@@ -30291,7 +30291,7 @@ public class GpuEngine : IEngine, IDisposable
         int numPoints = positions.Shape[0];
         int inputDim = positions.Shape.Length > 1 ? positions.Shape[1] : 1;
         int outputDim = inputDim * (1 + 2 * numFrequencies);
-        
+
         // For small tensors, use CPU (use VectorAdd threshold as baseline)
         if (numPoints * outputDim < _thresholds.VectorAdd)
         {
@@ -30918,7 +30918,7 @@ public class GpuEngine : IEngine, IDisposable
         return _cpuFallback.GenerateSpiralIndices(vertices, faces, spiralLength);
     }
 
-    
+
     #region Advanced Vectorization Operations
 
     /// <inheritdoc/>
@@ -32070,6 +32070,6 @@ public class GpuEngine : IEngine, IDisposable
 
     #endregion
 
-#endregion
+    #endregion
 }
 #endif

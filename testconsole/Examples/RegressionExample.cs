@@ -56,7 +56,7 @@ public class RegressionExample
             // Configure Adam optimizer for training
             var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
             {
-                LearningRate = 0.01,
+                InitialLearningRate = 0.01,
                 MaxIterations = 1000,
                 Beta1 = 0.9,
                 Beta2 = 0.999,

@@ -20,6 +20,18 @@ namespace AiDotNet.Models.Options;
 public class CoordinateDescentOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Gets or sets the batch size for mini-batch gradient estimation.
+    /// </summary>
+    /// <value>A positive integer, defaulting to -1 (full batch).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The batch size controls how many examples the optimizer looks at
+    /// when estimating partial derivatives. Coordinate Descent traditionally uses the full dataset
+    /// (batch size -1) for derivative estimation, but you can use mini-batches for faster but
+    /// noisier updates on large datasets.</para>
+    /// </remarks>
+    public int BatchSize { get; set; } = -1;
+
+    /// <summary>
     /// Gets or sets the rate at which the learning rate increases when performance improves.
     /// </summary>
     /// <value>The learning rate increase rate, defaulting to 0.05 (5%).</value>

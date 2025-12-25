@@ -15,7 +15,28 @@ namespace AiDotNet.Models.Options;
 public class AdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
-    /// Gets or sets the learning rate for the Adam optimizer.
+    /// Gets or sets the batch size for mini-batch gradient descent.
+    /// </summary>
+    /// <value>A positive integer, defaulting to 32.</value>
+    /// <remarks>
+    /// <para>
+    /// The batch size determines how many samples are processed before updating the model parameters.
+    /// Larger batch sizes provide more stable gradient estimates but use more memory.
+    /// </para>
+    /// <para><b>For Beginners:</b> The batch size controls how many examples the optimizer looks at
+    /// before making an update to the model:
+    ///
+    /// - BatchSize = 1: Update after each sample (true stochastic)
+    /// - BatchSize = 32: Update after every 32 samples (typical mini-batch)
+    /// - BatchSize = [entire dataset]: Batch gradient descent
+    ///
+    /// The default of 32 is a good balance between speed and stability for Adam.
+    /// </para>
+    /// </remarks>
+    public int BatchSize { get; set; } = 32;
+
+    /// <summary>
+    /// Gets or sets the initial learning rate for the Adam optimizer.
     /// </summary>
     /// <value>The learning rate, defaulting to 0.001.</value>
     /// <remarks>
@@ -24,7 +45,7 @@ public class AdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// by stepping too far. If it's too small, training will take a very long time. The default of 0.001 works well for most problems,
     /// which is why Adam is popular - it doesn't require much tuning of this value.</para>
     /// </remarks>
-    public double LearningRate { get; set; } = 0.001;
+    public new double InitialLearningRate { get; set; } = 0.001;
 
     /// <summary>
     /// Gets or sets the exponential decay rate for the first moment estimates.

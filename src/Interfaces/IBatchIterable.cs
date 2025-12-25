@@ -43,4 +43,75 @@ public interface IBatchIterable<TBatch>
     /// Callers should check the return value before using batch.
     /// </remarks>
     bool TryGetNextBatch(out TBatch batch);
+
+    /// <summary>
+    /// Iterates through all batches in the dataset using lazy evaluation.
+    /// </summary>
+    /// <param name="batchSize">Optional batch size override. Uses default BatchSize if null.</param>
+    /// <param name="shuffle">Whether to shuffle data before batching. Default is true.</param>
+    /// <param name="dropLast">Whether to drop the last incomplete batch. Default is false.</param>
+    /// <param name="seed">Optional random seed for reproducible shuffling.</param>
+    /// <returns>An enumerable sequence of batches using yield return for memory efficiency.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides a PyTorch-style iteration pattern using IEnumerable and yield return
+    /// for memory-efficient lazy evaluation. Each call creates a fresh iteration, automatically
+    /// handling reset and shuffle operations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the recommended way to iterate through your data:
+    ///
+    /// <code>
+    /// foreach (var (xBatch, yBatch) in dataLoader.GetBatches(batchSize: 32, shuffle: true))
+    /// {
+    ///     // Train on this batch
+    ///     model.TrainOnBatch(xBatch, yBatch);
+    /// }
+    /// </code>
+    ///
+    /// Unlike GetNextBatch(), you don't need to call Reset() - each GetBatches() call
+    /// starts fresh. The yield return pattern means batches are generated on-demand,
+    /// not all loaded into memory at once.
+    /// </para>
+    /// </remarks>
+    IEnumerable<TBatch> GetBatches(int? batchSize = null, bool shuffle = true, bool dropLast = false, int? seed = null);
+
+    /// <summary>
+    /// Asynchronously iterates through all batches with prefetching support.
+    /// </summary>
+    /// <param name="batchSize">Optional batch size override. Uses default BatchSize if null.</param>
+    /// <param name="shuffle">Whether to shuffle data before batching. Default is true.</param>
+    /// <param name="dropLast">Whether to drop the last incomplete batch. Default is false.</param>
+    /// <param name="seed">Optional random seed for reproducible shuffling.</param>
+    /// <param name="prefetchCount">Number of batches to prefetch ahead. Default is 2.</param>
+    /// <param name="cancellationToken">Token to cancel the iteration.</param>
+    /// <returns>An async enumerable sequence of batches.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method enables async batch iteration with configurable prefetching, similar to
+    /// PyTorch's num_workers or TensorFlow's prefetch(). Batches are prepared in the background
+    /// while the current batch is being processed.
+    /// </para>
+    /// <para><b>For Beginners:</b> Use this for large datasets or when batch preparation is slow:
+    ///
+    /// <code>
+    /// await foreach (var (xBatch, yBatch) in dataLoader.GetBatchesAsync(prefetchCount: 2))
+    /// {
+    ///     // While training on this batch, the next 2 batches are being prepared
+    ///     await model.TrainOnBatchAsync(xBatch, yBatch);
+    /// }
+    /// </code>
+    ///
+    /// Prefetching helps hide data loading latency, especially useful for:
+    /// - Large images that need decoding
+    /// - Data that requires preprocessing
+    /// - Slow storage (network drives, cloud storage)
+    /// </para>
+    /// </remarks>
+    IAsyncEnumerable<TBatch> GetBatchesAsync(
+        int? batchSize = null,
+        bool shuffle = true,
+        bool dropLast = false,
+        int? seed = null,
+        int prefetchCount = 2,
+        CancellationToken cancellationToken = default);
 }

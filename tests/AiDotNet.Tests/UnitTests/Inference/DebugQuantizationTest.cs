@@ -1,10 +1,10 @@
+using System;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Inference;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
-using System;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
 

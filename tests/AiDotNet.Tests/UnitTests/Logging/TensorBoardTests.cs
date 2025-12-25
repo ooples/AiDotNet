@@ -3,6 +3,12 @@ using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Logging;
 
+// These tests share the "runs" directory and must not execute in parallel.
+[CollectionDefinition("TensorBoard filesystem", DisableParallelization = true)]
+public sealed class TensorBoardFilesystemCollection
+{
+}
+
 /// <summary>
 /// Unit tests for TensorBoard logging functionality.
 /// </summary>
@@ -208,6 +214,7 @@ public class TensorBoardWriterTests : IDisposable
 /// <summary>
 /// Unit tests for SummaryWriter (PyTorch-compatible API).
 /// </summary>
+[Collection("TensorBoard filesystem")]
 public class SummaryWriterTests : IDisposable
 {
     private readonly string _testDir;
@@ -560,6 +567,7 @@ public class SummaryWriterTests : IDisposable
 /// <summary>
 /// Tests for TensorBoardTrainingContext.
 /// </summary>
+[Collection("TensorBoard filesystem")]
 public class TensorBoardTrainingContextTests : IDisposable
 {
     private readonly string _testDir;
@@ -675,6 +683,7 @@ public class TensorBoardTrainingContextTests : IDisposable
 /// <summary>
 /// Tests for TensorBoard extension methods.
 /// </summary>
+[Collection("TensorBoard filesystem")]
 public class TensorBoardExtensionsTests : IDisposable
 {
     public void Dispose()

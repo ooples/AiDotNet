@@ -72,49 +72,82 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// criteria are met.
     /// </para>
     /// <para><b>For Beginners:</b> This is the main journey of our hiker:
-    /// 
+    ///
     /// 1. Start at a random point on the hill (initialize random solution)
-    /// 2. For each step (iteration):
-    ///    - Look around to decide which way is downhill (calculate gradient)
-    ///    - Take a step in that direction (update solution)
+    /// 2. For each epoch (pass through the data):
+    ///    - Process data in batches (default BatchSize=1 for true stochastic)
+    ///    - For each batch:
+    ///      - Look around to decide which way is downhill (calculate gradient)
+    ///      - Apply momentum if configured
+    ///      - Take a step in that direction (update solution)
     ///    - Check if this is the lowest point found so far (evaluate and update best solution)
     ///    - Adjust step size if needed (update adaptive parameters)
     ///    - Decide whether to stop early if no progress is being made
     /// 3. Return the lowest point found during the entire journey
-    /// 
+    ///
     /// This process helps find a good solution efficiently, even in complex landscapes.
+    /// </para>
+    /// <para><b>DataLoader Integration:</b>
+    /// This optimizer now uses the DataLoader batching infrastructure which supports:
+    /// - Custom samplers (weighted, stratified, curriculum, importance, active learning)
+    /// - Reproducible shuffling via RandomSeed
+    /// - Option to drop incomplete final batches
+    /// - True stochastic behavior with BatchSize=1 (default)
+    /// Set these options via GradientBasedOptimizerOptions.DataSampler, ShuffleData, DropLastBatch, and RandomSeed.
     /// </para>
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
+        // Initialize with random solution
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
 
+        // Initialize parameters
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            gradient = ApplyMomentum(gradient);
-            var newSolution = UpdateSolution(currentSolution, gradient);
+            // Notify sampler of new epoch (for curriculum/self-paced learning)
+            NotifyEpochStart(epoch);
 
-            var currentStepData = EvaluateSolution(newSolution, inputData);
+            // Create batcher for the current epoch using DataLoader infrastructure
+            // Default BatchSize=1 gives true stochastic gradient descent
+            var batcher = CreateBatcher(inputData, _options.BatchSize);
+
+            foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+            {
+                // Calculate gradient on the batch (single sample for true SGD)
+                var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+
+                // Apply momentum if configured
+                gradient = ApplyMomentum(gradient);
+
+                // Update solution
+                var newSolution = UpdateSolution(currentSolution, gradient);
+
+                currentSolution = newSolution;
+            }
+
+            // Evaluate after processing all batches in the epoch
+            var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
-
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            // Check early stopping criteria
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
-                break;
+                return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            // Check convergence
+            if (NumOps.LessThan(
+                NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
+                NumOps.FromDouble(_options.Tolerance)))
             {
-                break;
+                return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            currentSolution = newSolution;
             previousStepData = currentStepData;
         }
 

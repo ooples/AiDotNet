@@ -1,4 +1,5 @@
-
+using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 
 namespace AiDotNet.Models.Options;
 
@@ -71,6 +72,79 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     public IRegularization<T, TInput, TOutput> Regularization { get; set; } = new L2Regularization<T, TInput, TOutput>();
 
     /// <summary>
+    /// Gets or sets the optional data sampler for advanced sampling strategies during batch creation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A data sampler controls how training examples are selected and ordered during batch creation.
+    /// This enables advanced sampling strategies like:
+    /// - Weighted sampling for class imbalance
+    /// - Stratified sampling to maintain class proportions
+    /// - Curriculum learning to start with easy examples
+    /// - Importance sampling to focus on high-loss examples
+    /// - Active learning to prioritize uncertain examples
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this as choosing which examples to show the model and in what order.
+    /// If you have more examples of cats than dogs, weighted sampling can help the model see dogs more often.
+    /// Curriculum learning shows easy examples first, like learning to walk before running.
+    ///
+    /// **Example:**
+    /// <code>
+    /// // Balanced sampling for imbalanced classes
+    /// options.DataSampler = Samplers.Balanced(labels, numClasses: 2);
+    ///
+    /// // Curriculum learning (easy to hard)
+    /// options.DataSampler = Samplers.Curriculum(difficulties);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IDataSampler? DataSampler { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to shuffle data at the beginning of each epoch.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Shuffling the training data at each epoch helps prevent the model from learning the order
+    /// of training examples rather than the underlying patterns. This is ignored if a custom
+    /// DataSampler is provided.
+    /// </para>
+    /// <para><b>For Beginners:</b> Like shuffling a deck of cards before each deal,
+    /// this ensures the model sees examples in different orders, which helps it learn better patterns.
+    /// </para>
+    /// </remarks>
+    public bool ShuffleData { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to drop the last incomplete batch.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When the training data size is not evenly divisible by the batch size, the last batch
+    /// will be smaller. Setting this to true discards that incomplete batch.
+    /// </para>
+    /// <para><b>For Beginners:</b> If you have 100 examples and a batch size of 32, you'll have
+    /// 3 full batches (96 examples) and 1 partial batch (4 examples). Setting DropLastBatch=true
+    /// discards that partial batch, which can help with training stability.
+    /// </para>
+    /// </remarks>
+    public bool DropLastBatch { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the random seed for reproducibility.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Setting a seed ensures the same random sequence is generated for shuffling and sampling,
+    /// making experiments reproducible.
+    /// </para>
+    /// <para><b>For Beginners:</b> Like a recipe, a seed lets you recreate the exact same training run.
+    /// This is useful for debugging and comparing different model configurations.
+    /// </para>
+    /// </remarks>
+    public int? RandomSeed { get; set; }
+
+    /// <summary>
     /// Gets or sets whether gradient clipping is enabled.
     /// </summary>
     /// <remarks>
@@ -128,6 +202,40 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// </para>
     /// </remarks>
     public double MaxGradientValue { get; set; } = GradientClippingHelper.DefaultMaxValue;
+
+    /// <summary>
+    /// Gets or sets the learning rate scheduler to use during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Learning rate schedulers dynamically adjust the learning rate during training,
+    /// which can significantly improve convergence and final model performance.
+    /// </para>
+    /// <para><b>For Beginners:</b> A learning rate scheduler automatically adjusts how fast
+    /// your model learns during training. Common strategies include:
+    /// - Starting with a higher learning rate and gradually decreasing it
+    /// - Using warmup to slowly increase the learning rate at the start
+    /// - Cycling between high and low learning rates
+    ///
+    /// Set this to null (default) to use a constant learning rate.
+    /// </para>
+    /// </remarks>
+    public ILearningRateScheduler? LearningRateScheduler { get; set; }
+
+    /// <summary>
+    /// Gets or sets when the learning rate scheduler should be stepped.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// - <see cref="SchedulerStepMode.StepPerBatch"/>: Update LR after each mini-batch
+    /// - <see cref="SchedulerStepMode.StepPerEpoch"/>: Update LR after each epoch (default)
+    /// - <see cref="SchedulerStepMode.WarmupThenEpoch"/>: Per-batch during warmup, then per-epoch
+    /// </para>
+    /// <para><b>For Beginners:</b> Most schedulers work best with per-epoch stepping.
+    /// Use per-batch stepping for warmup schedulers or cyclical learning rates.
+    /// </para>
+    /// </remarks>
+    public SchedulerStepMode SchedulerStepMode { get; set; } = SchedulerStepMode.StepPerEpoch;
 }
 
 /// <summary>

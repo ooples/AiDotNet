@@ -42,11 +42,6 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     private int _t;
 
     /// <summary>
-    /// The current learning rate.
-    /// </summary>
-    private T _currentLearningRate;
-
-    /// <summary>
     /// The current value of beta1 (interpolation momentum).
     /// </summary>
     private T _currentBeta1;
@@ -77,7 +72,6 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         _m = Vector<T>.Empty();
         _t = 0;
         _options = options ?? new();
-        _currentLearningRate = NumOps.Zero;
         _currentBeta1 = NumOps.Zero;
         _currentBeta2 = NumOps.Zero;
 
@@ -88,12 +82,13 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// Initializes the adaptive parameters used by the Lion optimizer.
     /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This sets up the initial learning rate and momentum factors.
-    /// Lion typically uses fixed values for these parameters, but they can be made adaptive if needed.</para>
+    /// <para><b>For Beginners:</b> This sets up the momentum factors.
+    /// Lion typically uses fixed values for these parameters, but they can be made adaptive if needed.
+    /// Learning rate is handled by the base class and synced with any configured scheduler.</para>
     /// </remarks>
     protected override void InitializeAdaptiveParameters()
     {
-        _currentLearningRate = NumOps.FromDouble(_options.LearningRate);
+        // Learning rate is handled by base class (synced with scheduler)
         _currentBeta1 = NumOps.FromDouble(_options.Beta1);
         _currentBeta2 = NumOps.FromDouble(_options.Beta2);
     }
@@ -107,6 +102,11 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <para><b>For Beginners:</b> This is the main learning process. It repeatedly improves the model's
     /// parameters using the Lion algorithm. Lion's sign-based updates make it particularly efficient
     /// for large-scale optimization problems, often converging faster than Adam while using less memory.</para>
+    /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
+    /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
+    /// and notifies the sampler of epoch starts using
+    /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>.
+    /// </para>
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
@@ -120,17 +120,24 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
-            _t++;
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            var newSolution = UpdateSolution(currentSolution, gradient);
+            NotifyEpochStart(epoch);
+            var batcher = CreateBatcher(inputData, _options.BatchSize);
 
-            var currentStepData = EvaluateSolution(newSolution, inputData);
+            foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+            {
+                _t++;
+                var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+                var newSolution = UpdateSolution(currentSolution, gradient);
+                currentSolution = newSolution;
+            }
+
+            var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 break;
             }
@@ -140,7 +147,6 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 break;
             }
 
-            currentSolution = newSolution;
             previousStepData = currentStepData;
         }
 
@@ -220,7 +226,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         var parameters = currentSolution.GetParameters();
         var weightDecay = NumOps.FromDouble(_options.WeightDecay);
-        var effectiveLearningRate = _currentLearningRate;
+        var effectiveLearningRate = CurrentLearningRate;
 
         // Step 1: Interpolate between momentum and gradient
         var oneMinusBeta1 = NumOps.Subtract(NumOps.One, _currentBeta1);
@@ -240,7 +246,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         }
 
         // Step 4: Update parameters
-        var lrTimesUpdate = (Vector<T>)Engine.Multiply(update, _currentLearningRate);
+        var lrTimesUpdate = (Vector<T>)Engine.Multiply(update, CurrentLearningRate);
         var newParameters = (Vector<T>)Engine.Subtract(parameters, lrTimesUpdate);
 
         // Step 5: Update momentum for next iteration
@@ -294,7 +300,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         }
 
         // Update parameters
-        var lrTimesUpdate = (Vector<T>)Engine.Multiply(update, _currentLearningRate);
+        var lrTimesUpdate = (Vector<T>)Engine.Multiply(update, CurrentLearningRate);
         var updatedParams = (Vector<T>)Engine.Subtract(parameters, lrTimesUpdate);
 
         // Update momentum: m_t = beta2 * m_{t-1} + (1 - beta2) * g_t
@@ -369,14 +375,14 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var signValue = (Vector<T>)Engine.Sign(interpolated);
 
         // Reverse the update: params_old = (params_new + lr * sign) / (1 - lr * wd)
-        var currentLrVec = Vector<T>.CreateDefault(signValue.Length, _currentLearningRate);
+        var currentLrVec = Vector<T>.CreateDefault(signValue.Length, CurrentLearningRate);
         var lrTimesSign = (Vector<T>)Engine.Multiply(currentLrVec, signValue);
         var numerator = (Vector<T>)Engine.Add(updatedParameters, lrTimesSign);
 
         Vector<T> original;
         if (!NumOps.Equals(weightDecay, NumOps.Zero))
         {
-            var denominator = NumOps.Subtract(NumOps.One, NumOps.Multiply(_currentLearningRate, weightDecay));
+            var denominator = NumOps.Subtract(NumOps.One, NumOps.Multiply(CurrentLearningRate, weightDecay));
             var denominatorVec = Vector<T>.CreateDefault(numerator.Length, denominator);
             original = (Vector<T>)Engine.Divide(numerator, denominatorVec);
         }
@@ -434,7 +440,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         }
 
         // Update parameters
-        var lrTimesUpdate = (Vector<T>)Engine.Multiply(update, _currentLearningRate);
+        var lrTimesUpdate = (Vector<T>)Engine.Multiply(update, CurrentLearningRate);
         var updatedParams = (Vector<T>)Engine.Subtract(paramVector, lrTimesUpdate);
 
         // Update momentum: m_t = beta2 * m_{t-1} + (1 - beta2) * g_t
@@ -458,6 +464,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     public override void Reset()
     {
+        base.Reset();
         _m = Vector<T>.Empty();
         _t = 0;
     }
@@ -601,6 +608,6 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
-        return $"{baseKey}_Lion_{_options.LearningRate}_{_options.MaxIterations}";
+        return $"{baseKey}_Lion_{_options.InitialLearningRate}_{_options.MaxIterations}";
     }
 }

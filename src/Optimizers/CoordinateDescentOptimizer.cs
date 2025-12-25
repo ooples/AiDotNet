@@ -87,8 +87,14 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// <returns>The result of the optimization process.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> This is the heart of the Coordinate Descent algorithm. It iteratively improves the solution
-    /// by updating one coordinate (variable) at a time. The process continues until it reaches the maximum number of iterations 
+    /// by updating one coordinate (variable) at a time. The process continues until it reaches the maximum number of iterations
     /// or meets the stopping criteria.
+    /// </para>
+    /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for epoch management.
+    /// Coordinate Descent typically operates on the full dataset for derivative estimation,
+    /// but notifies the sampler of epoch starts using
+    /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/> for compatibility with
+    /// curriculum learning and sampling strategies.
     /// </para>
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
@@ -101,15 +107,17 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
 
         InitializeAdaptiveParameters(currentSolution);
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
+            NotifyEpochStart(epoch);
+
             var newSolution = UpdateSolution(currentSolution, inputData);
             var currentStepData = EvaluateSolution(newSolution, inputData);
 
             UpdateBestSolution(currentStepData, ref bestStepData);
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }

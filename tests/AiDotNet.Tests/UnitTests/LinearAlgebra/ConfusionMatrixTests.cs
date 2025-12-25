@@ -681,4 +681,341 @@ public class ConfusionMatrixTests
     }
 
     #endregion
+
+    #region Matthews Correlation Coefficient Tests
+
+    [Fact]
+    public void GetMatthewsCorrelationCoefficient_BinaryPerfectPrediction_ReturnsOne()
+    {
+        // Arrange - Perfect binary classification
+        var matrix = new ConfusionMatrix<double>(10, 10, 0, 0);
+
+        // Act
+        double mcc = matrix.GetMatthewsCorrelationCoefficient();
+
+        // Assert
+        Assert.Equal(1.0, mcc, precision: 10);
+    }
+
+    [Fact]
+    public void GetMatthewsCorrelationCoefficient_BinaryTotalDisagreement_ReturnsNegativeOne()
+    {
+        // Arrange - Complete reversal: all positives predicted as negative and vice versa
+        var matrix = new ConfusionMatrix<double>(0, 0, 10, 10);
+
+        // Act
+        double mcc = matrix.GetMatthewsCorrelationCoefficient();
+
+        // Assert
+        Assert.Equal(-1.0, mcc, precision: 10);
+    }
+
+    [Fact]
+    public void GetMatthewsCorrelationCoefficient_RandomPrediction_ReturnsNearZero()
+    {
+        // Arrange - Balanced random-like predictions
+        var matrix = new ConfusionMatrix<double>(5, 5, 5, 5);
+
+        // Act
+        double mcc = matrix.GetMatthewsCorrelationCoefficient();
+
+        // Assert
+        Assert.Equal(0.0, mcc, precision: 10);
+    }
+
+    [Fact]
+    public void GetMatthewsCorrelationCoefficient_MultiClass_CalculatesCorrectly()
+    {
+        // Arrange - 3-class problem with good predictions
+        var matrix = new ConfusionMatrix<double>(3);
+        // Perfect predictions for most samples
+        for (int i = 0; i < 10; i++) matrix.Increment(0, 0);
+        for (int i = 0; i < 10; i++) matrix.Increment(1, 1);
+        for (int i = 0; i < 10; i++) matrix.Increment(2, 2);
+        // A few misclassifications
+        matrix.Increment(0, 1);
+        matrix.Increment(1, 2);
+
+        // Act
+        double mcc = matrix.GetMatthewsCorrelationCoefficient();
+
+        // Assert
+        // MCC should be positive and high for good predictions
+        Assert.True(mcc > 0.8);
+        Assert.True(mcc <= 1.0);
+    }
+
+    [Fact]
+    public void GetMatthewsCorrelationCoefficient_EmptyMatrix_ReturnsZero()
+    {
+        // Arrange
+        var matrix = new ConfusionMatrix<double>(3);
+
+        // Act
+        double mcc = matrix.GetMatthewsCorrelationCoefficient();
+
+        // Assert
+        Assert.Equal(0.0, mcc);
+    }
+
+    #endregion
+
+    #region Cohen's Kappa Tests
+
+    [Fact]
+    public void GetCohenKappa_PerfectAgreement_ReturnsOne()
+    {
+        // Arrange - All predictions are correct
+        var matrix = new ConfusionMatrix<double>(3);
+        for (int i = 0; i < 10; i++) matrix.Increment(0, 0);
+        for (int i = 0; i < 10; i++) matrix.Increment(1, 1);
+        for (int i = 0; i < 10; i++) matrix.Increment(2, 2);
+
+        // Act
+        double kappa = matrix.GetCohenKappa();
+
+        // Assert
+        Assert.Equal(1.0, kappa, precision: 10);
+    }
+
+    [Fact]
+    public void GetCohenKappa_RandomAgreement_ReturnsNearZero()
+    {
+        // Arrange - Uniform distribution (random chance)
+        var matrix = new ConfusionMatrix<double>(2);
+        matrix.Increment(0, 0);
+        matrix.Increment(0, 1);
+        matrix.Increment(1, 0);
+        matrix.Increment(1, 1);
+
+        // Act
+        double kappa = matrix.GetCohenKappa();
+
+        // Assert
+        // With uniform distribution, kappa should be near 0
+        Assert.True(Math.Abs(kappa) < 0.1);
+    }
+
+    [Fact]
+    public void GetCohenKappa_SubstantialAgreement_ReturnsHighValue()
+    {
+        // Arrange - Most predictions correct with some errors
+        var matrix = new ConfusionMatrix<double>(2);
+        for (int i = 0; i < 40; i++) matrix.Increment(0, 0);  // TP
+        for (int i = 0; i < 40; i++) matrix.Increment(1, 1);  // TN
+        matrix.Increment(0, 1);  // FP
+        matrix.Increment(1, 0);  // FN
+
+        // Act
+        double kappa = matrix.GetCohenKappa();
+
+        // Assert
+        // Kappa should be high (>0.8) for substantial agreement
+        Assert.True(kappa > 0.8);
+    }
+
+    [Fact]
+    public void GetCohenKappa_EmptyMatrix_ReturnsZero()
+    {
+        // Arrange
+        var matrix = new ConfusionMatrix<double>(3);
+
+        // Act
+        double kappa = matrix.GetCohenKappa();
+
+        // Assert
+        Assert.Equal(0.0, kappa);
+    }
+
+    [Fact]
+    public void GetCohenKappa_MultiClass_CalculatesCorrectly()
+    {
+        // Arrange - 3-class problem
+        var matrix = new ConfusionMatrix<double>(3);
+        for (int i = 0; i < 8; i++) matrix.Increment(0, 0);
+        for (int i = 0; i < 8; i++) matrix.Increment(1, 1);
+        for (int i = 0; i < 8; i++) matrix.Increment(2, 2);
+        matrix.Increment(0, 1);
+        matrix.Increment(1, 0);
+
+        // Act
+        double kappa = matrix.GetCohenKappa();
+
+        // Assert
+        // Kappa should be between 0 and 1 for this case
+        Assert.True(kappa > 0.5);
+        Assert.True(kappa < 1.0);
+    }
+
+    #endregion
+
+    #region Hamming Loss Tests
+
+    [Fact]
+    public void GetHammingLoss_PerfectPredictions_ReturnsZero()
+    {
+        // Arrange - All predictions correct
+        var matrix = new ConfusionMatrix<double>(3);
+        for (int i = 0; i < 10; i++) matrix.Increment(0, 0);
+        for (int i = 0; i < 10; i++) matrix.Increment(1, 1);
+        for (int i = 0; i < 10; i++) matrix.Increment(2, 2);
+
+        // Act
+        double hammingLoss = matrix.GetHammingLoss();
+
+        // Assert
+        Assert.Equal(0.0, hammingLoss, precision: 10);
+    }
+
+    [Fact]
+    public void GetHammingLoss_AllWrongPredictions_ReturnsOne()
+    {
+        // Arrange - All predictions wrong
+        var matrix = new ConfusionMatrix<double>(2);
+        matrix.Increment(0, 1);  // Predicted 0, actual 1
+        matrix.Increment(1, 0);  // Predicted 1, actual 0
+
+        // Act
+        double hammingLoss = matrix.GetHammingLoss();
+
+        // Assert
+        Assert.Equal(1.0, hammingLoss, precision: 10);
+    }
+
+    [Fact]
+    public void GetHammingLoss_HalfCorrect_ReturnsPointFive()
+    {
+        // Arrange - Half correct, half wrong
+        var matrix = new ConfusionMatrix<double>(2);
+        matrix.Increment(0, 0);  // Correct
+        matrix.Increment(1, 1);  // Correct
+        matrix.Increment(0, 1);  // Wrong
+        matrix.Increment(1, 0);  // Wrong
+
+        // Act
+        double hammingLoss = matrix.GetHammingLoss();
+
+        // Assert
+        Assert.Equal(0.5, hammingLoss, precision: 10);
+    }
+
+    [Fact]
+    public void GetHammingLoss_EqualsOneMinusAccuracy()
+    {
+        // Arrange
+        var matrix = new ConfusionMatrix<double>(3);
+        for (int i = 0; i < 7; i++) matrix.Increment(0, 0);
+        for (int i = 0; i < 8; i++) matrix.Increment(1, 1);
+        matrix.Increment(0, 1);
+        matrix.Increment(1, 0);
+        matrix.Increment(2, 0);
+
+        // Act
+        double hammingLoss = matrix.GetHammingLoss();
+        double accuracy = matrix.GetAccuracy();
+
+        // Assert
+        Assert.Equal(1.0 - accuracy, hammingLoss, precision: 10);
+    }
+
+    #endregion
+
+    #region Jaccard Score Tests
+
+    [Fact]
+    public void GetJaccardScore_PerfectPredictions_ReturnsOne()
+    {
+        // Arrange - Perfect predictions
+        var matrix = new ConfusionMatrix<double>(2);
+        for (int i = 0; i < 10; i++) matrix.Increment(0, 0);
+        for (int i = 0; i < 10; i++) matrix.Increment(1, 1);
+
+        // Act
+        double jaccard = matrix.GetJaccardScore();
+
+        // Assert
+        Assert.Equal(1.0, jaccard, precision: 10);
+    }
+
+    [Fact]
+    public void GetJaccardScore_PerClass_CalculatesCorrectly()
+    {
+        // Arrange
+        var matrix = new ConfusionMatrix<double>(2);
+        // Class 0: TP=8, FP=2, FN=2
+        for (int i = 0; i < 8; i++) matrix.Increment(0, 0);  // TP
+        matrix.Increment(0, 1);  // FP
+        matrix.Increment(0, 1);  // FP
+        matrix.Increment(1, 0);  // FN
+        matrix.Increment(1, 0);  // FN
+        for (int i = 0; i < 6; i++) matrix.Increment(1, 1);  // TN for class 0
+
+        // Act
+        double jaccard0 = matrix.GetJaccardScore(0);
+
+        // Assert
+        // Jaccard = TP / (TP + FP + FN) = 8 / (8 + 2 + 2) = 8/12 = 2/3
+        Assert.Equal(8.0 / 12.0, jaccard0, precision: 10);
+    }
+
+    [Fact]
+    public void GetJaccardScore_MacroAveraged_CalculatesCorrectly()
+    {
+        // Arrange
+        var matrix = new ConfusionMatrix<double>(2);
+        // Increment(actual, predicted):
+        // - 10x Increment(0, 0): actual=0, predicted=0 -> TP for class 0
+        // - 5x Increment(1, 1): actual=1, predicted=1 -> TP for class 1
+        // - 5x Increment(1, 0): actual=1, predicted=0 -> FP for class 0, FN for class 1
+        for (int i = 0; i < 10; i++) matrix.Increment(0, 0);
+        for (int i = 0; i < 5; i++) matrix.Increment(1, 1);
+        for (int i = 0; i < 5; i++) matrix.Increment(1, 0);
+
+        // Class 0: TP=10, FP=5, FN=0 -> Jaccard = 10/(10+5+0) = 10/15 = 2/3
+        // Class 1: TP=5, FP=0, FN=5 -> Jaccard = 5/(5+0+5) = 5/10 = 0.5
+        // Macro Jaccard = (2/3 + 0.5) / 2 = 7/12 ≈ 0.5833
+
+        // Act
+        double macroJaccard = matrix.GetJaccardScore();
+
+        // Assert
+        double expected = (2.0 / 3.0 + 0.5) / 2.0; // 7/12 ≈ 0.5833
+        Assert.Equal(expected, macroJaccard, precision: 10);
+    }
+
+    [Fact]
+    public void GetJaccardScore_ZeroDenominator_ReturnsZeroForClass()
+    {
+        // Arrange - Class with no predictions and no actual samples
+        var matrix = new ConfusionMatrix<double>(3);
+        matrix.Increment(0, 0);  // Only class 0 has data
+
+        // Act
+        double jaccard2 = matrix.GetJaccardScore(2);
+
+        // Assert
+        Assert.Equal(0.0, jaccard2);
+    }
+
+    [Fact]
+    public void GetJaccardScore_MultiClass_CalculatesCorrectly()
+    {
+        // Arrange - 3-class problem
+        var matrix = new ConfusionMatrix<double>(3);
+        for (int i = 0; i < 10; i++) matrix.Increment(0, 0);
+        for (int i = 0; i < 10; i++) matrix.Increment(1, 1);
+        for (int i = 0; i < 10; i++) matrix.Increment(2, 2);
+        // Add some misclassifications
+        matrix.Increment(0, 1);  // FP for 0, FN for 1
+        matrix.Increment(1, 2);  // FP for 1, FN for 2
+
+        // Act
+        double jaccard = matrix.GetJaccardScore();
+
+        // Assert
+        // All classes have high Jaccard scores, macro average should be high
+        Assert.True(jaccard > 0.8);
+    }
+
+    #endregion
 }

@@ -71,7 +71,7 @@ public static class MeshConvolutionOperations
         {
             // Step 1: Gather features from spiral neighbors
             var gathered = new T[gatheredSize];
-            
+
             for (int s = 0; s < spiralLength; s++)
             {
                 int neighborIdx = indicesData[v * spiralLength + s];
@@ -232,7 +232,7 @@ public static class MeshConvolutionOperations
                 // Handle remaining elements
                 for (; i < gatheredSize; i++)
                 {
-                    gatheredGrad[i] = numOps.Add(gatheredGrad[i], 
+                    gatheredGrad[i] = numOps.Add(gatheredGrad[i],
                         numOps.Multiply(grad, weightsData[weightRowOffset + i]));
                 }
             }
@@ -250,7 +250,7 @@ public static class MeshConvolutionOperations
                         for (int c = 0; c < inputChannels; c++)
                         {
                             int inputIdx = neighborIdx * inputChannels + c;
-                            inputGrad[inputIdx] = numOps.Add(inputGrad[inputIdx], 
+                            inputGrad[inputIdx] = numOps.Add(inputGrad[inputIdx],
                                 gatheredGrad[gatherOffset + c]);
                         }
                     }
@@ -294,7 +294,7 @@ public static class MeshConvolutionOperations
         {
             // Gather features from spiral neighbors
             var gathered = new T[gatheredSize];
-            
+
             for (int s = 0; s < spiralLength; s++)
             {
                 int neighborIdx = indicesData[v * spiralLength + s];
@@ -386,7 +386,7 @@ public static class MeshConvolutionOperations
         Parallel.For(0, outputChannels, oc =>
         {
             T sum = numOps.Zero;
-            
+
             int simdWidth = System.Numerics.Vector<float>.Count;
             int v = 0;
 
@@ -513,7 +513,7 @@ public static class MeshConvolutionOperations
             for (int oc = 0; oc < outputChannels; oc++)
             {
                 T sum = biasData[oc];
-                
+
                 for (int ic = 0; ic < inputChannels; ic++)
                 {
                     sum = numOps.Add(sum, numOps.Multiply(
@@ -852,7 +852,7 @@ public static class MeshConvolutionOperations
         double crossY = e1z * e2x - e1x * e2z;
         double crossZ = e1x * e2y - e1y * e2x;
         double crossMag = Math.Sqrt(crossX * crossX + crossY * crossY + crossZ * crossZ);
-        
+
         return crossMag > 1e-10 ? dot / crossMag : 0.0;
     }
 
@@ -946,7 +946,7 @@ public static class MeshConvolutionOperations
         Parallel.For(0, numVertices, v =>
         {
             var spiral = GenerateVertexSpiral(v, adjacency, vertexData, spiralLength, numOps);
-            
+
             for (int s = 0; s < spiralLength; s++)
             {
                 spiralIndices[v * spiralLength + s] = spiral[s];

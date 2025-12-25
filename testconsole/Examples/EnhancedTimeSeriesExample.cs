@@ -391,7 +391,7 @@ public class EnhancedTimeSeriesExample
         // Configure Adam optimizer
         var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
-            LearningRate = 0.01,
+            InitialLearningRate = 0.01,
             MaxIterations = 1000,
             Tolerance = 1e-6
         };
@@ -422,7 +422,7 @@ public class EnhancedTimeSeriesExample
         // Configure Adam optimizer
         var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
-            LearningRate = 0.01,
+            InitialLearningRate = 0.01,
             MaxIterations = 1000,
             Tolerance = 1e-6
         };
@@ -453,7 +453,7 @@ public class EnhancedTimeSeriesExample
         // Configure Adam optimizer
         var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
-            LearningRate = 0.01,
+            InitialLearningRate = 0.01,
             MaxIterations = 1000,
             Tolerance = 1e-6
         };

@@ -34,6 +34,19 @@ namespace AiDotNet.Models.Options;
 public class LevenbergMarquardtOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Gets or sets the batch size for gradient computation.
+    /// </summary>
+    /// <value>A positive integer, defaulting to -1 (full batch).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The batch size controls how many examples are used to calculate gradients.
+    /// Levenberg-Marquardt uses full-batch gradients (batch size -1) because it requires computing the
+    /// Jacobian matrix across the entire dataset to properly construct the normal equations.
+    /// Using mini-batches would introduce noise that makes the Jacobian approximation unreliable
+    /// and would compromise the algorithm's ability to balance between Gauss-Newton and gradient descent.</para>
+    /// </remarks>
+    public int BatchSize { get; set; } = -1;
+
+    /// <summary>
     /// Gets or sets the starting value for the damping factor used in the algorithm.
     /// </summary>
     /// <value>The initial damping factor, defaulting to 0.1.</value>

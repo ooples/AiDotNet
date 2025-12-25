@@ -33,6 +33,18 @@ namespace AiDotNet.Models.Options;
 public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Gets or sets the batch size for gradient computation.
+    /// </summary>
+    /// <value>A positive integer, defaulting to -1 (full batch).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The batch size controls how many examples are used to calculate gradients.
+    /// L-BFGS traditionally uses full-batch gradients (batch size -1) because it maintains a history of
+    /// gradient and position differences that require consistent gradients between iterations.
+    /// Using mini-batches would introduce noise that disrupts the two-loop recursion.</para>
+    /// </remarks>
+    public int BatchSize { get; set; } = -1;
+
+    /// <summary>
     /// Gets or sets the memory size, which determines how many previous iterations' information
     /// the L-BFGS algorithm stores to approximate the Hessian matrix.
     /// </summary>

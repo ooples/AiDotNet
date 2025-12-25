@@ -453,7 +453,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
         int aggregatedFeatures = InputChannels * (1 + NumNeighbors);
 
         var aggregatedInput = AggregateEdgeFeatures(_lastInput, _lastEdgeAdjacency, numEdges, aggregatedFeatures);
-        
+
         // Compute weight gradient: delta.T @ aggregatedInput
         var deltaTransposed = Engine.TensorTranspose(delta);
         _weightsGradient = Engine.TensorMatMul(deltaTransposed, aggregatedInput);
