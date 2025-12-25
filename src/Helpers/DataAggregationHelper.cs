@@ -47,6 +47,20 @@ public static class DataAggregationHelper
             return items[0];
         }
 
+        // Validate all items are of the same type as the first item
+        var firstItemType = items[0]?.GetType();
+        for (int i = 1; i < items.Count; i++)
+        {
+            var currentType = items[i]?.GetType();
+            if (currentType != firstItemType)
+            {
+                throw new ArgumentException(
+                    $"Cannot aggregate {itemTypeName}s of mixed types. " +
+                    $"Item 0 is {firstItemType?.Name ?? "null"}, but item {i} is {currentType?.Name ?? "null"}. " +
+                    $"All items must be of the same type.");
+            }
+        }
+
         // Handle Matrix<T> aggregation
         if (items[0] is Matrix<T>)
         {
