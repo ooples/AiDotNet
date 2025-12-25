@@ -96,9 +96,19 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
     private const double SVD_LATENT_SCALE = 0.18215;
 
     /// <summary>
+    /// Default noise augmentation strength for conditioning image.
+    /// </summary>
+    private const double DEFAULT_NOISE_AUG_STRENGTH = 0.02;
+
+    /// <summary>
     /// The VideoUNet noise predictor.
     /// </summary>
     private readonly VideoUNetPredictor<T> _videoUNet;
+
+    /// <summary>
+    /// Noise augmentation strength for micro-conditioning.
+    /// </summary>
+    private readonly double _noiseAugmentStrength;
 
     /// <summary>
     /// The temporal VAE for video encoding/decoding.
@@ -212,7 +222,8 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
         TemporalVAE<T>? temporalVAE = null,
         IConditioningModule<T>? conditioner = null,
         int defaultNumFrames = 25,
-        int defaultFPS = 7)
+        int defaultFPS = 7,
+        double noiseAugmentStrength = DEFAULT_NOISE_AUG_STRENGTH)
         : base(options, scheduler ?? CreateDefaultScheduler(), defaultNumFrames, defaultFPS)
     {
         // Create default VideoUNet if not provided
@@ -223,6 +234,9 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
 
         // Store optional conditioner
         _conditioner = conditioner;
+
+        // Store noise augment strength for micro-conditioning
+        _noiseAugmentStrength = noiseAugmentStrength;
     }
 
     /// <summary>
@@ -441,34 +455,57 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
     /// <returns>Motion embedding tensor.</returns>
     protected override Tensor<T> CreateMotionEmbedding(int motionBucketId, int fps)
     {
-        // SVD uses a more complex motion embedding that combines:
-        // 1. Motion bucket ID (normalized to 0-1)
-        // 2. FPS conditioning (normalized to 0-1)
-        // 3. Additional positional encoding
+        // SVD uses micro-conditioning with add_time_ids:
+        // [fps-1, motion_bucket_id, noise_aug_strength] as separate raw values
+        // that are concatenated and projected through learned embedding layers
 
-        var embeddingDim = 256; // SVD motion embedding dimension
-        var embedding = new Tensor<T>(new[] { 1, embeddingDim });
+        // Standard SVD embedding dimensions:
+        // - Each conditioning value is embedded into 256 dimensions
+        // - Total: 3 values x 256 = 768 (or fewer depending on model config)
+        var additionTimeEmbedDim = 256;
+        var numConditioningValues = 3; // fps, motion_bucket_id, noise_aug_strength
+        var totalEmbeddingDim = additionTimeEmbedDim * numConditioningValues;
+
+        var embedding = new Tensor<T>(new[] { 1, totalEmbeddingDim });
         var span = embedding.AsWritableSpan();
 
-        // Normalized motion and fps values
-        var normalizedMotion = motionBucketId / 255.0;
-        var normalizedFps = fps / 30.0;
+        // Create add_time_ids: [fps-1, motion_bucket_id, noise_aug_strength]
+        // SVD was trained with fps-1 as per diffusers implementation
+        double fpsMinus1 = fps - 1;
+        double motionBucket = motionBucketId;
+        double noiseAugStrength = _noiseAugmentStrength; // Use configured noise aug strength
 
-        // Fill with sinusoidal positional encoding modulated by motion/fps
-        for (int i = 0; i < embeddingDim; i += 2)
-        {
-            var freq = Math.Pow(10000.0, -i / (double)embeddingDim);
-            var motionPhase = normalizedMotion * Math.PI * 2;
-            var fpsPhase = normalizedFps * Math.PI;
-
-            span[i] = NumOps.FromDouble(Math.Sin(freq * motionPhase + fpsPhase));
-            if (i + 1 < embeddingDim)
-            {
-                span[i + 1] = NumOps.FromDouble(Math.Cos(freq * motionPhase + fpsPhase));
-            }
-        }
+        // Each value is projected using sinusoidal timestep embedding (similar to diffusion timestep)
+        // then concatenated. This follows the SVD UNet's addition_embed_type architecture
+        ProjectConditioningValue(span, fpsMinus1, 0, additionTimeEmbedDim);
+        ProjectConditioningValue(span, motionBucket, additionTimeEmbedDim, additionTimeEmbedDim);
+        ProjectConditioningValue(span, noiseAugStrength, additionTimeEmbedDim * 2, additionTimeEmbedDim);
 
         return embedding;
+    }
+
+    /// <summary>
+    /// Projects a single conditioning value into an embedding using sinusoidal timestep projection.
+    /// </summary>
+    /// <param name="span">The output span to write to.</param>
+    /// <param name="value">The conditioning value.</param>
+    /// <param name="startIdx">Start index in the span.</param>
+    /// <param name="embedDim">Embedding dimension for this value.</param>
+    private void ProjectConditioningValue(Span<T> span, double value, int startIdx, int embedDim)
+    {
+        // Use sinusoidal embedding similar to timestep embedding
+        // This is then typically passed through linear layers in the actual model
+        int halfDim = embedDim / 2;
+        double embScale = Math.Log(10000.0) / (halfDim - 1);
+
+        for (int i = 0; i < halfDim; i++)
+        {
+            double freq = Math.Exp(-i * embScale);
+            double phase = value * freq;
+
+            span[startIdx + i] = NumOps.FromDouble(Math.Sin(phase));
+            span[startIdx + halfDim + i] = NumOps.FromDouble(Math.Cos(phase));
+        }
     }
 
     /// <summary>
