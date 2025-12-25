@@ -408,17 +408,14 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         var parameters = Generator.GetParameters();
         var gradients = Generator.GetParameterGradients();
 
-        // Gradient clipping
+        // Gradient clipping using vectorized operations
         var gradientNorm = gradients.L2Norm();
         var clipThreshold = NumOps.FromDouble(5.0);
 
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
             var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
-            }
+            gradients = Engine.Multiply(gradients, scaleFactor);
         }
 
         var updatedParameters = GeneratorOptimizer.UpdateParameters(parameters, gradients);
@@ -433,17 +430,14 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         var parameters = Discriminator.GetParameters();
         var gradients = Discriminator.GetParameterGradients();
 
-        // Gradient clipping
+        // Gradient clipping using vectorized operations
         var gradientNorm = gradients.L2Norm();
         var clipThreshold = NumOps.FromDouble(5.0);
 
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
             var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
-            }
+            gradients = Engine.Multiply(gradients, scaleFactor);
         }
 
         var updatedParameters = DiscriminatorOptimizer.UpdateParameters(parameters, gradients);
@@ -494,38 +488,22 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// </remarks>
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets)
     {
-        int batchSize = predictions.Shape[0];
-        var gradients = new Tensor<T>(predictions.Shape);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            T logit = predictions[i, 0];
-            T target = targets[i, 0];
-
-            // sigmoid(logit) = 1 / (1 + exp(-logit))
-            T negLogit = NumOps.Negate(logit);
-            T expNegLogit = NumOps.Exp(negLogit);
-            T sigmoid = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegLogit));
-
-            // Gradient = sigmoid(logit) - target
-            gradients[i, 0] = NumOps.Subtract(sigmoid, target);
-        }
-
-        return gradients;
+        // === Vectorized BCE gradients using IEngine (Phase B: US-GPU-015) ===
+        // Gradient of BCE with logits: dL/dz = sigmoid(z) - target
+        var sigmoid = Engine.Sigmoid(predictions);
+        return Engine.TensorSubtract(sigmoid, targets);
     }
 
     /// <summary>
-    /// Creates a label tensor filled with a specified value.
+    /// Creates a label tensor filled with a specified value using vectorized fill.
     /// </summary>
     private Tensor<T> CreateLabelTensor(int batchSize, T value)
     {
         var shape = new int[] { batchSize, 1 };
         var tensor = new Tensor<T>(shape);
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            tensor[i, 0] = value;
-        }
+        // Use vectorized fill operation
+        Engine.TensorFill(tensor, value);
 
         return tensor;
     }

@@ -299,17 +299,14 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         var parameters = Generator.GetParameters();
         var gradients = Generator.GetParameterGradients();
 
-        // Gradient clipping
+        // Gradient clipping using vectorized operations
         var gradientNorm = gradients.L2Norm();
         var clipThreshold = NumOps.FromDouble(5.0);
 
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
             var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
-            }
+            gradients = Engine.Multiply(gradients, scaleFactor);
         }
 
         var updatedParameters = _generatorOptimizer.UpdateParameters(parameters, gradients);
@@ -324,17 +321,14 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         var parameters = Discriminator.GetParameters();
         var gradients = Discriminator.GetParameterGradients();
 
-        // Gradient clipping
+        // Gradient clipping using vectorized operations
         var gradientNorm = gradients.L2Norm();
         var clipThreshold = NumOps.FromDouble(5.0);
 
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
             var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
-            }
+            gradients = Engine.Multiply(gradients, scaleFactor);
         }
 
         var updatedParameters = _discriminatorOptimizer.UpdateParameters(parameters, gradients);
@@ -512,21 +506,8 @@ public class ACGAN<T> : NeuralNetworkBase<T>
             return discOutput;
         }
 
-        // Apply sigmoid transformation: p = 1 / (1 + exp(-x))
-        var normalized = new Tensor<T>(discOutput.Shape);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                T logit = discOutput[i, j];
-                T negLogit = NumOps.Negate(logit);
-                T expNegLogit = NumOps.Exp(negLogit);
-                T denominator = NumOps.Add(one, expNegLogit);
-                normalized[i, j] = NumOps.Divide(one, denominator);
-            }
-        }
-
-        return normalized;
+        // === Vectorized sigmoid using IEngine (Phase B: US-GPU-015) ===
+        return Engine.Sigmoid(discOutput);
     }
 
     /// <summary>

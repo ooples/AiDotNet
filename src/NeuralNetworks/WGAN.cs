@@ -384,20 +384,9 @@ public class WGAN<T> : NeuralNetworkBase<T>
         var clipMin = NumOps.FromDouble(-_weightClipValue);
         var clipMax = NumOps.FromDouble(_weightClipValue);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            // Clip to [-c, c]
-            if (NumOps.GreaterThan(parameters[i], clipMax))
-            {
-                parameters[i] = clipMax;
-            }
-            else if (NumOps.LessThan(parameters[i], clipMin))
-            {
-                parameters[i] = clipMin;
-            }
-        }
-
-        Critic.UpdateParameters(parameters);
+        // Vectorized weight clipping using Engine.Clamp
+        var clippedParameters = Engine.Clamp(parameters, clipMin, clipMax);
+        Critic.UpdateParameters(clippedParameters);
     }
 
     /// <summary>
@@ -413,28 +402,21 @@ public class WGAN<T> : NeuralNetworkBase<T>
         // Forward pass through critic
         var criticScores = Critic.Predict(images);
 
-        // Calculate average score
+        // Calculate average score using vectorized reduction
         int batchSize = images.Shape[0];
-        T totalScore = NumOps.Zero;
+        T avgScore = NumOps.Divide(Engine.TensorSum(criticScores), NumOps.FromDouble(batchSize));
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            totalScore = NumOps.Add(totalScore, criticScores[i, 0]);
-        }
-
-        T avgScore = NumOps.Divide(totalScore, NumOps.FromDouble(batchSize));
-
-        // Create predicted scores and labels vectors for loss function
+        // Create predicted scores from tensor (extract first column) and labels using vectorized fill
         // Labels: +1 for real samples, -1 for fake samples (Wasserstein convention)
         var predictedScores = new Vector<T>(batchSize);
-        var labels = new Vector<T>(batchSize);
         T labelValue = isReal ? NumOps.One : NumOps.Negate(NumOps.One);
 
+        // Extract scores from tensor to vector (column 0)
         for (int i = 0; i < batchSize; i++)
         {
             predictedScores[i] = criticScores[i, 0];
-            labels[i] = labelValue;
         }
+        var labels = Engine.Fill<T>(batchSize, labelValue);
 
         // Use the loss function to calculate gradients
         // WassersteinLoss.CalculateDerivative returns -labels[i] / n
@@ -479,13 +461,13 @@ public class WGAN<T> : NeuralNetworkBase<T>
         // This minimizes the negative of the score, i.e., maximizes the score
         int batchSize = noise.Shape[0];
         var predictedScores = new Vector<T>(batchSize);
-        var labels = new Vector<T>(batchSize);
 
+        // Extract scores from tensor to vector (column 0)
         for (int i = 0; i < batchSize; i++)
         {
             predictedScores[i] = criticScores[i, 0];
-            labels[i] = NumOps.One; // Want to maximize score (be more "real")
         }
+        var labels = Engine.Fill<T>(batchSize, NumOps.One); // Want to maximize score (be more "real")
 
         // Calculate loss using the loss function: -mean(predicted * labels)
         // With labels = +1: loss = -mean(predicted), minimizing this maximizes scores
@@ -522,17 +504,14 @@ public class WGAN<T> : NeuralNetworkBase<T>
         var parameters = Generator.GetParameters();
         var gradients = Generator.GetParameterGradients();
 
-        // Gradient clipping
+        // Gradient clipping using vectorized operations
         var gradientNorm = gradients.L2Norm();
         var clipThreshold = NumOps.FromDouble(5.0);
 
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
             var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
-            }
+            gradients = Engine.Multiply(gradients, scaleFactor);
         }
 
         var updatedParameters = _generatorOptimizer.UpdateParameters(parameters, gradients);
@@ -547,17 +526,14 @@ public class WGAN<T> : NeuralNetworkBase<T>
         var parameters = Critic.GetParameters();
         var gradients = Critic.GetParameterGradients();
 
-        // Gradient clipping
+        // Gradient clipping using vectorized operations
         var gradientNorm = gradients.L2Norm();
         var clipThreshold = NumOps.FromDouble(5.0);
 
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
             var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
-            }
+            gradients = Engine.Multiply(gradients, scaleFactor);
         }
 
         var updatedParameters = _criticOptimizer.UpdateParameters(parameters, gradients);

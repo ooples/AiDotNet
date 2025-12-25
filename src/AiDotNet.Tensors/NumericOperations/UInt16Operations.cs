@@ -540,6 +540,21 @@ public class UInt16Operations : INumericOperations<ushort>
     /// </remarks>
     public ushort Round(ushort value) => value;
 
+    public ushort Floor(ushort value) => value;
+    public ushort Ceiling(ushort value) => value;
+    public ushort Frac(ushort value) => 0;
+
+    /// <summary>
+    /// Returns the sine of the specified value (truncated to integer).
+    /// </summary>
+    public ushort Sin(ushort value) => (ushort)Math.Sin(value);
+
+    /// <summary>
+    /// Returns the cosine of the specified value (truncated to integer).
+    /// </summary>
+    public ushort Cos(ushort value) => (ushort)Math.Cos(value);
+
+
     /// <summary>
     /// Gets the minimum value that can be represented by a ushort.
     /// </summary>
@@ -801,4 +816,19 @@ public class UInt16Operations : INumericOperations<ushort>
     public void Clip(ReadOnlySpan<ushort> x, ushort min, ushort max, Span<ushort> destination) => VectorizedOperationsFallback.Clip(_instance, x, min, max, destination);
     public void Pow(ReadOnlySpan<ushort> x, ushort power, Span<ushort> destination) => VectorizedOperationsFallback.Pow(_instance, x, power, destination);
     public void Copy(ReadOnlySpan<ushort> source, Span<ushort> destination) => source.CopyTo(destination);
+
+    public void Floor(ReadOnlySpan<ushort> x, Span<ushort> destination) => x.CopyTo(destination);
+    public void Ceiling(ReadOnlySpan<ushort> x, Span<ushort> destination) => x.CopyTo(destination);
+    public void Frac(ReadOnlySpan<ushort> x, Span<ushort> destination) => destination.Fill(0);
+    public void Sin(ReadOnlySpan<ushort> x, Span<ushort> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (ushort)Math.Sin(x[i]);
+    }
+    public void Cos(ReadOnlySpan<ushort> x, Span<ushort> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (ushort)Math.Cos(x[i]);
+    }
+
 }

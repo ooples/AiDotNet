@@ -173,6 +173,51 @@ public class MultivectorOperations<T> : INumericOperations<Multivector<T>>
         return new Multivector<T>(_algebra, coeffs);
     }
 
+    public Multivector<T> Floor(Multivector<T> value)
+    {
+        EnsureCompatible(value);
+        var coeffs = new T[value.BasisCount];
+        for (int i = 0; i < coeffs.Length; i++)
+            coeffs[i] = _ops.Floor(value[i]);
+        return new Multivector<T>(_algebra, coeffs);
+    }
+
+    public Multivector<T> Ceiling(Multivector<T> value)
+    {
+        EnsureCompatible(value);
+        var coeffs = new T[value.BasisCount];
+        for (int i = 0; i < coeffs.Length; i++)
+            coeffs[i] = _ops.Ceiling(value[i]);
+        return new Multivector<T>(_algebra, coeffs);
+    }
+
+    public Multivector<T> Frac(Multivector<T> value)
+    {
+        EnsureCompatible(value);
+        var coeffs = new T[value.BasisCount];
+        for (int i = 0; i < coeffs.Length; i++)
+            coeffs[i] = _ops.Frac(value[i]);
+        return new Multivector<T>(_algebra, coeffs);
+    }
+
+    public Multivector<T> Sin(Multivector<T> value)
+    {
+        EnsureCompatible(value);
+        var coeffs = new T[value.BasisCount];
+        for (int i = 0; i < coeffs.Length; i++)
+            coeffs[i] = _ops.Sin(value[i]);
+        return new Multivector<T>(_algebra, coeffs);
+    }
+
+    public Multivector<T> Cos(Multivector<T> value)
+    {
+        EnsureCompatible(value);
+        var coeffs = new T[value.BasisCount];
+        for (int i = 0; i < coeffs.Length; i++)
+            coeffs[i] = _ops.Cos(value[i]);
+        return new Multivector<T>(_algebra, coeffs);
+    }
+
     public Multivector<T> MinValue
     {
         get
@@ -352,6 +397,21 @@ public class MultivectorOperations<T> : INumericOperations<Multivector<T>>
 
     public void Copy(ReadOnlySpan<Multivector<T>> source, Span<Multivector<T>> destination)
         => source.CopyTo(destination);
+
+    public void Floor(ReadOnlySpan<Multivector<T>> x, Span<Multivector<T>> destination)
+        => VectorizedOperationsFallback.Floor(this, x, destination);
+
+    public void Ceiling(ReadOnlySpan<Multivector<T>> x, Span<Multivector<T>> destination)
+        => VectorizedOperationsFallback.Ceiling(this, x, destination);
+
+    public void Frac(ReadOnlySpan<Multivector<T>> x, Span<Multivector<T>> destination)
+        => VectorizedOperationsFallback.Frac(this, x, destination);
+
+    public void Sin(ReadOnlySpan<Multivector<T>> x, Span<Multivector<T>> destination)
+        => VectorizedOperationsFallback.Sin(this, x, destination);
+
+    public void Cos(ReadOnlySpan<Multivector<T>> x, Span<Multivector<T>> destination)
+        => VectorizedOperationsFallback.Cos(this, x, destination);
 
     #endregion
 

@@ -691,13 +691,9 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// <returns>The normalized vector.</returns>
     private Vector<T> NormalizeVector(Vector<T> vector)
     {
-        T norm = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            norm = NumOps.Add(norm, NumOps.Multiply(vector[i], vector[i]));
-        }
-
-        norm = NumOps.Sqrt(norm);
+        // Compute L2 norm using vectorized dot product: sqrt(sum(vector^2))
+        T normSquared = Engine.DotProduct(vector, vector);
+        T norm = NumOps.Sqrt(normSquared);
 
         // Avoid division by zero
         if (MathHelper.AlmostEqual(norm, NumOps.Zero))
@@ -705,13 +701,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             return new Vector<T>(vector.Length); // Return zero vector
         }
 
-        Vector<T> normalized = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            normalized[i] = NumOps.Divide(vector[i], norm);
-        }
-
-        return normalized;
+        // Vectorized normalization: vector / norm
+        return (Vector<T>)Engine.Divide(vector, norm);
     }
 
     /// <summary>
@@ -720,72 +711,53 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// <param name="input">The input vector.</param>
     private void UpdateReservoirState(Vector<T> input)
     {
-        // Calculate input contribution: input_weights * input
-        Vector<T> inputContribution = new Vector<T>(_reservoirSize);
-        for (int i = 0; i < _reservoirSize; i++)
+        // Vectorized input contribution: transpose(input_weights) * input
+        var inputWeightsTransposed = Engine.MatrixTranspose(_inputWeights);
+        Vector<T> inputContribution = Engine.MatrixVectorMultiply(inputWeightsTransposed, input);
+
+        // Vectorized reservoir contribution: transpose(reservoir_weights) * current_state
+        var reservoirWeightsTransposed = Engine.MatrixTranspose(_reservoirWeights);
+        Vector<T> reservoirContribution = Engine.MatrixVectorMultiply(reservoirWeightsTransposed, _currentState);
+
+        // Vectorized sum: input_contribution + reservoir_contribution + bias
+        Vector<T> preActivation = Engine.Add(Engine.Add(inputContribution, reservoirContribution), _reservoirBias);
+
+        // Apply activation function
+        Vector<T> activated;
+        if (_reservoirScalarActivation != null)
         {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < _inputSize; j++)
+            // Scalar activation must be applied element-wise
+            activated = new Vector<T>(_reservoirSize);
+            for (int i = 0; i < _reservoirSize; i++)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(_inputWeights[j, i], input[j]));
+                activated[i] = _reservoirScalarActivation.Activate(preActivation[i]);
             }
-            inputContribution[i] = sum;
+        }
+        else if (_reservoirVectorActivation != null)
+        {
+            // Use vectorized activation
+            activated = _reservoirVectorActivation.Activate(preActivation);
+        }
+        else
+        {
+            // Default to vectorized tanh using Engine
+            activated = Engine.Tanh(preActivation);
         }
 
-        // Calculate reservoir contribution: reservoir_weights * current_state
-        Vector<T> reservoirContribution = new Vector<T>(_reservoirSize);
-        for (int i = 0; i < _reservoirSize; i++)
+        // Apply leaking rate (vectorized)
+        Vector<T> newState;
+        if (MathHelper.AlmostEqual(_leakingRate, NumOps.One))
         {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < _reservoirSize; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_reservoirWeights[j, i], _currentState[j]));
-            }
-            reservoirContribution[i] = sum;
+            // No leaking
+            newState = activated;
         }
-
-        // Calculate new state: input_contribution + reservoir_contribution + bias
-        Vector<T> newState = new Vector<T>(_reservoirSize);
-        for (int i = 0; i < _reservoirSize; i++)
+        else
         {
-            T sum = NumOps.Add(NumOps.Add(inputContribution[i], reservoirContribution[i]), _reservoirBias[i]);
-
-            // Apply activation function
-            T activated;
-            if (_reservoirScalarActivation != null)
-            {
-                activated = _reservoirScalarActivation.Activate(sum);
-            }
-            else if (_reservoirVectorActivation != null)
-            {
-                // For simplicity, we'll just compute this element-wise
-                // A proper implementation would apply the vector activation to the whole vector
-                Vector<T> temp = new Vector<T>(1);
-                temp[0] = sum;
-                activated = _reservoirVectorActivation.Activate(temp)[0];
-            }
-            else
-            {
-                // Default to tanh if no activation is specified
-                double val = Math.Tanh(Convert.ToDouble(sum));
-                activated = NumOps.FromDouble(val);
-            }
-
-            // Apply leaking rate
-            if (MathHelper.AlmostEqual(_leakingRate, NumOps.One))
-            {
-                // No leaking
-                newState[i] = activated;
-            }
-            else
-            {
-                // Leaky integration: (1-a)*previous_state + a*new_state
-                T oneMinusAlpha = NumOps.Subtract(NumOps.One, _leakingRate);
-                newState[i] = NumOps.Add(
-                    NumOps.Multiply(oneMinusAlpha, _currentState[i]),
-                    NumOps.Multiply(_leakingRate, activated)
-                );
-            }
+            // Vectorized leaky integration: (1-a)*previous_state + a*new_state
+            T oneMinusAlpha = NumOps.Subtract(NumOps.One, _leakingRate);
+            var previousScaled = Engine.Multiply(_currentState, oneMinusAlpha);
+            var activatedScaled = Engine.Multiply(activated, _leakingRate);
+            newState = Engine.Add(previousScaled, activatedScaled);
         }
 
         // Update the current state
@@ -798,33 +770,31 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// <returns>The output vector.</returns>
     private Vector<T> ComputeOutput()
     {
-        // Calculate output: output_weights^T * reservoir_state + output_bias
-        Vector<T> output = new Vector<T>(_outputSize);
-        for (int i = 0; i < _outputSize; i++)
-        {
-            T sum = _outputBias[i];
-            for (int j = 0; j < _reservoirSize; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_outputWeights[j, i], _currentState[j]));
-            }
+        // Vectorized output: transpose(output_weights) * reservoir_state + output_bias
+        var outputWeightsTransposed = Engine.MatrixTranspose(_outputWeights);
+        Vector<T> linearOutput = Engine.MatrixVectorMultiply(outputWeightsTransposed, _currentState);
+        Vector<T> preActivation = Engine.Add(linearOutput, _outputBias);
 
-            // Apply output activation if specified
-            if (_outputScalarActivation != null)
+        // Apply output activation if specified
+        Vector<T> output;
+        if (_outputScalarActivation != null)
+        {
+            // Scalar activation must be applied element-wise
+            output = new Vector<T>(_outputSize);
+            for (int i = 0; i < _outputSize; i++)
             {
-                output[i] = _outputScalarActivation.Activate(sum);
+                output[i] = _outputScalarActivation.Activate(preActivation[i]);
             }
-            else if (_outputVectorActivation != null)
-            {
-                // For simplicity, element-wise application
-                Vector<T> temp = new Vector<T>(1);
-                temp[0] = sum;
-                output[i] = _outputVectorActivation.Activate(temp)[0];
-            }
-            else
-            {
-                // No activation, linear output
-                output[i] = sum;
-            }
+        }
+        else if (_outputVectorActivation != null)
+        {
+            // Use vectorized activation
+            output = _outputVectorActivation.Activate(preActivation);
+        }
+        else
+        {
+            // No activation, linear output
+            output = preActivation;
         }
 
         return output;
@@ -835,9 +805,13 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public void ResetReservoirState()
     {
+        // Vectorized reset using Engine tensor fill
+        var stateTensor = new Tensor<T>(_currentState.ToArray(), [_reservoirSize]);
+        Engine.TensorFill(stateTensor, NumOps.Zero);
+        var zeroArray = stateTensor.ToArray();
         for (int i = 0; i < _reservoirSize; i++)
         {
-            _currentState[i] = NumOps.Zero;
+            _currentState[i] = zeroArray[i];
         }
     }
 

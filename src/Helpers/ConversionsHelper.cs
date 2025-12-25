@@ -505,4 +505,48 @@ public static class ConversionsHelper
                 $"For Matrix<T>, use ConvertVectorToInput(vector, referenceMatrix) instead.");
         }
     }
+
+    /// <summary>
+    /// Gets the sample count from supported input/output data types.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <typeparam name="TData">The data type to inspect.</typeparam>
+    /// <param name="data">The data instance to inspect.</param>
+    /// <returns>The number of samples in the data.</returns>
+    public static int GetSampleCount<T, TData>(TData data)
+    {
+        if (data == null)
+        {
+            throw new ArgumentNullException(nameof(data));
+        }
+
+        if (data is Matrix<T> matrix)
+        {
+            return matrix.Rows;
+        }
+
+        if (data is Vector<T> vector)
+        {
+            return vector.Length;
+        }
+
+        if (data is Tensor<T> tensor)
+        {
+            if (tensor.Rank == 0)
+            {
+                return tensor.Length > 0 ? 1 : 0;
+            }
+
+            return tensor.Shape[0];
+        }
+
+        if (data is T)
+        {
+            return 1;
+        }
+
+        throw new InvalidOperationException(
+            $"Cannot determine sample count for type {typeof(TData).Name}. " +
+            "Expected Matrix<T>, Vector<T>, Tensor<T>, or scalar T.");
+    }
 }

@@ -408,7 +408,7 @@ public interface IEngine
     /// </summary>
     /// <typeparam name="T">The numeric type of the vector.</typeparam>
     /// <param name="vector">The input vector.</param>
-    /// <returns>The L2 norm: sqrt(sum(x[i]Ãƒâ€šÃ‚Â²)).</returns>
+    /// <returns>The L2 norm: sqrt(sum(x[i]ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â²)).</returns>
     /// <remarks>
     /// <para>
     /// L2 norm is the Euclidean length of the vector.
@@ -427,7 +427,7 @@ public interface IEngine
     /// <typeparam name="T">The numeric type of the vectors.</typeparam>
     /// <param name="a">The first vector.</param>
     /// <param name="b">The second vector.</param>
-    /// <returns>The Euclidean distance: sqrt(sum((a[i] - b[i])Ãƒâ€šÃ‚Â²)).</returns>
+    /// <returns>The Euclidean distance: sqrt(sum((a[i] - b[i])ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â²)).</returns>
     /// <exception cref="ArgumentException">Thrown when vectors have different lengths.</exception>
     /// <remarks>
     /// <para>
@@ -922,12 +922,12 @@ public interface IEngine
     /// </summary>
     /// <typeparam name="T">The numeric type of the vector.</typeparam>
     /// <param name="vector">The input vector (values in range [-1, 1]).</param>
-    /// <returns>A new vector containing arcsin values in range [-π/2, π/2].</returns>
+    /// <returns>A new vector containing arcsin values in range [-Ãâ‚¬/2, Ãâ‚¬/2].</returns>
     /// <remarks>
     /// <para>
     /// Inverse sine (arcsin) is the inverse of the sine function.
     /// Input domain: [-1, 1]
-    /// Output range: [-π/2, π/2] radians
+    /// Output range: [-Ãâ‚¬/2, Ãâ‚¬/2] radians
     /// </para>
     /// </remarks>
     Vector<T> Asin<T>(Vector<T> vector);
@@ -953,12 +953,12 @@ public interface IEngine
     /// </summary>
     /// <typeparam name="T">The numeric type of the vector.</typeparam>
     /// <param name="vector">The input vector (values in range [-1, 1]).</param>
-    /// <returns>A new vector containing arccos values in range [0, π].</returns>
+    /// <returns>A new vector containing arccos values in range [0, Ãâ‚¬].</returns>
     /// <remarks>
     /// <para>
     /// Inverse cosine (arccos) is the inverse of the cosine function.
     /// Input domain: [-1, 1]
-    /// Output range: [0, π] radians
+    /// Output range: [0, Ãâ‚¬] radians
     /// </para>
     /// </remarks>
     Vector<T> Acos<T>(Vector<T> vector);
@@ -984,12 +984,12 @@ public interface IEngine
     /// </summary>
     /// <typeparam name="T">The numeric type of the vector.</typeparam>
     /// <param name="vector">The input vector.</param>
-    /// <returns>A new vector containing arctan values in range (-π/2, π/2).</returns>
+    /// <returns>A new vector containing arctan values in range (-Ãâ‚¬/2, Ãâ‚¬/2).</returns>
     /// <remarks>
     /// <para>
     /// Inverse tangent (arctan) is the inverse of the tangent function.
     /// Input domain: (-Inf, Inf)
-    /// Output range: (-π/2, π/2) radians
+    /// Output range: (-Ãâ‚¬/2, Ãâ‚¬/2) radians
     /// </para>
     /// </remarks>
     Vector<T> Atan<T>(Vector<T> vector);
@@ -1272,7 +1272,7 @@ public interface IEngine
     /// <para>
     /// Tanh activation function: tanh(x) = (e^x - e^-x) / (e^x + e^-x).
     /// Commonly used in hidden layers of neural networks.
-    /// CPU implementation uses TensorPrimitives for SIMD optimization (3-6ÃƒÆ’Ã¢â‚¬â€ speedup for float).
+    /// CPU implementation uses TensorPrimitives for SIMD optimization (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float).
     /// GPU implementation uses ILGPU kernels.
     /// </para>
     /// </remarks>
@@ -1286,9 +1286,9 @@ public interface IEngine
     /// <returns>A new vector containing sigmoid values between 0 and 1.</returns>
     /// <remarks>
     /// <para>
-    /// Sigmoid activation function: ÃƒÂÃ†â€™(x) = 1 / (1 + e^-x).
+    /// Sigmoid activation function: ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢(x) = 1 / (1 + e^-x).
     /// Commonly used for binary classification and gate functions in LSTMs/GRUs.
-    /// CPU implementation uses TensorPrimitives for SIMD optimization (3-6ÃƒÆ’Ã¢â‚¬â€ speedup for float).
+    /// CPU implementation uses TensorPrimitives for SIMD optimization (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float).
     /// GPU implementation uses ILGPU kernels.
     /// </para>
     /// </remarks>
@@ -1363,9 +1363,9 @@ public interface IEngine
     /// <returns>A new vector with GELU activation applied.</returns>
     /// <remarks>
     /// <para>
-    /// GELU activation: x * ÃƒÅ½Ã‚Â¦(x) where ÃƒÅ½Ã‚Â¦ is the standard Gaussian cumulative distribution.
+    /// GELU activation: x * ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â½ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦(x) where ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â½ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ is the standard Gaussian cumulative distribution.
     /// Commonly used in transformers (BERT, GPT) and modern architectures.
-    /// Approximation: 0.5 * x * (1 + tanh(ÃƒÂ¢Ã‹â€ Ã…Â¡(2/ÃƒÂÃ¢â€šÂ¬) * (x + 0.044715 * xÃƒâ€šÃ‚Â³)))
+    /// Approximation: 0.5 * x * (1 + tanh(ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¹ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡(2/ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬) * (x + 0.044715 * xÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³)))
     /// </para>
     /// </remarks>
     Vector<T> GELU<T>(Vector<T> vector);
@@ -1448,7 +1448,7 @@ public interface IEngine
     /// <remarks>
     /// <para><b>US-GPU-007: GEMM</b></para>
     /// <para>
-    /// Matrix multiplication is O(nÃƒâ€šÃ‚Â³) - highly computationally intensive.
+    /// Matrix multiplication is O(nÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³) - highly computationally intensive.
     /// GPU acceleration provides 100-1000x speedup for large matrices.
     /// Essential for dense neural network layers.
     /// </para>
@@ -1570,7 +1570,7 @@ public interface IEngine
     /// <typeparam name="T">The numeric type of vector elements.</typeparam>
     /// <param name="a">The first vector (length M).</param>
     /// <param name="b">The second vector (length N).</param>
-    /// <returns>An MÃƒÆ’Ã¢â‚¬â€N matrix containing the outer product.</returns>
+    /// <returns>An MÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂN matrix containing the outer product.</returns>
     /// <remarks>
     /// GPU-accelerated outer product for SVD and other decompositions.
     /// </remarks>
@@ -1642,9 +1642,9 @@ public interface IEngine
     /// Performs batched matrix multiplication on 3D tensors.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="a">The first tensor [B, M, K] - B batches of MÃƒÆ’Ã¢â‚¬â€K matrices.</param>
-    /// <param name="b">The second tensor [B, K, N] - B batches of KÃƒÆ’Ã¢â‚¬â€N matrices.</param>
-    /// <returns>The result tensor [B, M, N] - B batches of MÃƒÆ’Ã¢â‚¬â€N matrices.</returns>
+    /// <param name="a">The first tensor [B, M, K] - B batches of MÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂK matrices.</param>
+    /// <param name="b">The second tensor [B, K, N] - B batches of KÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂN matrices.</param>
+    /// <returns>The result tensor [B, M, N] - B batches of MÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂN matrices.</returns>
     /// <exception cref="ArgumentException">Thrown when tensor dimensions are incompatible.</exception>
     /// <remarks>
     /// <para><b>US-GPU-013: BatchMatMul</b></para>
@@ -1990,6 +1990,154 @@ public interface IEngine
     /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
     /// </remarks>
     Tensor<T> TensorNegate<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise power of a tensor raised to a scalar exponent.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor (base values).</param>
+    /// <param name="exponent">The scalar exponent to raise each element to.</param>
+    /// <returns>A tensor with pow(x, exponent) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in attention sharpening (Neural Turing Machines), gamma correction,
+    /// polynomial features, and various normalization operations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorPower<T>(Tensor<T> tensor, T exponent);
+
+    /// <summary>
+    /// Computes the element-wise power of a tensor raised to another tensor (element-wise exponents).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="bases">The input tensor of base values.</param>
+    /// <param name="exponents">The tensor of exponents (must have same shape as bases).</param>
+    /// <returns>A tensor with pow(bases[i], exponents[i]) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used for element-wise power operations where exponents vary per element.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorPower<T>(Tensor<T> bases, Tensor<T> exponents);
+
+    /// <summary>
+    /// Computes the element-wise floor of a tensor (largest integer less than or equal to each element).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with floor(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in hash encoding for 3D AI (NeRF, Gaussian Splatting), grid-based calculations,
+    /// and index computation. Essential for converting continuous coordinates to discrete grid indices.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorFloor<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise ceiling of a tensor (smallest integer greater than or equal to each element).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with ceiling(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in ceil mode pooling, index calculations, and grid-based spatial computations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorCeiling<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise fractional part of a tensor (x - floor(x)).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with frac(x) = x - floor(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Essential for hash encoding in neural radiance fields (NeRF) and Instant-NGP.
+    /// The fractional part is used to interpolate between discrete grid corners for
+    /// smooth, differentiable spatial encoding. Also used in periodic functions and texture mapping.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorFrac<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise sine of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor with angles in radians.</param>
+    /// <returns>A tensor with sin(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Essential for positional encoding in transformers and neural radiance fields.
+    /// Positional encoding uses sin(position * frequency) to create smooth,
+    /// periodic spatial features that help models understand relative positions.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorSin<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise cosine of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor with angles in radians.</param>
+    /// <returns>A tensor with cos(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Essential for positional encoding in transformers and neural radiance fields.
+    /// Positional encoding uses cos(position * frequency) alongside sin to create
+    /// unique, differentiable position representations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorCos<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Performs trilinear interpolation on a 3D grid.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="grid">The 3D feature grid of shape [D, H, W, C] where D=depth, H=height, W=width, C=channels.</param>
+    /// <param name="positions">The 3D coordinates to sample at, shape [N, 3] where each row is (z, y, x) in range [0, D-1], [0, H-1], [0, W-1].</param>
+    /// <returns>Interpolated values of shape [N, C].</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-017: 3D Spatial Operations</b></para>
+    /// <para>
+    /// Essential for hash encoding in neural radiance fields (NeRF) and Instant-NGP.
+    /// Trilinear interpolation samples from a discrete 3D grid using continuous coordinates,
+    /// computing weighted averages of the 8 surrounding voxel corners. The fractional part
+    /// of each coordinate determines the interpolation weights.
+    /// 
+    /// Formula for weights at position (z, y, x):
+    /// - fz, fy, fx = fractional parts of z, y, x
+    /// - Corners weighted by (1-fz)*(1-fy)*(1-fx), fz*(1-fy)*(1-fx), etc.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorTrilinearInterpolate<T>(Tensor<T> grid, Tensor<T> positions);
+
+    /// <summary>
+    /// Computes the backward pass for trilinear interpolation, returning gradients for the grid.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the upstream layer [numPositions, channels].</param>
+    /// <param name="grid">The original 3D grid [depth, height, width, channels].</param>
+    /// <param name="positions">The positions at which interpolation was performed [numPositions, 3].</param>
+    /// <returns>The gradient with respect to the grid [depth, height, width, channels].</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-017: 3D Spatial Operations</b></para>
+    /// <para>
+    /// Essential for training neural radiance fields (NeRF) and Instant-NGP with backpropagation.
+    /// The backward pass scatters gradients to the 8 surrounding voxel corners using the same
+    /// trilinear interpolation weights computed during the forward pass.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorTrilinearInterpolateBackward<T>(Tensor<T> gradOutput, Tensor<T> grid, Tensor<T> positions);
 
     /// <summary>
     /// Computes the element-wise power of a tensor raised to a scalar exponent.
@@ -2411,6 +2559,313 @@ public interface IEngine
 
     #endregion
 
+    #region 3D Convolution and Pooling Operations
+
+    /// <summary>
+    /// Performs 3D convolution on a 5D tensor for volumetric data processing.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, in_channels, depth, height, width].</param>
+    /// <param name="kernel">The convolution kernel [out_channels, in_channels, kernel_depth, kernel_height, kernel_width].</param>
+    /// <param name="stride">The stride of the convolution (applied equally to all spatial dimensions).</param>
+    /// <param name="padding">The zero-padding to add to all sides (applied equally to all spatial dimensions).</param>
+    /// <param name="dilation">The spacing between kernel elements (applied equally to all spatial dimensions).</param>
+    /// <returns>The convolved tensor [batch, out_channels, output_depth, output_height, output_width].</returns>
+    /// <exception cref="ArgumentException">Thrown when input or kernel dimensions are invalid.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-030: Conv3D</b></para>
+    /// <para>
+    /// 3D convolution extends 2D convolution to volumetric data by applying learnable filters
+    /// across depth, height, and width dimensions. This is essential for:
+    /// - Voxel-based 3D object recognition (ModelNet, ShapeNet)
+    /// - Medical imaging analysis (CT scans, MRI volumes)
+    /// - Video understanding (treating time as the third spatial dimension)
+    /// - Point cloud processing after voxelization
+    /// </para>
+    /// <para>
+    /// Output dimensions:
+    /// output_depth = floor((depth + 2*padding - dilation*(kernel_depth-1) - 1) / stride) + 1
+    /// output_height = floor((height + 2*padding - dilation*(kernel_height-1) - 1) / stride) + 1
+    /// output_width = floor((width + 2*padding - dilation*(kernel_width-1) - 1) / stride) + 1
+    /// </para>
+    /// <para>
+    /// GPU acceleration provides 100-1000x speedup for typical 3D CNN layers due to the
+    /// cubic growth in computation compared to 2D convolutions.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of 3D convolution as sliding a small 3D cube (the kernel)
+    /// through a larger 3D volume (the input), computing dot products at each position.
+    /// This allows the network to learn 3D patterns like surfaces, edges, and volumetric shapes.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Conv3D<T>(Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0, int dilation = 1);
+
+    /// <summary>
+    /// Performs 3D convolution with asymmetric stride, padding, and dilation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, in_channels, depth, height, width].</param>
+    /// <param name="kernel">The convolution kernel [out_channels, in_channels, kernel_depth, kernel_height, kernel_width].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW] of the convolution.</param>
+    /// <param name="padding">The padding [padD, padH, padW] to add to the input.</param>
+    /// <param name="dilation">The dilation [dilationD, dilationH, dilationW] spacing between kernel elements.</param>
+    /// <returns>The convolved tensor [batch, out_channels, output_depth, output_height, output_width].</returns>
+    /// <exception cref="ArgumentException">Thrown when input or kernel dimensions are invalid or stride/padding/dilation arrays have incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This overload allows different stride, padding, and dilation values for each spatial dimension,
+    /// providing more flexibility for architectures that need asymmetric operations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Conv3D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation);
+
+    /// <summary>
+    /// Computes the gradient of Conv3D with respect to the input tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output [batch, out_channels, out_depth, out_height, out_width].</param>
+    /// <param name="kernel">The convolution kernel used in forward pass [out_channels, in_channels, kernel_depth, kernel_height, kernel_width].</param>
+    /// <param name="inputShape">The shape of the original input tensor [batch, in_channels, depth, height, width].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW] used in forward pass.</param>
+    /// <param name="padding">The padding [padD, padH, padW] used in forward pass.</param>
+    /// <param name="dilation">The dilation [dilationD, dilationH, dilationW] used in forward pass.</param>
+    /// <returns>The gradient with respect to the input tensor [batch, in_channels, depth, height, width].</returns>
+    /// <remarks>
+    /// <para>
+    /// This is used during backpropagation to compute how the loss changes with respect to the input.
+    /// The operation is mathematically a transposed convolution (deconvolution) of the gradient
+    /// with the kernel rotated 180 degrees in each spatial dimension.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Conv3DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding, int[] dilation);
+
+    /// <summary>
+    /// Computes the gradient of Conv3D with respect to the kernel (weights).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output [batch, out_channels, out_depth, out_height, out_width].</param>
+    /// <param name="input">The original input tensor from forward pass [batch, in_channels, depth, height, width].</param>
+    /// <param name="kernelShape">The shape of the kernel [out_channels, in_channels, kernel_depth, kernel_height, kernel_width].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW] used in forward pass.</param>
+    /// <param name="padding">The padding [padD, padH, padW] used in forward pass.</param>
+    /// <param name="dilation">The dilation [dilationD, dilationH, dilationW] used in forward pass.</param>
+    /// <returns>The gradient with respect to the kernel [out_channels, in_channels, kernel_depth, kernel_height, kernel_width].</returns>
+    /// <remarks>
+    /// <para>
+    /// This is used during backpropagation to compute how the loss changes with respect to the weights.
+    /// The operation is mathematically a convolution between the input and the output gradient.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Conv3DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding, int[] dilation);
+
+    /// <summary>
+    /// Performs 3D max pooling on a 5D tensor (batch, channels, depth, height, width).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, channels, depth, height, width].</param>
+    /// <param name="poolSize">The size of the pooling window (applied equally to all spatial dimensions).</param>
+    /// <param name="stride">The stride of the pooling window. If 0, defaults to poolSize.</param>
+    /// <param name="padding">The amount of zero-padding to add to the input.</param>
+    /// <returns>The pooled tensor [batch, channels, output_depth, output_height, output_width].</returns>
+    /// <exception cref="ArgumentException">Thrown when input is not a 5D tensor.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-031: MaxPool3D</b></para>
+    /// <para>
+    /// Max pooling downsamples the spatial dimensions by taking the maximum value
+    /// in each 3D pooling window. Commonly used in 3D CNNs for:
+    /// - Reducing spatial dimensions of volumetric data
+    /// - Providing translation invariance in 3D
+    /// - Reducing computation in deeper layers
+    /// </para>
+    /// <para>
+    /// Output dimensions:
+    /// output_d = floor((depth + 2*padding - poolSize) / stride) + 1
+    /// output_h = floor((height + 2*padding - poolSize) / stride) + 1
+    /// output_w = floor((width + 2*padding - poolSize) / stride) + 1
+    /// </para>
+    /// </remarks>
+    Tensor<T> MaxPool3D<T>(Tensor<T> input, int poolSize, int stride = 0, int padding = 0);
+
+    /// <summary>
+    /// Performs 3D max pooling with asymmetric pool size, stride, and padding.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, channels, depth, height, width].</param>
+    /// <param name="poolSize">The pooling window size [poolD, poolH, poolW].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW].</param>
+    /// <param name="padding">The padding [padD, padH, padW].</param>
+    /// <returns>The pooled tensor [batch, channels, output_depth, output_height, output_width].</returns>
+    Tensor<T> MaxPool3D<T>(Tensor<T> input, int[] poolSize, int[] stride, int[] padding);
+
+    /// <summary>
+    /// Performs 3D max pooling and returns the indices of the maximum values.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, channels, depth, height, width].</param>
+    /// <param name="poolSize">The pooling window size [poolD, poolH, poolW].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW].</param>
+    /// <param name="maxIndices">Output parameter containing the 3D coordinates (d, h, w) of maximum values for each output position.</param>
+    /// <returns>The pooled tensor [batch, channels, output_depth, output_height, output_width].</returns>
+    /// <remarks>
+    /// <para>
+    /// The maxIndices array stores the 3D coordinates (depth, height, width) within the input tensor
+    /// where the maximum value was found for each output position. This is essential for the backward
+    /// pass to route gradients correctly.
+    /// Shape of maxIndices: [batch, channels, output_depth, output_height, output_width, 3]
+    /// where the last dimension contains [max_d_index, max_h_index, max_w_index].
+    /// </para>
+    /// </remarks>
+    Tensor<T> MaxPool3DWithIndices<T>(Tensor<T> input, int[] poolSize, int[] stride, out int[,,,,,] maxIndices);
+
+    /// <summary>
+    /// Computes the gradient of MaxPool3D with respect to the input.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output.</param>
+    /// <param name="maxIndices">The indices of maximum values from the forward pass.</param>
+    /// <param name="inputShape">The shape of the original input tensor.</param>
+    /// <param name="poolSize">The pooling window size [poolD, poolH, poolW].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW].</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// During backpropagation, gradients are routed only to the positions that had the maximum
+    /// values in the forward pass (as indicated by maxIndices). All other positions receive zero gradient.
+    /// </para>
+    /// </remarks>
+    Tensor<T> MaxPool3DBackward<T>(Tensor<T> gradOutput, int[,,,,,] maxIndices, int[] inputShape, int[] poolSize, int[] stride);
+
+    /// <summary>
+    /// Performs 3D average pooling on a 5D tensor (batch, channels, depth, height, width).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, channels, depth, height, width].</param>
+    /// <param name="poolSize">The size of the pooling window (applied equally to all spatial dimensions).</param>
+    /// <param name="stride">The stride of the pooling window. If 0, defaults to poolSize.</param>
+    /// <param name="padding">The amount of zero-padding to add to the input.</param>
+    /// <returns>The pooled tensor [batch, channels, output_depth, output_height, output_width].</returns>
+    /// <exception cref="ArgumentException">Thrown when input is not a 5D tensor.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-032: AvgPool3D</b></para>
+    /// <para>
+    /// Average pooling downsamples the spatial dimensions by computing the average value
+    /// in each 3D pooling window. Compared to max pooling:
+    /// - Smoother gradients during backpropagation
+    /// - Better for preserving overall magnitude information
+    /// - Often used in later layers or for global pooling
+    /// </para>
+    /// </remarks>
+    Tensor<T> AvgPool3D<T>(Tensor<T> input, int poolSize, int stride = 0, int padding = 0);
+
+    /// <summary>
+    /// Performs 3D average pooling with asymmetric pool size, stride, and padding.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, channels, depth, height, width].</param>
+    /// <param name="poolSize">The pooling window size [poolD, poolH, poolW].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW].</param>
+    /// <param name="padding">The padding [padD, padH, padW].</param>
+    /// <returns>The pooled tensor [batch, channels, output_depth, output_height, output_width].</returns>
+    Tensor<T> AvgPool3D<T>(Tensor<T> input, int[] poolSize, int[] stride, int[] padding);
+
+    /// <summary>
+    /// Computes the gradient of AvgPool3D with respect to the input.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output.</param>
+    /// <param name="inputShape">The shape of the original input tensor.</param>
+    /// <param name="poolSize">The pooling window size [poolD, poolH, poolW].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW].</param>
+    /// <param name="padding">The padding [padD, padH, padW].</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// During backpropagation, each gradient value from the output is divided equally among
+    /// all the input positions that contributed to that output (i.e., divided by the pool volume).
+    /// </para>
+    /// </remarks>
+    Tensor<T> AvgPool3DBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] poolSize, int[] stride, int[] padding);
+
+    /// <summary>
+    /// Performs 3D nearest-neighbor upsampling on a 5D tensor (batch, channels, depth, height, width).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, channels, depth, height, width].</param>
+    /// <param name="scaleD">The depth scaling factor.</param>
+    /// <param name="scaleH">The height scaling factor.</param>
+    /// <param name="scaleW">The width scaling factor.</param>
+    /// <returns>The upsampled tensor with shape [batch, channels, depth*scaleD, height*scaleH, width*scaleW].</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-035: Upsample3D</b></para>
+    /// <para>
+    /// 3D upsampling increases the spatial dimensions of volumetric data by replicating values.
+    /// This is essential for decoder paths in encoder-decoder architectures like 3D U-Net.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Upsample3D<T>(Tensor<T> input, int scaleD, int scaleH, int scaleW);
+
+    /// <summary>
+    /// Computes the backward pass for 3D upsampling.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer [batch, channels, out_depth, out_height, out_width].</param>
+    /// <param name="inputShape">The original input shape [batch, channels, depth, height, width].</param>
+    /// <param name="scaleD">The depth scaling factor used in forward pass.</param>
+    /// <param name="scaleH">The height scaling factor used in forward pass.</param>
+    /// <param name="scaleW">The width scaling factor used in forward pass.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// During backpropagation, gradients are accumulated from all output positions that were
+    /// derived from each input position (i.e., summed over the scaling block).
+    /// </para>
+    /// </remarks>
+    Tensor<T> Upsample3DBackward<T>(Tensor<T> gradOutput, int[] inputShape, int scaleD, int scaleH, int scaleW);
+
+    /// <summary>
+    /// Performs 3D transposed convolution (deconvolution) for learned upsampling.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, in_channels, depth, height, width].</param>
+    /// <param name="kernel">The kernel tensor [in_channels, out_channels, kernel_depth, kernel_height, kernel_width].</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW].</param>
+    /// <param name="padding">The padding [padD, padH, padW].</param>
+    /// <param name="outputPadding">Output padding for size adjustment [outPadD, outPadH, outPadW].</param>
+    /// <returns>The upsampled tensor.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-036: ConvTranspose3D</b></para>
+    /// <para>
+    /// Transposed 3D convolution learns upsampling filters, providing more flexibility than
+    /// nearest-neighbor upsampling. Used in decoder paths of 3D U-Net and similar architectures.
+    /// </para>
+    /// </remarks>
+    Tensor<T> ConvTranspose3D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] outputPadding);
+
+    /// <summary>
+    /// Computes the gradient of ConvTranspose3D with respect to the input.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="kernel">The kernel tensor used in forward pass.</param>
+    /// <param name="inputShape">The original input shape.</param>
+    /// <param name="stride">The stride used in forward pass.</param>
+    /// <param name="padding">The padding used in forward pass.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> ConvTranspose3DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding);
+
+    /// <summary>
+    /// Computes the gradient of ConvTranspose3D with respect to the kernel.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor from forward pass.</param>
+    /// <param name="kernelShape">The shape of the kernel.</param>
+    /// <param name="stride">The stride used in forward pass.</param>
+    /// <param name="padding">The padding used in forward pass.</param>
+    /// <returns>The gradient with respect to the kernel.</returns>
+    Tensor<T> ConvTranspose3DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding);
+
+    #endregion
+
     #region Normalization and Activation Operations
 
     /// <summary>
@@ -2472,7 +2927,7 @@ public interface IEngine
     /// <remarks>
     /// <para>
     /// TaylorSoftmax uses Taylor series approximation of exp(x):
-    /// exp(x) ≈ 1 + x + x²/2! + x³/3! + ... + xⁿ/n!
+    /// exp(x) Ã¢â€°Ë† 1 + x + xÃ‚Â²/2! + xÃ‚Â³/3! + ... + xÃ¢ÂÂ¿/n!
     /// Then normalizes like standard softmax.
     /// More computationally efficient than standard softmax for some hardware.
     /// </para>
@@ -2526,7 +2981,7 @@ public interface IEngine
     /// <returns>A tensor with Spherical-Softmax applied.</returns>
     /// <remarks>
     /// <para>
-    /// SphericalSoftmax = softmax(x / ||x||₂)
+    /// SphericalSoftmax = softmax(x / ||x||Ã¢â€šâ€š)
     /// First L2-normalizes the input, then applies softmax.
     /// This improves numerical stability for inputs with varying magnitudes.
     /// </para>
@@ -2874,7 +3329,7 @@ public interface IEngine
     /// <remarks>
     /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
     /// <para>
-    /// Computes Σ(x_i²) for all elements in the tensor. Used in:
+    /// Computes ÃŽÂ£(x_iÃ‚Â²) for all elements in the tensor. Used in:
     /// - L2 regularization loss computation
     /// - Frobenius norm calculation (sqrt of sum of squares)
     /// - Gradient magnitude computation
@@ -2937,14 +3392,14 @@ public interface IEngine
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
     /// <param name="input">The input tensor with shape [batch, features].</param>
     /// <param name="centers">The RBF center positions with shape [numCenters, features].</param>
-    /// <param name="epsilons">The epsilon values (1/(2*width²)) for each center with shape [numCenters].</param>
-    /// <returns>The RBF kernel output with shape [batch, numCenters], computing exp(-epsilon * ||x - center||²).</returns>
+    /// <param name="epsilons">The epsilon values (1/(2*widthÃ‚Â²)) for each center with shape [numCenters].</param>
+    /// <returns>The RBF kernel output with shape [batch, numCenters], computing exp(-epsilon * ||x - center||Ã‚Â²).</returns>
     /// <remarks>
     /// <para>
-    /// Computes Gaussian RBF: K(x, c) = exp(-epsilon * ||x - c||²) where:
+    /// Computes Gaussian RBF: K(x, c) = exp(-epsilon * ||x - c||Ã‚Â²) where:
     /// - x is an input sample
     /// - c is a center
-    /// - epsilon = 1/(2*width²) controls the spread
+    /// - epsilon = 1/(2*widthÃ‚Â²) controls the spread
     /// </para>
     /// <para><b>For Beginners:</b> RBF kernels measure similarity between points.
     /// Points close to a center produce values near 1, distant points produce values near 0.
@@ -3258,6 +3713,61 @@ public interface IEngine
     /// </para>
     /// </remarks>
     Tensor<T> TensorRandomNormal<T>(int[] shape, T mean, T stddev);
+
+    /// <summary>
+    /// Generates a tensor filled with random values from a uniform distribution within a specified range.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="shape">The shape of the output tensor.</param>
+    /// <param name="min">The minimum value (inclusive).</param>
+    /// <param name="max">The maximum value (exclusive).</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <returns>A tensor filled with random values in [min, max).</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Random Operations</b></para>
+    /// <para>
+    /// Used for weight initialization with specific ranges (e.g., Xavier uniform [-limit, limit]),
+    /// embedding initialization, and data augmentation. More flexible than TensorRandomUniform
+    /// which only generates values in [0, 1).
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorRandomUniformRange<T>(int[] shape, T min, T max, int? seed = null);
+
+    /// <summary>
+    /// Generates a dropout mask tensor where each element is either zero or a scale value.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="shape">The shape of the output tensor.</param>
+    /// <param name="dropoutRate">Probability of dropping each element (0 to 1).</param>
+    /// <param name="scale">The scale factor for non-dropped elements (typically 1/(1-dropoutRate)).</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <returns>A tensor containing the dropout mask.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Dropout Operations</b></para>
+    /// <para>
+    /// Used in dropout layers during training. Elements are randomly set to zero with probability
+    /// dropoutRate, and remaining elements are scaled to maintain expected values.
+    /// The mask can be multiplied element-wise with activations: output = input * mask.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorDropoutMask<T>(int[] shape, T dropoutRate, T scale, int? seed = null);
+
+    /// <summary>
+    /// Subtracts a tensor from a scalar value element-wise (scalar - tensor).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="scalar">The scalar value to subtract from.</param>
+    /// <param name="tensor">The tensor to subtract.</param>
+    /// <returns>A tensor with (scalar - x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Arithmetic Operations</b></para>
+    /// <para>
+    /// Used for computing (1 - p) in probability calculations, BCE loss gradients,
+    /// and other operations where the subtraction order matters.
+    /// More efficient than TensorNegate(TensorSubtractScalar(tensor, scalar)).
+    /// </para>
+    /// </remarks>
+    Tensor<T> ScalarMinusTensor<T>(T scalar, Tensor<T> tensor);
 
     /// <summary>
     /// Creates an identity matrix as a tensor.
@@ -3788,6 +4298,668 @@ public interface IEngine
     /// </para>
     /// </remarks>
     Tensor<T> TensorWhere<T>(Tensor<bool> condition, Tensor<T> x, Tensor<T> y);
+
+    #endregion
+
+    #region Neural Radiance Fields Operations
+
+    /// <summary>
+    /// Computes positional encoding for Neural Radiance Fields.
+    /// Applies sin/cos frequency encoding: [sin(2^0*Ãâ‚¬*x), cos(2^0*Ãâ‚¬*x), ..., sin(2^(L-1)*Ãâ‚¬*x), cos(2^(L-1)*Ãâ‚¬*x)]
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="positions">Input positions tensor of shape [N, D] where D is typically 3 (x,y,z).</param>
+    /// <param name="numFrequencies">Number of frequency levels (L in the paper, typically 10 for positions, 4 for directions).</param>
+    /// <returns>Encoded tensor of shape [N, D * 2 * numFrequencies].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Positional encoding transforms low-dimensional coordinates into
+    /// high-dimensional features that help neural networks learn high-frequency details.
+    /// </para>
+    /// <para>
+    /// Without positional encoding, neural networks tend to learn smooth, blurry functions.
+    /// The sin/cos encoding at multiple frequencies enables sharp, detailed reconstructions.
+    /// </para>
+    /// <para>
+    /// Reference: "NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis"
+    /// by Mildenhall et al., ECCV 2020
+    /// </para>
+    /// </remarks>
+    Tensor<T> PositionalEncoding<T>(Tensor<T> positions, int numFrequencies);
+
+    /// <summary>
+    /// Computes the backward pass for positional encoding.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="positions">Original input positions tensor of shape [N, D].</param>
+    /// <param name="encodedGradient">Gradient of loss with respect to encoded output [N, D * 2 * numFrequencies].</param>
+    /// <param name="numFrequencies">Number of frequency levels used in forward pass.</param>
+    /// <returns>Gradient with respect to input positions [N, D].</returns>
+    Tensor<T> PositionalEncodingBackward<T>(Tensor<T> positions, Tensor<T> encodedGradient, int numFrequencies);
+
+    /// <summary>
+    /// Performs volume rendering along rays using alpha compositing.
+    /// Computes: C(r) = ÃŽÂ£ T_i * ÃŽÂ±_i * c_i where T_i = ÃŽÂ (1 - ÃŽÂ±_j) for j &lt; i
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="rgbSamples">RGB color samples of shape [numRays, numSamples, 3].</param>
+    /// <param name="densitySamples">Density/sigma samples of shape [numRays, numSamples, 1].</param>
+    /// <param name="tValues">Distance values along rays of shape [numRays, numSamples].</param>
+    /// <returns>Rendered colors of shape [numRays, 3].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Volume rendering accumulates color along a ray by considering
+    /// how much light is blocked (transmittance) at each sample point.
+    /// </para>
+    /// <para>
+    /// The alpha value at each point represents how much light is absorbed there.
+    /// Transmittance tracks how much light reaches each point from the camera.
+    /// Final color is the weighted sum of all sample colors.
+    /// </para>
+    /// </remarks>
+    Tensor<T> VolumeRendering<T>(Tensor<T> rgbSamples, Tensor<T> densitySamples, Tensor<T> tValues);
+
+    /// <summary>
+    /// Computes the backward pass for volume rendering.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="rgbSamples">RGB color samples from forward pass [numRays, numSamples, 3].</param>
+    /// <param name="densitySamples">Density samples from forward pass [numRays, numSamples, 1].</param>
+    /// <param name="tValues">Distance values from forward pass [numRays, numSamples].</param>
+    /// <param name="outputGradient">Gradient of loss with respect to rendered colors [numRays, 3].</param>
+    /// <param name="rgbGradient">Output: Gradient with respect to RGB samples.</param>
+    /// <param name="densityGradient">Output: Gradient with respect to density samples.</param>
+    void VolumeRenderingBackward<T>(
+        Tensor<T> rgbSamples,
+        Tensor<T> densitySamples,
+        Tensor<T> tValues,
+        Tensor<T> outputGradient,
+        out Tensor<T> rgbGradient,
+        out Tensor<T> densityGradient);
+
+    /// <summary>
+    /// Samples points uniformly along rays for volume rendering.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="rayOrigins">Ray origin points of shape [numRays, 3].</param>
+    /// <param name="rayDirections">Ray direction vectors of shape [numRays, 3] (should be normalized).</param>
+    /// <param name="nearBound">Near clipping distance.</param>
+    /// <param name="farBound">Far clipping distance.</param>
+    /// <param name="numSamples">Number of samples per ray.</param>
+    /// <param name="stratified">If true, adds jitter to sample positions for anti-aliasing.</param>
+    /// <returns>Tuple of (sample positions [numRays * numSamples, 3], sample directions [numRays * numSamples, 3], t values [numRays, numSamples]).</returns>
+    (Tensor<T> positions, Tensor<T> directions, Tensor<T> tValues) SampleRayPoints<T>(
+        Tensor<T> rayOrigins,
+        Tensor<T> rayDirections,
+        T nearBound,
+        T farBound,
+        int numSamples,
+        bool stratified = true);
+
+    /// <summary>
+    /// Performs importance sampling based on coarse network density predictions.
+    /// Samples more points where density is high (hierarchical sampling).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tValuesCoarse">Coarse sample t values [numRays, numCoarseSamples].</param>
+    /// <param name="weightsCoarse">Rendering weights from coarse samples [numRays, numCoarseSamples].</param>
+    /// <param name="numFineSamples">Number of additional fine samples to generate.</param>
+    /// <returns>Fine sample t values [numRays, numFineSamples] concentrated where density is high.</returns>
+    Tensor<T> ImportanceSampling<T>(Tensor<T> tValuesCoarse, Tensor<T> weightsCoarse, int numFineSamples);
+
+    /// <summary>
+    /// Generates camera rays for each pixel in an image.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="cameraPosition">Camera position in world coordinates [3].</param>
+    /// <param name="cameraRotation">Camera rotation matrix [3, 3] (camera-to-world).</param>
+    /// <param name="imageWidth">Image width in pixels.</param>
+    /// <param name="imageHeight">Image height in pixels.</param>
+    /// <param name="focalLength">Camera focal length.</param>
+    /// <returns>Tuple of (ray origins [H*W, 3], ray directions [H*W, 3]).</returns>
+    (Tensor<T> origins, Tensor<T> directions) GenerateCameraRays<T>(
+        Vector<T> cameraPosition,
+        Matrix<T> cameraRotation,
+        int imageWidth,
+        int imageHeight,
+        T focalLength);
+
+    #endregion
+
+    #region Gaussian Splatting Operations
+
+    /// <summary>
+    /// Projects 3D Gaussians to 2D screen space for rasterization.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="means3D">Gaussian center positions [N, 3].</param>
+    /// <param name="covariances3D">3D covariance matrices [N, 3, 3] or [N, 6] (upper triangular).</param>
+    /// <param name="viewMatrix">World-to-camera transformation [4, 4].</param>
+    /// <param name="projMatrix">Camera projection matrix [4, 4].</param>
+    /// <param name="imageWidth">Target image width.</param>
+    /// <param name="imageHeight">Target image height.</param>
+    /// <param name="means2D">Output: Projected 2D means [N, 2].</param>
+    /// <param name="covariances2D">Output: Projected 2D covariances [N, 3] (a, b, c for axÃ‚Â² + 2bxy + cyÃ‚Â²).</param>
+    /// <param name="depths">Output: Depth values for sorting [N].</param>
+    /// <param name="visible">Output: Visibility mask (in frustum and valid) [N].</param>
+    void ProjectGaussians3DTo2D<T>(
+        Tensor<T> means3D,
+        Tensor<T> covariances3D,
+        Matrix<T> viewMatrix,
+        Matrix<T> projMatrix,
+        int imageWidth,
+        int imageHeight,
+        out Tensor<T> means2D,
+        out Tensor<T> covariances2D,
+        out Tensor<T> depths,
+        out Tensor<bool> visible);
+
+    /// <summary>
+    /// Rasterizes 2D Gaussians onto an image using alpha blending.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="means2D">Projected 2D Gaussian centers [N, 2].</param>
+    /// <param name="covariances2D">2D covariance parameters [N, 3].</param>
+    /// <param name="colors">Gaussian colors [N, C] where C is typically 3 (RGB) or more for SH.</param>
+    /// <param name="opacities">Gaussian opacities [N].</param>
+    /// <param name="depths">Depth values for sorting [N].</param>
+    /// <param name="imageWidth">Output image width.</param>
+    /// <param name="imageHeight">Output image height.</param>
+    /// <param name="tileSize">Tile size for tiled rasterization (typically 16).</param>
+    /// <returns>Rendered image [H, W, C].</returns>
+    Tensor<T> RasterizeGaussians<T>(
+        Tensor<T> means2D,
+        Tensor<T> covariances2D,
+        Tensor<T> colors,
+        Tensor<T> opacities,
+        Tensor<T> depths,
+        int imageWidth,
+        int imageHeight,
+        int tileSize = 16);
+
+    /// <summary>
+    /// Computes the backward pass for Gaussian rasterization.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="means2D">Projected 2D Gaussian centers [N, 2].</param>
+    /// <param name="covariances2D">2D covariance parameters [N, 3].</param>
+    /// <param name="colors">Gaussian colors [N, C].</param>
+    /// <param name="opacities">Gaussian opacities [N].</param>
+    /// <param name="depths">Depth values [N].</param>
+    /// <param name="imageWidth">Image width.</param>
+    /// <param name="imageHeight">Image height.</param>
+    /// <param name="outputGradient">Gradient of loss with respect to rendered image [H, W, C].</param>
+    /// <param name="tileSize">Tile size used in forward pass.</param>
+    /// <param name="means2DGrad">Output: Gradient with respect to 2D means.</param>
+    /// <param name="covariances2DGrad">Output: Gradient with respect to 2D covariances.</param>
+    /// <param name="colorsGrad">Output: Gradient with respect to colors.</param>
+    /// <param name="opacitiesGrad">Output: Gradient with respect to opacities.</param>
+    void RasterizeGaussiansBackward<T>(
+        Tensor<T> means2D,
+        Tensor<T> covariances2D,
+        Tensor<T> colors,
+        Tensor<T> opacities,
+        Tensor<T> depths,
+        int imageWidth,
+        int imageHeight,
+        Tensor<T> outputGradient,
+        int tileSize,
+        out Tensor<T> means2DGrad,
+        out Tensor<T> covariances2DGrad,
+        out Tensor<T> colorsGrad,
+        out Tensor<T> opacitiesGrad);
+
+    /// <summary>
+    /// Evaluates spherical harmonics for view-dependent color in Gaussian Splatting.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="shCoefficients">Spherical harmonics coefficients [N, (degree+1)Ã‚Â², C] where C=3 for RGB.</param>
+    /// <param name="viewDirections">Normalized view directions [N, 3] or [1, 3] for broadcast.</param>
+    /// <param name="degree">SH degree (0-3, where 0=constant, 3=full view dependence).</param>
+    /// <returns>Evaluated colors [N, C].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Spherical harmonics allow colors to change based on viewing angle,
+    /// enabling realistic specular highlights and view-dependent effects.
+    /// </para>
+    /// <para>
+    /// Degree 0: Constant color (1 coefficient per channel)
+    /// Degree 1: Linear variation (4 coefficients per channel)
+    /// Degree 2: Quadratic variation (9 coefficients per channel)
+    /// Degree 3: Cubic variation (16 coefficients per channel)
+    /// </para>
+    /// </remarks>
+    Tensor<T> EvaluateSphericalHarmonics<T>(Tensor<T> shCoefficients, Tensor<T> viewDirections, int degree);
+
+    /// <summary>
+    /// Computes the backward pass for spherical harmonics evaluation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="shCoefficients">SH coefficients from forward pass.</param>
+    /// <param name="viewDirections">View directions from forward pass.</param>
+    /// <param name="degree">SH degree.</param>
+    /// <param name="outputGradient">Gradient with respect to evaluated colors.</param>
+    /// <returns>Gradient with respect to SH coefficients.</returns>
+    Tensor<T> EvaluateSphericalHarmonicsBackward<T>(
+        Tensor<T> shCoefficients,
+        Tensor<T> viewDirections,
+        int degree,
+        Tensor<T> outputGradient);
+
+    /// <summary>
+    /// Computes 3D covariance matrices from rotation quaternions and scale vectors.
+    /// Covariance = R * S * S^T * R^T where R is rotation matrix from quaternion, S is diagonal scale.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="rotations">Rotation quaternions [N, 4] (w, x, y, z).</param>
+    /// <param name="scales">Scale vectors [N, 3].</param>
+    /// <returns>Covariance matrices [N, 3, 3] or [N, 6] (upper triangular).</returns>
+    Tensor<T> ComputeGaussianCovariance<T>(Tensor<T> rotations, Tensor<T> scales);
+
+    /// <summary>
+    /// Computes the backward pass for Gaussian covariance computation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="rotations">Rotation quaternions from forward pass.</param>
+    /// <param name="scales">Scale vectors from forward pass.</param>
+    /// <param name="covarianceGradient">Gradient with respect to covariances.</param>
+    /// <param name="rotationsGrad">Output: Gradient with respect to rotations.</param>
+    /// <param name="scalesGrad">Output: Gradient with respect to scales.</param>
+    void ComputeGaussianCovarianceBackward<T>(
+        Tensor<T> rotations,
+        Tensor<T> scales,
+        Tensor<T> covarianceGradient,
+        out Tensor<T> rotationsGrad,
+        out Tensor<T> scalesGrad);
+
+    #endregion
+
+    #region Instant-NGP Operations
+
+    /// <summary>
+    /// Performs multiresolution hash encoding for Instant-NGP.
+    /// Encodes 3D positions using a hierarchy of hash tables with trilinear interpolation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="positions">Input positions [N, 3] normalized to [0, 1].</param>
+    /// <param name="hashTables">List of hash tables, one per resolution level.</param>
+    /// <param name="resolutions">Resolution at each level.</param>
+    /// <param name="featuresPerLevel">Number of features stored per hash entry.</param>
+    /// <returns>Encoded features [N, numLevels * featuresPerLevel].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Hash encoding replaces expensive positional encoding with fast
+    /// table lookups, enabling 100x faster training and 1000x faster rendering than NeRF.
+    /// </para>
+    /// <para>
+    /// The key insight is that hash collisions are okay because:
+    /// 1. Multiple positions mapping to the same entry often have similar features
+    /// 2. The neural network learns to handle collisions during training
+    /// 3. The speed benefit far outweighs the minor quality impact
+    /// </para>
+    /// <para>
+    /// Reference: "Instant Neural Graphics Primitives with a Multiresolution Hash Encoding"
+    /// by MÃƒÂ¼ller et al., ACM Transactions on Graphics 2022
+    /// </para>
+    /// </remarks>
+    Tensor<T> MultiresolutionHashEncoding<T>(
+        Tensor<T> positions,
+        Tensor<T>[] hashTables,
+        int[] resolutions,
+        int featuresPerLevel);
+
+    /// <summary>
+    /// Computes the backward pass for multiresolution hash encoding.
+    /// Accumulates gradients to the appropriate hash table entries.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="positions">Input positions from forward pass.</param>
+    /// <param name="hashTables">Hash tables from forward pass.</param>
+    /// <param name="resolutions">Resolutions from forward pass.</param>
+    /// <param name="featuresPerLevel">Features per level from forward pass.</param>
+    /// <param name="outputGradient">Gradient with respect to encoded features.</param>
+    /// <returns>Gradients for each hash table.</returns>
+    Tensor<T>[] MultiresolutionHashEncodingBackward<T>(
+        Tensor<T> positions,
+        Tensor<T>[] hashTables,
+        int[] resolutions,
+        int featuresPerLevel,
+        Tensor<T> outputGradient);
+
+    /// <summary>
+    /// Updates occupancy grid for efficient ray sampling in Instant-NGP.
+    /// Marks which voxels contain geometry based on density threshold.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="occupancyGrid">Current occupancy grid [gridSize, gridSize, gridSize].</param>
+    /// <param name="densities">Sampled density values.</param>
+    /// <param name="positions">Positions where densities were sampled.</param>
+    /// <param name="gridSize">Size of the occupancy grid.</param>
+    /// <param name="threshold">Density threshold for occupancy.</param>
+    /// <param name="decayFactor">EMA decay for updating occupancy values.</param>
+    /// <returns>Updated occupancy grid.</returns>
+    Tensor<T> UpdateOccupancyGrid<T>(
+        Tensor<T> occupancyGrid,
+        Tensor<T> densities,
+        Tensor<T> positions,
+        int gridSize,
+        T threshold,
+        T decayFactor);
+
+    /// <summary>
+    /// Samples rays while skipping empty space using occupancy grid.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="rayOrigins">Ray origins [numRays, 3].</param>
+    /// <param name="rayDirections">Ray directions [numRays, 3].</param>
+    /// <param name="occupancyBitfield">Packed occupancy bits for fast lookup as a 1D tensor.</param>
+    /// <param name="gridSize">Size of the occupancy grid.</param>
+    /// <param name="sceneBoundsMin">Minimum scene bounds [3].</param>
+    /// <param name="sceneBoundsMax">Maximum scene bounds [3].</param>
+    /// <param name="nearBound">Near clipping distance.</param>
+    /// <param name="farBound">Far clipping distance.</param>
+    /// <param name="maxSamples">Maximum samples per ray.</param>
+    /// <returns>Tuple of (sample positions, sample directions, valid mask, t values).</returns>
+    (Tensor<T> positions, Tensor<T> directions, Tensor<bool> validMask, Tensor<T> tValues) SampleRaysWithOccupancy<T>(
+        Tensor<T> rayOrigins,
+        Tensor<T> rayDirections,
+        Tensor<uint> occupancyBitfield,
+        int gridSize,
+        Vector<T> sceneBoundsMin,
+        Vector<T> sceneBoundsMax,
+        T nearBound,
+        T farBound,
+        int maxSamples);
+
+    #endregion
+
+    #region Mesh Convolution Operations
+
+    /// <summary>
+    /// Performs spiral convolution on mesh vertex features.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="vertexFeatures">Input vertex features [numVertices, inputChannels].</param>
+    /// <param name="spiralIndices">Spiral neighbor indices [numVertices, spiralLength].</param>
+    /// <param name="weights">Convolution weights [outputChannels, inputChannels * spiralLength].</param>
+    /// <param name="biases">Bias values [outputChannels].</param>
+    /// <returns>Output vertex features [numVertices, outputChannels].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Spiral convolution extends traditional convolution to irregular mesh surfaces.
+    /// Unlike grid-based convolutions where neighbors are in fixed positions, mesh vertices have
+    /// variable connectivity. Spiral convolution solves this by:
+    /// 
+    /// 1. Defining a consistent spiral ordering of neighbors around each vertex
+    /// 2. Gathering features from neighbors in this canonical order
+    /// 3. Applying learned weights to the ordered features
+    /// 
+    /// This creates translation-equivariant convolutions on arbitrary mesh topologies.
+    /// </para>
+    /// <para>
+    /// <b>Mathematical Formulation:</b>
+    /// For each vertex v with spiral neighbors S(v) = [nÃ¢â€šÂ, nÃ¢â€šâ€š, ..., nÃ¢â€šâ€“]:
+    /// 
+    /// gathered[v] = concat(features[nÃ¢â€šÂ], features[nÃ¢â€šâ€š], ..., features[nÃ¢â€šâ€“])
+    /// output[v] = weights @ gathered[v] + bias
+    /// 
+    /// The spiral ordering ensures that the convolution is invariant to mesh parameterization.
+    /// </para>
+    /// <para>
+    /// Reference: "Neural 3D Morphable Models: Spiral Convolutional Networks" by Bouritsas et al.
+    /// Reference: "SpiralNet++: A Fast and Highly Efficient Mesh Convolution Operator" by Gong et al.
+    /// </para>
+    /// </remarks>
+    Tensor<T> SpiralConv<T>(
+        Tensor<T> vertexFeatures,
+        Tensor<int> spiralIndices,
+        Tensor<T> weights,
+        Tensor<T> biases);
+
+    /// <summary>
+    /// Computes the backward pass for spiral convolution with respect to input features.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="outputGradient">Gradient with respect to output [numVertices, outputChannels].</param>
+    /// <param name="spiralIndices">Spiral neighbor indices [numVertices, spiralLength].</param>
+    /// <param name="weights">Convolution weights [outputChannels, inputChannels * spiralLength].</param>
+    /// <param name="inputChannels">Number of input channels.</param>
+    /// <returns>Gradient with respect to input features [numVertices, inputChannels].</returns>
+    /// <remarks>
+    /// <para>
+    /// The backward pass scatters gradients back to the original vertex positions according
+    /// to the spiral indices. This uses atomic scatter-add operations for correctness when
+    /// multiple spiral paths reference the same vertex.
+    /// </para>
+    /// </remarks>
+    Tensor<T> SpiralConvBackwardInput<T>(
+        Tensor<T> outputGradient,
+        Tensor<int> spiralIndices,
+        Tensor<T> weights,
+        int inputChannels);
+
+    /// <summary>
+    /// Computes the backward pass for spiral convolution with respect to weights.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="outputGradient">Gradient with respect to output [numVertices, outputChannels].</param>
+    /// <param name="vertexFeatures">Input vertex features from forward pass [numVertices, inputChannels].</param>
+    /// <param name="spiralIndices">Spiral neighbor indices [numVertices, spiralLength].</param>
+    /// <returns>Gradient with respect to weights [outputChannels, inputChannels * spiralLength].</returns>
+    Tensor<T> SpiralConvBackwardWeights<T>(
+        Tensor<T> outputGradient,
+        Tensor<T> vertexFeatures,
+        Tensor<int> spiralIndices);
+
+    /// <summary>
+    /// Computes the backward pass for spiral convolution with respect to biases.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="outputGradient">Gradient with respect to output [numVertices, outputChannels].</param>
+    /// <returns>Gradient with respect to biases [outputChannels].</returns>
+    Tensor<T> SpiralConvBackwardBias<T>(Tensor<T> outputGradient);
+
+    /// <summary>
+    /// Performs diffusion convolution on mesh vertex features using the Laplacian operator.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="vertexFeatures">Input vertex features [numVertices, inputChannels].</param>
+    /// <param name="laplacian">Mesh Laplacian matrix [numVertices, numVertices].</param>
+    /// <param name="weights">Diffusion weights [outputChannels, inputChannels].</param>
+    /// <param name="biases">Bias values [outputChannels].</param>
+    /// <param name="diffusionTime">Diffusion time parameter controlling spatial extent.</param>
+    /// <returns>Output vertex features [numVertices, outputChannels].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Diffusion convolution uses heat diffusion on the mesh surface
+    /// to define the convolution kernel. Features spread across the mesh according to the
+    /// heat equation, which respects the intrinsic geometry of the surface.
+    /// 
+    /// The diffusion time controls how far features propagate:
+    /// - Small time: local features, fine detail
+    /// - Large time: global features, coarse structure
+    /// </para>
+    /// <para>
+    /// <b>Mathematical Formulation:</b>
+    /// output = exp(-t * L) @ input @ weights + bias
+    /// 
+    /// Where L is the mesh Laplacian and t is the diffusion time.
+    /// The matrix exponential is computed using eigendecomposition or Taylor series.
+    /// </para>
+    /// <para>
+    /// Reference: "DiffusionNet: Discretization Agnostic Learning on Surfaces" by Sharp et al.
+    /// </para>
+    /// </remarks>
+    Tensor<T> DiffusionConv<T>(
+        Tensor<T> vertexFeatures,
+        Tensor<T> laplacian,
+        Tensor<T> weights,
+        Tensor<T> biases,
+        T diffusionTime);
+
+    /// <summary>
+    /// Computes the backward pass for diffusion convolution.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="outputGradient">Gradient with respect to output [numVertices, outputChannels].</param>
+    /// <param name="vertexFeatures">Input vertex features from forward pass.</param>
+    /// <param name="laplacian">Mesh Laplacian matrix from forward pass.</param>
+    /// <param name="weights">Diffusion weights from forward pass.</param>
+    /// <param name="diffusionTime">Diffusion time from forward pass.</param>
+    /// <returns>Tuple of (input gradient, weight gradient, bias gradient).</returns>
+    (Tensor<T> inputGrad, Tensor<T> weightGrad, Tensor<T> biasGrad) DiffusionConvBackward<T>(
+        Tensor<T> outputGradient,
+        Tensor<T> vertexFeatures,
+        Tensor<T> laplacian,
+        Tensor<T> weights,
+        T diffusionTime);
+
+    /// <summary>
+    /// Computes the mesh Laplacian matrix from vertex positions and face indices.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="vertices">Vertex positions [numVertices, 3].</param>
+    /// <param name="faces">Face indices [numFaces, 3] for triangular mesh.</param>
+    /// <param name="laplacianType">Type of Laplacian operator to compute.</param>
+    /// <returns>Laplacian matrix [numVertices, numVertices].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Laplacian Types:</b>
+    /// - <see cref="LaplacianType.Uniform"/>: Simple adjacency-based, ignores geometry
+    /// - <see cref="LaplacianType.Cotangent"/>: Geometry-aware, preserves angles
+    /// - <see cref="LaplacianType.Normalized"/>: Cotangent normalized by vertex areas
+    /// </para>
+    /// </remarks>
+    Tensor<T> ComputeMeshLaplacian<T>(
+        Tensor<T> vertices,
+        Tensor<int> faces,
+        LaplacianType laplacianType = LaplacianType.Cotangent);
+
+    /// <summary>
+    /// Generates spiral indices for mesh vertices based on connectivity.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for vertex positions.</typeparam>
+    /// <param name="vertices">Vertex positions [numVertices, 3].</param>
+    /// <param name="faces">Face indices [numFaces, 3].</param>
+    /// <param name="spiralLength">Number of neighbors in each spiral.</param>
+    /// <returns>Spiral indices [numVertices, spiralLength].</returns>
+    /// <remarks>
+    /// <para>
+    /// The algorithm:
+    /// 1. Build adjacency list from faces
+    /// 2. For each vertex, find the initial reference direction
+    /// 3. Sort neighbors by angle from reference in consistent winding order
+    /// 4. Extend to spiral length by following the ring structure
+    /// </para>
+    /// </remarks>
+    Tensor<int> GenerateSpiralIndices<T>(
+        Tensor<T> vertices,
+        Tensor<int> faces,
+        int spiralLength);
+
+    #endregion
+
+    #region Advanced Vectorization Operations
+
+    /// <summary>
+    /// Computes pairwise squared Euclidean distances between two sets of points.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="x">First set of points [N, D] where N is number of points and D is dimensionality.</param>
+    /// <param name="y">Second set of points [M, D] where M is number of points and D is dimensionality.</param>
+    /// <returns>Distance matrix [N, M] where element [i,j] is squared distance between x[i] and y[j].</returns>
+    /// <remarks>
+    /// Uses the identity: ||x - y||^2 = ||x||^2 + ||y||^2 - 2 * x.y for efficiency.
+    /// This avoids the O(N*M*D) explicit subtraction and enables GPU parallelization.
+    /// </remarks>
+    Tensor<T> PairwiseDistanceSquared<T>(Tensor<T> x, Tensor<T> y);
+
+    /// <summary>
+    /// Computes pairwise Euclidean distances between two sets of points.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="x">First set of points [N, D].</param>
+    /// <param name="y">Second set of points [M, D].</param>
+    /// <returns>Distance matrix [N, M] where element [i,j] is Euclidean distance between x[i] and y[j].</returns>
+    Tensor<T> PairwiseDistance<T>(Tensor<T> x, Tensor<T> y);
+
+    /// <summary>
+    /// Returns the k largest or smallest elements along an axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor.</param>
+    /// <param name="k">Number of top elements to return.</param>
+    /// <param name="axis">Axis along which to find top-k. Default -1 means last axis.</param>
+    /// <param name="largest">If true, return k largest elements; if false, return k smallest.</param>
+    /// <returns>Tuple of (values, indices) where values contains the top-k elements and indices their positions.</returns>
+    (Tensor<T> values, Tensor<int> indices) TopK<T>(Tensor<T> input, int k, int axis = -1, bool largest = true);
+
+    /// <summary>
+    /// Returns indices that would sort the tensor along an axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor.</param>
+    /// <param name="axis">Axis along which to sort. Default -1 means last axis.</param>
+    /// <param name="descending">If true, sort in descending order.</param>
+    /// <returns>Tensor of indices that would sort the input.</returns>
+    Tensor<int> ArgSort<T>(Tensor<T> input, int axis = -1, bool descending = false);
+
+/// <summary>
+    /// Gathers elements from input tensor along an axis using indices.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Source tensor to gather from.</param>
+    /// <param name="indices">Indices specifying which elements to gather.</param>
+    /// <param name="axis">Axis along which to gather.</param>
+    /// <returns>Tensor of gathered elements.</returns>
+    Tensor<T> Gather<T>(Tensor<T> input, Tensor<int> indices, int axis);
+
+    /// <summary>
+    /// Scatters values into a new tensor at positions specified by indices.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor providing the shape and initial values.</param>
+    /// <param name="indices">Indices where to scatter values.</param>
+    /// <param name="values">Values to scatter.</param>
+    /// <param name="axis">Axis along which to scatter.</param>
+    /// <returns>New tensor with scattered values.</returns>
+    Tensor<T> Scatter<T>(Tensor<T> input, Tensor<int> indices, Tensor<T> values, int axis);
+
+    /// <summary>
+    /// Scatters values by adding them to existing values at positions specified by indices.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor providing the shape and initial values.</param>
+    /// <param name="indices">Indices where to add values.</param>
+    /// <param name="values">Values to add at specified indices.</param>
+    /// <param name="axis">Axis along which to scatter-add.</param>
+    /// <returns>New tensor with values added at specified positions.</returns>
+    Tensor<T> ScatterAdd<T>(Tensor<T> input, Tensor<int> indices, Tensor<T> values, int axis);
+
+    /// <summary>
+    /// Computes the hyperbolic cosine of each element in the tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">Input tensor.</param>
+    /// <returns>Tensor with hyperbolic cosine applied element-wise.</returns>
+    Tensor<T> TensorCosh<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the hyperbolic sine of each element in the tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">Input tensor.</param>
+    /// <returns>Tensor with hyperbolic sine applied element-wise.</returns>
+    Tensor<T> TensorSinh<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the outer product of two 1D tensors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">First 1D tensor of length N.</param>
+    /// <param name="b">Second 1D tensor of length M.</param>
+    /// <returns>2D tensor [N, M] where result[i,j] = a[i] * b[j].</returns>
+    Tensor<T> TensorOuter<T>(Tensor<T> a, Tensor<T> b);
 
     #endregion
 }

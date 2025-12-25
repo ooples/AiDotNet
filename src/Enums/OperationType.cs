@@ -281,6 +281,12 @@ public enum OperationType
     Upsample,
 
     /// <summary>
+    /// 3D upsampling operation for volumetric data.
+    /// Increases spatial resolution by repeating or interpolating values in depth, height, and width.
+    /// </summary>
+    Upsample3D,
+
+    /// <summary>
     /// Pixel shuffle operation for upsampling.
     /// </summary>
     PixelShuffle,
@@ -318,6 +324,11 @@ public enum OperationType
     /// 2D max pooling.
     /// </summary>
     MaxPool2D,
+
+    /// <summary>
+    /// 3D max pooling.
+    /// </summary>
+    MaxPool3D,
 
     /// <summary>
     /// 2D average pooling.

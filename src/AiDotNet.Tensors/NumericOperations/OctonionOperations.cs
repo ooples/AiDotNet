@@ -179,6 +179,61 @@ public class OctonionOperations<T> : INumericOperations<Octonion<T>>
             _ops.Round(value.E6),
             _ops.Round(value.E7));
 
+    public Octonion<T> Floor(Octonion<T> value)
+        => new Octonion<T>(
+            _ops.Floor(value.Scalar),
+            _ops.Floor(value.E1),
+            _ops.Floor(value.E2),
+            _ops.Floor(value.E3),
+            _ops.Floor(value.E4),
+            _ops.Floor(value.E5),
+            _ops.Floor(value.E6),
+            _ops.Floor(value.E7));
+
+    public Octonion<T> Ceiling(Octonion<T> value)
+        => new Octonion<T>(
+            _ops.Ceiling(value.Scalar),
+            _ops.Ceiling(value.E1),
+            _ops.Ceiling(value.E2),
+            _ops.Ceiling(value.E3),
+            _ops.Ceiling(value.E4),
+            _ops.Ceiling(value.E5),
+            _ops.Ceiling(value.E6),
+            _ops.Ceiling(value.E7));
+
+    public Octonion<T> Frac(Octonion<T> value)
+        => new Octonion<T>(
+            _ops.Frac(value.Scalar),
+            _ops.Frac(value.E1),
+            _ops.Frac(value.E2),
+            _ops.Frac(value.E3),
+            _ops.Frac(value.E4),
+            _ops.Frac(value.E5),
+            _ops.Frac(value.E6),
+            _ops.Frac(value.E7));
+
+    public Octonion<T> Sin(Octonion<T> value)
+        => new Octonion<T>(
+            _ops.Sin(value.Scalar),
+            _ops.Sin(value.E1),
+            _ops.Sin(value.E2),
+            _ops.Sin(value.E3),
+            _ops.Sin(value.E4),
+            _ops.Sin(value.E5),
+            _ops.Sin(value.E6),
+            _ops.Sin(value.E7));
+
+    public Octonion<T> Cos(Octonion<T> value)
+        => new Octonion<T>(
+            _ops.Cos(value.Scalar),
+            _ops.Cos(value.E1),
+            _ops.Cos(value.E2),
+            _ops.Cos(value.E3),
+            _ops.Cos(value.E4),
+            _ops.Cos(value.E5),
+            _ops.Cos(value.E6),
+            _ops.Cos(value.E7));
+
     public Octonion<T> MinValue => new Octonion<T>(
         _ops.MinValue, _ops.MinValue, _ops.MinValue, _ops.MinValue, _ops.MinValue, _ops.MinValue, _ops.MinValue, _ops.MinValue);
 
@@ -342,6 +397,21 @@ public class OctonionOperations<T> : INumericOperations<Octonion<T>>
 
     public void Copy(ReadOnlySpan<Octonion<T>> source, Span<Octonion<T>> destination)
         => source.CopyTo(destination);
+
+    public void Floor(ReadOnlySpan<Octonion<T>> x, Span<Octonion<T>> destination)
+        => VectorizedOperationsFallback.Floor(this, x, destination);
+
+    public void Ceiling(ReadOnlySpan<Octonion<T>> x, Span<Octonion<T>> destination)
+        => VectorizedOperationsFallback.Ceiling(this, x, destination);
+
+    public void Frac(ReadOnlySpan<Octonion<T>> x, Span<Octonion<T>> destination)
+        => VectorizedOperationsFallback.Frac(this, x, destination);
+
+    public void Sin(ReadOnlySpan<Octonion<T>> x, Span<Octonion<T>> destination)
+        => VectorizedOperationsFallback.Sin(this, x, destination);
+
+    public void Cos(ReadOnlySpan<Octonion<T>> x, Span<Octonion<T>> destination)
+        => VectorizedOperationsFallback.Cos(this, x, destination);
 
     #endregion
 }

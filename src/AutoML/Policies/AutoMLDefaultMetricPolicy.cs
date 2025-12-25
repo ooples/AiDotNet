@@ -42,8 +42,28 @@ internal static class AutoMLDefaultMetricPolicy
             AutoMLTaskFamily.ObjectDetection => (MetricType.MeanAveragePrecision, Maximize: true),
             AutoMLTaskFamily.ImageSegmentation => (MetricType.F1Score, Maximize: true),
             AutoMLTaskFamily.ReinforcementLearning => (MetricType.AverageEpisodeReward, Maximize: true),
+            
+            // 3D Point Cloud Tasks
+            AutoMLTaskFamily.PointCloudClassification => (MetricType.Accuracy, Maximize: true),
+            AutoMLTaskFamily.PointCloudSegmentation => (MetricType.MeanIoU, Maximize: true),
+            AutoMLTaskFamily.PointCloudCompletion => (MetricType.ChamferDistance, Maximize: false),
+            
+            // 3D Volumetric Tasks
+            AutoMLTaskFamily.VolumetricClassification => (MetricType.Accuracy, Maximize: true),
+            AutoMLTaskFamily.VolumetricSegmentation => (MetricType.MeanIoU, Maximize: true),
+            
+            // 3D Mesh Tasks
+            AutoMLTaskFamily.MeshClassification => (MetricType.Accuracy, Maximize: true),
+            AutoMLTaskFamily.MeshSegmentation => (MetricType.MeanIoU, Maximize: true),
+            
+            // Neural Radiance Fields
+            AutoMLTaskFamily.RadianceFieldReconstruction => (MetricType.PSNR, Maximize: true),
+            
+            // 3D Detection and Depth
+            AutoMLTaskFamily.ThreeDObjectDetection => (MetricType.MeanAveragePrecision, Maximize: true),
+            AutoMLTaskFamily.DepthEstimation => (MetricType.AbsoluteRelativeError, Maximize: false),
+            
             _ => (MetricType.Accuracy, Maximize: true)
         };
     }
 }
-

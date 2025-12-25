@@ -346,22 +346,8 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         var latentT = Engine.TensorTranspose(latent);
         var logits = Engine.TensorMatMul(latent, latentT);
 
-        // Apply sigmoid to get probabilities
-        var reconstructed = new Tensor<T>([numNodes, numNodes]);
-        for (int i = 0; i < numNodes; i++)
-        {
-            for (int j = 0; j < numNodes; j++)
-            {
-                T logit = logits[i, j];
-                // Sigmoid: 1 / (1 + exp(-x))
-                T negLogit = NumOps.Negate(logit);
-                T expNeg = NumOps.Exp(negLogit);
-                T onePlusExp = NumOps.Add(NumOps.One, expNeg);
-                reconstructed[i, j] = NumOps.Divide(NumOps.One, onePlusExp);
-            }
-        }
-
-        return reconstructed;
+        // === Vectorized sigmoid using IEngine (Phase B: US-GPU-015) ===
+        return Engine.Sigmoid(logits);
     }
 
     /// <summary>
@@ -439,25 +425,24 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
             return NumOps.Zero;
         }
 
+        // === Vectorized KL divergence using IEngine (Phase B: US-GPU-015) ===
         // KL = -0.5 * sum(1 + log_var - mean^2 - exp(log_var))
-        var kl = NumOps.Zero;
-        for (int i = 0; i < _lastMean.Length; i++)
-        {
-            T m = _lastMean.GetFlat(i);
-            T lv = _lastLogVar.GetFlat(i);
+        //    = 0.5 * sum(exp(log_var) + mean^2 - 1 - log_var)
+        var expLogVar = Engine.TensorExp(_lastLogVar);
+        var meanSquared = Engine.TensorMultiply(_lastMean, _lastMean);
 
-            T mSquared = NumOps.Multiply(m, m);
-            T expLv = NumOps.Exp(lv);
+        T sumExpLogVar = Engine.TensorSum(expLogVar);
+        T sumMeanSquared = Engine.TensorSum(meanSquared);
+        T sumLogVar = Engine.TensorSum(_lastLogVar);
+        T n = NumOps.FromDouble(_lastMean.Length);
 
-            // 1 + log_var - mean^2 - exp(log_var)
-            T term = NumOps.Subtract(
-                NumOps.Add(NumOps.One, lv),
-                NumOps.Add(mSquared, expLv));
+        // sum(exp(logVar) + mean^2 - 1 - logVar)
+        T sum = NumOps.Subtract(
+            NumOps.Add(sumExpLogVar, sumMeanSquared),
+            NumOps.Add(n, sumLogVar));
 
-            kl = NumOps.Subtract(kl, NumOps.Multiply(NumOps.FromDouble(0.5), term));
-        }
-
-        return NumOps.Divide(kl, NumOps.FromDouble(_lastMean.Length));
+        T kl = NumOps.Multiply(NumOps.FromDouble(0.5), sum);
+        return NumOps.Divide(kl, n);
     }
 
     /// <summary>
@@ -526,17 +511,11 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         var klMeanGrad = _lastMean;
         var totalMeanGrad = Engine.TensorAdd(meanGrad, Engine.TensorMultiplyScalar(klMeanGrad, NumOps.FromDouble(KLWeight)));
 
-        // Gradient for log-variance (from KL divergence)
-        // d(KL)/d(logvar) = 0.5 * (exp(logvar) - 1)
-        var klLogVarGrad = new Tensor<T>(_lastLogVar.Shape);
-        for (int i = 0; i < _lastLogVar.Length; i++)
-        {
-            T lv = _lastLogVar.GetFlat(i);
-            T expLv = NumOps.Exp(lv);
-            T grad = NumOps.Multiply(NumOps.FromDouble(0.5 * KLWeight),
-                NumOps.Subtract(expLv, NumOps.One));
-            klLogVarGrad.SetFlat(i, grad);
-        }
+        // === Vectorized KL log-variance gradient using IEngine (Phase B: US-GPU-015) ===
+        // d(KL)/d(logvar) = 0.5 * KLWeight * (exp(logvar) - 1)
+        var expLogVar = Engine.TensorExp(_lastLogVar);
+        var expMinusOne = Engine.TensorSubtractScalar(expLogVar, NumOps.One);
+        var klLogVarGrad = Engine.TensorMultiplyScalar(expMinusOne, NumOps.FromDouble(0.5 * KLWeight));
 
         _logVarWeightsGradient = Engine.TensorMatMul(encoderT, klLogVarGrad);
 

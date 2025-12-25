@@ -208,14 +208,9 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Compute contrastive loss for each cached pair
         foreach (var (embedding1, embedding2, label) in _cachedEmbeddingPairs)
         {
-            // Compute Euclidean distance between embeddings
-            T distanceSquared = NumOps.Zero;
-            for (int i = 0; i < embedding1.Length; i++)
-            {
-                T diff = NumOps.Subtract(embedding1[i], embedding2[i]);
-                T diffSquared = NumOps.Multiply(diff, diff);
-                distanceSquared = NumOps.Add(distanceSquared, diffSquared);
-            }
+            // Compute Euclidean distance using vectorized operations
+            var diff = (Vector<T>)Engine.Subtract(embedding1, embedding2);
+            T distanceSquared = Engine.DotProduct(diff, diff);
             T distance = NumOps.Sqrt(distanceSquared);
 
             // Compute contrastive loss based on label
@@ -551,14 +546,10 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Assume the subnetwork has internal logic to update all its layers
         Vector<T> subnetworkGradients = _subnetwork.GetParameterGradients();
         Vector<T> subnetworkParameters = _subnetwork.GetParameters();
-        Vector<T> updatedParameters = new Vector<T>(subnetworkParameters.Length);
 
-        // Apply learning rate to gradients
-        for (int i = 0; i < subnetworkParameters.Length; i++)
-        {
-            T gradientStep = NumOps.Multiply(subnetworkGradients[i], learningRate);
-            updatedParameters[i] = NumOps.Add(subnetworkParameters[i], gradientStep);
-        }
+        // Apply learning rate to gradients using vectorized operations
+        var gradientStep = (Vector<T>)Engine.Multiply(subnetworkGradients, learningRate);
+        var updatedParameters = (Vector<T>)Engine.Add(subnetworkParameters, gradientStep);
 
         // Update the subnetwork with new parameters
         _subnetwork.UpdateParameters(updatedParameters);

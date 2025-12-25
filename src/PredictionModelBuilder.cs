@@ -975,11 +975,15 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         }
 
         // Convert and validate inputs
+        int xSamples = ConversionsHelper.GetSampleCount<T, TInput>(x);
+        int ySamples = ConversionsHelper.GetSampleCount<T, TOutput>(y);
+
+        if (xSamples != ySamples)
+            throw new ArgumentException("Number of rows in features must match length of actual values", nameof(x));
+
+        // Convert inputs to Matrix/Vector for internal processing
         var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
         var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
-
-        if (convertedX.Rows != convertedY.Length)
-            throw new ArgumentException("Number of rows in features must match length of actual values", nameof(x));
 
         // AGENT ASSISTANCE (if enabled)
         AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null;

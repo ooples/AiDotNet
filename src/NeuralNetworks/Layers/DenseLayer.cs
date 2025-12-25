@@ -450,11 +450,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // === Vectorized L1 Regularization: Σ|w| (Phase B: US-GPU-015) ===
         if (Regularization == RegularizationType.L1 || Regularization == RegularizationType.L1L2)
         {
-            T l1Loss = NumOps.Zero;
-            for (int i = 0; i < _weights.Length; i++)
-            {
-                l1Loss = NumOps.Add(l1Loss, NumOps.Abs(_weights[i]));
-            }
+            // Use vectorized abs and sum operations
+            var absWeights = Engine.TensorAbs(_weights);
+            T l1Loss = Engine.TensorSum(absWeights);
             l1Loss = NumOps.Multiply(L1Strength, l1Loss);
             regularizationLoss = NumOps.Add(regularizationLoss, l1Loss);
         }
@@ -462,11 +460,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // === Vectorized L2 Regularization: Σ(w²) (Phase B: US-GPU-015) ===
         if (Regularization == RegularizationType.L2 || Regularization == RegularizationType.L1L2)
         {
-            T l2Loss = NumOps.Zero;
-            for (int i = 0; i < _weights.Length; i++)
-            {
-                l2Loss = NumOps.Add(l2Loss, NumOps.Multiply(_weights[i], _weights[i]));
-            }
+            // Use vectorized element-wise multiply and sum operations
+            var weightsSquared = Engine.TensorMultiply(_weights, _weights);
+            T l2Loss = Engine.TensorSum(weightsSquared);
             // L2 regularization is typically 0.5 * lambda * Σ(w²)
             l2Loss = NumOps.Multiply(L2Strength, l2Loss);
             l2Loss = NumOps.Multiply(NumOps.FromDouble(0.5), l2Loss);

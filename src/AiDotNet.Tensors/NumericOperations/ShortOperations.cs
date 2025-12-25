@@ -527,6 +527,21 @@ public class ShortOperations : INumericOperations<short>
     /// </remarks>
     public short Round(short value) => value;
 
+    public short Floor(short value) => value;
+    public short Ceiling(short value) => value;
+    public short Frac(short value) => 0;
+
+    /// <summary>
+    /// Returns the sine of the specified value (truncated to integer).
+    /// </summary>
+    public short Sin(short value) => (short)Math.Sin(value);
+
+    /// <summary>
+    /// Returns the cosine of the specified value (truncated to integer).
+    /// </summary>
+    public short Cos(short value) => (short)Math.Cos(value);
+
+
     /// <summary>
     /// Gets the minimum value that can be represented by a short.
     /// </summary>
@@ -803,4 +818,19 @@ public class ShortOperations : INumericOperations<short>
     public void Copy(ReadOnlySpan<short> source, Span<short> destination) => source.CopyTo(destination);
 
     #endregion
+
+    public void Floor(ReadOnlySpan<short> x, Span<short> destination) => x.CopyTo(destination);
+    public void Ceiling(ReadOnlySpan<short> x, Span<short> destination) => x.CopyTo(destination);
+    public void Frac(ReadOnlySpan<short> x, Span<short> destination) => destination.Fill(0);
+    public void Sin(ReadOnlySpan<short> x, Span<short> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (short)Math.Sin(x[i]);
+    }
+    public void Cos(ReadOnlySpan<short> x, Span<short> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (short)Math.Cos(x[i]);
+    }
+
 }
