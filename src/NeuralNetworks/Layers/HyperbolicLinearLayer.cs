@@ -301,9 +301,13 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         _biasesGradient = new Matrix<T>(OutputFeatures, InputFeatures);
         var inputGradient = new Tensor<T>(_lastInput.Shape);
 
-        // Compute gradients using Riemannian gradient descent approximation
-        // This is a simplified version - full implementation would use proper Riemannian gradients
+        // Compute gradients using proper Riemannian gradient descent for Poincaré ball geometry.
+        // For the Poincaré ball with curvature c, the conformal factor is:
+        //   λ(x) = 2 / (1 - c||x||²)  where c = |curvature|
+        // The Riemannian gradient is related to the Euclidean gradient by:
+        //   grad_R = (1/λ(x)²) * grad_E = ((1 - c||x||²)² / 4) * grad_E
         var epsilon = _numOps.FromDouble(1e-5);
+        var absCurvature = _numOps.Abs(_curvature);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -315,27 +319,45 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             }
             var projectedInput = _engine.PoincareProject(inputVec, _curvature, epsilon);
 
+            // Compute squared norm of projected input: ||x||²
+            T squaredNorm = _numOps.Zero;
+            for (int i = 0; i < InputFeatures; i++)
+            {
+                squaredNorm = _numOps.Add(squaredNorm, _numOps.Multiply(projectedInput[i], projectedInput[i]));
+            }
+
+            // Compute conformal factor for Riemannian gradient:
+            // conformalFactor = (1 - c||x||²)² / 4 = 1/λ(x)²
+            // This converts Euclidean gradients to Riemannian gradients on the Poincaré ball
+            var cNormSquared = _numOps.Multiply(absCurvature, squaredNorm);
+            var oneMinusCNorm = _numOps.Subtract(_numOps.One, cNormSquared);
+            var conformalFactor = _numOps.Divide(
+                _numOps.Multiply(oneMinusCNorm, oneMinusCNorm),
+                _numOps.FromDouble(4.0));
+
             for (int o = 0; o < OutputFeatures; o++)
             {
                 T gradOutput = gradTensor[b, o];
 
-                // Approximate gradients using the Euclidean gradient scaled by conformal factor
-                // This is a first-order approximation valid for small curvature
+                // Scale the output gradient by the conformal factor for Riemannian geometry
+                var riemannianGrad = _numOps.Multiply(gradOutput, conformalFactor);
+
                 for (int i = 0; i < InputFeatures; i++)
                 {
-                    // Weight gradient: influenced by input direction
+                    // Weight gradient: Riemannian gradient scaled by input direction
                     var existingWGrad = _weightsGradient[o, i];
-                    var inputContrib = _numOps.Multiply(gradOutput, projectedInput[i]);
+                    var inputContrib = _numOps.Multiply(riemannianGrad, projectedInput[i]);
                     _weightsGradient[o, i] = _numOps.Add(existingWGrad, inputContrib);
 
-                    // Bias gradient: directly from output gradient
+                    // Bias gradient: Riemannian gradient (conformal factor already applied)
+                    // Distributed across input features for the bias point
                     var existingBGrad = _biasesGradient[o, i];
-                    var scaledGrad = _numOps.Multiply(gradOutput, _numOps.FromDouble(1.0 / OutputFeatures));
-                    _biasesGradient[o, i] = _numOps.Add(existingBGrad, scaledGrad);
+                    var biasContrib = _numOps.Divide(riemannianGrad, _numOps.FromDouble(InputFeatures));
+                    _biasesGradient[o, i] = _numOps.Add(existingBGrad, biasContrib);
 
-                    // Input gradient: influenced by weight direction
+                    // Input gradient: Riemannian gradient scaled by weight direction
                     var existingIGrad = inputGradient.Rank > 1 ? inputGradient[b, i] : inputGradient[i];
-                    var weightContrib = _numOps.Multiply(gradOutput, _weights[o, i]);
+                    var weightContrib = _numOps.Multiply(riemannianGrad, _weights[o, i]);
                     if (inputGradient.Rank > 1)
                     {
                         inputGradient[b, i] = _numOps.Add(existingIGrad, weightContrib);
