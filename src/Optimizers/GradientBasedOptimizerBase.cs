@@ -153,7 +153,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         base(model, options)
     {
         GradientOptions = options;
-        _currentLearningRate = GradientOptions.InitialLearningRate;
         _currentMomentum = GradientOptions.InitialMomentum;
         _previousGradient = Vector<T>.Empty();
         _lastComputedGradients = Vector<T>.Empty();
@@ -165,11 +164,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _learningRateScheduler = options.LearningRateScheduler;
         _schedulerStepMode = options.SchedulerStepMode;
 
-        // If a scheduler is provided, sync the learning rate
-        if (_learningRateScheduler != null)
-        {
-            _currentLearningRate = _learningRateScheduler.CurrentLearningRate;
-        }
+        // Use scheduler's current learning rate if available, otherwise use initial rate
+        _currentLearningRate = _learningRateScheduler?.CurrentLearningRate
+            ?? GradientOptions.InitialLearningRate;
     }
 
     /// <inheritdoc/>
@@ -917,14 +914,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _currentEpoch = 0;
 
         // Restore initial learning rate
-        if (_learningRateScheduler != null)
-        {
-            _currentLearningRate = _learningRateScheduler.CurrentLearningRate;
-        }
-        else
-        {
-            _currentLearningRate = GradientOptions.InitialLearningRate;
-        }
+        _currentLearningRate = _learningRateScheduler?.CurrentLearningRate
+            ?? GradientOptions.InitialLearningRate;
     }
 
     /// <summary>
@@ -955,8 +946,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </summary>
     /// <remarks>
     /// <para>
-    /// When using <see cref="SchedulerStepMode.StepPerEpoch"/> or <see cref="SchedulerStepMode.WarmupThenEpoch"/>,
-    /// this method should be called at the end of each epoch to advance the scheduler.
+    /// <b>When to call this method:</b> This method must be called at the end of each epoch if you are using
+    /// <see cref="SchedulerStepMode.StepPerEpoch"/> or <see cref="SchedulerStepMode.WarmupThenEpoch"/>.
+    /// Failure to call this method will prevent the learning rate scheduler from advancing, resulting
+    /// in a constant learning rate throughout training.
     /// </para>
     /// <para><b>For Beginners:</b> An epoch is one complete pass through all your training data.
     /// Many learning rate schedules (like step decay or cosine annealing) work on an epoch basis,
@@ -988,9 +981,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </summary>
     /// <remarks>
     /// <para>
-    /// When using <see cref="SchedulerStepMode.StepPerBatch"/> or during the warmup phase of
-    /// <see cref="SchedulerStepMode.WarmupThenEpoch"/>, this method should be called after each
-    /// batch to advance the scheduler.
+    /// <b>When to call this method:</b> This method must be called after each batch if you are using
+    /// <see cref="SchedulerStepMode.StepPerBatch"/>, or during the warmup phase when using
+    /// <see cref="SchedulerStepMode.WarmupThenEpoch"/>. Failure to call this method will prevent
+    /// the learning rate scheduler from advancing on a per-batch basis.
     /// </para>
     /// <para><b>For Beginners:</b> A batch is a small subset of your training data processed at once.
     /// Some schedulers (like warmup or cyclical learning rates) need to update after every batch
@@ -1027,6 +1021,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// to the base learning rate over a specified number of steps. This helps stabilize
     /// training in the early phases.
     /// </para>
+    /// <para>
+    /// <b>Detection Logic:</b> For <see cref="LinearWarmupScheduler"/>, this method uses the
+    /// explicit warmup step count for accurate detection. For other schedulers, warmup detection
+    /// is not supported and this method returns false. The heuristic of comparing current LR to
+    /// base LR was removed because it incorrectly identifies decay phases (e.g., cosine annealing)
+    /// as warmup when the learning rate drops below the base learning rate.
+    /// </para>
     /// </remarks>
     protected virtual bool IsInWarmupPhase()
     {
@@ -1035,14 +1036,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             return false;
         }
 
-        // Check if the scheduler supports warmup detection
-        // A scheduler is in warmup if current LR is below base LR and still increasing
-        var currentLr = _learningRateScheduler.CurrentLearningRate;
-        var baseLr = _learningRateScheduler.BaseLearningRate;
+        // Check if the scheduler is a LinearWarmupScheduler with explicit warmup steps
+        if (_learningRateScheduler is LinearWarmupScheduler warmupScheduler)
+        {
+            // Use the scheduler's explicit warmup step count for accurate detection
+            return _learningRateScheduler.CurrentStep < warmupScheduler.WarmupSteps;
+        }
 
-        // If current LR is less than base LR, we're likely still in warmup
-        // This is a heuristic - specific schedulers may override this behavior
-        return currentLr < baseLr;
+        // For other schedulers, we cannot reliably detect warmup
+        // The heuristic currentLr < baseLr is flawed as it triggers during decay phases
+        // Return false to avoid incorrect behavior with WarmupThenEpoch mode
+        return false;
     }
 
     /// <summary>
