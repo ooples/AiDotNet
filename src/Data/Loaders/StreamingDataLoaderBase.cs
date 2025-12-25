@@ -40,13 +40,8 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
     /// <param name="numWorkers">Number of parallel workers for sample loading. Default is 4.</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when batchSize is not positive.</exception>
     protected StreamingDataLoaderBase(int batchSize, int prefetchCount = 2, int numWorkers = 4)
+        : base(batchSize > 0 ? batchSize : throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be positive."))
     {
-        if (batchSize <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be positive.");
-        }
-
-        BatchSize = batchSize;
         _prefetchCount = Math.Max(1, prefetchCount);
         _numWorkers = Math.Max(1, numWorkers);
     }
