@@ -350,44 +350,155 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     }
 
     /// <summary>
-    /// Simplified Griffin-Lim algorithm for spectrogram inversion.
+    /// Griffin-Lim algorithm for spectrogram inversion.
+    /// Iteratively estimates phase from magnitude spectrogram.
     /// </summary>
     private Tensor<T> GriffinLim(Tensor<T> spectrogram, int audioLength)
     {
         var numIterations = 32;
         var hopLength = _spectrogramConfig.HopLength;
+        var fftSize = _spectrogramConfig.FFTSize;
+        var numBins = fftSize / 2 + 1;
 
-        // Initialize with random phases
-        var audioData = new T[audioLength];
+        // Extract spectrogram dimensions
+        var specShape = spectrogram.Shape;
+        var numMelBins = specShape.Length > 2 ? specShape[^2] : specShape[0];
+        var numFrames = specShape[^1];
+
         var specSpan = spectrogram.AsSpan();
 
-        // Initialize phases randomly
-        var phases = new double[specSpan.Length];
-        var rng = RandomGenerator;
-        for (int i = 0; i < phases.Length; i++)
+        // Convert mel spectrogram to linear spectrogram (approximation)
+        var magnitudes = new double[numFrames, numBins];
+        for (int frame = 0; frame < numFrames; frame++)
         {
-            phases[i] = rng.NextDouble() * 2 * Math.PI;
-        }
-
-        // Iterate to estimate phases
-        for (int iter = 0; iter < numIterations; iter++)
-        {
-            // Inverse STFT with current phases
-            for (int t = 0; t < audioLength; t++)
+            for (int bin = 0; bin < numBins; bin++)
             {
-                var sum = 0.0;
-                var specIdx = (t / hopLength) % specSpan.Length;
+                // Map linear bin to mel bin
+                var melBin = (int)(bin * (double)numMelBins / numBins);
+                melBin = Math.Min(melBin, numMelBins - 1);
+
+                var specIdx = frame + melBin * numFrames;
                 if (specIdx < specSpan.Length)
                 {
-                    var magnitude = NumOps.ToDouble(specSpan[specIdx]);
-                    var phase = phases[specIdx];
-                    sum = magnitude * Math.Cos(phase);
+                    var val = NumOps.ToDouble(specSpan[specIdx]);
+                    // Convert from log scale if needed
+                    magnitudes[frame, bin] = _spectrogramConfig.UseLogScale
+                        ? Math.Exp(val) - 1e-5
+                        : val;
                 }
-                audioData[t] = NumOps.FromDouble(sum * 0.01); // Scale factor
             }
         }
 
-        return new Tensor<T>(new[] { 1, audioLength }, new Vector<T>(audioData));
+        // Initialize audio signal
+        var audioData = new double[audioLength];
+
+        // Initialize phases randomly
+        var rng = RandomGenerator;
+        var phases = new double[numFrames, numBins];
+        for (int frame = 0; frame < numFrames; frame++)
+        {
+            for (int bin = 0; bin < numBins; bin++)
+            {
+                phases[frame, bin] = rng.NextDouble() * 2 * Math.PI;
+            }
+        }
+
+        // Create analysis window (Hann window)
+        var window = new double[fftSize];
+        for (int i = 0; i < fftSize; i++)
+        {
+            window[i] = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (fftSize - 1)));
+        }
+
+        // Griffin-Lim iterations
+        for (int iter = 0; iter < numIterations; iter++)
+        {
+            // Inverse STFT: Reconstruct audio from magnitudes and phases
+            Array.Clear(audioData, 0, audioData.Length);
+            var windowSum = new double[audioLength];
+
+            for (int frame = 0; frame < numFrames; frame++)
+            {
+                var frameStart = frame * hopLength;
+
+                // Inverse DFT for this frame
+                var frameData = new double[fftSize];
+                for (int n = 0; n < fftSize; n++)
+                {
+                    double sum = 0;
+                    for (int k = 0; k < numBins; k++)
+                    {
+                        var mag = magnitudes[frame, k];
+                        var phase = phases[frame, k];
+                        var angle = 2 * Math.PI * k * n / fftSize;
+                        sum += mag * Math.Cos(angle + phase);
+                    }
+                    frameData[n] = sum / fftSize;
+                }
+
+                // Apply window and overlap-add
+                for (int n = 0; n < fftSize; n++)
+                {
+                    var idx = frameStart + n;
+                    if (idx < audioLength)
+                    {
+                        audioData[idx] += frameData[n] * window[n];
+                        windowSum[idx] += window[n] * window[n];
+                    }
+                }
+            }
+
+            // Normalize by window sum
+            for (int i = 0; i < audioLength; i++)
+            {
+                if (windowSum[i] > 1e-8)
+                {
+                    audioData[i] /= windowSum[i];
+                }
+            }
+
+            // Forward STFT: Extract new phases from reconstructed audio
+            if (iter < numIterations - 1)
+            {
+                for (int frame = 0; frame < numFrames; frame++)
+                {
+                    var frameStart = frame * hopLength;
+
+                    // Extract windowed frame
+                    var frameData = new double[fftSize];
+                    for (int n = 0; n < fftSize; n++)
+                    {
+                        var idx = frameStart + n;
+                        if (idx < audioLength)
+                        {
+                            frameData[n] = audioData[idx] * window[n];
+                        }
+                    }
+
+                    // DFT to get new phases
+                    for (int k = 0; k < numBins; k++)
+                    {
+                        double real = 0, imag = 0;
+                        for (int n = 0; n < fftSize; n++)
+                        {
+                            var angle = -2 * Math.PI * k * n / fftSize;
+                            real += frameData[n] * Math.Cos(angle);
+                            imag += frameData[n] * Math.Sin(angle);
+                        }
+                        phases[frame, k] = Math.Atan2(imag, real);
+                    }
+                }
+            }
+        }
+
+        // Convert to output format
+        var result = new T[audioLength];
+        for (int i = 0; i < audioLength; i++)
+        {
+            result[i] = NumOps.FromDouble(audioData[i]);
+        }
+
+        return new Tensor<T>(new[] { 1, audioLength }, new Vector<T>(result));
     }
 
     /// <summary>
