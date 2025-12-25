@@ -270,8 +270,8 @@ public abstract class ClassifierBase<T> : IClassifier<T>
         var classCounts = new int[NumClasses];
         for (int i = 0; i < y.Length; i++)
         {
-            int classIdx = (int)NumOps.ToDouble(y[i]);
-            if (classIdx >= 0 && classIdx < NumClasses)
+            int classIdx = GetClassIndexFromLabel(y[i]);
+            if (classIdx >= 0)
             {
                 classCounts[classIdx]++;
             }
@@ -293,6 +293,37 @@ public abstract class ClassifierBase<T> : IClassifier<T>
         }
 
         return weights;
+    }
+
+    /// <summary>
+    /// Gets the class index for a given label value.
+    /// </summary>
+    /// <param name="label">The label value to look up.</param>
+    /// <returns>The index of the class in ClassLabels, or -1 if not found.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method maps label values to their corresponding class indices using the ClassLabels array.
+    /// This is more robust than directly casting labels to indices, as it handles non-0-indexed labels
+    /// (e.g., labels like 1, 2, 3 or -1, 1).
+    /// </para>
+    /// </remarks>
+    protected int GetClassIndexFromLabel(T label)
+    {
+        if (ClassLabels is null)
+        {
+            return -1;
+        }
+
+        double labelValue = NumOps.ToDouble(label);
+        for (int i = 0; i < ClassLabels.Length; i++)
+        {
+            if (Math.Abs(NumOps.ToDouble(ClassLabels[i]) - labelValue) < 1e-10)
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>
