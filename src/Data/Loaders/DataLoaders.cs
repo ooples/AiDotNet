@@ -1,5 +1,6 @@
 using AiDotNet.FederatedLearning.Benchmarks.Leaf;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Data.Geometry;
 
 namespace AiDotNet.Data.Loaders;
 
@@ -475,6 +476,36 @@ public static class DataLoaders
         return loader;
     }
 
+    #region Geometry Dataset Methods
+
+    /// <summary>
+    /// Creates a ModelNet40 classification data loader.
+    /// </summary>
+    public static ModelNet40ClassificationDataLoader<T> ModelNet40Classification<T>(
+        ModelNet40ClassificationDataLoaderOptions? options = null)
+    {
+        return new ModelNet40ClassificationDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a ShapeNetCore part segmentation data loader.
+    /// </summary>
+    public static ShapeNetCorePartSegmentationDataLoader<T> ShapeNetCorePartSegmentation<T>(
+        ShapeNetCorePartSegmentationDataLoaderOptions? options = null)
+    {
+        return new ShapeNetCorePartSegmentationDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a ScanNet semantic segmentation data loader.
+    /// </summary>
+    public static ScanNetSemanticSegmentationDataLoader<T> ScanNetSemanticSegmentation<T>(
+        ScanNetSemanticSegmentationDataLoaderOptions? options = null)
+    {
+        return new ScanNetSemanticSegmentationDataLoader<T>(options);
+    }
+
+    #endregion
     #endregion
 
     #region Streaming Factory Methods

@@ -154,20 +154,60 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeEncodings()
     {
+        // Vectorized positional encoding computation using IEngine
+        // Formula: PE(pos, 2i) = sin(pos / 10000^(2i/d_model))
+        //          PE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))
+
+        // Pre-compute division terms: 1 / 10000^(2i/d_model) for each dimension pair
+        int halfEmbedding = embeddingSize / 2;
+        var divTerms = new Tensor<T>(new[] { halfEmbedding });
+        for (int i = 0; i < halfEmbedding; i++)
+        {
+            double exponent = NumericalStabilityHelper.SafeDiv(2.0 * i, embeddingSize);
+            divTerms[i] = NumOps.FromDouble(1.0 / Math.Pow(10000, exponent));
+        }
+
+        // Create position tensor [maxSequenceLength]
+        var positions = new Tensor<T>(new[] { maxSequenceLength });
         for (int pos = 0; pos < maxSequenceLength; pos++)
         {
-            for (int i = 0; i < embeddingSize; i++)
+            positions[pos] = NumOps.FromDouble(pos);
+        }
+
+        // Compute all angles: angles[pos, i] = pos * divTerms[i]
+        // This is an outer product: [maxSequenceLength] x [halfEmbedding] -> [maxSequenceLength, halfEmbedding]
+        var angles = Engine.TensorOuter(positions, divTerms);
+
+        // Apply vectorized sin and cos using IEngine
+        var sinValues = Engine.TensorSin(angles);
+        var cosValues = Engine.TensorCos(angles);
+
+        // Interleave sin and cos values into encodings tensor
+        // Even indices get sin, odd indices get cos
+        for (int pos = 0; pos < maxSequenceLength; pos++)
+        {
+            for (int i = 0; i < halfEmbedding; i++)
             {
-                double exponent = NumericalStabilityHelper.SafeDiv(2.0 * (i / 2), embeddingSize);
-                double angle = pos / Math.Pow(10000, exponent);
-                if (i % 2 == 0)
-                {
-                    encodings[pos, i] = NumOps.FromDouble(Math.Sin(angle));
-                }
-                else
-                {
-                    encodings[pos, i] = NumOps.FromDouble(Math.Cos(angle));
-                }
+                encodings[pos, 2 * i] = sinValues[pos, i];         // Even: sin
+                encodings[pos, 2 * i + 1] = cosValues[pos, i];     // Odd: cos
+            }
+        }
+
+        // Handle odd embeddingSize (last dimension uses sin if odd) - vectorized
+        if (embeddingSize % 2 == 1)
+        {
+            int lastDimIdx = embeddingSize - 1;
+            double exponent = NumericalStabilityHelper.SafeDiv(2.0 * (lastDimIdx / 2), embeddingSize);
+            T divTerm = NumOps.FromDouble(1.0 / Math.Pow(10000, exponent));
+
+            // Vectorized: angles = positions * divTerm, then sin(angles)
+            var lastAngles = Engine.TensorMultiplyScalar(positions, divTerm);
+            var lastSinValues = Engine.TensorSin(lastAngles);
+
+            // Copy vectorized results to encodings
+            for (int pos = 0; pos < maxSequenceLength; pos++)
+            {
+                encodings[pos, lastDimIdx] = lastSinValues[pos];
             }
         }
     }

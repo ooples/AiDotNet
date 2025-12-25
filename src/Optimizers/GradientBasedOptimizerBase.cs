@@ -306,16 +306,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // Use current learning rate (may differ from initial due to decay/scheduling)
         var lr = NumOps.FromDouble(_currentLearningRate);
 
-        // Reverse the SGD update: params_old = params_new + lr * gradients
-        var original = new T[updatedParameters.Length];
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            // Use NumOps for all arithmetic to maintain precision and type safety
-            var lrTimesGradient = NumOps.Multiply(lr, appliedGradients[i]);
-            original[i] = NumOps.Add(updatedParameters[i], lrTimesGradient);
-        }
-
-        return new Vector<T>(original);
+        // Reverse the SGD update using vectorized operations: params_old = params_new + lr * gradients
+        var lrTimesGradients = (Vector<T>)Engine.Multiply(appliedGradients, lr);
+        return (Vector<T>)Engine.Add(updatedParameters, lrTimesGradients);
     }
 
     /// <summary>
@@ -897,11 +890,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
         }
 
-        // Average the gradient
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            gradient[i] = NumOps.Divide(gradient[i], NumOps.FromDouble(batchIndices.Length));
-        }
+        // Average the gradient using vectorized division
+        var batchSizeScalar = NumOps.FromDouble(batchIndices.Length);
+        gradient = (Vector<T>)Engine.Divide(gradient, batchSizeScalar);
 
         // Store for external access (enables gradient clipping, true DDP, debugging, etc.)
         _lastComputedGradients = gradient;
@@ -1003,13 +994,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 Vector<T> parameters = layer.GetParameters();
                 Vector<T> gradients = layer.GetParameterGradients();
 
-                // Apply simple gradient descent update
-                Vector<T> newParameters = new Vector<T>(parameters.Length);
-                for (int i = 0; i < parameters.Length; i++)
-                {
-                    T update = NumOps.Multiply(gradients[i], NumOps.FromDouble(_currentLearningRate));
-                    newParameters[i] = NumOps.Subtract(parameters[i], update);
-                }
+                // Apply simple gradient descent update using vectorized operations
+                var lr = NumOps.FromDouble(_currentLearningRate);
+                var scaledGradients = (Vector<T>)Engine.Multiply(gradients, lr);
+                var newParameters = (Vector<T>)Engine.Subtract(parameters, scaledGradients);
 
                 layer.SetParameters(newParameters);
                 layer.ClearGradients();

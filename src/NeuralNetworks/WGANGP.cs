@@ -295,23 +295,13 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     {
         Critic.SetTrainingMode(true);
 
-        // Forward pass on real images to compute scores
+        // Forward pass on real images to compute scores using vectorized reduction
         var realScores = Critic.Predict(realImages);
-        T realScore = NumOps.Zero;
-        for (int i = 0; i < batchSize; i++)
-        {
-            realScore = NumOps.Add(realScore, realScores[i, 0]);
-        }
-        realScore = NumOps.Divide(realScore, NumOps.FromDouble(batchSize));
+        T realScore = NumOps.Divide(Engine.TensorSum(realScores), NumOps.FromDouble(batchSize));
 
-        // Forward pass on fake images to compute scores
+        // Forward pass on fake images to compute scores using vectorized reduction
         var fakeScores = Critic.Predict(fakeImages);
-        T fakeScore = NumOps.Zero;
-        for (int i = 0; i < batchSize; i++)
-        {
-            fakeScore = NumOps.Add(fakeScore, fakeScores[i, 0]);
-        }
-        fakeScore = NumOps.Divide(fakeScore, NumOps.FromDouble(batchSize));
+        T fakeScore = NumOps.Divide(Engine.TensorSum(fakeScores), NumOps.FromDouble(batchSize));
 
         // Compute gradient penalty (this calls Predict on interpolated images which overwrites cache)
         var (gradientPenalty, gpParameterGradients) = ComputeGradientPenaltyWithGradients(realImages, fakeImages, batchSize);
@@ -321,12 +311,9 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         T gpTerm = NumOps.Multiply(NumOps.FromDouble(_gradientPenaltyCoefficient), gradientPenalty);
         T criticLoss = NumOps.Add(NumOps.Negate(wassersteinDistance), gpTerm);
 
-        // Create gradients for real images (maximize score)
+        // Create gradients for real images (maximize score) using vectorized fill
         var realGradients = new Tensor<T>(realScores.Shape);
-        for (int i = 0; i < batchSize; i++)
-        {
-            realGradients[i, 0] = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        }
+        Engine.TensorFill(realGradients, NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize)));
 
         // IMPORTANT: Re-run forward pass on real images before backprop
         // The GP computation called Predict(interpolated) which overwrote the cached activations
@@ -334,29 +321,20 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         Critic.Backpropagate(realGradients);
         var realParameterGradients = Critic.GetParameterGradients().Clone();
 
-        // Create gradients for fake images (minimize score)
+        // Create gradients for fake images (minimize score) using vectorized fill
         var fakeGradients = new Tensor<T>(fakeScores.Shape);
-        for (int i = 0; i < batchSize; i++)
-        {
-            fakeGradients[i, 0] = NumOps.Divide(NumOps.Negate(NumOps.One), NumOps.FromDouble(batchSize));
-        }
+        Engine.TensorFill(fakeGradients, NumOps.Divide(NumOps.Negate(NumOps.One), NumOps.FromDouble(batchSize)));
 
         // IMPORTANT: Re-run forward pass on fake images before backprop
         Critic.Predict(fakeImages);
         Critic.Backpropagate(fakeGradients);
         var fakeParameterGradients = Critic.GetParameterGradients().Clone();
 
-        // Combine all gradients: real gradients + fake gradients + scaled GP gradients
-        var combinedGradients = new Vector<T>(realParameterGradients.Length);
+        // Combine all gradients using vectorized operations: real + fake + scaled GP
         T gpScale = NumOps.FromDouble(_gradientPenaltyCoefficient);
-        for (int i = 0; i < combinedGradients.Length; i++)
-        {
-            // Sum all gradient contributions
-            T realGrad = realParameterGradients[i];
-            T fakeGrad = fakeParameterGradients[i];
-            T gpGrad = NumOps.Multiply(gpScale, gpParameterGradients[i]);
-            combinedGradients[i] = NumOps.Add(NumOps.Add(realGrad, fakeGrad), gpGrad);
-        }
+        var scaledGpGradients = Engine.Multiply(gpParameterGradients, gpScale);
+        var realPlusFake = Engine.Add(realParameterGradients, fakeParameterGradients);
+        var combinedGradients = Engine.Add(realPlusFake, scaledGpGradients);
 
         // Update critic parameters with combined gradients using optimizer
         UpdateCriticWithOptimizer(combinedGradients);
@@ -372,42 +350,41 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         Tensor<T> fakeImages,
         int batchSize)
     {
-        var random = RandomHelper.ThreadSafeRandom;
-
-        // Create interpolated images
-        var interpolatedImages = new Tensor<T>(realImages.Shape);
+        // Create interpolated images using vectorized operations
+        // Formula: interpolated = epsilon * real + (1 - epsilon) * fake
+        // Generate random epsilon values per sample and broadcast to full shape
 
         // Compute number of elements per sample (excludes batch dimension)
         int sampleSize = realImages.Length / batchSize;
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            T epsilon = NumOps.FromDouble(random.NextDouble());
+        // Generate random epsilon values [batchSize, 1, ...] and tile to match image shape
+        var epsilonShape = new int[realImages.Shape.Length];
+        epsilonShape[0] = batchSize;
+        for (int d = 1; d < epsilonShape.Length; d++) epsilonShape[d] = 1;
+        var epsilonBase = Engine.TensorRandomUniform<T>(epsilonShape);
 
-            for (int i = 0; i < sampleSize; i++)
-            {
-                int flatIdx = b * sampleSize + i;
-                T realValue = realImages.GetFlat(flatIdx);
-                T fakeValue = fakeImages.GetFlat(flatIdx);
+        // Tile epsilon to match full image shape
+        var tileFactors = new int[realImages.Shape.Length];
+        tileFactors[0] = 1;
+        for (int d = 1; d < tileFactors.Length; d++) tileFactors[d] = realImages.Shape[d];
+        var epsilon = Engine.TensorTile(epsilonBase, tileFactors);
 
-                T interpolated = NumOps.Add(
-                    NumOps.Multiply(epsilon, realValue),
-                    NumOps.Multiply(NumOps.Subtract(NumOps.One, epsilon), fakeValue)
-                );
+        // Compute (1 - epsilon)
+        var onesTensor = new Tensor<T>(epsilon.Shape);
+        Engine.TensorFill(onesTensor, NumOps.One);
+        var oneMinusEpsilon = Engine.TensorSubtract(onesTensor, epsilon);
 
-                interpolatedImages.SetFlat(flatIdx, interpolated);
-            }
-        }
+        // interpolated = epsilon * real + (1 - epsilon) * fake
+        var epsilonTimesReal = Engine.TensorMultiply(epsilon, realImages);
+        var oneMinusEpsilonTimesFake = Engine.TensorMultiply(oneMinusEpsilon, fakeImages);
+        var interpolatedImages = Engine.TensorAdd(epsilonTimesReal, oneMinusEpsilonTimesFake);
 
         // Forward pass through critic
         var interpolatedScores = Critic.Predict(interpolatedImages);
 
-        // Create gradients of all ones (we want to compute d(score)/d(input))
+        // Create gradients of all ones using vectorized fill
         var ones = new Tensor<T>(interpolatedScores.Shape);
-        for (int i = 0; i < batchSize; i++)
-        {
-            ones[i, 0] = NumOps.One;
-        }
+        Engine.TensorFill(ones, NumOps.One);
 
         // Backpropagate to get gradients with respect to input
         var inputGradients = Critic.Backpropagate(ones);
@@ -415,29 +392,29 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         // Capture the parameter gradients from this backprop
         var gpParameterGradients = Critic.GetParameterGradients().Clone();
 
-        // Compute L2 norm of gradients for each sample
-        T totalPenalty = NumOps.Zero;
+        // Compute L2 norm of gradients for each sample using vectorized operations
         int gradientSampleSize = inputGradients.Length / batchSize;
+        var gradientsReshaped = inputGradients.Reshape([batchSize, gradientSampleSize]);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            T gradNormSquared = NumOps.Zero;
+        // gradNormSquared[b] = sum(grad[b, i]^2) for each batch
+        var gradSquared = Engine.TensorMultiply(gradientsReshaped, gradientsReshaped);
+        var gradNormSquared = Engine.ReduceSum(gradSquared, [1], keepDims: false);
 
-            for (int i = 0; i < gradientSampleSize; i++)
-            {
-                int flatIdx = b * gradientSampleSize + i;
-                T gradValue = inputGradients.GetFlat(flatIdx);
-                gradNormSquared = NumOps.Add(gradNormSquared, NumOps.Multiply(gradValue, gradValue));
-            }
+        // gradNorm = sqrt(gradNormSquared)
+        var gradNorm = Engine.TensorSqrt(gradNormSquared);
 
-            T gradNorm = NumOps.Sqrt(gradNormSquared);
-            T deviation = NumOps.Subtract(gradNorm, NumOps.One);
-            T penalty = NumOps.Multiply(deviation, deviation);
+        // deviation = gradNorm - 1
+        var onesForDeviation = new Tensor<T>(gradNorm.Shape);
+        Engine.TensorFill(onesForDeviation, NumOps.One);
+        var deviation = Engine.TensorSubtract(gradNorm, onesForDeviation);
 
-            totalPenalty = NumOps.Add(totalPenalty, penalty);
-        }
+        // penalty = deviation^2
+        var penalty = Engine.TensorMultiply(deviation, deviation);
 
-        return (NumOps.Divide(totalPenalty, NumOps.FromDouble(batchSize)), gpParameterGradients);
+        // totalPenalty = mean(penalty)
+        T totalPenalty = NumOps.Divide(Engine.TensorSum(penalty), NumOps.FromDouble(batchSize));
+
+        return (totalPenalty, gpParameterGradients);
     }
 
     /// <summary>
@@ -448,17 +425,14 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     {
         var parameters = Critic.GetParameters();
 
-        // Gradient clipping
+        // Gradient clipping using vectorized operations
         var gradientNorm = gradients.L2Norm();
         var clipThreshold = NumOps.FromDouble(5.0);
 
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
             var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
-            }
+            gradients = Engine.Multiply(gradients, scaleFactor);
         }
 
         var updatedParameters = _criticOptimizer.UpdateParameters(parameters, gradients);
@@ -480,24 +454,14 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         // Get critic scores
         var criticScores = Critic.Predict(generatedImages);
 
-        // Calculate average score (generator wants to maximize this)
+        // Calculate average score using vectorized reduction (generator wants to maximize this)
         int batchSize = noise.Shape[0];
-        T totalScore = NumOps.Zero;
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            totalScore = NumOps.Add(totalScore, criticScores[i, 0]);
-        }
-
-        T avgScore = NumOps.Divide(totalScore, NumOps.FromDouble(batchSize));
+        T avgScore = NumOps.Divide(Engine.TensorSum(criticScores), NumOps.FromDouble(batchSize));
         T loss = NumOps.Negate(avgScore);
 
-        // Create gradients
+        // Create gradients using vectorized fill
         var gradients = new Tensor<T>(criticScores.Shape);
-        for (int i = 0; i < batchSize; i++)
-        {
-            gradients[i, 0] = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        }
+        Engine.TensorFill(gradients, NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize)));
 
         // Backpropagate through critic to get gradients for generator
         var criticInputGradients = Critic.BackwardWithInputGradient(gradients);
@@ -519,17 +483,14 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var parameters = Generator.GetParameters();
         var gradients = Generator.GetParameterGradients();
 
-        // Gradient clipping
+        // Gradient clipping using vectorized operations
         var gradientNorm = gradients.L2Norm();
         var clipThreshold = NumOps.FromDouble(5.0);
 
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
             var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
-            }
+            gradients = Engine.Multiply(gradients, scaleFactor);
         }
 
         var updatedParameters = _generatorOptimizer.UpdateParameters(parameters, gradients);

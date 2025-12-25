@@ -489,6 +489,974 @@ internal static class LocallyConnectedConv2DKernels
 }
 
 /// <summary>
+/// Parameter struct for Conv3D kernel (groups 15 scalar parameters for volumetric convolution).
+/// </summary>
+internal readonly struct Conv3DParams
+{
+    public readonly int Batch;
+    public readonly int InChannels;
+    public readonly int Depth;
+    public readonly int Height;
+    public readonly int Width;
+    public readonly int OutChannels;
+    public readonly int OutputDepth;
+    public readonly int OutputHeight;
+    public readonly int OutputWidth;
+    public readonly int KernelDepth;
+    public readonly int KernelHeight;
+    public readonly int KernelWidth;
+    public readonly int StrideD;
+    public readonly int StrideH;
+    public readonly int StrideW;
+    public readonly int PadD;
+    public readonly int PadH;
+    public readonly int PadW;
+    public readonly int DilationD;
+    public readonly int DilationH;
+    public readonly int DilationW;
+
+    public Conv3DParams(int batch, int inChannels, int depth, int height, int width, int outChannels,
+        int outputDepth, int outputHeight, int outputWidth, int kernelDepth, int kernelHeight, int kernelWidth,
+        int strideD, int strideH, int strideW, int padD, int padH, int padW, int dilationD, int dilationH, int dilationW)
+    {
+        Batch = batch;
+        InChannels = inChannels;
+        Depth = depth;
+        Height = height;
+        Width = width;
+        OutChannels = outChannels;
+        OutputDepth = outputDepth;
+        OutputHeight = outputHeight;
+        OutputWidth = outputWidth;
+        KernelDepth = kernelDepth;
+        KernelHeight = kernelHeight;
+        KernelWidth = kernelWidth;
+        StrideD = strideD;
+        StrideH = strideH;
+        StrideW = strideW;
+        PadD = padD;
+        PadH = padH;
+        PadW = padW;
+        DilationD = dilationD;
+        DilationH = dilationH;
+        DilationW = dilationW;
+    }
+}
+
+/// <summary>
+/// Static helper class for Conv3D kernel methods (required for explicit compilation).
+/// </summary>
+internal static class Conv3DKernels
+{
+    /// <summary>
+    /// Conv3D forward kernel implementation for float precision.
+    /// Input: [batch, inChannels, depth, height, width]
+    /// Kernel: [outChannels, inChannels, kernelD, kernelH, kernelW]
+    /// Output: [batch, outChannels, outputD, outputH, outputW]
+    /// </summary>
+    public static void Conv3DKernelFloatImpl(Index1D index, ArrayView<float> input, ArrayView<float> kernel, ArrayView<float> output,
+        Conv3DParams p)
+    {
+        // Convert flat index to 5D coordinates: [b, oc, od, oh, ow]
+        int ow = (int)index % p.OutputWidth;
+        int temp = (int)index / p.OutputWidth;
+        int oh = temp % p.OutputHeight;
+        temp /= p.OutputHeight;
+        int od = temp % p.OutputDepth;
+        temp /= p.OutputDepth;
+        int oc = temp % p.OutChannels;
+        int b = temp / p.OutChannels;
+
+        float sum = 0;
+
+        // Sum over input channels and kernel volume
+        for (int ic = 0; ic < p.InChannels; ic++)
+        {
+            for (int kd = 0; kd < p.KernelDepth; kd++)
+            {
+                for (int kh = 0; kh < p.KernelHeight; kh++)
+                {
+                    for (int kw = 0; kw < p.KernelWidth; kw++)
+                    {
+                        int id = od * p.StrideD + kd * p.DilationD - p.PadD;
+                        int ih = oh * p.StrideH + kh * p.DilationH - p.PadH;
+                        int iw = ow * p.StrideW + kw * p.DilationW - p.PadW;
+
+                        if (id >= 0 && id < p.Depth && ih >= 0 && ih < p.Height && iw >= 0 && iw < p.Width)
+                        {
+                            // input index: [b, ic, id, ih, iw]
+                            int inputIdx = (((b * p.InChannels + ic) * p.Depth + id) * p.Height + ih) * p.Width + iw;
+                            // kernel index: [oc, ic, kd, kh, kw]
+                            int kernelIdx = (((oc * p.InChannels + ic) * p.KernelDepth + kd) * p.KernelHeight + kh) * p.KernelWidth + kw;
+                            sum += input[inputIdx] * kernel[kernelIdx];
+                        }
+                    }
+                }
+            }
+        }
+
+        output[index] = sum;
+    }
+
+    /// <summary>
+    /// Conv3D forward kernel implementation for double precision.
+    /// </summary>
+    public static void Conv3DKernelDoubleImpl(Index1D index, ArrayView<double> input, ArrayView<double> kernel, ArrayView<double> output,
+        Conv3DParams p)
+    {
+        int ow = (int)index % p.OutputWidth;
+        int temp = (int)index / p.OutputWidth;
+        int oh = temp % p.OutputHeight;
+        temp /= p.OutputHeight;
+        int od = temp % p.OutputDepth;
+        temp /= p.OutputDepth;
+        int oc = temp % p.OutChannels;
+        int b = temp / p.OutChannels;
+
+        double sum = 0;
+
+        for (int ic = 0; ic < p.InChannels; ic++)
+        {
+            for (int kd = 0; kd < p.KernelDepth; kd++)
+            {
+                for (int kh = 0; kh < p.KernelHeight; kh++)
+                {
+                    for (int kw = 0; kw < p.KernelWidth; kw++)
+                    {
+                        int id = od * p.StrideD + kd * p.DilationD - p.PadD;
+                        int ih = oh * p.StrideH + kh * p.DilationH - p.PadH;
+                        int iw = ow * p.StrideW + kw * p.DilationW - p.PadW;
+
+                        if (id >= 0 && id < p.Depth && ih >= 0 && ih < p.Height && iw >= 0 && iw < p.Width)
+                        {
+                            int inputIdx = (((b * p.InChannels + ic) * p.Depth + id) * p.Height + ih) * p.Width + iw;
+                            int kernelIdx = (((oc * p.InChannels + ic) * p.KernelDepth + kd) * p.KernelHeight + kh) * p.KernelWidth + kw;
+                            sum += input[inputIdx] * kernel[kernelIdx];
+                        }
+                    }
+                }
+            }
+        }
+
+        output[index] = sum;
+    }
+}
+
+/// <summary>
+/// Parameter struct for Pool3D kernel (for MaxPool3D and AvgPool3D).
+/// </summary>
+internal readonly struct Pool3DParams
+{
+    public readonly int Batch;
+    public readonly int Channels;
+    public readonly int Depth;
+    public readonly int Height;
+    public readonly int Width;
+    public readonly int OutputDepth;
+    public readonly int OutputHeight;
+    public readonly int OutputWidth;
+    public readonly int PoolD;
+    public readonly int PoolH;
+    public readonly int PoolW;
+    public readonly int StrideD;
+    public readonly int StrideH;
+    public readonly int StrideW;
+    public readonly int PadD;
+    public readonly int PadH;
+    public readonly int PadW;
+
+    public Pool3DParams(int batch, int channels, int depth, int height, int width,
+        int outputDepth, int outputHeight, int outputWidth,
+        int poolD, int poolH, int poolW, int strideD, int strideH, int strideW,
+        int padD, int padH, int padW)
+    {
+        Batch = batch;
+        Channels = channels;
+        Depth = depth;
+        Height = height;
+        Width = width;
+        OutputDepth = outputDepth;
+        OutputHeight = outputHeight;
+        OutputWidth = outputWidth;
+        PoolD = poolD;
+        PoolH = poolH;
+        PoolW = poolW;
+        StrideD = strideD;
+        StrideH = strideH;
+        StrideW = strideW;
+        PadD = padD;
+        PadH = padH;
+        PadW = padW;
+    }
+}
+
+/// <summary>
+/// Static helper class for Pool3D kernel methods.
+/// </summary>
+internal static class Pool3DKernels
+{
+    /// <summary>
+    /// MaxPool3D forward kernel for float precision.
+    /// </summary>
+    public static void MaxPool3DKernelFloatImpl(Index1D index, ArrayView<float> input, ArrayView<float> output, Pool3DParams p)
+    {
+        int ow = (int)index % p.OutputWidth;
+        int temp = (int)index / p.OutputWidth;
+        int oh = temp % p.OutputHeight;
+        temp /= p.OutputHeight;
+        int od = temp % p.OutputDepth;
+        temp /= p.OutputDepth;
+        int c = temp % p.Channels;
+        int b = temp / p.Channels;
+
+        float maxVal = float.NegativeInfinity;
+
+        for (int pd = 0; pd < p.PoolD; pd++)
+        {
+            for (int ph = 0; ph < p.PoolH; ph++)
+            {
+                for (int pw = 0; pw < p.PoolW; pw++)
+                {
+                    int id = od * p.StrideD + pd - p.PadD;
+                    int ih = oh * p.StrideH + ph - p.PadH;
+                    int iw = ow * p.StrideW + pw - p.PadW;
+
+                    if (id >= 0 && id < p.Depth && ih >= 0 && ih < p.Height && iw >= 0 && iw < p.Width)
+                    {
+                        int inputIdx = (((b * p.Channels + c) * p.Depth + id) * p.Height + ih) * p.Width + iw;
+                        float val = input[inputIdx];
+                        if (val > maxVal) maxVal = val;
+                    }
+                }
+            }
+        }
+
+        output[index] = maxVal;
+    }
+
+    /// <summary>
+    /// MaxPool3D forward kernel for double precision.
+    /// </summary>
+    public static void MaxPool3DKernelDoubleImpl(Index1D index, ArrayView<double> input, ArrayView<double> output, Pool3DParams p)
+    {
+        int ow = (int)index % p.OutputWidth;
+        int temp = (int)index / p.OutputWidth;
+        int oh = temp % p.OutputHeight;
+        temp /= p.OutputHeight;
+        int od = temp % p.OutputDepth;
+        temp /= p.OutputDepth;
+        int c = temp % p.Channels;
+        int b = temp / p.Channels;
+
+        double maxVal = double.NegativeInfinity;
+
+        for (int pd = 0; pd < p.PoolD; pd++)
+        {
+            for (int ph = 0; ph < p.PoolH; ph++)
+            {
+                for (int pw = 0; pw < p.PoolW; pw++)
+                {
+                    int id = od * p.StrideD + pd - p.PadD;
+                    int ih = oh * p.StrideH + ph - p.PadH;
+                    int iw = ow * p.StrideW + pw - p.PadW;
+
+                    if (id >= 0 && id < p.Depth && ih >= 0 && ih < p.Height && iw >= 0 && iw < p.Width)
+                    {
+                        int inputIdx = (((b * p.Channels + c) * p.Depth + id) * p.Height + ih) * p.Width + iw;
+                        double val = input[inputIdx];
+                        if (val > maxVal) maxVal = val;
+                    }
+                }
+            }
+        }
+
+        output[index] = maxVal;
+    }
+
+    /// <summary>
+    /// AvgPool3D forward kernel for float precision.
+    /// </summary>
+    public static void AvgPool3DKernelFloatImpl(Index1D index, ArrayView<float> input, ArrayView<float> output, Pool3DParams p)
+    {
+        int ow = (int)index % p.OutputWidth;
+        int temp = (int)index / p.OutputWidth;
+        int oh = temp % p.OutputHeight;
+        temp /= p.OutputHeight;
+        int od = temp % p.OutputDepth;
+        temp /= p.OutputDepth;
+        int c = temp % p.Channels;
+        int b = temp / p.Channels;
+
+        float sum = 0;
+        int count = 0;
+
+        for (int pd = 0; pd < p.PoolD; pd++)
+        {
+            for (int ph = 0; ph < p.PoolH; ph++)
+            {
+                for (int pw = 0; pw < p.PoolW; pw++)
+                {
+                    int id = od * p.StrideD + pd - p.PadD;
+                    int ih = oh * p.StrideH + ph - p.PadH;
+                    int iw = ow * p.StrideW + pw - p.PadW;
+
+                    if (id >= 0 && id < p.Depth && ih >= 0 && ih < p.Height && iw >= 0 && iw < p.Width)
+                    {
+                        int inputIdx = (((b * p.Channels + c) * p.Depth + id) * p.Height + ih) * p.Width + iw;
+                        sum += input[inputIdx];
+                        count++;
+                    }
+                }
+            }
+        }
+
+        output[index] = count > 0 ? sum / count : 0;
+    }
+
+    /// <summary>
+    /// AvgPool3D forward kernel for double precision.
+    /// </summary>
+    public static void AvgPool3DKernelDoubleImpl(Index1D index, ArrayView<double> input, ArrayView<double> output, Pool3DParams p)
+    {
+        int ow = (int)index % p.OutputWidth;
+        int temp = (int)index / p.OutputWidth;
+        int oh = temp % p.OutputHeight;
+        temp /= p.OutputHeight;
+        int od = temp % p.OutputDepth;
+        temp /= p.OutputDepth;
+        int c = temp % p.Channels;
+        int b = temp / p.Channels;
+
+        double sum = 0;
+        int count = 0;
+
+        for (int pd = 0; pd < p.PoolD; pd++)
+        {
+            for (int ph = 0; ph < p.PoolH; ph++)
+            {
+                for (int pw = 0; pw < p.PoolW; pw++)
+                {
+                    int id = od * p.StrideD + pd - p.PadD;
+                    int ih = oh * p.StrideH + ph - p.PadH;
+                    int iw = ow * p.StrideW + pw - p.PadW;
+
+                    if (id >= 0 && id < p.Depth && ih >= 0 && ih < p.Height && iw >= 0 && iw < p.Width)
+                    {
+                        int inputIdx = (((b * p.Channels + c) * p.Depth + id) * p.Height + ih) * p.Width + iw;
+                        sum += input[inputIdx];
+                        count++;
+                    }
+                }
+            }
+        }
+
+        output[index] = count > 0 ? sum / count : 0;
+    }
+}
+
+/// <summary>
+/// Parameter struct for PositionalEncoding GPU kernel.
+/// </summary>
+internal readonly struct PositionalEncodingParams
+{
+    /// <summary>Number of input points.</summary>
+    public readonly int NumPoints;
+    /// <summary>Input dimension (typically 3 for xyz).</summary>
+    public readonly int InputDim;
+    /// <summary>Number of frequency bands for encoding.</summary>
+    public readonly int NumFrequencies;
+    /// <summary>Output dimension per input value (2 * NumFrequencies for sin+cos).</summary>
+    public readonly int EncodingDim;
+
+    /// <summary>
+    /// Initializes positional encoding parameters.
+    /// </summary>
+    public PositionalEncodingParams(int numPoints, int inputDim, int numFrequencies)
+    {
+        NumPoints = numPoints;
+        InputDim = inputDim;
+        NumFrequencies = numFrequencies;
+        EncodingDim = 2 * numFrequencies;
+    }
+}
+
+/// <summary>
+/// GPU kernel implementations for NeRF positional encoding.
+/// </summary>
+internal static class PositionalEncodingKernels
+{
+    /// <summary>
+    /// PositionalEncoding forward kernel for float precision.
+    /// Encodes each input coordinate using sinusoidal functions at multiple frequencies.
+    /// Output layout: [numPoints, inputDim * (1 + 2 * numFrequencies)]
+    /// For each input value x, outputs: [x, sin(2^0 * pi * x), cos(2^0 * pi * x), ..., sin(2^(L-1) * pi * x), cos(2^(L-1) * pi * x)]
+    /// </summary>
+    public static void PositionalEncodingForwardFloat(
+        Index1D index,
+        ArrayView<float> input,
+        ArrayView<float> output,
+        PositionalEncodingParams p)
+    {
+        int totalOutputPerPoint = p.InputDim * (1 + p.EncodingDim);
+        int pointIdx = (int)index / totalOutputPerPoint;
+        int outputOffset = (int)index % totalOutputPerPoint;
+
+        if (pointIdx >= p.NumPoints) return;
+
+        int dimIdx = outputOffset / (1 + p.EncodingDim);
+        int encodingIdx = outputOffset % (1 + p.EncodingDim);
+
+        int inputIdx = pointIdx * p.InputDim + dimIdx;
+        float x = input[inputIdx];
+
+        if (encodingIdx == 0)
+        {
+            // Identity component
+            output[index] = x;
+        }
+        else
+        {
+            int freqIdx = (encodingIdx - 1) / 2;
+            bool isSin = (encodingIdx - 1) % 2 == 0;
+            float freq = XMath.Pow(2.0f, freqIdx) * 3.14159265358979f;
+            float angle = freq * x;
+            output[index] = isSin ? XMath.Sin(angle) : XMath.Cos(angle);
+        }
+    }
+
+    /// <summary>
+    /// PositionalEncoding forward kernel for double precision.
+    /// </summary>
+    public static void PositionalEncodingForwardDouble(
+        Index1D index,
+        ArrayView<double> input,
+        ArrayView<double> output,
+        PositionalEncodingParams p)
+    {
+        int totalOutputPerPoint = p.InputDim * (1 + p.EncodingDim);
+        int pointIdx = (int)index / totalOutputPerPoint;
+        int outputOffset = (int)index % totalOutputPerPoint;
+
+        if (pointIdx >= p.NumPoints) return;
+
+        int dimIdx = outputOffset / (1 + p.EncodingDim);
+        int encodingIdx = outputOffset % (1 + p.EncodingDim);
+
+        int inputIdx = pointIdx * p.InputDim + dimIdx;
+        double x = input[inputIdx];
+
+        if (encodingIdx == 0)
+        {
+            output[index] = x;
+        }
+        else
+        {
+            int freqIdx = (encodingIdx - 1) / 2;
+            bool isSin = (encodingIdx - 1) % 2 == 0;
+            double freq = XMath.Pow(2.0, freqIdx) * 3.14159265358979;
+            double angle = freq * x;
+            output[index] = isSin ? XMath.Sin(angle) : XMath.Cos(angle);
+        }
+    }
+
+    /// <summary>
+    /// PositionalEncoding backward kernel for float precision.
+    /// Computes gradient w.r.t. input positions from encoded gradient.
+    /// </summary>
+    public static void PositionalEncodingBackwardFloat(
+        Index1D index,
+        ArrayView<float> positions,
+        ArrayView<float> encodedGrad,
+        ArrayView<float> positionsGrad,
+        PositionalEncodingParams p)
+    {
+        int pointIdx = (int)index / p.InputDim;
+        int dimIdx = (int)index % p.InputDim;
+
+        if (pointIdx >= p.NumPoints) return;
+
+        int totalOutputPerPoint = p.InputDim * (1 + p.EncodingDim);
+        int inputIdx = pointIdx * p.InputDim + dimIdx;
+        float x = positions[inputIdx];
+
+        float grad = 0.0f;
+
+        // Gradient from identity component
+        int identityIdx = pointIdx * totalOutputPerPoint + dimIdx * (1 + p.EncodingDim);
+        grad += encodedGrad[identityIdx];
+
+        // Gradient from frequency components
+        for (int f = 0; f < p.NumFrequencies; f++)
+        {
+            float freq = XMath.Pow(2.0f, f) * 3.14159265358979f;
+            float angle = freq * x;
+
+            int sinIdx = identityIdx + 1 + 2 * f;
+            int cosIdx = identityIdx + 2 + 2 * f;
+
+            // d(sin(freq*x))/dx = freq * cos(freq*x)
+            grad += encodedGrad[sinIdx] * freq * XMath.Cos(angle);
+            // d(cos(freq*x))/dx = -freq * sin(freq*x)
+            grad += encodedGrad[cosIdx] * (-freq) * XMath.Sin(angle);
+        }
+
+        positionsGrad[index] = grad;
+    }
+
+    /// <summary>
+    /// PositionalEncoding backward kernel for double precision.
+    /// </summary>
+    public static void PositionalEncodingBackwardDouble(
+        Index1D index,
+        ArrayView<double> positions,
+        ArrayView<double> encodedGrad,
+        ArrayView<double> positionsGrad,
+        PositionalEncodingParams p)
+    {
+        int pointIdx = (int)index / p.InputDim;
+        int dimIdx = (int)index % p.InputDim;
+
+        if (pointIdx >= p.NumPoints) return;
+
+        int totalOutputPerPoint = p.InputDim * (1 + p.EncodingDim);
+        int inputIdx = pointIdx * p.InputDim + dimIdx;
+        double x = positions[inputIdx];
+
+        double grad = 0.0;
+
+        int identityIdx = pointIdx * totalOutputPerPoint + dimIdx * (1 + p.EncodingDim);
+        grad += encodedGrad[identityIdx];
+
+        for (int f = 0; f < p.NumFrequencies; f++)
+        {
+            double freq = XMath.Pow(2.0, f) * 3.14159265358979;
+            double angle = freq * x;
+
+            int sinIdx = identityIdx + 1 + 2 * f;
+            int cosIdx = identityIdx + 2 + 2 * f;
+
+            grad += encodedGrad[sinIdx] * freq * XMath.Cos(angle);
+            grad += encodedGrad[cosIdx] * (-freq) * XMath.Sin(angle);
+        }
+
+        positionsGrad[index] = grad;
+    }
+}
+
+/// <summary>
+/// Parameter struct for VolumeRendering GPU kernel.
+/// </summary>
+internal readonly struct VolumeRenderingParams
+{
+    /// <summary>Number of rays being rendered.</summary>
+    public readonly int NumRays;
+    /// <summary>Number of samples along each ray.</summary>
+    public readonly int NumSamples;
+    /// <summary>Number of color channels (typically 3 for RGB).</summary>
+    public readonly int NumChannels;
+
+    /// <summary>
+    /// Initializes volume rendering parameters.
+    /// </summary>
+    public VolumeRenderingParams(int numRays, int numSamples, int numChannels)
+    {
+        NumRays = numRays;
+        NumSamples = numSamples;
+        NumChannels = numChannels;
+    }
+}
+
+/// <summary>
+/// GPU kernel implementations for NeRF volume rendering.
+/// </summary>
+internal static class VolumeRenderingKernels
+{
+    /// <summary>
+    /// Volume rendering forward kernel for float precision.
+    /// Implements the classical volume rendering equation from NeRF.
+    /// C(r) = sum_i(T_i * alpha_i * c_i) where T_i = prod_j&lt;i(1 - alpha_j)
+    /// alpha_i = 1 - exp(-sigma_i * delta_i)
+    /// </summary>
+    public static void VolumeRenderingForwardFloat(
+        Index1D index,
+        ArrayView<float> rgb,        // [numRays, numSamples, numChannels]
+        ArrayView<float> density,    // [numRays, numSamples]
+        ArrayView<float> tValues,    // [numRays, numSamples]
+        ArrayView<float> output,     // [numRays, numChannels]
+        VolumeRenderingParams p)
+    {
+        int rayIdx = (int)index / p.NumChannels;
+        int channelIdx = (int)index % p.NumChannels;
+
+        if (rayIdx >= p.NumRays) return;
+
+        float accumulated = 0.0f;
+        float transmittance = 1.0f;
+
+        for (int s = 0; s < p.NumSamples - 1; s++)
+        {
+            int rgbIdx = (rayIdx * p.NumSamples + s) * p.NumChannels + channelIdx;
+            int densityIdx = rayIdx * p.NumSamples + s;
+            int tIdx = rayIdx * p.NumSamples + s;
+            int tNextIdx = rayIdx * p.NumSamples + s + 1;
+
+            float sigma = density[densityIdx];
+            float delta = tValues[tNextIdx] - tValues[tIdx];
+            float c = rgb[rgbIdx];
+
+            // alpha = 1 - exp(-sigma * delta)
+            float alpha = 1.0f - XMath.Exp(-sigma * delta);
+
+            accumulated += transmittance * alpha * c;
+            transmittance *= (1.0f - alpha);
+
+            // Early termination if transmittance is negligible
+            if (transmittance < 1e-4f) break;
+        }
+
+        output[index] = accumulated;
+    }
+
+    /// <summary>
+    /// Volume rendering forward kernel for double precision.
+    /// </summary>
+    public static void VolumeRenderingForwardDouble(
+        Index1D index,
+        ArrayView<double> rgb,
+        ArrayView<double> density,
+        ArrayView<double> tValues,
+        ArrayView<double> output,
+        VolumeRenderingParams p)
+    {
+        int rayIdx = (int)index / p.NumChannels;
+        int channelIdx = (int)index % p.NumChannels;
+
+        if (rayIdx >= p.NumRays) return;
+
+        double accumulated = 0.0;
+        double transmittance = 1.0;
+
+        for (int s = 0; s < p.NumSamples - 1; s++)
+        {
+            int rgbIdx = (rayIdx * p.NumSamples + s) * p.NumChannels + channelIdx;
+            int densityIdx = rayIdx * p.NumSamples + s;
+            int tIdx = rayIdx * p.NumSamples + s;
+            int tNextIdx = rayIdx * p.NumSamples + s + 1;
+
+            double sigma = density[densityIdx];
+            double delta = tValues[tNextIdx] - tValues[tIdx];
+            double c = rgb[rgbIdx];
+
+            double alpha = 1.0 - XMath.Exp(-sigma * delta);
+
+            accumulated += transmittance * alpha * c;
+            transmittance *= (1.0 - alpha);
+
+            if (transmittance < 1e-8) break;
+        }
+
+        output[index] = accumulated;
+    }
+}
+
+/// <summary>
+/// GPU kernel implementations for trilinear interpolation (hash encoding in NeRF).
+/// </summary>
+internal static class TrilinearInterpolateKernels
+{
+    /// <summary>
+    /// Trilinear interpolation kernel for float precision.
+    /// Grid is [D, H, W, C], positions is [N, 3], output is [N, C]
+    /// Each thread computes one output element (one channel for one position).
+    /// </summary>
+    public static void TrilinearInterpolateFloatImpl(
+        Index1D index,
+        ArrayView<float> grid,       // [D, H, W, C] flattened
+        ArrayView<float> positions,  // [N, 3] flattened
+        ArrayView<float> output,     // [N, C] flattened
+        int depth, int height, int width, int channels)
+    {
+        int n = (int)index / channels;
+        int c = (int)index % channels;
+        int numPositions = (int)output.Length / channels;
+        
+        if (n >= numPositions) return;
+
+        // Get position (z, y, x) in [0, dim-1] range
+        float z = positions[n * 3 + 0] * (depth - 1);
+        float y = positions[n * 3 + 1] * (height - 1);
+        float x = positions[n * 3 + 2] * (width - 1);
+
+        // Clamp to valid range
+        z = XMath.Max(0f, XMath.Min(depth - 1.001f, z));
+        y = XMath.Max(0f, XMath.Min(height - 1.001f, y));
+        x = XMath.Max(0f, XMath.Min(width - 1.001f, x));
+
+        // Get integer indices and fractional parts
+        int z0 = (int)XMath.Floor(z);
+        int y0 = (int)XMath.Floor(y);
+        int x0 = (int)XMath.Floor(x);
+        int z1 = z0 + 1;
+        int y1 = y0 + 1;
+        int x1 = x0 + 1;
+
+        // Clamp upper indices
+        z1 = XMath.Min(z1, depth - 1);
+        y1 = XMath.Min(y1, height - 1);
+        x1 = XMath.Min(x1, width - 1);
+
+        float zd = z - z0;
+        float yd = y - y0;
+        float xd = x - x0;
+
+        // Compute weights for 8 corners
+        float w000 = (1 - zd) * (1 - yd) * (1 - xd);
+        float w001 = (1 - zd) * (1 - yd) * xd;
+        float w010 = (1 - zd) * yd * (1 - xd);
+        float w011 = (1 - zd) * yd * xd;
+        float w100 = zd * (1 - yd) * (1 - xd);
+        float w101 = zd * (1 - yd) * xd;
+        float w110 = zd * yd * (1 - xd);
+        float w111 = zd * yd * xd;
+
+        // Get grid values at 8 corners (grid layout is [D, H, W, C])
+        int stride_d = height * width * channels;
+        int stride_h = width * channels;
+        int stride_w = channels;
+
+        float v000 = grid[z0 * stride_d + y0 * stride_h + x0 * stride_w + c];
+        float v001 = grid[z0 * stride_d + y0 * stride_h + x1 * stride_w + c];
+        float v010 = grid[z0 * stride_d + y1 * stride_h + x0 * stride_w + c];
+        float v011 = grid[z0 * stride_d + y1 * stride_h + x1 * stride_w + c];
+        float v100 = grid[z1 * stride_d + y0 * stride_h + x0 * stride_w + c];
+        float v101 = grid[z1 * stride_d + y0 * stride_h + x1 * stride_w + c];
+        float v110 = grid[z1 * stride_d + y1 * stride_h + x0 * stride_w + c];
+        float v111 = grid[z1 * stride_d + y1 * stride_h + x1 * stride_w + c];
+
+        // Interpolate
+        output[index] = w000 * v000 + w001 * v001 + w010 * v010 + w011 * v011 +
+                        w100 * v100 + w101 * v101 + w110 * v110 + w111 * v111;
+    }
+
+    /// <summary>
+    /// Trilinear interpolation kernel for double precision.
+    /// </summary>
+    public static void TrilinearInterpolateDoubleImpl(
+        Index1D index,
+        ArrayView<double> grid,       // [D, H, W, C] flattened
+        ArrayView<double> positions,  // [N, 3] flattened
+        ArrayView<double> output,     // [N, C] flattened
+        int depth, int height, int width, int channels)
+    {
+        int n = (int)index / channels;
+        int c = (int)index % channels;
+        int numPositions = (int)output.Length / channels;
+        
+        if (n >= numPositions) return;
+
+        // Get position (z, y, x) in [0, dim-1] range
+        double z = positions[n * 3 + 0] * (depth - 1);
+        double y = positions[n * 3 + 1] * (height - 1);
+        double x = positions[n * 3 + 2] * (width - 1);
+
+        // Clamp to valid range
+        z = XMath.Max(0.0, XMath.Min(depth - 1.001, z));
+        y = XMath.Max(0.0, XMath.Min(height - 1.001, y));
+        x = XMath.Max(0.0, XMath.Min(width - 1.001, x));
+
+        // Get integer indices and fractional parts
+        int z0 = (int)XMath.Floor(z);
+        int y0 = (int)XMath.Floor(y);
+        int x0 = (int)XMath.Floor(x);
+        int z1 = z0 + 1;
+        int y1 = y0 + 1;
+        int x1 = x0 + 1;
+
+        // Clamp upper indices
+        z1 = XMath.Min(z1, depth - 1);
+        y1 = XMath.Min(y1, height - 1);
+        x1 = XMath.Min(x1, width - 1);
+
+        double zd = z - z0;
+        double yd = y - y0;
+        double xd = x - x0;
+
+        // Compute weights for 8 corners
+        double w000 = (1 - zd) * (1 - yd) * (1 - xd);
+        double w001 = (1 - zd) * (1 - yd) * xd;
+        double w010 = (1 - zd) * yd * (1 - xd);
+        double w011 = (1 - zd) * yd * xd;
+        double w100 = zd * (1 - yd) * (1 - xd);
+        double w101 = zd * (1 - yd) * xd;
+        double w110 = zd * yd * (1 - xd);
+        double w111 = zd * yd * xd;
+
+        // Get grid values at 8 corners (grid layout is [D, H, W, C])
+        int stride_d = height * width * channels;
+        int stride_h = width * channels;
+        int stride_w = channels;
+
+        double v000 = grid[z0 * stride_d + y0 * stride_h + x0 * stride_w + c];
+        double v001 = grid[z0 * stride_d + y0 * stride_h + x1 * stride_w + c];
+        double v010 = grid[z0 * stride_d + y1 * stride_h + x0 * stride_w + c];
+        double v011 = grid[z0 * stride_d + y1 * stride_h + x1 * stride_w + c];
+        double v100 = grid[z1 * stride_d + y0 * stride_h + x0 * stride_w + c];
+        double v101 = grid[z1 * stride_d + y0 * stride_h + x1 * stride_w + c];
+        double v110 = grid[z1 * stride_d + y1 * stride_h + x0 * stride_w + c];
+        double v111 = grid[z1 * stride_d + y1 * stride_h + x1 * stride_w + c];
+
+        // Interpolate
+        output[index] = w000 * v000 + w001 * v001 + w010 * v010 + w011 * v011 +
+                        w100 * v100 + w101 * v101 + w110 * v110 + w111 * v111;
+    }
+
+    /// <summary>
+    /// Backward pass kernel for trilinear interpolation (float precision).
+    /// Scatters gradients from output back to grid using atomic operations.
+    /// Each thread handles one (position, channel) pair.
+    /// </summary>
+    public static void TrilinearInterpolateBackwardFloatImpl(
+        Index1D index,
+        ArrayView<float> gradOutput,  // [N, C] flattened - input gradients
+        ArrayView<float> positions,   // [N, 3] flattened - interpolation positions
+        ArrayView<float> gradGrid,    // [D, H, W, C] flattened - output gradients (accumulated atomically)
+        int depth, int height, int width, int channels)
+    {
+        int n = (int)index / channels;
+        int c = (int)index % channels;
+        int numPositions = (int)gradOutput.Length / channels;
+
+        if (n >= numPositions) return;
+
+        float grad = gradOutput[index];
+
+        // Get position (z, y, x) in [0, dim-1] range
+        float z = positions[n * 3 + 0] * (depth - 1);
+        float y = positions[n * 3 + 1] * (height - 1);
+        float x = positions[n * 3 + 2] * (width - 1);
+
+        // Clamp to valid range
+        z = XMath.Max(0f, XMath.Min(depth - 1.001f, z));
+        y = XMath.Max(0f, XMath.Min(height - 1.001f, y));
+        x = XMath.Max(0f, XMath.Min(width - 1.001f, x));
+
+        // Get integer indices and fractional parts
+        int z0 = (int)XMath.Floor(z);
+        int y0 = (int)XMath.Floor(y);
+        int x0 = (int)XMath.Floor(x);
+        int z1 = z0 + 1;
+        int y1 = y0 + 1;
+        int x1 = x0 + 1;
+
+        // Clamp upper indices
+        z1 = XMath.Min(z1, depth - 1);
+        y1 = XMath.Min(y1, height - 1);
+        x1 = XMath.Min(x1, width - 1);
+
+        float zd = z - z0;
+        float yd = y - y0;
+        float xd = x - x0;
+
+        // Compute weights for 8 corners (same as forward pass)
+        float w000 = (1 - zd) * (1 - yd) * (1 - xd);
+        float w001 = (1 - zd) * (1 - yd) * xd;
+        float w010 = (1 - zd) * yd * (1 - xd);
+        float w011 = (1 - zd) * yd * xd;
+        float w100 = zd * (1 - yd) * (1 - xd);
+        float w101 = zd * (1 - yd) * xd;
+        float w110 = zd * yd * (1 - xd);
+        float w111 = zd * yd * xd;
+
+        // Compute grid indices (grid layout is [D, H, W, C])
+        int stride_d = height * width * channels;
+        int stride_h = width * channels;
+        int stride_w = channels;
+
+        // Scatter gradient to 8 corners using atomic add
+        Atomic.Add(ref gradGrid[z0 * stride_d + y0 * stride_h + x0 * stride_w + c], w000 * grad);
+        Atomic.Add(ref gradGrid[z0 * stride_d + y0 * stride_h + x1 * stride_w + c], w001 * grad);
+        Atomic.Add(ref gradGrid[z0 * stride_d + y1 * stride_h + x0 * stride_w + c], w010 * grad);
+        Atomic.Add(ref gradGrid[z0 * stride_d + y1 * stride_h + x1 * stride_w + c], w011 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y0 * stride_h + x0 * stride_w + c], w100 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y0 * stride_h + x1 * stride_w + c], w101 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y1 * stride_h + x0 * stride_w + c], w110 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y1 * stride_h + x1 * stride_w + c], w111 * grad);
+    }
+
+    /// <summary>
+    /// Backward pass kernel for trilinear interpolation (double precision).
+    /// Scatters gradients from output back to grid using atomic operations.
+    /// </summary>
+    public static void TrilinearInterpolateBackwardDoubleImpl(
+        Index1D index,
+        ArrayView<double> gradOutput,  // [N, C] flattened - input gradients
+        ArrayView<double> positions,   // [N, 3] flattened - interpolation positions
+        ArrayView<double> gradGrid,    // [D, H, W, C] flattened - output gradients (accumulated atomically)
+        int depth, int height, int width, int channels)
+    {
+        int n = (int)index / channels;
+        int c = (int)index % channels;
+        int numPositions = (int)gradOutput.Length / channels;
+
+        if (n >= numPositions) return;
+
+        double grad = gradOutput[index];
+
+        // Get position (z, y, x) in [0, dim-1] range
+        double z = positions[n * 3 + 0] * (depth - 1);
+        double y = positions[n * 3 + 1] * (height - 1);
+        double x = positions[n * 3 + 2] * (width - 1);
+
+        // Clamp to valid range
+        z = XMath.Max(0.0, XMath.Min(depth - 1.001, z));
+        y = XMath.Max(0.0, XMath.Min(height - 1.001, y));
+        x = XMath.Max(0.0, XMath.Min(width - 1.001, x));
+
+        // Get integer indices and fractional parts
+        int z0 = (int)XMath.Floor(z);
+        int y0 = (int)XMath.Floor(y);
+        int x0 = (int)XMath.Floor(x);
+        int z1 = z0 + 1;
+        int y1 = y0 + 1;
+        int x1 = x0 + 1;
+
+        // Clamp upper indices
+        z1 = XMath.Min(z1, depth - 1);
+        y1 = XMath.Min(y1, height - 1);
+        x1 = XMath.Min(x1, width - 1);
+
+        double zd = z - z0;
+        double yd = y - y0;
+        double xd = x - x0;
+
+        // Compute weights for 8 corners (same as forward pass)
+        double w000 = (1 - zd) * (1 - yd) * (1 - xd);
+        double w001 = (1 - zd) * (1 - yd) * xd;
+        double w010 = (1 - zd) * yd * (1 - xd);
+        double w011 = (1 - zd) * yd * xd;
+        double w100 = zd * (1 - yd) * (1 - xd);
+        double w101 = zd * (1 - yd) * xd;
+        double w110 = zd * yd * (1 - xd);
+        double w111 = zd * yd * xd;
+
+        // Compute grid indices (grid layout is [D, H, W, C])
+        int stride_d = height * width * channels;
+        int stride_h = width * channels;
+        int stride_w = channels;
+
+        // Scatter gradient to 8 corners using atomic add
+        Atomic.Add(ref gradGrid[z0 * stride_d + y0 * stride_h + x0 * stride_w + c], w000 * grad);
+        Atomic.Add(ref gradGrid[z0 * stride_d + y0 * stride_h + x1 * stride_w + c], w001 * grad);
+        Atomic.Add(ref gradGrid[z0 * stride_d + y1 * stride_h + x0 * stride_w + c], w010 * grad);
+        Atomic.Add(ref gradGrid[z0 * stride_d + y1 * stride_h + x1 * stride_w + c], w011 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y0 * stride_h + x0 * stride_w + c], w100 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y0 * stride_h + x1 * stride_w + c], w101 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y1 * stride_h + x0 * stride_w + c], w110 * grad);
+        Atomic.Add(ref gradGrid[z1 * stride_d + y1 * stride_h + x1 * stride_w + c], w111 * grad);
+    }
+}
+
+/// <summary>
 /// GPU-based execution engine using ILGPU for hardware acceleration.
 /// </summary>
 /// <remarks>
@@ -688,6 +1656,22 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>? _conv2DBiasAddKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _conv2DBiasAddKernelDouble;
 
+    // Conv3D and Pool3D GPU kernels for volumetric operations
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, Conv3DParams>? _conv3DKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, Conv3DParams>? _conv3DKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, Pool3DParams>? _maxPool3DKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, Pool3DParams>? _maxPool3DKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, Pool3DParams>? _avgPool3DKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, Pool3DParams>? _avgPool3DKernelDouble;
+
+    // NeRF GPU kernels - Positional Encoding and Volume Rendering (3D AI Phase 3)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, PositionalEncodingParams>? _positionalEncodingForwardKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, PositionalEncodingParams>? _positionalEncodingForwardKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, PositionalEncodingParams>? _positionalEncodingBackwardKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, PositionalEncodingParams>? _positionalEncodingBackwardKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, VolumeRenderingParams>? _volumeRenderingForwardKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, VolumeRenderingParams>? _volumeRenderingForwardKernelDouble;
+
     // Production GPU kernels - Mathematical functions (Phase C: Production Ready)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _log2KernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _log2KernelDouble;
@@ -701,6 +1685,10 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _log1PKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _negateKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _negateKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, float, ArrayView<float>>? _powerScalarKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, double, ArrayView<double>>? _powerScalarKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, float, ArrayView<float>>? _scalarMinusTensorKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, double, ArrayView<double>>? _scalarMinusTensorKernelDouble;
 
     // Production GPU kernels - Utility functions (Phase C: Production Ready)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, float, float, ArrayView<float>>? _clampKernelFloat;
@@ -725,6 +1713,12 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _ceilingKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _truncateKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _truncateKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _fracKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _fracKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>? _trilinearInterpolateKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _trilinearInterpolateKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>? _trilinearInterpolateBackwardKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _trilinearInterpolateBackwardKernelDouble;
 
     // Production GPU kernels - Fill operations (Phase C: Production Ready)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, float>? _fillKernelFloat;
@@ -1803,6 +2797,48 @@ public class GpuEngine : IEngine, IDisposable
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, Conv2DParams>(
                     Conv2DKernels.Conv2DKernelDoubleImpl);
 
+                // Pre-compile Conv3D kernels for volumetric convolution
+                _conv3DKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, Conv3DParams>(
+                    Conv3DKernels.Conv3DKernelFloatImpl);
+                _conv3DKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, Conv3DParams>(
+                    Conv3DKernels.Conv3DKernelDoubleImpl);
+
+                // Pre-compile Pool3D kernels for volumetric pooling
+                _maxPool3DKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, Pool3DParams>(
+                    Pool3DKernels.MaxPool3DKernelFloatImpl);
+                _maxPool3DKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, Pool3DParams>(
+                    Pool3DKernels.MaxPool3DKernelDoubleImpl);
+                _avgPool3DKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, Pool3DParams>(
+                    Pool3DKernels.AvgPool3DKernelFloatImpl);
+                _avgPool3DKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, Pool3DParams>(
+                    Pool3DKernels.AvgPool3DKernelDoubleImpl);
+
+                // Pre-compile NeRF GPU kernels - Positional Encoding and Volume Rendering (3D AI Phase 3)
+                _positionalEncodingForwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, PositionalEncodingParams>(
+                    PositionalEncodingKernels.PositionalEncodingForwardFloat);
+                _positionalEncodingForwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, PositionalEncodingParams>(
+                    PositionalEncodingKernels.PositionalEncodingForwardDouble);
+                _positionalEncodingBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, PositionalEncodingParams>(
+                    PositionalEncodingKernels.PositionalEncodingBackwardFloat);
+                _positionalEncodingBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, PositionalEncodingParams>(
+                    PositionalEncodingKernels.PositionalEncodingBackwardDouble);
+                _volumeRenderingForwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, VolumeRenderingParams>(
+                    VolumeRenderingKernels.VolumeRenderingForwardFloat);
+                _volumeRenderingForwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, VolumeRenderingParams>(
+                    VolumeRenderingKernels.VolumeRenderingForwardDouble);
+
                 Console.WriteLine("[GpuEngine] Tensor kernels pre-compiled");
 
                 // Pre-compile production GPU kernels - Mathematical functions (Phase C: Production Ready)
@@ -1842,6 +2878,18 @@ public class GpuEngine : IEngine, IDisposable
                 _negateKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
                     (index, input, result) => result[index] = -input[index]);
+                _powerScalarKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, float, ArrayView<float>>(
+                    (index, input, exponent, result) => result[index] = XMath.Pow(input[index], exponent));
+                _powerScalarKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, double, ArrayView<double>>(
+                    (index, input, exponent, result) => result[index] = XMath.Pow(input[index], exponent));
+                _scalarMinusTensorKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, float, ArrayView<float>>(
+                    (index, input, scalar, result) => result[index] = scalar - input[index]);
+                _scalarMinusTensorKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, double, ArrayView<double>>(
+                    (index, input, scalar, result) => result[index] = scalar - input[index]);
                 Console.WriteLine("[GpuEngine] Mathematical kernels pre-compiled");
 
                 // Pre-compile production GPU kernels - Utility functions (Phase C: Production Ready)
@@ -1928,7 +2976,25 @@ public class GpuEngine : IEngine, IDisposable
                 _truncateKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
                     (index, input, result) => result[index] = XMath.Truncate(input[index]));
-                Console.WriteLine("[GpuEngine] Rounding kernels pre-compiled");
+                _fracKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, input, result) => result[index] = input[index] - XMath.Floor(input[index]));
+                _fracKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>>(
+                    (index, input, result) => result[index] = input[index] - XMath.Floor(input[index]));
+                _trilinearInterpolateKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>(
+                    TrilinearInterpolateKernels.TrilinearInterpolateFloatImpl);
+                _trilinearInterpolateKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>(
+                    TrilinearInterpolateKernels.TrilinearInterpolateDoubleImpl);
+                _trilinearInterpolateBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>(
+                    TrilinearInterpolateKernels.TrilinearInterpolateBackwardFloatImpl);
+                _trilinearInterpolateBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>(
+                    TrilinearInterpolateKernels.TrilinearInterpolateBackwardDoubleImpl);
+                Console.WriteLine("[GpuEngine] Rounding and trilinear interpolation kernels pre-compiled");
 
                 // Pre-compile production GPU kernels - Fill operations (Phase C: Production Ready)
                 _fillKernelFloat = _accelerator.LoadAutoGroupedKernel<
@@ -13440,6 +14506,818 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     /// <inheritdoc/>
+    public Tensor<T> TensorPower<T>(Tensor<T> tensor, T exponent)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        // TensorPower with scalar exponent - fall back to CPU for now
+        // GPU implementation would require a dedicated kernel with scalar parameter
+        if (tensor.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorPower(tensor, exponent);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var exponentObj = (object?)exponent; float exp = exponentObj is float fexp ? fexp : Convert.ToSingle(exponent);
+                return (Tensor<T>)(object)TensorPowerGpu((Tensor<float>)(object)tensor, exp);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var exponentObj = (object?)exponent; double exp = exponentObj is double dexp ? dexp : Convert.ToDouble(exponent);
+                return (Tensor<T>)(object)TensorPowerGpuDouble((Tensor<double>)(object)tensor, exp);
+            }
+        }
+
+        return _cpuFallback.TensorPower(tensor, exponent);
+    }
+
+    private Tensor<float> TensorPowerGpu(Tensor<float> tensor, float exponent)
+    {
+        try
+        {
+            var result = new Tensor<float>(tensor.Shape);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    // Use power kernel with scalar exponent
+                    (_powerScalarKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, exponent, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorPower(tensor, exponent);
+        }
+    }
+
+    private Tensor<double> TensorPowerGpuDouble(Tensor<double> tensor, double exponent)
+    {
+        try
+        {
+            var result = new Tensor<double>(tensor.Shape);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_powerScalarKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, exponent, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorPower(tensor, exponent);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorPower<T>(Tensor<T> bases, Tensor<T> exponents)
+    {
+        // Element-wise power - fall back to CPU as this requires element-wise kernel
+        return _cpuFallback.TensorPower(bases, exponents);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorFloor<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        if (tensor.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorFloor(tensor);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorFloorGpu((Tensor<float>)(object)tensor);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorFloorGpuDouble((Tensor<double>)(object)tensor);
+        }
+
+        return _cpuFallback.TensorFloor(tensor);
+    }
+
+    private Tensor<float> TensorFloorGpu(Tensor<float> tensor)
+    {
+        try
+        {
+            var result = new Tensor<float>(tensor.Shape);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_floorKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorFloor(tensor);
+        }
+    }
+
+    private Tensor<double> TensorFloorGpuDouble(Tensor<double> tensor)
+    {
+        try
+        {
+            var result = new Tensor<double>(tensor.Shape);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_floorKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorFloor(tensor);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorCeiling<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        if (tensor.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorCeiling(tensor);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorCeilingGpu((Tensor<float>)(object)tensor);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorCeilingGpuDouble((Tensor<double>)(object)tensor);
+        }
+
+        return _cpuFallback.TensorCeiling(tensor);
+    }
+
+    private Tensor<float> TensorCeilingGpu(Tensor<float> tensor)
+    {
+        try
+        {
+            var result = new Tensor<float>(tensor.Shape);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_ceilingKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorCeiling(tensor);
+        }
+    }
+
+    private Tensor<double> TensorCeilingGpuDouble(Tensor<double> tensor)
+    {
+        try
+        {
+            var result = new Tensor<double>(tensor.Shape);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_ceilingKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorCeiling(tensor);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorFrac<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        if (tensor.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorFrac(tensor);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorFracGpu((Tensor<float>)(object)tensor);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorFracGpuDouble((Tensor<double>)(object)tensor);
+        }
+
+        return _cpuFallback.TensorFrac(tensor);
+    }
+
+    private Tensor<float> TensorFracGpu(Tensor<float> tensor)
+    {
+        try
+        {
+            var result = new Tensor<float>(tensor.Shape);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_fracKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorFrac(tensor);
+        }
+    }
+
+    private Tensor<double> TensorFracGpuDouble(Tensor<double> tensor)
+    {
+        try
+        {
+            var result = new Tensor<double>(tensor.Shape);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_fracKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorFrac(tensor);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSin<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        if (tensor.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorSin(tensor);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorSinGpu((Tensor<float>)(object)tensor);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorSinGpuDouble((Tensor<double>)(object)tensor);
+        }
+
+        return _cpuFallback.TensorSin(tensor);
+    }
+
+    private Tensor<float> TensorSinGpu(Tensor<float> tensor)
+    {
+        try
+        {
+            var result = new Tensor<float>(tensor.Shape);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_sinKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorSin(tensor);
+        }
+    }
+
+    private Tensor<double> TensorSinGpuDouble(Tensor<double> tensor)
+    {
+        try
+        {
+            var result = new Tensor<double>(tensor.Shape);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_sinKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorSin(tensor);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorCos<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        if (tensor.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorCos(tensor);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorCosGpu((Tensor<float>)(object)tensor);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorCosGpuDouble((Tensor<double>)(object)tensor);
+        }
+
+        return _cpuFallback.TensorCos(tensor);
+    }
+
+    private Tensor<float> TensorCosGpu(Tensor<float> tensor)
+    {
+        try
+        {
+            var result = new Tensor<float>(tensor.Shape);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_cosKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorCos(tensor);
+        }
+    }
+
+    private Tensor<double> TensorCosGpuDouble(Tensor<double> tensor)
+    {
+        try
+        {
+            var result = new Tensor<double>(tensor.Shape);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_cosKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorCos(tensor);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorTrilinearInterpolate<T>(Tensor<T> grid, Tensor<T> positions)
+    {
+        if (grid == null) throw new ArgumentNullException(nameof(grid));
+        if (positions == null) throw new ArgumentNullException(nameof(positions));
+
+        // Grid should be [D, H, W, C], positions should be [N, 3]
+        if (grid.Rank != 4) throw new ArgumentException("Grid must be 4D [D, H, W, C]", nameof(grid));
+        if (positions.Rank != 2 || positions.Shape[1] != 3) throw new ArgumentException("Positions must be [N, 3]", nameof(positions));
+
+        int numPositions = positions.Shape[0];
+        int channels = grid.Shape[3];
+        int outputLength = numPositions * channels;
+
+        if (outputLength < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorTrilinearInterpolate(grid, positions);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorTrilinearInterpolateGpu(
+                    (Tensor<float>)(object)grid, (Tensor<float>)(object)positions);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorTrilinearInterpolateGpuDouble(
+                    (Tensor<double>)(object)grid, (Tensor<double>)(object)positions);
+        }
+
+        return _cpuFallback.TensorTrilinearInterpolate(grid, positions);
+    }
+
+    private Tensor<float> TensorTrilinearInterpolateGpu(Tensor<float> grid, Tensor<float> positions)
+    {
+        try
+        {
+            int depth = grid.Shape[0];
+            int height = grid.Shape[1];
+            int width = grid.Shape[2];
+            int channels = grid.Shape[3];
+            int numPositions = positions.Shape[0];
+
+            var result = new Tensor<float>(new[] { numPositions, channels });
+            var gpuGrid = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(grid.Length);
+            var gpuPositions = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(positions.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(result.Length);
+
+            try
+            {
+                gpuGrid.View.BaseView.CopyFromCPU(grid.AsSpan());
+                gpuPositions.View.BaseView.CopyFromCPU(positions.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_trilinearInterpolateKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        result.Length, gpuGrid.View, gpuPositions.View, gpuOutput.View,
+                        depth, height, width, channels);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGrid);
+                _memoryPoolFloat.Return(gpuPositions);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorTrilinearInterpolate(grid, positions);
+        }
+    }
+
+    private Tensor<double> TensorTrilinearInterpolateGpuDouble(Tensor<double> grid, Tensor<double> positions)
+    {
+        try
+        {
+            int depth = grid.Shape[0];
+            int height = grid.Shape[1];
+            int width = grid.Shape[2];
+            int channels = grid.Shape[3];
+            int numPositions = positions.Shape[0];
+
+            var result = new Tensor<double>(new[] { numPositions, channels });
+            var gpuGrid = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(grid.Length);
+            var gpuPositions = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(positions.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(result.Length);
+
+            try
+            {
+                gpuGrid.View.BaseView.CopyFromCPU(grid.AsSpan());
+                gpuPositions.View.BaseView.CopyFromCPU(positions.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_trilinearInterpolateKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        result.Length, gpuGrid.View, gpuPositions.View, gpuOutput.View,
+                        depth, height, width, channels);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGrid);
+                _memoryPoolDouble.Return(gpuPositions);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorTrilinearInterpolate(grid, positions);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorTrilinearInterpolateBackward<T>(Tensor<T> gradOutput, Tensor<T> grid, Tensor<T> positions)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (grid == null) throw new ArgumentNullException(nameof(grid));
+        if (positions == null) throw new ArgumentNullException(nameof(positions));
+
+        // Grid should be [D, H, W, C], positions should be [N, 3], gradOutput should be [N, C]
+        if (grid.Rank != 4) throw new ArgumentException("Grid must be 4D [D, H, W, C]", nameof(grid));
+        if (positions.Rank != 2 || positions.Shape[1] != 3) throw new ArgumentException("Positions must be [N, 3]", nameof(positions));
+
+        int numPositions = positions.Shape[0];
+        int channels = grid.Shape[3];
+
+        if (gradOutput.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorTrilinearInterpolateBackward(gradOutput, grid, positions);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorTrilinearInterpolateBackwardGpu(
+                    (Tensor<float>)(object)gradOutput, (Tensor<float>)(object)grid, (Tensor<float>)(object)positions);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorTrilinearInterpolateBackwardGpuDouble(
+                    (Tensor<double>)(object)gradOutput, (Tensor<double>)(object)grid, (Tensor<double>)(object)positions);
+        }
+
+        return _cpuFallback.TensorTrilinearInterpolateBackward(gradOutput, grid, positions);
+    }
+
+    private Tensor<float> TensorTrilinearInterpolateBackwardGpu(Tensor<float> gradOutput, Tensor<float> grid, Tensor<float> positions)
+    {
+        try
+        {
+            int depth = grid.Shape[0];
+            int height = grid.Shape[1];
+            int width = grid.Shape[2];
+            int channels = grid.Shape[3];
+            int numPositions = positions.Shape[0];
+
+            var gradGrid = new Tensor<float>(grid.Shape);
+            var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuPositions = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(positions.Length);
+            var gpuGradGrid = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradGrid.Length);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuPositions.View.BaseView.CopyFromCPU(positions.AsSpan());
+
+                // Zero-initialize the gradient grid
+                gpuGradGrid.View.BaseView.MemSetToZero();
+
+                lock (_gpuLock)
+                {
+                    (_trilinearInterpolateBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        gradOutput.Length, gpuGradOutput.View, gpuPositions.View, gpuGradGrid.View,
+                        depth, height, width, channels);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradGrid.View.BaseView.CopyToCPU(gradGrid.AsWritableSpan());
+                return gradGrid;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGradOutput);
+                _memoryPoolFloat.Return(gpuPositions);
+                _memoryPoolFloat.Return(gpuGradGrid);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorTrilinearInterpolateBackward(gradOutput, grid, positions);
+        }
+    }
+
+    private Tensor<double> TensorTrilinearInterpolateBackwardGpuDouble(Tensor<double> gradOutput, Tensor<double> grid, Tensor<double> positions)
+    {
+        try
+        {
+            int depth = grid.Shape[0];
+            int height = grid.Shape[1];
+            int width = grid.Shape[2];
+            int channels = grid.Shape[3];
+            int numPositions = positions.Shape[0];
+
+            var gradGrid = new Tensor<double>(grid.Shape);
+            var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuPositions = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(positions.Length);
+            var gpuGradGrid = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradGrid.Length);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuPositions.View.BaseView.CopyFromCPU(positions.AsSpan());
+
+                // Zero-initialize the gradient grid
+                gpuGradGrid.View.BaseView.MemSetToZero();
+
+                lock (_gpuLock)
+                {
+                    (_trilinearInterpolateBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        gradOutput.Length, gpuGradOutput.View, gpuPositions.View, gpuGradGrid.View,
+                        depth, height, width, channels);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradGrid.View.BaseView.CopyToCPU(gradGrid.AsWritableSpan());
+                return gradGrid;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGradOutput);
+                _memoryPoolDouble.Return(gpuPositions);
+                _memoryPoolDouble.Return(gpuGradGrid);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.TensorTrilinearInterpolateBackward(gradOutput, grid, positions);
+        }
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> TensorPow<T>(Tensor<T> tensor, T exponent)
     {
         if (tensor == null) throw new ArgumentNullException(nameof(tensor));
@@ -17694,6 +19572,580 @@ public class GpuEngine : IEngine, IDisposable
             Console.WriteLine($"[GpuEngine] GPU ConvTranspose2DBackwardKernel (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.ConvTranspose2DBackwardKernel(gradOutput, input, kernelShape, stride, padding);
         }
+    }
+
+    #endregion
+
+    #region 3D Convolution and Pooling Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> Conv3D<T>(Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0, int dilation = 1)
+    {
+        return Conv3D(input, kernel, [stride, stride, stride], [padding, padding, padding], [dilation, dilation, dilation]);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Conv3D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation)
+    {
+        // Validate array parameter lengths
+        if (stride == null || stride.Length != 3)
+            throw new ArgumentException("stride array must have exactly 3 elements (D, H, W).", nameof(stride));
+        if (padding == null || padding.Length != 3)
+            throw new ArgumentException("padding array must have exactly 3 elements (D, H, W).", nameof(padding));
+        if (dilation == null || dilation.Length != 3)
+            throw new ArgumentException("dilation array must have exactly 3 elements (D, H, W).", nameof(dilation));
+
+        // Adaptive execution: use convolution threshold
+        if (input.Length < _thresholds.Convolution)
+        {
+            return _cpuFallback.Conv3D(input, kernel, stride, padding, dilation);
+        }
+
+        // Check GPU health and type support
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)Conv3DGpu((Tensor<float>)(object)input, (Tensor<float>)(object)kernel, stride, padding, dilation);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)Conv3DGpuDouble((Tensor<double>)(object)input, (Tensor<double>)(object)kernel, stride, padding, dilation);
+        }
+
+        return _cpuFallback.Conv3D(input, kernel, stride, padding, dilation);
+    }
+
+    private Tensor<float> Conv3DGpu(Tensor<float> input, Tensor<float> kernel, int[] stride, int[] padding, int[] dilation)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (input.Rank != 5 || kernel.Rank != 5)
+        {
+            throw new ArgumentException($"Conv3D requires 5D tensors. Got input rank {input.Rank}, kernel rank {kernel.Rank}.");
+        }
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int depth = input.Shape[2];
+        int height = input.Shape[3];
+        int width = input.Shape[4];
+
+        int outChannels = kernel.Shape[0];
+        int kernelDepth = kernel.Shape[2];
+        int kernelHeight = kernel.Shape[3];
+        int kernelWidth = kernel.Shape[4];
+
+        int effectiveKernelDepth = dilation[0] * (kernelDepth - 1) + 1;
+        int effectiveKernelHeight = dilation[1] * (kernelHeight - 1) + 1;
+        int effectiveKernelWidth = dilation[2] * (kernelWidth - 1) + 1;
+
+        int outputDepth = (depth + 2 * padding[0] - effectiveKernelDepth) / stride[0] + 1;
+        int outputHeight = (height + 2 * padding[1] - effectiveKernelHeight) / stride[1] + 1;
+        int outputWidth = (width + 2 * padding[2] - effectiveKernelWidth) / stride[2] + 1;
+
+        // Check for potential overflow using long arithmetic
+        long outputSizeLong = (long)batch * outChannels * outputDepth * outputHeight * outputWidth;
+        if (outputSizeLong > int.MaxValue)
+        {
+            throw new ArgumentException($"Output tensor size ({outputSizeLong}) exceeds maximum supported size ({int.MaxValue}). Consider reducing batch size or output dimensions.");
+        }
+        int outputSize = (int)outputSizeLong;
+
+        try
+        {
+            var result = new Tensor<float>(new[] { batch, outChannels, outputDepth, outputHeight, outputWidth });
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuKernel = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(kernel.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuKernel.View.BaseView.CopyFromCPU(kernel.AsSpan());
+
+                // Thread-safe kernel execution
+                lock (_gpuLock)
+                {
+                    var parameters = new Conv3DParams(batch, inChannels, depth, height, width, outChannels,
+                        outputDepth, outputHeight, outputWidth, kernelDepth, kernelHeight, kernelWidth,
+                        stride[0], stride[1], stride[2], padding[0], padding[1], padding[2],
+                        dilation[0], dilation[1], dilation[2]);
+                    (_conv3DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View, parameters);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuKernel);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU Conv3D failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Conv3D(input, kernel, stride, padding, dilation);
+        }
+    }
+
+    private Tensor<double> Conv3DGpuDouble(Tensor<double> input, Tensor<double> kernel, int[] stride, int[] padding, int[] dilation)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (input.Rank != 5 || kernel.Rank != 5)
+        {
+            throw new ArgumentException($"Conv3D requires 5D tensors. Got input rank {input.Rank}, kernel rank {kernel.Rank}.");
+        }
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int depth = input.Shape[2];
+        int height = input.Shape[3];
+        int width = input.Shape[4];
+
+        int outChannels = kernel.Shape[0];
+        int kernelDepth = kernel.Shape[2];
+        int kernelHeight = kernel.Shape[3];
+        int kernelWidth = kernel.Shape[4];
+
+        int effectiveKernelDepth = dilation[0] * (kernelDepth - 1) + 1;
+        int effectiveKernelHeight = dilation[1] * (kernelHeight - 1) + 1;
+        int effectiveKernelWidth = dilation[2] * (kernelWidth - 1) + 1;
+
+        int outputDepth = (depth + 2 * padding[0] - effectiveKernelDepth) / stride[0] + 1;
+        int outputHeight = (height + 2 * padding[1] - effectiveKernelHeight) / stride[1] + 1;
+        int outputWidth = (width + 2 * padding[2] - effectiveKernelWidth) / stride[2] + 1;
+
+        // Check for potential overflow using long arithmetic
+        long outputSizeLong = (long)batch * outChannels * outputDepth * outputHeight * outputWidth;
+        if (outputSizeLong > int.MaxValue)
+        {
+            throw new ArgumentException($"Output tensor size ({outputSizeLong}) exceeds maximum supported size ({int.MaxValue}). Consider reducing batch size or output dimensions.");
+        }
+        int outputSize = (int)outputSizeLong;
+
+        try
+        {
+            var result = new Tensor<double>(new[] { batch, outChannels, outputDepth, outputHeight, outputWidth });
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuKernel = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(kernel.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuKernel.View.BaseView.CopyFromCPU(kernel.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    var parameters = new Conv3DParams(batch, inChannels, depth, height, width, outChannels,
+                        outputDepth, outputHeight, outputWidth, kernelDepth, kernelHeight, kernelWidth,
+                        stride[0], stride[1], stride[2], padding[0], padding[1], padding[2],
+                        dilation[0], dilation[1], dilation[2]);
+                    (_conv3DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View, parameters);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuKernel);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU Conv3D double failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Conv3D(input, kernel, stride, padding, dilation);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Conv3DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding, int[] dilation)
+    {
+        // Conv3D backward GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.Conv3DBackwardInput(gradOutput, kernel, inputShape, stride, padding, dilation);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Conv3DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding, int[] dilation)
+    {
+        // Conv3D backward GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.Conv3DBackwardKernel(gradOutput, input, kernelShape, stride, padding, dilation);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> MaxPool3D<T>(Tensor<T> input, int poolSize, int stride = 0, int padding = 0)
+    {
+        if (stride == 0) stride = poolSize;
+        return MaxPool3D(input, [poolSize, poolSize, poolSize], [stride, stride, stride], [padding, padding, padding]);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> MaxPool3D<T>(Tensor<T> input, int[] poolSize, int[] stride, int[] padding)
+    {
+        // Validate array parameter lengths
+        if (poolSize == null || poolSize.Length != 3)
+            throw new ArgumentException("poolSize array must have exactly 3 elements (D, H, W).", nameof(poolSize));
+        if (stride == null || stride.Length != 3)
+            throw new ArgumentException("stride array must have exactly 3 elements (D, H, W).", nameof(stride));
+        if (padding == null || padding.Length != 3)
+            throw new ArgumentException("padding array must have exactly 3 elements (D, H, W).", nameof(padding));
+
+        // Adaptive execution
+        if (input.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.MaxPool3D(input, poolSize, stride, padding);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)MaxPool3DGpu((Tensor<float>)(object)input, poolSize, stride, padding);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)MaxPool3DGpuDouble((Tensor<double>)(object)input, poolSize, stride, padding);
+        }
+
+        return _cpuFallback.MaxPool3D(input, poolSize, stride, padding);
+    }
+
+    private Tensor<float> MaxPool3DGpu(Tensor<float> input, int[] poolSize, int[] stride, int[] padding)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 5) throw new ArgumentException($"MaxPool3D requires 5D tensor. Got rank {input.Rank}.");
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int depth = input.Shape[2];
+        int height = input.Shape[3];
+        int width = input.Shape[4];
+
+        int outputDepth = (depth + 2 * padding[0] - poolSize[0]) / stride[0] + 1;
+        int outputHeight = (height + 2 * padding[1] - poolSize[1]) / stride[1] + 1;
+        int outputWidth = (width + 2 * padding[2] - poolSize[2]) / stride[2] + 1;
+
+        // Check for potential overflow using long arithmetic
+        long outputSizeLong = (long)batch * channels * outputDepth * outputHeight * outputWidth;
+        if (outputSizeLong > int.MaxValue)
+        {
+            throw new ArgumentException($"Output tensor size ({outputSizeLong}) exceeds maximum supported size ({int.MaxValue}).");
+        }
+
+        try
+        {
+            var result = new Tensor<float>(new[] { batch, channels, outputDepth, outputHeight, outputWidth });
+            int outputSize = batch * channels * outputDepth * outputHeight * outputWidth;
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    var parameters = new Pool3DParams(batch, channels, depth, height, width,
+                        outputDepth, outputHeight, outputWidth,
+                        poolSize[0], poolSize[1], poolSize[2],
+                        stride[0], stride[1], stride[2],
+                        padding[0], padding[1], padding[2]);
+                    (_maxPool3DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputSize, gpuInput.View, gpuOutput.View, parameters);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU MaxPool3D failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MaxPool3D(input, poolSize, stride, padding);
+        }
+    }
+
+    private Tensor<double> MaxPool3DGpuDouble(Tensor<double> input, int[] poolSize, int[] stride, int[] padding)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 5) throw new ArgumentException($"MaxPool3D requires 5D tensor. Got rank {input.Rank}.");
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int depth = input.Shape[2];
+        int height = input.Shape[3];
+        int width = input.Shape[4];
+
+        int outputDepth = (depth + 2 * padding[0] - poolSize[0]) / stride[0] + 1;
+        int outputHeight = (height + 2 * padding[1] - poolSize[1]) / stride[1] + 1;
+        int outputWidth = (width + 2 * padding[2] - poolSize[2]) / stride[2] + 1;
+
+        try
+        {
+            var result = new Tensor<double>(new[] { batch, channels, outputDepth, outputHeight, outputWidth });
+            int outputSize = batch * channels * outputDepth * outputHeight * outputWidth;
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    var parameters = new Pool3DParams(batch, channels, depth, height, width,
+                        outputDepth, outputHeight, outputWidth,
+                        poolSize[0], poolSize[1], poolSize[2],
+                        stride[0], stride[1], stride[2],
+                        padding[0], padding[1], padding[2]);
+                    (_maxPool3DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputSize, gpuInput.View, gpuOutput.View, parameters);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU MaxPool3D double failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MaxPool3D(input, poolSize, stride, padding);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> MaxPool3DWithIndices<T>(Tensor<T> input, int[] poolSize, int[] stride, out int[,,,,,] maxIndices)
+    {
+        // MaxPool3DWithIndices requires tracking indices - use CPU implementation
+        return _cpuFallback.MaxPool3DWithIndices(input, poolSize, stride, out maxIndices);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> MaxPool3DBackward<T>(Tensor<T> gradOutput, int[,,,,,] maxIndices, int[] inputShape, int[] poolSize, int[] stride)
+    {
+        // MaxPool3DBackward uses indices from forward pass - use CPU implementation
+        return _cpuFallback.MaxPool3DBackward(gradOutput, maxIndices, inputShape, poolSize, stride);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> AvgPool3D<T>(Tensor<T> input, int poolSize, int stride = 0, int padding = 0)
+    {
+        if (stride == 0) stride = poolSize;
+        return AvgPool3D(input, [poolSize, poolSize, poolSize], [stride, stride, stride], [padding, padding, padding]);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> AvgPool3D<T>(Tensor<T> input, int[] poolSize, int[] stride, int[] padding)
+    {
+        // Validate array parameter lengths
+        if (poolSize == null || poolSize.Length != 3)
+            throw new ArgumentException("poolSize array must have exactly 3 elements (D, H, W).", nameof(poolSize));
+        if (stride == null || stride.Length != 3)
+            throw new ArgumentException("stride array must have exactly 3 elements (D, H, W).", nameof(stride));
+        if (padding == null || padding.Length != 3)
+            throw new ArgumentException("padding array must have exactly 3 elements (D, H, W).", nameof(padding));
+
+        // Adaptive execution
+        if (input.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.AvgPool3D(input, poolSize, stride, padding);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)AvgPool3DGpu((Tensor<float>)(object)input, poolSize, stride, padding);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)AvgPool3DGpuDouble((Tensor<double>)(object)input, poolSize, stride, padding);
+        }
+
+        return _cpuFallback.AvgPool3D(input, poolSize, stride, padding);
+    }
+
+    private Tensor<float> AvgPool3DGpu(Tensor<float> input, int[] poolSize, int[] stride, int[] padding)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 5) throw new ArgumentException($"AvgPool3D requires 5D tensor. Got rank {input.Rank}.");
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int depth = input.Shape[2];
+        int height = input.Shape[3];
+        int width = input.Shape[4];
+
+        int outputDepth = (depth + 2 * padding[0] - poolSize[0]) / stride[0] + 1;
+        int outputHeight = (height + 2 * padding[1] - poolSize[1]) / stride[1] + 1;
+        int outputWidth = (width + 2 * padding[2] - poolSize[2]) / stride[2] + 1;
+
+        // Check for potential overflow using long arithmetic
+        long outputSizeLong = (long)batch * channels * outputDepth * outputHeight * outputWidth;
+        if (outputSizeLong > int.MaxValue)
+        {
+            throw new ArgumentException($"Output tensor size ({outputSizeLong}) exceeds maximum supported size ({int.MaxValue}).");
+        }
+        int outputSize = (int)outputSizeLong;
+
+        try
+        {
+            var result = new Tensor<float>(new[] { batch, channels, outputDepth, outputHeight, outputWidth });
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    var parameters = new Pool3DParams(batch, channels, depth, height, width,
+                        outputDepth, outputHeight, outputWidth,
+                        poolSize[0], poolSize[1], poolSize[2],
+                        stride[0], stride[1], stride[2],
+                        padding[0], padding[1], padding[2]);
+                    (_avgPool3DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputSize, gpuInput.View, gpuOutput.View, parameters);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU AvgPool3D failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.AvgPool3D(input, poolSize, stride, padding);
+        }
+    }
+
+    private Tensor<double> AvgPool3DGpuDouble(Tensor<double> input, int[] poolSize, int[] stride, int[] padding)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 5) throw new ArgumentException($"AvgPool3D requires 5D tensor. Got rank {input.Rank}.");
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int depth = input.Shape[2];
+        int height = input.Shape[3];
+        int width = input.Shape[4];
+
+        int outputDepth = (depth + 2 * padding[0] - poolSize[0]) / stride[0] + 1;
+        int outputHeight = (height + 2 * padding[1] - poolSize[1]) / stride[1] + 1;
+        int outputWidth = (width + 2 * padding[2] - poolSize[2]) / stride[2] + 1;
+
+        try
+        {
+            var result = new Tensor<double>(new[] { batch, channels, outputDepth, outputHeight, outputWidth });
+            int outputSize = batch * channels * outputDepth * outputHeight * outputWidth;
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    var parameters = new Pool3DParams(batch, channels, depth, height, width,
+                        outputDepth, outputHeight, outputWidth,
+                        poolSize[0], poolSize[1], poolSize[2],
+                        stride[0], stride[1], stride[2],
+                        padding[0], padding[1], padding[2]);
+                    (_avgPool3DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputSize, gpuInput.View, gpuOutput.View, parameters);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU AvgPool3D double failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.AvgPool3D(input, poolSize, stride, padding);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> AvgPool3DBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] poolSize, int[] stride, int[] padding)
+    {
+        // AvgPool3DBackward GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.AvgPool3DBackward(gradOutput, inputShape, poolSize, stride, padding);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Upsample3D<T>(Tensor<T> input, int scaleD, int scaleH, int scaleW)
+    {
+        // Upsample3D GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.Upsample3D(input, scaleD, scaleH, scaleW);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Upsample3DBackward<T>(Tensor<T> gradOutput, int[] inputShape, int scaleD, int scaleH, int scaleW)
+    {
+        // Upsample3DBackward GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.Upsample3DBackward(gradOutput, inputShape, scaleD, scaleH, scaleW);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ConvTranspose3D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] outputPadding)
+    {
+        // ConvTranspose3D GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.ConvTranspose3D(input, kernel, stride, padding, outputPadding);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ConvTranspose3DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding)
+    {
+        // ConvTranspose3DBackwardInput GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.ConvTranspose3DBackwardInput(gradOutput, kernel, inputShape, stride, padding);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ConvTranspose3DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding)
+    {
+        // ConvTranspose3DBackwardKernel GPU kernels not yet implemented - use CPU fallback
+        return _cpuFallback.ConvTranspose3DBackwardKernel(gradOutput, input, kernelShape, stride, padding);
     }
 
     #endregion
@@ -24151,6 +26603,261 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     /// <inheritdoc/>
+    public Tensor<T> TensorRandomUniformRange<T>(int[] shape, T min, T max, int? seed = null)
+    {
+        int totalSize = 1; foreach (var d in shape) totalSize *= d;
+        if (totalSize >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var minObj = (object?)min; float minF = minObj is float fm ? fm : Convert.ToSingle(min);
+                var maxObj = (object?)max; float maxF = maxObj is float fmx ? fmx : Convert.ToSingle(max);
+                return (Tensor<T>)(object)TensorRandomUniformRangeGpu(shape, minF, maxF, seed);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var minObj = (object?)min; double minD = minObj is double dm ? dm : Convert.ToDouble(min);
+                var maxObj = (object?)max; double maxD = maxObj is double dmx ? dmx : Convert.ToDouble(max);
+                return (Tensor<T>)(object)TensorRandomUniformRangeGpuDouble(shape, minD, maxD, seed);
+            }
+        }
+        return _cpuFallback.TensorRandomUniformRange(shape, min, max, seed);
+    }
+
+    private Tensor<float> TensorRandomUniformRangeGpu(int[] shape, float min, float max, int? seed)
+    {
+        try
+        {
+            int totalSize = 1; foreach (var d in shape) totalSize *= d;
+            var result = new float[totalSize];
+            float range = max - min;
+            var baseSeed = seed ?? RandomHelper.GenerateCryptographicSeed();
+
+            int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
+            System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
+            {
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
+                int start = batchIdx * batchSize;
+                int end = Math.Min(start + batchSize, totalSize);
+                for (int i = start; i < end; i++)
+                {
+                    result[i] = (float)(localRandom.NextDouble() * range + min);
+                }
+            });
+
+            return new Tensor<float>(shape, new Vector<float>(result));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorRandomUniformRange(shape, min, max, seed);
+        }
+    }
+
+    private Tensor<double> TensorRandomUniformRangeGpuDouble(int[] shape, double min, double max, int? seed)
+    {
+        try
+        {
+            int totalSize = 1; foreach (var d in shape) totalSize *= d;
+            var result = new double[totalSize];
+            double range = max - min;
+            var baseSeed = seed ?? RandomHelper.GenerateCryptographicSeed();
+
+            int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
+            System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
+            {
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
+                int start = batchIdx * batchSize;
+                int end = Math.Min(start + batchSize, totalSize);
+                for (int i = start; i < end; i++)
+                {
+                    result[i] = localRandom.NextDouble() * range + min;
+                }
+            });
+
+            return new Tensor<double>(shape, new Vector<double>(result));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorRandomUniformRange(shape, min, max, seed);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorDropoutMask<T>(int[] shape, T dropoutRate, T scale, int? seed = null)
+    {
+        int totalSize = 1; foreach (var d in shape) totalSize *= d;
+        if (totalSize >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var rateObj = (object?)dropoutRate; float rateF = rateObj is float fr ? fr : Convert.ToSingle(dropoutRate);
+                var scaleObj = (object?)scale; float scaleF = scaleObj is float fs ? fs : Convert.ToSingle(scale);
+                return (Tensor<T>)(object)TensorDropoutMaskGpu(shape, rateF, scaleF, seed);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var rateObj = (object?)dropoutRate; double rateD = rateObj is double dr ? dr : Convert.ToDouble(dropoutRate);
+                var scaleObj = (object?)scale; double scaleD = scaleObj is double ds ? ds : Convert.ToDouble(scale);
+                return (Tensor<T>)(object)TensorDropoutMaskGpuDouble(shape, rateD, scaleD, seed);
+            }
+        }
+        return _cpuFallback.TensorDropoutMask(shape, dropoutRate, scale, seed);
+    }
+
+    private Tensor<float> TensorDropoutMaskGpu(int[] shape, float dropoutRate, float scale, int? seed)
+    {
+        try
+        {
+            int totalSize = 1; foreach (var d in shape) totalSize *= d;
+            var result = new float[totalSize];
+            var baseSeed = seed ?? RandomHelper.GenerateCryptographicSeed();
+
+            int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
+            System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
+            {
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
+                int start = batchIdx * batchSize;
+                int end = Math.Min(start + batchSize, totalSize);
+                for (int i = start; i < end; i++)
+                {
+                    result[i] = localRandom.NextDouble() < dropoutRate ? 0.0f : scale;
+                }
+            });
+
+            return new Tensor<float>(shape, new Vector<float>(result));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorDropoutMask(shape, dropoutRate, scale, seed);
+        }
+    }
+
+    private Tensor<double> TensorDropoutMaskGpuDouble(int[] shape, double dropoutRate, double scale, int? seed)
+    {
+        try
+        {
+            int totalSize = 1; foreach (var d in shape) totalSize *= d;
+            var result = new double[totalSize];
+            var baseSeed = seed ?? RandomHelper.GenerateCryptographicSeed();
+
+            int batchSize = Math.Max(1, totalSize / Environment.ProcessorCount);
+            System.Threading.Tasks.Parallel.For(0, (totalSize + batchSize - 1) / batchSize, batchIdx =>
+            {
+                var localRandom = RandomHelper.CreateSeededRandom(unchecked(baseSeed + batchIdx));
+                int start = batchIdx * batchSize;
+                int end = Math.Min(start + batchSize, totalSize);
+                for (int i = start; i < end; i++)
+                {
+                    result[i] = localRandom.NextDouble() < dropoutRate ? 0.0 : scale;
+                }
+            });
+
+            return new Tensor<double>(shape, new Vector<double>(result));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorDropoutMask(shape, dropoutRate, scale, seed);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ScalarMinusTensor<T>(T scalar, Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        if (tensor.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.ScalarMinusTensor(scalar, tensor);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var scalarObj = (object?)scalar; float s = scalarObj is float fs ? fs : Convert.ToSingle(scalar);
+                return (Tensor<T>)(object)ScalarMinusTensorGpu(s, (Tensor<float>)(object)tensor);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var scalarObj = (object?)scalar; double s = scalarObj is double ds ? ds : Convert.ToDouble(scalar);
+                return (Tensor<T>)(object)ScalarMinusTensorGpuDouble(s, (Tensor<double>)(object)tensor);
+            }
+        }
+
+        return _cpuFallback.ScalarMinusTensor(scalar, tensor);
+    }
+
+    private Tensor<float> ScalarMinusTensorGpu(float scalar, Tensor<float> tensor)
+    {
+        try
+        {
+            var result = new Tensor<float>(tensor.Shape);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_scalarMinusTensorKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, scalar, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.ScalarMinusTensor(scalar, tensor);
+        }
+    }
+
+    private Tensor<double> ScalarMinusTensorGpuDouble(double scalar, Tensor<double> tensor)
+    {
+        try
+        {
+            var result = new Tensor<double>(tensor.Shape);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_scalarMinusTensorKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length, gpuInput.View, scalar, gpuOutput.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            return _cpuFallback.ScalarMinusTensor(scalar, tensor);
+        }
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> TensorEye<T>(int size)
     {
         if (size * size >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
@@ -27569,5 +30276,1800 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     #endregion
+
+    #region Neural Radiance Fields Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> PositionalEncoding<T>(Tensor<T> positions, int numFrequencies)
+    {
+        if (!SupportsGpu || !_gpuHealthy)
+        {
+            return _cpuFallback.PositionalEncoding(positions, numFrequencies);
+        }
+
+        // positions shape: [numPoints, inputDim] (typically inputDim=3 for xyz)
+        int numPoints = positions.Shape[0];
+        int inputDim = positions.Shape.Length > 1 ? positions.Shape[1] : 1;
+        int outputDim = inputDim * (1 + 2 * numFrequencies);
+        
+        // For small tensors, use CPU (use VectorAdd threshold as baseline)
+        if (numPoints * outputDim < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.PositionalEncoding(positions, numFrequencies);
+        }
+
+        try
+        {
+            if (typeof(T) == typeof(float) && _positionalEncodingForwardKernelFloat != null)
+            {
+                return (Tensor<T>)(object)PositionalEncodingGpuFloat(
+                    (Tensor<float>)(object)positions, numFrequencies, numPoints, inputDim, outputDim);
+            }
+            else if (typeof(T) == typeof(double) && _positionalEncodingForwardKernelDouble != null)
+            {
+                return (Tensor<T>)(object)PositionalEncodingGpuDouble(
+                    (Tensor<double>)(object)positions, numFrequencies, numPoints, inputDim, outputDim);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU PositionalEncoding failed: {ex.Message}. Falling back to CPU.");
+        }
+
+        return _cpuFallback.PositionalEncoding(positions, numFrequencies);
+    }
+
+    private Tensor<float> PositionalEncodingGpuFloat(Tensor<float> positions, int numFrequencies, int numPoints, int inputDim, int outputDim)
+    {
+        var outputShape = new int[] { numPoints, outputDim };
+        int outputSize = numPoints * outputDim;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<float>(positions.Length);
+            using var outputBuffer = _accelerator.Allocate1D<float>(outputSize);
+
+            // Copy input data
+            var inputData = new float[positions.Length];
+            for (int i = 0; i < positions.Length; i++)
+            {
+                inputData[i] = positions[i];
+            }
+            inputBuffer.CopyFromCPU(inputData);
+
+            var parameters = new PositionalEncodingParams(numPoints, inputDim, numFrequencies);
+
+            _positionalEncodingForwardKernelFloat!(
+                _accelerator.DefaultStream,
+                outputSize,
+                inputBuffer.View,
+                outputBuffer.View,
+                parameters);
+
+            _accelerator.Synchronize();
+
+            var outputData = outputBuffer.GetAsArray1D();
+            return new Tensor<float>(outputShape, new Vector<float>(outputData));
+        }
+    }
+
+    private Tensor<double> PositionalEncodingGpuDouble(Tensor<double> positions, int numFrequencies, int numPoints, int inputDim, int outputDim)
+    {
+        var outputShape = new int[] { numPoints, outputDim };
+        int outputSize = numPoints * outputDim;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<double>(positions.Length);
+            using var outputBuffer = _accelerator.Allocate1D<double>(outputSize);
+
+            var inputData = new double[positions.Length];
+            for (int i = 0; i < positions.Length; i++)
+            {
+                inputData[i] = positions[i];
+            }
+            inputBuffer.CopyFromCPU(inputData);
+
+            var parameters = new PositionalEncodingParams(numPoints, inputDim, numFrequencies);
+
+            _positionalEncodingForwardKernelDouble!(
+                _accelerator.DefaultStream,
+                outputSize,
+                inputBuffer.View,
+                outputBuffer.View,
+                parameters);
+
+            _accelerator.Synchronize();
+
+            var outputData = outputBuffer.GetAsArray1D();
+            return new Tensor<double>(outputShape, new Vector<double>(outputData));
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> PositionalEncodingBackward<T>(Tensor<T> positions, Tensor<T> encodedGradient, int numFrequencies)
+    {
+        if (!SupportsGpu || !_gpuHealthy)
+        {
+            return _cpuFallback.PositionalEncodingBackward(positions, encodedGradient, numFrequencies);
+        }
+
+        int numPoints = positions.Shape[0];
+        int inputDim = positions.Shape.Length > 1 ? positions.Shape[1] : 1;
+
+        if (numPoints * inputDim < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.PositionalEncodingBackward(positions, encodedGradient, numFrequencies);
+        }
+
+        try
+        {
+            if (typeof(T) == typeof(float) && _positionalEncodingBackwardKernelFloat != null)
+            {
+                return (Tensor<T>)(object)PositionalEncodingBackwardGpuFloat(
+                    (Tensor<float>)(object)positions, (Tensor<float>)(object)encodedGradient, numFrequencies, numPoints, inputDim);
+            }
+            else if (typeof(T) == typeof(double) && _positionalEncodingBackwardKernelDouble != null)
+            {
+                return (Tensor<T>)(object)PositionalEncodingBackwardGpuDouble(
+                    (Tensor<double>)(object)positions, (Tensor<double>)(object)encodedGradient, numFrequencies, numPoints, inputDim);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU PositionalEncodingBackward failed: {ex.Message}. Falling back to CPU.");
+        }
+
+        return _cpuFallback.PositionalEncodingBackward(positions, encodedGradient, numFrequencies);
+    }
+
+    private Tensor<float> PositionalEncodingBackwardGpuFloat(Tensor<float> positions, Tensor<float> encodedGrad, int numFrequencies, int numPoints, int inputDim)
+    {
+        var outputShape = positions.Shape;
+        int outputSize = numPoints * inputDim;
+
+        lock (_gpuLock)
+        {
+            using var positionsBuffer = _accelerator!.Allocate1D<float>(positions.Length);
+            using var gradBuffer = _accelerator.Allocate1D<float>(encodedGrad.Length);
+            using var outputBuffer = _accelerator.Allocate1D<float>(outputSize);
+
+            var posData = new float[positions.Length];
+            for (int i = 0; i < positions.Length; i++) posData[i] = positions[i];
+            positionsBuffer.CopyFromCPU(posData);
+
+            var gradData = new float[encodedGrad.Length];
+            for (int i = 0; i < encodedGrad.Length; i++) gradData[i] = encodedGrad[i];
+            gradBuffer.CopyFromCPU(gradData);
+
+            var parameters = new PositionalEncodingParams(numPoints, inputDim, numFrequencies);
+
+            _positionalEncodingBackwardKernelFloat!(
+                _accelerator.DefaultStream,
+                outputSize,
+                positionsBuffer.View,
+                gradBuffer.View,
+                outputBuffer.View,
+                parameters);
+
+            _accelerator.Synchronize();
+
+            var outputData = outputBuffer.GetAsArray1D();
+            return new Tensor<float>(outputShape, new Vector<float>(outputData));
+        }
+    }
+
+    private Tensor<double> PositionalEncodingBackwardGpuDouble(Tensor<double> positions, Tensor<double> encodedGrad, int numFrequencies, int numPoints, int inputDim)
+    {
+        var outputShape = positions.Shape;
+        int outputSize = numPoints * inputDim;
+
+        lock (_gpuLock)
+        {
+            using var positionsBuffer = _accelerator!.Allocate1D<double>(positions.Length);
+            using var gradBuffer = _accelerator.Allocate1D<double>(encodedGrad.Length);
+            using var outputBuffer = _accelerator.Allocate1D<double>(outputSize);
+
+            var posData = new double[positions.Length];
+            for (int i = 0; i < positions.Length; i++) posData[i] = positions[i];
+            positionsBuffer.CopyFromCPU(posData);
+
+            var gradData = new double[encodedGrad.Length];
+            for (int i = 0; i < encodedGrad.Length; i++) gradData[i] = encodedGrad[i];
+            gradBuffer.CopyFromCPU(gradData);
+
+            var parameters = new PositionalEncodingParams(numPoints, inputDim, numFrequencies);
+
+            _positionalEncodingBackwardKernelDouble!(
+                _accelerator.DefaultStream,
+                outputSize,
+                positionsBuffer.View,
+                gradBuffer.View,
+                outputBuffer.View,
+                parameters);
+
+            _accelerator.Synchronize();
+
+            var outputData = outputBuffer.GetAsArray1D();
+            return new Tensor<double>(outputShape, new Vector<double>(outputData));
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> VolumeRendering<T>(Tensor<T> rgbSamples, Tensor<T> densitySamples, Tensor<T> tValues)
+    {
+        if (!SupportsGpu || !_gpuHealthy)
+        {
+            return _cpuFallback.VolumeRendering(rgbSamples, densitySamples, tValues);
+        }
+
+        // rgbSamples: [numRays, numSamples, numChannels]
+        // densitySamples: [numRays, numSamples]
+        // tValues: [numRays, numSamples]
+        int numRays = rgbSamples.Shape[0];
+        int numSamples = rgbSamples.Shape[1];
+        int numChannels = rgbSamples.Shape.Length > 2 ? rgbSamples.Shape[2] : 1;
+
+        if (numRays * numChannels < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.VolumeRendering(rgbSamples, densitySamples, tValues);
+        }
+
+        try
+        {
+            if (typeof(T) == typeof(float) && _volumeRenderingForwardKernelFloat != null)
+            {
+                return (Tensor<T>)(object)VolumeRenderingGpuFloat(
+                    (Tensor<float>)(object)rgbSamples,
+                    (Tensor<float>)(object)densitySamples,
+                    (Tensor<float>)(object)tValues,
+                    numRays, numSamples, numChannels);
+            }
+            else if (typeof(T) == typeof(double) && _volumeRenderingForwardKernelDouble != null)
+            {
+                return (Tensor<T>)(object)VolumeRenderingGpuDouble(
+                    (Tensor<double>)(object)rgbSamples,
+                    (Tensor<double>)(object)densitySamples,
+                    (Tensor<double>)(object)tValues,
+                    numRays, numSamples, numChannels);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU VolumeRendering failed: {ex.Message}. Falling back to CPU.");
+        }
+
+        return _cpuFallback.VolumeRendering(rgbSamples, densitySamples, tValues);
+    }
+
+    private Tensor<float> VolumeRenderingGpuFloat(Tensor<float> rgb, Tensor<float> density, Tensor<float> tValues, int numRays, int numSamples, int numChannels)
+    {
+        var outputShape = new int[] { numRays, numChannels };
+        int outputSize = numRays * numChannels;
+
+        lock (_gpuLock)
+        {
+            using var rgbBuffer = _accelerator!.Allocate1D<float>(rgb.Length);
+            using var densityBuffer = _accelerator.Allocate1D<float>(density.Length);
+            using var tBuffer = _accelerator.Allocate1D<float>(tValues.Length);
+            using var outputBuffer = _accelerator.Allocate1D<float>(outputSize);
+
+            var rgbData = new float[rgb.Length];
+            for (int i = 0; i < rgb.Length; i++) rgbData[i] = rgb[i];
+            rgbBuffer.CopyFromCPU(rgbData);
+
+            var densityData = new float[density.Length];
+            for (int i = 0; i < density.Length; i++) densityData[i] = density[i];
+            densityBuffer.CopyFromCPU(densityData);
+
+            var tData = new float[tValues.Length];
+            for (int i = 0; i < tValues.Length; i++) tData[i] = tValues[i];
+            tBuffer.CopyFromCPU(tData);
+
+            var parameters = new VolumeRenderingParams(numRays, numSamples, numChannels);
+
+            _volumeRenderingForwardKernelFloat!(
+                _accelerator.DefaultStream,
+                outputSize,
+                rgbBuffer.View,
+                densityBuffer.View,
+                tBuffer.View,
+                outputBuffer.View,
+                parameters);
+
+            _accelerator.Synchronize();
+
+            var outputData = outputBuffer.GetAsArray1D();
+            return new Tensor<float>(outputShape, new Vector<float>(outputData));
+        }
+    }
+
+    private Tensor<double> VolumeRenderingGpuDouble(Tensor<double> rgb, Tensor<double> density, Tensor<double> tValues, int numRays, int numSamples, int numChannels)
+    {
+        var outputShape = new int[] { numRays, numChannels };
+        int outputSize = numRays * numChannels;
+
+        lock (_gpuLock)
+        {
+            using var rgbBuffer = _accelerator!.Allocate1D<double>(rgb.Length);
+            using var densityBuffer = _accelerator.Allocate1D<double>(density.Length);
+            using var tBuffer = _accelerator.Allocate1D<double>(tValues.Length);
+            using var outputBuffer = _accelerator.Allocate1D<double>(outputSize);
+
+            var rgbData = new double[rgb.Length];
+            for (int i = 0; i < rgb.Length; i++) rgbData[i] = rgb[i];
+            rgbBuffer.CopyFromCPU(rgbData);
+
+            var densityData = new double[density.Length];
+            for (int i = 0; i < density.Length; i++) densityData[i] = density[i];
+            densityBuffer.CopyFromCPU(densityData);
+
+            var tData = new double[tValues.Length];
+            for (int i = 0; i < tValues.Length; i++) tData[i] = tValues[i];
+            tBuffer.CopyFromCPU(tData);
+
+            var parameters = new VolumeRenderingParams(numRays, numSamples, numChannels);
+
+            _volumeRenderingForwardKernelDouble!(
+                _accelerator.DefaultStream,
+                outputSize,
+                rgbBuffer.View,
+                densityBuffer.View,
+                tBuffer.View,
+                outputBuffer.View,
+                parameters);
+
+            _accelerator.Synchronize();
+
+            var outputData = outputBuffer.GetAsArray1D();
+            return new Tensor<double>(outputShape, new Vector<double>(outputData));
+        }
+    }
+
+    /// <inheritdoc/>
+    public void VolumeRenderingBackward<T>(
+        Tensor<T> rgbSamples,
+        Tensor<T> densitySamples,
+        Tensor<T> tValues,
+        Tensor<T> outputGradient,
+        out Tensor<T> rgbGradient,
+        out Tensor<T> densityGradient)
+    {
+        // VolumeRendering backward is complex with multiple outputs
+        // CPU fallback is acceptable for now as backward pass is less frequent
+        _cpuFallback.VolumeRenderingBackward(
+            rgbSamples, densitySamples, tValues, outputGradient,
+            out rgbGradient, out densityGradient);
+    }
+
+    /// <inheritdoc/>
+    public (Tensor<T> positions, Tensor<T> directions, Tensor<T> tValues) SampleRayPoints<T>(
+        Tensor<T> rayOrigins,
+        Tensor<T> rayDirections,
+        T nearBound,
+        T farBound,
+        int numSamples,
+        bool stratified = true)
+    {
+        return _cpuFallback.SampleRayPoints(
+            rayOrigins, rayDirections, nearBound, farBound, numSamples, stratified);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ImportanceSampling<T>(Tensor<T> tValuesCoarse, Tensor<T> weightsCoarse, int numFineSamples)
+    {
+        return _cpuFallback.ImportanceSampling(tValuesCoarse, weightsCoarse, numFineSamples);
+    }
+
+    /// <inheritdoc/>
+    public (Tensor<T> origins, Tensor<T> directions) GenerateCameraRays<T>(
+        Vector<T> cameraPosition,
+        Matrix<T> cameraRotation,
+        int imageWidth,
+        int imageHeight,
+        T focalLength)
+    {
+        return _cpuFallback.GenerateCameraRays(
+            cameraPosition, cameraRotation, imageWidth, imageHeight, focalLength);
+    }
+
+    #endregion
+
+    #region Gaussian Splatting Operations
+
+    /// <inheritdoc/>
+    public void ProjectGaussians3DTo2D<T>(
+        Tensor<T> means3D,
+        Tensor<T> covariances3D,
+        Matrix<T> viewMatrix,
+        Matrix<T> projMatrix,
+        int imageWidth,
+        int imageHeight,
+        out Tensor<T> means2D,
+        out Tensor<T> covariances2D,
+        out Tensor<T> depths,
+        out Tensor<bool> visible)
+    {
+        _cpuFallback.ProjectGaussians3DTo2D(
+            means3D, covariances3D, viewMatrix, projMatrix,
+            imageWidth, imageHeight,
+            out means2D, out covariances2D, out depths, out visible);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> RasterizeGaussians<T>(
+        Tensor<T> means2D,
+        Tensor<T> covariances2D,
+        Tensor<T> colors,
+        Tensor<T> opacities,
+        Tensor<T> depths,
+        int imageWidth,
+        int imageHeight,
+        int tileSize = 16)
+    {
+        return _cpuFallback.RasterizeGaussians(
+            means2D, covariances2D, colors, opacities, depths,
+            imageWidth, imageHeight, tileSize);
+    }
+
+    /// <inheritdoc/>
+    public void RasterizeGaussiansBackward<T>(
+        Tensor<T> means2D,
+        Tensor<T> covariances2D,
+        Tensor<T> colors,
+        Tensor<T> opacities,
+        Tensor<T> depths,
+        int imageWidth,
+        int imageHeight,
+        Tensor<T> outputGradient,
+        int tileSize,
+        out Tensor<T> means2DGrad,
+        out Tensor<T> covariances2DGrad,
+        out Tensor<T> colorsGrad,
+        out Tensor<T> opacitiesGrad)
+    {
+        _cpuFallback.RasterizeGaussiansBackward(
+            means2D, covariances2D, colors, opacities, depths,
+            imageWidth, imageHeight, outputGradient, tileSize,
+            out means2DGrad, out covariances2DGrad, out colorsGrad, out opacitiesGrad);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> EvaluateSphericalHarmonics<T>(Tensor<T> shCoefficients, Tensor<T> viewDirections, int degree)
+    {
+        return _cpuFallback.EvaluateSphericalHarmonics(shCoefficients, viewDirections, degree);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> EvaluateSphericalHarmonicsBackward<T>(
+        Tensor<T> shCoefficients,
+        Tensor<T> viewDirections,
+        int degree,
+        Tensor<T> outputGradient)
+    {
+        return _cpuFallback.EvaluateSphericalHarmonicsBackward(
+            shCoefficients, viewDirections, degree, outputGradient);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ComputeGaussianCovariance<T>(Tensor<T> rotations, Tensor<T> scales)
+    {
+        return _cpuFallback.ComputeGaussianCovariance(rotations, scales);
+    }
+
+    /// <inheritdoc/>
+    public void ComputeGaussianCovarianceBackward<T>(
+        Tensor<T> rotations,
+        Tensor<T> scales,
+        Tensor<T> covarianceGradient,
+        out Tensor<T> rotationsGrad,
+        out Tensor<T> scalesGrad)
+    {
+        _cpuFallback.ComputeGaussianCovarianceBackward(
+            rotations, scales, covarianceGradient,
+            out rotationsGrad, out scalesGrad);
+    }
+
+    #endregion
+
+    #region Instant-NGP Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> MultiresolutionHashEncoding<T>(
+        Tensor<T> positions,
+        Tensor<T>[] hashTables,
+        int[] resolutions,
+        int featuresPerLevel)
+    {
+        return _cpuFallback.MultiresolutionHashEncoding(
+            positions, hashTables, resolutions, featuresPerLevel);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T>[] MultiresolutionHashEncodingBackward<T>(
+        Tensor<T> positions,
+        Tensor<T>[] hashTables,
+        int[] resolutions,
+        int featuresPerLevel,
+        Tensor<T> outputGradient)
+    {
+        return _cpuFallback.MultiresolutionHashEncodingBackward(
+            positions, hashTables, resolutions, featuresPerLevel, outputGradient);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> UpdateOccupancyGrid<T>(
+        Tensor<T> occupancyGrid,
+        Tensor<T> densities,
+        Tensor<T> positions,
+        int gridSize,
+        T threshold,
+        T decayFactor)
+    {
+        return _cpuFallback.UpdateOccupancyGrid(
+            occupancyGrid, densities, positions, gridSize, threshold, decayFactor);
+    }
+
+    /// <inheritdoc/>
+    public (Tensor<T> positions, Tensor<T> directions, Tensor<bool> validMask, Tensor<T> tValues) SampleRaysWithOccupancy<T>(
+        Tensor<T> rayOrigins,
+        Tensor<T> rayDirections,
+        Tensor<uint> occupancyBitfield,
+        int gridSize,
+        Vector<T> sceneBoundsMin,
+        Vector<T> sceneBoundsMax,
+        T nearBound,
+        T farBound,
+        int maxSamples)
+    {
+        return _cpuFallback.SampleRaysWithOccupancy(
+            rayOrigins, rayDirections, occupancyBitfield, gridSize,
+            sceneBoundsMin, sceneBoundsMax, nearBound, farBound, maxSamples);
+    }
+
+    #endregion
+
+    #region Mesh Convolution Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> SpiralConv<T>(
+        Tensor<T> vertexFeatures,
+        Tensor<int> spiralIndices,
+        Tensor<T> weights,
+        Tensor<T> biases)
+    {
+        // GPU kernel implementation for spiral convolution is complex due to
+        // the irregular access patterns of mesh topology. For initial implementation,
+        // use CPU fallback which is already highly optimized with SIMD.
+        // TODO: Implement optimized GPU kernel with shared memory for coalesced access.
+        return _cpuFallback.SpiralConv(vertexFeatures, spiralIndices, weights, biases);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SpiralConvBackwardInput<T>(
+        Tensor<T> outputGradient,
+        Tensor<int> spiralIndices,
+        Tensor<T> weights,
+        int inputChannels)
+    {
+        // Backward pass requires scatter-add operations which have complex
+        // synchronization requirements on GPU. Use CPU fallback.
+        return _cpuFallback.SpiralConvBackwardInput(outputGradient, spiralIndices, weights, inputChannels);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SpiralConvBackwardWeights<T>(
+        Tensor<T> outputGradient,
+        Tensor<T> vertexFeatures,
+        Tensor<int> spiralIndices)
+    {
+        return _cpuFallback.SpiralConvBackwardWeights(outputGradient, vertexFeatures, spiralIndices);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SpiralConvBackwardBias<T>(Tensor<T> outputGradient)
+    {
+        return _cpuFallback.SpiralConvBackwardBias(outputGradient);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DiffusionConv<T>(
+        Tensor<T> vertexFeatures,
+        Tensor<T> laplacian,
+        Tensor<T> weights,
+        Tensor<T> biases,
+        T diffusionTime)
+    {
+        // Diffusion convolution requires matrix exponential computation
+        // which is efficiently handled by CPU with Taylor series.
+        return _cpuFallback.DiffusionConv(vertexFeatures, laplacian, weights, biases, diffusionTime);
+    }
+
+    /// <inheritdoc/>
+    public (Tensor<T> inputGrad, Tensor<T> weightGrad, Tensor<T> biasGrad) DiffusionConvBackward<T>(
+        Tensor<T> outputGradient,
+        Tensor<T> vertexFeatures,
+        Tensor<T> laplacian,
+        Tensor<T> weights,
+        T diffusionTime)
+    {
+        return _cpuFallback.DiffusionConvBackward(outputGradient, vertexFeatures, laplacian, weights, diffusionTime);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ComputeMeshLaplacian<T>(
+        Tensor<T> vertices,
+        Tensor<int> faces,
+        LaplacianType laplacianType = LaplacianType.Cotangent)
+    {
+        // Laplacian computation is a one-time preprocessing step per mesh.
+        // CPU implementation is sufficient and avoids GPU memory transfer overhead.
+        return _cpuFallback.ComputeMeshLaplacian(vertices, faces, laplacianType);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<int> GenerateSpiralIndices<T>(
+        Tensor<T> vertices,
+        Tensor<int> faces,
+        int spiralLength)
+    {
+        // Spiral index generation is complex and depends on mesh topology.
+        // This is a one-time preprocessing step, CPU implementation is sufficient.
+        return _cpuFallback.GenerateSpiralIndices(vertices, faces, spiralLength);
+    }
+
+    
+    #region Advanced Vectorization Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> PairwiseDistanceSquared<T>(Tensor<T> x, Tensor<T> y)
+    {
+        if (x.Shape.Length != 2 || y.Shape.Length != 2)
+            throw new ArgumentException("Input tensors must be 2D [N, D]");
+        if (x.Shape[1] != y.Shape[1])
+            throw new ArgumentException("Input tensors must have the same dimensionality");
+
+        int n = x.Shape[0];
+        int m = y.Shape[0];
+        int d = x.Shape[1];
+
+        var result = new Tensor<T>([n, m]);
+
+        if (typeof(T) == typeof(float))
+        {
+            var xf = x as Tensor<float>;
+            var yf = y as Tensor<float>;
+            var rf = result as Tensor<float>;
+
+            using var xBuffer = _accelerator!.Allocate1D<float>(n * d);
+            using var yBuffer = _accelerator!.Allocate1D<float>(m * d);
+            using var resultBuffer = _accelerator!.Allocate1D<float>(n * m);
+
+            xBuffer.CopyFromCPU(xf!.Data);
+            yBuffer.CopyFromCPU(yf!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>,
+                ArrayView1D<float, Stride1D.Dense>, int, int, int>(PairwiseDistanceSquaredKernelFloat);
+
+            kernel(n * m, xBuffer.View, yBuffer.View, resultBuffer.View, n, m, d);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(rf!.Data);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            var xd = x as Tensor<double>;
+            var yd = y as Tensor<double>;
+            var rd = result as Tensor<double>;
+
+            using var xBuffer = _accelerator!.Allocate1D<double>(n * d);
+            using var yBuffer = _accelerator!.Allocate1D<double>(m * d);
+            using var resultBuffer = _accelerator!.Allocate1D<double>(n * m);
+
+            xBuffer.CopyFromCPU(xd!.Data);
+            yBuffer.CopyFromCPU(yd!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>,
+                ArrayView1D<double, Stride1D.Dense>, int, int, int>(PairwiseDistanceSquaredKernelDouble);
+
+            kernel(n * m, xBuffer.View, yBuffer.View, resultBuffer.View, n, m, d);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(rd!.Data);
+        }
+        else
+        {
+            return _cpuFallback.PairwiseDistanceSquared(x, y);
+        }
+
+        return result;
+    }
+
+    private static void PairwiseDistanceSquaredKernelFloat(
+        Index1D index,
+        ArrayView1D<float, Stride1D.Dense> x,
+        ArrayView1D<float, Stride1D.Dense> y,
+        ArrayView1D<float, Stride1D.Dense> result,
+        int n, int m, int d)
+    {
+        int i = index / m;
+        int j = index % m;
+
+        float dist = 0f;
+        for (int k = 0; k < d; k++)
+        {
+            float diff = x[i * d + k] - y[j * d + k];
+            dist += diff * diff;
+        }
+        result[index] = dist;
+    }
+
+    private static void PairwiseDistanceSquaredKernelDouble(
+        Index1D index,
+        ArrayView1D<double, Stride1D.Dense> x,
+        ArrayView1D<double, Stride1D.Dense> y,
+        ArrayView1D<double, Stride1D.Dense> result,
+        int n, int m, int d)
+    {
+        int i = index / m;
+        int j = index % m;
+
+        double dist = 0.0;
+        for (int k = 0; k < d; k++)
+        {
+            double diff = x[i * d + k] - y[j * d + k];
+            dist += diff * diff;
+        }
+        result[index] = dist;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> PairwiseDistance<T>(Tensor<T> x, Tensor<T> y)
+    {
+        var distSq = PairwiseDistanceSquared(x, y);
+        return TensorSqrt(distSq);
+    }
+
+    /// <inheritdoc/>
+    public (Tensor<T> values, Tensor<int> indices) TopK<T>(Tensor<T> input, int k, int axis = -1, bool largest = true)
+    {
+        if (axis < 0) axis = input.Shape.Length + axis;
+        if (axis < 0 || axis >= input.Shape.Length)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {input.Shape.Length} dimensions");
+
+        int axisSize = input.Shape[axis];
+        if (k > axisSize)
+            throw new ArgumentException($"k ({k}) cannot be greater than axis size ({axisSize})");
+
+        // Calculate output shape
+        var outputShape = (int[])input.Shape.Clone();
+        outputShape[axis] = k;
+
+        var values = new Tensor<T>(outputShape);
+        var indices = new Tensor<int>(outputShape);
+
+        // Calculate strides
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= input.Shape[i];
+        int innerSize = 1;
+        for (int i = axis + 1; i < input.Shape.Length; i++) innerSize *= input.Shape[i];
+
+        int numSlices = outerSize * innerSize;
+
+        if (numSlices >= 64 && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                TopKGpuFloat(
+                    (Tensor<float>)(object)input,
+                    (Tensor<float>)(object)values,
+                    indices, k, axis, largest, outerSize, axisSize, innerSize);
+                return (values, indices);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                TopKGpuDouble(
+                    (Tensor<double>)(object)input,
+                    (Tensor<double>)(object)values,
+                    indices, k, axis, largest, outerSize, axisSize, innerSize);
+                return (values, indices);
+            }
+        }
+
+        return _cpuFallback.TopK(input, k, axis, largest);
+    }
+
+    private void TopKGpuFloat(Tensor<float> input, Tensor<float> values, Tensor<int> indices,
+        int k, int axis, bool largest, int outerSize, int axisSize, int innerSize)
+    {
+        int numSlices = outerSize * innerSize;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<float>(input.Length);
+            using var valuesBuffer = _accelerator!.Allocate1D<float>(values.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>,
+                ArrayView1D<int, Stride1D.Dense>, int, int, int, int, int>(TopKKernelFloat);
+
+            kernel(numSlices, inputBuffer.View, valuesBuffer.View, indicesBuffer.View,
+                   k, outerSize, axisSize, innerSize, largest ? 1 : 0);
+            _accelerator!.Synchronize();
+
+            valuesBuffer.CopyToCPU(values.Data);
+            indicesBuffer.CopyToCPU(indices.Data);
+        }
+    }
+
+    private void TopKGpuDouble(Tensor<double> input, Tensor<double> values, Tensor<int> indices,
+        int k, int axis, bool largest, int outerSize, int axisSize, int innerSize)
+    {
+        int numSlices = outerSize * innerSize;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<double>(input.Length);
+            using var valuesBuffer = _accelerator!.Allocate1D<double>(values.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>,
+                ArrayView1D<int, Stride1D.Dense>, int, int, int, int, int>(TopKKernelDouble);
+
+            kernel(numSlices, inputBuffer.View, valuesBuffer.View, indicesBuffer.View,
+                   k, outerSize, axisSize, innerSize, largest ? 1 : 0);
+            _accelerator!.Synchronize();
+
+            valuesBuffer.CopyToCPU(values.Data);
+            indicesBuffer.CopyToCPU(indices.Data);
+        }
+    }
+
+    // TopK kernel - each thread processes one slice along the axis
+    // Uses simple O(n*k) selection algorithm suitable for small k
+    private static void TopKKernelFloat(
+        Index1D sliceIdx,
+        ArrayView1D<float, Stride1D.Dense> input,
+        ArrayView1D<float, Stride1D.Dense> values,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        int k, int outerSize, int axisSize, int innerSize, int largest)
+    {
+        int outer = sliceIdx / innerSize;
+        int inner = sliceIdx % innerSize;
+
+        // Find top-k using simple selection (suitable for small k)
+        // For each of k positions, find the best remaining element
+        for (int ki = 0; ki < k; ki++)
+        {
+            float bestVal = largest == 1 ? float.MinValue : float.MaxValue;
+            int bestIdx = 0;
+
+            for (int a = 0; a < axisSize; a++)
+            {
+                int srcIdx = outer * axisSize * innerSize + a * innerSize + inner;
+                float val = input[srcIdx];
+
+                // Check if this index was already selected
+                bool alreadySelected = false;
+                for (int pi = 0; pi < ki; pi++)
+                {
+                    int prevDstIdx = outer * k * innerSize + pi * innerSize + inner;
+                    if (indices[prevDstIdx] == a)
+                    {
+                        alreadySelected = true;
+                        break;
+                    }
+                }
+
+                if (!alreadySelected)
+                {
+                    bool isBetter = largest == 1 ? val > bestVal : val < bestVal;
+                    if (isBetter)
+                    {
+                        bestVal = val;
+                        bestIdx = a;
+                    }
+                }
+            }
+
+            int dstIdx = outer * k * innerSize + ki * innerSize + inner;
+            values[dstIdx] = bestVal;
+            indices[dstIdx] = bestIdx;
+        }
+    }
+
+    private static void TopKKernelDouble(
+        Index1D sliceIdx,
+        ArrayView1D<double, Stride1D.Dense> input,
+        ArrayView1D<double, Stride1D.Dense> values,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        int k, int outerSize, int axisSize, int innerSize, int largest)
+    {
+        int outer = sliceIdx / innerSize;
+        int inner = sliceIdx % innerSize;
+
+        for (int ki = 0; ki < k; ki++)
+        {
+            double bestVal = largest == 1 ? double.MinValue : double.MaxValue;
+            int bestIdx = 0;
+
+            for (int a = 0; a < axisSize; a++)
+            {
+                int srcIdx = outer * axisSize * innerSize + a * innerSize + inner;
+                double val = input[srcIdx];
+
+                bool alreadySelected = false;
+                for (int pi = 0; pi < ki; pi++)
+                {
+                    int prevDstIdx = outer * k * innerSize + pi * innerSize + inner;
+                    if (indices[prevDstIdx] == a)
+                    {
+                        alreadySelected = true;
+                        break;
+                    }
+                }
+
+                if (!alreadySelected)
+                {
+                    bool isBetter = largest == 1 ? val > bestVal : val < bestVal;
+                    if (isBetter)
+                    {
+                        bestVal = val;
+                        bestIdx = a;
+                    }
+                }
+            }
+
+            int dstIdx = outer * k * innerSize + ki * innerSize + inner;
+            values[dstIdx] = bestVal;
+            indices[dstIdx] = bestIdx;
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<int> ArgSort<T>(Tensor<T> input, int axis = -1, bool descending = false)
+    {
+        if (axis < 0) axis = input.Shape.Length + axis;
+        if (axis < 0 || axis >= input.Shape.Length)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {input.Shape.Length} dimensions");
+
+        var result = new Tensor<int>(input.Shape);
+        int axisSize = input.Shape[axis];
+
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= input.Shape[i];
+        int innerSize = 1;
+        for (int i = axis + 1; i < input.Shape.Length; i++) innerSize *= input.Shape[i];
+
+        int numSlices = outerSize * innerSize;
+
+        if (numSlices >= 64 && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                ArgSortGpuFloat((Tensor<float>)(object)input, result, axis, descending,
+                    outerSize, axisSize, innerSize);
+                return result;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                ArgSortGpuDouble((Tensor<double>)(object)input, result, axis, descending,
+                    outerSize, axisSize, innerSize);
+                return result;
+            }
+        }
+
+        return _cpuFallback.ArgSort(input, axis, descending);
+    }
+
+    private void ArgSortGpuFloat(Tensor<float> input, Tensor<int> result, int axis, bool descending,
+        int outerSize, int axisSize, int innerSize)
+    {
+        int numSlices = outerSize * innerSize;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<float>(input.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<int>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<int, Stride1D.Dense>,
+                int, int, int, int>(ArgSortKernelFloat);
+
+            kernel(numSlices, inputBuffer.View, resultBuffer.View,
+                   outerSize, axisSize, innerSize, descending ? 1 : 0);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    private void ArgSortGpuDouble(Tensor<double> input, Tensor<int> result, int axis, bool descending,
+        int outerSize, int axisSize, int innerSize)
+    {
+        int numSlices = outerSize * innerSize;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<double>(input.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<int>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<int, Stride1D.Dense>,
+                int, int, int, int>(ArgSortKernelDouble);
+
+            kernel(numSlices, inputBuffer.View, resultBuffer.View,
+                   outerSize, axisSize, innerSize, descending ? 1 : 0);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    // ArgSort kernel using insertion sort (suitable for small axis sizes)
+    // Each thread sorts one slice along the axis
+    private static void ArgSortKernelFloat(
+        Index1D sliceIdx,
+        ArrayView1D<float, Stride1D.Dense> input,
+        ArrayView1D<int, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int descending)
+    {
+        int outer = sliceIdx / innerSize;
+        int inner = sliceIdx % innerSize;
+
+        // Initialize indices
+        for (int a = 0; a < axisSize; a++)
+        {
+            int dstIdx = outer * axisSize * innerSize + a * innerSize + inner;
+            result[dstIdx] = a;
+        }
+
+        // Insertion sort on indices based on values
+        for (int i = 1; i < axisSize; i++)
+        {
+            int keyIdxPos = outer * axisSize * innerSize + i * innerSize + inner;
+            int keyIdx = result[keyIdxPos];
+            int keySrcPos = outer * axisSize * innerSize + keyIdx * innerSize + inner;
+            float keyVal = input[keySrcPos];
+
+            int j = i - 1;
+            while (j >= 0)
+            {
+                int jIdxPos = outer * axisSize * innerSize + j * innerSize + inner;
+                int jIdx = result[jIdxPos];
+                int jSrcPos = outer * axisSize * innerSize + jIdx * innerSize + inner;
+                float jVal = input[jSrcPos];
+
+                bool shouldSwap = descending == 1 ? jVal < keyVal : jVal > keyVal;
+                if (!shouldSwap) break;
+
+                // Shift
+                int nextIdxPos = outer * axisSize * innerSize + (j + 1) * innerSize + inner;
+                result[nextIdxPos] = jIdx;
+                j--;
+            }
+
+            int insertPos = outer * axisSize * innerSize + (j + 1) * innerSize + inner;
+            result[insertPos] = keyIdx;
+        }
+    }
+
+    private static void ArgSortKernelDouble(
+        Index1D sliceIdx,
+        ArrayView1D<double, Stride1D.Dense> input,
+        ArrayView1D<int, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int descending)
+    {
+        int outer = sliceIdx / innerSize;
+        int inner = sliceIdx % innerSize;
+
+        for (int a = 0; a < axisSize; a++)
+        {
+            int dstIdx = outer * axisSize * innerSize + a * innerSize + inner;
+            result[dstIdx] = a;
+        }
+
+        for (int i = 1; i < axisSize; i++)
+        {
+            int keyIdxPos = outer * axisSize * innerSize + i * innerSize + inner;
+            int keyIdx = result[keyIdxPos];
+            int keySrcPos = outer * axisSize * innerSize + keyIdx * innerSize + inner;
+            double keyVal = input[keySrcPos];
+
+            int j = i - 1;
+            while (j >= 0)
+            {
+                int jIdxPos = outer * axisSize * innerSize + j * innerSize + inner;
+                int jIdx = result[jIdxPos];
+                int jSrcPos = outer * axisSize * innerSize + jIdx * innerSize + inner;
+                double jVal = input[jSrcPos];
+
+                bool shouldSwap = descending == 1 ? jVal < keyVal : jVal > keyVal;
+                if (!shouldSwap) break;
+
+                int nextIdxPos = outer * axisSize * innerSize + (j + 1) * innerSize + inner;
+                result[nextIdxPos] = jIdx;
+                j--;
+            }
+
+            int insertPos = outer * axisSize * innerSize + (j + 1) * innerSize + inner;
+            result[insertPos] = keyIdx;
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Gather<T>(Tensor<T> input, Tensor<int> indices, int axis)
+    {
+        if (axis < 0) axis = input.Shape.Length + axis;
+        if (axis < 0 || axis >= input.Shape.Length)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {input.Shape.Length} dimensions");
+
+        var outputShape = new int[input.Shape.Length];
+        for (int i = 0; i < input.Shape.Length; i++)
+            outputShape[i] = i == axis ? indices.Length : input.Shape[i];
+
+        var result = new Tensor<T>(outputShape);
+
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= input.Shape[i];
+        int axisSize = input.Shape[axis];
+        int innerSize = 1;
+        for (int i = axis + 1; i < input.Shape.Length; i++) innerSize *= input.Shape[i];
+
+        int outputLen = result.Length;
+
+        if (outputLen >= 1024 && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                GatherGpuFloat((Tensor<float>)(object)input, indices, (Tensor<float>)(object)result,
+                    outerSize, axisSize, innerSize);
+                return result;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                GatherGpuDouble((Tensor<double>)(object)input, indices, (Tensor<double>)(object)result,
+                    outerSize, axisSize, innerSize);
+                return result;
+            }
+        }
+
+        return _cpuFallback.Gather(input, indices, axis);
+    }
+
+    private void GatherGpuFloat(Tensor<float> input, Tensor<int> indices, Tensor<float> result,
+        int outerSize, int axisSize, int innerSize)
+    {
+        int numIndices = indices.Length;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<float>(input.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<float>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+            indicesBuffer.CopyFromCPU(indices.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<int, Stride1D.Dense>,
+                ArrayView1D<float, Stride1D.Dense>, int, int, int, int>(GatherKernelFloat);
+
+            kernel(result.Length, inputBuffer.View, indicesBuffer.View, resultBuffer.View,
+                   outerSize, axisSize, innerSize, numIndices);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    private void GatherGpuDouble(Tensor<double> input, Tensor<int> indices, Tensor<double> result,
+        int outerSize, int axisSize, int innerSize)
+    {
+        int numIndices = indices.Length;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<double>(input.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<double>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+            indicesBuffer.CopyFromCPU(indices.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<int, Stride1D.Dense>,
+                ArrayView1D<double, Stride1D.Dense>, int, int, int, int>(GatherKernelDouble);
+
+            kernel(result.Length, inputBuffer.View, indicesBuffer.View, resultBuffer.View,
+                   outerSize, axisSize, innerSize, numIndices);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    // Gather kernel - each thread copies one output element
+    private static void GatherKernelFloat(
+        Index1D index,
+        ArrayView1D<float, Stride1D.Dense> input,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        ArrayView1D<float, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int numIndices)
+    {
+        // Compute which outer, index, inner this element corresponds to
+        int outer = index / (numIndices * innerSize);
+        int remainder = index % (numIndices * innerSize);
+        int idx = remainder / innerSize;
+        int inner = remainder % innerSize;
+
+        int srcIdx = indices[idx];
+        int srcFlatIndex = outer * axisSize * innerSize + srcIdx * innerSize + inner;
+        result[index] = input[srcFlatIndex];
+    }
+
+    private static void GatherKernelDouble(
+        Index1D index,
+        ArrayView1D<double, Stride1D.Dense> input,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        ArrayView1D<double, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int numIndices)
+    {
+        int outer = index / (numIndices * innerSize);
+        int remainder = index % (numIndices * innerSize);
+        int idx = remainder / innerSize;
+        int inner = remainder % innerSize;
+
+        int srcIdx = indices[idx];
+        int srcFlatIndex = outer * axisSize * innerSize + srcIdx * innerSize + inner;
+        result[index] = input[srcFlatIndex];
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Scatter<T>(Tensor<T> input, Tensor<int> indices, Tensor<T> values, int axis)
+    {
+        if (axis < 0) axis = input.Shape.Length + axis;
+        if (axis < 0 || axis >= input.Shape.Length)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {input.Shape.Length} dimensions");
+
+        // Create copy of input
+        var result = new Tensor<T>(input.Shape);
+
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= input.Shape[i];
+        int axisSize = input.Shape[axis];
+        int innerSize = 1;
+        for (int i = axis + 1; i < input.Shape.Length; i++) innerSize *= input.Shape[i];
+
+        if (input.Length >= 1024 && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                ScatterGpuFloat((Tensor<float>)(object)input, indices, (Tensor<float>)(object)values,
+                    (Tensor<float>)(object)result, outerSize, axisSize, innerSize);
+                return result;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                ScatterGpuDouble((Tensor<double>)(object)input, indices, (Tensor<double>)(object)values,
+                    (Tensor<double>)(object)result, outerSize, axisSize, innerSize);
+                return result;
+            }
+        }
+
+        return _cpuFallback.Scatter(input, indices, values, axis);
+    }
+
+    private void ScatterGpuFloat(Tensor<float> input, Tensor<int> indices, Tensor<float> values,
+        Tensor<float> result, int outerSize, int axisSize, int innerSize)
+    {
+        int numIndices = indices.Length;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<float>(input.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+            using var valuesBuffer = _accelerator!.Allocate1D<float>(values.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<float>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+            indicesBuffer.CopyFromCPU(indices.Data);
+            valuesBuffer.CopyFromCPU(values.Data);
+
+            // First copy input to result
+            var copyKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>>(CopyKernelFloat);
+            copyKernel(input.Length, inputBuffer.View, resultBuffer.View);
+            _accelerator!.Synchronize();
+
+            // Then scatter values
+            var scatterKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>,
+                ArrayView1D<float, Stride1D.Dense>, int, int, int, int>(ScatterKernelFloat);
+
+            scatterKernel(values.Length, indicesBuffer.View, valuesBuffer.View, resultBuffer.View,
+                          outerSize, axisSize, innerSize, numIndices);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    private void ScatterGpuDouble(Tensor<double> input, Tensor<int> indices, Tensor<double> values,
+        Tensor<double> result, int outerSize, int axisSize, int innerSize)
+    {
+        int numIndices = indices.Length;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<double>(input.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+            using var valuesBuffer = _accelerator!.Allocate1D<double>(values.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<double>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+            indicesBuffer.CopyFromCPU(indices.Data);
+            valuesBuffer.CopyFromCPU(values.Data);
+
+            var copyKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>>(CopyKernelDouble);
+            copyKernel(input.Length, inputBuffer.View, resultBuffer.View);
+            _accelerator!.Synchronize();
+
+            var scatterKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>,
+                ArrayView1D<double, Stride1D.Dense>, int, int, int, int>(ScatterKernelDouble);
+
+            scatterKernel(values.Length, indicesBuffer.View, valuesBuffer.View, resultBuffer.View,
+                          outerSize, axisSize, innerSize, numIndices);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    private static void CopyKernelFloat(
+        Index1D index,
+        ArrayView1D<float, Stride1D.Dense> input,
+        ArrayView1D<float, Stride1D.Dense> output)
+    {
+        output[index] = input[index];
+    }
+
+    private static void CopyKernelDouble(
+        Index1D index,
+        ArrayView1D<double, Stride1D.Dense> input,
+        ArrayView1D<double, Stride1D.Dense> output)
+    {
+        output[index] = input[index];
+    }
+
+    // Scatter kernel - writes values to indexed positions
+    // Note: If multiple indices point to same location, last write wins (no atomics for simple scatter)
+    private static void ScatterKernelFloat(
+        Index1D index,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        ArrayView1D<float, Stride1D.Dense> values,
+        ArrayView1D<float, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int numIndices)
+    {
+        // Compute which outer, index, inner this value corresponds to
+        int outer = index / (numIndices * innerSize);
+        int remainder = index % (numIndices * innerSize);
+        int idx = remainder / innerSize;
+        int inner = remainder % innerSize;
+
+        int dstIdx = indices[idx];
+        int dstFlatIndex = outer * axisSize * innerSize + dstIdx * innerSize + inner;
+        result[dstFlatIndex] = values[index];
+    }
+
+    private static void ScatterKernelDouble(
+        Index1D index,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        ArrayView1D<double, Stride1D.Dense> values,
+        ArrayView1D<double, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int numIndices)
+    {
+        int outer = index / (numIndices * innerSize);
+        int remainder = index % (numIndices * innerSize);
+        int idx = remainder / innerSize;
+        int inner = remainder % innerSize;
+
+        int dstIdx = indices[idx];
+        int dstFlatIndex = outer * axisSize * innerSize + dstIdx * innerSize + inner;
+        result[dstFlatIndex] = values[index];
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ScatterAdd<T>(Tensor<T> input, Tensor<int> indices, Tensor<T> values, int axis)
+    {
+        if (axis < 0) axis = input.Shape.Length + axis;
+        if (axis < 0 || axis >= input.Shape.Length)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {input.Shape.Length} dimensions");
+
+        var result = new Tensor<T>(input.Shape);
+
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= input.Shape[i];
+        int axisSize = input.Shape[axis];
+        int innerSize = 1;
+        for (int i = axis + 1; i < input.Shape.Length; i++) innerSize *= input.Shape[i];
+
+        if (input.Length >= 1024 && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                ScatterAddGpuFloat((Tensor<float>)(object)input, indices, (Tensor<float>)(object)values,
+                    (Tensor<float>)(object)result, outerSize, axisSize, innerSize);
+                return result;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                ScatterAddGpuDouble((Tensor<double>)(object)input, indices, (Tensor<double>)(object)values,
+                    (Tensor<double>)(object)result, outerSize, axisSize, innerSize);
+                return result;
+            }
+        }
+
+        return _cpuFallback.ScatterAdd(input, indices, values, axis);
+    }
+
+    private void ScatterAddGpuFloat(Tensor<float> input, Tensor<int> indices, Tensor<float> values,
+        Tensor<float> result, int outerSize, int axisSize, int innerSize)
+    {
+        int numIndices = indices.Length;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<float>(input.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+            using var valuesBuffer = _accelerator!.Allocate1D<float>(values.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<float>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+            indicesBuffer.CopyFromCPU(indices.Data);
+            valuesBuffer.CopyFromCPU(values.Data);
+
+            // First copy input to result
+            var copyKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>>(CopyKernelFloat);
+            copyKernel(input.Length, inputBuffer.View, resultBuffer.View);
+            _accelerator!.Synchronize();
+
+            // Use atomic add for scatter add
+            var scatterAddKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>,
+                ArrayView1D<float, Stride1D.Dense>, int, int, int, int>(ScatterAddKernelFloat);
+
+            scatterAddKernel(values.Length, indicesBuffer.View, valuesBuffer.View, resultBuffer.View,
+                             outerSize, axisSize, innerSize, numIndices);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    private void ScatterAddGpuDouble(Tensor<double> input, Tensor<int> indices, Tensor<double> values,
+        Tensor<double> result, int outerSize, int axisSize, int innerSize)
+    {
+        int numIndices = indices.Length;
+
+        lock (_gpuLock)
+        {
+            using var inputBuffer = _accelerator!.Allocate1D<double>(input.Length);
+            using var indicesBuffer = _accelerator!.Allocate1D<int>(indices.Length);
+            using var valuesBuffer = _accelerator!.Allocate1D<double>(values.Length);
+            using var resultBuffer = _accelerator!.Allocate1D<double>(result.Length);
+
+            inputBuffer.CopyFromCPU(input.Data);
+            indicesBuffer.CopyFromCPU(indices.Data);
+            valuesBuffer.CopyFromCPU(values.Data);
+
+            var copyKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>>(CopyKernelDouble);
+            copyKernel(input.Length, inputBuffer.View, resultBuffer.View);
+            _accelerator!.Synchronize();
+
+            var scatterAddKernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>,
+                ArrayView1D<double, Stride1D.Dense>, int, int, int, int>(ScatterAddKernelDouble);
+
+            scatterAddKernel(values.Length, indicesBuffer.View, valuesBuffer.View, resultBuffer.View,
+                             outerSize, axisSize, innerSize, numIndices);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(result.Data);
+        }
+    }
+
+    // ScatterAdd kernel using atomic operations
+    private static void ScatterAddKernelFloat(
+        Index1D index,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        ArrayView1D<float, Stride1D.Dense> values,
+        ArrayView1D<float, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int numIndices)
+    {
+        int outer = index / (numIndices * innerSize);
+        int remainder = index % (numIndices * innerSize);
+        int idx = remainder / innerSize;
+        int inner = remainder % innerSize;
+
+        int dstIdx = indices[idx];
+        int dstFlatIndex = outer * axisSize * innerSize + dstIdx * innerSize + inner;
+
+        // Use atomic add to handle concurrent writes
+        Atomic.Add(ref result[dstFlatIndex], values[index]);
+    }
+
+    private static void ScatterAddKernelDouble(
+        Index1D index,
+        ArrayView1D<int, Stride1D.Dense> indices,
+        ArrayView1D<double, Stride1D.Dense> values,
+        ArrayView1D<double, Stride1D.Dense> result,
+        int outerSize, int axisSize, int innerSize, int numIndices)
+    {
+        int outer = index / (numIndices * innerSize);
+        int remainder = index % (numIndices * innerSize);
+        int idx = remainder / innerSize;
+        int inner = remainder % innerSize;
+
+        int dstIdx = indices[idx];
+        int dstFlatIndex = outer * axisSize * innerSize + dstIdx * innerSize + inner;
+
+        Atomic.Add(ref result[dstFlatIndex], values[index]);
+    }
+
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorCosh<T>(Tensor<T> tensor)
+    {
+        var result = new Tensor<T>(tensor.Shape);
+        int length = tensor.Length;
+
+        if (typeof(T) == typeof(float))
+        {
+            var tf = tensor as Tensor<float>;
+            var rf = result as Tensor<float>;
+
+            using var inputBuffer = _accelerator!.Allocate1D<float>(length);
+            using var outputBuffer = _accelerator!.Allocate1D<float>(length);
+
+            inputBuffer.CopyFromCPU(tf!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>>(CoshKernelFloat);
+
+            kernel(length, inputBuffer.View, outputBuffer.View);
+            _accelerator!.Synchronize();
+
+            outputBuffer.CopyToCPU(rf!.Data);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            var td = tensor as Tensor<double>;
+            var rd = result as Tensor<double>;
+
+            using var inputBuffer = _accelerator!.Allocate1D<double>(length);
+            using var outputBuffer = _accelerator!.Allocate1D<double>(length);
+
+            inputBuffer.CopyFromCPU(td!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>>(CoshKernelDouble);
+
+            kernel(length, inputBuffer.View, outputBuffer.View);
+            _accelerator!.Synchronize();
+
+            outputBuffer.CopyToCPU(rd!.Data);
+        }
+        else
+        {
+            return _cpuFallback.TensorCosh(tensor);
+        }
+
+        return result;
+    }
+
+    private static void CoshKernelFloat(
+        Index1D index,
+        ArrayView1D<float, Stride1D.Dense> input,
+        ArrayView1D<float, Stride1D.Dense> output)
+    {
+        float x = input[index];
+        // cosh(x) = (e^x + e^-x) / 2
+        float expX = XMath.Exp(x);
+        float expNegX = XMath.Exp(-x);
+        output[index] = (expX + expNegX) * 0.5f;
+    }
+
+    private static void CoshKernelDouble(
+        Index1D index,
+        ArrayView1D<double, Stride1D.Dense> input,
+        ArrayView1D<double, Stride1D.Dense> output)
+    {
+        double x = input[index];
+        // cosh(x) = (e^x + e^-x) / 2
+        double expX = XMath.Exp(x);
+        double expNegX = XMath.Exp(-x);
+        output[index] = (expX + expNegX) * 0.5;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSinh<T>(Tensor<T> tensor)
+    {
+        var result = new Tensor<T>(tensor.Shape);
+        int length = tensor.Length;
+
+        if (typeof(T) == typeof(float))
+        {
+            var tf = tensor as Tensor<float>;
+            var rf = result as Tensor<float>;
+
+            using var inputBuffer = _accelerator!.Allocate1D<float>(length);
+            using var outputBuffer = _accelerator!.Allocate1D<float>(length);
+
+            inputBuffer.CopyFromCPU(tf!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>>(SinhKernelFloat);
+
+            kernel(length, inputBuffer.View, outputBuffer.View);
+            _accelerator!.Synchronize();
+
+            outputBuffer.CopyToCPU(rf!.Data);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            var td = tensor as Tensor<double>;
+            var rd = result as Tensor<double>;
+
+            using var inputBuffer = _accelerator!.Allocate1D<double>(length);
+            using var outputBuffer = _accelerator!.Allocate1D<double>(length);
+
+            inputBuffer.CopyFromCPU(td!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>>(SinhKernelDouble);
+
+            kernel(length, inputBuffer.View, outputBuffer.View);
+            _accelerator!.Synchronize();
+
+            outputBuffer.CopyToCPU(rd!.Data);
+        }
+        else
+        {
+            return _cpuFallback.TensorSinh(tensor);
+        }
+
+        return result;
+    }
+
+    private static void SinhKernelFloat(
+        Index1D index,
+        ArrayView1D<float, Stride1D.Dense> input,
+        ArrayView1D<float, Stride1D.Dense> output)
+    {
+        float x = input[index];
+        // sinh(x) = (e^x - e^-x) / 2
+        float expX = XMath.Exp(x);
+        float expNegX = XMath.Exp(-x);
+        output[index] = (expX - expNegX) * 0.5f;
+    }
+
+    private static void SinhKernelDouble(
+        Index1D index,
+        ArrayView1D<double, Stride1D.Dense> input,
+        ArrayView1D<double, Stride1D.Dense> output)
+    {
+        double x = input[index];
+        // sinh(x) = (e^x - e^-x) / 2
+        double expX = XMath.Exp(x);
+        double expNegX = XMath.Exp(-x);
+        output[index] = (expX - expNegX) * 0.5;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorOuter<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Shape.Length != 1 || b.Shape.Length != 1)
+            throw new ArgumentException("Both inputs must be 1D tensors");
+
+        int n = a.Shape[0];
+        int m = b.Shape[0];
+        var result = new Tensor<T>([n, m]);
+
+        if (typeof(T) == typeof(float))
+        {
+            var af = a as Tensor<float>;
+            var bf = b as Tensor<float>;
+            var rf = result as Tensor<float>;
+
+            using var aBuffer = _accelerator!.Allocate1D<float>(n);
+            using var bBuffer = _accelerator!.Allocate1D<float>(m);
+            using var resultBuffer = _accelerator!.Allocate1D<float>(n * m);
+
+            aBuffer.CopyFromCPU(af!.Data);
+            bBuffer.CopyFromCPU(bf!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>,
+                ArrayView1D<float, Stride1D.Dense>, int, int>(OuterKernelFloat);
+
+            kernel(n * m, aBuffer.View, bBuffer.View, resultBuffer.View, n, m);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(rf!.Data);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            var ad = a as Tensor<double>;
+            var bd = b as Tensor<double>;
+            var rd = result as Tensor<double>;
+
+            using var aBuffer = _accelerator!.Allocate1D<double>(n);
+            using var bBuffer = _accelerator!.Allocate1D<double>(m);
+            using var resultBuffer = _accelerator!.Allocate1D<double>(n * m);
+
+            aBuffer.CopyFromCPU(ad!.Data);
+            bBuffer.CopyFromCPU(bd!.Data);
+
+            var kernel = _accelerator!.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>,
+                ArrayView1D<double, Stride1D.Dense>, int, int>(OuterKernelDouble);
+
+            kernel(n * m, aBuffer.View, bBuffer.View, resultBuffer.View, n, m);
+            _accelerator!.Synchronize();
+
+            resultBuffer.CopyToCPU(rd!.Data);
+        }
+        else
+        {
+            return _cpuFallback.TensorOuter(a, b);
+        }
+
+        return result;
+    }
+
+    private static void OuterKernelFloat(
+        Index1D index,
+        ArrayView1D<float, Stride1D.Dense> a,
+        ArrayView1D<float, Stride1D.Dense> b,
+        ArrayView1D<float, Stride1D.Dense> result,
+        int n, int m)
+    {
+        int i = index / m;
+        int j = index % m;
+        result[index] = a[i] * b[j];
+    }
+
+    private static void OuterKernelDouble(
+        Index1D index,
+        ArrayView1D<double, Stride1D.Dense> a,
+        ArrayView1D<double, Stride1D.Dense> b,
+        ArrayView1D<double, Stride1D.Dense> result,
+        int n, int m)
+    {
+        int i = index / m;
+        int j = index % m;
+        result[index] = a[i] * b[j];
+    }
+
+    #endregion
+
+#endregion
 }
 #endif

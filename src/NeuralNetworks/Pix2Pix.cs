@@ -594,26 +594,11 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
-        var gradients = new Tensor<T>(predictions.Shape);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            T logit = predictions[i, 0];
-            T target = targets[i, 0];
-
-            // sigmoid(logit) = 1 / (1 + exp(-logit))
-            T negLogit = NumOps.Negate(logit);
-            T expNegLogit = NumOps.Exp(negLogit);
-            T sigmoid = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegLogit));
-
-            // Gradient = (sigmoid(logit) - target) / batchSize
-            gradients[i, 0] = NumOps.Divide(
-                NumOps.Subtract(sigmoid, target),
-                NumOps.FromDouble(batchSize)
-            );
-        }
-
-        return gradients;
+        // === Vectorized BCE gradients using IEngine (Phase B: US-GPU-015) ===
+        // Gradient of BCE with logits: dL/dz = (sigmoid(z) - target) / batchSize
+        var sigmoid = Engine.Sigmoid(predictions);
+        var diff = Engine.TensorSubtract(sigmoid, targets);
+        return Engine.TensorDivideScalar(diff, NumOps.FromDouble(batchSize));
     }
 
     /// <summary>
@@ -622,10 +607,8 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     private Tensor<T> CreateLabelTensor(int batchSize, T value)
     {
         var tensor = new Tensor<T>(new int[] { batchSize, 1 });
-        for (int i = 0; i < batchSize; i++)
-        {
-            tensor[i, 0] = value;
-        }
+        // === Vectorized tensor fill using IEngine (Phase B: US-GPU-015) ===
+        Engine.TensorFill(tensor, value);
         return tensor;
     }
 
@@ -637,17 +620,14 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         var parameters = Generator.GetParameters();
         var gradients = Generator.GetParameterGradients();
 
-        // Gradient clipping
+        // Gradient clipping using vectorized operations
         var gradientNorm = gradients.L2Norm();
         var clipThreshold = NumOps.FromDouble(5.0);
 
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
             var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
-            }
+            gradients = Engine.Multiply(gradients, scaleFactor);
         }
 
         var updatedParameters = _generatorOptimizer.UpdateParameters(parameters, gradients);
@@ -662,17 +642,14 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         var parameters = Discriminator.GetParameters();
         var gradients = Discriminator.GetParameterGradients();
 
-        // Gradient clipping
+        // Gradient clipping using vectorized operations
         var gradientNorm = gradients.L2Norm();
         var clipThreshold = NumOps.FromDouble(5.0);
 
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
             var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
-            }
+            gradients = Engine.Multiply(gradients, scaleFactor);
         }
 
         var updatedParameters = _discriminatorOptimizer.UpdateParameters(parameters, gradients);

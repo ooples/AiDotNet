@@ -501,6 +501,25 @@ public class ByteOperations : INumericOperations<byte>
     /// </remarks>
     public byte Round(byte value) => value;
 
+    public byte Floor(byte value) => value;
+    public byte Ceiling(byte value) => value;
+    public byte Frac(byte value) => 0;
+
+    /// <summary>
+    /// Returns the sine of the specified value (truncated to integer).
+    /// </summary>
+    /// <exception cref="NotSupportedException">Trigonometric operations are not supported for byte type.</exception>
+    public byte Sin(byte value) => throw new NotSupportedException(
+        "Sin is not supported for byte type. Math.Sin returns values in [-1,1] which cannot be meaningfully represented as bytes (0-255).");
+
+    /// <summary>
+    /// Returns the cosine of the specified value (truncated to integer).
+    /// </summary>
+    /// <exception cref="NotSupportedException">Trigonometric operations are not supported for byte type.</exception>
+    public byte Cos(byte value) => throw new NotSupportedException(
+        "Cos is not supported for byte type. Math.Cos returns values in [-1,1] which cannot be meaningfully represented as bytes (0-255).");
+
+
     /// <summary>
     /// Gets the minimum value a byte can represent.
     /// </summary>
@@ -771,4 +790,15 @@ public class ByteOperations : INumericOperations<byte>
     public void Copy(ReadOnlySpan<byte> source, Span<byte> destination) => source.CopyTo(destination);
 
     #endregion
+
+    public void Floor(ReadOnlySpan<byte> x, Span<byte> destination) => x.CopyTo(destination);
+    public void Ceiling(ReadOnlySpan<byte> x, Span<byte> destination) => x.CopyTo(destination);
+    public void Frac(ReadOnlySpan<byte> x, Span<byte> destination) => destination.Fill(0);
+    public void Sin(ReadOnlySpan<byte> x, Span<byte> destination) =>
+        throw new NotSupportedException(
+            "Sin is not supported for byte type. Math.Sin returns values in [-1,1] which cannot be meaningfully represented as bytes (0-255).");
+    public void Cos(ReadOnlySpan<byte> x, Span<byte> destination) =>
+        throw new NotSupportedException(
+            "Cos is not supported for byte type. Math.Cos returns values in [-1,1] which cannot be meaningfully represented as bytes (0-255).");
+
 }

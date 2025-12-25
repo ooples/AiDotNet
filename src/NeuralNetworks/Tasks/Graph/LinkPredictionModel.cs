@@ -282,12 +282,11 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
 
     private T DotProduct(Vector<T> a, Vector<T> b)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(a[i], b[i]));
-        }
-        return sum;
+        // Vectorized dot product using Engine
+        var tensorA = new Tensor<T>(a.ToArray(), [a.Length]);
+        var tensorB = new Tensor<T>(b.ToArray(), [b.Length]);
+        var product = Engine.TensorMultiply(tensorA, tensorB);
+        return Engine.TensorSum(product);
     }
 
     private T CosineSimilarity(Vector<T> a, Vector<T> b)
@@ -304,32 +303,30 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
 
     private T Hadamard(Vector<T> a, Vector<T> b)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(a[i], b[i]));
-        }
-        return sum;
+        // Vectorized element-wise product sum using Engine
+        var tensorA = new Tensor<T>(a.ToArray(), [a.Length]);
+        var tensorB = new Tensor<T>(b.ToArray(), [b.Length]);
+        var product = Engine.TensorMultiply(tensorA, tensorB);
+        return Engine.TensorSum(product);
     }
 
     private T NegativeDistance(Vector<T> a, Vector<T> b)
     {
-        T sumSquaredDiff = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Multiply(diff, diff));
-        }
+        // Vectorized L2 distance calculation using Engine
+        var tensorA = new Tensor<T>(a.ToArray(), [a.Length]);
+        var tensorB = new Tensor<T>(b.ToArray(), [b.Length]);
+        var diff = Engine.TensorSubtract(tensorA, tensorB);
+        var squaredDiff = Engine.TensorMultiply(diff, diff);
+        T sumSquaredDiff = Engine.TensorSum(squaredDiff);
         return NumOps.Multiply(NumOps.FromDouble(-1.0), sumSquaredDiff);
     }
 
     private T Norm(Vector<T> vec)
     {
-        T sumSquares = NumOps.Zero;
-        for (int i = 0; i < vec.Length; i++)
-        {
-            sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(vec[i], vec[i]));
-        }
+        // Vectorized L2 norm using Engine
+        var tensor = new Tensor<T>(vec.ToArray(), [vec.Length]);
+        var squared = Engine.TensorMultiply(tensor, tensor);
+        T sumSquares = Engine.TensorSum(squared);
         return NumOps.Sqrt(sumSquares);
     }
 
@@ -522,22 +519,37 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
 
     private double ComputeBCELoss(Tensor<T> posScores, Tensor<T> negScores)
     {
-        double loss = 0.0;
         int numPos = posScores.Shape[0];
         int numNeg = negScores.Shape[0];
+        double loss = 0.0;
+        T one = NumOps.One;
+        T epsilon = NumOps.FromDouble(1e-10);
 
-        for (int i = 0; i < numPos; i++)
+        // Vectorized computation for positive scores: loss = -log(sigmoid(score))
+        if (numPos > 0)
         {
-            double score = NumOps.ToDouble(posScores[i]);
-            double sigmoid = 1.0 / (1.0 + Math.Exp(-score));
-            loss -= Math.Log(Math.Max(sigmoid, 1e-10));
+            // sigmoid(x) = 1 / (1 + exp(-x))
+            // -log(sigmoid(x)) = log(1 + exp(-x))
+            var negPosScores = Engine.TensorMultiplyScalar(posScores, NumOps.FromDouble(-1.0));
+            var expNegPos = Engine.TensorExp(negPosScores);
+            var onePlusExp = Engine.TensorAddScalar(expNegPos, one);
+            var clamped = Engine.TensorClamp(onePlusExp, epsilon, NumOps.FromDouble(1e10));
+            var logValues = Engine.TensorLog(clamped);
+            T posLoss = Engine.TensorSum(logValues);
+            loss += NumOps.ToDouble(posLoss);
         }
 
-        for (int i = 0; i < numNeg; i++)
+        // Vectorized computation for negative scores: loss = -log(1 - sigmoid(score))
+        if (numNeg > 0)
         {
-            double score = NumOps.ToDouble(negScores[i]);
-            double sigmoid = 1.0 / (1.0 + Math.Exp(-score));
-            loss -= Math.Log(Math.Max(1.0 - sigmoid, 1e-10));
+            // 1 - sigmoid(x) = exp(-x) / (1 + exp(-x)) = 1 / (1 + exp(x))
+            // -log(1 - sigmoid(x)) = log(1 + exp(x))
+            var expNeg = Engine.TensorExp(negScores);
+            var onePlusExp = Engine.TensorAddScalar(expNeg, one);
+            var clamped = Engine.TensorClamp(onePlusExp, epsilon, NumOps.FromDouble(1e10));
+            var logValues = Engine.TensorLog(clamped);
+            T negLoss = Engine.TensorSum(logValues);
+            loss += NumOps.ToDouble(negLoss);
         }
 
         return (numPos + numNeg) > 0 ? loss / (numPos + numNeg) : 0.0;

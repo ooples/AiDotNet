@@ -4139,6 +4139,309 @@ public static class TensorOperations<T>
             tape.RecordOperation(node);
         return node;
     }
+
+    /// <summary>
+    /// Performs 3D convolution on a 5D tensor (batch, channels, depth, height, width).
+    /// </summary>
+    /// <param name="input">The input node with shape [batch, inChannels, depth, height, width].</param>
+    /// <param name="kernel">The kernel/filter with shape [outChannels, inChannels, kernelD, kernelH, kernelW].</param>
+    /// <param name="bias">Optional bias with shape [outChannels]. If null, no bias is added.</param>
+    /// <param name="stride">The stride [strideD, strideH, strideW]. Default is [1, 1, 1].</param>
+    /// <param name="padding">The padding [padD, padH, padW]. Default is [0, 0, 0].</param>
+    /// <returns>A new computation node containing the 3D convolution result.</returns>
+    /// <exception cref="ArgumentException">Thrown when input or kernel have invalid dimensions.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs 3D convolution, the fundamental operation for volumetric data processing.
+    /// Forward: Slides the kernel over the input computing dot products across all three spatial dimensions.
+    /// Backward: Computes gradients for both input and kernel using transposed 3D convolutions.
+    /// </para>
+    /// <para><b>For Beginners:</b> Conv3D is the 3D extension of Conv2D for volumetric data.
+    ///
+    /// For 3D convolution:
+    /// - The kernel "slides" over depth, height, and width dimensions
+    /// - Each output position is a dot product of the kernel with an input volume
+    /// - Stride controls how far the kernel moves each step in each dimension
+    /// - Padding adds borders to control output size
+    ///
+    /// Gradient computation:
+    /// - Gradient w.r.t. input: "full" 3D convolution with flipped kernel
+    /// - Gradient w.r.t. kernel: 3D cross-correlation between input and output gradient
+    ///
+    /// Used in:
+    /// - 3D object recognition from voxel grids (VoxNet, VoxelCNN)
+    /// - Medical image analysis (CT/MRI volumetric scans)
+    /// - Video understanding (treating time as depth dimension)
+    /// - Point cloud processing after voxelization
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Conv3D(
+        ComputationNode<T> input,
+        ComputationNode<T> kernel,
+        ComputationNode<T>? bias = null,
+        int[]? stride = null,
+        int[]? padding = null)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = input.Value.Shape;
+        var kernelShape = kernel.Value.Shape;
+
+        if (inputShape.Length != 5)
+            throw new ArgumentException("Conv3D requires 5D input [batch, inChannels, depth, height, width]", nameof(input));
+        if (kernelShape.Length != 5)
+            throw new ArgumentException("Conv3D requires 5D kernel [outChannels, inChannels, kernelD, kernelH, kernelW]", nameof(kernel));
+
+        stride ??= new int[] { 1, 1, 1 };
+        padding ??= new int[] { 0, 0, 0 };
+        var dilation = new int[] { 1, 1, 1 };
+        int outChannels = kernelShape[0];
+
+        // Forward pass: Use engine for GPU-accelerated 3D convolution
+        var result = engine.Conv3D(input.Value, kernel.Value, stride, padding, dilation);
+
+        // Add bias if provided
+        if (bias != null)
+        {
+            int batch = result.Shape[0];
+            int outD = result.Shape[2];
+            int outH = result.Shape[3];
+            int outW = result.Shape[4];
+
+            for (int b = 0; b < batch; b++)
+            {
+                for (int oc = 0; oc < outChannels; oc++)
+                {
+                    var biasVal = bias.Value[oc];
+                    for (int od = 0; od < outD; od++)
+                    {
+                        for (int oh = 0; oh < outH; oh++)
+                        {
+                            for (int ow = 0; ow < outW; ow++)
+                            {
+                                result[b, oc, od, oh, ow] = numOps.Add(result[b, oc, od, oh, ow], biasVal);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            // Gradient w.r.t. input using engine
+            if (input.RequiresGradient)
+            {
+                var gradInput = engine.Conv3DBackwardInput(gradient, kernel.Value, inputShape, stride, padding, dilation);
+                var existingGrad = input.Gradient;
+                input.Gradient = existingGrad == null ? gradInput : engine.TensorAdd(existingGrad, gradInput);
+            }
+
+            // Gradient w.r.t. kernel using engine
+            if (kernel.RequiresGradient)
+            {
+                var gradKernel = engine.Conv3DBackwardKernel(gradient, input.Value, kernelShape, stride, padding, dilation);
+                var existingGrad = kernel.Gradient;
+                kernel.Gradient = existingGrad == null ? gradKernel : engine.TensorAdd(existingGrad, gradKernel);
+            }
+
+            // Gradient w.r.t. bias
+            if (bias != null && bias.RequiresGradient)
+            {
+                var gradBias = new Tensor<T>(new int[] { outChannels });
+                int batch = gradient.Shape[0];
+                int outD = gradient.Shape[2];
+                int outH = gradient.Shape[3];
+                int outW = gradient.Shape[4];
+
+                for (int oc = 0; oc < outChannels; oc++)
+                {
+                    var sum = numOps.Zero;
+                    for (int b = 0; b < batch; b++)
+                    {
+                        for (int od = 0; od < outD; od++)
+                        {
+                            for (int oh = 0; oh < outH; oh++)
+                            {
+                                for (int ow = 0; ow < outW; ow++)
+                                {
+                                    sum = numOps.Add(sum, gradient[b, oc, od, oh, ow]);
+                                }
+                            }
+                        }
+                    }
+                    gradBias[oc] = sum;
+                }
+
+                var existingGrad = bias.Gradient;
+                bias.Gradient = existingGrad == null ? gradBias : existingGrad.Add(gradBias);
+            }
+        }
+
+        var parents = new List<ComputationNode<T>> { input, kernel };
+        if (bias != null) parents.Add(bias);
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient || kernel.RequiresGradient || (bias?.RequiresGradient ?? false),
+            parents: parents,
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Convolution3D;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Stride", stride },
+            { "Padding", padding }
+        };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Performs 3D max pooling on a 5D tensor (batch, channels, depth, height, width).
+    /// </summary>
+    /// <param name="input">The input node with shape [batch, channels, depth, height, width].</param>
+    /// <param name="poolSize">The size of the pooling window [poolD, poolH, poolW].</param>
+    /// <param name="strides">The stride for the pooling operation [strideD, strideH, strideW]. If null, uses poolSize.</param>
+    /// <returns>A new computation node containing the max pooled result.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs max pooling over 3D spatial dimensions (depth, height, width).
+    /// The backward function routes gradients only to the maximum values in each pooling window.
+    /// </para>
+    /// <para><b>For Beginners:</b> MaxPool3D downsamples volumetric data by taking the maximum value in each window.
+    ///
+    /// For max pooling:
+    /// - The forward pass slides a 3D window and takes the maximum
+    /// - This reduces the spatial dimensions while preserving the strongest activations
+    /// - The backward pass routes gradients only to where the max came from
+    /// - Non-max elements get zero gradient
+    ///
+    /// Used in:
+    /// - Voxel-based 3D CNNs for shape classification
+    /// - Medical image analysis (CT/MRI)
+    /// - Video processing
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> MaxPool3D(
+        ComputationNode<T> input,
+        int[] poolSize,
+        int[]? strides = null)
+    {
+        var shape = input.Value.Shape;
+        if (shape.Length != 5)
+            throw new ArgumentException("MaxPool3D requires 5D input [batch, channels, depth, height, width]");
+
+        strides ??= poolSize;
+
+        var engine = AiDotNetEngine.Current;
+        var result = engine.MaxPool3DWithIndices(input.Value, poolSize, strides, out var maxIndices);
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradA = engine.MaxPool3DBackward(gradient, maxIndices, shape, poolSize, strides);
+                var existingGrad = input.Gradient;
+                input.Gradient = existingGrad == null ? gradA : existingGrad.Add(gradA);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.MaxPool3D;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "KernelSize", poolSize },
+            { "Stride", strides },
+            { "Padding", new int[] { 0, 0, 0 } }
+        };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+
+    /// <summary>
+    /// Performs 3D upsampling (nearest neighbor) on a 5D tensor.
+    /// </summary>
+    /// <param name="input">The input node with shape [batch, channels, depth, height, width].</param>
+    /// <param name="scaleD">Scale factor for depth dimension.</param>
+    /// <param name="scaleH">Scale factor for height dimension.</param>
+    /// <param name="scaleW">Scale factor for width dimension.</param>
+    /// <returns>A new computation node containing the upsampled result with shape 
+    /// [batch, channels, depth*scaleD, height*scaleH, width*scaleW].</returns>
+    /// <exception cref="ArgumentException">Thrown when input is not 5D.</exception>
+    /// <remarks>
+    /// <para>
+    /// 3D upsampling increases spatial resolution by repeating values. This is the inverse
+    /// operation of 3D max pooling and is commonly used in 3D U-Net decoder paths.
+    /// </para>
+    /// <para><b>For Beginners:</b> Upsample3D makes volumetric data larger by repeating voxels.
+    /// If you have a 4x4x4 volume and upsample by 2 in each dimension, you get an 8x8x8 volume
+    /// where each original voxel is repeated 2x2x2 times.
+    /// </para>
+    /// <para><b>Gradient:</b> The gradient is computed by summing gradients that were distributed
+    /// to repeated elements back to the original position.</para>
+    /// </remarks>
+    public static ComputationNode<T> Upsample3D(
+        ComputationNode<T> input,
+        int scaleD,
+        int scaleH,
+        int scaleW)
+    {
+        var shape = input.Value.Shape;
+        if (shape.Length != 5)
+            throw new ArgumentException("Upsample3D requires 5D input [batch, channels, depth, height, width]");
+
+        var engine = AiDotNetEngine.Current;
+        var result = engine.Upsample3D(input.Value, scaleD, scaleH, scaleW);
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradA = engine.Upsample3DBackward(gradient, shape, scaleD, scaleH, scaleW);
+                var existingGrad = input.Gradient;
+                input.Gradient = existingGrad == null ? gradA : existingGrad.Add(gradA);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.Upsample3D;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "ScaleD", scaleD },
+            { "ScaleH", scaleH },
+            { "ScaleW", scaleW }
+        };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
     /// <summary>
     /// Performs 2D transposed convolution (deconvolution) on a 4D tensor.
     /// </summary>

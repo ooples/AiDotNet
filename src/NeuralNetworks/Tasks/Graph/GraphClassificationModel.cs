@@ -70,6 +70,7 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     private Tensor<T>? _cachedAdjacencyMatrix;
     private Tensor<T>? _nodeEmbeddings;
     private Tensor<T>? _graphEmbedding;
+    private int[]? _maxPoolingIndices; // Cached indices for max pooling backward pass
 
     /// <summary>
     /// Graph pooling methods for aggregating node embeddings.
@@ -249,69 +250,40 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     private Tensor<T> PoolGraph(Tensor<T> nodeEmbeddings)
     {
         int numNodes = nodeEmbeddings.Shape[0];
-        int embDim = nodeEmbeddings.Shape[1];
 
-        var graphEmb = new Tensor<T>([1, embDim]);
-
+        // Vectorized pooling using Engine operations
         switch (_poolingType)
         {
             case GraphPooling.Mean:
-                // Average pooling
-                for (int d = 0; d < embDim; d++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int n = 0; n < numNodes; n++)
-                    {
-                        sum = NumOps.Add(sum, nodeEmbeddings[n, d]);
-                    }
-                    graphEmb[0, d] = NumOps.Divide(sum, NumOps.FromDouble(numNodes));
-                }
-                break;
+                // Vectorized mean pooling: reduce along node dimension and divide by count
+                var sum = Engine.ReduceSum(nodeEmbeddings, [0], keepDims: true);
+                _maxPoolingIndices = null; // Not needed for mean pooling
+                return Engine.TensorDivideScalar(sum, NumOps.FromDouble(numNodes));
 
             case GraphPooling.Max:
-                // Max pooling
-                for (int d = 0; d < embDim; d++)
-                {
-                    T maxVal = nodeEmbeddings[0, d];
-                    for (int n = 1; n < numNodes; n++)
-                    {
-                        if (NumOps.GreaterThan(nodeEmbeddings[n, d], maxVal))
-                        {
-                            maxVal = nodeEmbeddings[n, d];
-                        }
-                    }
-                    graphEmb[0, d] = maxVal;
-                }
-                break;
+                // Vectorized max pooling: reduce max along node dimension
+                // Store indices for backward pass
+                var maxResult = Engine.ReduceMax(nodeEmbeddings, [0], keepDims: true, out int[] maxIndices);
+                _maxPoolingIndices = maxIndices;
+                return maxResult;
 
             case GraphPooling.Sum:
-                // Sum pooling
-                for (int d = 0; d < embDim; d++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int n = 0; n < numNodes; n++)
-                    {
-                        sum = NumOps.Add(sum, nodeEmbeddings[n, d]);
-                    }
-                    graphEmb[0, d] = sum;
-                }
-                break;
+                // Vectorized sum pooling: reduce along node dimension
+                _maxPoolingIndices = null; // Not needed for sum pooling
+                return Engine.ReduceSum(nodeEmbeddings, [0], keepDims: true);
 
             case GraphPooling.Attention:
                 // Simplified attention pooling (uniform weights = mean)
-                for (int d = 0; d < embDim; d++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int n = 0; n < numNodes; n++)
-                    {
-                        sum = NumOps.Add(sum, nodeEmbeddings[n, d]);
-                    }
-                    graphEmb[0, d] = NumOps.Divide(sum, NumOps.FromDouble(numNodes));
-                }
-                break;
-        }
+                var attSum = Engine.ReduceSum(nodeEmbeddings, [0], keepDims: true);
+                _maxPoolingIndices = null; // Not needed for attention pooling
+                return Engine.TensorDivideScalar(attSum, NumOps.FromDouble(numNodes));
 
-        return graphEmb;
+            default:
+                // Fallback to mean pooling
+                var defaultSum = Engine.ReduceSum(nodeEmbeddings, [0], keepDims: true);
+                _maxPoolingIndices = null;
+                return Engine.TensorDivideScalar(defaultSum, NumOps.FromDouble(numNodes));
+        }
     }
 
     /// <summary>
@@ -343,56 +315,34 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
 
         int numNodes = _nodeEmbeddings.Shape[0];
         int embDim = _nodeEmbeddings.Shape[1];
-
-        var gradNodeEmb = new Tensor<T>([numNodes, embDim]);
+        int[] inputShape = [numNodes, embDim];
 
         switch (_poolingType)
         {
             case GraphPooling.Mean:
-                // Gradient distributed equally to all nodes
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int d = 0; d < embDim; d++)
-                    {
-                        gradNodeEmb[n, d] = NumOps.Divide(
-                            gradGraphEmb[0, d],
-                            NumOps.FromDouble(numNodes));
-                    }
-                }
-                break;
+                // Vectorized: gradient divided by numNodes then tiled to all nodes
+                var scaledGrad = Engine.TensorDivideScalar(gradGraphEmb, NumOps.FromDouble(numNodes));
+                // Tile [1, embDim] -> [numNodes, embDim] by repeating numNodes times along axis 0
+                return Engine.TensorTile(scaledGrad, [numNodes, 1]);
 
             case GraphPooling.Max:
-                // Gradient goes only to node that had max value
-                for (int d = 0; d < embDim; d++)
+                // Max pooling backward: use ReduceMaxBackward with cached indices
+                if (_maxPoolingIndices is null)
                 {
-                    int maxIdx = 0;
-                    T maxVal = _nodeEmbeddings[0, d];
-                    for (int n = 1; n < numNodes; n++)
-                    {
-                        if (NumOps.GreaterThan(_nodeEmbeddings[n, d], maxVal))
-                        {
-                            maxVal = _nodeEmbeddings[n, d];
-                            maxIdx = n;
-                        }
-                    }
-                    gradNodeEmb[maxIdx, d] = gradGraphEmb[0, d];
+                    throw new InvalidOperationException("Max pooling indices not cached from forward pass.");
                 }
-                break;
+                return Engine.ReduceMaxBackward(gradGraphEmb, _maxPoolingIndices, inputShape);
 
             case GraphPooling.Sum:
-            case GraphPooling.Attention:
-                // Full gradient to all nodes
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int d = 0; d < embDim; d++)
-                    {
-                        gradNodeEmb[n, d] = gradGraphEmb[0, d];
-                    }
-                }
-                break;
-        }
+                // Sum pooling backward: gradient is copied to all nodes
+                return Engine.TensorTile(gradGraphEmb, [numNodes, 1]);
 
-        return gradNodeEmb;
+            case GraphPooling.Attention:
+            default:
+                // For simplified attention (uniform weights = mean), same as mean backward
+                var attScaledGrad = Engine.TensorDivideScalar(gradGraphEmb, NumOps.FromDouble(numNodes));
+                return Engine.TensorTile(attScaledGrad, [numNodes, 1]);
+        }
     }
 
     /// <summary>
@@ -572,44 +522,36 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ComputeGradient(Tensor<T> probs, Tensor<T> labels, int graphIdx)
     {
-        // Gradient of cross-entropy with softmax is (prob - label)
-        var gradient = new Tensor<T>([1, NumClasses]);
+        // Vectorized: gradient of cross-entropy with softmax is (prob - label)
+        // Extract the label row for this graph using Engine.GetRow equivalent
+        var labelRow = new Tensor<T>([1, NumClasses]);
         for (int c = 0; c < NumClasses; c++)
         {
-            gradient[0, c] = NumOps.Subtract(probs[0, c], labels[graphIdx, c]);
+            labelRow[0, c] = labels[graphIdx, c];
         }
-        return gradient;
+        return Engine.TensorSubtract<T>(probs, labelRow);
     }
 
     private Tensor<T> Softmax(Tensor<T> logits)
     {
-        int numClasses = logits.Shape[1];
-        var probs = new Tensor<T>([1, numClasses]);
+        // Vectorized softmax using Engine operations
+        // softmax(x) = exp(x - max(x)) / sum(exp(x - max(x)))
 
         // Find max for numerical stability
-        double maxLogit = NumOps.ToDouble(logits[0, 0]);
-        for (int c = 1; c < numClasses; c++)
-        {
-            double val = NumOps.ToDouble(logits[0, c]);
-            if (val > maxLogit) maxLogit = val;
-        }
+        var maxLogit = Engine.ReduceMax(logits, [1], keepDims: true, out _);
 
-        // Compute exp(logit - max) and sum
-        double sumExp = 0.0;
-        var expValues = new double[numClasses];
-        for (int c = 0; c < numClasses; c++)
-        {
-            expValues[c] = Math.Exp(NumOps.ToDouble(logits[0, c]) - maxLogit);
-            sumExp += expValues[c];
-        }
+        // Subtract max for stability: logits - max
+        // Use TensorTile to broadcast maxLogit to match logits shape if needed
+        var shifted = Engine.TensorSubtract<T>(logits, maxLogit);
 
-        // Normalize to get probabilities
-        for (int c = 0; c < numClasses; c++)
-        {
-            probs[0, c] = NumOps.FromDouble(expValues[c] / sumExp);
-        }
+        // Compute exp(shifted)
+        var expValues = Engine.TensorExp(shifted);
 
-        return probs;
+        // Sum the exp values
+        var sumExp = Engine.ReduceSum(expValues, [1], keepDims: true);
+
+        // Normalize: exp / sum using element-wise division
+        return Engine.TensorDivide<T>(expValues, sumExp);
     }
 
     /// <summary>

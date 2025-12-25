@@ -553,6 +553,21 @@ public class UIntOperations : INumericOperations<uint>
     /// </remarks>
     public uint Round(uint value) => value;
 
+    public uint Floor(uint value) => value;
+    public uint Ceiling(uint value) => value;
+    public uint Frac(uint value) => 0;
+
+    /// <summary>
+    /// Returns the sine of the specified value (truncated to integer).
+    /// </summary>
+    public uint Sin(uint value) => (uint)Math.Sin(value);
+
+    /// <summary>
+    /// Returns the cosine of the specified value (truncated to integer).
+    /// </summary>
+    public uint Cos(uint value) => (uint)Math.Cos(value);
+
+
     /// <summary>
     /// Gets the minimum value that can be represented by a uint.
     /// </summary>
@@ -826,4 +841,19 @@ public class UIntOperations : INumericOperations<uint>
     public void Clip(ReadOnlySpan<uint> x, uint min, uint max, Span<uint> destination) => VectorizedOperationsFallback.Clip(_instance, x, min, max, destination);
     public void Pow(ReadOnlySpan<uint> x, uint power, Span<uint> destination) => VectorizedOperationsFallback.Pow(_instance, x, power, destination);
     public void Copy(ReadOnlySpan<uint> source, Span<uint> destination) => source.CopyTo(destination);
+
+    public void Floor(ReadOnlySpan<uint> x, Span<uint> destination) => x.CopyTo(destination);
+    public void Ceiling(ReadOnlySpan<uint> x, Span<uint> destination) => x.CopyTo(destination);
+    public void Frac(ReadOnlySpan<uint> x, Span<uint> destination) => destination.Fill(0);
+    public void Sin(ReadOnlySpan<uint> x, Span<uint> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (uint)Math.Sin(x[i]);
+    }
+    public void Cos(ReadOnlySpan<uint> x, Span<uint> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (uint)Math.Cos(x[i]);
+    }
+
 }

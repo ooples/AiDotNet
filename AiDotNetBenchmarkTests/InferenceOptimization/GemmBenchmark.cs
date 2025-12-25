@@ -17,9 +17,11 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
     [HtmlExporter]
     public class GemmBenchmark
     {
-        private Tensor<float> _matrixA;
-        private Tensor<float> _matrixB;
-        private GemmKernel _gemmKernel;
+        private Tensor<float>? _matrixA;
+        private Tensor<float>? _matrixB;
+        private float[]? _matrixAData;
+        private float[]? _matrixBData;
+        private GemmKernel? _gemmKernel;
 
         [Params(64, 128, 256, 512, 1024)]
         public int MatrixSize { get; set; }
@@ -32,18 +34,25 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
             _gemmKernel = new GemmKernel();
 
             // Initialize matrices with deterministic data (avoids security hotspot noise in analysis)
-            _matrixA = new Tensor<float>(new[] { MatrixSize, MatrixSize });
-            _matrixB = new Tensor<float>(new[] { MatrixSize, MatrixSize });
+            var dataA = new float[MatrixSize * MatrixSize];
+            var dataB = new float[MatrixSize * MatrixSize];
 
-            for (int i = 0; i < _matrixA.Data.Length; i++)
+            for (int i = 0; i < dataA.Length; i++)
             {
-                _matrixA.Data[i] = DeterministicValue(i);
+                dataA[i] = DeterministicValue(i);
             }
 
-            for (int i = 0; i < _matrixB.Data.Length; i++)
+            for (int i = 0; i < dataB.Length; i++)
             {
-                _matrixB.Data[i] = DeterministicValue(i + 1_000_000);
+                dataB[i] = DeterministicValue(i + 1_000_000);
             }
+
+            _matrixA = new Tensor<float>(dataA, new[] { MatrixSize, MatrixSize });
+            _matrixB = new Tensor<float>(dataB, new[] { MatrixSize, MatrixSize });
+
+            // Pre-convert to arrays for naive benchmark (avoid ToArray() overhead in benchmark)
+            _matrixAData = _matrixA.ToArray();
+            _matrixBData = _matrixB.ToArray();
         }
 
         private static float DeterministicValue(int i)
@@ -58,8 +67,13 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
         [Benchmark(Baseline = true)]
         public Tensor<float> NaiveGemm()
         {
+            if (_matrixAData is null || _matrixBData is null)
+            {
+                throw new InvalidOperationException("Setup must be called before running benchmarks");
+            }
+
             // Naive triple-nested loop implementation
-            var result = new Tensor<float>(new[] { MatrixSize, MatrixSize });
+            var resultData = new float[MatrixSize * MatrixSize];
 
             for (int i = 0; i < MatrixSize; i++)
             {
@@ -68,24 +82,34 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
                     float sum = 0.0f;
                     for (int k = 0; k < MatrixSize; k++)
                     {
-                        sum += _matrixA.Data[i * MatrixSize + k] * _matrixB.Data[k * MatrixSize + j];
+                        sum += _matrixAData[i * MatrixSize + k] * _matrixBData[k * MatrixSize + j];
                     }
-                    result.Data[i * MatrixSize + j] = sum;
+                    resultData[i * MatrixSize + j] = sum;
                 }
             }
 
-            return result;
+            return new Tensor<float>(resultData, new[] { MatrixSize, MatrixSize });
         }
 
         [Benchmark]
         public Tensor<float> OptimizedGemm()
         {
+            if (_gemmKernel is null || _matrixA is null || _matrixB is null)
+            {
+                throw new InvalidOperationException("Setup must be called before running benchmarks");
+            }
+
             return _gemmKernel.Execute(_matrixA, _matrixB);
         }
 
         [Benchmark]
         public Tensor<float> OptimizedGemmTranspose()
         {
+            if (_gemmKernel is null || _matrixA is null || _matrixB is null)
+            {
+                throw new InvalidOperationException("Setup must be called before running benchmarks");
+            }
+
             return _gemmKernel.GemmTransposeB(_matrixA, _matrixB);
         }
     }

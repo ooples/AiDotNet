@@ -547,6 +547,21 @@ public class Int32Operations : INumericOperations<int>
     /// </remarks>
     public int Round(int value) => value;
 
+    public int Floor(int value) => value;
+    public int Ceiling(int value) => value;
+    public int Frac(int value) => 0;
+
+    /// <summary>
+    /// Returns the sine of the specified value (truncated to integer).
+    /// </summary>
+    public int Sin(int value) => (int)Math.Sin(value);
+
+    /// <summary>
+    /// Returns the cosine of the specified value (truncated to integer).
+    /// </summary>
+    public int Cos(int value) => (int)Math.Cos(value);
+
+
     /// <summary>
     /// Gets the minimum possible value for an int.
     /// </summary>
@@ -892,4 +907,19 @@ public class Int32Operations : INumericOperations<int>
     public void Copy(ReadOnlySpan<int> source, Span<int> destination) => source.CopyTo(destination);
 
     #endregion
+
+    public void Floor(ReadOnlySpan<int> x, Span<int> destination) => x.CopyTo(destination);
+    public void Ceiling(ReadOnlySpan<int> x, Span<int> destination) => x.CopyTo(destination);
+    public void Frac(ReadOnlySpan<int> x, Span<int> destination) => destination.Fill(0);
+    public void Sin(ReadOnlySpan<int> x, Span<int> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (int)Math.Sin(x[i]);
+    }
+    public void Cos(ReadOnlySpan<int> x, Span<int> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (int)Math.Cos(x[i]);
+    }
+
 }

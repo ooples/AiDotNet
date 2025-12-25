@@ -104,20 +104,9 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         int inputSize = inputShape.Aggregate(1, (a, b) => a * b);
         int outputSize = outputShape.Aggregate(1, (a, b) => a * b);
 
-        _u = new Tensor<T>([outputSize]);
-        _v = new Tensor<T>([inputSize]);
-
-        // Initialize with random values
-        var random = RandomHelper.ThreadSafeRandom;
-
-        for (int i = 0; i < outputSize; i++)
-        {
-            _u[i] = NumOps.FromDouble(random.NextDouble() * 2 - 1);
-        }
-        for (int i = 0; i < inputSize; i++)
-        {
-            _v[i] = NumOps.FromDouble(random.NextDouble() * 2 - 1);
-        }
+        // === Vectorized: Initialize u and v using TensorRandomUniformRange (Phase C: New IEngine methods) ===
+        _u = Engine.TensorRandomUniformRange<T>([outputSize], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
+        _v = Engine.TensorRandomUniformRange<T>([inputSize], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
 
         // Normalize u and v
         NormalizeVector(ref _u);
@@ -129,23 +118,14 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     /// </summary>
     private void NormalizeVector(ref Tensor<T> vector)
     {
-        // Compute L2 norm using vectorized operations
-        var squared = vector.Multiply(vector);
-        T sumSquared = NumOps.Zero;
-        for (int i = 0; i < squared.Length; i++)
-        {
-            sumSquared = NumOps.Add(sumSquared, squared[i]);
-        }
+        // === Vectorized L2 normalization using IEngine (Phase B: US-GPU-015) ===
+        var squared = Engine.TensorMultiply(vector, vector);
+        T sumSquared = Engine.TensorSum(squared);
         T norm = NumOps.Sqrt(sumSquared);
         T normPlusEps = NumOps.Add(norm, _epsilon);
 
-        // Divide by norm - element-wise division
-        var result = new Tensor<T>(vector.Shape);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            result[i] = NumOps.Divide(vector[i], normPlusEps);
-        }
-        vector = result;
+        // Vectorized division by scalar
+        vector = Engine.TensorDivideScalar(vector, normPlusEps);
     }
 
     /// <summary>

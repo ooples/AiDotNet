@@ -110,6 +110,41 @@ internal static class AutoMLDefaultCandidateModelsPolicy
 
             case AutoMLTaskFamily.Regression:
                 return GetRegressionCandidates(featureCount, preset);
+            // 3D Point Cloud Tasks
+            case AutoMLTaskFamily.PointCloudClassification:
+                return Get3DPointCloudClassificationCandidates(preset);
+
+            case AutoMLTaskFamily.PointCloudSegmentation:
+                return Get3DPointCloudSegmentationCandidates(preset);
+
+            case AutoMLTaskFamily.PointCloudCompletion:
+                return Get3DPointCloudCompletionCandidates(preset);
+
+            // 3D Volumetric Tasks
+            case AutoMLTaskFamily.VolumetricClassification:
+                return Get3DVolumetricClassificationCandidates(preset);
+
+            case AutoMLTaskFamily.VolumetricSegmentation:
+                return Get3DVolumetricSegmentationCandidates(preset);
+
+            // 3D Mesh Tasks
+            case AutoMLTaskFamily.MeshClassification:
+                return Get3DMeshClassificationCandidates(preset);
+
+            case AutoMLTaskFamily.MeshSegmentation:
+                return Get3DMeshSegmentationCandidates(preset);
+
+            // Neural Radiance Fields
+            case AutoMLTaskFamily.RadianceFieldReconstruction:
+                return GetRadianceFieldCandidates(preset);
+
+            // 3D Detection and Depth
+            case AutoMLTaskFamily.ThreeDObjectDetection:
+                return Get3DObjectDetectionCandidates(preset);
+
+            case AutoMLTaskFamily.DepthEstimation:
+                return GetDepthEstimationCandidates(preset);
+
 
             default:
                 return Array.Empty<ModelType>();
@@ -230,4 +265,253 @@ internal static class AutoMLDefaultCandidateModelsPolicy
                 ModelType.NeuralNetworkRegression
             };
     }
+    /// <summary>
+    /// Gets candidate models for 3D point cloud classification tasks.
+    /// </summary>
+    private static IReadOnlyList<ModelType> Get3DPointCloudClassificationCandidates(AutoMLBudgetPreset preset)
+    {
+        return preset switch
+        {
+            AutoMLBudgetPreset.CI => new[]
+            {
+                ModelType.PointNet
+            },
+            AutoMLBudgetPreset.Fast => new[]
+            {
+                ModelType.PointNet,
+                ModelType.DGCNN
+            },
+            AutoMLBudgetPreset.Thorough => new[]
+            {
+                ModelType.PointNet,
+                ModelType.PointNetPlusPlus,
+                ModelType.DGCNN
+            },
+            _ => new[]
+            {
+                ModelType.PointNet,
+                ModelType.PointNetPlusPlus,
+                ModelType.DGCNN
+            }
+        };
+    }
+
+    /// <summary>
+    /// Gets candidate models for 3D point cloud segmentation tasks.
+    /// </summary>
+    private static IReadOnlyList<ModelType> Get3DPointCloudSegmentationCandidates(AutoMLBudgetPreset preset)
+    {
+        return preset switch
+        {
+            AutoMLBudgetPreset.CI => new[]
+            {
+                ModelType.PointNet
+            },
+            AutoMLBudgetPreset.Fast => new[]
+            {
+                ModelType.PointNet,
+                ModelType.PointNetPlusPlus
+            },
+            AutoMLBudgetPreset.Thorough => new[]
+            {
+                ModelType.PointNet,
+                ModelType.PointNetPlusPlus,
+                ModelType.DGCNN
+            },
+            _ => new[]
+            {
+                ModelType.PointNetPlusPlus,
+                ModelType.DGCNN
+            }
+        };
+    }
+
+    /// <summary>
+    /// Gets candidate models for 3D point cloud completion tasks.
+    /// </summary>
+    private static IReadOnlyList<ModelType> Get3DPointCloudCompletionCandidates(AutoMLBudgetPreset preset)
+    {
+        // Point cloud completion typically uses encoder-decoder architectures
+        // PointNet++ with feature propagation is well-suited for this
+        return preset switch
+        {
+            AutoMLBudgetPreset.CI => new[]
+            {
+                ModelType.PointNet
+            },
+            _ => new[]
+            {
+                ModelType.PointNetPlusPlus,
+                ModelType.DGCNN
+            }
+        };
+    }
+
+    /// <summary>
+    /// Gets candidate models for 3D volumetric classification tasks.
+    /// </summary>
+    private static IReadOnlyList<ModelType> Get3DVolumetricClassificationCandidates(AutoMLBudgetPreset preset)
+    {
+        return preset switch
+        {
+            AutoMLBudgetPreset.CI => new[]
+            {
+                ModelType.VoxelCNN
+            },
+            AutoMLBudgetPreset.Fast => new[]
+            {
+                ModelType.VoxelCNN
+            },
+            AutoMLBudgetPreset.Thorough => new[]
+            {
+                ModelType.VoxelCNN,
+                ModelType.UNet3D
+            },
+            _ => new[]
+            {
+                ModelType.VoxelCNN
+            }
+        };
+    }
+
+    /// <summary>
+    /// Gets candidate models for 3D volumetric segmentation tasks.
+    /// </summary>
+    private static IReadOnlyList<ModelType> Get3DVolumetricSegmentationCandidates(AutoMLBudgetPreset preset)
+    {
+        return preset switch
+        {
+            AutoMLBudgetPreset.CI => new[]
+            {
+                ModelType.UNet3D
+            },
+            _ => new[]
+            {
+                ModelType.UNet3D,
+                ModelType.VoxelCNN
+            }
+        };
+    }
+
+    /// <summary>
+    /// Gets candidate models for 3D mesh classification tasks.
+    /// </summary>
+    private static IReadOnlyList<ModelType> Get3DMeshClassificationCandidates(AutoMLBudgetPreset preset)
+    {
+        return preset switch
+        {
+            AutoMLBudgetPreset.CI => new[]
+            {
+                ModelType.MeshCNN
+            },
+            AutoMLBudgetPreset.Fast => new[]
+            {
+                ModelType.MeshCNN,
+                ModelType.SpiralNetPlusPlus
+            },
+            AutoMLBudgetPreset.Thorough => new[]
+            {
+                ModelType.MeshCNN,
+                ModelType.SpiralNetPlusPlus,
+                ModelType.DiffusionNet
+            },
+            _ => new[]
+            {
+                ModelType.MeshCNN,
+                ModelType.DiffusionNet
+            }
+        };
+    }
+
+    /// <summary>
+    /// Gets candidate models for 3D mesh segmentation tasks.
+    /// </summary>
+    private static IReadOnlyList<ModelType> Get3DMeshSegmentationCandidates(AutoMLBudgetPreset preset)
+    {
+        return preset switch
+        {
+            AutoMLBudgetPreset.CI => new[]
+            {
+                ModelType.MeshCNN
+            },
+            _ => new[]
+            {
+                ModelType.MeshCNN,
+                ModelType.DiffusionNet
+            }
+        };
+    }
+
+    /// <summary>
+    /// Gets candidate models for neural radiance field reconstruction tasks.
+    /// </summary>
+    private static IReadOnlyList<ModelType> GetRadianceFieldCandidates(AutoMLBudgetPreset preset)
+    {
+        return preset switch
+        {
+            AutoMLBudgetPreset.CI => new[]
+            {
+                ModelType.InstantNGP  // Fastest for CI
+            },
+            AutoMLBudgetPreset.Fast => new[]
+            {
+                ModelType.InstantNGP,
+                ModelType.GaussianSplatting
+            },
+            AutoMLBudgetPreset.Thorough => new[]
+            {
+                ModelType.NeRF,
+                ModelType.InstantNGP,
+                ModelType.GaussianSplatting
+            },
+            _ => new[]
+            {
+                ModelType.InstantNGP,
+                ModelType.GaussianSplatting
+            }
+        };
+    }
+
+    /// <summary>
+    /// Gets candidate models for 3D object detection tasks.
+    /// </summary>
+    private static IReadOnlyList<ModelType> Get3DObjectDetectionCandidates(AutoMLBudgetPreset preset)
+    {
+        // 3D object detection often uses point cloud backbones with detection heads
+        return preset switch
+        {
+            AutoMLBudgetPreset.CI => new[]
+            {
+                ModelType.PointNet
+            },
+            _ => new[]
+            {
+                ModelType.PointNetPlusPlus,
+                ModelType.DGCNN,
+                ModelType.VoxelCNN
+            }
+        };
+    }
+
+    /// <summary>
+    /// Gets candidate models for depth estimation tasks.
+    /// </summary>
+    private static IReadOnlyList<ModelType> GetDepthEstimationCandidates(AutoMLBudgetPreset preset)
+    {
+        // Depth estimation typically uses encoder-decoder CNNs
+        // For now, map to general neural network types
+        return preset switch
+        {
+            AutoMLBudgetPreset.CI => new[]
+            {
+                ModelType.NeuralNetworkRegression
+            },
+            _ => new[]
+            {
+                ModelType.NeuralNetworkRegression,
+                ModelType.UNet3D
+            }
+        };
+    }
 }
+

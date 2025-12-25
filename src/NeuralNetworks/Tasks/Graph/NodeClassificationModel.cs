@@ -338,29 +338,70 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     private (double loss, double accuracy) ComputeLossAndAccuracy(
         Tensor<T> logits, Tensor<T> labels, int[] indices, int numClasses)
     {
-        double totalLoss = 0.0;
-        int correct = 0;
-
-        foreach (var nodeIdx in indices)
+        if (indices.Length == 0)
         {
-            // Cross-entropy loss for this node
-            for (int c = 0; c < numClasses; c++)
-            {
-                var logit = NumOps.ToDouble(logits[nodeIdx, c]);
-                var label = NumOps.ToDouble(labels[nodeIdx, c]);
-                totalLoss -= label * Math.Log(Math.Max(logit, 1e-10));
-            }
-
-            // Accuracy
-            int predictedClass = GetPredictedClass(logits, nodeIdx, numClasses);
-            int trueClass = GetTrueClass(labels, nodeIdx, numClasses);
-            if (predictedClass == trueClass) correct++;
+            return (0.0, 0.0);
         }
 
-        double avgLoss = indices.Length > 0 ? totalLoss / indices.Length : 0.0;
-        double accuracy = indices.Length > 0 ? (double)correct / indices.Length : 0.0;
+        // Gather logits and labels for the subset of nodes
+        var subsetLogits = new Tensor<T>([indices.Length, numClasses]);
+        var subsetLabels = new Tensor<T>([indices.Length, numClasses]);
+        for (int i = 0; i < indices.Length; i++)
+        {
+            int nodeIdx = indices[i];
+            for (int c = 0; c < numClasses; c++)
+            {
+                subsetLogits[i, c] = logits[nodeIdx, c];
+                subsetLabels[i, c] = labels[nodeIdx, c];
+            }
+        }
+
+        // Vectorized cross-entropy loss: -sum(labels * log(clamp(logits, epsilon, 1)))
+        T epsilon = NumOps.FromDouble(1e-10);
+        T one = NumOps.One;
+        var clampedLogits = Engine.TensorClamp(subsetLogits, epsilon, one);
+        var logLogits = Engine.TensorLog(clampedLogits);
+        var labelLogProduct = Engine.TensorMultiply(subsetLabels, logLogits);
+        T negSumLoss = Engine.TensorSum(labelLogProduct);
+        double totalLoss = -NumOps.ToDouble(negSumLoss);
+        double avgLoss = totalLoss / indices.Length;
+
+        // Compute accuracy: compare argmax of logits vs argmax of labels
+        int correct = 0;
+        for (int i = 0; i < indices.Length; i++)
+        {
+            int predictedClass = GetPredictedClassFromSubset(subsetLogits, i, numClasses);
+            int trueClass = GetTrueClassFromSubset(subsetLabels, i, numClasses);
+            if (predictedClass == trueClass) correct++;
+        }
+        double accuracy = (double)correct / indices.Length;
 
         return (avgLoss, accuracy);
+    }
+
+    private int GetPredictedClassFromSubset(Tensor<T> logits, int rowIdx, int numClasses)
+    {
+        int maxClass = 0;
+        T maxValue = logits[rowIdx, 0];
+        for (int c = 1; c < numClasses; c++)
+        {
+            if (NumOps.GreaterThan(logits[rowIdx, c], maxValue))
+            {
+                maxValue = logits[rowIdx, c];
+                maxClass = c;
+            }
+        }
+        return maxClass;
+    }
+
+    private int GetTrueClassFromSubset(Tensor<T> labels, int rowIdx, int numClasses)
+    {
+        for (int c = 0; c < numClasses; c++)
+        {
+            if (!NumOps.Equals(labels[rowIdx, c], NumOps.Zero))
+                return c;
+        }
+        return 0;
     }
 
     private double EvaluateAccuracy(Tensor<T> logits, Tensor<T> labels, int[] indices, int numClasses)
@@ -404,15 +445,39 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ComputeGradient(Tensor<T> logits, Tensor<T> labels, int[] trainIndices, int numClasses)
     {
+        // Initialize gradient tensor (zeros)
         var gradient = new Tensor<T>(logits.Shape);
-        var scale = NumOps.Divide(NumOps.One, NumOps.FromDouble(trainIndices.Length));
+        Engine.TensorFill(gradient, NumOps.Zero);
 
-        foreach (var nodeIdx in trainIndices)
+        if (trainIndices.Length == 0)
         {
+            return gradient;
+        }
+
+        // Gather logits and labels for the subset of training nodes
+        var subsetLogits = new Tensor<T>([trainIndices.Length, numClasses]);
+        var subsetLabels = new Tensor<T>([trainIndices.Length, numClasses]);
+        for (int i = 0; i < trainIndices.Length; i++)
+        {
+            int nodeIdx = trainIndices[i];
             for (int c = 0; c < numClasses; c++)
             {
-                var diff = NumOps.Subtract(logits[nodeIdx, c], labels[nodeIdx, c]);
-                gradient[nodeIdx, c] = NumOps.Multiply(scale, diff);
+                subsetLogits[i, c] = logits[nodeIdx, c];
+                subsetLabels[i, c] = labels[nodeIdx, c];
+            }
+        }
+
+        // Vectorized gradient computation: (logits - labels) / n
+        var diff = Engine.TensorSubtract<T>(subsetLogits, subsetLabels);
+        var scaledDiff = Engine.TensorDivideScalar(diff, NumOps.FromDouble(trainIndices.Length));
+
+        // Scatter gradients back to the full gradient tensor
+        for (int i = 0; i < trainIndices.Length; i++)
+        {
+            int nodeIdx = trainIndices[i];
+            for (int c = 0; c < numClasses; c++)
+            {
+                gradient[nodeIdx, c] = scaledDiff[i, c];
             }
         }
 

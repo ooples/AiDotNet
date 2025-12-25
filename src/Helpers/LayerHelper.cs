@@ -2748,4 +2748,515 @@ public static class LayerHelper<T>
             currentInputDim = hiddenDim;
         }
     }
+
+    /// <summary>
+    /// Creates default layers for a Voxel-based 3D Convolutional Neural Network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="voxelResolution">The resolution of the voxel grid (e.g., 32 for 32x32x32). Default is 32.</param>
+    /// <param name="numConvBlocks">The number of convolutional blocks (each block has Conv3D + MaxPool3D). Default is 3.</param>
+    /// <param name="baseFilters">The number of filters in the first convolutional layer. Doubles with each block. Default is 32.</param>
+    /// <returns>A collection of layers configured for voxel-based 3D classification.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A Voxel CNN is like a 3D version of a regular image classifier.
+    /// Instead of looking at a 2D image, it examines a 3D grid of "blocks" (voxels) to understand
+    /// 3D shapes. This is like how Minecraft represents the world - each block is either filled
+    /// or empty, and the pattern of blocks creates recognizable objects.
+    /// </para>
+    /// <para>
+    /// The architecture follows a standard pattern:
+    /// - Multiple Conv3D + MaxPool3D blocks to extract hierarchical 3D features
+    /// - Each block doubles the number of filters while halving the spatial resolution
+    /// - Global average pooling to aggregate spatial information
+    /// - Dense output layer for classification
+    /// </para>
+    /// <para>
+    /// Applications include:
+    /// - Recognizing 3D objects from voxelized point clouds (e.g., ModelNet40)
+    /// - Medical image analysis (CT, MRI volumetric scans)
+    /// - Spatial occupancy prediction from depth sensors
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the architecture has invalid input or output dimensions.</exception>
+    public static IEnumerable<ILayer<T>> CreateDefaultVoxelCNNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int voxelResolution = 32,
+        int numConvBlocks = 3,
+        int baseFilters = 32)
+    {
+        if (architecture.OutputSize <= 0)
+        {
+            throw new InvalidOperationException("Output size must be specified and greater than 0 for VoxelCNN.");
+        }
+
+        if (voxelResolution <= 0)
+        {
+            throw new ArgumentException("Voxel resolution must be positive.", nameof(voxelResolution));
+        }
+
+        int numClasses = architecture.OutputSize;
+        int currentResolution = voxelResolution;
+        int currentFilters = baseFilters;
+        int inputChannels = 1; // Typically single-channel occupancy grid
+
+        // Create Conv3D + MaxPool3D blocks
+        for (int block = 0; block < numConvBlocks; block++)
+        {
+            int outputFilters = currentFilters * (1 << block); // Double filters each block
+            int inChannels = (block == 0) ? inputChannels : (currentFilters * (1 << (block - 1)));
+
+            // Conv3D layer with padding to maintain resolution before pooling
+            yield return new Conv3DLayer<T>(
+                inputChannels: inChannels,
+                outputChannels: outputFilters,
+                kernelSize: 3,
+                inputDepth: currentResolution,
+                inputHeight: currentResolution,
+                inputWidth: currentResolution,
+                stride: 1,
+                padding: 1,
+                activation: new ReLUActivation<T>());
+
+            // MaxPool3D layer to downsample by factor of 2
+            if (currentResolution >= 2)
+            {
+                yield return new MaxPool3DLayer<T>(
+                    inputShape: [outputFilters, currentResolution, currentResolution, currentResolution],
+                    poolSize: 2,
+                    stride: 2);
+                currentResolution /= 2;
+            }
+        }
+
+        // Final number of filters after all blocks
+        int finalFilters = currentFilters * (1 << (numConvBlocks - 1));
+
+        // Global average pooling to aggregate spatial information
+        yield return new GlobalPoolingLayer<T>(
+            inputShape: [finalFilters, currentResolution, currentResolution, currentResolution],
+            poolingType: PoolingType.Average,
+            activationFunction: (IActivationFunction<T>?)null);
+
+        // Dense output layer for classification
+        IActivationFunction<T> outputActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
+            ? new SoftmaxActivation<T>()
+            : architecture.TaskType == NeuralNetworkTaskType.BinaryClassification
+                ? new SigmoidActivation<T>()
+                : new IdentityActivation<T>();
+
+        yield return new DenseLayer<T>(
+            inputSize: finalFilters,
+            outputSize: numClasses,
+            activationFunction: outputActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a 3D U-Net architecture for volumetric segmentation.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="voxelResolution">The resolution of the voxel grid (e.g., 32 for 32x32x32). Default is 32.</param>
+    /// <param name="numEncoderBlocks">The number of encoder blocks. Default is 4.</param>
+    /// <param name="baseFilters">The number of filters in the first convolutional layer. Doubles with each block. Default is 32.</param>
+    /// <returns>A collection of layers configured for 3D volumetric segmentation.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A 3D U-Net is like a specialized 3D image processor that can identify
+    /// different parts of a 3D volume (like organs in a CT scan or objects in a point cloud).
+    /// </para>
+    /// <para>
+    /// The U-shape architecture:
+    /// - Encoder: Progressively downsamples to capture context (like zooming out)
+    /// - Bottleneck: Smallest representation capturing global features
+    /// - Decoder: Progressively upsamples to restore resolution (like zooming in)
+    /// - Skip connections: Link encoder to decoder to preserve fine details
+    /// </para>
+    /// <para>
+    /// Applications include:
+    /// - 3D semantic segmentation of point clouds
+    /// - Medical image segmentation (organs, tumors in CT/MRI)
+    /// - Part segmentation of 3D shapes
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the architecture has invalid dimensions.</exception>
+    public static IEnumerable<ILayer<T>> CreateDefaultUNet3DLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int voxelResolution = 32,
+        int numEncoderBlocks = 4,
+        int baseFilters = 32)
+    {
+        if (architecture.OutputSize <= 0)
+        {
+            throw new InvalidOperationException("Output size (number of segmentation classes) must be greater than 0.");
+        }
+
+        if (voxelResolution <= 0)
+        {
+            throw new ArgumentException("Voxel resolution must be positive.", nameof(voxelResolution));
+        }
+
+        // Verify resolution is sufficient for the number of encoder blocks
+        int minResolution = 1 << numEncoderBlocks; // 2^numEncoderBlocks
+        if (voxelResolution < minResolution)
+        {
+            throw new ArgumentOutOfRangeException(nameof(voxelResolution),
+                $"VoxelResolution must be at least {minResolution} for {numEncoderBlocks} encoder blocks.");
+        }
+
+        int numClasses = architecture.OutputSize;
+        int currentResolution = voxelResolution;
+        int inputChannels = 1; // Typically single-channel occupancy grid
+
+        // Track encoder output filter counts for skip connections
+        var encoderFilters = new int[numEncoderBlocks];
+
+        // ============== ENCODER PATH ==============
+        // Each encoder block: Conv3D -> Conv3D -> MaxPool3D
+        for (int block = 0; block < numEncoderBlocks; block++)
+        {
+            int outputFilters = baseFilters * (1 << block); // Double filters each block
+            int inChannels = block == 0 ? inputChannels : encoderFilters[block - 1];
+            encoderFilters[block] = outputFilters;
+
+            // First Conv3D in block
+            yield return new Conv3DLayer<T>(
+                inputChannels: inChannels,
+                outputChannels: outputFilters,
+                kernelSize: 3,
+                inputDepth: currentResolution,
+                inputHeight: currentResolution,
+                inputWidth: currentResolution,
+                stride: 1,
+                padding: 1,
+                activation: new ReLUActivation<T>());
+
+            // Second Conv3D in block
+            yield return new Conv3DLayer<T>(
+                inputChannels: outputFilters,
+                outputChannels: outputFilters,
+                kernelSize: 3,
+                inputDepth: currentResolution,
+                inputHeight: currentResolution,
+                inputWidth: currentResolution,
+                stride: 1,
+                padding: 1,
+                activation: new ReLUActivation<T>());
+
+            // MaxPool3D to downsample (except last encoder block)
+            if (block < numEncoderBlocks - 1)
+            {
+                yield return new MaxPool3DLayer<T>(
+                    inputShape: [outputFilters, currentResolution, currentResolution, currentResolution],
+                    poolSize: 2,
+                    stride: 2);
+                currentResolution /= 2;
+            }
+        }
+
+        // ============== BOTTLENECK ==============
+        // Additional convolutions at the bottleneck
+        int bottleneckFilters = baseFilters * (1 << (numEncoderBlocks - 1)) * 2;
+        yield return new Conv3DLayer<T>(
+            inputChannels: encoderFilters[numEncoderBlocks - 1],
+            outputChannels: bottleneckFilters,
+            kernelSize: 3,
+            inputDepth: currentResolution,
+            inputHeight: currentResolution,
+            inputWidth: currentResolution,
+            stride: 1,
+            padding: 1,
+            activation: new ReLUActivation<T>());
+
+        // ============== DECODER PATH ==============
+        // Each decoder block: Upsample3D -> Conv3D -> Conv3D
+        // Note: Skip connections need to be handled by the network model
+        for (int block = numEncoderBlocks - 2; block >= 0; block--)
+        {
+            int outputFilters = encoderFilters[block];
+            int inChannels = block == numEncoderBlocks - 2 ? bottleneckFilters : encoderFilters[block + 1] * 2;
+
+            // Upsample3D to increase resolution
+            yield return new Upsample3DLayer<T>(
+                inputShape: [inChannels, currentResolution, currentResolution, currentResolution],
+                scaleFactor: 2);
+            currentResolution *= 2;
+
+            // First Conv3D after upsample (would concatenate with skip in full U-Net)
+            // For simplicity, we assume channels are doubled from skip connection
+            yield return new Conv3DLayer<T>(
+                inputChannels: inChannels, // In full U-Net: inChannels + encoderFilters[block] from skip
+                outputChannels: outputFilters,
+                kernelSize: 3,
+                inputDepth: currentResolution,
+                inputHeight: currentResolution,
+                inputWidth: currentResolution,
+                stride: 1,
+                padding: 1,
+                activation: new ReLUActivation<T>());
+
+            // Second Conv3D in decoder block
+            yield return new Conv3DLayer<T>(
+                inputChannels: outputFilters,
+                outputChannels: outputFilters,
+                kernelSize: 3,
+                inputDepth: currentResolution,
+                inputHeight: currentResolution,
+                inputWidth: currentResolution,
+                stride: 1,
+                padding: 1,
+                activation: new ReLUActivation<T>());
+        }
+
+        // ============== OUTPUT LAYER ==============
+        // 1x1x1 convolution to produce per-voxel class predictions
+        yield return new Conv3DLayer<T>(
+            inputChannels: baseFilters,
+            outputChannels: numClasses,
+            kernelSize: 1,
+            inputDepth: currentResolution,
+            inputHeight: currentResolution,
+            inputWidth: currentResolution,
+            stride: 1,
+            padding: 0,
+            activation: numClasses > 1 ? new SoftmaxActivation<T>() : new SigmoidActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for a MeshCNN architecture for mesh classification/segmentation.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="inputFeatures">Number of input features per edge. Default is 5.</param>
+    /// <param name="convChannels">Channel sizes for each edge convolution block.</param>
+    /// <param name="poolTargets">Target edge counts after each pooling operation.</param>
+    /// <param name="fcSizes">Sizes of fully connected layers before output.</param>
+    /// <param name="numNeighbors">Number of neighboring edges per edge. Default is 4.</param>
+    /// <param name="useBatchNorm">Whether to use batch normalization. Default is true.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization. Default is 0.5.</param>
+    /// <param name="useGlobalAveragePooling">Whether to use global average pooling. Default is false (max pooling).</param>
+    /// <returns>A collection of layers configured for mesh processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> MeshCNN processes 3D mesh data by learning from edge features.
+    /// </para>
+    /// <para>
+    /// The architecture consists of:
+    /// - Edge convolution blocks: Learn patterns from edge neighborhoods
+    /// - Mesh pooling: Simplify the mesh by removing less important edges
+    /// - Global pooling: Aggregate all edge features into a fixed-size vector
+    /// - Fully connected layers: Map aggregated features to class predictions
+    /// </para>
+    /// <para>
+    /// Applications include:
+    /// - 3D shape classification from mesh data
+    /// - Mesh segmentation (labeling different parts)
+    /// - Learning from CAD models and 3D scans
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the architecture has invalid output size.</exception>
+    public static IEnumerable<ILayer<T>> CreateDefaultMeshCNNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int inputFeatures = 5,
+        int[]? convChannels = null,
+        int[]? poolTargets = null,
+        int[]? fcSizes = null,
+        int numNeighbors = 4,
+        bool useBatchNorm = true,
+        double dropoutRate = 0.5,
+        bool useGlobalAveragePooling = false)
+    {
+        if (architecture.OutputSize <= 0)
+        {
+            throw new InvalidOperationException("Output size must be specified and greater than 0 for MeshCNN.");
+        }
+
+        convChannels ??= [64, 128, 256, 256];
+        poolTargets ??= [1800, 1350, 600];
+        fcSizes ??= [100];
+
+        if (inputFeatures <= 0)
+        {
+            throw new ArgumentException("Input features must be positive.", nameof(inputFeatures));
+        }
+
+        int numClasses = architecture.OutputSize;
+        int currentChannels = inputFeatures;
+
+        // Edge convolution blocks with optional pooling
+        for (int block = 0; block < convChannels.Length; block++)
+        {
+            int outChannels = convChannels[block];
+
+            // MeshEdgeConv layer
+            yield return new MeshEdgeConvLayer<T>(
+                inputChannels: currentChannels,
+                outputChannels: outChannels,
+                numNeighbors: numNeighbors,
+                activation: new ReLUActivation<T>());
+
+            currentChannels = outChannels;
+
+            // MeshPool layer (if we have a target for this block)
+            if (block < poolTargets.Length)
+            {
+                yield return new MeshPoolLayer<T>(
+                    inputChannels: currentChannels,
+                    targetEdges: poolTargets[block],
+                    numNeighbors: numNeighbors);
+            }
+        }
+
+        // Global pooling to aggregate edge features
+        // Note: MeshCNN typically uses a simple max/avg over all edges
+        yield return new GlobalPoolingLayer<T>(
+            inputShape: [currentChannels],
+            poolingType: useGlobalAveragePooling ? PoolingType.Average : PoolingType.Max,
+            activationFunction: (IActivationFunction<T>?)null);
+
+        // Fully connected layers
+        int fcInput = currentChannels;
+        foreach (var fcSize in fcSizes)
+        {
+            yield return new DenseLayer<T>(
+                inputSize: fcInput,
+                outputSize: fcSize,
+                activationFunction: new ReLUActivation<T>());
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            fcInput = fcSize;
+        }
+
+        // Output layer
+        IActivationFunction<T> outputActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
+            ? new SoftmaxActivation<T>()
+            : architecture.TaskType == NeuralNetworkTaskType.BinaryClassification
+                ? new SigmoidActivation<T>()
+                : new IdentityActivation<T>();
+
+        yield return new DenseLayer<T>(
+            inputSize: fcInput,
+            outputSize: numClasses,
+            activationFunction: outputActivation);
+    }
+
+    /// <summary>
+    /// Creates the default layer sequence for a SpiralNet mesh neural network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="inputFeatures">Number of input features per vertex (default: 3 for coordinates).</param>
+    /// <param name="spiralLength">Length of spiral sequences for convolutions.</param>
+    /// <param name="convChannels">Channel sizes for each spiral convolution block.</param>
+    /// <param name="poolRatios">Pooling ratios for mesh simplification at each level.</param>
+    /// <param name="fcSizes">Sizes of fully connected layers before output.</param>
+    /// <param name="useBatchNorm">Whether to use batch normalization after convolutions.</param>
+    /// <param name="dropoutRate">Dropout rate for fully connected layers.</param>
+    /// <param name="useGlobalAveragePooling">Whether to use global average (true) or max (false) pooling.</param>
+    /// <returns>An enumerable of layers forming the SpiralNet architecture.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method builds the default layer stack for SpiralNet++.</para>
+    /// <para>
+    /// Architecture pattern:
+    /// - Multiple spiral convolution blocks (SpiralConv + optional BatchNorm)
+    /// - Global pooling to aggregate vertex features
+    /// - Fully connected layers for classification
+    /// 
+    /// Applications:
+    /// - 3D face recognition and reconstruction
+    /// - Human body shape analysis
+    /// - Medical mesh analysis
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the architecture has invalid output size.</exception>
+    public static IEnumerable<ILayer<T>> CreateDefaultSpiralNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int inputFeatures = 3,
+        int spiralLength = 9,
+        int[]? convChannels = null,
+        double[]? poolRatios = null,
+        int[]? fcSizes = null,
+        bool useBatchNorm = true,
+        double dropoutRate = 0.5,
+        bool useGlobalAveragePooling = true)
+    {
+        if (architecture.OutputSize <= 0)
+        {
+            throw new InvalidOperationException("Output size must be specified and greater than 0 for SpiralNet.");
+        }
+
+        convChannels ??= [32, 64, 128, 256];
+        poolRatios ??= [0.5, 0.5];
+        fcSizes ??= [256, 128];
+
+        if (inputFeatures <= 0)
+        {
+            throw new ArgumentException("Input features must be positive.", nameof(inputFeatures));
+        }
+
+        if (spiralLength <= 0)
+        {
+            throw new ArgumentException("Spiral length must be positive.", nameof(spiralLength));
+        }
+
+        int numClasses = architecture.OutputSize;
+        int currentChannels = inputFeatures;
+
+        // Spiral convolution blocks
+        for (int block = 0; block < convChannels.Length; block++)
+        {
+            int outChannels = convChannels[block];
+
+            // SpiralConv layer
+            yield return new SpiralConvLayer<T>(
+                inputChannels: currentChannels,
+                outputChannels: outChannels,
+                spiralLength: spiralLength,
+                activation: new ReLUActivation<T>());
+
+            currentChannels = outChannels;
+
+            // Optional batch normalization
+            if (useBatchNorm)
+            {
+                yield return new BatchNormalizationLayer<T>(currentChannels);
+            }
+        }
+
+        // Global pooling to aggregate vertex features
+        yield return new GlobalPoolingLayer<T>(
+            inputShape: [currentChannels],
+            poolingType: useGlobalAveragePooling ? PoolingType.Average : PoolingType.Max,
+            activationFunction: (IActivationFunction<T>?)null);
+
+        // Fully connected layers
+        int fcInput = currentChannels;
+        foreach (var fcSize in fcSizes)
+        {
+            yield return new DenseLayer<T>(
+                inputSize: fcInput,
+                outputSize: fcSize,
+                activationFunction: new ReLUActivation<T>());
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            fcInput = fcSize;
+        }
+
+        // Output layer
+        IActivationFunction<T> outputActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
+            ? new SoftmaxActivation<T>()
+            : architecture.TaskType == NeuralNetworkTaskType.BinaryClassification
+                ? new SigmoidActivation<T>()
+                : new IdentityActivation<T>();
+
+        yield return new DenseLayer<T>(
+            inputSize: fcInput,
+            outputSize: numClasses,
+            activationFunction: outputActivation);
+    }
 }

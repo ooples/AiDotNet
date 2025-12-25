@@ -493,11 +493,8 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         var shape = new int[] { batchSize, 1 };
         var tensor = new Tensor<T>(shape);
 
-        // Fill with the specified value
-        for (int i = 0; i < batchSize; i++)
-        {
-            tensor[i, 0] = value;
-        }
+        // === Vectorized tensor fill using IEngine (Phase B: US-GPU-015) ===
+        Engine.TensorFill(tensor, value);
 
         return tensor;
     }
@@ -583,17 +580,14 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         var parameters = network.GetParameters();
         var gradients = network.GetParameterGradients();
 
-        // Gradient clipping to prevent exploding gradients
+        // Gradient clipping to prevent exploding gradients (vectorized)
         var gradientNorm = gradients.L2Norm();
         var clipThreshold = NumOps.FromDouble(5.0);
 
         if (NumOps.GreaterThan(gradientNorm, clipThreshold))
         {
             var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
-            }
+            gradients = Engine.Multiply(gradients, scaleFactor);
         }
 
         // Select the appropriate optimizer based on which network is being updated
@@ -1121,35 +1115,48 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             throw new ArgumentOutOfRangeException(nameof(noiseSize), noiseSize, "Noise size must be positive.");
         }
 
-        var random = RandomHelper.CreateSecureRandom();
-        var shape = new int[] { batchSize, noiseSize };
-        var noise = new Tensor<T>(shape);
+        int totalElements = batchSize * noiseSize;
 
-        // Generate normally distributed random numbers using Box-Muller transform
-        for (int b = 0; b < batchSize; b++)
+        // === Vectorized Box-Muller transform using new IEngine methods (Phase C) ===
+        // Generate uniform random numbers using TensorRandomUniformRange
+        int halfElements = (totalElements + 1) / 2;
+
+        // u2 is in [0, 1)
+        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+
+        // u1 is 1 - random to get (0, 1] and avoid log(0)
+        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u1 = Engine.ScalarMinusTensor(NumOps.One, u1Temp);
+        
+        // Vectorized Box-Muller: radius = sqrt(-2 * log(u1)), theta = 2 * pi * u2
+        var logU1 = Engine.TensorLog(u1);
+        var negTwoLogU1 = Engine.TensorMultiplyScalar(logU1, NumOps.FromDouble(-2.0));
+        var radius = Engine.TensorSqrt(negTwoLogU1);
+        
+        var theta = Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI));
+        
+        // z1 = radius * cos(theta), z2 = radius * sin(theta)
+        var cosTheta = Engine.TensorCos(theta);
+        var sinTheta = Engine.TensorSin(theta);
+        
+        var z1 = Engine.TensorMultiply(radius, cosTheta);
+        var z2 = Engine.TensorMultiply(radius, sinTheta);
+        
+        // Interleave z1 and z2 into the final noise tensor
+        var noiseData = new T[totalElements];
+        var z1Array = z1.ToArray();
+        var z2Array = z2.ToArray();
+        
+        for (int i = 0; i < halfElements; i++)
         {
-            for (int i = 0; i < noiseSize; i += 2)
-            {
-                double u1 = random.NextDouble(); // Uniform(0,1) random number
-                double u2 = random.NextDouble(); // Uniform(0,1) random number
-
-                // Box-Muller transformation
-                double radius = Math.Sqrt(-2.0 * Math.Log(u1));
-                double theta = 2.0 * Math.PI * u2;
-
-                double z1 = radius * Math.Cos(theta);
-                noise[b, i] = NumOps.FromDouble(z1);
-
-                // If we're not at the last element, generate the second value
-                if (i + 1 < noiseSize)
-                {
-                    double z2 = radius * Math.Sin(theta);
-                    noise[b, i + 1] = NumOps.FromDouble(z2);
-                }
-            }
+            int idx = i * 2;
+            if (idx < totalElements)
+                noiseData[idx] = z1Array[i];
+            if (idx + 1 < totalElements)
+                noiseData[idx + 1] = z2Array[i];
         }
-
-        return noise;
+        
+        return new Tensor<T>(noiseData, [batchSize, noiseSize]);
     }
 
     /// <summary>
@@ -1747,64 +1754,60 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         }
 
         // Generate random interpolation coefficients (epsilon) for each sample in batch
-        var epsilon = new T[batchSize];
+        int elementsPerSample = realSamples.Length / batchSize;
+        
+        // Create epsilon tensor [batchSize, 1] for broadcasting across elementsPerSample
+        var epsilonData = new T[batchSize];
         for (int i = 0; i < batchSize; i++)
         {
-            epsilon[i] = NumOps.FromDouble(Random.NextDouble());
+            epsilonData[i] = NumOps.FromDouble(Random.NextDouble());
         }
-
-        // Compute interpolated samples: x_hat = epsilon * real + (1 - epsilon) * fake
-        var interpolated = new Tensor<T>(realSamples.Shape);
-        int elementsPerSample = realSamples.Length / batchSize;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            T eps = epsilon[b];
-            T oneMinusEps = NumOps.Subtract(NumOps.One, eps);
-
-            for (int i = 0; i < elementsPerSample; i++)
-            {
-                int idx = b * elementsPerSample + i;
-                if (idx < realSamples.Length && idx < fakeSamples.Length)
-                {
-                    T realPart = NumOps.Multiply(eps, realSamples[idx]);
-                    T fakePart = NumOps.Multiply(oneMinusEps, fakeSamples[idx]);
-                    interpolated[idx] = NumOps.Add(realPart, fakePart);
-                }
-            }
-        }
+        
+        // Vectorized interpolation: x_hat = epsilon * real + (1 - epsilon) * fake
+        // Tile epsilon to match sample dimensions [batchSize, elementsPerSample]
+        var epsilonTensor = new Tensor<T>(epsilonData, [batchSize, 1]);
+        var epsilonBroadcast = Engine.TensorTile(epsilonTensor, [1, elementsPerSample]);
+        epsilonBroadcast = epsilonBroadcast.Reshape([realSamples.Length]);
+        
+        // Create ones tensor for (1 - epsilon) computation
+        var onesTensor = new Tensor<T>([realSamples.Length]);
+        Engine.TensorFill(onesTensor, NumOps.One);
+        var oneMinusEpsilon = Engine.TensorSubtract(onesTensor, epsilonBroadcast);
+        
+        // Flatten samples for element-wise operations
+        var realFlat = realSamples.Reshape([realSamples.Length]);
+        var fakeFlat = fakeSamples.Reshape([fakeSamples.Length]);
+        
+        // Compute interpolation: eps * real + (1 - eps) * fake
+        var realPart = Engine.TensorMultiply(epsilonBroadcast, realFlat);
+        var fakePart = Engine.TensorMultiply(oneMinusEpsilon, fakeFlat);
+        var interpolatedFlat = Engine.TensorAdd(realPart, fakePart);
+        var interpolated = interpolatedFlat.Reshape(realSamples.Shape);
 
         // Compute gradients using symbolic differentiation (autodiff)
-        // This is more accurate and efficient than numerical differentiation
         var gradients = ComputeSymbolicGradient(interpolated);
 
-        // Compute gradient penalty: lambda * mean((||gradient|| - 1)^2)
-        T totalPenalty = NumOps.Zero;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Compute L2 norm of gradient for this sample
-            T gradientNormSquared = NumOps.Zero;
-            for (int i = 0; i < elementsPerSample; i++)
-            {
-                int idx = b * elementsPerSample + i;
-                if (idx < gradients.Length)
-                {
-                    T g = gradients[idx];
-                    gradientNormSquared = NumOps.Add(gradientNormSquared, NumOps.Multiply(g, g));
-                }
-            }
-
-            T gradientNorm = NumOps.Sqrt(gradientNormSquared);
-
-            // Penalty term: (||gradient|| - 1)^2
-            T deviation = NumOps.Subtract(gradientNorm, NumOps.One);
-            T penalty = NumOps.Multiply(deviation, deviation);
-
-            totalPenalty = NumOps.Add(totalPenalty, penalty);
-        }
-
-        // Average over batch
+        // Vectorized gradient penalty computation
+        // Reshape gradients to [batchSize, elementsPerSample]
+        var gradientsTensor = new Tensor<T>(gradients.ToArray(), [batchSize, elementsPerSample]);
+        
+        // Compute squared gradients
+        var gradientsSquared = Engine.TensorMultiply(gradientsTensor, gradientsTensor);
+        
+        // Sum along axis 1 to get gradient norm squared per sample
+        var gradientNormSquared = Engine.ReduceSum(gradientsSquared, [1], keepDims: false);
+        
+        // Compute gradient norms
+        var gradientNorm = Engine.TensorSqrt(gradientNormSquared);
+        
+        // Compute deviation from 1: (||gradient|| - 1)^2
+        var onesTensorBatch = new Tensor<T>([batchSize]);
+        Engine.TensorFill(onesTensorBatch, NumOps.One);
+        var deviation = Engine.TensorSubtract(gradientNorm, onesTensorBatch);
+        var penaltyPerSample = Engine.TensorMultiply(deviation, deviation);
+        
+        // Compute mean penalty across batch
+        T totalPenalty = Engine.TensorSum(penaltyPerSample);
         totalPenalty = NumOps.Divide(totalPenalty, NumOps.FromDouble(batchSize));
 
         // Apply lambda weight
@@ -2061,17 +2064,13 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             var realMean = ComputeBatchMean(realLayerFeatures);
             var fakeMean = ComputeBatchMean(fakeLayerFeatures);
 
-            // Compute L2 distance between means
-            T layerLoss = NumOps.Zero;
-            int elementCount = Math.Min(realMean.Length, fakeMean.Length);
-
-            for (int i = 0; i < elementCount; i++)
-            {
-                T diff = NumOps.Subtract(realMean[i], fakeMean[i]);
-                layerLoss = NumOps.Add(layerLoss, NumOps.Multiply(diff, diff));
-            }
+            // Vectorized L2 distance between means
+            var diff = Engine.TensorSubtract(realMean, fakeMean);
+            var squaredDiff = Engine.TensorMultiply(diff, diff);
+            T layerLoss = Engine.TensorSum(squaredDiff);
 
             // Normalize by number of features
+            int elementCount = Math.Min(realMean.Length, fakeMean.Length);
             if (elementCount > 0)
             {
                 layerLoss = NumOps.Divide(layerLoss, NumOps.FromDouble(elementCount));
@@ -2123,31 +2122,11 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         }
 
         int batchSize = tensor.Shape[0];
-        int elementsPerSample = tensor.Length / batchSize;
 
-        var mean = new Tensor<T>(new int[] { elementsPerSample });
-
-        // Sum across batch dimension
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < elementsPerSample; i++)
-            {
-                int tensorIdx = b * elementsPerSample + i;
-                if (tensorIdx < tensor.Length)
-                {
-                    mean[i] = NumOps.Add(mean[i], tensor[tensorIdx]);
-                }
-            }
-        }
-
-        // Divide by batch size to get mean
+        // Vectorized: sum across batch dimension (axis 0), then divide by batch size
+        var sum = Engine.ReduceSum(tensor, [0], keepDims: false);
         T batchSizeT = NumOps.FromDouble(batchSize);
-        for (int i = 0; i < elementsPerSample; i++)
-        {
-            mean[i] = NumOps.Divide(mean[i], batchSizeT);
-        }
-
-        return mean;
+        return Engine.TensorDivideScalar(sum, batchSizeT);
     }
 
     /// <summary>
