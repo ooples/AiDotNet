@@ -395,8 +395,22 @@ public class AudioVAE<T> : VAEModelBase<T>
         int fftSize = 2048)
     {
         var shape = waveform.Shape;
-        var batch = shape[0];
-        var samples = shape.Length > 1 ? shape[1] : shape[0];
+
+        // Handle 1D waveform input [samples] vs 2D input [batch, samples]
+        int batch;
+        int samples;
+        if (shape.Length == 1)
+        {
+            // 1D waveform: treat as single batch
+            batch = 1;
+            samples = shape[0];
+        }
+        else
+        {
+            // 2D waveform: [batch, samples]
+            batch = shape[0];
+            samples = shape[1];
+        }
 
         // Calculate output dimensions
         var timeFrames = samples / hopLength;
@@ -420,7 +434,8 @@ public class AudioVAE<T> : VAEModelBase<T>
                     // This is a simplified version - real implementation uses FFT + mel filterbank
                     for (int s = startSample; s < endSample; s++)
                     {
-                        var sampleIdx = b * samples + s;
+                        // Handle both 1D [samples] and 2D [batch, samples] layouts
+                        var sampleIdx = (shape.Length == 1) ? s : (b * samples + s);
                         if (sampleIdx < waveSpan.Length)
                         {
                             var sampleVal = NumOps.ToDouble(waveSpan[sampleIdx]);
@@ -528,18 +543,92 @@ public class AudioVAE<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        // Simplified: return empty vector
-        return new Vector<T>(0);
+        var allParams = new List<T>();
+
+        // Collect from projection layers
+        if (_muProjection != null)
+        {
+            var p = _muProjection.GetParameters();
+            for (int i = 0; i < p.Length; i++)
+            {
+                allParams.Add(p[i]);
+            }
+        }
+
+        if (_logVarProjection != null)
+        {
+            var p = _logVarProjection.GetParameters();
+            for (int i = 0; i < p.Length; i++)
+            {
+                allParams.Add(p[i]);
+            }
+        }
+
+        if (_latentToDecoder != null)
+        {
+            var p = _latentToDecoder.GetParameters();
+            for (int i = 0; i < p.Length; i++)
+            {
+                allParams.Add(p[i]);
+            }
+        }
+
+        return new Vector<T>(allParams.ToArray());
     }
 
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        // Simplified implementation
+        int offset = 0;
+
+        if (_muProjection != null)
+        {
+            var count = _muProjection.ParameterCount;
+            var p = new T[count];
+            for (int i = 0; i < count; i++)
+            {
+                p[i] = parameters[offset + i];
+            }
+            _muProjection.SetParameters(new Vector<T>(p));
+            offset += count;
+        }
+
+        if (_logVarProjection != null)
+        {
+            var count = _logVarProjection.ParameterCount;
+            var p = new T[count];
+            for (int i = 0; i < count; i++)
+            {
+                p[i] = parameters[offset + i];
+            }
+            _logVarProjection.SetParameters(new Vector<T>(p));
+            offset += count;
+        }
+
+        if (_latentToDecoder != null)
+        {
+            var count = _latentToDecoder.ParameterCount;
+            var p = new T[count];
+            for (int i = 0; i < count; i++)
+            {
+                p[i] = parameters[offset + i];
+            }
+            _latentToDecoder.SetParameters(new Vector<T>(p));
+        }
     }
 
     /// <inheritdoc />
-    public override int ParameterCount => 0; // Simplified
+    public override int ParameterCount
+    {
+        get
+        {
+            int count = 0;
+            if (_muProjection != null) count += _muProjection.ParameterCount;
+            if (_logVarProjection != null) count += _logVarProjection.ParameterCount;
+            if (_latentToDecoder != null) count += _latentToDecoder.ParameterCount;
+            return count;
+        }
+    }
 
     #endregion
 
@@ -554,12 +643,16 @@ public class AudioVAE<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override IVAEModel<T> Clone()
     {
-        return new AudioVAE<T>(
+        var clone = new AudioVAE<T>(
             _melChannels,
             _latentChannels,
             _baseChannels,
             _channelMultipliers,
             _numResBlocks);
+
+        // Preserve trained weights
+        clone.SetParameters(GetParameters());
+        return clone;
     }
 
     #endregion
