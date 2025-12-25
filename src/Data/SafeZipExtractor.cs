@@ -16,22 +16,6 @@ namespace AiDotNet.Data;
 internal static class SafeZipExtractor
 {
     /// <summary>
-    /// Maximum number of entries allowed in an archive.
-    /// </summary>
-    private const int ThresholdEntries = 10000;
-
-    /// <summary>
-    /// Maximum total uncompressed size in bytes (1 GB).
-    /// </summary>
-    private const long ThresholdSize = 1L * 1024 * 1024 * 1024;
-
-    /// <summary>
-    /// Maximum allowed compression ratio before considering it a zip bomb.
-    /// A ratio above 10 is highly suspicious.
-    /// </summary>
-    private const double ThresholdRatio = 10.0;
-
-    /// <summary>
     /// Buffer size for reading compressed data.
     /// </summary>
     private const int BufferSize = 1024;
@@ -50,9 +34,9 @@ internal static class SafeZipExtractor
     public static void ExtractToDirectory(
         string zipFilePath,
         string destinationDirectory,
-        long maxUncompressedSize = ThresholdSize,
-        int maxEntries = ThresholdEntries,
-        double maxCompressionRatio = ThresholdRatio)
+        long maxUncompressedSize = 1L * 1024 * 1024 * 1024,
+        int maxEntries = 10000,
+        double maxCompressionRatio = 10.0)
     {
         if (string.IsNullOrEmpty(zipFilePath))
             throw new ArgumentNullException(nameof(zipFilePath));
