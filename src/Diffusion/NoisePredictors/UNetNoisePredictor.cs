@@ -593,9 +593,8 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         count += _timeEmbeddingDim * _timeEmbeddingDim + _timeEmbeddingDim;
 
         // Estimate blocks
-        foreach (var mult in _channelMultipliers)
+        foreach (var channels in _channelMultipliers.Select(mult => _baseChannels * mult))
         {
-            var channels = _baseChannels * mult;
             count += _numResBlocks * (channels * channels * 2); // Rough estimate per res block
         }
 
