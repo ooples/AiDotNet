@@ -74,7 +74,7 @@ public class AdaBoostClassifierOptions<T> : ClassifierOptions<T>
     /// SAMME.R (Real) uses probability estimates and typically performs better.
     /// SAMME uses class predictions only and is the original algorithm.
     /// </remarks>
-    public AdaBoostAlgorithm Algorithm { get; set; } = AdaBoostAlgorithm.SAMMER;
+    public AdaBoostAlgorithm Algorithm { get; set; } = AdaBoostAlgorithm.SAMME_R;
 
     /// <summary>
     /// Gets or sets the random state for reproducibility.
@@ -100,5 +100,5 @@ public enum AdaBoostAlgorithm
     /// SAMME.R algorithm using probability estimates.
     /// Generally performs better than SAMME.
     /// </summary>
-    SAMMER
+    SAMME_R
 }
