@@ -197,7 +197,7 @@ public class GpuPINNTrainer<T>
             }
 
             history.UseGpuAcceleration = IsUsingGpu;
-            history.PeakMemoryBytes = peakMemory - initialMemory;
+            history.PeakManagedMemoryBytes = peakMemory - initialMemory;
         }
         finally
         {
@@ -207,7 +207,7 @@ public class GpuPINNTrainer<T>
 
         if (_options.VerboseLogging)
         {
-            Console.WriteLine($"[GpuPINNTrainer] Training complete in {history.TotalTrainingTimeMs}ms, peak memory growth: {history.PeakMemoryBytes / 1024}KB");
+            Console.WriteLine($"[GpuPINNTrainer] Training complete in {history.TotalTrainingTimeMs}ms, peak managed memory growth: {history.PeakManagedMemoryBytes / 1024}KB");
         }
 
         return history;
@@ -391,16 +391,24 @@ public class GpuTrainingHistory<T> : TrainingHistory<T>
     public double AverageEpochTimeMs => Losses.Count > 0 ? (double)TotalTrainingTimeMs / Losses.Count : 0;
 
     /// <summary>
-    /// Gets or sets the peak memory growth during training in bytes.
+    /// Gets or sets the peak managed (heap) memory growth during training in bytes.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This measures the peak managed memory growth during training, which includes
-    /// tensor allocations. For GPU-specific memory, use external profiling tools
-    /// (nvidia-smi for NVIDIA, rocm-smi for AMD).
+    /// <b>Important:</b> This measures .NET managed memory growth (via GC.GetTotalMemory),
+    /// NOT GPU device memory. Managed memory includes tensor allocations on the CPU heap
+    /// but does not reflect actual GPU memory usage.
+    /// </para>
+    /// <para>
+    /// For GPU-specific memory profiling, use external tools:
+    /// <list type="bullet">
+    /// <item><description>NVIDIA: nvidia-smi, nvml library</description></item>
+    /// <item><description>AMD: rocm-smi</description></item>
+    /// <item><description>General: Visual Studio GPU profiler</description></item>
+    /// </list>
     /// </para>
     /// </remarks>
-    public long PeakMemoryBytes { get; set; }
+    public long PeakManagedMemoryBytes { get; set; }
 
     /// <summary>
     /// Gets or sets training timing statistics.
