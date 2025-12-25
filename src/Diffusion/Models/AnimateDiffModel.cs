@@ -291,7 +291,6 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
             throw new InvalidOperationException("Text-to-video generation requires a conditioning module.");
 
         var effectiveNumFrames = numFrames ?? DefaultNumFrames;
-        var effectiveFPS = fps ?? DefaultFPS;
         var useCFG = guidanceScale > 1.0 && NoisePredictor.SupportsCFG;
 
         // Encode text prompts

@@ -396,9 +396,6 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         // Denoising loop for extension
         foreach (var timestep in Scheduler.Timesteps)
         {
-            // Combine context and current extension
-            var combinedLatents = ConcatenateLatents(contextLatents, extensionLatents);
-
             // Predict noise (using context-aware prediction)
             var noisePrediction = PredictNoiseWithContext(
                 extensionLatents, timestep, contextLatents, promptEmbedding);
@@ -621,7 +618,6 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
 
         var startFrame = shape[^1] - contextFrames;
         var framesPerBatch = shape[1] * shape[2] * shape[3];
-        var frameSize = shape[1] * shape[2];
 
         for (int b = 0; b < shape[0]; b++)
         {

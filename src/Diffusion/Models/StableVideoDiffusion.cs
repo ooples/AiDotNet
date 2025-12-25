@@ -399,9 +399,6 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
         // The image embedding is used as cross-attention context
         // Motion embedding is combined with time embedding internally
 
-        var videoShape = latents.Shape;
-        var numFrames = videoShape[1];
-
         // For SVD, we predict noise for all frames at once using the 3D U-Net
         // The VideoUNet handles the 5D input internally
         return _videoUNet.PredictNoiseWithImageCondition(

@@ -588,12 +588,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> ProcessVideoFrames(Tensor<T> video, Func<Tensor<T>, Tensor<T>> processFrame)
     {
-        int batch = video.Shape[0];
-        int channels = video.Shape[1];
         int frames = video.Shape[2];
-        int height = video.Shape[3];
-        int width = video.Shape[4];
-
         var processedFrames = new List<Tensor<T>>();
 
         for (int f = 0; f < frames; f++)
