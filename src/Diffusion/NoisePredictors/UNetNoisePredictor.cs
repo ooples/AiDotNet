@@ -1,5 +1,6 @@
 using System.Linq;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Diffusion.Attention;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Diffusion;
@@ -461,12 +462,20 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // - Query: spatial features from x (reshaped internally)
         // - Key/Value: text embeddings from conditioning
         // - Output: attended features with same shape as x
-        if (crossAttn is LayerBase<T> layerBase)
+
+        // DiffusionCrossAttention uses ForwardWithContext for conditioning
+        if (crossAttn is DiffusionCrossAttention<T> diffusionCrossAttn)
         {
-            return layerBase.Forward(x, conditioning);
+            return diffusionCrossAttn.ForwardWithContext(x, conditioning);
         }
 
-        // Fallback for legacy layers
+        // CrossAttentionLayer has Forward(input, context) overload
+        if (crossAttn is CrossAttentionLayer<T> crossAttnLayer)
+        {
+            return crossAttnLayer.Forward(x, conditioning);
+        }
+
+        // Fallback for other layers
         return crossAttn.Forward(x);
     }
 
@@ -529,23 +538,24 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateAttentionBlock(int channels)
     {
-        // Self-attention layer
-        return new MultiHeadAttentionLayer<T>(
-            sequenceLength: 64 * 64,  // Will be adjusted based on actual size
-            embeddingDimension: channels,
-            headCount: _numHeads,
-            activationFunction: new IdentityActivation<T>());
+        // Self-attention layer using Flash Attention for memory efficiency
+        // Flash Attention is used for sequences >= 256 tokens (16x16 spatial)
+        return new DiffusionAttention<T>(
+            channels: channels,
+            numHeads: _numHeads,
+            spatialSize: 64,  // Will be adjusted based on actual size
+            flashAttentionThreshold: 256);
     }
 
     private ILayer<T> CreateCrossAttentionBlock(int channels)
     {
         // Cross-attention layer for conditioning with proper Q/K/V projections
         // Query dimension = spatial channels, Context dimension = text embedding dimension
-        return new CrossAttentionLayer<T>(
+        return new DiffusionCrossAttention<T>(
             queryDim: channels,
             contextDim: _contextDim,
-            headCount: _numHeads,
-            sequenceLength: 64 * 64);
+            numHeads: _numHeads,
+            spatialSize: 64);
     }
 
     private ILayer<T> CreateDownsample(int channels)
