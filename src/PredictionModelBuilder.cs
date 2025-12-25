@@ -42,6 +42,8 @@ using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.Policies;
 using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Preprocessing;
+using AiDotNet.Preprocessing.Imputers;
+using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet;
@@ -287,15 +289,26 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </para>
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
-        Action<PreprocessingPipeline<T, TInput, TInput>> pipelineBuilder)
+        Action<PreprocessingPipeline<T, TInput, TInput>>? pipelineBuilder = null)
     {
-        if (pipelineBuilder is null)
+        _preprocessingPipeline = new PreprocessingPipeline<T, TInput, TInput>();
+
+        if (pipelineBuilder is not null)
         {
-            throw new ArgumentNullException(nameof(pipelineBuilder));
+            pipelineBuilder(_preprocessingPipeline);
+        }
+        else
+        {
+            // Industry standard AutoML-style defaults:
+            // 1. Handle missing values with mean imputation (most common strategy)
+            // 2. Standardize features to zero mean and unit variance
+            // 3. These are the minimum recommended preprocessing steps for most ML algorithms
+            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
+                new SimpleImputer<T>(ImputationStrategy.Mean));
+            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
+                new StandardScaler<T>());
         }
 
-        _preprocessingPipeline = new PreprocessingPipeline<T, TInput, TInput>();
-        pipelineBuilder(_preprocessingPipeline);
         return this;
     }
 
@@ -317,15 +330,26 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </para>
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
-        IDataTransformer<T, TInput, TInput> transformer)
+        IDataTransformer<T, TInput, TInput>? transformer = null)
     {
-        if (transformer is null)
+        _preprocessingPipeline = new PreprocessingPipeline<T, TInput, TInput>();
+
+        if (transformer is not null)
         {
-            throw new ArgumentNullException(nameof(transformer));
+            _preprocessingPipeline.Add(transformer);
+        }
+        else
+        {
+            // Industry standard AutoML-style defaults:
+            // 1. Handle missing values with mean imputation (most common strategy)
+            // 2. Standardize features to zero mean and unit variance
+            // 3. These are the minimum recommended preprocessing steps for most ML algorithms
+            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
+                new SimpleImputer<T>(ImputationStrategy.Mean));
+            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
+                new StandardScaler<T>());
         }
 
-        _preprocessingPipeline = new PreprocessingPipeline<T, TInput, TInput>();
-        _preprocessingPipeline.Add(transformer);
         return this;
     }
 
@@ -349,9 +373,24 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </para>
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
-        PreprocessingPipeline<T, TInput, TInput> pipeline)
+        PreprocessingPipeline<T, TInput, TInput>? pipeline = null)
     {
-        _preprocessingPipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
+        if (pipeline is not null)
+        {
+            _preprocessingPipeline = pipeline;
+        }
+        else
+        {
+            // Industry standard AutoML-style defaults:
+            // 1. Handle missing values with mean imputation (most common strategy)
+            // 2. Standardize features to zero mean and unit variance
+            // 3. These are the minimum recommended preprocessing steps for most ML algorithms
+            _preprocessingPipeline = new PreprocessingPipeline<T, TInput, TInput>();
+            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
+                new SimpleImputer<T>(ImputationStrategy.Mean));
+            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
+                new StandardScaler<T>());
+        }
         return this;
     }
 
