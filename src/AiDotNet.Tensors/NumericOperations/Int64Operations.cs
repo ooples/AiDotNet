@@ -580,6 +580,21 @@ public class Int64Operations : INumericOperations<long>
     /// </remarks>
     public long Round(long value) => value;
 
+    public long Floor(long value) => value;
+    public long Ceiling(long value) => value;
+    public long Frac(long value) => 0;
+
+    /// <summary>
+    /// Returns the sine of the specified value (truncated to integer).
+    /// </summary>
+    public long Sin(long value) => (long)Math.Sin(value);
+
+    /// <summary>
+    /// Returns the cosine of the specified value (truncated to integer).
+    /// </summary>
+    public long Cos(long value) => (long)Math.Cos(value);
+
+
     /// <summary>
     /// Gets the minimum possible value for a long integer.
     /// </summary>
@@ -939,4 +954,59 @@ public class Int64Operations : INumericOperations<long>
     public void Copy(ReadOnlySpan<long> source, Span<long> destination) => source.CopyTo(destination);
 
     #endregion
+
+    /// <summary>
+    /// Copies the source values to destination (floor is identity for integers).
+    /// </summary>
+    public void Floor(ReadOnlySpan<long> x, Span<long> destination) => x.CopyTo(destination);
+
+    /// <summary>
+    /// Copies the source values to destination (ceiling is identity for integers).
+    /// </summary>
+    public void Ceiling(ReadOnlySpan<long> x, Span<long> destination) => x.CopyTo(destination);
+
+    /// <summary>
+    /// Fills destination with zeros (fractional part of integers is always zero).
+    /// </summary>
+    public void Frac(ReadOnlySpan<long> x, Span<long> destination)
+    {
+        if (destination.Length < x.Length)
+        {
+            throw new ArgumentException(
+                $"Destination span length ({destination.Length}) must be at least as long as source span ({x.Length}).",
+                nameof(destination));
+        }
+        destination.Slice(0, x.Length).Fill(0);
+    }
+
+    /// <summary>
+    /// Computes sine of each element (truncated to long).
+    /// </summary>
+    public void Sin(ReadOnlySpan<long> x, Span<long> destination)
+    {
+        if (destination.Length < x.Length)
+        {
+            throw new ArgumentException(
+                $"Destination span length ({destination.Length}) must be at least as long as source span ({x.Length}).",
+                nameof(destination));
+        }
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (long)Math.Sin(x[i]);
+    }
+
+    /// <summary>
+    /// Computes cosine of each element (truncated to long).
+    /// </summary>
+    public void Cos(ReadOnlySpan<long> x, Span<long> destination)
+    {
+        if (destination.Length < x.Length)
+        {
+            throw new ArgumentException(
+                $"Destination span length ({destination.Length}) must be at least as long as source span ({x.Length}).",
+                nameof(destination));
+        }
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = (long)Math.Cos(x[i]);
+    }
+
 }

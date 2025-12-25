@@ -633,6 +633,72 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// </remarks>
     public Complex<T> Round(Complex<T> value) => new(_ops.Round(value.Real), _ops.Round(value.Imaginary));
 
+    public Complex<T> Floor(Complex<T> value) => new Complex<T>(_ops.Floor(value.Real), _ops.Floor(value.Imaginary));
+    public Complex<T> Ceiling(Complex<T> value) => new Complex<T>(_ops.Ceiling(value.Real), _ops.Ceiling(value.Imaginary));
+    public Complex<T> Frac(Complex<T> value) => new Complex<T>(_ops.Frac(value.Real), _ops.Frac(value.Imaginary));
+
+    /// <summary>
+    /// Returns the sine of the specified complex value using the correct mathematical formula.
+    /// </summary>
+    /// <remarks>
+    /// For a complex number z = x + iy, the complex sine is:
+    /// sin(z) = sin(x)·cosh(y) + i·cos(x)·sinh(y)
+    /// where cosh(y) = (e^y + e^(-y))/2 and sinh(y) = (e^y - e^(-y))/2
+    /// </remarks>
+    public Complex<T> Sin(Complex<T> value)
+    {
+        // sin(x + iy) = sin(x)·cosh(y) + i·cos(x)·sinh(y)
+        T x = value.Real;
+        T y = value.Imaginary;
+
+        T sinX = _ops.Sin(x);
+        T cosX = _ops.Cos(x);
+
+        // Compute cosh(y) and sinh(y) using exponentials:
+        // cosh(y) = (e^y + e^(-y))/2, sinh(y) = (e^y - e^(-y))/2
+        T expY = _ops.Exp(y);
+        T expNegY = _ops.Exp(_ops.Negate(y));
+        T two = _ops.FromDouble(2.0);
+        T coshY = _ops.Divide(_ops.Add(expY, expNegY), two);
+        T sinhY = _ops.Divide(_ops.Subtract(expY, expNegY), two);
+
+        T realPart = _ops.Multiply(sinX, coshY);
+        T imagPart = _ops.Multiply(cosX, sinhY);
+
+        return new Complex<T>(realPart, imagPart);
+    }
+
+    /// <summary>
+    /// Returns the cosine of the specified complex value using the correct mathematical formula.
+    /// </summary>
+    /// <remarks>
+    /// For a complex number z = x + iy, the complex cosine is:
+    /// cos(z) = cos(x)·cosh(y) - i·sin(x)·sinh(y)
+    /// where cosh(y) = (e^y + e^(-y))/2 and sinh(y) = (e^y - e^(-y))/2
+    /// </remarks>
+    public Complex<T> Cos(Complex<T> value)
+    {
+        // cos(x + iy) = cos(x)·cosh(y) - i·sin(x)·sinh(y)
+        T x = value.Real;
+        T y = value.Imaginary;
+
+        T sinX = _ops.Sin(x);
+        T cosX = _ops.Cos(x);
+
+        // Compute cosh(y) and sinh(y) using exponentials:
+        // cosh(y) = (e^y + e^(-y))/2, sinh(y) = (e^y - e^(-y))/2
+        T expY = _ops.Exp(y);
+        T expNegY = _ops.Exp(_ops.Negate(y));
+        T two = _ops.FromDouble(2.0);
+        T coshY = _ops.Divide(_ops.Add(expY, expNegY), two);
+        T sinhY = _ops.Divide(_ops.Subtract(expY, expNegY), two);
+
+        T realPart = _ops.Multiply(cosX, coshY);
+        T imagPart = _ops.Negate(_ops.Multiply(sinX, sinhY));
+
+        return new Complex<T>(realPart, imagPart);
+    }
+
     /// <summary>
     /// Gets the minimum value that can be represented using complex numbers with the underlying type T.
     /// </summary>
@@ -1058,4 +1124,35 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
         => source.CopyTo(destination);
 
     #endregion
+
+    public void Floor(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = Floor(x[i]);
+    }
+
+    public void Ceiling(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = Ceiling(x[i]);
+    }
+
+    public void Frac(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = Frac(x[i]);
+    }
+
+    public void Sin(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = Sin(x[i]);
+    }
+
+    public void Cos(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+    {
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = Cos(x[i]);
+    }
+
 }

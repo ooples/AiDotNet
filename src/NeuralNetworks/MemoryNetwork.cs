@@ -343,48 +343,9 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     /// <returns>Normalized attention weights.</returns>
     private Tensor<T> ApplySoftmax(Tensor<T> logits)
     {
-        // Get shape information
-        int[] shape = logits.Shape;
-        int batchSize = shape[0];
-        int attentionSize = shape[shape.Length - 1];
-
-        // Create result tensor with same shape
-        Tensor<T> softmax = new Tensor<T>(shape);
-
-        // Apply softmax for each batch
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Find maximum value for numerical stability
-            T max = NumOps.Negate(NumOps.MaxValue);
-            for (int i = 0; i < attentionSize; i++)
-            {
-                T val = logits[b, i];
-                if (NumOps.GreaterThan(val, max))
-                {
-                    max = val;
-                }
-            }
-
-            // Calculate exp(x - max) for each element
-            T[] expValues = new T[attentionSize];
-            T sumExp = NumOps.Zero;
-
-            for (int i = 0; i < attentionSize; i++)
-            {
-                T val = logits[b, i];
-                T expVal = NumOps.Exp(NumOps.Subtract(val, max));
-                expValues[i] = expVal;
-                sumExp = NumOps.Add(sumExp, expVal);
-            }
-
-            // Normalize by sum of exponentials
-            for (int i = 0; i < attentionSize; i++)
-            {
-                softmax[b, i] = NumOps.Divide(expValues[i], sumExp);
-            }
-        }
-
-        return softmax;
+        // === Vectorized softmax using IEngine (Phase B: US-GPU-015) ===
+        // Apply softmax along the last axis (attention dimension)
+        return Engine.Softmax(logits, -1);
     }
 
     /// <summary>

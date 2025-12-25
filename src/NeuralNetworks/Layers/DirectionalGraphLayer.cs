@@ -407,15 +407,8 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// </summary>
     private Tensor<T> ApplySigmoid(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            T x = input.GetFlat(i);
-            T sigmoid = NumOps.Divide(NumOps.FromDouble(1.0),
-                NumOps.Add(NumOps.FromDouble(1.0), NumOps.Exp(NumOps.Negate(x))));
-            output.SetFlat(i, sigmoid);
-        }
-        return output;
+        // === Vectorized sigmoid using IEngine (Phase B: US-GPU-015) ===
+        return Engine.Sigmoid(input);
     }
 
     /// <summary>

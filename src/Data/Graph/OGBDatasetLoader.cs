@@ -281,7 +281,7 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
             {
                 Directory.Delete(datasetDir, recursive: true);
             }
-            ZipFile.ExtractToDirectory(tempFile, datasetDir);
+            SafeZipExtractor.ExtractToDirectory(tempFile, datasetDir);
         }
         finally
         {

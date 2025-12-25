@@ -702,14 +702,10 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private Tensor<T> CreateScalarTensor(T value, int[] shape)
     {
-        // Create a tensor filled with the scalar value - use direct Tensor constructor
-        var totalSize = shape.Aggregate(1, (a, b) => a * b);
-        var data = new T[totalSize];
-        for (int i = 0; i < totalSize; i++)
-        {
-            data[i] = value;
-        }
-        return new Tensor<T>(shape, new Vector<T>(data));
+        // === Vectorized tensor fill using IEngine (Phase B: US-GPU-015) ===
+        var tensor = new Tensor<T>(shape);
+        Engine.TensorFill(tensor, value);
+        return tensor;
     }
 
     /// <summary>

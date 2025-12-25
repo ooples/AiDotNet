@@ -278,22 +278,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     private Tensor<T> ClipTensorGradient(Tensor<T> gradient, T maxNorm)
     {
-        T totalNorm = NumOps.Zero;
-
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            totalNorm = NumOps.Add(totalNorm, NumOps.Multiply(gradient[i], gradient[i]));
-        }
-
-        totalNorm = NumOps.Sqrt(totalNorm);
+        // Compute L2 norm using vectorized operations: sqrt(sum(gradient^2))
+        var gradSquared = Engine.TensorMultiply(gradient, gradient);
+        T totalNormSquared = Engine.TensorSum(gradSquared);
+        T totalNorm = NumOps.Sqrt(totalNormSquared);
 
         if (NumOps.GreaterThan(totalNorm, maxNorm))
         {
+            // Scale gradient using vectorized multiplication
             T scalingFactor = NumOps.Divide(maxNorm, totalNorm);
-            for (int i = 0; i < gradient.Length; i++)
-            {
-                gradient[i] = NumOps.Multiply(gradient[i], scalingFactor);
-            }
+            gradient = Engine.TensorMultiplyScalar(gradient, scalingFactor);
         }
 
         return gradient;
@@ -2443,12 +2437,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (offset + layerParams.Length > gradients.Length)
                 throw new ArgumentException($"Gradient vector is too short for layer parameters.");
 
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                layerParams[i] = NumOps.Subtract(layerParams[i], NumOps.Multiply(learningRate, gradients[offset + i]));
-            }
+            // Vectorized parameter update: params = params - learningRate * gradients
+            var layerGradients = gradients.GetSubVector(offset, layerParams.Length);
+            var scaledGradients = (Vector<T>)Engine.Multiply(layerGradients, learningRate);
+            var updatedParams = (Vector<T>)Engine.Subtract(layerParams, scaledGradients);
 
-            layer.SetParameters(layerParams);
+            layer.SetParameters(updatedParams);
             offset += layerParams.Length;
         }
     }

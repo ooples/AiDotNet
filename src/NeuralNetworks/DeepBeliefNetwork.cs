@@ -428,14 +428,10 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentException("Original and reconstruction tensors must have the same shape.");
         }
 
-        // Calculate mean squared error
-        T sumSquaredError = NumOps.Zero;
-        for (int i = 0; i < original.Length; i++)
-        {
-            T diff = NumOps.Subtract(original.ToArray()[i], reconstruction.ToArray()[i]);
-            T squaredDiff = NumOps.Multiply(diff, diff);
-            sumSquaredError = NumOps.Add(sumSquaredError, squaredDiff);
-        }
+        // Vectorized mean squared error using Engine tensor operations
+        var diff = Engine.TensorSubtract(original, reconstruction);
+        var squaredDiff = Engine.TensorMultiply(diff, diff);
+        T sumSquaredError = Engine.TensorSum(squaredDiff);
 
         return NumOps.Divide(sumSquaredError, NumOps.FromDouble(original.Length));
     }

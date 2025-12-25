@@ -990,15 +990,14 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <returns>The sharpened weights.</returns>
     private Vector<T> Sharpen(Vector<T> weights, T gamma)
     {
-        var result = new Vector<T>(_memorySize);
-        T sum = NumOps.Zero;
+        // === Vectorized: Use TensorPower for element-wise power operation (Phase C: New IEngine methods) ===
+        var weightsTensor = new Tensor<T>(weights.ToArray(), [_memorySize]);
 
-        // Raise each weight to the power of gamma
-        for (int i = 0; i < _memorySize; i++)
-        {
-            result[i] = NumOps.Power(weights[i], gamma);
-            sum = NumOps.Add(sum, result[i]);
-        }
+        // Raise each weight to the power of gamma using vectorized operation
+        var powered = Engine.TensorPower(weightsTensor, gamma);
+
+        // Sum all powered values
+        T sum = Engine.TensorSum(powered);
 
         // Avoid division by zero
         if (NumOps.Equals(sum, NumOps.Zero))
@@ -1006,13 +1005,10 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
             sum = NumOps.FromDouble(1e-6);
         }
 
-        // Normalize to ensure sum is 1
-        for (int i = 0; i < _memorySize; i++)
-        {
-            result[i] = NumOps.Divide(result[i], sum);
-        }
+        // Normalize to ensure sum is 1 using vectorized division
+        var normalized = Engine.TensorDivideScalar(powered, sum);
 
-        return result;
+        return new Vector<T>(normalized.ToArray());
     }
 
     /// <summary>
