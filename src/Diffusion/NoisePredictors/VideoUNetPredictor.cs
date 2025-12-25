@@ -657,9 +657,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
         int batch = videoFeatures.Shape[0];
         int channels = videoFeatures.Shape[1];
-        int height = videoFeatures.Shape[3];
-        int width = videoFeatures.Shape[4];
-        int spatialSize = height * width;
+        int spatialSize = videoFeatures.Shape[3] * videoFeatures.Shape[4];
         int frameSize = channels * spatialSize;
 
         for (int b = 0; b < batch; b++)

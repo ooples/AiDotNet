@@ -300,15 +300,9 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         Tensor<T>? negativeEmbedding = null;
         if (useCFG)
         {
-            if (!string.IsNullOrEmpty(negativePrompt))
-            {
-                var negTokens = _conditioner.Tokenize(negativePrompt);
-                negativeEmbedding = _conditioner.EncodeText(negTokens);
-            }
-            else
-            {
-                negativeEmbedding = _conditioner.GetUnconditionalEmbedding(1);
-            }
+            negativeEmbedding = !string.IsNullOrEmpty(negativePrompt)
+                ? _conditioner.EncodeText(_conditioner.Tokenize(negativePrompt))
+                : _conditioner.GetUnconditionalEmbedding(1);
         }
 
         // Calculate latent dimensions
@@ -358,19 +352,13 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
 
         foreach (var timestep in Scheduler.Timesteps)
         {
-            Tensor<T> noisePrediction;
-
-            if (negativeEmbedding != null && guidanceScale > 1.0)
-            {
-                // Process all frames with motion-aware prediction
-                var condPred = PredictWithMotionModules(latents, timestep, promptEmbedding);
-                var uncondPred = PredictWithMotionModules(latents, timestep, negativeEmbedding);
-                noisePrediction = ApplyGuidanceVideo(uncondPred, condPred, guidanceScale);
-            }
-            else
-            {
-                noisePrediction = PredictWithMotionModules(latents, timestep, promptEmbedding);
-            }
+            // Process all frames with motion-aware prediction
+            var condPred = PredictWithMotionModules(latents, timestep, promptEmbedding);
+            var noisePrediction = negativeEmbedding != null && guidanceScale > 1.0
+                ? ApplyGuidanceVideo(
+                    PredictWithMotionModules(latents, timestep, negativeEmbedding),
+                    condPred, guidanceScale)
+                : condPred;
 
             latents = SchedulerStepVideo(latents, noisePrediction, timestep);
         }
@@ -419,17 +407,12 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
                 var windowLatents = ExtractFrameWindow(latents, startFrame, windowSize);
 
                 // Predict noise for this window
-                Tensor<T> windowNoise;
-                if (negativeEmbedding != null && guidanceScale > 1.0)
-                {
-                    var condPred = PredictWithMotionModules(windowLatents, timestep, promptEmbedding);
-                    var uncondPred = PredictWithMotionModules(windowLatents, timestep, negativeEmbedding);
-                    windowNoise = ApplyGuidanceVideo(uncondPred, condPred, guidanceScale);
-                }
-                else
-                {
-                    windowNoise = PredictWithMotionModules(windowLatents, timestep, promptEmbedding);
-                }
+                var condPred = PredictWithMotionModules(windowLatents, timestep, promptEmbedding);
+                var windowNoise = negativeEmbedding != null && guidanceScale > 1.0
+                    ? ApplyGuidanceVideo(
+                        PredictWithMotionModules(windowLatents, timestep, negativeEmbedding),
+                        condPred, guidanceScale)
+                    : condPred;
 
                 // Blend window noise into accumulator with linear weights
                 BlendWindowNoise(accumulatedNoise, accumulatedWeights, windowNoise, startFrame, windowSize);
