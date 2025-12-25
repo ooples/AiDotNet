@@ -208,7 +208,7 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
         return Options.MaxFeatures.ToLower() switch
         {
             "sqrt" => (int)Math.Ceiling(Math.Sqrt(NumFeatures)),
-            "log2" => (int)Math.Ceiling(Math.Log2(NumFeatures)),
+            "log2" => (int)Math.Ceiling(Math.Log(NumFeatures, 2)),
             "all" => NumFeatures,
             _ when int.TryParse(Options.MaxFeatures, out int n) => Math.Min(n, NumFeatures),
             _ => (int)Math.Ceiling(Math.Sqrt(NumFeatures)) // Default to sqrt

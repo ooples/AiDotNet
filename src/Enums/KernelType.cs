@@ -151,5 +151,28 @@ public enum KernelType
     /// The Laplacian kernel can be particularly effective for computer vision and text analysis tasks.
     /// </para>
     /// </remarks>
-    Laplacian
+    Laplacian,
+
+    /// <summary>
+    /// Indicates that the kernel matrix is precomputed rather than being computed on-the-fly.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When you use a Precomputed kernel, you calculate the similarity between
+    /// all pairs of data points yourself before training the model.
+    ///
+    /// Think of it as:
+    /// - You provide a matrix of pre-calculated similarities
+    /// - Useful when you have a custom similarity measure
+    /// - Allows using domain-specific kernels not built into the library
+    /// - Must compute kernel values between test and training data at prediction time
+    ///
+    /// Best used when:
+    /// - You need a custom kernel not available in the library
+    /// - You have pre-computed kernel values from another source
+    /// - You want to use specialized domain kernels (string kernels, graph kernels, etc.)
+    /// - You're working with structured data that requires special similarity measures
+    /// </para>
+    /// </remarks>
+    Precomputed
 }
