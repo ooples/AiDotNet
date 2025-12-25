@@ -403,8 +403,9 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisyImage, int timestep, Tensor<T> embedding)
     {
-        // Use the diffusion prior's noise prediction
-        return _diffusionPrior.PredictNoise(noisyImage, timestep);
+        // Use the internal U-Net's noise prediction with text conditioning
+        // This allows the diffusion model to guide 3D generation based on the text prompt
+        return _unet.PredictNoise(noisyImage, timestep, embedding);
     }
 
     /// <summary>
