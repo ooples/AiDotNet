@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PhysicsInformed.Benchmarks
 {
@@ -20,7 +21,7 @@ namespace AiDotNet.PhysicsInformed.Benchmarks
 
             options.Validate();
 
-            var random = new Random(options.Seed);
+            var random = RandomHelper.CreateSeededRandom(options.Seed);
             double sumSquared = 0.0;
             double sumTargetSquared = 0.0;
             double maxError = 0.0;
@@ -114,7 +115,7 @@ namespace AiDotNet.PhysicsInformed.Benchmarks
             int gridSize = options.GridSize;
             var inputs = new double[options.SampleCount, gridSize, gridSize];
             var outputs = new double[options.SampleCount, gridSize, gridSize];
-            var random = new Random(options.Seed);
+            var random = RandomHelper.CreateSeededRandom(options.Seed);
 
             for (int sample = 0; sample < options.SampleCount; sample++)
             {
@@ -146,7 +147,7 @@ namespace AiDotNet.PhysicsInformed.Benchmarks
             int gridSize = options.GridSize;
             var inputs = new double[options.SampleCount, gridSize, gridSize];
             var outputs = new double[options.SampleCount, gridSize, gridSize];
-            var random = new Random(options.Seed);
+            var random = RandomHelper.CreateSeededRandom(options.Seed);
 
             for (int sample = 0; sample < options.SampleCount; sample++)
             {
