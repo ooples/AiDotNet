@@ -126,7 +126,7 @@ public class Ray<T>
     /// <param name="direction">The direction vector of the ray (will be normalized).</param>
     /// <param name="nearBound">The near clipping distance.</param>
     /// <param name="farBound">The far clipping distance.</param>
-    public Ray(Vector<T> origin, Vector<T> direction, T nearBound, T farBound)  
+    public Ray(Vector<T> origin, Vector<T> direction, T nearBound, T farBound)
     {
         Origin = origin;
         Direction = direction.Normalize();
