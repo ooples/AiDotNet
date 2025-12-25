@@ -4904,7 +4904,7 @@ public interface IEngine
     /// <returns>Tensor of indices that would sort the input.</returns>
     Tensor<int> ArgSort<T>(Tensor<T> input, int axis = -1, bool descending = false);
 
-/// <summary>
+    /// <summary>
     /// Gathers elements from input tensor along an axis using indices.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>

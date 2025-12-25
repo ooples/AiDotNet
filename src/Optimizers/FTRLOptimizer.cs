@@ -103,8 +103,13 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// 2. Updates the solution based on this calculation
     /// 3. Checks if this new solution is the best one found so far
     /// 4. Decides whether to stop or continue improving
-    /// 
+    ///
     /// It's like a climber trying to find the highest peak, taking steps based on the slope they feel under their feet.
+    /// </para>
+    /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
+    /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
+    /// and notifies the sampler of epoch starts using
+    /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>.
     /// </para>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
@@ -122,18 +127,24 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         _n = new Vector<T>(parameters.Length);
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
-            _t++;
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            var newSolution = UpdateSolution(currentSolution, gradient);
+            NotifyEpochStart(epoch);
+            var batcher = CreateBatcher(inputData, _options.BatchSize);
 
-            var currentStepData = EvaluateSolution(newSolution, inputData);
+            foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+            {
+                _t++;
+                var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+                currentSolution = UpdateSolution(currentSolution, gradient);
+            }
+
+            var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
 
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }
@@ -143,7 +154,6 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            currentSolution = newSolution;
             previousStepData = currentStepData;
         }
 

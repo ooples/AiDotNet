@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Autodiff;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -205,13 +205,13 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         bool useMultiScaleGrouping = false,
         ILossFunction<T>? lossFunction = null)
         : this(new PointNetPlusPlusOptions
-            {
-                NumClasses = numClasses,
-                SamplingRates = samplingRates,
-                SearchRadii = searchRadii,
-                MlpDimensions = mlpDimensions,
-                UseMultiScaleGrouping = useMultiScaleGrouping
-            },
+        {
+            NumClasses = numClasses,
+            SamplingRates = samplingRates,
+            SearchRadii = searchRadii,
+            MlpDimensions = mlpDimensions,
+            UseMultiScaleGrouping = useMultiScaleGrouping
+        },
             lossFunction)
     {
     }
@@ -489,7 +489,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         return new Tensor<T>(output, [numPoints, featureDim]);
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)       
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
 

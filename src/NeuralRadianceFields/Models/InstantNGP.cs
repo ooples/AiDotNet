@@ -702,16 +702,16 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         // Prepare hash tables array and resolutions for Engine operation
         var hashTablesArray = new Tensor<T>[_numLevels];
         var resolutions = new int[_numLevels];
-        
+
         for (int level = 0; level < _numLevels; level++)
         {
             hashTablesArray[level] = _hashTables[level];
             resolutions[level] = GetLevelResolution(level);
         }
-        
+
         // Normalize positions to [0, 1] range before encoding
         var normalizedPositions = NormalizePositionsToUnit(positions);
-        
+
         // Use vectorized Engine implementation for CPU/GPU acceleration
         return Engine.MultiresolutionHashEncoding(normalizedPositions, hashTablesArray, resolutions, _featuresPerLevel);
     }
@@ -724,20 +724,20 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         int numPoints = positions.Shape[0];
         var normalized = new T[numPoints * 3];
         var posData = positions.Data;
-        
+
         for (int i = 0; i < numPoints; i++)
         {
             double px = NumOps.ToDouble(posData[i * 3]);
             double py = NumOps.ToDouble(posData[i * 3 + 1]);
             double pz = NumOps.ToDouble(posData[i * 3 + 2]);
-            
+
             NormalizePosition(px, py, pz, out double nx, out double ny, out double nz);
-            
+
             normalized[i * 3] = NumOps.FromDouble(nx);
             normalized[i * 3 + 1] = NumOps.FromDouble(ny);
             normalized[i * 3 + 2] = NumOps.FromDouble(nz);
         }
-        
+
         return new Tensor<T>(normalized, [numPoints, 3]);
     }
 
@@ -1137,8 +1137,8 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
             decay = 1.0;
         }
 
-        int batchSize = Math.Min(totalCells, Math.Max(4096, totalCells / 16));  
-        var unitDirection = new[] { NumOps.Zero, NumOps.Zero, NumOps.One };     
+        int batchSize = Math.Min(totalCells, Math.Max(4096, totalCells / 16));
+        var unitDirection = new[] { NumOps.Zero, NumOps.Zero, NumOps.One };
         int samplesPerCell = Math.Max(1, _occupancySamplesPerCell);
         double jitter = _occupancyJitter;
         if (jitter < 0.0)
@@ -1669,7 +1669,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         return new Tensor<T>(new T[numPoints * 6], [numPoints, 6]);
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)       
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         var prediction = ForwardWithMemory(input);
 

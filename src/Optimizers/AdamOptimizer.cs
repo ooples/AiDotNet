@@ -117,9 +117,17 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <para><b>For Beginners:</b> This is the main learning process. It repeatedly tries to improve
     /// the model's parameters, using the Adam algorithm to decide how to change them.
     /// </para>
+    /// <para><b>DataLoader Integration:</b>
+    /// This optimizer now uses the DataLoader batching infrastructure which supports:
+    /// - Custom samplers (weighted, stratified, curriculum, importance, active learning)
+    /// - Reproducible shuffling via RandomSeed
+    /// - Option to drop incomplete final batches
+    /// Set these options via GradientBasedOptimizerOptions.DataSampler, ShuffleData, DropLastBatch, and RandomSeed.
+    /// </para>
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
+        // Initialize with random solution
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var parameters = currentSolution.GetParameters();
@@ -127,31 +135,50 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         _v = new Vector<T>(parameters.Length);
         _t = 0;
 
+        // Initialize parameters
         InitializeAdaptiveParameters();
 
         var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
-            _t++;
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            var newSolution = UpdateSolution(currentSolution, gradient);
+            // Notify sampler of new epoch (for curriculum/self-paced learning)
+            NotifyEpochStart(epoch);
 
-            var currentStepData = EvaluateSolution(newSolution, inputData);
+            // Create batcher for the current epoch using DataLoader infrastructure
+            var batcher = CreateBatcher(inputData, _options.BatchSize);
+
+            foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+            {
+                _t++;
+                // Calculate gradient on the batch
+                var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+
+                // Update solution using Adam algorithm
+                var newSolution = UpdateSolution(currentSolution, gradient);
+
+                currentSolution = newSolution;
+            }
+
+            // Evaluate after processing all batches in the epoch
+            var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            // Check early stopping criteria
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
-                break;
+                return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            // Check convergence
+            if (NumOps.LessThan(
+                NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
+                NumOps.FromDouble(_options.Tolerance)))
             {
-                break;
+                return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            currentSolution = newSolution;
             previousStepData = currentStepData;
         }
 

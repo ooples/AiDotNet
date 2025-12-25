@@ -1,5 +1,5 @@
-using AiDotNet.ProgramSynthesis.Enums;
 using System.Threading;
+using AiDotNet.ProgramSynthesis.Enums;
 
 namespace AiDotNet.ProgramSynthesis.Interfaces;
 

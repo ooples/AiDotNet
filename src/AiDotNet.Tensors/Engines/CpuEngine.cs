@@ -10425,7 +10425,7 @@ public class CpuEngine : IEngine
         return result;
     }
 
-/// <inheritdoc/>
+    /// <inheritdoc/>
     public Tensor<T> Gather<T>(Tensor<T> input, Tensor<int> indices, int axis)
     {
         if (axis < 0) axis = input.Shape.Length + axis;
