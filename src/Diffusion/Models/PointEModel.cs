@@ -454,26 +454,49 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
         var imgShape = imageCondition.Shape;
 
         var batch = textShape[0];
-        var seqLen = Math.Max(textShape[1], imgShape[1]);
-        var totalDim = textShape[2] + imgShape[2];
+        var textSeqLen = textShape[1];
+        var textDim = textShape[2];
+        var imgSeqLen = imgShape[1];
+        var imgDim = imgShape[2];
+        var seqLen = Math.Max(textSeqLen, imgSeqLen);
+        var totalDim = textDim + imgDim;
 
         var result = new Tensor<T>(new[] { batch, seqLen, totalDim });
         var resultSpan = result.AsWritableSpan();
         var textSpan = textCondition.AsSpan();
         var imgSpan = imageCondition.AsSpan();
 
-        // Simple concatenation (in practice would use cross-attention)
-        var textDim = textShape[2];
-        for (int i = 0; i < resultSpan.Length; i++)
+        // Correctly map 3D indices for concatenation along feature dimension
+        for (int b = 0; b < batch; b++)
         {
-            var pos = i % totalDim;
-            if (pos < textDim && i < textSpan.Length)
+            for (int s = 0; s < seqLen; s++)
             {
-                resultSpan[i] = textSpan[i];
-            }
-            else if (pos >= textDim && i - textDim < imgSpan.Length)
-            {
-                resultSpan[i] = imgSpan[i - textDim];
+                for (int d = 0; d < totalDim; d++)
+                {
+                    int resultIdx = b * seqLen * totalDim + s * totalDim + d;
+
+                    if (d < textDim)
+                    {
+                        // From text tensor (if within its sequence length)
+                        if (s < textSeqLen)
+                        {
+                            int textIdx = b * textSeqLen * textDim + s * textDim + d;
+                            resultSpan[resultIdx] = textSpan[textIdx];
+                        }
+                        // else: zero-padded for sequence dimension
+                    }
+                    else
+                    {
+                        // From image tensor (if within its sequence length)
+                        int imgD = d - textDim;
+                        if (s < imgSeqLen)
+                        {
+                            int imgIdx = b * imgSeqLen * imgDim + s * imgDim + imgD;
+                            resultSpan[resultIdx] = imgSpan[imgIdx];
+                        }
+                        // else: zero-padded for sequence dimension
+                    }
+                }
             }
         }
 
@@ -579,10 +602,20 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        // Create a clone of the predictor to preserve trained weights
+        var clonedPredictor = new DiTNoisePredictor<T>(
+            inputChannels: POINTE_LATENT_CHANNELS,
+            hiddenSize: 512,
+            numLayers: 12,
+            numHeads: 8,
+            patchSize: 1,
+            contextDim: 1024);
+        clonedPredictor.SetParameters(_pointCloudPredictor.GetParameters());
+
         return new PointEModel<T>(
             options: null,
             scheduler: null,
-            pointCloudPredictor: null,
+            pointCloudPredictor: clonedPredictor,
             imageGenerator: _imageGenerator,
             conditioner: _conditioner,
             defaultPointCount: DefaultPointCount,

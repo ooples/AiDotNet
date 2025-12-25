@@ -359,14 +359,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
         // or image input: [batch, channels, height, width]
         bool isVideo = video.Shape.Length == 5;
 
-        if (isVideo)
-        {
-            return EncodeVideo(video);
-        }
-        else
-        {
-            return EncodeFrame(video);
-        }
+        return isVideo ? EncodeVideo(video) : EncodeFrame(video);
     }
 
     /// <summary>
@@ -461,14 +454,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
         // or image latent: [batch, latentChannels, height, width]
         bool isVideo = latent.Shape.Length == 5;
 
-        if (isVideo)
-        {
-            return DecodeVideo(latent);
-        }
-        else
-        {
-            return DecodeFrame(latent);
-        }
+        return isVideo ? DecodeVideo(latent) : DecodeFrame(latent);
     }
 
     /// <summary>
