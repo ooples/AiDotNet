@@ -55,6 +55,12 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
     /// </summary>
     public double OobScore_ { get; private set; }
 
+    /// <summary>
+    /// Out-of-bag sample indices for each tree.
+    /// Used for proper OOB score calculation.
+    /// </summary>
+    private readonly List<HashSet<int>> _oobIndicesPerTree = new();
+
     /// <inheritdoc/>
     public int MaxDepth => Options.MaxDepth ?? CalculateMaxDepth();
 
@@ -100,8 +106,9 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
             ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
             : RandomHelper.CreateSeededRandom(42);
 
-        // Clear existing estimators
+        // Clear existing estimators and OOB indices
         Estimators.Clear();
+        _oobIndicesPerTree.Clear();
 
         // Calculate max features to consider at each split
         int maxFeatures = CalculateMaxFeatures();
@@ -134,6 +141,9 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
             tree.Train(xBootstrap, yBootstrap);
 
             Estimators.Add(tree);
+
+            // Store OOB indices for this tree (for proper OOB score calculation)
+            _oobIndicesPerTree.Add(new HashSet<int>(oobIndices));
         }
 
         // Aggregate feature importances
@@ -220,18 +230,58 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
     /// </summary>
     private void CalculateOobScore(Matrix<T> x, Vector<T> y)
     {
-        // This is a simplified OOB calculation
-        // A full implementation would track which samples were OOB for each tree
-        var predictions = Predict(x);
+        // For each sample, aggregate predictions only from trees where it was OOB
+        int nSamples = x.Rows;
         int correct = 0;
-        for (int i = 0; i < y.Length; i++)
+        int oobSampleCount = 0;
+
+        for (int sampleIdx = 0; sampleIdx < nSamples; sampleIdx++)
         {
-            if (NumOps.Compare(predictions[i], y[i]) == 0)
+            // Collect predictions from trees where this sample was OOB
+            var voteCounts = new Dictionary<double, int>();
+            int treesVoted = 0;
+
+            for (int treeIdx = 0; treeIdx < Estimators.Count; treeIdx++)
             {
-                correct++;
+                // Check if this sample was OOB for this tree
+                if (_oobIndicesPerTree[treeIdx].Contains(sampleIdx))
+                {
+                    // Get prediction for this single sample
+                    var sample = new Matrix<T>(1, x.Columns);
+                    for (int j = 0; j < x.Columns; j++)
+                    {
+                        sample[0, j] = x[sampleIdx, j];
+                    }
+
+                    var pred = Estimators[treeIdx].Predict(sample);
+                    double predValue = NumOps.ToDouble(pred[0]);
+
+                    if (!voteCounts.TryGetValue(predValue, out int count))
+                    {
+                        count = 0;
+                    }
+                    voteCounts[predValue] = count + 1;
+                    treesVoted++;
+                }
+            }
+
+            // Only count samples that were OOB for at least one tree
+            if (treesVoted > 0)
+            {
+                oobSampleCount++;
+
+                // Find majority vote
+                double majorityClass = voteCounts.OrderByDescending(kv => kv.Value).First().Key;
+                double actualClass = NumOps.ToDouble(y[sampleIdx]);
+
+                if (Math.Abs(majorityClass - actualClass) < 1e-10)
+                {
+                    correct++;
+                }
             }
         }
-        OobScore_ = (double)correct / y.Length;
+
+        OobScore_ = oobSampleCount > 0 ? (double)correct / oobSampleCount : 0.0;
     }
 
     /// <summary>
