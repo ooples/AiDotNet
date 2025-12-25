@@ -86,6 +86,12 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// by calculating gradients, determining search directions, and updating the solution. The process continues until it reaches
     /// the maximum number of iterations or meets the stopping criteria.
     /// </para>
+    /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for epoch management.
+    /// Conjugate Gradient typically operates on the full dataset because the conjugate direction calculation
+    /// (Fletcher-Reeves formula) requires consistent gradients between iterations. The method notifies the
+    /// sampler of epoch starts using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>
+    /// for compatibility with curriculum learning and sampling strategies.
+    /// </para>
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
@@ -98,9 +104,11 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
         _previousDirection = null;
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
+            NotifyEpochStart(epoch);
             _iteration++;
+
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
             var direction = CalculateDirection(gradient);
             var newSolution = UpdateSolution(currentSolution, direction, gradient, inputData);
@@ -110,7 +118,7 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
 
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }

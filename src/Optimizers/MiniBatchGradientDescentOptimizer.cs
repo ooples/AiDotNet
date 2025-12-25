@@ -79,15 +79,22 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method implements the main optimization loop. It iterates through the data in mini-batches, 
-    /// calculating gradients and updating the model parameters for each batch. The process continues for 
+    /// This method implements the main optimization loop. It iterates through the data in mini-batches,
+    /// calculating gradients and updating the model parameters for each batch. The process continues for
     /// a specified number of epochs or until a stopping criterion is met.
     /// </para>
     /// <para><b>For Beginners:</b>
-    /// This is the actual journey to find the valley's bottom. You're taking steps (processing batches of data), 
-    /// checking your position (evaluating the model), and adjusting your direction (updating the model parameters). 
-    /// You do this repeatedly (for each epoch) until you're satisfied with your position or you've taken the 
+    /// This is the actual journey to find the valley's bottom. You're taking steps (processing batches of data),
+    /// checking your position (evaluating the model), and adjusting your direction (updating the model parameters).
+    /// You do this repeatedly (for each epoch) until you're satisfied with your position or you've taken the
     /// maximum number of steps you allowed yourself.
+    /// </para>
+    /// <para><b>DataLoader Integration:</b>
+    /// This optimizer now uses the DataLoader batching infrastructure which supports:
+    /// - Custom samplers (weighted, stratified, curriculum, importance, active learning)
+    /// - Reproducible shuffling via RandomSeed
+    /// - Option to drop incomplete final batches
+    /// Set these options via GradientBasedOptimizerOptions.DataSampler, ShuffleData, DropLastBatch, and RandomSeed.
     /// </para>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
@@ -99,24 +106,22 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
 
-        // Get dimensions
-        var batchSize = InputHelper<T, TInput>.GetBatchSize(inputData.XTrain);
-
         // Initialize parameters
         InitializeAdaptiveParameters();
 
         for (int epoch = 0; epoch < Options.MaxIterations; epoch++)
         {
-            // Shuffle indices for stochastic gradient descent
-            var shuffledIndices = Enumerable.Range(0, batchSize).OrderBy(x => Random.Next()).ToArray();
+            // Notify sampler of new epoch (for curriculum/self-paced learning)
+            NotifyEpochStart(epoch);
 
-            for (int i = 0; i < batchSize; i += _options.BatchSize)
+            // Create batcher for the current epoch using DataLoader infrastructure
+            // This handles shuffling, sampling strategies, and batch creation
+            var batcher = CreateBatcher(inputData, _options.BatchSize);
+
+            foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
-                // Get batch indices
-                var batchIndices = shuffledIndices.Skip(i).Take(_options.BatchSize).ToArray();
-
-                // Process batch and calculate gradient using our existing methods
-                var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain, batchIndices);
+                // Process batch and calculate gradient using the batch data directly
+                var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
 
                 // Update solution
                 var newSolution = UpdateSolution(currentSolution, gradient);

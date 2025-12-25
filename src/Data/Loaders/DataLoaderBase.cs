@@ -30,7 +30,17 @@ public abstract class DataLoaderBase<T> : IDataLoader<T>
     private int _currentIndex;
     private int _currentBatchIndex;
     private bool _isLoaded;
+    private int _batchSize;
     private readonly object _lock = new();
+
+    /// <summary>
+    /// Initializes a new instance of the DataLoaderBase class.
+    /// </summary>
+    /// <param name="batchSize">The batch size for iteration. Default is 32.</param>
+    protected DataLoaderBase(int batchSize = 32)
+    {
+        _batchSize = batchSize;
+    }
 
     /// <inheritdoc/>
     public abstract string Name { get; }
@@ -82,7 +92,11 @@ public abstract class DataLoaderBase<T> : IDataLoader<T>
     /// <summary>
     /// Gets or sets the batch size for iteration.
     /// </summary>
-    public virtual int BatchSize { get; set; } = 32;
+    public virtual int BatchSize
+    {
+        get => _batchSize;
+        set => _batchSize = value;
+    }
 
     /// <inheritdoc/>
     public int BatchCount => TotalCount > 0 ? (int)Math.Ceiling((double)TotalCount / BatchSize) : 0;

@@ -20,6 +20,18 @@ namespace AiDotNet.Models.Options;
 public class DFPOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Gets or sets the batch size for gradient computation.
+    /// </summary>
+    /// <value>A positive integer for mini-batch size, or -1 for full batch (default).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The batch size controls how many examples are used to calculate gradients.
+    /// DFP traditionally uses full-batch gradients (batch size -1) because it builds an approximation of
+    /// the inverse Hessian matrix that requires consistent gradients between iterations.
+    /// Using mini-batches would introduce noise that disrupts the Hessian approximation.</para>
+    /// </remarks>
+    public int BatchSize { get; set; } = -1;
+
+    /// <summary>
     /// Gets or sets the initial learning rate for the optimization process.
     /// </summary>
     /// <value>The initial learning rate, defaulting to 1.0.</value>

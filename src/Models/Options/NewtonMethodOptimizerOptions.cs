@@ -41,6 +41,18 @@ namespace AiDotNet.Models.Options;
 public class NewtonMethodOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Gets or sets the batch size for gradient computation.
+    /// </summary>
+    /// <value>A positive integer, defaulting to -1 (full batch).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The batch size controls how many examples are used to calculate gradients.
+    /// Newton's Method uses full-batch gradients (batch size -1) because it requires computing the Hessian
+    /// matrix, which depends on consistent gradient and second derivative information from the entire dataset.
+    /// Using mini-batches would introduce noise that makes the Hessian approximation unreliable.</para>
+    /// </remarks>
+    public int BatchSize { get; set; } = -1;
+
+    /// <summary>
     /// Gets or sets the initial learning rate used by the Newton's Method optimizer.
     /// </summary>
     /// <value>The initial learning rate, defaulting to 0.1.</value>
