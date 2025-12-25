@@ -212,9 +212,231 @@ public override void Deserialize(BinaryReader reader)
 
 ## Model Pattern
 
-All models MUST implement `IFullModel<T, TInput, TOutput>` and follow these patterns:
+There are two main model patterns in AiDotNet:
+1. **Neural Network Models** - Extend `NeuralNetworkBase<T>` (preferred for layer-based models)
+2. **Standalone Models** - Implement `IFullModel<T, TInput, TOutput>` directly
 
-### Class Declaration
+### Neural Network Model Pattern (Primary - FeedForwardNeuralNetwork as Golden Standard)
+
+All neural network models MUST extend `NeuralNetworkBase<T>`:
+
+```csharp
+namespace AiDotNet.NeuralNetworks;
+
+/// <summary>
+/// Brief description of the neural network.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
+/// <remarks>
+/// <para>
+/// Technical explanation of the network architecture.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Simple analogy explaining what this network does.
+/// </para>
+/// </remarks>
+public class ExampleNeuralNetwork<T> : NeuralNetworkBase<T>
+{
+    /// <summary>
+    /// The loss function used to calculate the error between predicted and expected outputs.
+    /// </summary>
+    private ILossFunction<T> _lossFunction;
+
+    /// <summary>
+    /// The optimization algorithm used to update the network's parameters during training.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+}
+```
+
+### Constructor Pattern (Neural Network)
+
+```csharp
+/// <summary>
+/// Initializes a new instance with the specified architecture.
+/// </summary>
+/// <param name="architecture">The architecture defining the structure of the neural network.</param>
+/// <param name="optimizer">The optimization algorithm. If null, Adam optimizer is used.</param>
+/// <param name="lossFunction">The loss function. If null, selected based on task type.</param>
+/// <param name="maxGradNorm">Maximum gradient norm for gradient clipping.</param>
+public ExampleNeuralNetwork(
+    NeuralNetworkArchitecture<T> architecture,
+    IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+    ILossFunction<T>? lossFunction = null,
+    double maxGradNorm = 1.0)
+    : base(architecture,
+           lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType),
+           maxGradNorm)
+{
+    // Apply defaults for optional parameters
+    _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+
+    // Initialize layers from architecture
+    InitializeLayers();
+}
+```
+
+### Required Override Methods (Neural Network)
+
+```csharp
+/// <summary>
+/// Gets whether this network supports training.
+/// </summary>
+public override bool SupportsTraining => true;
+
+/// <summary>
+/// Initializes the layers of the neural network based on the architecture.
+/// </summary>
+protected override void InitializeLayers()
+{
+    if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+    {
+        // Use user-provided layers
+        Layers.AddRange(Architecture.Layers);
+        ValidateCustomLayers(Layers);
+    }
+    else
+    {
+        // Use default layer configuration
+        Layers.AddRange(LayerHelper<T>.CreateDefaultFeedForwardLayers(Architecture));
+    }
+}
+
+/// <summary>
+/// Makes a prediction using the neural network.
+/// </summary>
+public override Tensor<T> Predict(Tensor<T> input)
+{
+    IsTrainingMode = false;
+    TensorValidator.ValidateShape(input, Architecture.GetInputShape(), nameof(ExampleNeuralNetwork<T>), "prediction");
+
+    var predictions = Forward(input);
+
+    IsTrainingMode = true;
+    return predictions;
+}
+
+/// <summary>
+/// Performs a forward pass through the network.
+/// </summary>
+public Tensor<T> Forward(Tensor<T> input)
+{
+    TensorValidator.ValidateShape(input, Architecture.GetInputShape(), nameof(ExampleNeuralNetwork<T>), "forward pass");
+
+    Tensor<T> output = input;
+    foreach (var layer in Layers)
+    {
+        output = layer.Forward(output);
+    }
+    return output;
+}
+
+/// <summary>
+/// Performs a backward pass through the network.
+/// </summary>
+public Tensor<T> Backward(Tensor<T> outputGradient)
+{
+    Tensor<T> gradient = outputGradient;
+    for (int i = Layers.Count - 1; i >= 0; i--)
+    {
+        gradient = Layers[i].Backward(gradient);
+    }
+    return gradient;
+}
+
+/// <summary>
+/// Trains the neural network using the provided input and expected output.
+/// </summary>
+public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+{
+    IsTrainingMode = true;
+
+    // Forward pass
+    var prediction = Forward(input);
+
+    // Calculate loss (including auxiliary losses from layers)
+    var primaryLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+    T auxiliaryLoss = NumOps.Zero;
+    foreach (var auxLayer in Layers.OfType<IAuxiliaryLossLayer<T>>().Where(l => l.UseAuxiliaryLoss))
+    {
+        var weightedAuxLoss = NumOps.Multiply(auxLayer.ComputeAuxiliaryLoss(), auxLayer.AuxiliaryLossWeight);
+        auxiliaryLoss = NumOps.Add(auxiliaryLoss, weightedAuxLoss);
+    }
+    LastLoss = NumOps.Add(primaryLoss, auxiliaryLoss);
+
+    // Calculate gradient and backpropagate
+    var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
+    Backward(Tensor<T>.FromVector(outputGradient));
+
+    // Update parameters
+    _optimizer.UpdateParameters(Layers);
+
+    IsTrainingMode = false;
+}
+
+/// <summary>
+/// Retrieves metadata about the neural network model.
+/// </summary>
+public override ModelMetadata<T> GetModelMetadata()
+{
+    return new ModelMetadata<T>
+    {
+        ModelType = ModelType.FeedForwardNetwork,
+        AdditionalInfo = new Dictionary<string, object>
+        {
+            { "InputShape", Architecture.GetInputShape() },
+            { "OutputShape", Architecture.GetOutputShape() },
+            { "LayerCount", Layers.Count },
+            { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() },
+            { "TaskType", Architecture.TaskType.ToString() },
+            { "ParameterCount", GetParameterCount() }
+        },
+        ModelData = this.Serialize()
+    };
+}
+
+/// <summary>
+/// Creates a new instance with the same configuration.
+/// </summary>
+protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+{
+    return new ExampleNeuralNetwork<T>(
+        Architecture,
+        _optimizer,
+        _lossFunction,
+        Convert.ToDouble(MaxGradNorm));
+}
+```
+
+### Serialization (Neural Network)
+
+```csharp
+/// <summary>
+/// Serializes network-specific data to a binary writer.
+/// </summary>
+protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+{
+    writer.Write(_optimizer.GetType().FullName ?? "AdamOptimizer");
+    writer.Write(_lossFunction.GetType().FullName ?? "MeanSquaredErrorLoss");
+}
+
+/// <summary>
+/// Deserializes network-specific data from a binary reader.
+/// </summary>
+protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+{
+    string optimizerType = reader.ReadString();
+    string lossFunctionType = reader.ReadString();
+    // Reconstruct optimizer and loss function from types if needed
+}
+```
+
+---
+
+### Standalone Model Pattern (For Non-Layer-Based Models)
+
+For models that don't use the layer architecture (like diffusion base classes):
 
 ```csharp
 namespace AiDotNet.Diffusion;
@@ -231,7 +453,7 @@ public abstract class ExampleModelBase<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 }
 ```
 
-### IFullModel Interface Requirements
+### IFullModel Interface Requirements (Standalone)
 
 ```csharp
 // IModel<TInput, TOutput, ModelMetadata<T>>
@@ -417,14 +639,36 @@ SomeWeight = NumOps.FromDouble(0.01);
 - [ ] Overrides `Deserialize(BinaryReader)` if additional state
 - [ ] Has comprehensive XML documentation with "For Beginners" sections
 
-### For Models (IFullModel<T, TInput, TOutput>)
+### For Neural Network Models (NeuralNetworkBase<T>)
+
+- [ ] Extends `NeuralNetworkBase<T>`
+- [ ] Has `private ILossFunction<T> _lossFunction`
+- [ ] Has `private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer`
+- [ ] Constructor accepts `NeuralNetworkArchitecture<T>` as first parameter
+- [ ] Constructor has nullable `optimizer` and `lossFunction` parameters with defaults
+- [ ] Calls `InitializeLayers()` at end of constructor
+- [ ] Overrides `SupportsTraining` property
+- [ ] Overrides `InitializeLayers()` method
+- [ ] Overrides `Predict(Tensor<T>)` method
+- [ ] Implements `Forward(Tensor<T>)` method
+- [ ] Implements `Backward(Tensor<T>)` method
+- [ ] Overrides `Train(Tensor<T>, Tensor<T>)` method
+- [ ] Overrides `GetModelMetadata()` method
+- [ ] Overrides `CreateNewInstance()` method
+- [ ] Overrides `SerializeNetworkSpecificData(BinaryWriter)` method
+- [ ] Overrides `DeserializeNetworkSpecificData(BinaryReader)` method
+- [ ] Uses `NumOps` for all numeric operations
+- [ ] Uses `RandomHelper.ThreadSafeRandom` for random numbers (via base class)
+- [ ] Has comprehensive XML documentation with "For Beginners" sections
+
+### For Standalone Models (IFullModel<T, TInput, TOutput>)
 
 - [ ] Implements `IFullModel<T, Tensor<T>, Tensor<T>>`
 - [ ] Has `protected static readonly INumericOperations<T> NumOps`
 - [ ] Has `protected Random RandomGenerator`
 - [ ] Has `protected readonly ILossFunction<T> LossFunction`
 - [ ] Implements `DefaultLossFunction` property
-- [ ] Implements all interface methods (see Model Pattern section)
+- [ ] Implements all interface methods (see Standalone Model Pattern section)
 - [ ] Uses `NumOps` for all numeric operations
 - [ ] Uses `RandomHelper` for random number generation
 - [ ] Has comprehensive XML documentation with "For Beginners" sections
@@ -440,18 +684,43 @@ Located at: `src/NeuralNetworks/Layers/ConvolutionalLayer.cs`
 Key patterns demonstrated:
 - Constructor with nullable activation parameter
 - Static `Configure` factory methods
-- Proper weight initialization
-- Forward/Backward pass caching
-- Serialization/Deserialization
-- JIT compilation support
+- Proper weight initialization using `RandomHelper`
+- Forward/Backward pass caching (`_lastInput`, `_lastOutput`)
+- Gradient storage (`_kernelsGradient`, `_biasesGradient`)
+- Serialization/Deserialization with `NumOps.ToDouble`/`FromDouble`
+- JIT compilation support via `ExportComputationGraph`
+
+### Reference Layer: TimeEmbeddingLayer
+
+Located at: `src/NeuralNetworks/Layers/TimeEmbeddingLayer.cs`
+
+Key patterns demonstrated:
+- Diffusion-specific layer for timestep conditioning
+- Two-layer MLP projection with SiLU activation
+- Sinusoidal embedding computation
+- Uses `RandomHelper.CreateSeededRandom()` for reproducibility
+- Complete forward/backward implementation
+
+### Reference Neural Network Model: FeedForwardNeuralNetwork
+
+Located at: `src/NeuralNetworks/FeedForwardNeuralNetwork.cs`
+
+Key patterns demonstrated:
+- Extends `NeuralNetworkBase<T>` (THE GOLDEN STANDARD)
+- Constructor with nullable optimizer and loss function
+- Proper layer initialization from architecture
+- Forward/Backward pass implementation
+- Training loop with auxiliary loss support
+- Model metadata generation
+- Network-specific serialization
 
 ### Reference Base Class: NoisePredictorBase
 
 Located at: `src/Diffusion/NoisePredictors/NoisePredictorBase.cs`
 
 Key patterns demonstrated:
-- IFullModel implementation
-- INoisePredictor interface
+- IFullModel implementation (standalone pattern)
+- INoisePredictor interface for diffusion models
 - Timestep embedding computation
 - Numerical gradient computation
 - Stream-based serialization
