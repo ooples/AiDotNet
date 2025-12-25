@@ -606,14 +606,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> ApplyTemporalProcessing(ILayer<T> temporalLayer, Tensor<T> video)
     {
-        // Simplified temporal processing - rearrange and process
-        int batch = video.Shape[0];
-        int channels = video.Shape[1];
-        int frames = video.Shape[2];
-        int height = video.Shape[3];
-        int width = video.Shape[4];
-
-        // For each spatial position, apply temporal processing
+        // Apply temporal layer to the video tensor
         var result = new Tensor<T>(video.Shape);
         var resultSpan = result.AsWritableSpan();
         var videoSpan = video.AsSpan();
