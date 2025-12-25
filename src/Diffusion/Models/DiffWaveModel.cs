@@ -723,22 +723,64 @@ public class DiffWaveResidualBlock<T>
 
     private Tensor<T> ApplyGatedActivation(Tensor<T> x)
     {
+        // Gated activation: tanh(x[:halfChannels]) * sigmoid(x[halfChannels:])
+        // Input shape: [batch, channels, length] for 1D waveform, or [batch, channels] for embedding
+        var inputShape = x.Shape;
         var span = x.AsSpan();
-        var halfLen = span.Length / 2;
-        var resultData = new T[halfLen];
 
-        for (int i = 0; i < halfLen; i++)
+        // Compute output shape: same as input but with half the channel dimension
+        int[] outputShape;
+        int batchSize = 1;
+        int halfChannels;
+        int elementsPerSample;
+
+        if (inputShape.Length == 3)
         {
-            var t = NumOps.ToDouble(span[i]);
-            var s = NumOps.ToDouble(span[i + halfLen]);
-
-            // tanh(t) * sigmoid(s)
-            var tanhVal = Math.Tanh(t);
-            var sigmoidVal = 1.0 / (1.0 + Math.Exp(-s));
-            resultData[i] = NumOps.FromDouble(tanhVal * sigmoidVal);
+            // Shape: [batch, channels, length]
+            batchSize = inputShape[0];
+            halfChannels = inputShape[1] / 2;
+            int length = inputShape[2];
+            outputShape = new[] { batchSize, halfChannels, length };
+            elementsPerSample = inputShape[1] * length;
+        }
+        else if (inputShape.Length == 2)
+        {
+            // Shape: [batch, features]
+            batchSize = inputShape[0];
+            halfChannels = inputShape[1] / 2;
+            outputShape = new[] { batchSize, halfChannels };
+            elementsPerSample = inputShape[1];
+        }
+        else
+        {
+            // Fallback: treat as flat array
+            halfChannels = span.Length / 2;
+            outputShape = new[] { halfChannels };
+            elementsPerSample = span.Length;
         }
 
-        return new Tensor<T>(new[] { 1, halfLen }, new Vector<T>(resultData));
+        var result = new Tensor<T>(outputShape);
+        var resultSpan = result.AsWritableSpan();
+        int halfElementsPerSample = elementsPerSample / 2;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int inputOffset = b * elementsPerSample;
+            int outputOffset = b * halfElementsPerSample;
+
+            for (int i = 0; i < halfElementsPerSample; i++)
+            {
+                var t = NumOps.ToDouble(span[inputOffset + i]);
+                var s = NumOps.ToDouble(span[inputOffset + halfElementsPerSample + i]);
+
+                // tanh(t) * sigmoid(s)
+                var tanhVal = Math.Tanh(t);
+                var sigmoidVal = 1.0 / (1.0 + Math.Exp(-s));
+                resultSpan[outputOffset + i] = NumOps.FromDouble(tanhVal * sigmoidVal);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
