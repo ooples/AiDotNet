@@ -448,12 +448,24 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <summary>
     /// Applies cross-attention between the sample and conditioning.
     /// </summary>
+    /// <param name="crossAttn">The cross-attention layer.</param>
+    /// <param name="x">Spatial features [batch, channels, height, width].</param>
+    /// <param name="conditioning">Text embeddings [batch, seq_len, context_dim].</param>
+    /// <returns>Attended spatial features with same shape as x.</returns>
     private Tensor<T> ApplyCrossAttention(ILayer<T>? crossAttn, Tensor<T> x, Tensor<T> conditioning)
     {
         if (crossAttn == null) return x;
 
-        // Cross-attention layer expects query from x, key/value from conditioning
-        // For simplicity, we pass through the attention layer
+        // CrossAttentionLayer handles:
+        // - Query: spatial features from x (reshaped internally)
+        // - Key/Value: text embeddings from conditioning
+        // - Output: attended features with same shape as x
+        if (crossAttn is LayerBase<T> layerBase)
+        {
+            return layerBase.Forward(x, conditioning);
+        }
+
+        // Fallback for legacy layers
         return crossAttn.Forward(x);
     }
 
@@ -526,12 +538,13 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateCrossAttentionBlock(int channels)
     {
-        // Cross-attention layer for conditioning
-        return new MultiHeadAttentionLayer<T>(
-            sequenceLength: 64 * 64,
-            embeddingDimension: channels,
+        // Cross-attention layer for conditioning with proper Q/K/V projections
+        // Query dimension = spatial channels, Context dimension = text embedding dimension
+        return new CrossAttentionLayer<T>(
+            queryDim: channels,
+            contextDim: _contextDim,
             headCount: _numHeads,
-            activationFunction: new IdentityActivation<T>());
+            sequenceLength: 64 * 64);
     }
 
     private ILayer<T> CreateDownsample(int channels)
