@@ -704,12 +704,18 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
     /// <summary>
     /// Reconstructs mesh from multiple views.
     /// </summary>
+    /// <remarks>
+    /// Current implementation generates a sphere-based point cloud as a placeholder.
+    /// Full multi-view reconstruction would require stereo matching / depth estimation
+    /// algorithms (e.g., COLMAP, MVSNet) which are beyond the scope of this diffusion model.
+    /// In production, pair with a dedicated 3D reconstruction pipeline.
+    /// </remarks>
     private Mesh3D<T> ReconstructFromMultiView(
         Tensor<T>[] views,
         (double azimuth, double elevation, double radius)[] cameras)
     {
-        // Extract depth/features from each view and triangulate
-        // This is a simplified implementation
+        // Generate sphere-based point cloud - production use cases should integrate
+        // with dedicated multi-view stereo (MVS) reconstruction pipelines
         var numPoints = DefaultPointCount;
         var points = new Tensor<T>(new[] { 1, numPoints, 3 });
         var pointSpan = points.AsWritableSpan();

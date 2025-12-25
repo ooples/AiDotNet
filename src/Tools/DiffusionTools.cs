@@ -377,12 +377,53 @@ public class ImageTo3DTool<T> : ToolBase
             return "Error: No 3D diffusion model configured.";
         }
 
-        // In a real implementation, we'd load the image and call _model.ImageTo3D()
-        return $"3D reconstruction configured.\n" +
-               $"Input: {(string.IsNullOrEmpty(imagePath) ? "image_data" : imagePath)}\n" +
-               $"Views: {numViews}, Steps: {numSteps}, Guidance: {guidanceScale:F1}\n" +
-               $"Supported features: PointCloud={_model.SupportsPointCloud}, " +
-               $"Mesh={_model.SupportsMesh}, Texture={_model.SupportsTexture}";
+        // Parse or load the image tensor
+        Tensor<T> inputImage;
+        try
+        {
+            if (json["image_data"] != null)
+            {
+                // Parse image data from JSON array
+                var imageDataArray = json["image_data"]!.ToObject<double[,,]>();
+                if (imageDataArray == null)
+                {
+                    return "Error: 'image_data' must be a 3D array [height, width, channels].";
+                }
+                int height = imageDataArray.GetLength(0);
+                int width = imageDataArray.GetLength(1);
+                int channels = imageDataArray.GetLength(2);
+                inputImage = new Tensor<T>(new[] { 1, channels, height, width });
+                var span = inputImage.AsWritableSpan();
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int h = 0; h < height; h++)
+                    {
+                        for (int w = 0; w < width; w++)
+                        {
+                            var numOps = MathHelper.GetNumericOperations<T>();
+                            span[c * height * width + h * width + w] = numOps.FromDouble(imageDataArray[h, w, c]);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                return $"Error: Loading images from file paths is not yet supported. " +
+                       $"Please provide 'image_data' as a 3D array [height, width, channels].";
+            }
+        }
+        catch (Exception ex)
+        {
+            return $"Error parsing image data: {ex.Message}";
+        }
+
+        // Generate 3D mesh from image
+        var mesh = _model.ImageTo3D(inputImage, numViews, numSteps, guidanceScale);
+
+        return $"Generated 3D model successfully.\n" +
+               $"Vertices: {mesh.Vertices.Shape[0]}, Faces: {mesh.Faces.GetLength(0)}\n" +
+               $"Views used: {numViews}, Steps: {numSteps}, Guidance: {guidanceScale:F1}\n" +
+               $"Has texture: {mesh.TextureImage != null}";
     }
 
     /// <inheritdoc />
@@ -539,9 +580,49 @@ public class AudioTransformTool<T> : ToolBase
             return "Error: This model does not support audio-to-audio transformation.";
         }
 
-        // In a real implementation, we'd load the audio and call AudioToAudio()
-        return $"Audio transformation configured.\n" +
-               $"Input: {(string.IsNullOrEmpty(audioPath) ? "audio_data" : audioPath)}\n" +
+        // Parse or load the audio tensor
+        Tensor<T> inputAudio;
+        try
+        {
+            if (json["audio_data"] != null)
+            {
+                // Parse audio data from JSON array [channels, samples] or [samples]
+                var audioDataArray = json["audio_data"]!.ToObject<double[]>();
+                if (audioDataArray == null)
+                {
+                    return "Error: 'audio_data' must be a 1D or 2D array of audio samples.";
+                }
+                int numSamples = audioDataArray.Length;
+                inputAudio = new Tensor<T>(new[] { 1, numSamples });
+                var span = inputAudio.AsWritableSpan();
+                var numOps = MathHelper.GetNumericOperations<T>();
+                for (int i = 0; i < numSamples; i++)
+                {
+                    span[i] = numOps.FromDouble(audioDataArray[i]);
+                }
+            }
+            else
+            {
+                return $"Error: Loading audio from file paths is not yet supported. " +
+                       $"Please provide 'audio_data' as an array of audio samples.";
+            }
+        }
+        catch (Exception ex)
+        {
+            return $"Error parsing audio data: {ex.Message}";
+        }
+
+        // Compute duration from audio length
+        var audioDuration = (double)inputAudio.Shape[^1] / _model.SampleRate;
+
+        // Transform the audio (pass null for negativePrompt)
+        var result = _model.AudioToAudio(inputAudio, prompt, null, strength, numSteps, guidanceScale);
+
+        var outputSamples = result.Shape[^1];
+        var outputDuration = (double)outputSamples / _model.SampleRate;
+
+        return $"Transformed audio successfully.\n" +
+               $"Input: {audioDuration:F2}s, Output: {outputDuration:F2}s\n" +
                $"Prompt: \"{prompt}\"\n" +
                $"Strength: {strength:F2}, Steps: {numSteps}, Guidance: {guidanceScale:F1}";
     }
