@@ -515,17 +515,17 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         var imageSpan = imageEmbedding.AsSpan();
         var textSpan = textEmbedding.AsSpan();
 
-        // Create combined embedding (simplified - use larger of two shapes)
-        var combinedShape = imageEmbedding.Shape.Length >= textEmbedding.Shape.Length
-            ? imageEmbedding.Shape
-            : textEmbedding.Shape;
+        // Select the tensor with more total elements for the combined shape
+        // This ensures we don't lose information from either embedding
+        int imageSize = imageSpan.Length;
+        int textSize = textSpan.Length;
+        var combinedShape = imageSize >= textSize ? imageEmbedding.Shape : textEmbedding.Shape;
 
         var combined = new Tensor<T>(combinedShape);
         var combinedSpan = combined.AsWritableSpan();
 
-        var minLength = Math.Min(Math.Min(imageSpan.Length, textSpan.Length), combinedSpan.Length);
-
-        for (int i = 0; i < minLength; i++)
+        // Combine elements, weighted by their respective scales
+        for (int i = 0; i < combinedSpan.Length; i++)
         {
             var imgVal = i < imageSpan.Length ? imageSpan[i] : NumOps.Zero;
             var txtVal = i < textSpan.Length ? textSpan[i] : NumOps.Zero;
@@ -570,11 +570,44 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         Tensor<T> imageEmbedding,
         Tensor<T> motionEmbedding)
     {
+        // Combine image embedding with motion embedding
+        // Motion embedding provides temporal dynamics (motion bucket, fps)
+        var combinedEmbedding = CombineImageAndMotion(imageEmbedding, motionEmbedding);
+
         return _videoUNet.PredictNoiseWithImageCondition(
             latents,
             timestep,
-            imageEmbedding,
+            combinedEmbedding,
             textConditioning: null);
+    }
+
+    /// <summary>
+    /// Combines image embedding with motion embedding for temporal conditioning.
+    /// </summary>
+    private Tensor<T> CombineImageAndMotion(Tensor<T> imageEmbedding, Tensor<T> motionEmbedding)
+    {
+        var imageShape = imageEmbedding.Shape;
+        var result = new Tensor<T>(imageShape);
+        var resultSpan = result.AsWritableSpan();
+        var imageSpan = imageEmbedding.AsSpan();
+        var motionSpan = motionEmbedding.AsSpan();
+
+        // Add motion modulation to image embedding
+        // Motion bucket affects how much motion/dynamics is applied
+        int motionLen = motionSpan.Length;
+        for (int i = 0; i < resultSpan.Length; i++)
+        {
+            // Modulate image embedding with motion information
+            int motionIdx = i % motionLen;
+            T motionVal = motionSpan[motionIdx];
+            double motionDouble = NumOps.ToDouble(motionVal);
+
+            // Apply motion as sinusoidal modulation (similar to timestep embedding)
+            double modulation = Math.Sin(i * motionDouble * 0.001) * 0.1;
+            resultSpan[i] = NumOps.Add(imageSpan[i], NumOps.FromDouble(modulation));
+        }
+
+        return result;
     }
 
     /// <summary>
