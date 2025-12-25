@@ -137,7 +137,7 @@ public class PointConvolutionLayer<T> : LayerBase<T>
     {
         _lastInput = input;
         int numPoints = input.Shape[0];
-        
+
         // Use vectorized matrix multiplication: [N, inputChannels] @ [inputChannels, outputChannels] = [N, outputChannels]
         // Reshape input to matrix for matmul
         var inputMatrix = new Matrix<T>(numPoints, _inputChannels);
@@ -148,10 +148,10 @@ public class PointConvolutionLayer<T> : LayerBase<T>
                 inputMatrix[i, j] = input.Data[i * _inputChannels + j];
             }
         }
-        
+
         // Vectorized matrix multiplication via Engine
         var outputMatrix = Engine.MatrixMultiply(inputMatrix, _weights);
-        
+
         // Add biases using broadcasting (vectorized)
         var output = new T[numPoints * _outputChannels];
         for (int n = 0; n < numPoints; n++)
@@ -210,7 +210,7 @@ public class PointConvolutionLayer<T> : LayerBase<T>
                 inputMatrix[i, j] = _lastInput.Data[i * _inputChannels + j];
             }
         }
-        
+
         var gradMatrix = new Matrix<T>(numPoints, _outputChannels);
         for (int i = 0; i < numPoints; i++)
         {
@@ -245,7 +245,7 @@ public class PointConvolutionLayer<T> : LayerBase<T>
         // Compute input gradient: dL/dX = dL/dY * W^T (vectorized)
         var weightsT = Engine.MatrixTranspose(_weights);
         var inputGradMatrix = Engine.MatrixMultiply(gradMatrix, weightsT);
-        
+
         var inputGradient = new T[numPoints * _inputChannels];
         for (int n = 0; n < numPoints; n++)
         {

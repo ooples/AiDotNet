@@ -293,7 +293,7 @@ public class Conv3DLayer<T> : LayerBase<T>
     /// <param name="stride">Stride of the convolution.</param>
     /// <param name="padding">Padding applied to the input.</param>
     /// <returns>An array representing [channels, outputDepth, outputHeight, outputWidth].</returns>
-    private static int[] CalculateOutputShape(int channels, int inputDepth, int inputHeight, int inputWidth, 
+    private static int[] CalculateOutputShape(int channels, int inputDepth, int inputHeight, int inputWidth,
         int kernelSize, int stride, int padding)
     {
         int outputDepth = (inputDepth + 2 * padding - kernelSize) / stride + 1;
@@ -510,7 +510,7 @@ public class Conv3DLayer<T> : LayerBase<T>
         }
         else
         {
-            batchedDelta = delta.Rank == 4 
+            batchedDelta = delta.Rank == 4
                 ? delta.Reshape(1, delta.Shape[0], delta.Shape[1], delta.Shape[2], delta.Shape[3])
                 : delta;
             batchedInput = _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2], _lastInput.Shape[3]);
@@ -574,14 +574,14 @@ public class Conv3DLayer<T> : LayerBase<T>
     {
         int channels = delta.Shape[1];
         var biasGrad = new T[channels];
-        
+
         var sumOverBatchAndSpatial = Engine.ReduceSum(delta, [0, 2, 3, 4], keepDims: false);
-        
+
         for (int c = 0; c < channels; c++)
         {
             biasGrad[c] = sumOverBatchAndSpatial[c];
         }
-        
+
         return new Tensor<T>(biasGrad, [channels]);
     }
 

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using AiDotNet.Interfaces;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -144,11 +144,11 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
         bool useFeatureTransform = true,
         ILossFunction<T>? lossFunction = null)
         : this(new PointNetOptions
-            {
-                NumClasses = numClasses,
-                UseInputTransform = useInputTransform,
-                UseFeatureTransform = useFeatureTransform
-            },
+        {
+            NumClasses = numClasses,
+            UseInputTransform = useInputTransform,
+            UseFeatureTransform = useFeatureTransform
+        },
             lossFunction)
     {
     }
@@ -342,7 +342,7 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
         return new Vector<T>(output.Data);
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)       
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
 

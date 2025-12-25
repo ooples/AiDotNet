@@ -171,7 +171,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// or the improvement falls below the specified tolerance.
     /// </para>
     /// <para><b>For Beginners:</b> This is the main search process where the algorithm looks for the best solution.
-    /// 
+    ///
     /// The process works like this:
     /// 1. Start at a random position on the "hill"
     /// 2. For each iteration:
@@ -182,8 +182,13 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     ///    - Adjust the step size based on progress
     /// 3. Stop when enough iterations are done, when no more improvement is happening, or when the
     ///    improvement is very small
-    /// 
+    ///
     /// This approach efficiently finds solutions that both fit the data well and satisfy the regularization constraints.
+    /// </para>
+    /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
+    /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
+    /// and notifies the sampler of epoch starts using
+    /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>.
     /// </para>
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
@@ -196,18 +201,24 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
 
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
-            _iteration++;
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            var newSolution = UpdateSolution(currentSolution, gradient);
+            NotifyEpochStart(epoch);
+            var batcher = CreateBatcher(inputData, _options.BatchSize);
 
-            var currentStepData = EvaluateSolution(newSolution, inputData);
+            foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+            {
+                _iteration++;
+                var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+                currentSolution = UpdateSolution(currentSolution, gradient);
+            }
+
+            var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
 
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }
@@ -217,7 +228,6 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            currentSolution = newSolution;
             previousStepData = currentStepData;
         }
 

@@ -1707,7 +1707,7 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         return new Tensor<T>(new T[numPoints * 6], [numPoints, 6]);
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)       
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (LossFunction == null)
         {

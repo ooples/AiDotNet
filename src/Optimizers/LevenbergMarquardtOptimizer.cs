@@ -91,7 +91,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method implements the main optimization loop. It iteratively improves the solution by calculating the 
+    /// This method implements the main optimization loop. It iteratively improves the solution by calculating the
     /// Jacobian matrix, residuals, and updating the solution until a stopping criterion is met.
     /// </para>
     /// <para><b>For Beginners:</b>
@@ -100,6 +100,12 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// 2. It checks how far off its current guess is (residuals).
     /// 3. It uses this information to make a better guess.
     /// 4. It keeps doing this until it's happy with the result or runs out of attempts.
+    /// </para>
+    /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for epoch management.
+    /// Levenberg-Marquardt typically operates on the full dataset because it requires computing the
+    /// Jacobian matrix across all samples to construct the normal equations properly. The method notifies the
+    /// sampler of epoch starts using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>
+    /// for compatibility with curriculum learning and sampling strategies.
     /// </para>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
@@ -114,9 +120,11 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
 
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
+            NotifyEpochStart(epoch);
             _iteration++;
+
             var jacobian = CalculateJacobian(currentSolution, inputData.XTrain);
             var residuals = CalculateResiduals(currentSolution, inputData.XTrain, inputData.YTrain);
             var newSolution = UpdateSolution(currentSolution, jacobian, residuals);
@@ -126,7 +134,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
 
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }

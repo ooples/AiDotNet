@@ -147,9 +147,9 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
         else
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultVoxelCNNLayers(
-                Architecture, 
-                VoxelResolution, 
-                NumConvBlocks, 
+                Architecture,
+                VoxelResolution,
+                NumConvBlocks,
                 BaseFilters));
         }
     }

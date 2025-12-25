@@ -389,7 +389,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
     /// <param name="input">Input tensor of shape [N, D] where N is number of points and D is input dimension.</param>
     /// <param name="numLevels">Number of frequency levels for encoding.</param>
     /// <returns>Encoded tensor of shape [N, D * 2 * numLevels].</returns>
-    private Tensor<T> PositionalEncoding(Tensor<T> input, int numLevels)        
+    private Tensor<T> PositionalEncoding(Tensor<T> input, int numLevels)
     {
         // Use vectorized Engine implementation for CPU/GPU acceleration
         return Engine.PositionalEncoding(input, numLevels);
@@ -493,7 +493,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         return renderedColors.Reshape(imageHeight, imageWidth, 3);
     }
 
-    private (Tensor<T> origins, Tensor<T> directions) GenerateCameraRays(       
+    private (Tensor<T> origins, Tensor<T> directions) GenerateCameraRays(
         Vector<T> cameraPosition,
         Matrix<T> cameraRotation,
         int width,
@@ -1058,13 +1058,13 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         return new Tensor<T>(inputGrad, [numPoints, 6]);
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)       
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         var prediction = ForwardWithMemory(input);
 
         if (LossFunction == null)
         {
-            throw new InvalidOperationException("Loss function not set.");      
+            throw new InvalidOperationException("Loss function not set.");
         }
 
         LastLoss = LossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
@@ -1099,12 +1099,12 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "PositionEncodingLevels", _positionEncodingLevels },
-                { "DirectionEncodingLevels", _directionEncodingLevels },        
+                { "DirectionEncodingLevels", _directionEncodingLevels },
                 { "HiddenDim", _hiddenDim },
                 { "NumLayers", _numLayers },
                 { "ColorHiddenDim", _colorHiddenDim },
                 { "ColorNumLayers", _colorNumLayers },
-                { "UseHierarchicalSampling", _useHierarchicalSampling },        
+                { "UseHierarchicalSampling", _useHierarchicalSampling },
                 { "RenderSamples", _renderSamples },
                 { "HierarchicalSamples", _hierarchicalSamples },
                 { "RenderNearBound", NumOps.ToDouble(_renderNearBound) },
@@ -1117,7 +1117,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)   
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_positionEncodingLevels);
         writer.Write(_directionEncodingLevels);
@@ -1133,7 +1133,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         writer.Write(NumOps.ToDouble(_learningRate));
     }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) 
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         int positionLevels = reader.ReadInt32();
         int directionLevels = reader.ReadInt32();
@@ -1165,7 +1165,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         }
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()  
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new NeRF<T>(
             new NeRFOptions

@@ -96,6 +96,11 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// 4. Make your move.
     /// You keep doing this until you reach the bottom of the hill or decide you're close enough to the best spot.
     /// </para>
+    /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
+    /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
+    /// and notifies the sampler of epoch starts using
+    /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>.
+    /// </para>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
@@ -110,19 +115,26 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
         _velocity = new Vector<T>(currentSolution.GetParameters().Length);
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
-            var lookaheadSolution = GetLookaheadSolution(currentSolution);
-            var gradient = CalculateGradient(lookaheadSolution, inputData.XTrain, inputData.YTrain);
-            _velocity = UpdateVelocity(gradient);
-            var newSolution = UpdateSolution(currentSolution, _velocity);
+            NotifyEpochStart(epoch);
+            var batcher = CreateBatcher(inputData, _options.BatchSize);
 
-            var currentStepData = EvaluateSolution(newSolution, inputData);
+            foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+            {
+                var lookaheadSolution = GetLookaheadSolution(currentSolution);
+                var gradient = CalculateGradient(lookaheadSolution, xBatch, yBatch);
+                _velocity = UpdateVelocity(gradient);
+                var newSolution = UpdateSolution(currentSolution, _velocity);
+                currentSolution = newSolution;
+            }
+
+            var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
 
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }
@@ -132,7 +144,6 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            currentSolution = newSolution;
             previousStepData = currentStepData;
         }
 
