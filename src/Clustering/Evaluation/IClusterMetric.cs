@@ -26,6 +26,11 @@ namespace AiDotNet.Clustering.Evaluation;
 public interface IClusterMetric<T>
 {
     /// <summary>
+    /// Gets the name of this metric.
+    /// </summary>
+    string Name { get; }
+
+    /// <summary>
     /// Computes the metric value.
     /// </summary>
     /// <param name="data">The data matrix (n_samples x n_features).</param>

@@ -52,6 +52,9 @@ public class DaviesBouldinIndex<T> : IClusterMetric<T>
     }
 
     /// <inheritdoc />
+    public string Name => "Davies-Bouldin Index";
+
+    /// <inheritdoc />
     public double Compute(Matrix<T> data, Vector<T> labels)
     {
         int n = data.Rows;
