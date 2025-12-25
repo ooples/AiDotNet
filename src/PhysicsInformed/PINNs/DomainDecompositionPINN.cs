@@ -276,7 +276,7 @@ public class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T>
         {
             var options = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                LearningRate = learningRate
+                InitialLearningRate = learningRate
             };
             _subdomainOptimizers[i] = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(_subdomainNetworks[i], options);
         }

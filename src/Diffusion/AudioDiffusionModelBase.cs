@@ -1,6 +1,7 @@
-using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.Diffusion;
@@ -103,7 +104,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// <param name="melChannels">Number of mel spectrogram channels.</param>
     protected AudioDiffusionModelBase(
         DiffusionModelOptions<T>? options = null,
-        IStepScheduler<T>? scheduler = null,
+        INoiseScheduler<T>? scheduler = null,
         int sampleRate = 16000,
         double defaultDurationSeconds = 10.0,
         int melChannels = 64)

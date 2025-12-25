@@ -1,9 +1,10 @@
 using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 
@@ -183,7 +184,7 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
     /// <param name="seed">Optional random seed.</param>
     public PointEModel(
         DiffusionModelOptions<T>? options = null,
-        IStepScheduler<T>? scheduler = null,
+        INoiseScheduler<T>? scheduler = null,
         DiTNoisePredictor<T>? pointCloudPredictor = null,
         ILatentDiffusionModel<T>? imageGenerator = null,
         IConditioningModule<T>? conditioner = null,

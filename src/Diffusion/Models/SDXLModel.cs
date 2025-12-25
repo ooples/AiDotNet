@@ -1,9 +1,10 @@
 using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 
@@ -225,7 +226,7 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public SDXLModel(
         DiffusionModelOptions<T>? options = null,
-        IStepScheduler<T>? scheduler = null,
+        INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
         StandardVAE<T>? vae = null,
         IConditioningModule<T>? conditioner1 = null,
@@ -736,7 +737,7 @@ public class SDXLRefiner<T>
     /// <summary>
     /// The scheduler.
     /// </summary>
-    private readonly IStepScheduler<T> _scheduler;
+    private readonly INoiseScheduler<T> _scheduler;
 
     /// <summary>
     /// The conditioning module.
@@ -759,7 +760,7 @@ public class SDXLRefiner<T>
     public SDXLRefiner(
         UNetNoisePredictor<T> refinerUNet,
         IVAEModel<T> vae,
-        IStepScheduler<T> scheduler,
+        INoiseScheduler<T> scheduler,
         IConditioningModule<T>? conditioner = null,
         int? seed = null)
     {

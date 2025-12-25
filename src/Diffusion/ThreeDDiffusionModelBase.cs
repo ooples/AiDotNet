@@ -1,6 +1,7 @@
-using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.Diffusion;
@@ -76,7 +77,7 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
     /// <param name="defaultPointCount">Default number of points in point clouds.</param>
     protected ThreeDDiffusionModelBase(
         DiffusionModelOptions<T>? options = null,
-        IStepScheduler<T>? scheduler = null,
+        INoiseScheduler<T>? scheduler = null,
         int defaultPointCount = 4096)
         : base(options, scheduler)
     {

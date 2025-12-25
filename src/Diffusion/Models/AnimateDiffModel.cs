@@ -1,8 +1,9 @@
 using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 
@@ -208,7 +209,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
     /// <param name="defaultFPS">Default frames per second.</param>
     public AnimateDiffModel(
         DiffusionModelOptions<T>? options = null,
-        IStepScheduler<T>? scheduler = null,
+        INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
         StandardVAE<T>? vae = null,
         IConditioningModule<T>? conditioner = null,

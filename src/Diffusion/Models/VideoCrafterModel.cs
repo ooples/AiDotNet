@@ -1,8 +1,9 @@
 using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 
@@ -197,7 +198,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
     /// <param name="defaultFPS">Default FPS.</param>
     public VideoCrafterModel(
         DiffusionModelOptions<T>? options = null,
-        IStepScheduler<T>? scheduler = null,
+        INoiseScheduler<T>? scheduler = null,
         VideoUNetPredictor<T>? videoUNet = null,
         TemporalVAE<T>? temporalVAE = null,
         IConditioningModule<T>? textConditioner = null,

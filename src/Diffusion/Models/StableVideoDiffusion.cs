@@ -1,8 +1,9 @@
 using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 
@@ -206,7 +207,7 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
     /// <param name="defaultFPS">Default frames per second.</param>
     public StableVideoDiffusion(
         DiffusionModelOptions<T>? options = null,
-        IStepScheduler<T>? scheduler = null,
+        INoiseScheduler<T>? scheduler = null,
         VideoUNetPredictor<T>? videoUNet = null,
         TemporalVAE<T>? temporalVAE = null,
         IConditioningModule<T>? conditioner = null,

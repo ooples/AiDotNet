@@ -1,9 +1,10 @@
 using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 
@@ -184,7 +185,7 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     /// <param name="seed">Optional random seed.</param>
     public ShapEModel(
         DiffusionModelOptions<T>? options = null,
-        IStepScheduler<T>? scheduler = null,
+        INoiseScheduler<T>? scheduler = null,
         DiTNoisePredictor<T>? latentPredictor = null,
         IConditioningModule<T>? conditioner = null,
         bool useSDFMode = true,
