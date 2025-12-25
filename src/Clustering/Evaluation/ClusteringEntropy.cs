@@ -33,6 +33,7 @@ namespace AiDotNet.Clustering.Evaluation;
 public class ClusteringEntropy<T> : IExternalClusterMetric<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private static readonly double Log2 = Math.Log(2);
 
     /// <summary>
     /// Initializes a new ClusteringEntropy instance.
@@ -70,10 +71,12 @@ public class ClusteringEntropy<T> : IExternalClusterMetric<T>
             trueClasses.Add(trueClass);
 
             var key = (cluster, trueClass);
-            contingency.TryAdd(key, 0);
+            if (!contingency.ContainsKey(key))
+                contingency[key] = 0;
             contingency[key]++;
 
-            clusterCounts.TryAdd(cluster, 0);
+            if (!clusterCounts.ContainsKey(cluster))
+                clusterCounts[cluster] = 0;
             clusterCounts[cluster]++;
         }
 
@@ -94,7 +97,7 @@ public class ClusteringEntropy<T> : IExternalClusterMetric<T>
                 if (contingency.TryGetValue((cluster, trueClass), out int count) && count > 0)
                 {
                     double p = (double)count / clusterSize;
-                    clusterEntropy -= p * Math.Log2(p);
+                    clusterEntropy -= p * Math.Log(p) / Log2;
                 }
             }
 
@@ -126,10 +129,12 @@ public class ClusteringEntropy<T> : IExternalClusterMetric<T>
             trueClasses.Add(trueClass);
 
             var key = (cluster, trueClass);
-            contingency.TryAdd(key, 0);
+            if (!contingency.ContainsKey(key))
+                contingency[key] = 0;
             contingency[key]++;
 
-            clusterCounts.TryAdd(cluster, 0);
+            if (!clusterCounts.ContainsKey(cluster))
+                clusterCounts[cluster] = 0;
             clusterCounts[cluster]++;
         }
 
@@ -153,7 +158,7 @@ public class ClusteringEntropy<T> : IExternalClusterMetric<T>
                 if (contingency.TryGetValue((cluster, trueClass), out int count) && count > 0)
                 {
                     double p = (double)count / clusterSize;
-                    clusterEntropy -= p * Math.Log2(p);
+                    clusterEntropy -= p * Math.Log(p) / Log2;
                 }
             }
 
@@ -186,7 +191,7 @@ public class ClusteringEntropy<T> : IExternalClusterMetric<T>
             return 0; // No entropy possible with one class
         }
 
-        double maxEntropy = Math.Log2(numClasses);
+        double maxEntropy = Math.Log(numClasses) / Log2;
         double entropy = Compute(trueLabels, predictedLabels);
 
         return maxEntropy > 0 ? entropy / maxEntropy : 0;
@@ -225,6 +230,7 @@ public class ConditionalEntropy<T> : IExternalClusterMetric<T>
 public class Homogeneity<T> : IExternalClusterMetric<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private static readonly double Log2 = Math.Log(2);
 
     /// <summary>
     /// Initializes a new Homogeneity instance.
@@ -257,8 +263,10 @@ public class Homogeneity<T> : IExternalClusterMetric<T>
 
     private double ComputeConditionalEntropy(Vector<T> trueLabels, Vector<T> predictedLabels)
     {
+        // Compute H(C|K) - entropy of classes given clusters
+        // ClusteringEntropy.Compute treats first param as cluster labels, second as class labels
         var entropy = new ClusteringEntropy<T>();
-        return entropy.Compute(trueLabels, predictedLabels);
+        return entropy.Compute(predictedLabels, trueLabels);
     }
 
     private double ComputeEntropy(Vector<T> labels)
@@ -269,7 +277,8 @@ public class Homogeneity<T> : IExternalClusterMetric<T>
         for (int i = 0; i < n; i++)
         {
             int label = (int)_numOps.ToDouble(labels[i]);
-            counts.TryAdd(label, 0);
+            if (!counts.ContainsKey(label))
+                counts[label] = 0;
             counts[label]++;
         }
 
@@ -279,7 +288,7 @@ public class Homogeneity<T> : IExternalClusterMetric<T>
             if (count > 0)
             {
                 double p = (double)count / n;
-                entropy -= p * Math.Log2(p);
+                entropy -= p * Math.Log(p) / Log2;
             }
         }
 
@@ -294,6 +303,7 @@ public class Homogeneity<T> : IExternalClusterMetric<T>
 public class Completeness<T> : IExternalClusterMetric<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private static readonly double Log2 = Math.Log(2);
 
     /// <summary>
     /// Initializes a new Completeness instance.
@@ -339,7 +349,8 @@ public class Completeness<T> : IExternalClusterMetric<T>
         for (int i = 0; i < n; i++)
         {
             int label = (int)_numOps.ToDouble(labels[i]);
-            counts.TryAdd(label, 0);
+            if (!counts.ContainsKey(label))
+                counts[label] = 0;
             counts[label]++;
         }
 
@@ -349,7 +360,7 @@ public class Completeness<T> : IExternalClusterMetric<T>
             if (count > 0)
             {
                 double p = (double)count / n;
-                entropy -= p * Math.Log2(p);
+                entropy -= p * Math.Log(p) / Log2;
             }
         }
 

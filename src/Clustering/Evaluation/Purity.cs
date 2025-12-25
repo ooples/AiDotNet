@@ -1,6 +1,3 @@
-using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.Interfaces;
-
 namespace AiDotNet.Clustering.Evaluation;
 
 /// <summary>
@@ -34,61 +31,40 @@ namespace AiDotNet.Clustering.Evaluation;
 /// But beware: Purity increases as k increases (k=n gives purity=1).
 /// </para>
 /// </remarks>
-public class Purity<T> : IExternalClusterMetric<T>
+public class Purity<T> : ExternalClusterMetricBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
-
     /// <summary>
     /// Initializes a new Purity instance.
     /// </summary>
-    public Purity()
+    public Purity() : base()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <inheritdoc />
-    public double Compute(Vector<T> trueLabels, Vector<T> predictedLabels)
+    public override double Compute(Vector<T> trueLabels, Vector<T> predictedLabels)
     {
-        int n = trueLabels.Length;
+        ValidateLabelVectors(trueLabels, predictedLabels);
 
-        if (n != predictedLabels.Length)
-        {
-            throw new ArgumentException("Label vectors must have the same length.");
-        }
+        int n = trueLabels.Length;
 
         if (n == 0)
         {
             return 0;
         }
 
-        // Build contingency table
-        var contingency = new Dictionary<(int Cluster, int Class), int>();
-        var clusterLabels = new HashSet<int>();
-        var trueClasses = new HashSet<int>();
-
-        for (int i = 0; i < n; i++)
-        {
-            int cluster = (int)_numOps.ToDouble(predictedLabels[i]);
-            int trueClass = (int)_numOps.ToDouble(trueLabels[i]);
-
-            clusterLabels.Add(cluster);
-            trueClasses.Add(trueClass);
-
-            var key = (cluster, trueClass);
-            contingency.TryAdd(key, 0);
-            contingency[key]++;
-        }
+        // Build contingency table using base class method
+        var (contingency, trueCounts, predCounts) = BuildContingencyTable(trueLabels, predictedLabels);
 
         // For each cluster, find the majority class count
         int correctlyAssigned = 0;
 
-        foreach (int cluster in clusterLabels)
+        foreach (int cluster in predCounts.Keys)
         {
             int maxCount = 0;
 
-            foreach (int trueClass in trueClasses)
+            foreach (int trueClass in trueCounts.Keys)
             {
-                if (contingency.TryGetValue((cluster, trueClass), out int count))
+                if (contingency.TryGetValue((trueClass, cluster), out int count))
                 {
                     maxCount = Math.Max(maxCount, count);
                 }
@@ -108,8 +84,11 @@ public class Purity<T> : IExternalClusterMetric<T>
     /// <returns>Dictionary mapping cluster labels to their purity values.</returns>
     public Dictionary<int, double> ComputePerCluster(Vector<T> trueLabels, Vector<T> predictedLabels)
     {
+        ValidateLabelVectors(trueLabels, predictedLabels);
+
         int n = trueLabels.Length;
 
+        // Build contingency table - note the keys are (True, Pred)
         var contingency = new Dictionary<(int Cluster, int Class), int>();
         var clusterCounts = new Dictionary<int, int>();
         var clusterLabels = new HashSet<int>();
@@ -117,17 +96,19 @@ public class Purity<T> : IExternalClusterMetric<T>
 
         for (int i = 0; i < n; i++)
         {
-            int cluster = (int)_numOps.ToDouble(predictedLabels[i]);
-            int trueClass = (int)_numOps.ToDouble(trueLabels[i]);
+            int cluster = (int)NumOps.ToDouble(predictedLabels[i]);
+            int trueClass = (int)NumOps.ToDouble(trueLabels[i]);
 
             clusterLabels.Add(cluster);
             trueClasses.Add(trueClass);
 
             var key = (cluster, trueClass);
-            contingency.TryAdd(key, 0);
+            if (!contingency.ContainsKey(key))
+                contingency[key] = 0;
             contingency[key]++;
 
-            clusterCounts.TryAdd(cluster, 0);
+            if (!clusterCounts.ContainsKey(cluster))
+                clusterCounts[cluster] = 0;
             clusterCounts[cluster]++;
         }
 

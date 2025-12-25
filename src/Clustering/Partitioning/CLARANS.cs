@@ -99,9 +99,9 @@ public class CLARANS<T> : ClusteringBase<T>
         NumFeatures = d;
         NumClusters = k;
 
-        if (k > n)
+        if (k >= n)
         {
-            throw new ArgumentException($"Number of clusters ({k}) cannot exceed number of samples ({n}).");
+            throw new ArgumentException($"Number of clusters ({k}) must be less than number of samples ({n}).");
         }
 
         var rand = Random ?? new Random();

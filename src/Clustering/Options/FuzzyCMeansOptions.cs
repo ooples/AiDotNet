@@ -56,7 +56,20 @@ public class FuzzyCMeansOptions<T> : ClusteringOptions<T>
     /// - Values > 2: Very soft, overlapping clusters
     /// </para>
     /// </remarks>
-    public double Fuzziness { get; set; } = 2.0;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if value is not greater than 1.</exception>
+    private double _fuzziness = 2.0;
+    public double Fuzziness
+    {
+        get => _fuzziness;
+        set
+        {
+            if (value <= 1.0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), "Fuzziness must be greater than 1.");
+            }
+            _fuzziness = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the distance metric.

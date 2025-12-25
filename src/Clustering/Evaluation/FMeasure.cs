@@ -85,13 +85,16 @@ public class FMeasure<T> : IExternalClusterMetric<T>
             predClusters.Add(predLabel);
 
             var key = (trueLabel, predLabel);
-            contingency.TryAdd(key, 0);
+            if (!contingency.ContainsKey(key))
+                contingency[key] = 0;
             contingency[key]++;
 
-            trueCounts.TryAdd(trueLabel, 0);
+            if (!trueCounts.ContainsKey(trueLabel))
+                trueCounts[trueLabel] = 0;
             trueCounts[trueLabel]++;
 
-            predCounts.TryAdd(predLabel, 0);
+            if (!predCounts.ContainsKey(predLabel))
+                predCounts[predLabel] = 0;
             predCounts[predLabel]++;
         }
 
@@ -157,13 +160,16 @@ public class FMeasure<T> : IExternalClusterMetric<T>
             predClusters.Add(predLabel);
 
             var key = (trueLabel, predLabel);
-            contingency.TryAdd(key, 0);
+            if (!contingency.ContainsKey(key))
+                contingency[key] = 0;
             contingency[key]++;
 
-            trueCounts.TryAdd(trueLabel, 0);
+            if (!trueCounts.ContainsKey(trueLabel))
+                trueCounts[trueLabel] = 0;
             trueCounts[trueLabel]++;
 
-            predCounts.TryAdd(predLabel, 0);
+            if (!predCounts.ContainsKey(predLabel))
+                predCounts[predLabel] = 0;
             predCounts[predLabel]++;
         }
 

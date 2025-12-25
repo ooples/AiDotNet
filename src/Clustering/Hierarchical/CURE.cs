@@ -279,7 +279,7 @@ public class CURE<T> : ClusteringBase<T>
         {
             foreach (var rep2 in c2.Representatives)
             {
-                double dist = ComputeEuclideanDistance(rep1, rep2);
+                double dist = ComputeDistance(rep1, rep2);
                 minDist = Math.Min(minDist, dist);
             }
         }
@@ -287,15 +287,17 @@ public class CURE<T> : ClusteringBase<T>
         return minDist;
     }
 
-    private double ComputeEuclideanDistance(double[] a, double[] b)
+    private double ComputeDistance(double[] a, double[] b)
     {
-        double sum = 0;
+        // Convert to Vector<T> and use the configured distance metric
+        var vecA = new Vector<T>(a.Length);
+        var vecB = new Vector<T>(b.Length);
         for (int i = 0; i < a.Length; i++)
         {
-            double diff = a[i] - b[i];
-            sum += diff * diff;
+            vecA[i] = NumOps.FromDouble(a[i]);
+            vecB[i] = NumOps.FromDouble(b[i]);
         }
-        return Math.Sqrt(sum);
+        return NumOps.ToDouble(_distanceMetric.Compute(vecA, vecB));
     }
 
     private CureCluster MergeClusters(CureCluster c1, CureCluster c2, Matrix<T> data)
@@ -364,7 +366,7 @@ public class CURE<T> : ClusteringBase<T>
                 point[j] = NumOps.ToDouble(data[idx, j]);
             }
 
-            double dist = ComputeEuclideanDistance(point, center);
+            double dist = ComputeDistance(point, center);
             if (dist > maxDist)
             {
                 maxDist = dist;
@@ -400,7 +402,7 @@ public class CURE<T> : ClusteringBase<T>
 
                 foreach (var rep in representatives)
                 {
-                    if (ComputeEuclideanDistance(point, rep) < 1e-10)
+                    if (ComputeDistance(point, rep) < 1e-10)
                     {
                         isRep = true;
                         break;
@@ -413,7 +415,7 @@ public class CURE<T> : ClusteringBase<T>
                 double minDist = double.MaxValue;
                 foreach (var rep in representatives)
                 {
-                    double dist = ComputeEuclideanDistance(point, rep);
+                    double dist = ComputeDistance(point, rep);
                     minDist = Math.Min(minDist, dist);
                 }
 
@@ -451,7 +453,7 @@ public class CURE<T> : ClusteringBase<T>
         {
             foreach (var rep in _clusters[i].Representatives)
             {
-                double dist = ComputeEuclideanDistance(point, rep);
+                double dist = ComputeDistance(point, rep);
                 if (dist < minDist)
                 {
                     minDist = dist;

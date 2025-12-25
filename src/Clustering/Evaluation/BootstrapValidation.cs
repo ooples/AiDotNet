@@ -63,7 +63,7 @@ public class BootstrapValidation<T>
         int n = data.Rows;
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
-            : new Random();
+            : RandomHelper.CreateSecureRandom();
 
         var silhouetteScores = new List<double>();
         var inertiaValues = new List<double>();
@@ -193,7 +193,7 @@ public class BootstrapValidation<T>
         int n = data.Rows;
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
-            : new Random();
+            : RandomHelper.CreateSecureRandom();
 
         // Track cluster assignments for each original point
         var assignmentCounts = new Dictionary<int, Dictionary<int, int>>();
@@ -237,7 +237,8 @@ public class BootstrapValidation<T>
                         int cluster = (int)_numOps.ToDouble(kmeans.Labels[i]);
 
                         pointAppearances[originalIdx]++;
-                        assignmentCounts[originalIdx].TryAdd(cluster, 0);
+                        if (!assignmentCounts[originalIdx].ContainsKey(cluster))
+                            assignmentCounts[originalIdx][cluster] = 0;
                         assignmentCounts[originalIdx][cluster]++;
                     }
                 }

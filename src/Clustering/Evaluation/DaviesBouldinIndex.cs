@@ -120,18 +120,27 @@ public class DaviesBouldinIndex<T> : IClusterMetric<T>
             scatter[label] = 0;
         }
 
+        // Precompute centroid vectors for distance metric
+        var centroidVectors = new Dictionary<int, Vector<T>>();
+        foreach (int label in labelList)
+        {
+            var vec = new Vector<T>(d);
+            for (int j = 0; j < d; j++)
+            {
+                vec[j] = _numOps.FromDouble(centroids[label][j]);
+            }
+            centroidVectors[label] = vec;
+        }
+
         for (int i = 0; i < n; i++)
         {
             int label = (int)_numOps.ToDouble(labels[i]);
             if (label < 0) continue;
 
-            double dist = 0;
-            for (int j = 0; j < d; j++)
-            {
-                double diff = _numOps.ToDouble(data[i, j]) - centroids[label][j];
-                dist += diff * diff;
-            }
-            scatter[label] += Math.Sqrt(dist);
+            // Use the configured distance metric
+            var pointVec = data.GetRow(i);
+            double dist = _numOps.ToDouble(metric.Compute(pointVec, centroidVectors[label]));
+            scatter[label] += dist;
         }
 
         foreach (int label in labelList)
@@ -156,14 +165,8 @@ public class DaviesBouldinIndex<T> : IClusterMetric<T>
 
                 int labelJ = labelList[jj];
 
-                // Distance between centroids
-                double centroidDist = 0;
-                for (int dim = 0; dim < d; dim++)
-                {
-                    double diff = centroids[labelI][dim] - centroids[labelJ][dim];
-                    centroidDist += diff * diff;
-                }
-                centroidDist = Math.Sqrt(centroidDist);
+                // Distance between centroids using configured metric
+                double centroidDist = _numOps.ToDouble(metric.Compute(centroidVectors[labelI], centroidVectors[labelJ]));
 
                 if (centroidDist > 0)
                 {

@@ -37,6 +37,7 @@ public class VariationOfInformation<T> : IExternalClusterMetric<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly bool _normalized;
+    private static readonly double Log2 = Math.Log(2);
 
     /// <summary>
     /// Initializes a new VariationOfInformation instance.
@@ -63,24 +64,22 @@ public class VariationOfInformation<T> : IExternalClusterMetric<T>
             return 0;
         }
 
+        // Build contingency table once
+        var (contingency, trueCounts, predCounts) = BuildContingencyTable(trueLabels, predictedLabels);
+
         // Compute entropies
-        double hC = ComputeEntropy(trueLabels, n);
-        double hK = ComputeEntropy(predictedLabels, n);
-        double mi = ComputeMutualInformation(trueLabels, predictedLabels, n);
+        double hC = ComputeEntropyFromCounts(trueCounts, n);
+        double hK = ComputeEntropyFromCounts(predCounts, n);
+        double mi = ComputeMutualInformationFromContingency(contingency, trueCounts, predCounts, n);
 
         double vi = hC + hK - 2 * mi;
 
         if (_normalized)
         {
-            double maxEntropy = Math.Max(hC, hK);
-            if (maxEntropy > 0)
+            double jointEntropy = hC + hK;
+            if (jointEntropy > 0)
             {
-                // Normalized VI = VI / (H(C) + H(K))
-                double jointEntropy = hC + hK;
-                if (jointEntropy > 0)
-                {
-                    return vi / jointEntropy;
-                }
+                return vi / jointEntropy;
             }
             return 0;
         }
@@ -97,7 +96,7 @@ public class VariationOfInformation<T> : IExternalClusterMetric<T>
     /// <remarks>
     /// <para>
     /// NMI = 2 * I(C, K) / (H(C) + H(K))
-    /// This is the complement of normalized VI: NMI = 1 - NVI
+    /// This is the arithmetic mean normalization variant.
     /// </para>
     /// </remarks>
     public double ComputeNMI(Vector<T> trueLabels, Vector<T> predictedLabels)
@@ -109,9 +108,11 @@ public class VariationOfInformation<T> : IExternalClusterMetric<T>
             return 1.0;
         }
 
-        double hC = ComputeEntropy(trueLabels, n);
-        double hK = ComputeEntropy(predictedLabels, n);
-        double mi = ComputeMutualInformation(trueLabels, predictedLabels, n);
+        var (contingency, trueCounts, predCounts) = BuildContingencyTable(trueLabels, predictedLabels);
+
+        double hC = ComputeEntropyFromCounts(trueCounts, n);
+        double hK = ComputeEntropyFromCounts(predCounts, n);
+        double mi = ComputeMutualInformationFromContingency(contingency, trueCounts, predCounts, n);
 
         double denominator = hC + hK;
         if (denominator == 0)
@@ -130,8 +131,11 @@ public class VariationOfInformation<T> : IExternalClusterMetric<T>
     /// <returns>AMI value, corrected for chance. 1.0 indicates perfect agreement.</returns>
     /// <remarks>
     /// <para>
-    /// AMI adjusts NMI for chance agreement, similar to how ARI adjusts Rand Index.
-    /// AMI = (MI - E[MI]) / (max(H(C), H(K)) - E[MI])
+    /// AMI adjusts NMI for chance agreement using the hypergeometric model.
+    /// AMI = (MI - E[MI]) / (mean(H(C), H(K)) - E[MI])
+    ///
+    /// This implementation uses the exact hypergeometric expectation formula
+    /// from Vinh, Epps, and Bailey (2010).
     /// </para>
     /// </remarks>
     public double ComputeAMI(Vector<T> trueLabels, Vector<T> predictedLabels)
@@ -143,8 +147,33 @@ public class VariationOfInformation<T> : IExternalClusterMetric<T>
             return 1.0;
         }
 
-        // Build contingency table
-        var contingency = new Dictionary<(int True, int Pred), int>();
+        var (contingency, trueCounts, predCounts) = BuildContingencyTable(trueLabels, predictedLabels);
+
+        double hC = ComputeEntropyFromCounts(trueCounts, n);
+        double hK = ComputeEntropyFromCounts(predCounts, n);
+        double mi = ComputeMutualInformationFromContingency(contingency, trueCounts, predCounts, n);
+
+        // Compute expected MI under hypergeometric null model
+        double emi = ComputeExpectedMI(trueCounts, predCounts, n);
+
+        // Use arithmetic mean of entropies as normalizer (most common variant)
+        double meanH = (hC + hK) / 2.0;
+        double denominator = meanH - emi;
+
+        if (Math.Abs(denominator) < 1e-15)
+        {
+            // When denominator is zero, AMI is defined as 1 if MI == EMI, else 0
+            return Math.Abs(mi - emi) < 1e-15 ? 1.0 : 0.0;
+        }
+
+        return (mi - emi) / denominator;
+    }
+
+    private (Dictionary<(int, int), int>, Dictionary<int, int>, Dictionary<int, int>) BuildContingencyTable(
+        Vector<T> trueLabels, Vector<T> predictedLabels)
+    {
+        int n = trueLabels.Length;
+        var contingency = new Dictionary<(int, int), int>();
         var trueCounts = new Dictionary<int, int>();
         var predCounts = new Dictionary<int, int>();
 
@@ -154,131 +183,120 @@ public class VariationOfInformation<T> : IExternalClusterMetric<T>
             int predLabel = (int)_numOps.ToDouble(predictedLabels[i]);
 
             var key = (trueLabel, predLabel);
-            contingency.TryAdd(key, 0);
+            if (!contingency.ContainsKey(key))
+                contingency[key] = 0;
             contingency[key]++;
 
-            trueCounts.TryAdd(trueLabel, 0);
+            if (!trueCounts.ContainsKey(trueLabel))
+                trueCounts[trueLabel] = 0;
             trueCounts[trueLabel]++;
 
-            predCounts.TryAdd(predLabel, 0);
+            if (!predCounts.ContainsKey(predLabel))
+                predCounts[predLabel] = 0;
             predCounts[predLabel]++;
         }
 
-        double hC = ComputeEntropy(trueLabels, n);
-        double hK = ComputeEntropy(predictedLabels, n);
-        double mi = ComputeMutualInformation(trueLabels, predictedLabels, n);
-
-        // Compute expected MI under hypergeometric model
-        double emi = ComputeExpectedMI(trueCounts, predCounts, n);
-
-        double maxH = Math.Max(hC, hK);
-        double denominator = maxH - emi;
-
-        if (Math.Abs(denominator) < 1e-10)
-        {
-            return 1.0;
-        }
-
-        return (mi - emi) / denominator;
+        return (contingency, trueCounts, predCounts);
     }
 
-    private double ComputeEntropy(Vector<T> labels, int n)
+    private double ComputeEntropyFromCounts(Dictionary<int, int> counts, int n)
     {
-        var counts = new Dictionary<int, int>();
-
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)_numOps.ToDouble(labels[i]);
-            counts.TryAdd(label, 0);
-            counts[label]++;
-        }
-
         double entropy = 0;
         foreach (int count in counts.Values)
         {
             if (count > 0)
             {
                 double p = (double)count / n;
-                entropy -= p * Math.Log2(p);
+                entropy -= p * Math.Log(p) / Log2;
             }
         }
-
         return entropy;
     }
 
-    private double ComputeMutualInformation(Vector<T> trueLabels, Vector<T> predictedLabels, int n)
+    private double ComputeMutualInformationFromContingency(
+        Dictionary<(int, int), int> contingency,
+        Dictionary<int, int> trueCounts,
+        Dictionary<int, int> predCounts,
+        int n)
     {
-        // Build contingency table
-        var contingency = new Dictionary<(int True, int Pred), int>();
-        var trueCounts = new Dictionary<int, int>();
-        var predCounts = new Dictionary<int, int>();
-
-        for (int i = 0; i < n; i++)
-        {
-            int trueLabel = (int)_numOps.ToDouble(trueLabels[i]);
-            int predLabel = (int)_numOps.ToDouble(predictedLabels[i]);
-
-            var key = (trueLabel, predLabel);
-            contingency.TryAdd(key, 0);
-            contingency[key]++;
-
-            trueCounts.TryAdd(trueLabel, 0);
-            trueCounts[trueLabel]++;
-
-            predCounts.TryAdd(predLabel, 0);
-            predCounts[predLabel]++;
-        }
-
-        // Compute MI
         double mi = 0;
         foreach (var kvp in contingency)
         {
             int nij = kvp.Value;
-            int ni = trueCounts[kvp.Key.True];
-            int nj = predCounts[kvp.Key.Pred];
+            int ni = trueCounts[kvp.Key.Item1];
+            int nj = predCounts[kvp.Key.Item2];
 
             if (nij > 0)
             {
                 double pij = (double)nij / n;
                 double pi = (double)ni / n;
                 double pj = (double)nj / n;
-                mi += pij * Math.Log2(pij / (pi * pj));
+                mi += pij * Math.Log(pij / (pi * pj)) / Log2;
             }
         }
-
         return mi;
     }
 
+    /// <summary>
+    /// Computes the expected mutual information under the hypergeometric null model.
+    /// Uses the exact formula from Vinh, Epps, and Bailey (2010):
+    /// "Information Theoretic Measures for Clusterings Comparison"
+    /// </summary>
     private double ComputeExpectedMI(Dictionary<int, int> trueCounts, Dictionary<int, int> predCounts, int n)
     {
-        // Approximate expected MI using the formula:
-        // E[MI] ≈ sum over all (i,j) of expected contribution
-        // This is a simplified approximation
-
         double emi = 0;
-        var trueList = trueCounts.Values.ToList();
-        var predList = predCounts.Values.ToList();
+        var trueList = trueCounts.Values.ToArray();
+        var predList = predCounts.Values.ToArray();
+
+        // Precompute log factorials for efficiency
+        var logFact = new double[n + 1];
+        logFact[0] = 0;
+        for (int i = 1; i <= n; i++)
+        {
+            logFact[i] = logFact[i - 1] + Math.Log(i);
+        }
 
         foreach (int ai in trueList)
         {
             foreach (int bj in predList)
             {
-                // Expected overlap under hypergeometric distribution
-                double expectedNij = (double)ai * bj / n;
-                if (expectedNij > 0)
+                // Sum over all possible values of nij
+                int nijMin = Math.Max(1, ai + bj - n);
+                int nijMax = Math.Min(ai, bj);
+
+                for (int nij = nijMin; nij <= nijMax; nij++)
                 {
-                    double pij = expectedNij / n;
-                    double pi = (double)ai / n;
-                    double pj = (double)bj / n;
-                    if (pij > 0 && pi > 0 && pj > 0)
+                    // Compute log of hypergeometric probability
+                    // P(nij) = C(ai, nij) * C(n-ai, bj-nij) / C(n, bj)
+                    double logProb = LogBinomial(ai, nij, logFact)
+                                   + LogBinomial(n - ai, bj - nij, logFact)
+                                   - LogBinomial(n, bj, logFact);
+
+                    if (double.IsNegativeInfinity(logProb))
+                        continue;
+
+                    double prob = Math.Exp(logProb);
+
+                    // Contribution to EMI
+                    double logTerm = Math.Log((double)nij * n / ((double)ai * bj));
+                    if (!double.IsNaN(logTerm) && !double.IsInfinity(logTerm))
                     {
-                        emi += pij * Math.Log2(pij / (pi * pj));
+                        emi += (double)nij / n * logTerm / Log2 * prob;
                     }
                 }
             }
         }
 
         return Math.Max(0, emi);
+    }
+
+    private static double LogBinomial(int n, int k, double[] logFact)
+    {
+        if (k < 0 || k > n)
+            return double.NegativeInfinity;
+        if (k == 0 || k == n)
+            return 0;
+        return logFact[n] - logFact[k] - logFact[n - k];
     }
 }
 
