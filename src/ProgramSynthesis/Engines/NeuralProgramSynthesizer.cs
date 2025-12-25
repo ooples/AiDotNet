@@ -1,3 +1,5 @@
+using System.Linq;
+using System.Text;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -10,8 +12,6 @@ using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Interfaces;
 using AiDotNet.ProgramSynthesis.Models;
 using Microsoft.Data.Sqlite;
-using System.Linq;
-using System.Text;
 using TreeSitter;
 
 namespace AiDotNet.ProgramSynthesis.Engines;

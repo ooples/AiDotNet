@@ -65,7 +65,7 @@ public static class Voxelization<T>
         double rangeY = maxY - minY;
         double rangeZ = maxZ - minZ;
         double maxRange = Math.Max(Math.Max(rangeX, rangeY), rangeZ);
-        
+
         if (maxRange < 1e-10)
         {
             maxRange = 1.0;
@@ -101,7 +101,7 @@ public static class Voxelization<T>
         var voxelTensor = new Tensor<T>(voxels, [resolution, resolution, resolution]);
         var origin = new Vector<T>([NumOps.FromDouble(minX), NumOps.FromDouble(minY), NumOps.FromDouble(minZ)]);
         var voxelSizeVec = new Vector<T>([NumOps.FromDouble(voxelSize), NumOps.FromDouble(voxelSize), NumOps.FromDouble(voxelSize)]);
-        
+
         return new VoxelGridData<T>(voxelTensor, origin, voxelSizeVec);
     }
 
@@ -171,7 +171,7 @@ public static class Voxelization<T>
         var voxels = new T[resolution * resolution * resolution];
 
         int samplesPerEdge = Math.Max(1, resolution / 4);
-        
+
         for (int f = 0; f < numFaces; f++)
         {
             int v0 = mesh.Faces[f, 0];
@@ -228,7 +228,7 @@ public static class Voxelization<T>
         var voxelTensor = new Tensor<T>(voxels, [resolution, resolution, resolution]);
         var origin = new Vector<T>([NumOps.FromDouble(minX), NumOps.FromDouble(minY), NumOps.FromDouble(minZ)]);
         var voxelSizeVec = new Vector<T>([NumOps.FromDouble(voxelSize), NumOps.FromDouble(voxelSize), NumOps.FromDouble(voxelSize)]);
-        
+
         return new VoxelGridData<T>(voxelTensor, origin, voxelSizeVec);
     }
 

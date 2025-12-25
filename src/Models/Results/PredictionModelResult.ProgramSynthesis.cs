@@ -11,8 +11,8 @@ using AiDotNet.ProgramSynthesis.Serving;
 using AiDotNet.ProgramSynthesis.Tokenization;
 using AiDotNet.Reasoning.Benchmarks;
 using AiDotNet.Reasoning.Benchmarks.Models;
-using AiDotNet.Tokenization.Models;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tokenization.Models;
 
 namespace AiDotNet.Models.Results;
 

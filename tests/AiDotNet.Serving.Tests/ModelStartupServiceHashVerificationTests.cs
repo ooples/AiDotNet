@@ -1,5 +1,5 @@
-using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Configuration;
+using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;

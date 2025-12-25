@@ -644,26 +644,26 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         {
             // For batched inputs, accumulate gradients across all batches
             int batchSize = _lastInput.Shape[0];
-            
+
             // Reshape delta to [batchSize * numVertices, OutputChannels] for matrix operations
             var deltaReshaped = delta.Reshape(batchSize * numVertices, OutputChannels);
             var diffusedReshaped = _diffusedFeatures.Reshape(batchSize * numVertices, InputChannels * NumTimeScales);
-            
+
             // Compute weight gradients: sum over all samples
             var transposedDelta = Engine.TensorTranspose(deltaReshaped);
             _weightsGradient = Engine.TensorMatMul(transposedDelta, diffusedReshaped);
-            
+
             // Compute bias gradients: sum over all samples
             _biasesGradient = Engine.ReduceSum(deltaReshaped, [0], keepDims: false);
-            
+
             // Compute input gradients
             var diffusedGrad = Engine.TensorMatMul(deltaReshaped, _weights);
-            
+
             // Compute diffusion time gradients (accumulate across batches)
             ComputeDiffusionTimeGradients(diffusedGrad, _lastInput.Reshape(batchSize * numVertices, InputChannels), numVertices * batchSize);
-            
+
             var inputGrad = BackpropagateThroughDiffusion(diffusedGrad, numVertices * batchSize);
-            
+
             return inputGrad.Reshape(batchSize, numVertices, InputChannels);
         }
         else
@@ -673,10 +673,10 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             _biasesGradient = Engine.ReduceSum(delta, [0], keepDims: false);
 
             var diffusedGrad = Engine.TensorMatMul(delta, _weights);
-            
+
             // Compute diffusion time gradients
             ComputeDiffusionTimeGradients(diffusedGrad, _lastInput, numVertices);
-            
+
             var inputGrad = BackpropagateThroughDiffusion(diffusedGrad, numVertices);
 
             return inputGrad;
@@ -1024,7 +1024,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             {
                 T update = NumOps.Multiply(learningRate, _diffusionTimesGradient[t]);
                 DiffusionTimes[t] = NumOps.Subtract(DiffusionTimes[t], update);
-                
+
                 // Clamp to minimum positive value to ensure valid diffusion
                 if (NumOps.ToDouble(DiffusionTimes[t]) < NumOps.ToDouble(minTime))
                 {

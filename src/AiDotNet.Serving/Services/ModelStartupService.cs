@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using AiDotNet.Models.Results;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
@@ -5,7 +6,6 @@ using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Security.Cryptography;
 
 namespace AiDotNet.Serving.Services;
 

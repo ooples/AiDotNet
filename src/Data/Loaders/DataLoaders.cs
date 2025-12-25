@@ -1,6 +1,6 @@
+using AiDotNet.Data.Geometry;
 using AiDotNet.FederatedLearning.Benchmarks.Leaf;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.Data.Geometry;
 
 namespace AiDotNet.Data.Loaders;
 

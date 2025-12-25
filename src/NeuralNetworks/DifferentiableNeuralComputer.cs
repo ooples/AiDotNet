@@ -1423,25 +1423,25 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Vectorized softmax using IEngine tensor operations
         // Convert vector to tensor for vectorized operations
         var inputTensor = new Tensor<T>(vector.ToArray(), [vector.Length]);
-        
+
         // Find maximum for numerical stability using ReduceMax (empty array = reduce all)
         var maxTensor = Engine.ReduceMax(inputTensor, [], keepDims: true, out _);
         T maxVal = maxTensor[0];
-        
+
         // Create max tensor for broadcasting
         var maxBroadcast = new Tensor<T>([vector.Length]);
         Engine.TensorFill(maxBroadcast, maxVal);
-        
+
         // Compute exp(x - max) using vectorized operations
         var shifted = Engine.TensorSubtract(inputTensor, maxBroadcast);
         var expTensor = Engine.TensorExp(shifted);
-        
+
         // Compute sum of exponentials
         T sum = Engine.TensorSum(expTensor);
-        
+
         // Normalize by dividing by sum
         var result = Engine.TensorDivideScalar(expTensor, sum);
-        
+
         // Convert back to Vector
         var resultArray = result.ToArray();
         var expVector = new Vector<T>(vector.Length);
@@ -1449,7 +1449,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         {
             expVector[i] = resultArray[i];
         }
-        
+
         return expVector;
     }
 

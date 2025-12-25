@@ -1,14 +1,14 @@
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Autodiff;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.PointCloud.Interfaces;
 using AiDotNet.PointCloud.Layers;
+using AiDotNet.Tensors;
 
 namespace AiDotNet.PointCloud.Models;
 
@@ -191,13 +191,13 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
         double dropoutRate = 0.5,
         ILossFunction<T>? lossFunction = null)
         : this(new DGCNNOptions
-            {
-                NumClasses = numClasses,
-                KnnK = knnK,
-                EdgeConvChannels = edgeConvChannels ?? [64, 64, 128, 256],
-                UseDropout = useDropout,
-                DropoutRate = dropoutRate
-            },
+        {
+            NumClasses = numClasses,
+            KnnK = knnK,
+            EdgeConvChannels = edgeConvChannels ?? [64, 64, 128, 256],
+            UseDropout = useDropout,
+            DropoutRate = dropoutRate
+        },
             lossFunction)
     {
     }
@@ -422,7 +422,7 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
         }
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)       
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
 
@@ -764,7 +764,7 @@ internal class EdgeConvLayer<T> : LayerBase<T>
         {
             for (int c = 0; c < _outputChannels; c++)
             {
-                T maxVal = edgeFeatures.Data[(i * k) * _outputChannels + c];    
+                T maxVal = edgeFeatures.Data[(i * k) * _outputChannels + c];
                 int maxIdx = 0;
 
                 for (int kIdx = 1; kIdx < k; kIdx++)

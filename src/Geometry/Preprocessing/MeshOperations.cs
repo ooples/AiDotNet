@@ -70,7 +70,7 @@ public static class MeshOperations<T>
     {
         int numVertices = mesh.NumVertices;
         int numFaces = mesh.NumFaces;
-        
+
         var normalSums = new double[numVertices * 3];
         var faceNormals = ComputeFaceNormals(mesh);
 
