@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
 
@@ -631,12 +632,53 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// Applies temporal attention across frames.
+    /// Applies temporal attention across frames using GPU/CPU accelerated tensor operations.
     /// </summary>
+    /// <remarks>
+    /// For each spatial position (h, w), attention is computed across all frames.
+    /// This allows the model to capture long-range temporal dependencies.
+    /// Uses TensorPermute for efficient layout transformations on GPU/CPU.
+    /// </remarks>
     private Tensor<T> ApplyTemporalAttention(ILayer<T> temporalAttention, Tensor<T> video)
     {
-        // Each spatial position attends across time
-        return video; // Placeholder - actual implementation would reshape and apply attention
+        // Video shape: [batch, channels, frames, height, width] (NCFHW)
+        var shape = video.Shape;
+        int batch = shape[0];
+        int channels = shape[1];
+        int frames = shape[2];
+        int height = shape[3];
+        int width = shape[4];
+        int spatialSize = height * width;
+
+        var engine = AiDotNetEngine.Current;
+
+        // Step 1: Permute from NCFHW to NHWFC using GPU-accelerated permute
+        // [batch, channels, frames, height, width] -> [batch, height, width, frames, channels]
+        var permuted = engine.TensorPermute(video, new[] { 0, 3, 4, 2, 1 });
+
+        // Step 2: Reshape to [batch * height * width, frames, channels] for attention
+        // Each spatial position becomes a batch element, frames become the sequence dimension
+        var reshaped = permuted.Reshape(new[] { batch * spatialSize, frames, channels });
+
+        // Step 3: Apply temporal attention layer
+        Tensor<T> attended;
+        if (temporalAttention is LayerBase<T> layerBase)
+        {
+            attended = layerBase.Forward(reshaped);
+        }
+        else
+        {
+            attended = temporalAttention.Forward(reshaped);
+        }
+
+        // Step 4: Reshape back to [batch, height, width, frames, channels]
+        var reshapedBack = attended.Reshape(new[] { batch, height, width, frames, channels });
+
+        // Step 5: Permute back from NHWFC to NCFHW
+        // [batch, height, width, frames, channels] -> [batch, channels, frames, height, width]
+        var result = engine.TensorPermute(reshapedBack, new[] { 0, 4, 3, 1, 2 });
+
+        return result;
     }
 
     /// <summary>
