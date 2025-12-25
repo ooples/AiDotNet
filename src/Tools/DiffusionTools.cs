@@ -1,6 +1,7 @@
 using Newtonsoft.Json.Linq;
 using AiDotNet.Diffusion;
 using AiDotNet.Diffusion.Models;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Tools;
@@ -381,7 +382,12 @@ public class ImageTo3DTool<T> : ToolBase
         Tensor<T> inputImage;
         try
         {
-            if (json["image_data"] != null)
+            if (!string.IsNullOrWhiteSpace(imagePath))
+            {
+                // Load image from file path using ImageHelper
+                inputImage = ImageHelper<T>.LoadImage(imagePath, normalize: true);
+            }
+            else if (json["image_data"] != null)
             {
                 // Parse image data from JSON array
                 var imageDataArray = json["image_data"]!.ToObject<double[,,]>();
@@ -394,13 +400,13 @@ public class ImageTo3DTool<T> : ToolBase
                 int channels = imageDataArray.GetLength(2);
                 inputImage = new Tensor<T>(new[] { 1, channels, height, width });
                 var span = inputImage.AsWritableSpan();
+                var numOps = MathHelper.GetNumericOperations<T>();
                 for (int c = 0; c < channels; c++)
                 {
                     for (int h = 0; h < height; h++)
                     {
                         for (int w = 0; w < width; w++)
                         {
-                            var numOps = MathHelper.GetNumericOperations<T>();
                             span[c * height * width + h * width + w] = numOps.FromDouble(imageDataArray[h, w, c]);
                         }
                     }
@@ -408,13 +414,20 @@ public class ImageTo3DTool<T> : ToolBase
             }
             else
             {
-                return $"Error: Loading images from file paths is not yet supported. " +
-                       $"Please provide 'image_data' as a 3D array [height, width, channels].";
+                return "Error: Either 'image_path' or 'image_data' must be provided.";
             }
+        }
+        catch (FileNotFoundException ex)
+        {
+            return $"Error: Image file not found: {ex.FileName}";
+        }
+        catch (NotSupportedException ex)
+        {
+            return $"Error: {ex.Message}";
         }
         catch (Exception ex)
         {
-            return $"Error parsing image data: {ex.Message}";
+            return $"Error loading/parsing image: {ex.Message}";
         }
 
         // Generate 3D mesh from image
@@ -582,9 +595,23 @@ public class AudioTransformTool<T> : ToolBase
 
         // Parse or load the audio tensor
         Tensor<T> inputAudio;
+        int loadedSampleRate = _model.SampleRate;
         try
         {
-            if (json["audio_data"] != null)
+            if (!string.IsNullOrWhiteSpace(audioPath))
+            {
+                // Load audio from file path using AudioHelper
+                var audioResult = AudioHelper<T>.LoadAudio(audioPath, normalize: true, targetSampleRate: _model.SampleRate);
+                inputAudio = audioResult.Audio;
+                loadedSampleRate = audioResult.SampleRate;
+
+                // Convert to mono if model expects mono
+                if (audioResult.Channels > 1)
+                {
+                    inputAudio = AudioHelper<T>.ToMono(inputAudio);
+                }
+            }
+            else if (json["audio_data"] != null)
             {
                 // Parse audio data from JSON array [channels, samples] or [samples]
                 var audioDataArray = json["audio_data"]!.ToObject<double[]>();
@@ -593,7 +620,7 @@ public class AudioTransformTool<T> : ToolBase
                     return "Error: 'audio_data' must be a 1D or 2D array of audio samples.";
                 }
                 int numSamples = audioDataArray.Length;
-                inputAudio = new Tensor<T>(new[] { 1, numSamples });
+                inputAudio = new Tensor<T>(new[] { 1, 1, numSamples });
                 var span = inputAudio.AsWritableSpan();
                 var numOps = MathHelper.GetNumericOperations<T>();
                 for (int i = 0; i < numSamples; i++)
@@ -603,17 +630,24 @@ public class AudioTransformTool<T> : ToolBase
             }
             else
             {
-                return $"Error: Loading audio from file paths is not yet supported. " +
-                       $"Please provide 'audio_data' as an array of audio samples.";
+                return "Error: Either 'audio_path' or 'audio_data' must be provided.";
             }
+        }
+        catch (FileNotFoundException ex)
+        {
+            return $"Error: Audio file not found: {ex.FileName}";
+        }
+        catch (NotSupportedException ex)
+        {
+            return $"Error: {ex.Message}";
         }
         catch (Exception ex)
         {
-            return $"Error parsing audio data: {ex.Message}";
+            return $"Error loading/parsing audio: {ex.Message}";
         }
 
         // Compute duration from audio length
-        var audioDuration = (double)inputAudio.Shape[^1] / _model.SampleRate;
+        var audioDuration = (double)inputAudio.Shape[^1] / loadedSampleRate;
 
         // Transform the audio (pass null for negativePrompt)
         var result = _model.AudioToAudio(inputAudio, prompt, null, strength, numSteps, guidanceScale);
