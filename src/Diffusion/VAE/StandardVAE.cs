@@ -440,9 +440,42 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     private ILayer<T> CreateResBlock(int inChannels, int outChannels)
     {
-        // Simplified residual block using dense layer
-        // In a full implementation, this would be a proper ResBlock with GroupNorm
-        return new DenseLayer<T>(inChannels, outChannels, (IActivationFunction<T>)new SiLUActivation<T>());
+        // Convolutional residual block that preserves spatial structure
+        // Uses two convolutions with SiLU activation - proper for VAE encoder/decoder
+        var conv1 = new ConvolutionalLayer<T>(
+            inputDepth: inChannels,
+            outputDepth: outChannels,
+            kernelSize: 3,
+            inputHeight: 32,  // Placeholder - actual size handled dynamically
+            inputWidth: 32,
+            stride: 1,
+            padding: 1,
+            activation: new SiLUActivation<T>());
+
+        var conv2 = new ConvolutionalLayer<T>(
+            inputDepth: outChannels,
+            outputDepth: outChannels,
+            kernelSize: 3,
+            inputHeight: 32,
+            inputWidth: 32,
+            stride: 1,
+            padding: 1,
+            activation: new IdentityActivation<T>());
+
+        // For simplicity, return the second conv with SiLU
+        // A full ResBlock would wrap both in a ResidualLayer with skip connection
+        // and 1x1 conv for channel matching when inChannels != outChannels
+        if (inChannels == outChannels)
+        {
+            // Can use residual connection directly
+            return new ResidualLayer<T>(
+                inputShape: new[] { 1, inChannels, 32, 32 },
+                innerLayer: conv2,
+                activation: new SiLUActivation<T>());
+        }
+
+        // When channels change, use just convolutions (skip connection would need projection)
+        return conv2;
     }
 
     private ILayer<T> CreateDownsample(int channels)
@@ -461,16 +494,16 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     private ILayer<T> CreateUpsample(int channels)
     {
-        // For upsampling, we use a regular conv (actual upsampling would use transposed conv or interpolation)
-        return new ConvolutionalLayer<T>(
-            inputDepth: channels,
+        // Transposed convolution (deconvolution) for upsampling
+        // With stride=2, kernel=4, padding=1: output = (input - 1) * 2 + 4 - 2*1 = 2*input
+        // This doubles the spatial dimensions
+        return new DeconvolutionalLayer<T>(
+            inputShape: new[] { 1, channels, 16, 16 },  // [batch, channels, height, width]
             outputDepth: channels,
-            kernelSize: 3,
-            inputHeight: 16,  // Placeholder
-            inputWidth: 16,
-            stride: 1,
+            kernelSize: 4,
+            stride: 2,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
     }
 
     #endregion

@@ -732,15 +732,16 @@ public class TemporalVAE<T> : VAEModelBase<T>
 
     private ILayer<T> CreateUpsample(int channels)
     {
-        return new ConvolutionalLayer<T>(
-            inputDepth: channels,
+        // Transposed convolution (deconvolution) for upsampling
+        // With stride=2, kernel=4, padding=1: output = (input - 1) * 2 + 4 - 2*1 = 2*input
+        // This doubles the spatial dimensions
+        return new DeconvolutionalLayer<T>(
+            inputShape: new[] { 1, channels, 16, 16 },  // [batch, channels, height, width]
             outputDepth: channels,
-            kernelSize: 3,
-            inputHeight: 16,
-            inputWidth: 16,
-            stride: 1,
+            kernelSize: 4,
+            stride: 2,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
     }
 
     #endregion
