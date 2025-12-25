@@ -361,14 +361,14 @@ public class Upsample3DLayer<T> : LayerBase<T>
     public override void Serialize(BinaryWriter writer)
     {
         base.Serialize(writer);
-        
+
         // Write input shape for proper deserialization
         writer.Write(InputShape.Length);
         foreach (var dim in InputShape)
         {
             writer.Write(dim);
         }
-        
+
         writer.Write(ScaleDepth);
         writer.Write(ScaleHeight);
         writer.Write(ScaleWidth);
@@ -388,7 +388,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
     public override void Deserialize(BinaryReader reader)
     {
         base.Deserialize(reader);
-        
+
         // Read input shape
         int inputShapeLength = reader.ReadInt32();
         var inputShape = new int[inputShapeLength];
@@ -396,11 +396,11 @@ public class Upsample3DLayer<T> : LayerBase<T>
         {
             inputShape[i] = reader.ReadInt32();
         }
-        
+
         var scaleD = reader.ReadInt32();
         var scaleH = reader.ReadInt32();
         var scaleW = reader.ReadInt32();
-        
+
         // Validate serialized values match current instance (readonly properties cannot be changed)
         if (scaleD != ScaleDepth || scaleH != ScaleHeight || scaleW != ScaleWidth)
         {
@@ -429,7 +429,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
         {
             reader.ReadDouble(); // Skip parameters (not used for this layer type)
         }
-        
+
         // Read input shape
         int inputShapeLength = reader.ReadInt32();
         var inputShape = new int[inputShapeLength];
@@ -437,12 +437,12 @@ public class Upsample3DLayer<T> : LayerBase<T>
         {
             inputShape[i] = reader.ReadInt32();
         }
-        
+
         // Read scale factors
         var scaleD = reader.ReadInt32();
         var scaleH = reader.ReadInt32();
         var scaleW = reader.ReadInt32();
-        
+
         return new Upsample3DLayer<T>(inputShape, scaleD, scaleH, scaleW);
     }
 

@@ -87,6 +87,14 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// </summary>
     /// <param name="inputData">The input data for optimization.</param>
     /// <returns>The result of the optimization process.</returns>
+    /// <remarks>
+    /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for epoch management.
+    /// Trust Region methods typically operate on the full dataset because they construct a local quadratic
+    /// model of the objective function that requires accurate gradient and Hessian information. The method
+    /// notifies the sampler of epoch starts using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>
+    /// for compatibility with curriculum learning and sampling strategies.
+    /// </para>
+    /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -97,8 +105,9 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
 
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
+            NotifyEpochStart(epoch);
             _iteration++;
 
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
@@ -131,7 +140,7 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
 
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }

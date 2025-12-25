@@ -592,13 +592,13 @@ public class MeshPoolLayer<T> : LayerBase<T>
 
         // Compute attention scores via linear transformation
         var scores = TensorOperations<T>.MatrixMultiply(inputNode, importanceNode);
-        
+
         // Apply softmax to get attention weights
         var attentionWeights = TensorOperations<T>.Softmax(scores);
 
         // Weighted sum of features (attention-weighted pooling)
         var weightedFeatures = TensorOperations<T>.ElementwiseMultiply(inputNode, attentionWeights);
-        
+
         // Reduce to get pooled output - use mean across edges
         var pooledOutput = TensorOperations<T>.Mean(weightedFeatures);
 

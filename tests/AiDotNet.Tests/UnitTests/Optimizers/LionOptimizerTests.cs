@@ -23,7 +23,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
                 throw new InvalidOperationException("Options should not be null after assertion.");
             }
 
-            Assert.Equal(1e-4, options.LearningRate);
+            Assert.Equal(1e-4, options.InitialLearningRate);
             Assert.Equal(0.9, options.Beta1);
             Assert.Equal(0.99, options.Beta2);
             Assert.Equal(0.0, options.WeightDecay);
@@ -35,7 +35,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var customOptions = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.001,
+                InitialLearningRate =0.001,
                 Beta1 = 0.95,
                 Beta2 = 0.999,
                 WeightDecay = 0.01
@@ -52,7 +52,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
                 throw new InvalidOperationException("Options should not be null after assertion.");
             }
 
-            Assert.Equal(0.001, options.LearningRate);
+            Assert.Equal(0.001, options.InitialLearningRate);
             Assert.Equal(0.95, options.Beta1);
             Assert.Equal(0.999, options.Beta2);
             Assert.Equal(0.01, options.WeightDecay);
@@ -64,7 +64,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -89,7 +89,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -114,7 +114,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -138,7 +138,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.01
@@ -163,7 +163,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -197,7 +197,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -224,7 +224,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.0, // No interpolation to isolate sign effect
                 Beta2 = 0.0,
                 WeightDecay = 0.0
@@ -254,7 +254,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99
             };
@@ -282,7 +282,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.001,
+                InitialLearningRate =0.001,
                 Beta1 = 0.95,
                 Beta2 = 0.999,
                 WeightDecay = 0.01
@@ -312,7 +312,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
                 throw new InvalidOperationException("Deserialized options should not be null after assertion.");
             }
 
-            Assert.Equal(options.LearningRate, deserializedOptions.LearningRate);
+            Assert.Equal(options.InitialLearningRate, deserializedOptions.InitialLearningRate);
             Assert.Equal(options.Beta1, deserializedOptions.Beta1);
             Assert.Equal(options.Beta2, deserializedOptions.Beta2);
             Assert.Equal(options.WeightDecay, deserializedOptions.WeightDecay);
@@ -324,13 +324,13 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var initialOptions = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.001
+                InitialLearningRate =0.001
             };
             var optimizer = new LionOptimizer<double, Vector<double>, Vector<double>>(null, initialOptions);
 
             var newOptions = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.01
+                InitialLearningRate =0.01
             };
 
             // Act
@@ -347,7 +347,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
                 throw new InvalidOperationException("Current options should not be null after assertion.");
             }
 
-            Assert.Equal(0.01, currentOptions.LearningRate);
+            Assert.Equal(0.01, currentOptions.InitialLearningRate);
         }
 
         [Fact]
@@ -356,7 +356,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<float, Vector<float>, Vector<float>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -380,7 +380,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<float, Vector<float>, Vector<float>>
             {
-                LearningRate = 0.1f,
+                InitialLearningRate =0.1f,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -414,14 +414,14 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var optionsLowBeta1 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.1,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
             };
             var optionsHighBeta1 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -449,14 +449,14 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var optionsLowBeta2 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.1,
                 WeightDecay = 0.0
             };
             var optionsHighBeta2 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.1,
+                InitialLearningRate =0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.9,
                 WeightDecay = 0.0
@@ -483,7 +483,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                LearningRate = 0.002,
+                InitialLearningRate =0.002,
                 Beta1 = 0.85,
                 Beta2 = 0.98
             };
@@ -499,7 +499,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
                 throw new InvalidOperationException("Retrieved options should not be null after assertion.");
             }
 
-            Assert.Equal(0.002, retrievedOptions.LearningRate);
+            Assert.Equal(0.002, retrievedOptions.InitialLearningRate);
             Assert.Equal(0.85, retrievedOptions.Beta1);
             Assert.Equal(0.98, retrievedOptions.Beta2);
         }

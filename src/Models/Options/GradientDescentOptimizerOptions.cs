@@ -28,6 +28,17 @@ namespace AiDotNet.Models.Options;
 public class GradientDescentOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Gets or sets the batch size for mini-batch gradient descent.
+    /// </summary>
+    /// <value>A positive integer, defaulting to 32.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The batch size controls how many examples the optimizer looks at
+    /// before making an update to the model. The default of 32 is a good balance for gradient descent.
+    /// Setting it to -1 uses full-batch gradient descent (all training samples in each iteration).</para>
+    /// </remarks>
+    public int BatchSize { get; set; } = 32;
+
+    /// <summary>
     /// The regularization options to control overfitting during gradient descent optimization.
     /// </summary>
     /// <remarks>

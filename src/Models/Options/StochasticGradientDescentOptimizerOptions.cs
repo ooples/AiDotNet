@@ -39,42 +39,67 @@ namespace AiDotNet.Models.Options;
 public class StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Gets or sets the batch size for stochastic gradient descent.
+    /// </summary>
+    /// <value>A positive integer, defaulting to 1 for true stochastic behavior.</value>
+    /// <remarks>
+    /// <para>
+    /// The batch size determines how many samples are processed before updating the model parameters.
+    /// A batch size of 1 represents true Stochastic Gradient Descent, processing one sample at a time.
+    /// Larger batch sizes create mini-batch gradient descent behavior with SGD's update rule.
+    /// </para>
+    /// <para><b>For Beginners:</b> The batch size controls how many examples the optimizer looks at
+    /// before making an update to the model:
+    ///
+    /// - BatchSize = 1: True stochastic - update after each sample (default)
+    /// - BatchSize = 32: Mini-batch - update after every 32 samples
+    /// - BatchSize = [entire dataset]: Batch gradient descent
+    ///
+    /// Smaller batch sizes:
+    /// - More frequent updates (faster convergence initially)
+    /// - More noise in gradients (can help escape local minima)
+    /// - Less efficient use of vectorized operations
+    ///
+    /// Larger batch sizes:
+    /// - Smoother gradient estimates
+    /// - Better use of GPU/vectorization
+    /// - May require adjusting learning rate
+    ///
+    /// The default of 1 gives true stochastic behavior. Consider using
+    /// MiniBatchGradientDescentOptimizer if you want mini-batch behavior with
+    /// additional features like adaptive learning rates.
+    /// </para>
+    /// </remarks>
+    public int BatchSize { get; set; } = 1;
+
+    /// <summary>
     /// Gets or sets the maximum number of iterations for the optimization algorithm.
     /// </summary>
     /// <value>A positive integer, defaulting to 1000.</value>
     /// <remarks>
     /// <para>
-    /// This property specifies the maximum number of iterations (epochs) that the SGD algorithm will perform. 
-    /// Each iteration processes one mini-batch of data. The optimization will stop either when this number of 
-    /// iterations is reached or when another stopping criterion (such as convergence tolerance) is met, whichever 
-    /// comes first. The default value of 1000 is suitable for many applications, but may need adjustment based on 
-    /// the specific problem, dataset size, and mini-batch size. For complex problems or large datasets, more 
-    /// iterations might be needed to reach convergence. This property overrides the MaxIterations property 
-    /// inherited from the base class to provide a more appropriate default value for SGD optimization.
+    /// This property specifies the maximum number of epochs that the SGD algorithm will perform.
+    /// Each epoch processes all batches of data. The optimization will stop either when this number of
+    /// epochs is reached or when another stopping criterion (such as convergence tolerance) is met,
+    /// whichever comes first. The default value of 1000 is suitable for many applications, but may
+    /// need adjustment based on the specific problem, dataset size, and batch size.
     /// </para>
-    /// <para><b>For Beginners:</b> This setting limits how many rounds of updates the algorithm will perform.
-    /// 
-    /// The maximum iterations parameter:
-    /// - Sets an upper limit on how many mini-batch updates will be performed
+    /// <para><b>For Beginners:</b> This setting limits how many complete passes through the data
+    /// the algorithm will perform.
+    ///
+    /// The maximum iterations (epochs) parameter:
+    /// - Sets an upper limit on training duration
     /// - Prevents the algorithm from running indefinitely
     /// - Serves as a safety mechanism if convergence isn't reached
-    /// 
-    /// The default value of 1000 means:
-    /// - The algorithm will process at most 1000 mini-batches
+    ///
+    /// The default value of 1000 epochs means:
+    /// - The algorithm will make at most 1000 complete passes through your data
     /// - This is often sufficient for many problems
-    /// 
-    /// Think of it like this:
-    /// - Each iteration is one step toward finding the optimal solution
-    /// - More iterations allow more steps and potentially better results
-    /// - But there are diminishing returns after a certain point
-    /// 
+    ///
     /// When to adjust this value:
     /// - Increase it for complex problems that need more iterations to converge
     /// - Decrease it for simpler problems or when you need faster results
     /// - Monitor validation metrics to determine if more iterations are helpful
-    /// 
-    /// For example, when training a deep neural network on a large dataset,
-    /// you might need to increase this to 5000 or more to reach optimal performance.
     /// </para>
     /// </remarks>
     public new int MaxIterations { get; set; } = 1000;

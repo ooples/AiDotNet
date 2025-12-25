@@ -109,6 +109,13 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// the ball should roll (gradient), how fast it's moving (velocity), and where it ends up (new solution).
     /// You keep doing this until the ball finds the lowest point or you've rolled it enough times.
     /// </para>
+    /// <para><b>DataLoader Integration:</b>
+    /// This optimizer now uses the DataLoader batching infrastructure which supports:
+    /// - Custom samplers (weighted, stratified, curriculum, importance, active learning)
+    /// - Reproducible shuffling via RandomSeed
+    /// - Option to drop incomplete final batches
+    /// Set these options via GradientBasedOptimizerOptions.DataSampler, ShuffleData, DropLastBatch, and RandomSeed.
+    /// </para>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
@@ -116,35 +123,55 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
+        // Initialize with random solution
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
 
         _velocity = new Vector<T>(currentSolution.GetParameters().Length);
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            _velocity = UpdateVelocity(gradient);
-            var newSolution = UpdateSolution(currentSolution, _velocity);
+            // Notify sampler of new epoch (for curriculum/self-paced learning)
+            NotifyEpochStart(epoch);
 
-            var currentStepData = EvaluateSolution(newSolution, inputData);
+            // Create batcher for the current epoch using DataLoader infrastructure
+            var batcher = CreateBatcher(inputData, _options.BatchSize);
+
+            foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+            {
+                // Calculate gradient on the batch
+                var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+
+                // Update velocity with momentum
+                _velocity = UpdateVelocity(gradient);
+
+                // Update solution
+                var newSolution = UpdateSolution(currentSolution, _velocity);
+
+                currentSolution = newSolution;
+            }
+
+            // Evaluate after processing all batches in the epoch
+            var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
-
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            // Check early stopping criteria
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            // Check convergence
+            if (NumOps.LessThan(
+                NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
+                NumOps.FromDouble(_options.Tolerance)))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            currentSolution = newSolution;
             previousStepData = currentStepData;
         }
 

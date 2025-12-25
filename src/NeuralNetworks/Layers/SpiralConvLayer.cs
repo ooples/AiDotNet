@@ -386,7 +386,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
     private Tensor<T> ProcessBatched(Tensor<T> input, int batchSize, int numVertices)
     {
         var outputData = new T[batchSize * numVertices * OutputChannels];
-        
+
         // Thread-local storage for gathered features per batch sample
         var localGatheredFeatures = new Tensor<T>[batchSize];
         var transposedWeights = Engine.TensorTranspose(_weights);
@@ -394,18 +394,18 @@ public class SpiralConvLayer<T> : LayerBase<T>
         Parallel.For(0, batchSize, b =>
         {
             var singleInput = ExtractBatchSlice(input, b, numVertices);
-            
+
             // Gather spiral features (thread-safe, result stored per-batch)
             var gathered = GatherSpiralFeatures(singleInput, numVertices);
             localGatheredFeatures[b] = gathered;
-            
+
             // Compute output using pre-transposed weights
             var singleOutput = Engine.TensorMatMul(gathered, transposedWeights);
             singleOutput = AddBiases(singleOutput, numVertices);
-            
+
             // Apply activation
             singleOutput = ApplyActivation(singleOutput);
-            
+
             var singleData = singleOutput.ToArray();
             int offset = b * numVertices * OutputChannels;
             Array.Copy(singleData, 0, outputData, offset, singleData.Length);
@@ -433,14 +433,14 @@ public class SpiralConvLayer<T> : LayerBase<T>
     {
         int featureDim = SpiralLength * InputChannels;
         var combinedData = new T[batchSize * numVertices * featureDim];
-        
+
         for (int b = 0; b < batchSize; b++)
         {
             var batchData = localGatheredFeatures[b].ToArray();
             int offset = b * numVertices * featureDim;
             Array.Copy(batchData, 0, combinedData, offset, batchData.Length);
         }
-        
+
         return new Tensor<T>(combinedData, [batchSize, numVertices, featureDim]);
     }
 

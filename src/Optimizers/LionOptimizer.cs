@@ -102,6 +102,11 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <para><b>For Beginners:</b> This is the main learning process. It repeatedly improves the model's
     /// parameters using the Lion algorithm. Lion's sign-based updates make it particularly efficient
     /// for large-scale optimization problems, often converging faster than Adam while using less memory.</para>
+    /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
+    /// It creates a batcher using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.CreateBatcher"/>
+    /// and notifies the sampler of epoch starts using
+    /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>.
+    /// </para>
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
@@ -115,17 +120,24 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
-            _t++;
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            var newSolution = UpdateSolution(currentSolution, gradient);
+            NotifyEpochStart(epoch);
+            var batcher = CreateBatcher(inputData, _options.BatchSize);
 
-            var currentStepData = EvaluateSolution(newSolution, inputData);
+            foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+            {
+                _t++;
+                var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+                var newSolution = UpdateSolution(currentSolution, gradient);
+                currentSolution = newSolution;
+            }
+
+            var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 break;
             }
@@ -135,7 +147,6 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 break;
             }
 
-            currentSolution = newSolution;
             previousStepData = currentStepData;
         }
 
@@ -453,6 +464,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     public override void Reset()
     {
+        base.Reset();
         _m = Vector<T>.Empty();
         _t = 0;
     }

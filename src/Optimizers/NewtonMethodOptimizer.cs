@@ -89,6 +89,12 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// 4. You check if you've found a better spot than any you've seen before.
     /// 5. You decide whether to keep going or stop if you think you've found the lowest point.
     /// </para>
+    /// <para><b>DataLoader Integration:</b> This method uses the DataLoader API for epoch management.
+    /// Newton's Method typically operates on the full dataset because it requires computing the Hessian
+    /// matrix that needs consistent second derivative information. The method notifies the
+    /// sampler of epoch starts using <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>
+    /// for compatibility with curriculum learning and sampling strategies.
+    /// </para>
     /// </remarks>
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
@@ -102,9 +108,11 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
+            NotifyEpochStart(epoch);
             _iteration++;
+
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
             // Use efficient Hessian computation (automatically uses IGradientComputable if available)
             var hessian = ComputeHessianEfficiently(currentSolution, inputData);
@@ -116,7 +124,7 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-            if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
+            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }
