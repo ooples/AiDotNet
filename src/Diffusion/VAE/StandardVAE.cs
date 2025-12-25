@@ -440,42 +440,33 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     private ILayer<T> CreateResBlock(int inChannels, int outChannels)
     {
-        // Convolutional residual block that preserves spatial structure
-        // Uses two convolutions with SiLU activation - proper for VAE encoder/decoder
-        var conv1 = new ConvolutionalLayer<T>(
-            inputDepth: inChannels,
-            outputDepth: outChannels,
-            kernelSize: 3,
-            inputHeight: 32,  // Placeholder - actual size handled dynamically
-            inputWidth: 32,
-            stride: 1,
-            padding: 1,
-            activation: new SiLUActivation<T>());
+        // Use proper VAEResBlock with GroupNorm and skip connections
+        // This follows the Stable Diffusion VAE architecture:
+        // GroupNorm -> SiLU -> Conv3x3 -> GroupNorm -> SiLU -> Conv3x3 + skip
+        int numGroups = CalculateGroupCount(inChannels, outChannels);
+        return new VAEResBlock<T>(inChannels, outChannels, numGroups, spatialSize: 32);
+    }
 
-        var conv2 = new ConvolutionalLayer<T>(
-            inputDepth: outChannels,
-            outputDepth: outChannels,
-            kernelSize: 3,
-            inputHeight: 32,
-            inputWidth: 32,
-            stride: 1,
-            padding: 1,
-            activation: new IdentityActivation<T>());
+    /// <summary>
+    /// Calculates the appropriate number of groups for GroupNorm.
+    /// </summary>
+    /// <param name="inChannels">Input channels.</param>
+    /// <param name="outChannels">Output channels.</param>
+    /// <returns>Number of groups that evenly divides both channel counts.</returns>
+    private static int CalculateGroupCount(int inChannels, int outChannels)
+    {
+        // Common group counts for VAE: 32 for large channels, 16 for medium, 8 for small
+        int[] preferredGroups = new[] { 32, 16, 8, 4, 2, 1 };
 
-        // For simplicity, return the second conv with SiLU
-        // A full ResBlock would wrap both in a ResidualLayer with skip connection
-        // and 1x1 conv for channel matching when inChannels != outChannels
-        if (inChannels == outChannels)
+        foreach (int groups in preferredGroups)
         {
-            // Can use residual connection directly
-            return new ResidualLayer<T>(
-                inputShape: new[] { 1, inChannels, 32, 32 },
-                innerLayer: conv2,
-                activation: new SiLUActivation<T>());
+            if (inChannels % groups == 0 && outChannels % groups == 0)
+            {
+                return groups;
+            }
         }
 
-        // When channels change, use just convolutions (skip connection would need projection)
-        return conv2;
+        return 1;
     }
 
     private ILayer<T> CreateDownsample(int channels)
