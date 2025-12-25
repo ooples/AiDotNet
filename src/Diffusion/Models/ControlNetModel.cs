@@ -97,9 +97,14 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     private readonly UNetNoisePredictor<T> _baseUNet;
 
     /// <summary>
-    /// The ControlNet encoder blocks.
+    /// The ControlNet encoder blocks for the primary control type.
     /// </summary>
     private readonly ControlNetEncoder<T> _controlNetEncoder;
+
+    /// <summary>
+    /// Cache of encoders by control type for multi-control generation.
+    /// </summary>
+    private readonly Dictionary<ControlType, ControlNetEncoder<T>> _encoderCache;
 
     /// <summary>
     /// The VAE for encoding/decoding.
@@ -139,7 +144,18 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => CN_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _baseUNet.ParameterCount + _controlNetEncoder.ParameterCount;
+    public override int ParameterCount
+    {
+        get
+        {
+            var count = _baseUNet.ParameterCount;
+            foreach (var encoder in _encoderCache.Values)
+            {
+                count += encoder.ParameterCount;
+            }
+            return count;
+        }
+    }
 
     /// <summary>
     /// Gets the type of control signal this model uses.
@@ -205,6 +221,12 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
             baseChannels: 320,
             channelMultipliers: new[] { 1, 2, 4, 4 },
             seed: seed);
+
+        // Initialize encoder cache with the primary encoder
+        _encoderCache = new Dictionary<ControlType, ControlNetEncoder<T>>
+        {
+            { _controlType, _controlNetEncoder }
+        };
     }
 
     /// <summary>
@@ -278,6 +300,29 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
             ControlType.Mlsd => 1,       // Single channel MLSD lines
             _ => 3                       // Default to RGB
         };
+    }
+
+    /// <summary>
+    /// Gets or creates a cached encoder for the specified control type.
+    /// This ensures encoders are reused and their trained weights are preserved.
+    /// </summary>
+    /// <param name="controlType">The type of control signal.</param>
+    /// <returns>A cached or newly created encoder for the control type.</returns>
+    private ControlNetEncoder<T> GetOrCreateEncoder(ControlType controlType)
+    {
+        if (_encoderCache.TryGetValue(controlType, out var encoder))
+        {
+            return encoder;
+        }
+
+        // Create a new encoder for this control type and cache it
+        var newEncoder = new ControlNetEncoder<T>(
+            inputChannels: GetControlChannels(controlType),
+            baseChannels: 320,
+            channelMultipliers: new[] { 1, 2, 4, 4 });
+
+        _encoderCache[controlType] = newEncoder;
+        return newEncoder;
     }
 
     /// <summary>
@@ -422,11 +467,8 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
 
         for (int i = 0; i < controlImages.Length; i++)
         {
-            var encoder = new ControlNetEncoder<T>(
-                inputChannels: GetControlChannels(controlTypes[i]),
-                baseChannels: 320,
-                channelMultipliers: new[] { 1, 2, 4, 4 });
-
+            // Use cached encoder to preserve trained weights
+            var encoder = GetOrCreateEncoder(controlTypes[i]);
             var features = encoder.Encode(controlImages[i]);
 
             // Scale by strength
@@ -579,19 +621,41 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     }
 
     /// <summary>
-    /// Adds two tensors element-wise.
+    /// Adds two tensors element-wise with proper shape handling.
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
         var aSpan = a.AsSpan();
         var bSpan = b.AsSpan();
+
+        // Use the larger tensor's shape for the result
+        var resultShape = aSpan.Length >= bSpan.Length ? a.Shape : b.Shape;
+        var result = new Tensor<T>(resultShape);
         var resultSpan = result.AsWritableSpan();
 
         var minLen = Math.Min(aSpan.Length, bSpan.Length);
+        var maxLen = Math.Max(aSpan.Length, bSpan.Length);
+
+        // Add overlapping elements
         for (int i = 0; i < minLen; i++)
         {
             resultSpan[i] = NumOps.Add(aSpan[i], bSpan[i]);
+        }
+
+        // Copy remaining elements from the larger tensor
+        if (aSpan.Length > minLen)
+        {
+            for (int i = minLen; i < maxLen; i++)
+            {
+                resultSpan[i] = aSpan[i];
+            }
+        }
+        else if (bSpan.Length > minLen)
+        {
+            for (int i = minLen; i < maxLen; i++)
+            {
+                resultSpan[i] = bSpan[i];
+            }
         }
 
         return result;
@@ -600,42 +664,55 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var baseParams = _baseUNet.GetParameters();
-        var controlParams = _controlNetEncoder.GetParameters();
+        var allParams = new List<T>();
 
-        // Concatenate parameters
-        var totalSize = baseParams.Length + controlParams.Length;
-        var combined = new T[totalSize];
+        // Add base UNet parameters
+        var baseParams = _baseUNet.GetParameters();
         for (int i = 0; i < baseParams.Length; i++)
         {
-            combined[i] = baseParams[i];
-        }
-        for (int i = 0; i < controlParams.Length; i++)
-        {
-            combined[baseParams.Length + i] = controlParams[i];
+            allParams.Add(baseParams[i]);
         }
 
-        return new Vector<T>(combined);
+        // Add all cached encoder parameters (in deterministic order)
+        foreach (var kvp in _encoderCache.OrderBy(kv => kv.Key))
+        {
+            var encoderParams = kvp.Value.GetParameters();
+            for (int i = 0; i < encoderParams.Length; i++)
+            {
+                allParams.Add(encoderParams[i]);
+            }
+        }
+
+        return new Vector<T>(allParams.ToArray());
     }
 
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        int offset = 0;
+
+        // Set base UNet parameters
         var baseCount = _baseUNet.ParameterCount;
         var baseParams = new T[baseCount];
-        var controlParams = new T[parameters.Length - baseCount];
-
         for (int i = 0; i < baseCount; i++)
         {
-            baseParams[i] = parameters[i];
+            baseParams[i] = parameters[offset + i];
         }
-        for (int i = 0; i < controlParams.Length; i++)
-        {
-            controlParams[i] = parameters[baseCount + i];
-        }
-
         _baseUNet.SetParameters(new Vector<T>(baseParams));
-        _controlNetEncoder.SetParameters(new Vector<T>(controlParams));
+        offset += baseCount;
+
+        // Set all cached encoder parameters (in same order as GetParameters)
+        foreach (var kvp in _encoderCache.OrderBy(kv => kv.Key))
+        {
+            var encoderCount = kvp.Value.ParameterCount;
+            var encoderParams = new T[encoderCount];
+            for (int i = 0; i < encoderCount; i++)
+            {
+                encoderParams[i] = parameters[offset + i];
+            }
+            kvp.Value.SetParameters(new Vector<T>(encoderParams));
+            offset += encoderCount;
+        }
     }
 
     /// <inheritdoc />
@@ -651,6 +728,13 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
             controlType: _controlType,
             conditioner: _conditioner,
             seed: RandomGenerator.Next());
+
+        // Create matching encoder cache in clone before setting parameters
+        foreach (var controlType in _encoderCache.Keys.Where(ct => ct != _controlType))
+        {
+            // GetOrCreateEncoder adds to the cache
+            clone.GetOrCreateEncoder(controlType);
+        }
 
         clone.SetParameters(GetParameters());
         clone.ConditioningStrength = _conditioningStrength;
