@@ -1,4 +1,4 @@
-
+using AiDotNet.LearningRateSchedulers;
 
 namespace AiDotNet.Models.Options;
 
@@ -128,6 +128,40 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// </para>
     /// </remarks>
     public double MaxGradientValue { get; set; } = GradientClippingHelper.DefaultMaxValue;
+
+    /// <summary>
+    /// Gets or sets the learning rate scheduler to use during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Learning rate schedulers dynamically adjust the learning rate during training,
+    /// which can significantly improve convergence and final model performance.
+    /// </para>
+    /// <para><b>For Beginners:</b> A learning rate scheduler automatically adjusts how fast
+    /// your model learns during training. Common strategies include:
+    /// - Starting with a higher learning rate and gradually decreasing it
+    /// - Using warmup to slowly increase the learning rate at the start
+    /// - Cycling between high and low learning rates
+    ///
+    /// Set this to null (default) to use a constant learning rate.
+    /// </para>
+    /// </remarks>
+    public ILearningRateScheduler? LearningRateScheduler { get; set; }
+
+    /// <summary>
+    /// Gets or sets when the learning rate scheduler should be stepped.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// - <see cref="SchedulerStepMode.StepPerBatch"/>: Update LR after each mini-batch
+    /// - <see cref="SchedulerStepMode.StepPerEpoch"/>: Update LR after each epoch (default)
+    /// - <see cref="SchedulerStepMode.WarmupThenEpoch"/>: Per-batch during warmup, then per-epoch
+    /// </para>
+    /// <para><b>For Beginners:</b> Most schedulers work best with per-epoch stepping.
+    /// Use per-batch stepping for warmup schedulers or cyclical learning rates.
+    /// </para>
+    /// </remarks>
+    public SchedulerStepMode SchedulerStepMode { get; set; } = SchedulerStepMode.StepPerEpoch;
 }
 
 /// <summary>
