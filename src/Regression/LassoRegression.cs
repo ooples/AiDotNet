@@ -115,8 +115,9 @@ public class LassoRegression<T> : RegressionBase<T>
         }
 
         // Initialize coefficients (warm start or zeros)
+        // Warm start only if coefficients were previously set (Length > 0) and match expected size
         Vector<T> w;
-        if (Options.WarmStart && Coefficients.Length == (Options.UseIntercept ? p - 1 : p))
+        if (Options.WarmStart && Coefficients.Length > 0 && Coefficients.Length == (Options.UseIntercept ? p - 1 : p))
         {
             // Use existing coefficients as warm start
             w = new Vector<T>(p);
@@ -192,16 +193,10 @@ public class LassoRegression<T> : RegressionBase<T>
                 }
 
                 // Apply soft-thresholding (don't regularize intercept)
-                T newW;
-                if (j < startIdx || NumOps.Equals(xSquaredSum[j], NumOps.Zero))
-                {
-                    // Intercept or zero column - no regularization
-                    newW = NumOps.Equals(xSquaredSum[j], NumOps.Zero) ? NumOps.Zero : NumOps.Divide(rho, xSquaredSum[j]);
-                }
-                else
-                {
-                    newW = SoftThreshold(rho, alpha, xSquaredSum[j]);
-                }
+                // Intercept or zero column gets no regularization; otherwise apply L1 soft-thresholding
+                T newW = (j < startIdx || NumOps.Equals(xSquaredSum[j], NumOps.Zero))
+                    ? (NumOps.Equals(xSquaredSum[j], NumOps.Zero) ? NumOps.Zero : NumOps.Divide(rho, xSquaredSum[j]))
+                    : SoftThreshold(rho, alpha, xSquaredSum[j]);
 
                 w[j] = newW;
 

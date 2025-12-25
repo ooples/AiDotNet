@@ -41,8 +41,13 @@ namespace AiDotNet.Models.Options;
 /// <typeparam name="T">The data type used for calculations.</typeparam>
 public class ElasticNetRegressionOptions<T> : RegressionOptions<T>
 {
+    private double _alpha = 1.0;
+    private double _l1Ratio = 0.5;
+    private int _maxIterations = 1000;
+    private double _tolerance = 1e-4;
+
     /// <summary>
-    /// Gets or sets the overall regularization strength. Must be a positive value.
+    /// Gets or sets the overall regularization strength. Must be a non-negative value.
     /// </summary>
     /// <value>The regularization parameter, defaulting to 1.0.</value>
     /// <remarks>
@@ -61,7 +66,19 @@ public class ElasticNetRegressionOptions<T> : RegressionOptions<T>
     /// Use cross-validation to find the optimal value for your data.
     /// </para>
     /// </remarks>
-    public double Alpha { get; set; } = 1.0;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is negative.</exception>
+    public double Alpha
+    {
+        get => _alpha;
+        set
+        {
+            if (value < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "Alpha must be non-negative.");
+            }
+            _alpha = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the ratio of L1 penalty in the combined penalty. Must be between 0 and 1.
@@ -88,7 +105,19 @@ public class ElasticNetRegressionOptions<T> : RegressionOptions<T>
     /// - Use cross-validation to find the optimal value
     /// </para>
     /// </remarks>
-    public double L1Ratio { get; set; } = 0.5;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is outside [0, 1] range.</exception>
+    public double L1Ratio
+    {
+        get => _l1Ratio;
+        set
+        {
+            if (value < 0 || value > 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "L1Ratio must be between 0 and 1.");
+            }
+            _l1Ratio = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the maximum number of iterations for the coordinate descent algorithm.
@@ -103,7 +132,19 @@ public class ElasticNetRegressionOptions<T> : RegressionOptions<T>
     /// The default of 1000 is usually sufficient. Increase if you see convergence warnings.
     /// </para>
     /// </remarks>
-    public int MaxIterations { get; set; } = 1000;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not positive.</exception>
+    public int MaxIterations
+    {
+        get => _maxIterations;
+        set
+        {
+            if (value <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "MaxIterations must be positive.");
+            }
+            _maxIterations = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the convergence tolerance for the optimization algorithm.
@@ -117,7 +158,19 @@ public class ElasticNetRegressionOptions<T> : RegressionOptions<T>
     /// The default is good for most applications.
     /// </para>
     /// </remarks>
-    public double Tolerance { get; set; } = 1e-4;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not positive.</exception>
+    public double Tolerance
+    {
+        get => _tolerance;
+        set
+        {
+            if (value <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "Tolerance must be positive.");
+            }
+            _tolerance = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets whether to use warm starting for cross-validation.

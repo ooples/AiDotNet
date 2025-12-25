@@ -41,8 +41,10 @@ namespace AiDotNet.Models.Options;
 /// <typeparam name="T">The data type used for calculations.</typeparam>
 public class RidgeRegressionOptions<T> : RegressionOptions<T>
 {
+    private double _alpha = 1.0;
+
     /// <summary>
-    /// Gets or sets the regularization strength (alpha). Must be a positive value.
+    /// Gets or sets the regularization strength (alpha). Must be a non-negative value.
     /// </summary>
     /// <value>The regularization parameter, defaulting to 1.0.</value>
     /// <remarks>
@@ -68,7 +70,19 @@ public class RidgeRegressionOptions<T> : RegressionOptions<T>
     /// - Use cross-validation to find the optimal value systematically
     /// </para>
     /// </remarks>
-    public double Alpha { get; set; } = 1.0;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is negative.</exception>
+    public double Alpha
+    {
+        get => _alpha;
+        set
+        {
+            if (value < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "Alpha must be non-negative.");
+            }
+            _alpha = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the type of matrix decomposition used to solve the ridge regression equations.

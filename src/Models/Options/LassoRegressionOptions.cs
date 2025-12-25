@@ -40,8 +40,12 @@ namespace AiDotNet.Models.Options;
 /// <typeparam name="T">The data type used for calculations.</typeparam>
 public class LassoRegressionOptions<T> : RegressionOptions<T>
 {
+    private double _alpha = 1.0;
+    private int _maxIterations = 1000;
+    private double _tolerance = 1e-4;
+
     /// <summary>
-    /// Gets or sets the regularization strength (alpha). Must be a positive value.
+    /// Gets or sets the regularization strength (alpha). Must be a non-negative value.
     /// </summary>
     /// <value>The regularization parameter, defaulting to 1.0.</value>
     /// <remarks>
@@ -65,7 +69,19 @@ public class LassoRegressionOptions<T> : RegressionOptions<T>
     /// - Use cross-validation with a range of alpha values to find the optimal value
     /// </para>
     /// </remarks>
-    public double Alpha { get; set; } = 1.0;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is negative.</exception>
+    public double Alpha
+    {
+        get => _alpha;
+        set
+        {
+            if (value < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "Alpha must be non-negative.");
+            }
+            _alpha = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the maximum number of iterations for the coordinate descent algorithm.
@@ -93,7 +109,19 @@ public class LassoRegressionOptions<T> : RegressionOptions<T>
     /// - You want to limit computational time
     /// </para>
     /// </remarks>
-    public int MaxIterations { get; set; } = 1000;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not positive.</exception>
+    public int MaxIterations
+    {
+        get => _maxIterations;
+        set
+        {
+            if (value <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "MaxIterations must be positive.");
+            }
+            _maxIterations = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the convergence tolerance for the optimization algorithm.
@@ -117,7 +145,19 @@ public class LassoRegressionOptions<T> : RegressionOptions<T>
     /// - Training is too slow (increase tolerance)
     /// </para>
     /// </remarks>
-    public double Tolerance { get; set; } = 1e-4;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not positive.</exception>
+    public double Tolerance
+    {
+        get => _tolerance;
+        set
+        {
+            if (value <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "Tolerance must be positive.");
+            }
+            _tolerance = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets whether to use warm starting for cross-validation.
