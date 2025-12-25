@@ -553,6 +553,31 @@ public static class DataLoaders
         int prefetchCount = 2,
         int numWorkers = 4)
     {
+        if (sampleReader is null)
+        {
+            throw new ArgumentNullException(nameof(sampleReader), "Sample reader function cannot be null.");
+        }
+
+        if (sampleCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(sampleCount), "Sample count must be greater than 0.");
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        if (prefetchCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(prefetchCount), "Prefetch count must be greater than 0.");
+        }
+
+        if (numWorkers <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numWorkers), "Number of workers must be greater than 0.");
+        }
+
         return new StreamingDataLoader<T, TInput, TOutput>(
             sampleCount, sampleReader, batchSize, null, prefetchCount, numWorkers);
     }
@@ -600,6 +625,36 @@ public static class DataLoaders
         int prefetchCount = 2,
         int numWorkers = 4)
     {
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            throw new ArgumentNullException(nameof(directory), "Directory path cannot be null or empty.");
+        }
+
+        if (string.IsNullOrWhiteSpace(filePattern))
+        {
+            throw new ArgumentNullException(nameof(filePattern), "File pattern cannot be null or empty.");
+        }
+
+        if (fileProcessor is null)
+        {
+            throw new ArgumentNullException(nameof(fileProcessor), "File processor function cannot be null.");
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        if (prefetchCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(prefetchCount), "Prefetch count must be greater than 0.");
+        }
+
+        if (numWorkers <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numWorkers), "Number of workers must be greater than 0.");
+        }
+
         return new FileStreamingDataLoader<T, TInput, TOutput>(
             directory, filePattern, fileProcessor, batchSize, searchOption, prefetchCount, numWorkers);
     }
@@ -644,6 +699,26 @@ public static class DataLoaders
         bool hasHeader = true,
         int prefetchCount = 2)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentNullException(nameof(filePath), "File path cannot be null or empty.");
+        }
+
+        if (lineParser is null)
+        {
+            throw new ArgumentNullException(nameof(lineParser), "Line parser function cannot be null.");
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        if (prefetchCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(prefetchCount), "Prefetch count must be greater than 0.");
+        }
+
         return new CsvStreamingDataLoader<T, TInput, TOutput>(
             filePath, lineParser, batchSize, hasHeader, prefetchCount);
     }
