@@ -51,6 +51,12 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
     /// </summary>
     private Random? _random;
 
+    /// <summary>
+    /// Mean residual values for each tree's leaf predictions.
+    /// Each entry contains [meanForClass0, meanForClass1] for the corresponding tree.
+    /// </summary>
+    private readonly List<T[]> _leafResidualMeans = new();
+
     /// <inheritdoc/>
     public int MaxDepth => Options.MaxDepth;
 
@@ -95,8 +101,9 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
             : RandomHelper.CreateSeededRandom(42);
 
-        // Clear existing estimators
+        // Clear existing estimators and residual means
         Estimators.Clear();
+        _leafResidualMeans.Clear();
 
         int n = x.Rows;
 
@@ -176,8 +183,7 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
                 MinImpurityDecrease = Options.MinImpurityDecrease
             };
 
-            // For simplicity, we'll fit to residual signs for classification
-            // A proper implementation would use regression trees
+            // Fit to residual signs to determine tree structure
             var residualClasses = new Vector<T>(residualsSample.Length);
             for (int i = 0; i < residualsSample.Length; i++)
             {
@@ -190,14 +196,44 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             tree.Train(xSample, residualClasses);
             Estimators.Add(tree);
 
-            // Update predictions
+            // Compute mean residual values for each predicted class (leaf)
+            // This approximates regression tree behavior by using actual residual magnitudes
+            var samplePreds = tree.Predict(xSample);
+            T sumClass0 = NumOps.Zero, sumClass1 = NumOps.Zero;
+            int countClass0 = 0, countClass1 = 0;
+
+            for (int i = 0; i < residualsSample.Length; i++)
+            {
+                if (NumOps.Compare(samplePreds[i], NumOps.One) == 0)
+                {
+                    sumClass1 = NumOps.Add(sumClass1, residualsSample[i]);
+                    countClass1++;
+                }
+                else
+                {
+                    sumClass0 = NumOps.Add(sumClass0, residualsSample[i]);
+                    countClass0++;
+                }
+            }
+
+            // Compute mean residuals for each class (with fallback to 0 if no samples)
+            T meanClass0 = countClass0 > 0
+                ? NumOps.Divide(sumClass0, NumOps.FromDouble(countClass0))
+                : NumOps.Zero;
+            T meanClass1 = countClass1 > 0
+                ? NumOps.Divide(sumClass1, NumOps.FromDouble(countClass1))
+                : NumOps.Zero;
+
+            _leafResidualMeans.Add(new[] { meanClass0, meanClass1 });
+
+            // Update predictions using actual mean residuals instead of fixed values
             var treePreds = tree.Predict(x);
             for (int i = 0; i < n; i++)
             {
-                // Map prediction to residual estimate
+                // Use actual mean residual for the predicted class
                 T treeOutput = NumOps.Compare(treePreds[i], NumOps.One) == 0
-                    ? NumOps.FromDouble(0.5)
-                    : NumOps.FromDouble(-0.5);
+                    ? meanClass1
+                    : meanClass0;
                 fValues[i] = NumOps.Add(fValues[i], NumOps.Multiply(lr, treeOutput));
             }
         }
@@ -279,9 +315,10 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             for (int m = 0; m < Estimators.Count; m++)
             {
                 var treePred = Estimators[m].Predict(sample);
+                // Use stored mean residuals for this tree
                 T treeOutput = NumOps.Compare(treePred[0], NumOps.One) == 0
-                    ? NumOps.FromDouble(0.5)
-                    : NumOps.FromDouble(-0.5);
+                    ? _leafResidualMeans[m][1]
+                    : _leafResidualMeans[m][0];
                 fValue = NumOps.Add(fValue, NumOps.Multiply(lr, treeOutput));
             }
 
@@ -319,9 +356,10 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             for (int m = 0; m < Estimators.Count; m++)
             {
                 var treePred = Estimators[m].Predict(sample);
+                // Use stored mean residuals for this tree
                 T treeOutput = NumOps.Compare(treePred[0], NumOps.One) == 0
-                    ? NumOps.FromDouble(0.5)
-                    : NumOps.FromDouble(-0.5);
+                    ? _leafResidualMeans[m][1]
+                    : _leafResidualMeans[m][0];
                 fValue = NumOps.Add(fValue, NumOps.Multiply(lr, treeOutput));
             }
 
