@@ -57,6 +57,11 @@ public abstract class ClusteringBase<T> : IClustering<T>
     public T? Inertia { get; protected set; }
 
     /// <summary>
+    /// Gets or sets whether the model has been trained.
+    /// </summary>
+    public bool IsTrained { get; protected set; }
+
+    /// <summary>
     /// Gets or sets the number of features.
     /// </summary>
     public int NumFeatures { get; protected set; }
@@ -103,6 +108,26 @@ public abstract class ClusteringBase<T> : IClustering<T>
     {
         var y = new Vector<T>(x.Rows);
         Train(x, y);
+    }
+
+    /// <summary>
+    /// Trains the model on data (unsupervised convenience method).
+    /// </summary>
+    public virtual void Train(Matrix<T> x)
+    {
+        var y = new Vector<T>(x.Rows);
+        Train(x, y);
+    }
+
+    /// <summary>
+    /// Validates that the model has been trained.
+    /// </summary>
+    protected void ValidateIsTrained()
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("Model must be trained before performing this operation.");
+        }
     }
 
     /// <inheritdoc/>
@@ -217,7 +242,7 @@ public abstract class ClusteringBase<T> : IClustering<T>
         return new ModelMetadata<T>
         {
             ModelType = GetModelType(),
-            NumFeatures = NumFeatures,
+            FeatureCount = NumFeatures,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["NumClusters"] = NumClusters,
