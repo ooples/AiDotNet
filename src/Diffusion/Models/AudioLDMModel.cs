@@ -593,11 +593,33 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        // Clone U-Net with trained weights
+        var baseChannels = _isVersion2 ? 384 : 256;
+        var contextDim = _isVersion2 ? 1024 : 768;
+        var clonedUnet = new UNetNoisePredictor<T>(
+            inputChannels: AUDIOLDM_LATENT_CHANNELS,
+            outputChannels: AUDIOLDM_LATENT_CHANNELS,
+            baseChannels: baseChannels,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            numResBlocks: 2,
+            attentionResolutions: new[] { 4, 2, 1 },
+            contextDim: contextDim);
+        clonedUnet.SetParameters(_unet.GetParameters());
+
+        // Clone AudioVAE with trained weights
+        var clonedVae = new AudioVAE<T>(
+            melChannels: MelChannels,
+            latentChannels: AUDIOLDM_LATENT_CHANNELS,
+            baseChannels: 64,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            numResBlocks: 2);
+        clonedVae.SetParameters(_audioVAE.GetParameters());
+
         return new AudioLDMModel<T>(
             options: null,
             scheduler: null,
-            unet: null,
-            audioVAE: null,
+            unet: clonedUnet,
+            audioVAE: clonedVae,
             conditioner: _conditioner,
             sampleRate: SampleRate,
             defaultDurationSeconds: DefaultDurationSeconds,
