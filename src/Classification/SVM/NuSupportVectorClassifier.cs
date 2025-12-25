@@ -258,17 +258,48 @@ public class NuSupportVectorClassifier<T> : SVMBase<T>
                         continue;
                     }
 
-                    // Update alphas
+                    // Update alphas in pairs to maintain Nu-SVC constraint: sum(alpha_i * y_i) = 0
+                    T alphaJ = _alphas[j];
                     T deltaAlpha = NumOps.Divide(
                         NumOps.Multiply(yi, NumOps.Subtract(Ej, Ei)),
                         eta);
 
+                    // Compute bounds for alpha_i considering constraint maintenance
+                    // If y_i == y_j: delta_alpha_j = -delta_alpha_i (to maintain sum constraint)
+                    // If y_i != y_j: delta_alpha_j = delta_alpha_i
+                    T deltaAlphaJ;
+                    if (NumOps.Compare(NumOps.Multiply(yi, yj), NumOps.One) == 0)
+                    {
+                        // Same class: alpha_j decreases when alpha_i increases
+                        deltaAlphaJ = NumOps.Negate(deltaAlpha);
+                    }
+                    else
+                    {
+                        // Different class: alpha_j changes same direction
+                        deltaAlphaJ = deltaAlpha;
+                    }
+
+                    // Clip alpha_i
                     T newAlphaI = NumOps.Add(alphaI, deltaAlpha);
                     newAlphaI = Max(NumOps.Zero, Min(upperBoundAlpha, newAlphaI));
+                    T actualDeltaI = NumOps.Subtract(newAlphaI, alphaI);
 
-                    if (NumOps.Compare(NumOps.Abs(NumOps.Subtract(newAlphaI, alphaI)), tolerance) > 0)
+                    // Compute corresponding alpha_j
+                    T newAlphaJ;
+                    if (NumOps.Compare(NumOps.Multiply(yi, yj), NumOps.One) == 0)
+                    {
+                        newAlphaJ = NumOps.Subtract(alphaJ, actualDeltaI);
+                    }
+                    else
+                    {
+                        newAlphaJ = NumOps.Add(alphaJ, actualDeltaI);
+                    }
+                    newAlphaJ = Max(NumOps.Zero, Min(upperBoundAlpha, newAlphaJ));
+
+                    if (NumOps.Compare(NumOps.Abs(actualDeltaI), tolerance) > 0)
                     {
                         _alphas[i] = newAlphaI;
+                        _alphas[j] = newAlphaJ;
                         changed = true;
                     }
                 }

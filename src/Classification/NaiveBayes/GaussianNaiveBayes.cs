@@ -104,7 +104,7 @@ public class GaussianNaiveBayes<T> : NaiveBayesBase<T>
                 _means[c, f] = NumOps.Divide(sum, NumOps.FromDouble(classCount));
             }
 
-            // Compute variance for each feature (using Bessel's correction for unbiased estimate)
+            // Compute variance for each feature (using n, not n-1, for sklearn compatibility)
             for (int f = 0; f < NumFeatures; f++)
             {
                 T sumSquaredDiff = NumOps.Zero;

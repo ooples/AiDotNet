@@ -111,17 +111,17 @@ public class MultiOutputClassifier<T> : MetaClassifierBase<T>, IMultiLabelClassi
         }
 
         NumFeatures = x.Columns;
-        ClassLabels = ExtractClassLabels(y);
-        NumClasses = ClassLabels.Length;
+        var originalClassLabels = ExtractClassLabels(y);
+        int numOriginalClasses = originalClassLabels.Length;
         TaskType = InferTaskType(y);
 
         // Convert to multi-label format (one-hot encoding)
-        var yMultiLabel = new Matrix<T>(y.Length, NumClasses);
+        var yMultiLabel = new Matrix<T>(y.Length, numOriginalClasses);
         for (int i = 0; i < y.Length; i++)
         {
-            for (int c = 0; c < NumClasses; c++)
+            for (int c = 0; c < numOriginalClasses; c++)
             {
-                if (NumOps.Compare(y[i], ClassLabels[c]) == 0)
+                if (NumOps.Compare(y[i], originalClassLabels[c]) == 0)
                 {
                     yMultiLabel[i, c] = NumOps.One;
                 }
@@ -129,6 +129,9 @@ public class MultiOutputClassifier<T> : MetaClassifierBase<T>, IMultiLabelClassi
         }
 
         TrainMultiLabel(x, yMultiLabel);
+
+        // Restore original class labels for Predict to return correct label values
+        ClassLabels = originalClassLabels;
     }
 
     /// <inheritdoc/>
@@ -171,14 +174,30 @@ public class MultiOutputClassifier<T> : MetaClassifierBase<T>, IMultiLabelClassi
         // Predict for each output independently
         for (int c = 0; c < NumClasses; c++)
         {
-            var labelPreds = _classifiers[c].Predict(input);
-
-            for (int i = 0; i < input.Rows; i++)
+            // Try to get probabilities first, fall back to using predictions directly
+            if (_classifiers[c] is IProbabilisticClassifier<T> probClassifier)
             {
-                // Threshold at 0.5 for binary
-                predictions[i, c] = NumOps.Compare(labelPreds[i], NumOps.FromDouble(0.5)) >= 0
-                    ? NumOps.One
-                    : NumOps.Zero;
+                var probs = probClassifier.PredictProbabilities(input);
+                for (int i = 0; i < input.Rows; i++)
+                {
+                    // Use probability of positive class (column 1 for binary classifiers)
+                    T posProb = probs.Columns > 1 ? probs[i, 1] : probs[i, 0];
+                    predictions[i, c] = NumOps.Compare(posProb, NumOps.FromDouble(0.5)) >= 0
+                        ? NumOps.One
+                        : NumOps.Zero;
+                }
+            }
+            else
+            {
+                // Fall back to using class predictions (assumes binary 0/1 labels)
+                var labelPreds = _classifiers[c].Predict(input);
+                for (int i = 0; i < input.Rows; i++)
+                {
+                    // Compare to NumOps.One to check if positive class was predicted
+                    predictions[i, c] = NumOps.Compare(labelPreds[i], NumOps.One) == 0
+                        ? NumOps.One
+                        : NumOps.Zero;
+                }
             }
         }
 

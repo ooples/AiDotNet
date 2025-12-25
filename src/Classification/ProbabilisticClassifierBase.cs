@@ -62,6 +62,11 @@ public abstract class ProbabilisticClassifierBase<T> : ClassifierBase<T>, IProba
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        if (NumClasses <= 0)
+        {
+            throw new InvalidOperationException("Model has not been trained or has no classes.");
+        }
+
         var probabilities = PredictProbabilities(input);
         var predictions = new Vector<T>(input.Rows);
 

@@ -50,6 +50,12 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
     private Random? _random;
 
     /// <summary>
+    /// Feature indices selected for each estimator.
+    /// Used to ensure prediction uses the same features as training.
+    /// </summary>
+    private int[][]? _featureIndicesPerEstimator;
+
+    /// <summary>
     /// Initializes a new instance of the BaggingClassifier class.
     /// </summary>
     /// <param name="estimatorFactory">Factory function to create base classifiers.</param>
@@ -91,6 +97,7 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
         int numEstimators = Options.NumEstimators;
 
         _estimators = new IClassifier<T>[numEstimators];
+        _featureIndicesPerEstimator = new int[numEstimators][];
 
         // Train each estimator on a bootstrap sample
         for (int e = 0; e < numEstimators; e++)
@@ -99,16 +106,19 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
             int sampleSize = (int)(n * Options.MaxSamples);
             var (xSample, ySample) = CreateBootstrapSample(x, y, sampleSize);
 
-            // Optionally sample features
+            // Optionally sample features randomly
             Matrix<T> xFinal;
             if (Options.MaxFeatures < 1.0)
             {
                 int numFeaturesToSample = (int)(NumFeatures * Options.MaxFeatures);
-                xFinal = SampleFeatures(xSample, numFeaturesToSample);
+                var (sampledData, featureIndices) = SampleFeaturesRandomly(xSample, numFeaturesToSample);
+                xFinal = sampledData;
+                _featureIndicesPerEstimator[e] = featureIndices;
             }
             else
             {
                 xFinal = xSample;
+                _featureIndicesPerEstimator[e] = Enumerable.Range(0, NumFeatures).ToArray();
             }
 
             // Train classifier
@@ -140,29 +150,34 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
     }
 
     /// <summary>
-    /// Samples a subset of features.
+    /// Randomly samples a subset of features.
     /// </summary>
-    private Matrix<T> SampleFeatures(Matrix<T> x, int numFeatures)
+    /// <returns>A tuple of the sampled data matrix and the selected feature indices.</returns>
+    private (Matrix<T> data, int[] featureIndices) SampleFeaturesRandomly(Matrix<T> x, int numFeatures)
     {
-        // For simplicity, just take the first N features
-        // A more sophisticated implementation would randomly select features
+        // Randomly select feature indices without replacement
+        var featureIndices = Enumerable.Range(0, x.Columns)
+            .OrderBy(_ => _random!.Next())
+            .Take(numFeatures)
+            .ToArray();
+
         var xSampled = new Matrix<T>(x.Rows, numFeatures);
 
         for (int i = 0; i < x.Rows; i++)
         {
             for (int j = 0; j < numFeatures; j++)
             {
-                xSampled[i, j] = x[i, j];
+                xSampled[i, j] = x[i, featureIndices[j]];
             }
         }
 
-        return xSampled;
+        return (xSampled, featureIndices);
     }
 
     /// <inheritdoc/>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        if (_estimators is null || ClassLabels is null)
+        if (_estimators is null || ClassLabels is null || _featureIndicesPerEstimator is null)
         {
             throw new InvalidOperationException("Model has not been trained.");
         }
@@ -176,11 +191,12 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
 
             for (int e = 0; e < _estimators.Length; e++)
             {
-                // Extract single sample
-                var sample = new Matrix<T>(1, input.Columns);
-                for (int j = 0; j < input.Columns; j++)
+                // Extract single sample using the same feature indices used during training
+                var featureIndices = _featureIndicesPerEstimator[e];
+                var sample = new Matrix<T>(1, featureIndices.Length);
+                for (int j = 0; j < featureIndices.Length; j++)
                 {
-                    sample[0, j] = input[i, j];
+                    sample[0, j] = input[i, featureIndices[j]];
                 }
 
                 var pred = _estimators[e].Predict(sample);
