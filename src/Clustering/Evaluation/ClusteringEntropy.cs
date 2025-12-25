@@ -336,9 +336,11 @@ public class Completeness<T> : IExternalClusterMetric<T>
 
     private double ComputeConditionalEntropy(Vector<T> labels, Vector<T> givenLabels)
     {
-        // This computes H(labels | givenLabels)
+        // This computes H(labels | givenLabels) = H(K|C)
+        // ClusteringEntropy.Compute(X, Y) returns H(Y|X)
+        // So we need Compute(givenLabels, labels) to get H(labels|givenLabels)
         var entropy = new ClusteringEntropy<T>();
-        return entropy.Compute(labels, givenLabels);
+        return entropy.Compute(givenLabels, labels);
     }
 
     private double ComputeEntropy(Vector<T> labels)

@@ -54,7 +54,8 @@ public class CLARANS<T> : ClusteringBase<T>
     public CLARANS(CLARANSOptions<T>? options = null)
         : base(options ?? new CLARANSOptions<T>())
     {
-        _options = options ?? new CLARANSOptions<T>();
+        // Use the options passed to base constructor to avoid double instantiation
+        _options = (CLARANSOptions<T>)Options;
     }
 
     /// <summary>
@@ -88,6 +89,16 @@ public class CLARANS<T> : ClusteringBase<T>
         var newInstance = (CLARANS<T>)CreateNewInstance();
         newInstance.SetParameters(parameters);
         return newInstance;
+    }
+
+    /// <summary>
+    /// Trains the CLARANS clustering model on the given data.
+    /// </summary>
+    /// <param name="x">The input data matrix.</param>
+    public override void Train(Matrix<T> x)
+    {
+        // CLARANS is unsupervised, so we can ignore labels
+        Train(x, new Vector<T>(x.Rows));
     }
 
     /// <inheritdoc />

@@ -52,6 +52,12 @@ public class ConnectivityIndex<T> : IClusterMetric<T>
     /// <param name="distanceMetric">Distance metric to use, or null for Euclidean (default).</param>
     public ConnectivityIndex(int numNeighbors = 10, IDistanceMetric<T>? distanceMetric = null)
     {
+        if (numNeighbors <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numNeighbors),
+                "Number of neighbors must be greater than 0.");
+        }
+
         _numNeighbors = numNeighbors;
         _distanceMetric = distanceMetric;
         _numOps = MathHelper.GetNumericOperations<T>();

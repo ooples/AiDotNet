@@ -290,7 +290,9 @@ public class BootstrapValidation<T>
             StdDev = stdDev,
             Lower = sorted[lowerIdx],
             Upper = sorted[upperIdx],
-            Median = sorted[sorted.Count / 2],
+            Median = sorted.Count % 2 == 1
+                ? sorted[sorted.Count / 2]
+                : (sorted[sorted.Count / 2 - 1] + sorted[sorted.Count / 2]) / 2,
             NumSamples = sorted.Count
         };
     }

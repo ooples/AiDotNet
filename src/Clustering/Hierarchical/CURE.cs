@@ -121,6 +121,13 @@ public class CURE<T> : ClusteringBase<T>
 
         int sampleN = data.Rows;
 
+        // Validate NumClusters is within valid range
+        if (_options.NumClusters < 1 || _options.NumClusters > sampleN)
+        {
+            throw new ArgumentException(
+                $"NumClusters must be between 1 and {sampleN} (number of data points), got {_options.NumClusters}.");
+        }
+
         // Initialize: each point is its own cluster
         _clusters = new List<CureCluster>();
         for (int i = 0; i < sampleN; i++)
