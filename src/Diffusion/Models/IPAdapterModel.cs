@@ -132,7 +132,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
 
     /// <inheritdoc />
     public override int ParameterCount =>
-        _baseUNet.ParameterCount + _imageEncoder.ParameterCount + _imageProjector.ParameterCount;
+        _baseUNet.ParameterCount + _vae.ParameterCount + _imageEncoder.ParameterCount + _imageProjector.ParameterCount;
 
     /// <summary>
     /// Gets or sets the default image prompt weight (0-1).
@@ -517,16 +517,21 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     public override Vector<T> GetParameters()
     {
         var unetParams = _baseUNet.GetParameters();
+        var vaeParams = _vae.GetParameters();
         var encoderParams = _imageEncoder.GetParameters();
         var projectorParams = _imageProjector.GetParameters();
 
-        var totalLength = unetParams.Length + encoderParams.Length + projectorParams.Length;
+        var totalLength = unetParams.Length + vaeParams.Length + encoderParams.Length + projectorParams.Length;
         var combined = new T[totalLength];
 
         var offset = 0;
         for (int i = 0; i < unetParams.Length; i++)
         {
             combined[offset++] = unetParams[i];
+        }
+        for (int i = 0; i < vaeParams.Length; i++)
+        {
+            combined[offset++] = vaeParams[i];
         }
         for (int i = 0; i < encoderParams.Length; i++)
         {
@@ -544,6 +549,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _baseUNet.ParameterCount;
+        var vaeCount = _vae.ParameterCount;
         var encoderCount = _imageEncoder.ParameterCount;
         var projectorCount = _imageProjector.ParameterCount;
 
@@ -554,6 +560,13 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
             unetParams[i] = parameters[offset++];
         }
         _baseUNet.SetParameters(new Vector<T>(unetParams));
+
+        var vaeParams = new T[vaeCount];
+        for (int i = 0; i < vaeCount; i++)
+        {
+            vaeParams[i] = parameters[offset++];
+        }
+        _vae.SetParameters(new Vector<T>(vaeParams));
 
         var encoderParams = new T[encoderCount];
         for (int i = 0; i < encoderCount; i++)
