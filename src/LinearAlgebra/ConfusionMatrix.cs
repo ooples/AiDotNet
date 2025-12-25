@@ -798,17 +798,22 @@ public class ConfusionMatrix<T> : MatrixBase<T>
     }
 
     /// <summary>
-    /// Gets the Matthews Correlation Coefficient (MCC) for binary classification.
+    /// Gets the Matthews Correlation Coefficient (MCC) for classification.
     /// </summary>
     /// <returns>The MCC value between -1 and 1.</returns>
     /// <remarks>
     /// <para>
-    /// MCC is calculated as: (TP × TN - FP × FN) / sqrt((TP+FP)(TP+FN)(TN+FP)(TN+FN))
+    /// For binary classification: MCC = (TP * TN - FP * FN) / sqrt((TP+FP)(TP+FN)(TN+FP)(TN+FN))
+    /// </para>
+    /// <para>
+    /// For multi-class classification, this uses the generalized formula that operates directly
+    /// on the confusion matrix: MCC = (c * s - sum(pk * tk)) / sqrt((s^2 - sum(pk^2)) * (s^2 - sum(tk^2)))
+    /// where c is the trace, s is total sum, pk is row sum, and tk is column sum.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> The Matthews Correlation Coefficient is considered one of the best metrics
-    /// for binary classification, especially when classes are imbalanced. Unlike accuracy, it takes into
-    /// account all four values in the confusion matrix.
+    /// for classification, especially when classes are imbalanced. Unlike accuracy, it takes into
+    /// account all values in the confusion matrix.
     ///
     /// The MCC ranges from -1 to +1:
     /// - +1: Perfect prediction (your model is always correct)
@@ -816,38 +821,63 @@ public class ConfusionMatrix<T> : MatrixBase<T>
     /// - -1: Total disagreement (your model is always wrong)
     ///
     /// MCC is particularly useful because it only produces a high score if your model performs well
-    /// on both positive and negative classes.
+    /// on all classes.
     /// </para>
     /// </remarks>
     public T GetMatthewsCorrelationCoefficient()
     {
-        T tp = _numOps.Zero;
-        T tn = _numOps.Zero;
-        T fp = _numOps.Zero;
-        T fn = _numOps.Zero;
+        // Generalized multi-class MCC using the full confusion matrix.
+        // Reference formula:
+        //   c = trace(confusionMatrix) - sum of diagonal elements (correct predictions)
+        //   s = sum of all elements
+        //   pk = sum of row k (predicted as class k)
+        //   tk = sum of column k (actual class k)
+        //   MCC = (c * s - sum_k(pk * tk)) / sqrt((s^2 - sum_k(pk^2)) * (s^2 - sum_k(tk^2)))
 
-        // For multi-class, aggregate TP, TN, FP, FN across all classes
+        T c = _numOps.Zero;          // trace (correct predictions)
+        T s = _numOps.Zero;          // total sum of all elements
+        T sumPkTk = _numOps.Zero;    // sum of pk * tk
+        T sumPk2 = _numOps.Zero;     // sum of pk^2
+        T sumTk2 = _numOps.Zero;     // sum of tk^2
+
+        // First pass: compute trace (c) and total sum (s)
         for (int i = 0; i < ClassCount; i++)
         {
-            tp = _numOps.Add(tp, GetTruePositives(i));
-            tn = _numOps.Add(tn, GetTrueNegatives(i));
-            fp = _numOps.Add(fp, GetFalsePositives(i));
-            fn = _numOps.Add(fn, GetFalseNegatives(i));
+            c = _numOps.Add(c, this[i, i]);
+            for (int j = 0; j < ClassCount; j++)
+            {
+                s = _numOps.Add(s, this[i, j]);
+            }
         }
 
-        // MCC = (TP × TN - FP × FN) / sqrt((TP+FP)(TP+FN)(TN+FP)(TN+FN))
+        // Second pass: compute pk, tk and aggregate sums
+        for (int k = 0; k < ClassCount; k++)
+        {
+            T pk = _numOps.Zero; // sum over row k (predicted as class k)
+            T tk = _numOps.Zero; // sum over column k (actual class k)
+
+            for (int j = 0; j < ClassCount; j++)
+            {
+                pk = _numOps.Add(pk, this[k, j]);
+                tk = _numOps.Add(tk, this[j, k]);
+            }
+
+            sumPkTk = _numOps.Add(sumPkTk, _numOps.Multiply(pk, tk));
+            sumPk2 = _numOps.Add(sumPk2, _numOps.Multiply(pk, pk));
+            sumTk2 = _numOps.Add(sumTk2, _numOps.Multiply(tk, tk));
+        }
+
+        // Numerator: c * s - sum(pk * tk)
         T numerator = _numOps.Subtract(
-            _numOps.Multiply(tp, tn),
-            _numOps.Multiply(fp, fn));
+            _numOps.Multiply(c, s),
+            sumPkTk);
 
-        T tpPlusFp = _numOps.Add(tp, fp);
-        T tpPlusFn = _numOps.Add(tp, fn);
-        T tnPlusFp = _numOps.Add(tn, fp);
-        T tnPlusFn = _numOps.Add(tn, fn);
+        // Denominator: sqrt((s^2 - sum(pk^2)) * (s^2 - sum(tk^2)))
+        T sSquared = _numOps.Multiply(s, s);
+        T sSquaredMinusSumPk2 = _numOps.Subtract(sSquared, sumPk2);
+        T sSquaredMinusSumTk2 = _numOps.Subtract(sSquared, sumTk2);
 
-        T denomProduct = _numOps.Multiply(
-            _numOps.Multiply(tpPlusFp, tpPlusFn),
-            _numOps.Multiply(tnPlusFp, tnPlusFn));
+        T denomProduct = _numOps.Multiply(sSquaredMinusSumPk2, sSquaredMinusSumTk2);
 
         if (_numOps.Equals(denomProduct, _numOps.Zero))
         {
@@ -921,7 +951,7 @@ public class ConfusionMatrix<T> : MatrixBase<T>
                 colSum = _numOps.Add(colSum, this[i, k]);
             }
 
-            // Expected count for class k = (rowSum × colSum) / total
+            // Expected count for class k = (rowSum * colSum) / total
             T expectedCount = _numOps.Divide(_numOps.Multiply(rowSum, colSum), total);
             expectedAgreement = _numOps.Add(expectedAgreement, expectedCount);
         }
@@ -934,7 +964,8 @@ public class ConfusionMatrix<T> : MatrixBase<T>
 
         if (_numOps.Equals(denominator, _numOps.Zero))
         {
-            return _numOps.One; // Perfect agreement when expected = 1
+            // Degenerate case: expected agreement is 1 so kappa is undefined; return 1.0 by convention.
+            return _numOps.One;
         }
 
         return _numOps.Divide(numerator, denominator);
