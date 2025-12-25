@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Preprocessing.DimensionalityReduction;
@@ -189,7 +190,7 @@ public class TruncatedSVD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var eigenvalues = new double[k];
         var eigenvectors = new double[k, n];
         var A = (double[,])matrix.Clone();
-        var random = new Random(_randomState);
+        var random = RandomHelper.CreateSeededRandom(_randomState);
 
         for (int m = 0; m < k; m++)
         {

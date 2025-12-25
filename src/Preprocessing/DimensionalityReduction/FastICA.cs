@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Preprocessing.DimensionalityReduction;
@@ -227,7 +228,7 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private double[,] FastICADeflation(double[,] X, int n, int p, int nComponents)
     {
         var W = new double[nComponents, p];
-        var random = new Random(_randomState);
+        var random = RandomHelper.CreateSeededRandom(_randomState);
 
         for (int c = 0; c < nComponents; c++)
         {
@@ -338,7 +339,7 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private double[,] FastICAParallel(double[,] X, int n, int p, int nComponents)
     {
         var W = new double[nComponents, p];
-        var random = new Random(_randomState);
+        var random = RandomHelper.CreateSeededRandom(_randomState);
 
         // Initialize with random orthogonal matrix
         for (int c = 0; c < nComponents; c++)
@@ -468,7 +469,7 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var eigenvalues = new double[k];
         var eigenvectors = new double[k, n];
         var A = (double[,])matrix.Clone();
-        var random = new Random(_randomState);
+        var random = RandomHelper.CreateSeededRandom(_randomState);
 
         for (int m = 0; m < k; m++)
         {

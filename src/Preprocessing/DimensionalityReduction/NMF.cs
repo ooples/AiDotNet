@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Preprocessing.DimensionalityReduction;
@@ -166,7 +167,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         var W = new double[n, k];
         var H = new double[k, p];
-        var random = new Random(_randomState);
+        var random = RandomHelper.CreateSeededRandom(_randomState);
 
         switch (_init)
         {
@@ -273,7 +274,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var eigenvalues = new double[k];
         var eigenvectors = new double[k, n];
         var A = (double[,])matrix.Clone();
-        var random = new Random(_randomState);
+        var random = RandomHelper.CreateSeededRandom(_randomState);
 
         for (int m = 0; m < k; m++)
         {
@@ -607,7 +608,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Initialize W
         var W = new double[n, k];
         double scale = Math.Sqrt(V.Cast<double>().Average() / k);
-        var random = new Random(_randomState);
+        var random = RandomHelper.CreateSeededRandom(_randomState);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < k; j++)

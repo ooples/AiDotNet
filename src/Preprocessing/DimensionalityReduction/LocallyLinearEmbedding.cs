@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Preprocessing.DimensionalityReduction;
@@ -762,7 +763,7 @@ public class LocallyLinearEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         }
 
         var A = (double[,])AtA.Clone();
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int c = 0; c < numComponents; c++)
         {

@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Preprocessing.Encoders;
@@ -174,7 +175,7 @@ public class CatBoostEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var processSet = new HashSet<int>(columnsToProcess);
 
         // Create shuffled order for randomization
-        var random = new Random(_randomState);
+        var random = RandomHelper.CreateSeededRandom(_randomState);
         var order = Enumerable.Range(0, numRows).ToArray();
         for (int i = numRows - 1; i > 0; i--)
         {
