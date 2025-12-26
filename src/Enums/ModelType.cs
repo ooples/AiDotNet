@@ -1022,6 +1022,8 @@ public enum ModelType
 
     SiameseNetwork,
 
+    Clip,
+
     InterventionAnalysisModel,
 
     TBATSModel,
