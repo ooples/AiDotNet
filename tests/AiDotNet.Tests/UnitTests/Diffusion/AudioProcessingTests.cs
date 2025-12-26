@@ -1,5 +1,8 @@
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.WindowFunctions;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion;
@@ -16,9 +19,10 @@ public class AudioProcessingTests
     {
         // Arrange
         int length = 2048;
+        var windowFunc = new HanningWindow<float>();
 
         // Act
-        var window = WindowFunctions<float>.CreateHann(length);
+        var window = windowFunc.Create(length);
 
         // Assert
         Assert.Equal(length, window.Length);
@@ -29,9 +33,10 @@ public class AudioProcessingTests
     {
         // Arrange
         int length = 1024;
+        var windowFunc = new HanningWindow<float>();
 
         // Act
-        var window = WindowFunctions<float>.CreateHann(length);
+        var window = windowFunc.Create(length);
 
         // Assert - Hann window should be near zero at edges
         Assert.True(Math.Abs(window[0]) < 0.001f);
@@ -43,9 +48,10 @@ public class AudioProcessingTests
     {
         // Arrange
         int length = 1024;
+        var windowFunc = new HammingWindow<float>();
 
         // Act
-        var window = WindowFunctions<float>.CreateHamming(length);
+        var window = windowFunc.Create(length);
 
         // Assert - Hamming doesn't go to zero at edges
         Assert.True(window[0] > 0.05f);
@@ -56,10 +62,12 @@ public class AudioProcessingTests
     {
         // Arrange
         int length = 512;
+        var windowBeta5Func = new KaiserWindow<float>(beta: 5.0);
+        var windowBeta14Func = new KaiserWindow<float>(beta: 14.0);
 
         // Act
-        var windowBeta5 = WindowFunctions<float>.CreateKaiser(length, beta: 5.0);
-        var windowBeta14 = WindowFunctions<float>.CreateKaiser(length, beta: 14.0);
+        var windowBeta5 = windowBeta5Func.Create(length);
+        var windowBeta14 = windowBeta14Func.Create(length);
 
         // Assert - Higher beta should have narrower window
         // Edge values should be lower for higher beta
@@ -67,18 +75,27 @@ public class AudioProcessingTests
     }
 
     [Theory]
-    [InlineData(WindowType.Hann)]
-    [InlineData(WindowType.Hamming)]
-    [InlineData(WindowType.Blackman)]
-    [InlineData(WindowType.Rectangular)]
-    [InlineData(WindowType.Triangular)]
-    public void WindowFunctions_AllTypes_CreateCorrectLength(WindowType windowType)
+    [InlineData(WindowFunctionType.Hanning)]
+    [InlineData(WindowFunctionType.Hamming)]
+    [InlineData(WindowFunctionType.Blackman)]
+    [InlineData(WindowFunctionType.Rectangular)]
+    [InlineData(WindowFunctionType.Triangular)]
+    public void WindowFunctions_AllTypes_CreateCorrectLength(WindowFunctionType windowType)
     {
         // Arrange
         int length = 1024;
+        IWindowFunction<float> windowFunc = windowType switch
+        {
+            WindowFunctionType.Hanning => new HanningWindow<float>(),
+            WindowFunctionType.Hamming => new HammingWindow<float>(),
+            WindowFunctionType.Blackman => new BlackmanWindow<float>(),
+            WindowFunctionType.Rectangular => new RectangularWindow<float>(),
+            WindowFunctionType.Triangular => new TriangularWindow<float>(),
+            _ => new HanningWindow<float>()
+        };
 
         // Act
-        var window = WindowFunctions<float>.Create(windowType, length);
+        var window = windowFunc.Create(length);
 
         // Assert
         Assert.Equal(length, window.Length);
