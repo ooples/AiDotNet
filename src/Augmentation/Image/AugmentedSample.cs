@@ -92,7 +92,9 @@ public class AugmentedSample<T, TData>
         var clone = new AugmentedSample<T, TData>(clonedData)
         {
             Labels = Labels is not null ? new Vector<T>(Labels.ToArray()) : null,
-            Metadata = new Dictionary<string, object>(Metadata)
+            Metadata = Metadata.ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value is ICloneable cloneableValue ? cloneableValue.Clone() : kvp.Value)
         };
 
         if (BoundingBoxes is not null)
