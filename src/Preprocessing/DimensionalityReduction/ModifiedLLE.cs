@@ -105,6 +105,16 @@ public class ModifiedLLE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nSamples = data.Rows;
         int n = data.Rows;
         int p = data.Columns;
+
+        // Validate that we have enough samples for requested components
+        // We need at least nComponents + 1 samples because we skip the null eigenvector
+        if (_nComponents >= n)
+        {
+            throw new ArgumentException(
+                $"nComponents ({_nComponents}) must be less than number of samples ({n}) for MLLE. " +
+                $"The null eigenvector is skipped, so at least {_nComponents + 1} samples are required.");
+        }
+
         int k = Math.Min(_nNeighbors, n - 1);
 
         // Convert to double array
@@ -194,7 +204,6 @@ public class ModifiedLLE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         for (int d = 0; d < _nComponents; d++)
         {
             int eigIdx = d + 1; // Skip null eigenvector
-            if (eigIdx >= n) eigIdx = d;
 
             for (int i = 0; i < n; i++)
             {

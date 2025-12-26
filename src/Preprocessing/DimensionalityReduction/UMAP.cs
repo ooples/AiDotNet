@@ -291,6 +291,68 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
     }
 
+    /// <summary>
+    /// Computes distance between two points using the configured metric.
+    /// </summary>
+    private double ComputeDistance(double[] pointA, double[] pointB)
+    {
+        int p = pointA.Length;
+        double dist = 0;
+        switch (_metric)
+        {
+            case UMAPMetric.Euclidean:
+                for (int k = 0; k < p; k++)
+                {
+                    double diff = pointA[k] - pointB[k];
+                    dist += diff * diff;
+                }
+                return Math.Sqrt(dist);
+
+            case UMAPMetric.Manhattan:
+                for (int k = 0; k < p; k++)
+                {
+                    dist += Math.Abs(pointA[k] - pointB[k]);
+                }
+                return dist;
+
+            case UMAPMetric.Cosine:
+                double dot = 0, normA = 0, normB = 0;
+                for (int k = 0; k < p; k++)
+                {
+                    dot += pointA[k] * pointB[k];
+                    normA += pointA[k] * pointA[k];
+                    normB += pointB[k] * pointB[k];
+                }
+                double denom = Math.Sqrt(normA * normB);
+                return denom > 1e-10 ? 1 - dot / denom : 1;
+
+            case UMAPMetric.Correlation:
+                double meanA = 0, meanB = 0;
+                for (int k = 0; k < p; k++)
+                {
+                    meanA += pointA[k];
+                    meanB += pointB[k];
+                }
+                meanA /= p;
+                meanB /= p;
+
+                double cov = 0, varA = 0, varB = 0;
+                for (int k = 0; k < p; k++)
+                {
+                    double diffA = pointA[k] - meanA;
+                    double diffB = pointB[k] - meanB;
+                    cov += diffA * diffB;
+                    varA += diffA * diffA;
+                    varB += diffB * diffB;
+                }
+                double denomCorr = Math.Sqrt(varA * varB);
+                return denomCorr > 1e-10 ? 1 - cov / denomCorr : 1;
+
+            default:
+                throw new NotSupportedException($"Metric {_metric} is not supported.");
+        }
+    }
+
     private double[,] ComputeFuzzySimplicialSet()
     {
         int n = _nSamples;
@@ -545,8 +607,12 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     }
 
     /// <summary>
-    /// Returns the embedding computed during Fit, or transforms new data.
+    /// Transforms data using the fitted UMAP embedding.
     /// </summary>
+    /// <remarks>
+    /// <para>This method always performs out-of-sample transformation using the learned
+    /// embedding space. To get the original training embedding, use <see cref="GetEmbedding"/>.</para>
+    /// </remarks>
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_embedding is null || _trainingData is null)
@@ -554,27 +620,35 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("UMAP has not been fitted.");
         }
 
-        // Check if this is the training data
-        if (data.Rows == _nSamples)
+        // Always perform out-of-sample transformation for consistency
+        // Checking row count is fragile - different datasets can have the same number of rows
+        return TransformNewData(data);
+    }
+
+    /// <summary>
+    /// Gets the embedding computed during Fit for the training data.
+    /// </summary>
+    /// <returns>The embedding matrix for the training data.</returns>
+    public Matrix<T> GetEmbedding()
+    {
+        if (_embedding is null)
         {
-            // Return fitted embedding
-            int n = _embedding.GetLength(0);
-            int d = _embedding.GetLength(1);
-            var result = new T[n, d];
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    result[i, j] = NumOps.FromDouble(_embedding[i, j]);
-                }
-            }
-
-            return new Matrix<T>(result);
+            throw new InvalidOperationException("UMAP has not been fitted.");
         }
 
-        // Out-of-sample transformation
-        return TransformNewData(data);
+        int n = _embedding.GetLength(0);
+        int d = _embedding.GetLength(1);
+        var result = new T[n, d];
+
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                result[i, j] = NumOps.FromDouble(_embedding[i, j]);
+            }
+        }
+
+        return new Matrix<T>(result);
     }
 
     private Matrix<T> TransformNewData(Matrix<T> data)
@@ -603,17 +677,26 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // and compute weighted average of their embeddings
         for (int i = 0; i < nNew; i++)
         {
+            // Extract the new point as an array
+            var newPoint = new double[p];
+            for (int k = 0; k < p; k++)
+            {
+                newPoint[k] = newData[i, k];
+            }
+
             var distances = new (double dist, int idx)[_nSamples];
 
             for (int j = 0; j < _nSamples; j++)
             {
-                double dist = 0;
+                // Extract the training point as an array
+                var trainPoint = new double[p];
                 for (int k = 0; k < p; k++)
                 {
-                    double diff = newData[i, k] - _trainingData![j, k];
-                    dist += diff * diff;
+                    trainPoint[k] = _trainingData![j, k];
                 }
-                distances[j] = (Math.Sqrt(dist), j);
+                // Use the same distance metric as during training
+                double dist = ComputeDistance(newPoint, trainPoint);
+                distances[j] = (dist, j);
             }
 
             Array.Sort(distances, (a, b) => a.dist.CompareTo(b.dist));

@@ -118,6 +118,15 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
+        // Validate that we have enough samples for requested components
+        // We need at least nComponents + 1 samples because we skip the first eigenvector
+        if (_nComponents >= n)
+        {
+            throw new ArgumentException(
+                $"nComponents ({_nComponents}) must be less than number of samples ({n}) for Diffusion Maps. " +
+                $"The first eigenvector is skipped, so at least {_nComponents + 1} samples are required.");
+        }
+
         // Convert to double array
         var X = new double[n, p];
         for (int i = 0; i < n; i++)
@@ -228,22 +237,19 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         for (int k = 0; k < _nComponents; k++)
         {
-            int eigIdx = k + 1; // Skip first
-            if (eigIdx >= n) eigIdx = k;
+            int eigIdx = k + 1; // Skip first (constant) eigenvector
 
             _eigenvalues[k] = eigenvalues[eigIdx];
 
             // Scale by eigenvalue^t for diffusion time t
-            double scale = Math.Pow(Math.Max(0, eigenvalues[eigIdx]), _diffusionTime);
+            // Eigenvalues of the symmetric normalized Laplacian should be non-negative
+            double scale = Math.Pow(eigenvalues[eigIdx], _diffusionTime);
 
             for (int i = 0; i < n; i++)
             {
-                // Also normalize by sqrt(d) to get diffusion coordinates
+                // Standard diffusion map embedding uses eigenvectors scaled by eigenvalue powers
+                // Degree normalization was already applied when constructing the symmetric operator Ms
                 _embedding[i, k] = eigenvectors[eigIdx, i] * scale;
-                if (d[i] > 0)
-                {
-                    _embedding[i, k] /= Math.Sqrt(d[i]);
-                }
             }
         }
     }

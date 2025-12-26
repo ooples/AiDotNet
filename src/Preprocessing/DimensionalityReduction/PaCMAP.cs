@@ -211,7 +211,8 @@ public class PaCMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             }
 
             // Further pairs (random sampling from distant points)
-            for (int f = 0; f < nFurther; f++)
+            // Guard against n == 1 which would cause infinite loop
+            for (int f = 0; f < nFurther && n > 1; f++)
             {
                 int idx = random.Next(n);
                 while (idx == i)

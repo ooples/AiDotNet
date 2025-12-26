@@ -46,6 +46,7 @@ public class RandomizedPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private double[]? _mean;
     private double[]? _explainedVariance;
     private double[]? _singularValues;
+    private double _totalVariance;
     private int _nFeatures;
 
     /// <summary>
@@ -109,6 +110,21 @@ public class RandomizedPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int p = data.Columns;
         _nFeatures = p;
 
+        // Validate minimum sample count (need at least 2 for variance calculation)
+        if (n < 2)
+        {
+            throw new ArgumentException("RandomizedPCA requires at least 2 samples.", nameof(data));
+        }
+
+        // Validate that we can extract the requested number of components
+        int maxComponents = Math.Min(n, p);
+        if (_nComponents > maxComponents)
+        {
+            throw new ArgumentException(
+                $"Cannot extract {_nComponents} components from data with dimensions {n}x{p}. " +
+                $"Maximum available components: {maxComponents}.");
+        }
+
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSeededRandom(42);
@@ -141,6 +157,18 @@ public class RandomizedPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             {
                 Xc[i, j] = X[i, j] - _mean[j];
             }
+        }
+
+        // Compute total variance (sum of variances of all features)
+        _totalVariance = 0;
+        for (int j = 0; j < p; j++)
+        {
+            double colVariance = 0;
+            for (int i = 0; i < n; i++)
+            {
+                colVariance += Xc[i, j] * Xc[i, j];
+            }
+            _totalVariance += colVariance / (n - 1);
         }
 
         // Step 2: Randomized range finder
@@ -464,8 +492,9 @@ public class RandomizedPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     }
 
     /// <summary>
-    /// Gets the total explained variance ratio.
+    /// Gets the total explained variance ratio (proportion of total variance explained by selected components).
     /// </summary>
+    /// <returns>A value between 0 and 1 representing the fraction of total variance captured.</returns>
     public double GetExplainedVarianceRatio()
     {
         if (_explainedVariance is null)
@@ -473,13 +502,13 @@ public class RandomizedPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("RandomizedPCA has not been fitted.");
         }
 
-        double total = 0;
+        double explainedSum = 0;
         foreach (var v in _explainedVariance)
         {
-            total += v;
+            explainedSum += v;
         }
 
-        return total;
+        return _totalVariance > 0 ? explainedSum / _totalVariance : 0;
     }
 
     /// <summary>

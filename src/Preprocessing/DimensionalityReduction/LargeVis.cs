@@ -368,14 +368,15 @@ public class LargeVis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 }
 
                 double f = w / (1.0 + dY);
-                double g = 2.0 * f * f;
+                double g = 2.0 * w * f;
 
                 for (int d = 0; d < _nComponents; d++)
                 {
                     double diff = Y[i, d] - Y[j, d];
                     double grad = g * diff;
-                    Y[i, d] += lr * grad;
-                    Y[j, d] -= lr * grad;
+                    // Attractive force: subtract gradient to pull points together
+                    Y[i, d] -= lr * grad;
+                    Y[j, d] += lr * grad;
                 }
 
                 // Negative samples: repel i from random points
@@ -400,7 +401,9 @@ public class LargeVis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     {
                         double diff = Y[i, d] - Y[k, d];
                         double grad = g * diff;
+                        // Repulsive force: add gradient to push points apart (symmetric update)
                         Y[i, d] += lr * grad;
+                        Y[k, d] -= lr * grad;
                     }
                 }
             }

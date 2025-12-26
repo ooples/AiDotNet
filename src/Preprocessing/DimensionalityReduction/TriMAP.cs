@@ -70,7 +70,7 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="nOutliers">Number of outliers per point. Defaults to 5.</param>
     /// <param name="nRandom">Number of random triplets per point. Defaults to 3.</param>
     /// <param name="nIter">Number of optimization iterations. Defaults to 400.</param>
-    /// <param name="learningRate">Learning rate for optimization. Defaults to 1000.</param>
+    /// <param name="learningRate">Learning rate for optimization. Defaults to 100. Higher values may cause instability.</param>
     /// <param name="randomState">Random seed for reproducibility.</param>
     /// <param name="columnIndices">The column indices to use, or null for all columns.</param>
     public TriMAP(
@@ -79,7 +79,7 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int nOutliers = 5,
         int nRandom = 3,
         int nIter = 400,
-        double learningRate = 1000.0,
+        double learningRate = 100.0,
         int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -92,6 +92,13 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (nInliers < 1)
         {
             throw new ArgumentException("Number of inliers must be at least 1.", nameof(nInliers));
+        }
+
+        if (learningRate <= 0 || learningRate > 10000)
+        {
+            throw new ArgumentException(
+                "Learning rate must be positive and not exceed 10000 to avoid numerical instability.",
+                nameof(learningRate));
         }
 
         _nComponents = nComponents;
@@ -111,6 +118,12 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nSamples = data.Rows;
         int n = data.Rows;
         int p = data.Columns;
+
+        // TriMAP requires at least 3 samples to form triplets (anchor, positive, negative)
+        if (n < 3)
+        {
+            throw new ArgumentException("TriMAP requires at least 3 samples to form triplets.", nameof(data));
+        }
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
@@ -423,12 +436,20 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         for (int iter = 0; iter < _nIter; iter++)
         {
-            // Shuffle triplets
+            // Shuffle triplets using Fisher-Yates shuffle
             for (int i = triplets.Count - 1; i > 0; i--)
             {
                 int j = random.Next(i + 1);
-                (triplets[i], triplets[j], weights[i], weights[j]) =
-                    (triplets[j], triplets[i], weights[j], weights[i]);
+
+                // Swap triplets
+                var tmpTriplet = triplets[i];
+                triplets[i] = triplets[j];
+                triplets[j] = tmpTriplet;
+
+                // Swap corresponding weights
+                double tmpWeight = weights[i];
+                weights[i] = weights[j];
+                weights[j] = tmpWeight;
             }
 
             var gradients = new double[n, _nComponents];

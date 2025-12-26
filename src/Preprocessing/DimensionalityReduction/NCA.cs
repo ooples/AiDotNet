@@ -93,9 +93,13 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Fits NCA using the provided data and labels.
     /// </summary>
+    /// <remarks>
+    /// This method is internal to maintain the transformer pattern.
+    /// Use <see cref="FitTransformSupervised"/> for supervised fitting with labels.
+    /// </remarks>
     /// <param name="data">The input data matrix.</param>
     /// <param name="labels">The class labels for each sample.</param>
-    public void Fit(Matrix<T> data, int[] labels)
+    internal void Fit(Matrix<T> data, int[] labels)
     {
         _nFeatures = data.Columns;
         int n = data.Rows;
@@ -396,6 +400,18 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         _transformationMatrix = A;
+    }
+
+    /// <summary>
+    /// Fits NCA using the provided data and labels, then transforms the data.
+    /// </summary>
+    /// <param name="data">The input data matrix.</param>
+    /// <param name="labels">The class labels for each sample.</param>
+    /// <returns>The transformed data projected onto the learned space.</returns>
+    public Matrix<T> FitTransformSupervised(Matrix<T> data, int[] labels)
+    {
+        Fit(data, labels);
+        return TransformCore(data);
     }
 
     /// <summary>
