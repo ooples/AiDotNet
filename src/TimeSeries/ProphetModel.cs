@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.TimeSeries;
 
@@ -1669,19 +1670,15 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         Vector<T> lowerBound = new Vector<T>(predictions.Length);
         Vector<T> upperBound = new Vector<T>(predictions.Length);
 
-        // Use normal distribution z-scores for interval calculation
-        // For 95% interval, z ≈ 1.96; for 80%, z ≈ 1.28
-        double zScore;
-        if (_prophetOptions.PredictionIntervalWidth >= 0.95)
-            zScore = 1.96;
-        else if (_prophetOptions.PredictionIntervalWidth >= 0.90)
-            zScore = 1.645;
-        else if (_prophetOptions.PredictionIntervalWidth >= 0.80)
-            zScore = 1.28;
-        else
-            zScore = 1.0;
+        // Calculate z-score from confidence level using inverse normal CDF
+        // For confidence level c, z = Φ^(-1)((1 + c) / 2)
+        // Examples: 95% → 1.96, 90% → 1.645, 80% → 1.28
+        T probability = NumOps.Divide(
+            NumOps.Add(NumOps.One, NumOps.FromDouble(_prophetOptions.PredictionIntervalWidth)),
+            NumOps.FromDouble(2.0));
+        T zScore = StatisticsHelper<T>.CalculateInverseNormalCDF(probability);
 
-        T halfWidth = NumOps.Multiply(NumOps.FromDouble(zScore), _residualStdDev);
+        T halfWidth = NumOps.Multiply(zScore, _residualStdDev);
 
         for (int i = 0; i < predictions.Length; i++)
         {
