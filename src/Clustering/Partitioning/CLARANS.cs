@@ -115,7 +115,7 @@ public class CLARANS<T> : ClusteringBase<T>
             throw new ArgumentException($"Number of clusters ({k}) must be less than number of samples ({n}).");
         }
 
-        var rand = Random ?? new Random();
+        var rand = Random ?? RandomHelper.CreateSecureRandom();
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
         // Precompute distance matrix for efficiency

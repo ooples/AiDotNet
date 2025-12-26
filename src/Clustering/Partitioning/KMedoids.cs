@@ -97,7 +97,7 @@ public class KMedoids<T> : ClusteringBase<T>
             throw new ArgumentException($"Number of clusters ({k}) cannot exceed number of samples ({n}).");
         }
 
-        var rand = Random ?? new Random();
+        var rand = Random ?? RandomHelper.CreateSecureRandom();
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
         // Precompute distance matrix
@@ -314,7 +314,7 @@ public class KMedoids<T> : ClusteringBase<T>
             else
             {
                 // Fallback to random
-                var rand = Random ?? new Random();
+                var rand = Random ?? RandomHelper.CreateSecureRandom();
                 int candidate;
                 do
                 {

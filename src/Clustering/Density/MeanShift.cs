@@ -212,7 +212,7 @@ public class MeanShift<T> : ClusteringBase<T>
 
         // Sample a subset of points for efficiency
         int sampleSize = Math.Min(n, 500);
-        var rand = Random ?? new Random();
+        var rand = Random ?? RandomHelper.CreateSecureRandom();
         var indices = Enumerable.Range(0, n).OrderBy(_ => rand.Next()).Take(sampleSize).ToList();
 
         // Compute pairwise distances

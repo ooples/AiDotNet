@@ -4,6 +4,7 @@ using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Clustering.SemiSupervised;
 
@@ -229,7 +230,9 @@ public class SeededKMeans<T> : ClusteringBase<T>
         }
 
         // Average the sums
-        var rand = Options.RandomState.HasValue ? new Random(Options.RandomState.Value) : new Random();
+        var rand = Options.RandomState.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+            : RandomHelper.CreateSecureRandom();
 
         for (int c = 0; c < k; c++)
         {

@@ -2,6 +2,7 @@ using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Clustering.Streaming;
 
@@ -102,7 +103,9 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         NumFeatures = d;
         NumClusters = k;
 
-        var rand = Options.RandomState.HasValue ? new Random(Options.RandomState.Value) : new Random();
+        var rand = Options.RandomState.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Initialize centers with K-Means++
         var centers = InitializeCentersKMeansPlusPlus(x, k, n, d, rand);
@@ -314,7 +317,9 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         int k = NumClusters;
         int batchSize = Math.Min(_options.BatchSize, n);
 
-        var rand = Options.RandomState.HasValue ? new Random(Options.RandomState.Value) : new Random();
+        var rand = Options.RandomState.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Get current centers
         var centers = new double[k][];

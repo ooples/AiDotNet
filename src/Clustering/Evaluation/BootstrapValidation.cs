@@ -46,6 +46,12 @@ public class BootstrapValidation<T>
     /// <param name="randomState">Random seed for reproducibility.</param>
     public BootstrapValidation(int numBootstraps = 100, int? randomState = null)
     {
+        if (numBootstraps <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numBootstraps),
+                "Number of bootstrap samples must be greater than 0.");
+        }
+
         _numOps = MathHelper.GetNumericOperations<T>();
         _numBootstraps = numBootstraps;
         _randomState = randomState;
@@ -144,6 +150,18 @@ public class BootstrapValidation<T>
     /// <returns>Results for each K value.</returns>
     public BootstrapAnalysisResult EvaluateRange(Matrix<T> data, int minClusters = 2, int maxClusters = 10, double confidenceLevel = 0.95)
     {
+        if (minClusters < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(minClusters),
+                "Minimum clusters must be at least 1.");
+        }
+
+        if (maxClusters < minClusters)
+        {
+            throw new ArgumentException(
+                $"Maximum clusters ({maxClusters}) must be greater than or equal to minimum clusters ({minClusters}).");
+        }
+
         int n = data.Rows;
         maxClusters = Math.Min(maxClusters, n - 1);
 

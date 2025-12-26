@@ -57,7 +57,8 @@ public class CURE<T> : ClusteringBase<T>
     public CURE(CUREOptions<T>? options = null)
         : base(options ?? new CUREOptions<T>())
     {
-        _options = options ?? new CUREOptions<T>();
+        // Use the options passed to base constructor to avoid double instantiation
+        _options = (CUREOptions<T>)Options;
         _distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
         _random = _options.RandomState.HasValue
             ? RandomHelper.CreateSeededRandom(_options.RandomState.Value)

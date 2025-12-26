@@ -264,9 +264,10 @@ public class Homogeneity<T> : IExternalClusterMetric<T>
     private double ComputeConditionalEntropy(Vector<T> trueLabels, Vector<T> predictedLabels)
     {
         // Compute H(C|K) - entropy of classes given clusters
-        // ClusteringEntropy.Compute treats first param as cluster labels, second as class labels
+        // ClusteringEntropy.Compute(X, Y) returns H(X|Y)
+        // So Compute(trueLabels, predictedLabels) gives H(trueLabels | predictedLabels) = H(C|K)
         var entropy = new ClusteringEntropy<T>();
-        return entropy.Compute(predictedLabels, trueLabels);
+        return entropy.Compute(trueLabels, predictedLabels);
     }
 
     private double ComputeEntropy(Vector<T> labels)
@@ -337,10 +338,10 @@ public class Completeness<T> : IExternalClusterMetric<T>
     private double ComputeConditionalEntropy(Vector<T> labels, Vector<T> givenLabels)
     {
         // This computes H(labels | givenLabels) = H(K|C)
-        // ClusteringEntropy.Compute(X, Y) returns H(Y|X)
-        // So we need Compute(givenLabels, labels) to get H(labels|givenLabels)
+        // ClusteringEntropy.Compute(X, Y) returns H(X|Y)
+        // So we need Compute(labels, givenLabels) to get H(labels|givenLabels)
         var entropy = new ClusteringEntropy<T>();
-        return entropy.Compute(givenLabels, labels);
+        return entropy.Compute(labels, givenLabels);
     }
 
     private double ComputeEntropy(Vector<T> labels)

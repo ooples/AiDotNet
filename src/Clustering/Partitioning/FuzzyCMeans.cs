@@ -4,6 +4,7 @@ using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Clustering.Partitioning;
 
@@ -100,7 +101,9 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
             throw new ArgumentException("Fuzziness must be greater than 1.");
         }
 
-        var rand = Options.RandomState.HasValue ? new Random(Options.RandomState.Value) : new Random();
+        var rand = Options.RandomState.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+            : RandomHelper.CreateSecureRandom();
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
         // Initialize membership matrix randomly

@@ -4,6 +4,7 @@ using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Clustering.Neural;
 
@@ -107,7 +108,9 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
         int width = _options.GridWidth;
         int height = _options.GridHeight;
 
-        var rand = Options.RandomState.HasValue ? new Random(Options.RandomState.Value) : new Random();
+        var rand = Options.RandomState.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Initialize weights randomly
         _weights = new double[height, width][];
@@ -283,7 +286,9 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
         // Simple K-Means clustering of neurons
         _neuronLabels = new int[numNeurons];
         var centers = new double[k][];
-        var rand = Options.RandomState.HasValue ? new Random(Options.RandomState.Value) : new Random();
+        var rand = Options.RandomState.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Initialize centers randomly from neurons
         var indices = Enumerable.Range(0, numNeurons).OrderBy(_ => rand.Next()).Take(k).ToArray();

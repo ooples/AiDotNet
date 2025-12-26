@@ -96,8 +96,8 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         NumFeatures = d;
 
         var rand = _options.RandomSeed.HasValue
-            ? new Random(_options.RandomSeed.Value)
-            : new Random();
+            ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Generate base clusterings
         var baseClusterings = new List<int[]>();

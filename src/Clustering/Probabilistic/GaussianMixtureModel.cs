@@ -274,7 +274,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
     private void InitializeWithKMeansPlusPlus(double[,] data, int n, int d, int k)
     {
-        var rand = Random ?? new Random();
+        var rand = Random ?? RandomHelper.CreateSecureRandom();
 
         // First center: random
         int firstIdx = rand.Next(n);
@@ -330,7 +330,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
     private void InitializeRandom(double[,] data, int n, int d, int k)
     {
-        var rand = Random ?? new Random();
+        var rand = Random ?? RandomHelper.CreateSecureRandom();
         var selectedIndices = new HashSet<int>();
 
         for (int c = 0; c < k; c++)
@@ -1037,7 +1037,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        var rand = Random ?? new Random();
+        var rand = Random ?? RandomHelper.CreateSecureRandom();
         var samples = new Matrix<T>(numSamples, NumFeatures);
 
         for (int i = 0; i < numSamples; i++)

@@ -4,6 +4,7 @@ using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Clustering.SemiSupervised;
 
@@ -99,7 +100,9 @@ public class COPKMeans<T> : ClusteringBase<T>
         NumFeatures = d;
         NumClusters = k;
 
-        var rand = Options.RandomState.HasValue ? new Random(Options.RandomState.Value) : new Random();
+        var rand = Options.RandomState.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+            : RandomHelper.CreateSecureRandom();
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
         // Compute transitive closures of constraints

@@ -310,7 +310,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
         var eigenvalues = new double[k];
 
         // Initialize with random vectors
-        var rand = Random ?? new Random();
+        var rand = Random ?? RandomHelper.CreateSecureRandom();
         var vectors = new double[k, n];
 
         for (int i = 0; i < k; i++)

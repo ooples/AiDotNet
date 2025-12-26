@@ -71,7 +71,9 @@ public class GapStatistic<T>
             maxClusters = n;
         }
 
-        var rand = _randomState.HasValue ? new Random(_randomState.Value) : new Random();
+        var rand = _randomState.HasValue
+            ? RandomHelper.CreateSeededRandom(_randomState.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Compute data bounds for uniform reference generation
         var minBounds = new double[d];

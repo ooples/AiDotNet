@@ -95,7 +95,7 @@ public abstract class ClusteringBase<T> : IClustering<T>
         _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         Random = Options.RandomState.HasValue
             ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
-            : new Random();
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc/>

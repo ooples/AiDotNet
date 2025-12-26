@@ -66,7 +66,7 @@ public class StabilityValidation<T>
         int subsampleSize = Math.Max(2, (int)(n * _subsampleFraction));
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
-            : new Random();
+            : RandomHelper.CreateSecureRandom();
 
         var allLabels = new List<(int[] Indices, Vector<T> Labels)>();
 
