@@ -20,6 +20,7 @@ using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Configuration;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Augmentation.TTA;
 using AiDotNet.TrainingMonitoring;
 using AiDotNet.TrainingMonitoring.ExperimentTracking;
 
@@ -579,6 +580,31 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
+
+    // ============================================================================
+    // Test-Time Augmentation Properties
+    // ============================================================================
+
+    /// <summary>
+    /// Gets or sets the Test-Time Augmentation (TTA) configuration stored as an object.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// TTA applies augmentations during inference to improve prediction quality.
+    /// Multiple augmented versions of the input are created, predictions are made
+    /// on each, and the results are aggregated (e.g., mean, median, majority vote).
+    /// </para>
+    /// <para><b>For Beginners:</b> Instead of making one prediction on one input,
+    /// TTA makes predictions on multiple variations (flipped, rotated, etc.) and
+    /// combines them. This often produces more accurate and robust predictions.
+    ///
+    /// Example use cases:
+    /// - Image classification: Predict on original + flipped + rotated versions
+    /// - Object detection: Average confidence scores across augmentations
+    /// - Medical imaging: Reduce noise in predictions by aggregating multiple views
+    /// </para>
+    /// </remarks>
+    public object? TTAConfiguration { get; set; }
 
     // ============================================================================
     // Safety & Robustness Properties

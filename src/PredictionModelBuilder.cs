@@ -38,6 +38,8 @@ global using AiDotNet.Tokenization.HuggingFace;
 global using AiDotNet.Tokenization.Interfaces;
 global using AiDotNet.Tools;
 global using AiDotNet.UncertaintyQuantification.Layers;
+using AiDotNet.Augmentation.Integration;
+using AiDotNet.Augmentation.TTA;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.Policies;
 using AiDotNet.AutoML.SearchSpace;
@@ -180,6 +182,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
 
     // Training augmentation configuration
     private object? _trainingAugmentationConfiguration;
+
+    // Test-Time Augmentation configuration
+    private object? _ttaConfiguration;
 
     // Federated learning configuration (facade-first: orchestration is internal)
     private FederatedLearningOptions? _federatedLearningOptions;
@@ -1044,6 +1049,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            TTAConfiguration = _ttaConfiguration,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
             BiasDetector = _biasDetector,
@@ -1216,6 +1222,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            TTAConfiguration = _ttaConfiguration,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
             BiasDetector = _biasDetector,
@@ -3942,6 +3949,98 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         Augmentation.Integration.TrainingAugmentationConfiguration<T, TAugData> configuration)
     {
         _trainingAugmentationConfiguration = configuration;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures Test-Time Augmentation to improve prediction accuracy during inference.
+    /// </summary>
+    /// <param name="pipelineBuilder">Action to configure the augmentation pipeline (optional).</param>
+    /// <typeparam name="TAugData">The data type being augmented (e.g., ImageTensor, AudioClip).</typeparam>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Test-Time Augmentation (TTA) is a technique that makes predictions
+    /// more accurate and reliable. Instead of asking the model to look at your image once, it:
+    ///
+    /// 1. Creates several slightly different versions of your image (flipped, rotated, etc.)
+    /// 2. Asks the model to predict on each version
+    /// 3. Combines all the predictions (usually by averaging)
+    ///
+    /// This is like asking multiple experts for their opinion and taking the average - you get a
+    /// more reliable answer than asking just one person.
+    ///
+    /// <b>When to use TTA:</b>
+    /// - Medical imaging (reducing diagnostic errors)
+    /// - Competition submissions (squeezing out extra accuracy)
+    /// - When prediction confidence matters more than speed
+    /// - Object detection (more stable bounding boxes)
+    ///
+    /// <b>When NOT to use TTA:</b>
+    /// - Real-time applications (TTA is slower - N predictions instead of 1)
+    /// - Simple classification tasks where accuracy is already sufficient
+    /// - Resource-constrained environments
+    ///
+    /// <b>Default settings (if you call without parameters):</b>
+    /// - 5 augmented versions (research-backed sweet spot between accuracy and speed)
+    /// - Mean aggregation (most robust for general use cases)
+    /// - Original image included (ensures baseline prediction is considered)
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Example - Simple usage with defaults:</b>
+    /// <code>
+    /// // Just enable TTA with industry-standard defaults
+    /// var result = builder
+    ///     .ConfigureModel(cnnModel)
+    ///     .ConfigureTestTimeAugmentation&lt;ImageTensor&lt;double&gt;&gt;()
+    ///     .Build(images, labels);
+    ///
+    /// // Predictions now use TTA automatically
+    /// var prediction = result.PredictWithTTA(newImage);
+    /// </code>
+    ///
+    /// <b>Example - Custom augmentation pipeline:</b>
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(cnnModel)
+    ///     .ConfigureTestTimeAugmentation&lt;ImageTensor&lt;double&gt;&gt;(tta => tta
+    ///         .Add(new HorizontalFlip&lt;double, ImageTensor&lt;double&gt;&gt;())
+    ///         .Add(new RandomRotation&lt;double, ImageTensor&lt;double&gt;&gt;(-5, 5))
+    ///         .WithNumAugmentations(8)
+    ///         .WithAggregation(TTAAggregationMethod.Median))
+    ///     .Build(images, labels);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTestTimeAugmentation<TAugData>(
+        Action<TestTimeAugmentationBuilder<T, TAugData>>? pipelineBuilder = null)
+    {
+        var builder = new TestTimeAugmentationBuilder<T, TAugData>();
+        pipelineBuilder?.Invoke(builder);
+        _ttaConfiguration = builder.Build();
+        return this;
+    }
+
+    /// <summary>
+    /// Configures Test-Time Augmentation using a pre-built configuration object.
+    /// </summary>
+    /// <param name="configuration">The TTA configuration (optional, uses industry defaults if null).</param>
+    /// <typeparam name="TAugData">The data type being augmented (e.g., ImageTensor, AudioClip).</typeparam>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this overload when you want to share the same TTA configuration
+    /// across multiple models, or when you've loaded a configuration from settings/files.
+    ///
+    /// If you pass null, you get sensible industry-standard defaults:
+    /// - 5 augmented samples
+    /// - Mean aggregation
+    /// - Original input included
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTestTimeAugmentation<TAugData>(
+        TestTimeAugmentationConfiguration<T, TAugData>? configuration = null)
+    {
+        _ttaConfiguration = configuration ?? new TestTimeAugmentationConfiguration<T, TAugData>();
         return this;
     }
 
