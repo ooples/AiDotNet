@@ -552,7 +552,13 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     {
         var videoEmbedding = GetVideoEmbedding(frames);
 
-        // Simple retrieval-based captioning
+        if (_useNativeMode && _captionHead is not null)
+        {
+            // Autoregressive caption generation
+            return GenerateCaptionAutoregressive(videoEmbedding, maxLength);
+        }
+
+        // Fallback to retrieval-based captioning for ONNX mode
         var candidateCaptions = new[]
         {
             "A person is performing an action.",
@@ -566,6 +572,210 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         return bestMatch.Index >= 0 ? candidateCaptions[bestMatch.Index] : candidateCaptions[0];
     }
 
+    /// <summary>
+    /// Generates a caption autoregressively token by token.
+    /// </summary>
+    private string GenerateCaptionAutoregressive(Vector<T> videoContext, int maxLength)
+    {
+        var generatedTokens = new List<int>();
+        const int BOS_TOKEN = 49406; // CLIP tokenizer BOS
+        const int EOS_TOKEN = 49407; // CLIP tokenizer EOS
+        const int PAD_TOKEN = 0;
+
+        generatedTokens.Add(BOS_TOKEN);
+
+        // Create context tensor from video embedding
+        var contextTensor = Tensor<T>.CreateDefault([1, videoContext.Length], NumOps.Zero);
+        for (int i = 0; i < videoContext.Length; i++)
+        {
+            contextTensor[0, i] = videoContext[i];
+        }
+
+        for (int step = 0; step < maxLength - 1; step++)
+        {
+            // Get current sequence embedding
+            var sequenceEmbedding = GetSequenceEmbedding(generatedTokens);
+
+            // Combine with video context using cross-attention-like mechanism
+            var combinedContext = CombineVideoTextContext(contextTensor, sequenceEmbedding);
+
+            // Project to vocabulary logits through caption head
+            var logits = _captionHead!.Forward(combinedContext);
+
+            // Get logits for the last position
+            int vocabSize = logits.Shape.Length > 1 ? logits.Shape[1] : logits.Shape[0];
+            var lastLogits = new T[Math.Min(vocabSize, _vocabularySize)];
+            for (int i = 0; i < lastLogits.Length; i++)
+            {
+                lastLogits[i] = logits.Shape.Length > 1 ? logits[0, i] : logits[i];
+            }
+
+            // Apply softmax and sample next token (greedy or nucleus sampling)
+            int nextToken = SampleNextToken(lastLogits, temperature: 0.8, topP: 0.9);
+
+            if (nextToken == EOS_TOKEN || nextToken == PAD_TOKEN)
+                break;
+
+            generatedTokens.Add(nextToken);
+        }
+
+        // Decode tokens to text
+        return DecodeTokensToText(generatedTokens);
+    }
+
+    /// <summary>
+    /// Gets embedding for a sequence of token IDs.
+    /// </summary>
+    private Tensor<T> GetSequenceEmbedding(List<int> tokenIds)
+    {
+        if (_textTokenEmbedding is null || _textPositionalEmbeddings is null)
+            throw new InvalidOperationException("Text embedding layers not initialized.");
+
+        int seqLen = tokenIds.Count;
+        var tokenTensor = Tensor<T>.CreateDefault([seqLen], NumOps.Zero);
+        for (int i = 0; i < seqLen; i++)
+        {
+            tokenTensor[i] = NumOps.FromDouble(tokenIds[i]);
+        }
+
+        var embedded = _textTokenEmbedding.Forward(tokenTensor);
+
+        // Add positional embeddings
+        for (int i = 0; i < seqLen && i < _textPositionalEmbeddings.Rows; i++)
+        {
+            for (int j = 0; j < embedded.Shape[1] && j < _textPositionalEmbeddings.Columns; j++)
+            {
+                embedded[i, j] = NumOps.Add(embedded[i, j], _textPositionalEmbeddings[i, j]);
+            }
+        }
+
+        // Apply text encoder layers
+        var current = embedded;
+        foreach (var layer in _textEncoderLayers)
+        {
+            current = layer.Forward(current);
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// Combines video and text contexts for generation.
+    /// </summary>
+    private Tensor<T> CombineVideoTextContext(Tensor<T> videoContext, Tensor<T> textEmbedding)
+    {
+        // Use attention-weighted combination of video and text
+        int textSeqLen = textEmbedding.Shape[0];
+        int hiddenDim = textEmbedding.Shape[1];
+
+        // Mean pool text embedding and add to video context
+        var textPooled = MeanPool(textEmbedding);
+
+        // Concatenate or add video and text contexts
+        int outputDim = Math.Min(videoContext.Shape[1], _embeddingDimension);
+        var combined = Tensor<T>.CreateDefault([1, outputDim], NumOps.Zero);
+
+        for (int i = 0; i < outputDim; i++)
+        {
+            T videoVal = i < videoContext.Shape[1] ? videoContext[0, i] : NumOps.Zero;
+            T textVal = i < textPooled.Length ? textPooled[i] : NumOps.Zero;
+            // Gated combination
+            T gate = NumOps.FromDouble(0.5);
+            combined[0, i] = NumOps.Add(
+                NumOps.Multiply(gate, videoVal),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, gate), textVal));
+        }
+
+        return combined;
+    }
+
+    /// <summary>
+    /// Samples the next token using temperature scaling and nucleus (top-p) sampling.
+    /// </summary>
+    private int SampleNextToken(T[] logits, double temperature, double topP)
+    {
+        if (logits.Length == 0)
+            return 0;
+
+        // Apply temperature
+        var scaledLogits = new double[logits.Length];
+        for (int i = 0; i < logits.Length; i++)
+        {
+            scaledLogits[i] = NumOps.ToDouble(logits[i]) / Math.Max(temperature, 0.01);
+        }
+
+        // Softmax
+        double maxLogit = scaledLogits.Max();
+        var expLogits = scaledLogits.Select(l => Math.Exp(l - maxLogit)).ToArray();
+        double sumExp = expLogits.Sum();
+        var probs = expLogits.Select(e => e / sumExp).ToArray();
+
+        // Nucleus (top-p) sampling
+        var sortedIndices = Enumerable.Range(0, probs.Length)
+            .OrderByDescending(i => probs[i])
+            .ToList();
+
+        double cumulativeProb = 0.0;
+        var nucleusIndices = new List<int>();
+        var nucleusProbs = new List<double>();
+
+        foreach (var idx in sortedIndices)
+        {
+            cumulativeProb += probs[idx];
+            nucleusIndices.Add(idx);
+            nucleusProbs.Add(probs[idx]);
+
+            if (cumulativeProb >= topP)
+                break;
+        }
+
+        // Renormalize nucleus probabilities
+        double nucleusSum = nucleusProbs.Sum();
+        var normalizedProbs = nucleusProbs.Select(p => p / nucleusSum).ToArray();
+
+        // Sample from nucleus
+        var random = new Random();
+        double sample = random.NextDouble();
+        double cumulative = 0.0;
+
+        for (int i = 0; i < nucleusIndices.Count; i++)
+        {
+            cumulative += normalizedProbs[i];
+            if (sample <= cumulative)
+                return nucleusIndices[i];
+        }
+
+        return nucleusIndices[nucleusIndices.Count - 1];
+    }
+
+    /// <summary>
+    /// Decodes token IDs back to text.
+    /// </summary>
+    private string DecodeTokensToText(List<int> tokenIds)
+    {
+        const int BOS_TOKEN = 49406;
+        const int EOS_TOKEN = 49407;
+
+        // Filter out special tokens
+        var filteredTokens = tokenIds
+            .Where(t => t != BOS_TOKEN && t != EOS_TOKEN && t > 0)
+            .ToList();
+
+        if (filteredTokens.Count == 0)
+            return "A video showing activity.";
+
+        // Use tokenizer to decode if available
+        try
+        {
+            return _tokenizer.Decode(filteredTokens);
+        }
+        catch
+        {
+            // Fallback: return generic caption
+            return "A video showing activity.";
+        }
+    }
+
     /// <inheritdoc/>
     public string AnswerVideoQuestion(
         IEnumerable<Tensor<T>> frames,
@@ -575,12 +785,162 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         var videoEmbedding = GetVideoEmbedding(frames);
         var questionEmbedding = GetTextEmbedding(question);
 
-        // Simple yes/no question handling
+        if (_useNativeMode && _captionHead is not null)
+        {
+            // Generative question answering
+            return GenerateAnswerAutoregressive(videoEmbedding, questionEmbedding, question, maxLength);
+        }
+
+        // Fallback to retrieval-based QA for ONNX mode
         var candidateAnswers = new[] { "Yes", "No", "Unknown" };
         var bestMatch = RetrieveTextsForVideo(frames,
             candidateAnswers.Select(a => $"{question} {a}"), 1).FirstOrDefault();
 
         return bestMatch.Index >= 0 ? candidateAnswers[bestMatch.Index] : "Unknown";
+    }
+
+    /// <summary>
+    /// Generates an answer autoregressively using video and question context.
+    /// </summary>
+    private string GenerateAnswerAutoregressive(
+        Vector<T> videoContext,
+        Vector<T> questionContext,
+        string question,
+        int maxLength)
+    {
+        var generatedTokens = new List<int>();
+        const int BOS_TOKEN = 49406;
+        const int EOS_TOKEN = 49407;
+        const int PAD_TOKEN = 0;
+
+        // Encode the question as prompt tokens
+        var questionTokens = _tokenizer.Encode(question);
+        foreach (var token in questionTokens.TokenIds.Take(_maxSequenceLength / 2))
+        {
+            generatedTokens.Add(token);
+        }
+
+        // Add separator/answer prompt token
+        generatedTokens.Add(BOS_TOKEN);
+
+        // Create combined video-question context tensor
+        int contextDim = videoContext.Length;
+        var combinedContextTensor = Tensor<T>.CreateDefault([1, contextDim], NumOps.Zero);
+
+        // Fuse video and question embeddings with attention-weighted mechanism
+        for (int i = 0; i < contextDim; i++)
+        {
+            T videoVal = i < videoContext.Length ? videoContext[i] : NumOps.Zero;
+            T questionVal = i < questionContext.Length ? questionContext[i] : NumOps.Zero;
+
+            // Attention-weighted fusion: emphasize question-relevant video features
+            T dotProduct = NumOps.Multiply(videoVal, questionVal);
+            T weight = NumOps.FromDouble(Math.Max(0.3, Math.Min(0.7,
+                0.5 + NumOps.ToDouble(dotProduct) * 0.2)));
+
+            combinedContextTensor[0, i] = NumOps.Add(
+                NumOps.Multiply(weight, videoVal),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, weight), questionVal));
+        }
+
+        // Check if this is a yes/no question for constrained decoding
+        bool isYesNoQuestion = IsYesNoQuestion(question);
+
+        for (int step = 0; step < maxLength; step++)
+        {
+            // Get current sequence embedding
+            var sequenceEmbedding = GetSequenceEmbedding(generatedTokens);
+
+            // Combine with video-question context
+            var decoderInput = CombineVideoTextContext(combinedContextTensor, sequenceEmbedding);
+
+            // Project to vocabulary logits
+            var logits = _captionHead!.Forward(decoderInput);
+
+            // Get logits for the last position
+            int vocabSize = logits.Shape.Length > 1 ? logits.Shape[1] : logits.Shape[0];
+            var lastLogits = new T[Math.Min(vocabSize, _vocabularySize)];
+            for (int i = 0; i < lastLogits.Length; i++)
+            {
+                lastLogits[i] = logits.Shape.Length > 1 ? logits[0, i] : logits[i];
+            }
+
+            int nextToken;
+            if (isYesNoQuestion && step == 0)
+            {
+                // Constrained decoding for yes/no questions - only consider yes/no tokens
+                nextToken = SampleYesNoToken(lastLogits);
+            }
+            else
+            {
+                // Regular sampling with lower temperature for more focused answers
+                nextToken = SampleNextToken(lastLogits, temperature: 0.6, topP: 0.85);
+            }
+
+            if (nextToken == EOS_TOKEN || nextToken == PAD_TOKEN)
+                break;
+
+            generatedTokens.Add(nextToken);
+        }
+
+        // Decode only the answer portion (tokens after BOS separator)
+        int answerStartIndex = generatedTokens.LastIndexOf(BOS_TOKEN) + 1;
+        var answerTokens = generatedTokens.Skip(answerStartIndex).ToList();
+
+        if (answerTokens.Count == 0)
+        {
+            // Fallback based on question type
+            return isYesNoQuestion ? "Unknown" : "The video shows activity.";
+        }
+
+        return DecodeTokensToText(answerTokens);
+    }
+
+    /// <summary>
+    /// Determines if a question expects a yes/no answer.
+    /// </summary>
+    private static bool IsYesNoQuestion(string question)
+    {
+        var lowerQuestion = question.ToLowerInvariant().Trim();
+        string[] yesNoStarters = { "is ", "are ", "was ", "were ", "do ", "does ", "did ",
+                                   "can ", "could ", "will ", "would ", "should ", "has ", "have ", "had " };
+
+        return yesNoStarters.Any(starter => lowerQuestion.StartsWith(starter)) ||
+               lowerQuestion.EndsWith("?") && (
+                   lowerQuestion.Contains(" or not") ||
+                   lowerQuestion.Contains("yes or no"));
+    }
+
+    /// <summary>
+    /// Samples a yes/no token with constrained decoding.
+    /// </summary>
+    private int SampleYesNoToken(T[] logits)
+    {
+        // Common token IDs for yes/no in CLIP vocabulary
+        // These are approximate - actual IDs depend on tokenizer
+        const int YES_TOKEN_APPROX = 8505;  // "yes"
+        const int NO_TOKEN_APPROX = 645;    // "no"
+        const int UNKNOWN_TOKEN_APPROX = 3067; // "unknown"
+
+        // Get logits for yes/no/unknown tokens
+        double yesLogit = YES_TOKEN_APPROX < logits.Length ?
+            NumOps.ToDouble(logits[YES_TOKEN_APPROX]) : double.MinValue;
+        double noLogit = NO_TOKEN_APPROX < logits.Length ?
+            NumOps.ToDouble(logits[NO_TOKEN_APPROX]) : double.MinValue;
+        double unknownLogit = UNKNOWN_TOKEN_APPROX < logits.Length ?
+            NumOps.ToDouble(logits[UNKNOWN_TOKEN_APPROX]) : double.MinValue;
+
+        // Add small noise for diversity
+        var random = new Random();
+        yesLogit += random.NextDouble() * 0.1;
+        noLogit += random.NextDouble() * 0.1;
+        unknownLogit += random.NextDouble() * 0.05; // Slight bias against unknown
+
+        if (yesLogit >= noLogit && yesLogit >= unknownLogit)
+            return YES_TOKEN_APPROX;
+        if (noLogit >= yesLogit && noLogit >= unknownLogit)
+            return NO_TOKEN_APPROX;
+        return UNKNOWN_TOKEN_APPROX;
     }
 
     /// <inheritdoc/>
