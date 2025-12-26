@@ -99,6 +99,26 @@ public class PaCMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new ArgumentException("Number of neighbors must be at least 1.", nameof(nNeighbors));
         }
 
+        if (mnRatio <= 0)
+        {
+            throw new ArgumentException("Mid-near ratio must be positive.", nameof(mnRatio));
+        }
+
+        if (fpRatio <= 0)
+        {
+            throw new ArgumentException("Further pair ratio must be positive.", nameof(fpRatio));
+        }
+
+        if (nIter < 1)
+        {
+            throw new ArgumentException("Number of iterations must be at least 1.", nameof(nIter));
+        }
+
+        if (learningRate <= 0)
+        {
+            throw new ArgumentException("Learning rate must be positive.", nameof(learningRate));
+        }
+
         _nComponents = nComponents;
         _nNeighbors = nNeighbors;
         _mnRatio = mnRatio;

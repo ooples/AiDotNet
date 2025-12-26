@@ -101,26 +101,29 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="labels">The class labels for each sample.</param>
     internal void Fit(Matrix<T> data, int[] labels)
     {
-        _nFeatures = data.Columns;
         int n = data.Rows;
-        int p = data.Columns;
 
         if (labels.Length != n)
         {
             throw new ArgumentException("Labels length must match number of samples.", nameof(labels));
         }
 
+        // Apply column selection if specified
+        var columnsToProcess = GetColumnsToProcess(data.Columns);
+        int p = columnsToProcess.Length;
+        _nFeatures = p;
+
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSeededRandom(42);
 
-        // Convert to double array
+        // Convert to double array with column selection
         var X = new double[n, p];
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < p; j++)
             {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+                X[i, j] = NumOps.ToDouble(data[i, columnsToProcess[j]]);
             }
         }
 

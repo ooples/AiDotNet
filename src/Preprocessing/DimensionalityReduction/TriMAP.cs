@@ -101,6 +101,11 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 nameof(learningRate));
         }
 
+        if (nIter < 1)
+        {
+            throw new ArgumentException("Number of iterations must be at least 1.", nameof(nIter));
+        }
+
         _nComponents = nComponents;
         _nInliers = nInliers;
         _nOutliers = nOutliers;
@@ -207,6 +212,14 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Generate triplets
         for (int i = 0; i < n; i++)
         {
+            // Sort distances once per point for mid-range negative selection
+            var sortedDists = new (double dist, int idx)[n];
+            for (int jj = 0; jj < n; jj++)
+            {
+                sortedDists[jj] = (jj == i ? double.MaxValue : distances[i, jj], jj);
+            }
+            Array.Sort(sortedDists, (a, b) => a.dist.CompareTo(b.dist));
+
             // Inlier triplets (nearest neighbors as positives)
             for (int j = 0; j < k; j++)
             {
@@ -216,16 +229,10 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 for (int m = 0; m < Math.Min(nOut, k); m++)
                 {
                     int negIdx = Math.Min(k + m, n - 1);
-                    var dists = new (double dist, int idx)[n];
-                    for (int jj = 0; jj < n; jj++)
-                    {
-                        dists[jj] = (jj == i ? double.MaxValue : distances[i, jj], jj);
-                    }
-                    Array.Sort(dists, (a, b) => a.dist.CompareTo(b.dist));
 
                     if (negIdx < n)
                     {
-                        int negative = dists[negIdx].idx;
+                        int negative = sortedDists[negIdx].idx;
                         if (positive != negative)
                         {
                             triplets.Add((i, positive, negative));

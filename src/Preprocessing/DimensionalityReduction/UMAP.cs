@@ -139,6 +139,26 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new ArgumentException("Spread must be positive.", nameof(spread));
         }
 
+        if (nEpochs < 1)
+        {
+            throw new ArgumentException("Number of epochs must be at least 1.", nameof(nEpochs));
+        }
+
+        if (learningRate <= 0)
+        {
+            throw new ArgumentException("Learning rate must be positive.", nameof(learningRate));
+        }
+
+        if (negativeSampleRate < 0)
+        {
+            throw new ArgumentException("Negative sample rate must be non-negative.", nameof(negativeSampleRate));
+        }
+
+        if (repulsionStrength <= 0)
+        {
+            throw new ArgumentException("Repulsion strength must be positive.", nameof(repulsionStrength));
+        }
+
         _nComponents = nComponents;
         _nNeighbors = nNeighbors;
         _minDist = minDist;
@@ -359,10 +379,26 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var sigmas = new double[n];
         var rhos = new double[n];
 
-        // Compute rho (distance to nearest neighbor) and sigma for each point
+        // Compute rho (distance to local_connectivity-th nearest neighbor) and sigma for each point
         for (int i = 0; i < n; i++)
         {
-            rhos[i] = _knnDistances![i, 0];
+            // Use local_connectivity to determine rho
+            // local_connectivity=1.0 means rho is distance to 1st neighbor
+            // local_connectivity=2.5 means interpolate between 2nd and 3rd neighbors
+            int localConnIdx = (int)Math.Floor(_localConnectivity) - 1;
+            localConnIdx = Math.Max(0, Math.Min(localConnIdx, _nNeighbors - 1));
+            double localConnFrac = _localConnectivity - Math.Floor(_localConnectivity);
+
+            if (localConnFrac < 1e-5 || localConnIdx >= _nNeighbors - 1)
+            {
+                rhos[i] = _knnDistances![i, localConnIdx];
+            }
+            else
+            {
+                // Interpolate between neighbors
+                rhos[i] = (1 - localConnFrac) * _knnDistances![i, localConnIdx]
+                        + localConnFrac * _knnDistances[i, localConnIdx + 1];
+            }
 
             // Binary search for sigma
             double target = Math.Log(_nNeighbors) / Math.Log(2);
@@ -538,7 +574,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 }
 
                 // Negative sampling for repulsive forces
-                int nNegativeSamples = (int)_negativeSampleRate;
+                int nNegativeSamples = (int)Math.Round(_negativeSampleRate);
                 for (int neg = 0; neg < nNegativeSamples; neg++)
                 {
                     int k = random.Next(n);
