@@ -39,6 +39,7 @@ global using AiDotNet.Tokenization.Interfaces;
 global using AiDotNet.Tools;
 global using AiDotNet.UncertaintyQuantification.Layers;
 using AiDotNet.Augmentation.Integration;
+using AiDotNet.Augmentation.Interfaces;
 using AiDotNet.Augmentation.TTA;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.Policies;
@@ -181,10 +182,10 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     private CurriculumLearningOptions<T, TInput, TOutput>? _curriculumLearningOptions;
 
     // Training augmentation configuration
-    private object? _trainingAugmentationConfiguration;
+    private ITrainingAugmentationConfiguration? _trainingAugmentationConfiguration;
 
     // Test-Time Augmentation configuration
-    private object? _ttaConfiguration;
+    private ITTAConfiguration? _ttaConfiguration;
 
     // Federated learning configuration (facade-first: orchestration is internal)
     private FederatedLearningOptions? _federatedLearningOptions;
@@ -1050,6 +1051,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             TTAConfiguration = _ttaConfiguration,
+            TrainingAugmentationConfiguration = _trainingAugmentationConfiguration,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
             BiasDetector = _biasDetector,
@@ -1223,6 +1225,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             TTAConfiguration = _ttaConfiguration,
+            TrainingAugmentationConfiguration = _trainingAugmentationConfiguration,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
             BiasDetector = _biasDetector,

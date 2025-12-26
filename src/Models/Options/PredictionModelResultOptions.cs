@@ -20,6 +20,7 @@ using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Configuration;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Augmentation.Interfaces;
 using AiDotNet.Augmentation.TTA;
 using AiDotNet.TrainingMonitoring;
 using AiDotNet.TrainingMonitoring.ExperimentTracking;
@@ -586,7 +587,7 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     // ============================================================================
 
     /// <summary>
-    /// Gets or sets the Test-Time Augmentation (TTA) configuration stored as an object.
+    /// Gets or sets the Test-Time Augmentation (TTA) configuration.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -604,7 +605,28 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     /// - Medical imaging: Reduce noise in predictions by aggregating multiple views
     /// </para>
     /// </remarks>
-    public object? TTAConfiguration { get; set; }
+    public ITTAConfiguration? TTAConfiguration { get; set; }
+
+    /// <summary>
+    /// Gets or sets the training augmentation configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Training augmentation applies transformations during training to increase
+    /// data diversity and improve model generalization. Unlike TTA which is used
+    /// during inference, training augmentation is applied to training data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the augmentations that were applied
+    /// during training. While TTA makes predictions more accurate, training augmentation
+    /// helps the model learn better by showing it variations of the training data.
+    ///
+    /// Example use cases:
+    /// - Image classification: Train on flipped, rotated, and color-adjusted versions
+    /// - Object detection: Apply scale and perspective transforms during training
+    /// - Medical imaging: Add noise and contrast variations to improve robustness
+    /// </para>
+    /// </remarks>
+    public ITrainingAugmentationConfiguration? TrainingAugmentationConfiguration { get; set; }
 
     // ============================================================================
     // Safety & Robustness Properties

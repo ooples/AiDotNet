@@ -19,7 +19,7 @@ namespace AiDotNet.Augmentation.Integration;
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 /// <typeparam name="TData">The data type being augmented.</typeparam>
-public class TrainingAugmentationConfiguration<T, TData>
+public class TrainingAugmentationConfiguration<T, TData> : ITrainingAugmentationConfiguration<T, TData>
 {
     /// <summary>
     /// Gets or sets the augmentation pipeline for training.
