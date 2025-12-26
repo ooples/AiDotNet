@@ -98,10 +98,10 @@ public class MultiFidelityAndDomainDecompositionTests
         history.AddEpoch(1.0, subdomainLosses, 0.05, 0.05);
 
         // Assert
-        Assert.Equal(1, history.Losses.Count);
-        Assert.Equal(1, history.SubdomainLosses.Count);
-        Assert.Equal(1, history.InterfaceLosses.Count);
-        Assert.Equal(1, history.PhysicsLosses.Count);
+        Assert.Single(history.Losses);
+        Assert.Single(history.SubdomainLosses);
+        Assert.Single(history.InterfaceLosses);
+        Assert.Single(history.PhysicsLosses);
         Assert.Equal(3, history.SubdomainCount);
 
         Assert.Equal(1.0, history.Losses[0]);

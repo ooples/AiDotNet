@@ -4,9 +4,9 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
-using AiDotNet.Optimizers;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.PhysicsInformed.NeuralOperators
 {

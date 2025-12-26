@@ -1,7 +1,7 @@
-using Xunit;
 using AiDotNet.Tensors.Engines;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Groups;
+using AiDotNet.Tensors.LinearAlgebra;
+using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Engines;
 
@@ -77,7 +77,7 @@ public class CpuAdvancedAlgebraEngineTests
         var result = _engine.OctonionConjugateBatch(octonions);
 
         // Assert: Conjugate flips signs of e1-e7
-        Assert.Equal(1, result.Length);
+        Assert.Single(result);
         Assert.Equal(1.0, result[0].Scalar, precision: 10);
         Assert.Equal(-2.0, result[0].E1, precision: 10);
         Assert.Equal(-3.0, result[0].E2, precision: 10);
@@ -202,7 +202,7 @@ public class CpuAdvancedAlgebraEngineTests
         var result = _engine.MultivectorReverseBatch(mvs);
 
         // Assert: Reverse of scalar is same scalar
-        Assert.Equal(1, result.Length);
+        Assert.Single(result);
         Assert.Equal(5.0, result[0].Scalar, precision: 10);
     }
 
@@ -224,7 +224,7 @@ public class CpuAdvancedAlgebraEngineTests
         var result = _engine.GradeProjectBatch(mvs, 0);
 
         // Assert: Should only have scalar part
-        Assert.Equal(1, result.Length);
+        Assert.Single(result);
         Assert.Equal(5.0, result[0].Scalar, precision: 10);
         Assert.Equal(0.0, result[0][1], precision: 10);  // e1 should be 0
         Assert.Equal(0.0, result[0][2], precision: 10);  // e2 should be 0
@@ -327,7 +327,7 @@ public class CpuAdvancedAlgebraEngineTests
         var result = _engine.Se3ExpBatch(group, tangents);
 
         // Assert: Identity rotation, zero translation
-        Assert.Equal(1, result.Length);
+        Assert.Single(result);
         Assert.Equal(1.0, result[0].Rotation.Matrix[0, 0], precision: 10);
         Assert.Equal(0.0, result[0].Translation[0], precision: 10);
         Assert.Equal(0.0, result[0].Translation[1], precision: 10);
@@ -349,7 +349,7 @@ public class CpuAdvancedAlgebraEngineTests
         var recovered = _engine.Se3LogBatch(group, transforms);
 
         // Assert
-        Assert.Equal(1, recovered.Length);
+        Assert.Single(recovered);
         for (int i = 0; i < 6; i++)
         {
             Assert.Equal(tangents[0][i], recovered[0][i], precision: 7);
@@ -369,7 +369,7 @@ public class CpuAdvancedAlgebraEngineTests
         var adjoints = _engine.So3AdjointBatch(group, rotations);
 
         // Assert: Adjoint equals rotation matrix for SO(3)
-        Assert.Equal(1, adjoints.Length);
+        Assert.Single(adjoints);
         for (int i = 0; i < 3; i++)
         {
             for (int j = 0; j < 3; j++)

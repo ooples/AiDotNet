@@ -1,6 +1,6 @@
-using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 
 namespace AiDotNet.NeuralNetworks.Diffusion;
 
