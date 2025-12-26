@@ -157,6 +157,17 @@ public class AugmentationContext<T>
     }
 
     /// <summary>
+    /// Samples from a Gaussian (normal) distribution.
+    /// </summary>
+    /// <param name="mean">The mean of the distribution.</param>
+    /// <param name="stdDev">The standard deviation of the distribution.</param>
+    /// <returns>A sample from N(mean, stdDev^2).</returns>
+    public double SampleGaussian(double mean, double stdDev)
+    {
+        return mean + stdDev * SampleStandardNormal();
+    }
+
+    /// <summary>
     /// Samples from a standard normal distribution.
     /// </summary>
     /// <returns>A sample from N(0, 1).</returns>
