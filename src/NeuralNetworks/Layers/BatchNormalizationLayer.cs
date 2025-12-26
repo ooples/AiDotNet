@@ -337,48 +337,26 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         }
         else
         {
-            // Inference: Use running statistics (Vectorized)
+            // Inference: Use running statistics
             // output = gamma * (input - runningMean) / sqrt(runningVar + epsilon) + beta
 
-            // 1. Normalize: (input - runningMean) / sqrt(runningVar + epsilon)
-            // Note: runningMean/Var are [features], input is [batch, features]. 
-            // Engine operations typically handle broadcasting for [batch, features] vs [features]
-            // If not, we might need explicit broadcasting, but Cpu/Gpu engines usually support basic broadcasting 
-            // or we can use a custom inference kernel if needed. 
-            // Assuming Engine supports [batch, features] - [features] broadcasting (standard requirement).
-
-            // Calculate denominator: sqrt(runningVar + epsilon)
+            // Calculate scale and shift terms
             var epsilonVec = Tensor<T>.CreateDefault(_runningVariance.Shape, _epsilon);
             var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
             var stdDev = Engine.TensorSqrt(variancePlusEps);
-
-            // Calculate (input - runningMean)
-            // We need to broadcast runningMean to [batch, features].
-            // If Engine.TensorSubtract handles this (NumPy style), great.
-            // CpuEngine.TensorSubtract checks "ShapesMatch". 
-            // Tensor.Subtract (helper) handles broadcasting? No, it enforces same shape.
-            // We need to manually broadcast or use a specialized kernel.
-            // Since we are upgrading to production grade, let's use explicit expansion if needed.
-            // Actually, BatchNorm handles this internally during training. For inference, we can re-use BatchNorm
-            // but passing running stats as if they were batch stats, IF BatchNorm operation allows overriding mean/var.
-            // Engine.BatchNorm signature has 'out mean, out var'. It doesn't take them as input for normalization logic override.
-            // It computes them.
-
-            // So we must implement inference normalization manually using Engine ops.
-            // To broadcast 1D [C] to 2D [B, C], we can rely on the fact that Tensor.Add(Vector) supports it?
-            // Tensor.cs has Add(Vector). 
-
-            // Better approach: Construct pre-computed scale and shift terms.
-            // scale = gamma / stdDev
-            // shift = beta - (gamma * runningMean) / stdDev
-            // output = input * scale + shift
-            // This reduces inference to a linear transformation per feature.
 
             var scale = Engine.TensorDivide(_gamma, stdDev);
             var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
             var shift = Engine.TensorSubtract(_beta, term2);
 
-            // Expand scale/shift to match [batch, features] without vector conversions
+            // Handle both 2D [batch, features] and 4D [batch, channels, height, width]
+            if (input.Shape.Length == 4)
+            {
+                // 4D case: [batch, channels, height, width]
+                return ApplyInference4D(input, scale, shift);
+            }
+
+            // 2D case: [batch, features]
             int batchSize = input.Shape[0];
             int featureSize = input.Shape[1];
 
@@ -388,6 +366,42 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             var scaled = Engine.TensorMultiply(input, scaleExpanded);
             return Engine.TensorAdd(scaled, shiftExpanded);
         }
+    }
+
+    /// <summary>
+    /// Applies batch normalization inference for 4D tensors.
+    /// </summary>
+    private Tensor<T> ApplyInference4D(Tensor<T> input, Tensor<T> scale, Tensor<T> shift)
+    {
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+        int spatialSize = height * width;
+
+        var inputData = input.Data;
+        var scaleData = scale.Data;
+        var shiftData = shift.Data;
+        var outputData = new T[inputData.Length];
+
+        for (int n = 0; n < batch; n++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                int batchOffset = n * channels * spatialSize;
+                int channelOffset = c * spatialSize;
+                T scaleC = scaleData[c];
+                T shiftC = shiftData[c];
+
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    int idx = batchOffset + channelOffset + s;
+                    outputData[idx] = NumOps.Add(NumOps.Multiply(inputData[idx], scaleC), shiftC);
+                }
+            }
+        }
+
+        return new Tensor<T>(input.Shape, new Vector<T>(outputData));
     }
 
     /// <summary>
