@@ -198,7 +198,8 @@ public class Scale<T> : SpatialAugmentationBase<T, ImageTensor<T>>
 
         // Use modular arithmetic for deterministic reflection
         // Period is 2 * (size - 1) for reflection pattern
-        int period = 2 * (size - 1);
+        // Use long arithmetic to prevent overflow for large sizes
+        long period = 2L * (size - 1);
 
         // Handle negative coordinates
         coord = Math.Abs(coord);
