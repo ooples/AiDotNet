@@ -5,6 +5,7 @@ using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Partitioning;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Clustering.AutoK;
 
@@ -278,7 +279,7 @@ public class GMeans<T> : ClusteringBase<T>
 
         // Compute first principal component using power iteration
         var pc = new double[d];
-        var rand = new Random(42);
+        var rand = RandomHelper.CreateSeededRandom(42);
         for (int j = 0; j < d; j++)
         {
             pc[j] = rand.NextDouble() - 0.5;
