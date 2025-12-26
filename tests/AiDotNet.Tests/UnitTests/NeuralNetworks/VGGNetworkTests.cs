@@ -489,8 +489,8 @@ public class VGGNetworkTests
     [Fact]
     public void VGGVariant_AllVariantsAreDefined()
     {
-        // Act
-        var variants = Enum.GetValues<VGGVariant>();
+        // Act - use non-generic Enum.GetValues for .NET Framework compatibility
+        var variants = Enum.GetValues(typeof(VGGVariant)).Cast<VGGVariant>().ToArray();
 
         // Assert
         Assert.Equal(8, variants.Length);
