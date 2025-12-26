@@ -338,13 +338,11 @@ public class BottleneckBlock<T> : LayerBase<T>
             }
 
             // Check downsample layers if present
-            if (_hasDownsample)
+            if (_hasDownsample &&
+                (_downsampleConv is null || !_downsampleConv.SupportsJitCompilation ||
+                 _downsampleBn is null || !_downsampleBn.SupportsJitCompilation))
             {
-                if (_downsampleConv is null || !_downsampleConv.SupportsJitCompilation ||
-                    _downsampleBn is null || !_downsampleBn.SupportsJitCompilation)
-                {
-                    return false;
-                }
+                return false;
             }
 
             return true;

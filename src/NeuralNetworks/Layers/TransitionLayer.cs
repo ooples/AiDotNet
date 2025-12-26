@@ -117,19 +117,10 @@ public class TransitionLayer<T> : LayerBase<T>
 
         // Handle batched input (4D) - use Engine.AvgPool2D directly
         // AvgPoolingLayer expects 3D input, so we handle 4D separately
-        Tensor<T> output;
-        if (_convOut.Shape.Length == 4)
-        {
-            // [B, C, H, W] - use Engine directly
-            output = Engine.AvgPool2D(_convOut, poolSize: 2, stride: 2, padding: 0);
-        }
-        else
-        {
-            // [C, H, W] - use the AvgPoolingLayer
-            output = _pool.Forward(_convOut);
-        }
-
-        return output;
+        // [B, C, H, W] uses Engine directly, [C, H, W] uses the AvgPoolingLayer
+        return _convOut.Shape.Length == 4
+            ? Engine.AvgPool2D(_convOut, poolSize: 2, stride: 2, padding: 0)
+            : _pool.Forward(_convOut);
     }
 
     /// <summary>
@@ -143,17 +134,10 @@ public class TransitionLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         // Backward through pool - handle 4D inputs
-        Tensor<T> grad;
-        if (outputGradient.Shape.Length == 4)
-        {
-            // Manual backward for 4D average pooling
-            // Distribute gradient equally to all pooled positions
-            grad = AvgPool2DBackward(outputGradient, _convOut.Shape);
-        }
-        else
-        {
-            grad = _pool.Backward(outputGradient);
-        }
+        // 4D: manual backward, 3D: use pooling layer
+        Tensor<T> grad = outputGradient.Shape.Length == 4
+            ? AvgPool2DBackward(outputGradient, _convOut.Shape)
+            : _pool.Backward(outputGradient);
 
         // Backward through conv
         grad = _conv.Backward(grad);
@@ -182,7 +166,7 @@ public class TransitionLayer<T> : LayerBase<T>
         int stride = 2;
 
         var inputGrad = new Tensor<T>(inputShape);
-        var divisor = NumOps.FromDouble(poolSize * poolSize);
+        var divisor = NumOps.FromDouble((double)poolSize * poolSize);
 
         for (int n = 0; n < batch; n++)
         {

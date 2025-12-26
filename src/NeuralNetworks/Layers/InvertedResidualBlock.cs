@@ -295,7 +295,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>
         }
 
         // Combine gradients if we have residual connection
-        if (_useResidual && gradToInput is not null)
+        if (gradToInput is not null)
         {
             return AddTensors(grad, gradToInput);
         }

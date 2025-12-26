@@ -143,7 +143,6 @@ public class DenseBlock<T> : LayerBase<T>
 
         // Start with the full gradient (for all concatenated features)
         var currentGrad = outputGradient;
-        var inputGradient = new Tensor<T>(_layerOutputs[0].Shape);
 
         // Process layers in reverse order
         for (int i = _numLayers - 1; i >= 0; i--)
