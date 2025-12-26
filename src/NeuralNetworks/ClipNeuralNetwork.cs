@@ -807,14 +807,23 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
                 embeddings.Add(NormalizeVector(result));
             }
         }
+        else if (dims.Length == 1)
+        {
+            // Shape: [hidden] - single embedding, no batch dimension
+            // This should only happen when batchSize == 1
+            var result = new Vector<T>(_embeddingDimension);
+            for (int i = 0; i < _embeddingDimension && i < dims[0]; i++)
+            {
+                result[i] = NumOps.FromDouble(onnxTensor[i]);
+            }
+            embeddings.Add(NormalizeVector(result));
+        }
         else
         {
-            // Fallback: treat as individual embeddings via ConvertToVector
-            for (int b = 0; b < batchSize; b++)
-            {
-                var singleEmbedding = ConvertToVector(onnxTensor);
-                embeddings.Add(singleEmbedding);
-            }
+            // Unexpected tensor shape - throw to avoid silent incorrect results
+            throw new InvalidOperationException(
+                $"Unexpected ONNX output tensor shape: [{string.Join(", ", dims)}]. " +
+                $"Expected 1D [hidden], 2D [batch, hidden], or 3D [batch, seq_len, hidden].");
         }
 
         return embeddings;
