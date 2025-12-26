@@ -623,7 +623,7 @@ public class MobileNetTests
     public void MobileNetV2WidthMultiplier_EnumValues_AreDistinct()
     {
         // Arrange
-        var values = Enum.GetValues<MobileNetV2WidthMultiplier>();
+        var values = Enum.GetValues(typeof(MobileNetV2WidthMultiplier)).Cast<MobileNetV2WidthMultiplier>().ToArray();
 
         // Assert
         Assert.Equal(5, values.Length);
@@ -638,7 +638,7 @@ public class MobileNetTests
     public void MobileNetV3Variant_EnumValues_AreDistinct()
     {
         // Arrange
-        var values = Enum.GetValues<MobileNetV3Variant>();
+        var values = Enum.GetValues(typeof(MobileNetV3Variant)).Cast<MobileNetV3Variant>().ToArray();
 
         // Assert
         Assert.Equal(2, values.Length);
