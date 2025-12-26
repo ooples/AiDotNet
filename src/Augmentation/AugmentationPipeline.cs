@@ -77,7 +77,11 @@ public class AugmentationPipeline<T, TData> : IAugmentationPolicy<T, TData>
     /// <exception cref="ArgumentNullException">Thrown if augmentation is null.</exception>
     public AugmentationPipeline<T, TData> Add(IAugmentation<T, TData> augmentation)
     {
-        ArgumentNullException.ThrowIfNull(augmentation);
+        if (augmentation is null)
+        {
+            throw new ArgumentNullException(nameof(augmentation));
+        }
+
         _augmentations.Add(augmentation);
         return this;
     }
@@ -90,7 +94,11 @@ public class AugmentationPipeline<T, TData> : IAugmentationPolicy<T, TData>
     /// <exception cref="ArgumentNullException">Thrown if augmentations is null.</exception>
     public AugmentationPipeline<T, TData> AddRange(IEnumerable<IAugmentation<T, TData>> augmentations)
     {
-        ArgumentNullException.ThrowIfNull(augmentations);
+        if (augmentations is null)
+        {
+            throw new ArgumentNullException(nameof(augmentations));
+        }
+
         _augmentations.AddRange(augmentations);
         return this;
     }
