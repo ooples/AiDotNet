@@ -1,7 +1,7 @@
 using System;
-using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Diffusion;

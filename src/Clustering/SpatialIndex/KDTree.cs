@@ -1,5 +1,5 @@
-using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.DistanceMetrics;
+using AiDotNet.Clustering.Interfaces;
 
 namespace AiDotNet.Clustering.SpatialIndex;
 

@@ -3,12 +3,12 @@ using System.IO;
 using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.NeuralNetworks;
 
 namespace AiDotNet.PhysicsInformed.NeuralOperators
 {

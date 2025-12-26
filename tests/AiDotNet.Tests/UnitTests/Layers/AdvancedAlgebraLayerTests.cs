@@ -1,6 +1,6 @@
-using Xunit;
-using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.NeuralNetworks.Layers;
+using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Layers;
 

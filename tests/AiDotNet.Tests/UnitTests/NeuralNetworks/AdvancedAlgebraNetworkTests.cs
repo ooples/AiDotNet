@@ -1,8 +1,8 @@
-using Xunit;
-using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 

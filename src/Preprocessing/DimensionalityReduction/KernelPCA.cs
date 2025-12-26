@@ -185,45 +185,45 @@ public class KernelPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         switch (_kernel)
         {
             case KernelType.Linear:
+            {
+                double dot = 0;
+                for (int k = 0; k < p; k++)
                 {
-                    double dot = 0;
-                    for (int k = 0; k < p; k++)
-                    {
-                        dot += X1[i, k] * X2[j, k];
-                    }
-                    return dot;
+                    dot += X1[i, k] * X2[j, k];
                 }
+                return dot;
+            }
 
             case KernelType.RBF:
+            {
+                double sqDist = 0;
+                for (int k = 0; k < p; k++)
                 {
-                    double sqDist = 0;
-                    for (int k = 0; k < p; k++)
-                    {
-                        double diff = X1[i, k] - X2[j, k];
-                        sqDist += diff * diff;
-                    }
-                    return Math.Exp(-_gamma * sqDist);
+                    double diff = X1[i, k] - X2[j, k];
+                    sqDist += diff * diff;
                 }
+                return Math.Exp(-_gamma * sqDist);
+            }
 
             case KernelType.Polynomial:
+            {
+                double dot = 0;
+                for (int k = 0; k < p; k++)
                 {
-                    double dot = 0;
-                    for (int k = 0; k < p; k++)
-                    {
-                        dot += X1[i, k] * X2[j, k];
-                    }
-                    return Math.Pow(_gamma * dot + _coef0, _degree);
+                    dot += X1[i, k] * X2[j, k];
                 }
+                return Math.Pow(_gamma * dot + _coef0, _degree);
+            }
 
             case KernelType.Sigmoid:
+            {
+                double dot = 0;
+                for (int k = 0; k < p; k++)
                 {
-                    double dot = 0;
-                    for (int k = 0; k < p; k++)
-                    {
-                        dot += X1[i, k] * X2[j, k];
-                    }
-                    return Math.Tanh(_gamma * dot + _coef0);
+                    dot += X1[i, k] * X2[j, k];
                 }
+                return Math.Tanh(_gamma * dot + _coef0);
+            }
 
             default:
                 throw new ArgumentException($"Unknown kernel type: {_kernel}");

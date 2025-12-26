@@ -1,12 +1,12 @@
 using System.Linq;
 using AiDotNet.Autodiff;
-using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Diffusion;

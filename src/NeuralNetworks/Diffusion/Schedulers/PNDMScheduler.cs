@@ -185,12 +185,9 @@ public sealed class PNDMScheduler<T> : NoiseSchedulerBase<T>
                 predOriginalSample = PredictOriginalSample(modelOutput, timestep, sample);
                 predOriginalSample = ClipSampleIfNeeded(predOriginalSample);
 
-                // Update ets with average
-                var avgEt = new Vector<T>(sample.Length);
-                for (int i = 0; i < sample.Length; i++)
-                {
-                    avgEt[i] = NumOps.Divide(NumOps.Add(_ets[^1][i], modelOutput[i]), NumOps.FromDouble(2.0));
-                }
+                // Update ets with average (VECTORIZED)
+                var sum = Engine.Add(_ets[^1], modelOutput);
+                var avgEt = Engine.Multiply(sum, NumOps.FromDouble(0.5));
                 _ets[^1] = avgEt;
 
                 result = ComputePrevSample(predOriginalSample, avgEt, alphaCumprodPrev);
@@ -207,17 +204,15 @@ public sealed class PNDMScheduler<T> : NoiseSchedulerBase<T>
 
             case 3:
             default:
-                // Fourth prk step: compute linear combination
-                var linearCombination = new Vector<T>(sample.Length);
+                // Fourth prk step: compute linear combination (VECTORIZED)
                 var oneThird = NumOps.FromDouble(1.0 / 3.0);
-                var twoThirds = NumOps.FromDouble(2.0 / 3.0);
 
-                for (int i = 0; i < sample.Length; i++)
-                {
-                    var term1 = NumOps.Multiply(oneThird, _ets[^2][i]);
-                    var term2 = NumOps.Multiply(twoThirds, NumOps.Divide(NumOps.Add(_ets[^1][i], modelOutput[i]), NumOps.FromDouble(2.0)));
-                    linearCombination[i] = NumOps.Add(term1, term2);
-                }
+                // term1 = (1/3) * _ets[^2]
+                var term1 = Engine.Multiply(_ets[^2], oneThird);
+                // term2 = (2/3) * ((_ets[^1] + modelOutput) / 2) = (1/3) * (_ets[^1] + modelOutput)
+                var avgLast = Engine.Add(_ets[^1], modelOutput);
+                var term2 = Engine.Multiply(avgLast, oneThird);
+                var linearCombination = Engine.Add(term1, term2);
 
                 // Update last ets entry
                 _ets[^1] = linearCombination;
@@ -226,7 +221,12 @@ public sealed class PNDMScheduler<T> : NoiseSchedulerBase<T>
                 int actualPrevTimestep = Math.Max(timestep - (Config.TrainTimesteps / Timesteps.Length), 0);
                 T alphaCumprodActualPrev = AlphasCumulativeProduct[actualPrevTimestep];
 
-                predOriginalSample = PredictOriginalSample(linearCombination, timestep, _currentSample!);
+                // Validate _currentSample is set before using
+                if (_currentSample == null)
+                {
+                    throw new InvalidOperationException("Current sample not initialized for PRK step.");
+                }
+                predOriginalSample = PredictOriginalSample(linearCombination, timestep, _currentSample);
                 predOriginalSample = ClipSampleIfNeeded(predOriginalSample);
 
                 result = ComputePrevSample(predOriginalSample, linearCombination, alphaCumprodActualPrev);
@@ -264,46 +264,36 @@ public sealed class PNDMScheduler<T> : NoiseSchedulerBase<T>
     }
 
     /// <summary>
-    /// Computes the linear multi-step combination of model outputs.
+    /// Computes the linear multi-step combination of model outputs (VECTORIZED).
+    /// Uses Adams-Bashforth style coefficients for multi-step prediction.
     /// </summary>
     private Vector<T> ComputeLinearMultiStep()
     {
-        int n = _ets[0].Length;
-        var result = new Vector<T>(n);
-
-        // Adams-Bashforth style coefficients
+        // Adams-Bashforth style coefficients with vectorized operations
         switch (_ets.Count)
         {
             case 1:
-                // Simple copy
-                for (int i = 0; i < n; i++)
-                    result[i] = _ets[0][i];
-                break;
+                // Simple copy - return the only element
+                return CopyVector(_ets[0]);
 
             case 2:
                 // Linear extrapolation: (3 * e_{t-1} - e_{t-2}) / 2
                 var half = NumOps.FromDouble(0.5);
                 var three = NumOps.FromDouble(3.0);
-                for (int i = 0; i < n; i++)
-                {
-                    var term = NumOps.Subtract(NumOps.Multiply(three, _ets[1][i]), _ets[0][i]);
-                    result[i] = NumOps.Multiply(half, term);
-                }
-                break;
+                var scaled1 = Engine.Multiply(_ets[1], three);
+                var diff = Engine.Subtract(scaled1, _ets[0]);
+                return Engine.Multiply(diff, half);
 
             case 3:
                 // Quadratic: (23 * e_{t-1} - 16 * e_{t-2} + 5 * e_{t-3}) / 12
                 var c1 = NumOps.FromDouble(23.0 / 12.0);
                 var c2 = NumOps.FromDouble(-16.0 / 12.0);
                 var c3 = NumOps.FromDouble(5.0 / 12.0);
-                for (int i = 0; i < n; i++)
-                {
-                    var term1 = NumOps.Multiply(c1, _ets[2][i]);
-                    var term2 = NumOps.Multiply(c2, _ets[1][i]);
-                    var term3 = NumOps.Multiply(c3, _ets[0][i]);
-                    result[i] = NumOps.Add(NumOps.Add(term1, term2), term3);
-                }
-                break;
+                var term1 = Engine.Multiply(_ets[2], c1);
+                var term2 = Engine.Multiply(_ets[1], c2);
+                var term3 = Engine.Multiply(_ets[0], c3);
+                var sum12 = Engine.Add(term1, term2);
+                return Engine.Add(sum12, term3);
 
             default:
                 // Cubic: (55 * e_{t-1} - 59 * e_{t-2} + 37 * e_{t-3} - 9 * e_{t-4}) / 24
@@ -311,59 +301,43 @@ public sealed class PNDMScheduler<T> : NoiseSchedulerBase<T>
                 var d2 = NumOps.FromDouble(-59.0 / 24.0);
                 var d3 = NumOps.FromDouble(37.0 / 24.0);
                 var d4 = NumOps.FromDouble(-9.0 / 24.0);
-                for (int i = 0; i < n; i++)
-                {
-                    var term1 = NumOps.Multiply(d1, _ets[3][i]);
-                    var term2 = NumOps.Multiply(d2, _ets[2][i]);
-                    var term3 = NumOps.Multiply(d3, _ets[1][i]);
-                    var term4 = NumOps.Multiply(d4, _ets[0][i]);
-                    result[i] = NumOps.Add(NumOps.Add(NumOps.Add(term1, term2), term3), term4);
-                }
-                break;
+                var t1 = Engine.Multiply(_ets[3], d1);
+                var t2 = Engine.Multiply(_ets[2], d2);
+                var t3 = Engine.Multiply(_ets[1], d3);
+                var t4 = Engine.Multiply(_ets[0], d4);
+                var s12 = Engine.Add(t1, t2);
+                var s34 = Engine.Add(t3, t4);
+                return Engine.Add(s12, s34);
         }
-
-        return result;
     }
 
     /// <summary>
-    /// Predicts the original sample from noise prediction.
+    /// Predicts the original sample from noise prediction (VECTORIZED).
     /// </summary>
     private Vector<T> PredictOriginalSample(Vector<T> modelOutput, int timestep, Vector<T> sample)
     {
-        int n = sample.Length;
         T alphaCumprod = AlphasCumulativeProduct[timestep];
         T sqrtAlphaCumprod = NumOps.Sqrt(alphaCumprod);
         T sqrtOneMinusAlphaCumprod = NumOps.Sqrt(NumOps.Subtract(NumOps.One, alphaCumprod));
 
-        var predOriginal = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            var noiseTerm = NumOps.Multiply(sqrtOneMinusAlphaCumprod, modelOutput[i]);
-            var numerator = NumOps.Subtract(sample[i], noiseTerm);
-            predOriginal[i] = NumOps.Divide(numerator, sqrtAlphaCumprod);
-        }
-
-        return predOriginal;
+        // Vectorized: x_0 = (x_t - sqrt(1-alpha) * eps) / sqrt(alpha)
+        var noiseTerm = Engine.Multiply(modelOutput, sqrtOneMinusAlphaCumprod);
+        var numerator = Engine.Subtract(sample, noiseTerm);
+        return Engine.Divide(numerator, sqrtAlphaCumprod);
     }
 
     /// <summary>
-    /// Computes the previous sample from predicted original and model output.
+    /// Computes the previous sample from predicted original and model output (VECTORIZED).
     /// </summary>
     private Vector<T> ComputePrevSample(Vector<T> predOriginal, Vector<T> modelOutput, T alphaCumprodPrev)
     {
-        int n = predOriginal.Length;
         T sqrtAlphaCumprodPrev = NumOps.Sqrt(alphaCumprodPrev);
         T sqrtOneMinusAlphaCumprodPrev = NumOps.Sqrt(NumOps.Subtract(NumOps.One, alphaCumprodPrev));
 
-        var prevSample = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            var originalTerm = NumOps.Multiply(sqrtAlphaCumprodPrev, predOriginal[i]);
-            var noiseTerm = NumOps.Multiply(sqrtOneMinusAlphaCumprodPrev, modelOutput[i]);
-            prevSample[i] = NumOps.Add(originalTerm, noiseTerm);
-        }
-
-        return prevSample;
+        // Vectorized: x_{t-1} = sqrt(alpha_prev) * x_0 + sqrt(1-alpha_prev) * eps
+        var originalTerm = Engine.Multiply(predOriginal, sqrtAlphaCumprodPrev);
+        var noiseTerm = Engine.Multiply(modelOutput, sqrtOneMinusAlphaCumprodPrev);
+        return Engine.Add(originalTerm, noiseTerm);
     }
 
     /// <summary>
