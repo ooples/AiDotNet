@@ -72,14 +72,21 @@ public class AugmentedSample<T, TData>
     }
 
     /// <summary>
-    /// Creates a deep copy of this sample.
+    /// Creates a copy of this sample with deep-copied targets.
     /// </summary>
-    /// <returns>A new sample with copied data.</returns>
+    /// <returns>A new sample with copied targets.</returns>
+    /// <remarks>
+    /// <para>
+    /// BoundingBoxes, Keypoints, and Masks are deep-copied. Data is shallow-copied
+    /// since TData's cloning mechanism is unknown. Labels are deep-copied if not null.
+    /// If deep-copying of Data is required, clone it before calling this method.
+    /// </para>
+    /// </remarks>
     public AugmentedSample<T, TData> Clone()
     {
         var clone = new AugmentedSample<T, TData>(Data)
         {
-            Labels = Labels,
+            Labels = Labels is not null ? new Vector<T>(Labels.ToArray()) : null,
             Metadata = new Dictionary<string, object>(Metadata)
         };
 

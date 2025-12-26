@@ -44,8 +44,8 @@ public class MixUp<T> : LabelMixingAugmentationBase<T, ImageTensor<T>>
     /// <param name="alpha">
     /// The alpha parameter for the Beta distribution that samples the mixing ratio.
     /// Industry standard default is 1.0 (uniform distribution over [0, 1]).
-    /// Higher values (like 0.2) concentrate samples near 0 and 1 (less mixing).
-    /// Lower values spread samples more uniformly.
+    /// Lower values (like 0.2) concentrate samples near 0 and 1 (less mixing).
+    /// Higher values (above 1.0) concentrate samples near 0.5 (stronger mixing).
     /// </param>
     /// <param name="probability">
     /// The probability of applying this augmentation (0.0 to 1.0).

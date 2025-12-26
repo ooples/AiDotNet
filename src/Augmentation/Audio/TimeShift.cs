@@ -24,7 +24,7 @@ public class TimeShift<T> : AudioAugmenterBase<T>
     /// </summary>
     /// <remarks>
     /// <para>Default: -0.2 (20% backward)</para>
-    /// <para>Negative values shift audio backward (adds silence at start).</para>
+    /// <para>Negative values shift audio backward in time (content moves earlier, silence fills end).</para>
     /// </remarks>
     public double MinShiftFraction { get; }
 
@@ -33,7 +33,7 @@ public class TimeShift<T> : AudioAugmenterBase<T>
     /// </summary>
     /// <remarks>
     /// <para>Default: 0.2 (20% forward)</para>
-    /// <para>Positive values shift audio forward (adds silence at end).</para>
+    /// <para>Positive values shift audio forward in time (content moves later, silence fills start).</para>
     /// </remarks>
     public double MaxShiftFraction { get; }
 

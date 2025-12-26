@@ -371,30 +371,41 @@ public class Rotation<T> : SpatialAugmentationBase<T, ImageTensor<T>>
     /// <summary>
     /// Transforms a segmentation mask after rotation.
     /// </summary>
+    /// <remarks>
+    /// Uses the same rotation center as the image transformation, scaled to mask dimensions
+    /// if they differ from image dimensions, to ensure proper alignment.
+    /// </remarks>
     protected override SegmentationMask<T> TransformMask(
         SegmentationMask<T> mask,
         IDictionary<string, object> transformParams,
         AugmentationContext<T> context)
     {
         double angleRadians = (double)transformParams["angle_radians"];
+        int imageWidth = (int)transformParams["image_width"];
+        int imageHeight = (int)transformParams["image_height"];
+        double imageCenterX = (double)transformParams["center_x"];
+        double imageCenterY = (double)transformParams["center_y"];
 
         var result = mask.Clone();
-        int height = mask.Height;
-        int width = mask.Width;
+        int maskHeight = mask.Height;
+        int maskWidth = mask.Width;
 
-        double centerX = width / 2.0;
-        double centerY = height / 2.0;
+        // Scale the center to mask dimensions if they differ from image dimensions
+        // This ensures the rotation pivot point is consistent between image and mask
+        double centerX = imageCenterX * maskWidth / imageWidth;
+        double centerY = imageCenterY * maskHeight / imageHeight;
+
         double cos = Math.Cos(angleRadians);
         double sin = Math.Sin(angleRadians);
 
         // Get the dense mask data
         var data = mask.ToDense();
-        var rotated = new T[height, width];
+        var rotated = new T[maskHeight, maskWidth];
 
         // Rotate the mask using nearest neighbor (to preserve class labels)
-        for (int y = 0; y < height; y++)
+        for (int y = 0; y < maskHeight; y++)
         {
-            for (int x = 0; x < width; x++)
+            for (int x = 0; x < maskWidth; x++)
             {
                 double dx = x - centerX;
                 double dy = y - centerY;
@@ -406,7 +417,7 @@ public class Rotation<T> : SpatialAugmentationBase<T, ImageTensor<T>>
                 int srcXi = (int)Math.Round(srcX);
                 int srcYi = (int)Math.Round(srcY);
 
-                if (srcXi >= 0 && srcXi < width && srcYi >= 0 && srcYi < height)
+                if (srcXi >= 0 && srcXi < maskWidth && srcYi >= 0 && srcYi < maskHeight)
                 {
                     rotated[y, x] = data[srcYi, srcXi];
                 }

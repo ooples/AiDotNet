@@ -114,16 +114,28 @@ public class HorizontalFlip<T> : SpatialAugmentationBase<T, ImageTensor<T>>
     /// <summary>
     /// Transforms a keypoint after horizontal flip.
     /// </summary>
+    /// <remarks>
+    /// Handles both normalized coordinates (0.0-1.0) and absolute pixel coordinates.
+    /// </remarks>
     protected override Keypoint<T> TransformKeypoint(
         Keypoint<T> keypoint,
         IDictionary<string, object> transformParams,
         AugmentationContext<T> context)
     {
-        int imageWidth = (int)transformParams["image_width"];
-
-        // For horizontal flip: new_x = image_width - 1 - old_x (0-indexed)
         double x = Convert.ToDouble(keypoint.X);
-        double newX = imageWidth - 1 - x;
+        double newX;
+
+        if (keypoint.IsNormalized)
+        {
+            // For normalized coordinates: new_x = 1.0 - old_x
+            newX = 1.0 - x;
+        }
+        else
+        {
+            // For pixel coordinates: new_x = image_width - 1 - old_x (0-indexed)
+            int imageWidth = (int)transformParams["image_width"];
+            newX = imageWidth - 1 - x;
+        }
 
         var result = keypoint.Clone();
         result.X = (T)Convert.ChangeType(newX, typeof(T));

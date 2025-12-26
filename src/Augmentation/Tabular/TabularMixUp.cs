@@ -63,7 +63,12 @@ public class TabularMixUp<T> : TabularMixingAugmenterBase<T>
         for (int i = 0; i < rows; i++)
         {
             int j = indices[i];
-            if (i == j) continue; // Skip self-mixing
+
+            // Avoid self-mixing by using neighbor instead - ensures consistent augmentation
+            if (i == j)
+            {
+                j = (i + 1) % rows;
+            }
 
             for (int c = 0; c < cols; c++)
             {

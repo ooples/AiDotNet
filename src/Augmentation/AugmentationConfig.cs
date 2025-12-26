@@ -976,10 +976,11 @@ public static class DataModalityDetector
             return DataModality.Video;
         }
 
-        // Check for generic Tensor (could be image)
+        // Check for generic Tensor - return Unknown to require explicit configuration
+        // since a Tensor could be image, audio spectrogram, or other modalities
         if (typeName.StartsWith("Tensor", StringComparison.Ordinal))
         {
-            return DataModality.Image; // Default assumption for tensors
+            return DataModality.Unknown;
         }
 
         // Check for Vector (could be tabular)

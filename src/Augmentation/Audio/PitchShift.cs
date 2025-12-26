@@ -3,12 +3,14 @@ using AiDotNet.Tensors;
 namespace AiDotNet.Augmentation.Audio;
 
 /// <summary>
-/// Shifts the pitch of audio without changing the tempo.
+/// Shifts the pitch of audio using resampling.
 /// </summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> Pitch shifting makes audio sound higher or lower,
-/// like the difference between a high and low voice. Unlike changing playback speed,
-/// this keeps the audio the same length while changing only the pitch.</para>
+/// like the difference between a high and low voice.</para>
+/// <para><b>Note:</b> This simplified implementation uses linear interpolation resampling,
+/// which maintains audio length but may introduce artifacts. For production use with
+/// precise pitch-only changes, consider using a phase vocoder or WSOLA algorithm.</para>
 /// <para><b>When to use:</b>
 /// <list type="bullet">
 /// <item>Speech recognition to handle different voice pitches</item>
