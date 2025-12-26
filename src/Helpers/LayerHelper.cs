@@ -145,6 +145,119 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates layers for a VGG network based on the specified configuration.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="configuration">The VGG-specific configuration.</param>
+    /// <returns>A collection of layers forming a VGG network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> VGG networks are deep convolutional neural networks known for their
+    /// simplicity and effectiveness. They use stacks of 3x3 convolutions followed by max pooling
+    /// to progressively extract higher-level features from images.
+    /// </para>
+    /// <para>
+    /// The VGG architecture consists of:
+    /// <list type="bullet">
+    /// <item>5 convolutional blocks with increasing number of filters (64 -> 128 -> 256 -> 512 -> 512)</item>
+    /// <item>Max pooling after each block to reduce spatial dimensions by half</item>
+    /// <item>Optional batch normalization after each convolution (in _BN variants)</item>
+    /// <item>3 fully connected layers (4096 -> 4096 -> numClasses)</item>
+    /// <item>Dropout regularization in the fully connected layers</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVGGLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        Configuration.VGGConfiguration configuration)
+    {
+        if (configuration == null)
+        {
+            throw new ArgumentNullException(nameof(configuration));
+        }
+
+        var inputShape = architecture.GetInputShape();
+        int currentChannels = inputShape[0];
+        int currentHeight = inputShape[1];
+        int currentWidth = inputShape[2];
+
+        var blockConfig = configuration.BlockConfiguration;
+
+        // Process each VGG block
+        for (int blockIdx = 0; blockIdx < blockConfig.Length; blockIdx++)
+        {
+            var block = blockConfig[blockIdx];
+
+            // Add convolutional layers in this block
+            for (int convIdx = 0; convIdx < block.Length; convIdx++)
+            {
+                int outputChannels = block[convIdx];
+
+                // Convolutional layer with 3x3 kernel
+                yield return new ConvolutionalLayer<T>(
+                    inputDepth: currentChannels,
+                    inputHeight: currentHeight,
+                    inputWidth: currentWidth,
+                    outputDepth: outputChannels,
+                    kernelSize: 3,
+                    stride: 1,
+                    padding: 1,  // Same padding to preserve spatial dimensions
+                    activation: new ReLUActivation<T>()
+                );
+
+                // Optional batch normalization
+                if (configuration.UseBatchNormalization)
+                {
+                    yield return new BatchNormalizationLayer<T>(outputChannels);
+                }
+
+                currentChannels = outputChannels;
+            }
+
+            // Max pooling after each block (2x2, stride 2)
+            yield return new MaxPoolingLayer<T>(
+                inputShape: [currentChannels, currentHeight, currentWidth],
+                poolSize: 2,
+                strides: 2
+            );
+
+            currentHeight /= 2;
+            currentWidth /= 2;
+        }
+
+        // Flatten before fully connected layers
+        int flattenedSize = currentChannels * currentHeight * currentWidth;
+        yield return new FlattenLayer<T>(inputShape: [currentChannels, currentHeight, currentWidth]);
+
+        // Classifier (fully connected layers) - only if included
+        if (configuration.IncludeClassifier)
+        {
+            // FC1: flattenedSize -> 4096
+            yield return new DenseLayer<T>(
+                inputSize: flattenedSize,
+                outputSize: 4096,
+                activationFunction: new ReLUActivation<T>()
+            );
+            yield return new DropoutLayer<T>((float)configuration.DropoutRate);
+
+            // FC2: 4096 -> 4096
+            yield return new DenseLayer<T>(
+                inputSize: 4096,
+                outputSize: 4096,
+                activationFunction: new ReLUActivation<T>()
+            );
+            yield return new DropoutLayer<T>((float)configuration.DropoutRate);
+
+            // FC3 (Output): 4096 -> numClasses
+            yield return new DenseLayer<T>(
+                inputSize: 4096,
+                outputSize: configuration.NumClasses,
+                activationFunction: new SoftmaxActivation<T>() as IActivationFunction<T>
+            );
+        }
+    }
+
+    /// <summary>
     /// Creates default layers for an occupancy detection neural network with temporal data.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration that defines input and output shapes.</param>
