@@ -116,6 +116,13 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="data">The training data matrix.</param>
     protected override void FitCore(Matrix<T> data)
     {
+        if (data.Rows == 0)
+        {
+            throw new ArgumentException(
+                "Input data must have at least one sample to fit spline knots.",
+                nameof(data));
+        }
+
         _nInputFeatures = data.Columns;
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
         var processSet = new HashSet<int>(columnsToProcess);

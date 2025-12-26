@@ -119,6 +119,19 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nFeaturesIn = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+
+        if (n == 0)
+        {
+            throw new ArgumentException("Input data must have at least one sample.", nameof(data));
+        }
+
+        if (_whiten && n < p)
+        {
+            throw new ArgumentException(
+                $"When whitening is enabled, number of samples ({n}) must be >= number of features ({p}).",
+                nameof(data));
+        }
+
         int k = Math.Min(_nComponents, Math.Min(n, p));
 
         // Convert to double and center
@@ -439,6 +452,16 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 for (int k = 0; k < cols; k++)
                 {
                     W[i, k] /= norm;
+                }
+            }
+            else
+            {
+                // Vector is near-zero after orthogonalization (linearly dependent)
+                // Re-initialize with small random values to maintain orthogonality
+                var random = RandomHelper.CreateSeededRandom(_randomState + i);
+                for (int k = 0; k < cols; k++)
+                {
+                    W[i, k] = (random.NextDouble() - 0.5) * 1e-6;
                 }
             }
         }

@@ -309,7 +309,25 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 }
                 norm = Math.Sqrt(norm);
 
-                if (norm < 1e-10) break;
+                if (norm < 1e-10)
+                {
+                    // Av is nearly zero - keep current normalized v as eigenvector
+                    // Ensure v is still normalized (it should be from previous iteration or init)
+                    double vNorm = 0;
+                    for (int i = 0; i < n; i++)
+                    {
+                        vNorm += v[i] * v[i];
+                    }
+                    vNorm = Math.Sqrt(vNorm);
+                    if (vNorm > 1e-10)
+                    {
+                        for (int i = 0; i < n; i++)
+                        {
+                            v[i] /= vNorm;
+                        }
+                    }
+                    break;
+                }
 
                 for (int i = 0; i < n; i++)
                 {
@@ -387,7 +405,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 }
             }
 
-            // Compute W^T W H
+            // Compute W^T W H with regularization
             for (int i = 0; i < k; i++)
             {
                 for (int j = 0; j < p; j++)
@@ -397,7 +415,10 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     {
                         sum += WTW[i, l] * H[l, j];
                     }
-                    WTWH[i, j] = sum + eps;
+                    // Add L1/L2 regularization: alpha * (l1_ratio + (1-l1_ratio) * H[i,j])
+                    double l1Reg = _alpha * _l1Ratio;
+                    double l2Reg = _alpha * (1 - _l1Ratio) * H[i, j];
+                    WTWH[i, j] = sum + l1Reg + l2Reg + eps;
                 }
             }
 
@@ -444,7 +465,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 }
             }
 
-            // Compute W H H^T
+            // Compute W H H^T with regularization
             for (int i = 0; i < n; i++)
             {
                 for (int j = 0; j < k; j++)
@@ -454,7 +475,10 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     {
                         sum += W[i, l] * HHT[l, j];
                     }
-                    WHHT[i, j] = sum + eps;
+                    // Add L1/L2 regularization: alpha * (l1_ratio + (1-l1_ratio) * W[i,j])
+                    double l1Reg = _alpha * _l1Ratio;
+                    double l2Reg = _alpha * (1 - _l1Ratio) * W[i, j];
+                    WHHT[i, j] = sum + l1Reg + l2Reg + eps;
                 }
             }
 
@@ -492,7 +516,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Update H by minimizing ||V - WH||^2 with H >= 0
+            // Update H by minimizing ||V - WH||^2 + regularization with H >= 0
             for (int c = 0; c < k; c++)
             {
                 for (int j = 0; j < p; j++)
@@ -515,11 +539,14 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                         denominator += W[i, c] * W[i, c];
                     }
 
+                    // Add L1/L2 regularization to denominator
+                    denominator += _alpha * _l1Ratio + _alpha * (1 - _l1Ratio);
+
                     H[c, j] = Math.Max(0, numerator / denominator);
                 }
             }
 
-            // Update W by minimizing ||V - WH||^2 with W >= 0
+            // Update W by minimizing ||V - WH||^2 + regularization with W >= 0
             for (int i = 0; i < n; i++)
             {
                 for (int c = 0; c < k; c++)
@@ -540,6 +567,9 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                         numerator += H[c, j] * residual;
                         denominator += H[c, j] * H[c, j];
                     }
+
+                    // Add L1/L2 regularization to denominator
+                    denominator += _alpha * _l1Ratio + _alpha * (1 - _l1Ratio);
 
                     W[i, c] = Math.Max(0, numerator / denominator);
                 }
@@ -595,14 +625,36 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int p = data.Columns;
         int k = _components.GetLength(0);
 
-        // Convert to double
+        // Validate feature count matches training data
+        if (p != _nFeaturesIn)
+        {
+            throw new ArgumentException(
+                $"Input data has {p} features, but model was fitted with {_nFeaturesIn} features.",
+                nameof(data));
+        }
+
+        // Convert to double, enforcing non-negativity (required for NMF)
         var V = new double[n, p];
+        bool hasNegatives = false;
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < p; j++)
             {
-                V[i, j] = Math.Max(0, NumOps.ToDouble(data[i, j]));
+                double val = NumOps.ToDouble(data[i, j]);
+                if (val < 0)
+                {
+                    hasNegatives = true;
+                    val = 0;
+                }
+                V[i, j] = val;
             }
+        }
+
+        if (hasNegatives)
+        {
+            throw new ArgumentException(
+                "NMF requires non-negative input data. Negative values were detected.",
+                nameof(data));
         }
 
         // Initialize W
@@ -701,8 +753,19 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         int n = data.Rows;
+        int inputColumns = data.Columns;
         int p = _nFeaturesIn;
         int k = _components.GetLength(0);
+
+        // Validate input column count matches number of components
+        if (inputColumns != k)
+        {
+            throw new ArgumentException(
+                $"Input data has {inputColumns} columns, but model expects coefficient matrix " +
+                $"with {k} columns (number of components).",
+                nameof(data));
+        }
+
         var result = new T[n, p];
 
         for (int i = 0; i < n; i++)

@@ -40,6 +40,7 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
     // Fitted parameters
     private double[,]? _components; // Topic-word distribution (k x vocab)
     private double[,]? _expDigammaComponents;
+    private double[]? _lambdaSums; // Sum of lambda per topic for reconstruction
     private int _nVocab;
 
     /// <summary>
@@ -240,6 +241,8 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
         }
 
         // Copy final lambda to components and normalize
+        // Store lambda sums for accurate reconstruction during inference
+        _lambdaSums = new double[k];
         for (int t = 0; t < k; t++)
         {
             double sum = 0;
@@ -247,6 +250,7 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
             {
                 sum += lambda[t, w];
             }
+            _lambdaSums[t] = sum;
             for (int w = 0; w < _nVocab; w++)
             {
                 _components![t, w] = lambda[t, w] / sum;
@@ -318,6 +322,8 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
         }
 
         // Copy final lambda to components and normalize
+        // Store lambda sums for accurate reconstruction during inference
+        _lambdaSums = new double[k];
         for (int t = 0; t < k; t++)
         {
             double sum = 0;
@@ -325,6 +331,7 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
             {
                 sum += lambda[t, w];
             }
+            _lambdaSums[t] = sum;
             for (int w = 0; w < _nVocab; w++)
             {
                 _components![t, w] = lambda[t, w] / sum;
@@ -443,7 +450,7 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
     /// </summary>
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
-        if (_components is null)
+        if (_components is null || _lambdaSums is null)
         {
             throw new InvalidOperationException("LatentDirichletAllocation has not been fitted.");
         }
@@ -451,16 +458,15 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
         int n = data.Rows;
         int k = _nComponents;
 
-        // Create lambda from components for inference
+        // Reconstruct lambda from normalized components using stored sums
+        // lambda[t, w] = _components[t, w] * _lambdaSums[t]
         var lambda = new double[k, _nVocab];
         for (int t = 0; t < k; t++)
         {
-            double sum = 0;
             for (int w = 0; w < _nVocab; w++)
             {
-                // Convert back to unnormalized form
-                lambda[t, w] = _components[t, w] * _nVocab + _topicWordPrior;
-                sum += lambda[t, w];
+                // Use stored lambda sum for accurate reconstruction
+                lambda[t, w] = _components[t, w] * _lambdaSums[t];
             }
         }
 

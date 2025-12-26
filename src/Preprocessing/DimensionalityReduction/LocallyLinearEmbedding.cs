@@ -324,6 +324,11 @@ public class LocallyLinearEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>
 
     private double[,] ComputeStandardLLEEmbedding(int n, int k)
     {
+        if (_reconstructionWeights is null)
+        {
+            throw new InvalidOperationException("Reconstruction weights have not been computed.");
+        }
+
         // Compute M = (I - W)' * (I - W)
         var M = new double[n, n];
 
@@ -336,7 +341,7 @@ public class LocallyLinearEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>
                 // (I - W)_ki * (I - W)_kj
                 for (int l = 0; l < n; l++)
                 {
-                    double Ili = (i == l ? 1 : 0) - _reconstructionWeights![l, i];
+                    double Ili = (i == l ? 1 : 0) - _reconstructionWeights[l, i];
                     double Ilj = (j == l ? 1 : 0) - _reconstructionWeights[l, j];
                     sum += Ili * Ilj;
                 }
