@@ -22131,6 +22131,21 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
+    public Tensor<T> GroupNorm<T>(Tensor<T> input, int numGroups, Tensor<T> gamma, Tensor<T> beta, double epsilon, out Tensor<T> mean, out Tensor<T> variance)
+    {
+        // GroupNorm has different memory access patterns than LayerNorm due to channel grouping
+        // For now, delegate to CPU. GPU kernel can be added for high-throughput scenarios.
+        return _cpuFallback.GroupNorm(input, numGroups, gamma, beta, epsilon, out mean, out variance);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GroupNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int numGroups, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta)
+    {
+        // Delegate to CPU fallback for now
+        return _cpuFallback.GroupNormBackward(gradOutput, input, numGroups, gamma, mean, variance, epsilon, out gradGamma, out gradBeta);
+    }
+
     #endregion
 
     #region Tensor Reduction Operations

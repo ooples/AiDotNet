@@ -1,5 +1,5 @@
-using AiDotNet.Clustering.Partitioning;
 using AiDotNet.Clustering.Options;
+using AiDotNet.Clustering.Partitioning;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
