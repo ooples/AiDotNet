@@ -302,14 +302,11 @@ public static class ClipModelLoader
                 return false;
 
             var requiredFiles = GetRequiredFiles(config);
-            foreach (var fileName in requiredFiles)
+            return requiredFiles.All(fileName =>
             {
                 var localPath = ValidateAndCombinePath(modelCacheDir, fileName);
-                if (!File.Exists(localPath))
-                    return false;
-            }
-
-            return true;
+                return File.Exists(localPath);
+            });
         }
         catch (InvalidOperationException)
         {
@@ -432,7 +429,9 @@ public static class ClipModelLoader
     private static string GetDefaultCacheDir()
     {
         var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return Path.Combine(userProfile, DefaultCacheDir);
+        // DefaultCacheDir is a constant, so this is safe, but we use
+        // ValidateAndCombinePath for consistency with other path operations.
+        return ValidateAndCombinePath(userProfile, DefaultCacheDir);
     }
 
     private static ITokenizer LoadTokenizer(string modelPath)
