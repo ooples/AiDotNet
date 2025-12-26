@@ -12,25 +12,25 @@ namespace AiDotNet.TimeSeries;
 /// - MA (Moving Average): Uses the dependency between an observation and residual errors from a moving average model
 /// </para>
 /// 
-/// <para>
-/// For Beginners:
-/// ARIMA is a popular technique for analyzing and forecasting time series data (data collected over time, 
-/// like stock prices, temperature readings, or monthly sales figures).
-/// 
-/// Think of ARIMA as combining three different approaches:
-/// 1. AutoRegressive (AR): Looks at past values to predict future values. For example, today's
-///    temperature might be related to yesterday's temperature.
-/// 2. Integrated (I): Transforms the data to make it easier to analyze by removing trends.
+/// <para><b>For Beginners:</b>
+/// ARIMA is a popular technique for analyzing and forecasting time series data (data collected over time,
+/// like stock prices, temperature readings, or monthly sales figures).</para>
+/// <para>Think of ARIMA as combining three different approaches:</para>
+/// <list type="number">
+/// <item>AutoRegressive (AR): Looks at past values to predict future values. For example, today's
+///    temperature might be related to yesterday's temperature.</item>
+/// <item>Integrated (I): Transforms the data to make it easier to analyze by removing trends.
 ///    For example, instead of looking at temperatures directly, we might look at how they
-///    change from day to day.
-/// 3. Moving Average (MA): Looks at past prediction errors to improve future predictions.
-///    For example, if we consistently underestimate temperature, we can adjust for that.
-/// 
-/// The model has three key parameters (p, d, q):
-/// - p: How many past values to look at (AR component)
-/// - d: How many times to difference the data (I component)
-/// - q: How many past prediction errors to consider (MA component)
-/// </para>
+///    change from day to day.</item>
+/// <item>Moving Average (MA): Looks at past prediction errors to improve future predictions.
+///    For example, if we consistently underestimate temperature, we can adjust for that.</item>
+/// </list>
+/// <para>The model has three key parameters (p, d, q):</para>
+/// <list type="bullet">
+/// <item>p: How many past values to look at (AR component)</item>
+/// <item>d: How many times to difference the data (I component)</item>
+/// <item>q: How many past prediction errors to consider (MA component)</item>
+/// </list>
 /// </remarks>
 public class ARIMAModel<T> : TimeSeriesModelBase<T>
 {
@@ -43,10 +43,10 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// Coefficients for the autoregressive (AR) component of the model.
     /// </summary>
     /// <remarks>
-    /// For Beginners:
+    /// <para><b>For Beginners:</b>
     /// These coefficients determine how much each past value influences the prediction.
     /// For example, if the coefficient for yesterday's value is 0.7, it means yesterday's
-    /// value has a strong influence on today's prediction.
+    /// value has a strong influence on today's prediction.</para>
     /// </remarks>
     private Vector<T> _arCoefficients;
 
@@ -54,10 +54,10 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// Coefficients for the moving average (MA) component of the model.
     /// </summary>
     /// <remarks>
-    /// For Beginners:
+    /// <para><b>For Beginners:</b>
     /// These coefficients determine how much each past prediction error influences the prediction.
     /// They help the model learn from its mistakes. For example, if the model consistently
-    /// underpredicts, these coefficients help correct that bias.
+    /// underpredicts, these coefficients help correct that bias.</para>
     /// </remarks>
     private Vector<T> _maCoefficients;
 
@@ -65,9 +65,9 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// The constant term in the ARIMA equation.
     /// </summary>
     /// <remarks>
-    /// For Beginners:
+    /// <para><b>For Beginners:</b>
     /// This is like the "baseline" value in the prediction, before considering the effects
-    /// of past values and errors. It's similar to the y-intercept in a linear equation.
+    /// of past values and errors. It's similar to the y-intercept in a linear equation.</para>
     /// </remarks>
     private T _constant;
 
@@ -75,9 +75,9 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// The anomaly detection threshold computed during training.
     /// </summary>
     /// <remarks>
-    /// For Beginners:
+    /// <para><b>For Beginners:</b>
     /// This value represents the cutoff for determining if a prediction error is large enough
-    /// to be considered an anomaly. It's computed from the training data residuals.
+    /// to be considered an anomaly. It's computed from the training data residuals.</para>
     /// </remarks>
     private T _anomalyThreshold;
 
@@ -96,14 +96,15 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     /// <param name="options">Options for the ARIMA model, including p, d, and q parameters. If null, default options are used.</param>
     /// <remarks>
-    /// For Beginners:
-    /// This constructor creates a new ARIMA model. You can customize the model by providing options:
-    /// - p: How many past values to consider (AR order)
-    /// - d: How many times to difference the data to remove trends
-    /// - q: How many past prediction errors to consider (MA order)
-    /// 
-    /// If you don't provide options, default values will be used, but it's usually best
-    /// to choose values that make sense for your specific data.
+    /// <para><b>For Beginners:</b>
+    /// This constructor creates a new ARIMA model. You can customize the model by providing options:</para>
+    /// <list type="bullet">
+    /// <item>p: How many past values to consider (AR order)</item>
+    /// <item>d: How many times to difference the data to remove trends</item>
+    /// <item>q: How many past prediction errors to consider (MA order)</item>
+    /// </list>
+    /// <para>If you don't provide options, default values will be used, but it's usually best
+    /// to choose values that make sense for your specific data.</para>
     /// </remarks>
     public ARIMAModel(ARIMAOptions<T>? options = null) : base(options ?? new())
     {
@@ -124,12 +125,11 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// <param name="maCoefficients">The MA coefficients.</param>
     /// <returns>The estimated constant term.</returns>
     /// <remarks>
-    /// For Beginners:
-    /// This private method calculates the "baseline" value for predictions.
-    /// 
-    /// The constant term represents the average value of the time series after
+    /// <para><b>For Beginners:</b>
+    /// This private method calculates the "baseline" value for predictions.</para>
+    /// <para>The constant term represents the average value of the time series after
     /// accounting for the influence of the AR components. It ensures that
-    /// the model's predictions center around the correct average value.
+    /// the model's predictions center around the correct average value.</para>
     /// </remarks>
     private T EstimateConstant(Vector<T> y, Vector<T> arCoefficients, Vector<T> maCoefficients)
     {
@@ -146,17 +146,17 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// <param name="input">Input matrix for prediction (typically just time indices for future periods).</param>
     /// <returns>A vector of predicted values.</returns>
     /// <remarks>
-    /// For Beginners:
-    /// This method uses the trained ARIMA model to forecast future values.
-    /// 
-    /// The prediction process:
-    /// 1. Starts with the constant term as a base value
-    /// 2. Adds the effects of past observations (AR component)
-    /// 3. Adds the effects of past prediction errors (MA component)
-    /// 4. For each prediction, updates the history used for the next prediction
-    /// 
-    /// Note: For pure time series forecasting, the input parameter might just indicate
-    /// how many future periods to predict.
+    /// <para><b>For Beginners:</b>
+    /// This method uses the trained ARIMA model to forecast future values.</para>
+    /// <para>The prediction process:</para>
+    /// <list type="number">
+    /// <item>Starts with the constant term as a base value</item>
+    /// <item>Adds the effects of past observations (AR component)</item>
+    /// <item>Adds the effects of past prediction errors (MA component)</item>
+    /// <item>For each prediction, updates the history used for the next prediction</item>
+    /// </list>
+    /// <para>Note: For pure time series forecasting, the input parameter might just indicate
+    /// how many future periods to predict.</para>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
@@ -215,16 +215,16 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// <param name="yTest">Actual target values for testing.</param>
     /// <returns>A dictionary of evaluation metrics (MSE, RMSE, MAE).</returns>
     /// <remarks>
-    /// For Beginners:
+    /// <para><b>For Beginners:</b>
     /// This method measures how well the model performs by comparing its predictions
-    /// against actual values from a test dataset.
-    /// 
-    /// It calculates several common error metrics:
-    /// - MSE (Mean Squared Error): The average of squared differences between predictions and actual values
-    /// - RMSE (Root Mean Squared Error): The square root of MSE, which is in the same units as the original data
-    /// - MAE (Mean Absolute Error): The average of absolute differences between predictions and actual values
-    /// 
-    /// Lower values for all these metrics indicate better performance.
+    /// against actual values from a test dataset.</para>
+    /// <para>It calculates several common error metrics:</para>
+    /// <list type="bullet">
+    /// <item>MSE (Mean Squared Error): The average of squared differences between predictions and actual values</item>
+    /// <item>RMSE (Root Mean Squared Error): The square root of MSE, which is in the same units as the original data</item>
+    /// <item>MAE (Mean Absolute Error): The average of absolute differences between predictions and actual values</item>
+    /// </list>
+    /// <para>Lower values for all these metrics indicate better performance.</para>
     /// </remarks>
     public override Dictionary<string, T> EvaluateModel(Matrix<T> xTest, Vector<T> yTest)
     {
@@ -251,16 +251,16 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     /// <param name="writer">The binary writer to write to.</param>
     /// <remarks>
-    /// For Beginners:
-    /// This private method saves the model's internal state to a file or stream.
-    /// 
-    /// Serialization allows you to:
-    /// 1. Save a trained model to disk
-    /// 2. Load it later without having to retrain
-    /// 3. Share the model with others
-    /// 
-    /// The method saves all the essential parameters: the p, d, q values,
-    /// the constant term, and the AR and MA coefficients.
+    /// <para><b>For Beginners:</b>
+    /// This private method saves the model's internal state to a file or stream.</para>
+    /// <para>Serialization allows you to:</para>
+    /// <list type="number">
+    /// <item>Save a trained model to disk</item>
+    /// <item>Load it later without having to retrain</item>
+    /// <item>Share the model with others</item>
+    /// </list>
+    /// <para>The method saves all the essential parameters: the p, d, q values,
+    /// the constant term, and the AR and MA coefficients.</para>
     /// </remarks>
     protected override void SerializeCore(BinaryWriter writer)
     {
@@ -292,16 +292,16 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     /// <param name="reader">The binary reader to read from.</param>
     /// <remarks>
-    /// For Beginners:
-    /// This private method loads a previously saved model from a file or stream.
-    /// 
-    /// Deserialization allows you to:
-    /// 1. Load a previously trained model
-    /// 2. Use it immediately without retraining
-    /// 3. Apply the exact same model to new data
-    /// 
-    /// The method loads all the parameters that were saved during serialization:
-    /// the p, d, q values, the constant term, and the AR and MA coefficients.
+    /// <para><b>For Beginners:</b>
+    /// This private method loads a previously saved model from a file or stream.</para>
+    /// <para>Deserialization allows you to:</para>
+    /// <list type="number">
+    /// <item>Load a previously trained model</item>
+    /// <item>Use it immediately without retraining</item>
+    /// <item>Apply the exact same model to new data</item>
+    /// </list>
+    /// <para>The method loads all the parameters that were saved during serialization:
+    /// the p, d, q values, the constant term, and the AR and MA coefficients.</para>
     /// </remarks>
     protected override void DeserializeCore(BinaryReader reader)
     {
@@ -342,16 +342,16 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// <param name="x">Feature matrix (typically just time indices for ARIMA models).</param>
     /// <param name="y">Target vector (the time series values to be modeled).</param>
     /// <remarks>
-    /// For Beginners:
-    /// This method contains the core implementation of the training process. It:
-    /// 
-    /// 1. Differences the data to remove trends (the "I" in ARIMA)
-    /// 2. Estimates the AR coefficients that capture how past values affect future values
-    /// 3. Calculates residuals and uses them to estimate the MA coefficients
-    /// 4. Estimates the constant term that serves as the baseline prediction
-    /// 
-    /// This implementation follows the same process as the public Train method but
-    /// provides the actual mechanism that fits the model to your data.
+    /// <para><b>For Beginners:</b>
+    /// This method contains the core implementation of the training process. It:</para>
+    /// <list type="number">
+    /// <item>Differences the data to remove trends (the "I" in ARIMA)</item>
+    /// <item>Estimates the AR coefficients that capture how past values affect future values</item>
+    /// <item>Calculates residuals and uses them to estimate the MA coefficients</item>
+    /// <item>Estimates the constant term that serves as the baseline prediction</item>
+    /// </list>
+    /// <para>This implementation follows the same process as the public Train method but
+    /// provides the actual mechanism that fits the model to your data.</para>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
@@ -384,10 +384,10 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     /// <param name="residuals">The residuals from training.</param>
     /// <remarks>
-    /// For Beginners:
+    /// <para><b>For Beginners:</b>
     /// This method calculates what counts as "normal" variation in your data by looking at how
     /// far off the model's predictions were during training. It then sets a threshold so that
-    /// only unusually large errors get flagged as anomalies.
+    /// only unusually large errors get flagged as anomalies.</para>
     /// </remarks>
     private void ComputeAnomalyThreshold(Vector<T> residuals)
     {
@@ -435,17 +435,17 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// <param name="input">Input vector containing features for prediction.</param>
     /// <returns>The predicted value.</returns>
     /// <remarks>
-    /// For Beginners:
-    /// This method generates a single prediction based on your input data.
-    /// 
-    /// The prediction process:
-    /// 1. Starts with the constant term as the baseline value
-    /// 2. Adds the influence of past observations (AR component)
-    /// 3. Adds the influence of past prediction errors (MA component)
-    /// 
-    /// This is useful when you need just one prediction rather than a whole series.
+    /// <para><b>For Beginners:</b>
+    /// This method generates a single prediction based on your input data.</para>
+    /// <para>The prediction process:</para>
+    /// <list type="number">
+    /// <item>Starts with the constant term as the baseline value</item>
+    /// <item>Adds the influence of past observations (AR component)</item>
+    /// <item>Adds the influence of past prediction errors (MA component)</item>
+    /// </list>
+    /// <para>This is useful when you need just one prediction rather than a whole series.
     /// For example, if you want to predict tomorrow's temperature specifically,
-    /// rather than temperatures for the next week.
+    /// rather than temperatures for the next week.</para>
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {
@@ -481,19 +481,21 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the model.</returns>
     /// <remarks>
-    /// For Beginners:
-    /// This method provides a summary of your model's settings and what it has learned.
-    /// 
-    /// The metadata includes:
-    /// - The type of model (ARIMA)
-    /// - The p, d, and q parameters that define the model structure
-    /// - The AR and MA coefficients that were learned during training
-    /// - The constant term that serves as the baseline prediction
-    /// 
-    /// This information is useful for:
-    /// - Documenting your model for future reference
-    /// - Comparing different models to see which performs best
-    /// - Understanding what patterns the model has identified in your data
+    /// <para><b>For Beginners:</b>
+    /// This method provides a summary of your model's settings and what it has learned.</para>
+    /// <para>The metadata includes:</para>
+    /// <list type="bullet">
+    /// <item>The type of model (ARIMA)</item>
+    /// <item>The p, d, and q parameters that define the model structure</item>
+    /// <item>The AR and MA coefficients that were learned during training</item>
+    /// <item>The constant term that serves as the baseline prediction</item>
+    /// </list>
+    /// <para>This information is useful for:</para>
+    /// <list type="bullet">
+    /// <item>Documenting your model for future reference</item>
+    /// <item>Comparing different models to see which performs best</item>
+    /// <item>Understanding what patterns the model has identified in your data</item>
+    /// </list>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -526,18 +528,20 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     /// <returns>A new instance of the ARIMA model.</returns>
     /// <remarks>
-    /// For Beginners:
-    /// This method creates a fresh copy of the model with the same settings.
-    /// 
-    /// The new copy:
-    /// - Has the same p, d, and q parameters as the original model
-    /// - Has the same configuration options
-    /// - Is untrained (doesn't have coefficients yet)
-    /// 
-    /// This is useful when you want to:
-    /// - Train multiple versions of the same model on different data
-    /// - Create ensemble models that combine predictions from multiple similar models
-    /// - Reset a model to start fresh while keeping the same structure
+    /// <para><b>For Beginners:</b>
+    /// This method creates a fresh copy of the model with the same settings.</para>
+    /// <para>The new copy:</para>
+    /// <list type="bullet">
+    /// <item>Has the same p, d, and q parameters as the original model</item>
+    /// <item>Has the same configuration options</item>
+    /// <item>Is untrained (doesn't have coefficients yet)</item>
+    /// </list>
+    /// <para>This is useful when you want to:</para>
+    /// <list type="bullet">
+    /// <item>Train multiple versions of the same model on different data</item>
+    /// <item>Create ensemble models that combine predictions from multiple similar models</item>
+    /// <item>Reset a model to start fresh while keeping the same structure</item>
+    /// </list>
     /// </remarks>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
