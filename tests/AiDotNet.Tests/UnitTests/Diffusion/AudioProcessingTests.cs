@@ -398,8 +398,9 @@ public class AudioProcessingTests
         var targetMagnitude = stft.Magnitude(signal);
 
         // Act - Compare different iteration counts
-        var griffinLim10 = new GriffinLim<float>(nFft: nFft, iterations: 10, seed: 42);
-        var griffinLim50 = new GriffinLim<float>(nFft: nFft, iterations: 50, seed: 42);
+        // Use momentum: 0 for deterministic convergence (high momentum can cause oscillation)
+        var griffinLim10 = new GriffinLim<float>(nFft: nFft, iterations: 10, momentum: 0.0, seed: 42);
+        var griffinLim50 = new GriffinLim<float>(nFft: nFft, iterations: 50, momentum: 0.0, seed: 42);
 
         var audio10 = griffinLim10.Reconstruct(targetMagnitude);
         var audio50 = griffinLim50.Reconstruct(targetMagnitude);
@@ -407,9 +408,9 @@ public class AudioProcessingTests
         double error10 = griffinLim10.ComputeSpectralConvergence(targetMagnitude, audio10);
         double error50 = griffinLim50.ComputeSpectralConvergence(targetMagnitude, audio50);
 
-        // Assert - More iterations should have lower error
-        Assert.True(error50 <= error10 * 1.1, // Allow small tolerance
-            $"50 iterations error ({error50}) should be <= 10 iterations ({error10})");
+        // Assert - More iterations should have lower or equal error (with tolerance for numerical precision)
+        Assert.True(error50 <= error10 * 1.05,
+            $"50 iterations error ({error50}) should be <= 10 iterations error ({error10}) with 5% tolerance");
     }
 
     [Fact]
