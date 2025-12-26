@@ -119,19 +119,14 @@ public static class ClipTokenizerFactory
 
         // Load merges
         var mergesText = File.ReadAllLines(mergesPath);
-        var merges = new Dictionary<(string, string), int>();
-        int rank = 0;
 
         // Process merges, skipping header lines and empty lines
-        var validLines = mergesText
+        var merges = mergesText
             .Where(line => !line.StartsWith("#") && !string.IsNullOrWhiteSpace(line))
             .Select(line => line.Split(' '))
-            .Where(parts => parts.Length == 2);
-
-        foreach (var parts in validLines)
-        {
-            merges[(parts[0], parts[1])] = rank++;
-        }
+            .Where(parts => parts.Length == 2)
+            .Select((parts, rank) => new { Parts = parts, Rank = rank })
+            .ToDictionary(x => (x.Parts[0], x.Parts[1]), x => x.Rank);
 
         return new BpeTokenizer(vocabulary, merges, SpecialTokens.Clip(), ClipPattern);
     }
