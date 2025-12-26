@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.AutoML.NAS
@@ -148,7 +149,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             var bignas = new BigNAS<double>(searchSpace);
             var teacherLogits = new Vector<double>(5);
             var studentLogits = new Vector<double>(5);
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
 
             for (int i = 0; i < 5; i++)
             {

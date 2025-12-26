@@ -1,5 +1,6 @@
 using AiDotNet.ActiveLearning;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tests.Helpers;
 using Xunit;
 
@@ -640,7 +641,7 @@ public class HybridSamplingTests
     private static Tensor<double> CreateVariedTestPool(int numSamples, int featureSize)
     {
         var tensor = new Tensor<double>(new int[] { numSamples, featureSize });
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = random.NextDouble();

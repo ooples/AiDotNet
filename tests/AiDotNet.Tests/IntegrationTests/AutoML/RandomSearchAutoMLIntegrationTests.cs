@@ -1,6 +1,7 @@
 using AiDotNet.AutoML;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -36,7 +37,7 @@ public class RandomSearchAutoMLIntegrationTests
             valY[i] = (2.0 * x1) + (3.0 * x2);
         }
 
-        var autoML = new RandomSearchAutoML<double, Matrix<double>, Vector<double>>(random: new Random(123));
+        var autoML = new RandomSearchAutoML<double, Matrix<double>, Vector<double>>(random: RandomHelper.CreateSeededRandom(123));
         autoML.TrialLimit = 3;
         autoML.SetCandidateModels(new List<ModelType> { ModelType.MultipleRegression });
 

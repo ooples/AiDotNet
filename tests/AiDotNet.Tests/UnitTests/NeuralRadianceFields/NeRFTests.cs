@@ -1,5 +1,6 @@
 using AiDotNet.NeuralRadianceFields.Data;
 using AiDotNet.NeuralRadianceFields.Models;
+using AiDotNet.Tensors.Helpers;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralRadianceFields;
@@ -115,7 +116,7 @@ public class NeRFTests
 
     private Tensor<double> CreateSamplePositions(int numPoints)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var data = new double[numPoints * 3];
 
         for (int i = 0; i < numPoints * 3; i++)
@@ -128,7 +129,7 @@ public class NeRFTests
 
     private Tensor<double> CreateSampleDirections(int numPoints)
     {
-        var random = new Random(43);
+        var random = RandomHelper.CreateSeededRandom(43);
         var data = new double[numPoints * 3];
 
         for (int i = 0; i < numPoints; i++)
@@ -149,7 +150,7 @@ public class NeRFTests
 
     private Matrix<double> CreateSamplePointCloudMatrix(int numPoints)
     {
-        var random = new Random(44);
+        var random = RandomHelper.CreateSeededRandom(44);
         var matrix = new Matrix<double>(numPoints, 3);
 
         for (int i = 0; i < numPoints; i++)
@@ -164,7 +165,7 @@ public class NeRFTests
 
     private Matrix<double> CreateSampleColorMatrix(int numPoints)
     {
-        var random = new Random(45);
+        var random = RandomHelper.CreateSeededRandom(45);
         var matrix = new Matrix<double>(numPoints, 3);
 
         for (int i = 0; i < numPoints; i++)

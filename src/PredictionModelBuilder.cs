@@ -41,6 +41,9 @@ global using AiDotNet.UncertaintyQuantification.Layers;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.Policies;
 using AiDotNet.AutoML.SearchSpace;
+using AiDotNet.Preprocessing;
+using AiDotNet.Preprocessing.Imputers;
+using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet;
@@ -133,6 +136,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
 {
     private IFeatureSelector<T, TInput>? _featureSelector;
     private INormalizer<T, TInput, TOutput>? _normalizer;
+    private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
     private IRegularization<T, TInput, TOutput>? _regularization;
     private IFitnessCalculator<T, TInput, TOutput>? _fitnessCalculator;
     private IFitDetector<T, TInput, TOutput>? _fitDetector;
@@ -260,6 +264,133 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureNormalizer(INormalizer<T, TInput, TOutput> normalizer)
     {
         _normalizer = normalizer;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures a preprocessing pipeline using a builder action.
+    /// </summary>
+    /// <param name="pipelineBuilder">An action that configures the preprocessing pipeline.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// The new preprocessing pipeline replaces the legacy normalizer system with a more flexible,
+    /// composable approach supporting scalers, encoders, imputers, and feature generators.
+    /// </para>
+    /// <para><b>For Beginners:</b> This lets you chain multiple preprocessing steps together:
+    /// <code>
+    /// builder.ConfigurePreprocessing(pipeline => pipeline
+    ///     .Add(new SimpleImputer&lt;double&gt;(ImputationStrategy.Mean))
+    ///     .Add(new StandardScaler&lt;double&gt;())
+    ///     .Add(new PolynomialFeatures&lt;double&gt;(degree: 2)));
+    /// </code>
+    /// The pipeline will apply these transformations in order during training,
+    /// and remember them for predictions on new data.
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
+        Action<PreprocessingPipeline<T, TInput, TInput>>? pipelineBuilder = null)
+    {
+        _preprocessingPipeline = new PreprocessingPipeline<T, TInput, TInput>();
+
+        if (pipelineBuilder is not null)
+        {
+            pipelineBuilder(_preprocessingPipeline);
+        }
+        else
+        {
+            // Industry standard AutoML-style defaults:
+            // 1. Handle missing values with mean imputation (most common strategy)
+            // 2. Standardize features to zero mean and unit variance
+            // 3. These are the minimum recommended preprocessing steps for most ML algorithms
+            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
+                new SimpleImputer<T>(ImputationStrategy.Mean));
+            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
+                new StandardScaler<T>());
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Configures a single preprocessing transformer.
+    /// </summary>
+    /// <param name="transformer">The transformer to use for preprocessing.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Use this overload when you only need a single transformer. For multiple transformers,
+    /// use the overload that takes an Action to build a pipeline.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a simple way to add just one preprocessing step:
+    /// <code>
+    /// builder.ConfigurePreprocessing(new StandardScaler&lt;double&gt;());
+    /// </code>
+    /// If you need multiple steps, use the pipeline builder overload instead.
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
+        IDataTransformer<T, TInput, TInput>? transformer = null)
+    {
+        _preprocessingPipeline = new PreprocessingPipeline<T, TInput, TInput>();
+
+        if (transformer is not null)
+        {
+            _preprocessingPipeline.Add(transformer);
+        }
+        else
+        {
+            // Industry standard AutoML-style defaults:
+            // 1. Handle missing values with mean imputation (most common strategy)
+            // 2. Standardize features to zero mean and unit variance
+            // 3. These are the minimum recommended preprocessing steps for most ML algorithms
+            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
+                new SimpleImputer<T>(ImputationStrategy.Mean));
+            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
+                new StandardScaler<T>());
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Configures a pre-built preprocessing pipeline.
+    /// </summary>
+    /// <param name="pipeline">The preprocessing pipeline to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Use this overload when you have a pre-configured pipeline that you want to reuse
+    /// across multiple model builders.
+    /// </para>
+    /// <para><b>For Beginners:</b> Use this when you've already created a pipeline elsewhere:
+    /// <code>
+    /// var myPipeline = new PreprocessingPipeline&lt;double, Matrix&lt;double&gt;, Matrix&lt;double&gt;&gt;()
+    ///     .Add(new StandardScaler&lt;double&gt;());
+    ///
+    /// builder.ConfigurePreprocessing(myPipeline);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
+        PreprocessingPipeline<T, TInput, TInput>? pipeline = null)
+    {
+        if (pipeline is not null)
+        {
+            _preprocessingPipeline = pipeline;
+        }
+        else
+        {
+            // Industry standard AutoML-style defaults:
+            // 1. Handle missing values with mean imputation (most common strategy)
+            // 2. Standardize features to zero mean and unit variance
+            // 3. These are the minimum recommended preprocessing steps for most ML algorithms
+            _preprocessingPipeline = new PreprocessingPipeline<T, TInput, TInput>();
+            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
+                new SimpleImputer<T>(ImputationStrategy.Mean));
+            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
+                new StandardScaler<T>());
+        }
         return this;
     }
 
@@ -1428,7 +1559,31 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         }
 
         // Preprocess the data
-        var (preprocessedX, preprocessedY, normInfo) = dataPreprocessor.PreprocessData(x, y);
+        TInput preprocessedX;
+        TOutput preprocessedY;
+        NormalizationInfo<T, TInput, TOutput>? normInfo = null;
+        PreprocessingInfo<T, TInput, TOutput>? preprocessingInfo = null;
+
+        if (_preprocessingPipeline is not null)
+        {
+            // Use new preprocessing pipeline
+            preprocessedX = _preprocessingPipeline.FitTransform(x);
+            preprocessedY = y; // Target preprocessing handled separately if needed
+
+            // Create PreprocessingInfo with fitted pipeline
+            preprocessingInfo = new PreprocessingInfo<T, TInput, TOutput>(
+                _preprocessingPipeline,
+                targetPipeline: null // Target pipeline can be added later if needed
+            );
+
+            // Create a legacy normInfo for backward compatibility (empty but non-null)
+            normInfo = new NormalizationInfo<T, TInput, TOutput>();
+        }
+        else
+        {
+            // Use legacy dataPreprocessor
+            (preprocessedX, preprocessedY, normInfo) = dataPreprocessor.PreprocessData(x, y);
+        }
 
         if (usePartitionedFederatedData)
         {
@@ -1996,6 +2151,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = normInfo,
+            PreprocessingInfo = preprocessingInfo,
             AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
@@ -2441,6 +2597,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
 
         // Create normalization info (RL doesn't use normalization like supervised learning)
         var normInfo = new NormalizationInfo<T, TInput, TOutput>();
+        PreprocessingInfo<T, TInput, TOutput>? preprocessingInfo = null;
 
         // Create deployment configuration from individual configs
         var deploymentConfig = DeploymentConfiguration.Create(
@@ -2461,6 +2618,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = normInfo,
+            PreprocessingInfo = preprocessingInfo,
             AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,

@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.Helpers;
 
@@ -27,7 +28,7 @@ public static class ActiveLearningTestHelper
     /// <returns>A tensor representing the unlabeled pool.</returns>
     public static Tensor<double> CreateUnlabeledPool(int numSamples, int numFeatures)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var data = new Vector<double>(numSamples * numFeatures);
 
         for (int i = 0; i < numSamples * numFeatures; i++)

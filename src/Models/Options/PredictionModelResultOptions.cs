@@ -10,6 +10,7 @@ using AiDotNet.HyperparameterOptimization;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Models.Results;
+using AiDotNet.Preprocessing;
 using AiDotNet.ProgramSynthesis.Serving;
 using AiDotNet.PromptEngineering.Analysis;
 using AiDotNet.PromptEngineering.Compression;
@@ -124,8 +125,32 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     /// When you make predictions on new data, it applies the same scaling so the model
     /// understands the input correctly.
     /// </para>
+    /// <para><b>Note:</b> This is the legacy normalization system. For new code, prefer using
+    /// <see cref="PreprocessingInfo"/> which provides a more flexible pipeline-based approach.</para>
     /// </remarks>
     public NormalizationInfo<T, TInput, TOutput>? NormalizationInfo { get; set; }
+
+    /// <summary>
+    /// Gets or sets the preprocessing pipeline information for data transformation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stores the fitted preprocessing pipeline used during training so that new input data
+    /// can be transformed the same way. This replaces the legacy <see cref="NormalizationInfo"/>
+    /// with a more flexible, composable pipeline approach supporting scalers, encoders, imputers,
+    /// and feature generators.
+    /// </para>
+    /// <para><b>For Beginners:</b> This remembers all the data transformations applied during training:
+    /// - Scaling (StandardScaler, MinMaxScaler, etc.)
+    /// - Encoding (OneHotEncoder, LabelEncoder, etc.)
+    /// - Missing value handling (SimpleImputer, KNNImputer, etc.)
+    /// - Feature generation (PolynomialFeatures, SplineTransformer, etc.)
+    ///
+    /// When you make predictions on new data, it applies the same transformations so the model
+    /// understands the input correctly.
+    /// </para>
+    /// </remarks>
+    public PreprocessingInfo<T, TInput, TOutput>? PreprocessingInfo { get; set; }
 
     /// <summary>
     /// Gets or sets an optional AutoML run summary for this trained model.
