@@ -72,6 +72,26 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     private T _constant;
 
     /// <summary>
+    /// The anomaly detection threshold computed during training.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners:
+    /// This value represents the cutoff for determining if a prediction error is large enough
+    /// to be considered an anomaly. It's computed from the training data residuals.
+    /// </remarks>
+    private T _anomalyThreshold;
+
+    /// <summary>
+    /// The standard deviation of residuals computed during training.
+    /// </summary>
+    private T _residualStdDev;
+
+    /// <summary>
+    /// The mean of residuals computed during training.
+    /// </summary>
+    private T _residualMean;
+
+    /// <summary>
     /// Creates a new ARIMA model with the specified options.
     /// </summary>
     /// <param name="options">Options for the ARIMA model, including p, d, and q parameters. If null, default options are used.</param>
@@ -91,6 +111,9 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         _constant = NumOps.Zero;
         _arCoefficients = Vector<T>.Empty();
         _maCoefficients = Vector<T>.Empty();
+        _anomalyThreshold = NumOps.Zero;
+        _residualStdDev = NumOps.Zero;
+        _residualMean = NumOps.Zero;
     }
 
     /// <summary>
@@ -348,6 +371,62 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
 
         // Step 4: Estimate constant term for the model
         _constant = EstimateConstant(diffY, _arCoefficients, _maCoefficients);
+
+        // Step 5: If anomaly detection is enabled, compute threshold from residuals
+        if (_arimaOptions.EnableAnomalyDetection)
+        {
+            ComputeAnomalyThreshold(arResiduals);
+        }
+    }
+
+    /// <summary>
+    /// Computes the anomaly detection threshold from training residuals.
+    /// </summary>
+    /// <param name="residuals">The residuals from training.</param>
+    /// <remarks>
+    /// For Beginners:
+    /// This method calculates what counts as "normal" variation in your data by looking at how
+    /// far off the model's predictions were during training. It then sets a threshold so that
+    /// only unusually large errors get flagged as anomalies.
+    /// </remarks>
+    private void ComputeAnomalyThreshold(Vector<T> residuals)
+    {
+        if (residuals.Length == 0)
+        {
+            _residualMean = NumOps.Zero;
+            _residualStdDev = NumOps.One;
+            _anomalyThreshold = NumOps.FromDouble(_arimaOptions.AnomalyThresholdSigma);
+            return;
+        }
+
+        // Compute mean of absolute residuals
+        T sum = NumOps.Zero;
+        for (int i = 0; i < residuals.Length; i++)
+        {
+            sum = NumOps.Add(sum, NumOps.Abs(residuals[i]));
+        }
+        _residualMean = NumOps.Divide(sum, NumOps.FromDouble(residuals.Length));
+
+        // Compute standard deviation of absolute residuals
+        T sumSquaredDiff = NumOps.Zero;
+        for (int i = 0; i < residuals.Length; i++)
+        {
+            T diff = NumOps.Subtract(NumOps.Abs(residuals[i]), _residualMean);
+            sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Multiply(diff, diff));
+        }
+        _residualStdDev = NumOps.Sqrt(NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(residuals.Length)));
+
+        // If std dev is zero (all residuals are the same), use a small default
+        if (NumOps.Equals(_residualStdDev, NumOps.Zero))
+        {
+            _residualStdDev = NumOps.FromDouble(0.001);
+        }
+
+        // Threshold = mean + (sigma * stddev)
+        _anomalyThreshold = NumOps.Add(
+            _residualMean,
+            NumOps.Multiply(NumOps.FromDouble(_arimaOptions.AnomalyThresholdSigma), _residualStdDev)
+        );
     }
 
     /// <summary>
@@ -464,5 +543,199 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     {
         // Create a new instance with the same options
         return new ARIMAModel<T>(_arimaOptions);
+    }
+
+    /// <summary>
+    /// Detects anomalies in a time series by comparing predictions to actual values.
+    /// </summary>
+    /// <param name="timeSeries">The time series data to analyze for anomalies.</param>
+    /// <returns>A boolean array where true indicates an anomaly at that position.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the ARIMA model to predict each point in the time series based on
+    /// previous values, then flags points where the prediction error exceeds the anomaly threshold
+    /// computed during training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method goes through your time series and identifies
+    /// points that are "unusual" compared to what the model would expect. A point is considered
+    /// an anomaly if the difference between the actual value and the predicted value is larger
+    /// than the threshold learned during training.
+    ///
+    /// Example use case: If you have daily sales data, this method can identify days where
+    /// sales were abnormally high or low compared to the typical pattern.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the model hasn't been trained yet or when anomaly detection wasn't enabled during training.
+    /// </exception>
+    public bool[] DetectAnomalies(Vector<T> timeSeries)
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("Model must be trained before detecting anomalies.");
+        }
+
+        if (!_arimaOptions.EnableAnomalyDetection)
+        {
+            throw new InvalidOperationException("Anomaly detection was not enabled during training. " +
+                "Set EnableAnomalyDetection = true in ARIMAOptions and retrain the model.");
+        }
+
+        var scores = ComputeAnomalyScores(timeSeries);
+        bool[] anomalies = new bool[scores.Length];
+
+        for (int i = 0; i < scores.Length; i++)
+        {
+            anomalies[i] = NumOps.GreaterThan(scores[i], _anomalyThreshold);
+        }
+
+        return anomalies;
+    }
+
+    /// <summary>
+    /// Computes anomaly scores for each point in a time series.
+    /// </summary>
+    /// <param name="timeSeries">The time series data to analyze.</param>
+    /// <returns>A vector of anomaly scores (absolute prediction errors) for each point.</returns>
+    /// <remarks>
+    /// <para>
+    /// The anomaly score is the absolute difference between the actual value and the predicted value.
+    /// Higher scores indicate more anomalous points. The first few points (up to the lag order)
+    /// will have a score of zero since there isn't enough history to make predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> Instead of just saying "anomaly or not", this method tells you
+    /// exactly how unusual each point is. A score of 0 means the value matches the prediction perfectly.
+    /// Higher scores mean the value was more unexpected.
+    ///
+    /// You can use these scores to:
+    /// - Rank anomalies by severity (higher score = more unusual)
+    /// - Set your own custom threshold
+    /// - Visualize the anomaly intensity over time
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the model hasn't been trained yet.</exception>
+    public Vector<T> ComputeAnomalyScores(Vector<T> timeSeries)
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("Model must be trained before computing anomaly scores.");
+        }
+
+        int lagOrder = _arimaOptions.LagOrder;
+        if (timeSeries.Length <= lagOrder)
+        {
+            throw new ArgumentException($"Time series must have more than {lagOrder} points (the lag order).");
+        }
+
+        Vector<T> scores = new Vector<T>(timeSeries.Length);
+
+        // First lagOrder points can't have scores computed (not enough history)
+        for (int i = 0; i < lagOrder; i++)
+        {
+            scores[i] = NumOps.Zero;
+        }
+
+        // Compute scores for the rest of the series
+        for (int i = lagOrder; i < timeSeries.Length; i++)
+        {
+            // Create input vector from previous lagOrder values
+            Vector<T> input = new Vector<T>(lagOrder);
+            for (int j = 0; j < lagOrder; j++)
+            {
+                input[j] = timeSeries[i - lagOrder + j];
+            }
+
+            T prediction = PredictSingle(input);
+            T actual = timeSeries[i];
+            scores[i] = NumOps.Abs(NumOps.Subtract(actual, prediction));
+        }
+
+        return scores;
+    }
+
+    /// <summary>
+    /// Detects anomalies and returns detailed information about each detected anomaly.
+    /// </summary>
+    /// <param name="timeSeries">The time series data to analyze.</param>
+    /// <returns>A list of tuples containing (index, actual value, predicted value, score) for each anomaly.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method not only tells you which points are anomalies,
+    /// but also provides additional context:
+    /// - Index: The position of the anomaly in the time series
+    /// - Actual: What the value actually was
+    /// - Predicted: What the model expected the value to be
+    /// - Score: How far off the prediction was
+    ///
+    /// This extra information helps you understand why each point was flagged as an anomaly.
+    /// </para>
+    /// </remarks>
+    public List<(int Index, T Actual, T Predicted, T Score)> DetectAnomaliesDetailed(Vector<T> timeSeries)
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("Model must be trained before detecting anomalies.");
+        }
+
+        if (!_arimaOptions.EnableAnomalyDetection)
+        {
+            throw new InvalidOperationException("Anomaly detection was not enabled during training.");
+        }
+
+        int lagOrder = _arimaOptions.LagOrder;
+        var anomalies = new List<(int Index, T Actual, T Predicted, T Score)>();
+
+        for (int i = lagOrder; i < timeSeries.Length; i++)
+        {
+            Vector<T> input = new Vector<T>(lagOrder);
+            for (int j = 0; j < lagOrder; j++)
+            {
+                input[j] = timeSeries[i - lagOrder + j];
+            }
+
+            T prediction = PredictSingle(input);
+            T actual = timeSeries[i];
+            T score = NumOps.Abs(NumOps.Subtract(actual, prediction));
+
+            if (NumOps.GreaterThan(score, _anomalyThreshold))
+            {
+                anomalies.Add((i, actual, prediction, score));
+            }
+        }
+
+        return anomalies;
+    }
+
+    /// <summary>
+    /// Gets the current anomaly detection threshold.
+    /// </summary>
+    /// <returns>The anomaly threshold computed during training.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This tells you the current cutoff value used to decide
+    /// whether a prediction error is large enough to be an anomaly. Values above this threshold
+    /// are considered anomalies.
+    /// </para>
+    /// </remarks>
+    public T GetAnomalyThreshold()
+    {
+        if (!_arimaOptions.EnableAnomalyDetection)
+        {
+            throw new InvalidOperationException("Anomaly detection was not enabled during training.");
+        }
+        return _anomalyThreshold;
+    }
+
+    /// <summary>
+    /// Sets a custom anomaly detection threshold.
+    /// </summary>
+    /// <param name="threshold">The new threshold value.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If the automatic threshold is flagging too many or too few
+    /// anomalies, you can set your own. A higher threshold means fewer anomalies will be detected
+    /// (only more extreme values). A lower threshold means more anomalies will be detected.
+    /// </para>
+    /// </remarks>
+    public void SetAnomalyThreshold(T threshold)
+    {
+        _anomalyThreshold = threshold;
     }
 }

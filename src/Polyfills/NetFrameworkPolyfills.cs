@@ -317,5 +317,55 @@ namespace System.IO
             }
 #endif
         }
+
+        /// <summary>
+        /// Asynchronously writes text to a file, creating the file if it doesn't exist or overwriting it if it does.
+        /// </summary>
+        /// <param name="path">The path to the file.</param>
+        /// <param name="contents">The text to write.</param>
+        /// <param name="cancellationToken">A cancellation token.</param>
+        /// <returns>A task that represents the asynchronous write operation.</returns>
+        public static async Threading.Tasks.Task WriteAllTextAsync(
+            string path,
+            string contents,
+            Threading.CancellationToken cancellationToken = default)
+        {
+#if NET5_0_OR_GREATER
+            await File.WriteAllTextAsync(path, contents, cancellationToken);
+#else
+            cancellationToken.ThrowIfCancellationRequested();
+            using (var writer = new StreamWriter(path, false))
+            {
+                await writer.WriteAsync(contents);
+            }
+#endif
+        }
+
+        /// <summary>
+        /// Asynchronously writes lines to a file, creating the file if it doesn't exist or overwriting it if it does.
+        /// </summary>
+        /// <param name="path">The path to the file.</param>
+        /// <param name="contents">The lines to write.</param>
+        /// <param name="cancellationToken">A cancellation token.</param>
+        /// <returns>A task that represents the asynchronous write operation.</returns>
+        public static async Threading.Tasks.Task WriteAllLinesAsync(
+            string path,
+            System.Collections.Generic.IEnumerable<string> contents,
+            Threading.CancellationToken cancellationToken = default)
+        {
+#if NET5_0_OR_GREATER
+            await File.WriteAllLinesAsync(path, contents, cancellationToken);
+#else
+            cancellationToken.ThrowIfCancellationRequested();
+            using (var writer = new StreamWriter(path, false))
+            {
+                foreach (var line in contents)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await writer.WriteLineAsync(line);
+                }
+            }
+#endif
+        }
     }
 }

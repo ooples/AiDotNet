@@ -268,6 +268,23 @@ public class ErrorStats<T>
     public T MeanSquaredLogError { get; private set; }
 
     /// <summary>
+    /// Continuous Ranked Probability Score - Evaluates probabilistic forecast accuracy.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners:
+    /// CRPS measures how well a probabilistic forecast matches reality. Unlike MAE which only looks
+    /// at point predictions, CRPS considers the entire predicted probability distribution.
+    ///
+    /// For deterministic predictions (no uncertainty estimates), CRPS equals MAE.
+    /// For probabilistic predictions, CRPS rewards well-calibrated uncertainty estimates.
+    /// Lower values indicate better probabilistic forecasts.
+    ///
+    /// CRPS is especially important for evaluating time series models like DeepAR, TFT, and Chronos
+    /// that provide uncertainty estimates along with their predictions.
+    /// </remarks>
+    public T CRPS { get; private set; }
+
+    /// <summary>
     /// Mean Absolute Error - Alias for MAE property.
     /// </summary>
     /// <remarks>
@@ -416,6 +433,7 @@ public class ErrorStats<T>
         AUCPR = _numOps.Zero;
         AUCROC = _numOps.Zero;
         SMAPE = _numOps.Zero;
+        CRPS = _numOps.Zero;
         Accuracy = _numOps.Zero;
         Precision = _numOps.Zero;
         Recall = _numOps.Zero;
@@ -489,6 +507,7 @@ public class ErrorStats<T>
         }
         SMAPE = StatisticsHelper<T>.CalculateSymmetricMeanAbsolutePercentageError(actual, predicted);
         MeanSquaredLogError = StatisticsHelper<T>.CalculateMeanSquaredLogError(actual, predicted);
+        CRPS = StatisticsHelper<T>.CalculateCRPS(actual, predicted);
 
         // Calculate standard errors
         SampleStandardError = StatisticsHelper<T>.CalculateSampleStandardError(actual, predicted, numberOfParameters);
@@ -556,6 +575,7 @@ public class ErrorStats<T>
             MetricType.AUCROC => AUCROC,
             MetricType.SMAPE => SMAPE,
             MetricType.MeanSquaredLogError => MeanSquaredLogError,
+            MetricType.CRPS => CRPS,
             MetricType.MeanAbsoluteError => MeanAbsoluteError,
             MetricType.MeanSquaredError => MeanSquaredError,
             MetricType.RootMeanSquaredError => RootMeanSquaredError,
@@ -610,6 +630,7 @@ public class ErrorStats<T>
             MetricType.AUCROC => true,
             MetricType.SMAPE => true,
             MetricType.MeanSquaredLogError => true,
+            MetricType.CRPS => true,
             MetricType.MeanAbsoluteError => true,
             MetricType.MeanSquaredError => true,
             MetricType.RootMeanSquaredError => true,
