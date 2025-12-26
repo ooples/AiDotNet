@@ -215,7 +215,6 @@ public partial class PredictionModelResult<T, TInput, TOutput>
     {
         int length = vectors[0].Length;
         var result = new T[length];
-        var numOps = MathHelper.GetNumericOperations<T>();
 
         for (int i = 0; i < length; i++)
         {
@@ -341,7 +340,7 @@ public partial class PredictionModelResult<T, TInput, TOutput>
         var weights = vectors.Select(v => v.ToArray().Select(x => Convert.ToDouble(x)).Max()).ToList();
         double totalWeight = weights.Sum();
 
-        if (totalWeight == 0)
+        if (Math.Abs(totalWeight) < 1e-10)
         {
             return ComputeMean(vectors); // Fallback to simple mean
         }

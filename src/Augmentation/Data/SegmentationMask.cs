@@ -244,7 +244,7 @@ public class SegmentationMask<T>
 
         if (Encoding == MaskEncoding.RLE && RLECounts is not null)
         {
-            return DecodRLE();
+            return DecodeRLE();
         }
 
         if (Encoding == MaskEncoding.Polygon && Polygons is not null)
@@ -403,7 +403,7 @@ public class SegmentationMask<T>
     /// <summary>
     /// Decodes RLE to dense format.
     /// </summary>
-    private T[,] DecodRLE()
+    private T[,] DecodeRLE()
     {
         if (RLECounts is null)
         {

@@ -273,12 +273,28 @@ public class Affine<T> : SpatialAugmentationBase<T, ImageTensor<T>>
 
     private static double ReflectCoordinate(double coord, int size)
     {
-        while (coord < 0 || coord >= size)
+        if (size <= 1)
         {
-            if (coord < 0) coord = -coord;
-            if (coord >= size) coord = 2 * (size - 1) - coord;
+            return 0;
         }
-        return Math.Max(0, Math.Min(size - 1, coord));
+
+        // Use modular arithmetic for deterministic reflection
+        // Period is 2 * (size - 1) for reflection pattern
+        int period = 2 * (size - 1);
+
+        // Handle negative coordinates
+        coord = Math.Abs(coord);
+
+        // Reduce to single period
+        double reduced = coord % period;
+
+        // If in second half of period, reflect back
+        if (reduced >= size)
+        {
+            reduced = period - reduced;
+        }
+
+        return Math.Max(0, Math.Min(size - 1, reduced));
     }
 
     private static double WrapCoordinate(double coord, int size)

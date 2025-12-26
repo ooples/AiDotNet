@@ -125,7 +125,7 @@ public enum InterpolationMode
 /// <typeparam name="T">The numeric type for pixel values.</typeparam>
 public class ImageTensor<T>
 {
-    private Tensor<T> _data;
+    private readonly Tensor<T> _data;
 
     /// <summary>
     /// Gets the underlying tensor data.

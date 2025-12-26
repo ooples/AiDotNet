@@ -345,28 +345,26 @@ public class RandomCrop<T> : SpatialAugmentationBase<T, ImageTensor<T>>
     {
         int cropX = (int)transformParams["crop_x"];
         int cropY = (int)transformParams["crop_y"];
-        int cropW = (int)transformParams["crop_width"];
-        int cropH = (int)transformParams["crop_height"];
         double scaleX = (double)transformParams["scale_x"];
         double scaleY = (double)transformParams["scale_y"];
 
         var (x, y, w, h) = box.ToXYWH();
 
-        // Transform coordinates relative to crop region
-        double newX = (x - cropX) * scaleX;
-        double newY = (y - cropY) * scaleY;
-        double newW = w * scaleX;
-        double newH = h * scaleY;
+        // Transform corner coordinates relative to crop region
+        double newX1 = (x - cropX) * scaleX;
+        double newY1 = (y - cropY) * scaleY;
+        double newX2 = (x + w - cropX) * scaleX;
+        double newY2 = (y + h - cropY) * scaleY;
 
-        // Clip to output bounds
-        newX = Math.Max(0, newX);
-        newY = Math.Max(0, newY);
-        double newX2 = Math.Min(CropWidth, newX + newW);
-        double newY2 = Math.Min(CropHeight, newY + newH);
+        // Clip both corners to output bounds independently
+        newX1 = Math.Max(0, Math.Min(CropWidth, newX1));
+        newY1 = Math.Max(0, Math.Min(CropHeight, newY1));
+        newX2 = Math.Max(0, Math.Min(CropWidth, newX2));
+        newY2 = Math.Max(0, Math.Min(CropHeight, newY2));
 
         var result = box.Clone();
-        result.X1 = (T)Convert.ChangeType(newX, typeof(T));
-        result.Y1 = (T)Convert.ChangeType(newY, typeof(T));
+        result.X1 = (T)Convert.ChangeType(newX1, typeof(T));
+        result.Y1 = (T)Convert.ChangeType(newY1, typeof(T));
         result.X2 = (T)Convert.ChangeType(newX2, typeof(T));
         result.Y2 = (T)Convert.ChangeType(newY2, typeof(T));
         result.Format = BoundingBoxFormat.XYXY;

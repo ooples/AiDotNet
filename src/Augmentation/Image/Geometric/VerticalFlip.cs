@@ -126,9 +126,9 @@ public class VerticalFlip<T> : SpatialAugmentationBase<T, ImageTensor<T>>
     {
         int imageHeight = (int)transformParams["image_height"];
 
-        // For vertical flip: new_y = image_height - old_y
+        // For vertical flip: new_y = image_height - 1 - old_y (0-indexed)
         double y = Convert.ToDouble(keypoint.Y);
-        double newY = imageHeight - y;
+        double newY = imageHeight - 1 - y;
 
         var result = keypoint.Clone();
         result.Y = (T)Convert.ChangeType(newY, typeof(T));

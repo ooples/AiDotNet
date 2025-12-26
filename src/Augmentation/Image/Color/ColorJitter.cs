@@ -267,17 +267,17 @@ public class ColorJitter<T> : AugmentationBase<T, ImageTensor<T>>
         double delta = max - min;
 
         v = max;
-        s = max == 0 ? 0 : delta / max;
+        s = Math.Abs(max) < 1e-10 ? 0 : delta / max;
 
-        if (delta == 0)
+        if (Math.Abs(delta) < 1e-10)
         {
             h = 0;
         }
-        else if (max == r)
+        else if (Math.Abs(max - r) < 1e-10)
         {
             h = ((g - b) / delta) % 6;
         }
-        else if (max == g)
+        else if (Math.Abs(max - g) < 1e-10)
         {
             h = (b - r) / delta + 2;
         }

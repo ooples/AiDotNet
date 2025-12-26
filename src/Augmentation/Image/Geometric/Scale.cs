@@ -191,14 +191,28 @@ public class Scale<T> : SpatialAugmentationBase<T, ImageTensor<T>>
 
     private static double ReflectCoordinate(double coord, int size)
     {
-        while (coord < 0 || coord >= size)
+        if (size <= 1)
         {
-            if (coord < 0)
-                coord = -coord;
-            if (coord >= size)
-                coord = 2 * (size - 1) - coord;
+            return 0;
         }
-        return Math.Max(0, Math.Min(size - 1, coord));
+
+        // Use modular arithmetic for deterministic reflection
+        // Period is 2 * (size - 1) for reflection pattern
+        int period = 2 * (size - 1);
+
+        // Handle negative coordinates
+        coord = Math.Abs(coord);
+
+        // Reduce to single period
+        double reduced = coord % period;
+
+        // If in second half of period, reflect back
+        if (reduced >= size)
+        {
+            reduced = period - reduced;
+        }
+
+        return Math.Max(0, Math.Min(size - 1, reduced));
     }
 
     private static double WrapCoordinate(double coord, int size)
@@ -311,8 +325,16 @@ public class Scale<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         int height = mask.Height;
         int width = mask.Width;
 
-        double centerX = width / 2.0;
-        double centerY = height / 2.0;
+        // Use center from transform params for consistency with image transformation
+        // If mask dimensions differ from image, scale the center proportionally
+        double imageCenterX = (double)transformParams["center_x"];
+        double imageCenterY = (double)transformParams["center_y"];
+        int imageWidth = (int)transformParams["image_width"];
+        int imageHeight = (int)transformParams["image_height"];
+
+        // Scale center if mask dimensions differ from image dimensions
+        double centerX = (width == imageWidth) ? imageCenterX : width / 2.0;
+        double centerY = (height == imageHeight) ? imageCenterY : height / 2.0;
 
         var data = mask.ToDense();
         var scaled = new T[height, width];

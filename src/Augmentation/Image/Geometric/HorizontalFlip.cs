@@ -123,9 +123,9 @@ public class HorizontalFlip<T> : SpatialAugmentationBase<T, ImageTensor<T>>
     {
         int imageWidth = (int)transformParams["image_width"];
 
-        // For horizontal flip: new_x = image_width - old_x
+        // For horizontal flip: new_x = image_width - 1 - old_x (0-indexed)
         double x = Convert.ToDouble(keypoint.X);
-        double newX = imageWidth - x;
+        double newX = imageWidth - 1 - x;
 
         var result = keypoint.Clone();
         result.X = (T)Convert.ChangeType(newX, typeof(T));

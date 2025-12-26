@@ -180,7 +180,9 @@ public class BoundingBox<T>
             BoundingBoxFormat.XYXY or BoundingBoxFormat.PascalVOC => (x1, y1, x2, y2),
             BoundingBoxFormat.XYWH or BoundingBoxFormat.COCO => (x1, y1, x1 + x2, y1 + y2),
             BoundingBoxFormat.CXCYWH => (x1 - x2 / 2, y1 - y2 / 2, x1 + x2 / 2, y1 + y2 / 2),
-            BoundingBoxFormat.YOLO => (
+            BoundingBoxFormat.YOLO => ImageWidth <= 0 || ImageHeight <= 0
+                ? throw new InvalidOperationException("ImageWidth and ImageHeight must be set for YOLO format conversion.")
+                : (
                 (x1 - x2 / 2) * ImageWidth,
                 (y1 - y2 / 2) * ImageHeight,
                 (x1 + x2 / 2) * ImageWidth,

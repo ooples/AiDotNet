@@ -2179,6 +2179,8 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             DeploymentConfiguration = deploymentConfig,
             JitCompiledFunction = jitCompiledFunction,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            TTAConfiguration = _ttaConfiguration,
+            TrainingAugmentationConfiguration = _trainingAugmentationConfiguration,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
             GraphStore = _graphStore,
