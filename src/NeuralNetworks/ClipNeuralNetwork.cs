@@ -107,6 +107,16 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
     private readonly int _imageSize;
 
     /// <summary>
+    /// Path to the image encoder ONNX model (stored for CreateNewInstance).
+    /// </summary>
+    private readonly string _imageEncoderPath;
+
+    /// <summary>
+    /// Path to the text encoder ONNX model (stored for CreateNewInstance).
+    /// </summary>
+    private readonly string _textEncoderPath;
+
+    /// <summary>
     /// Gets the dimensionality of the embedding vectors produced by this model.
     /// </summary>
     /// <remarks>
@@ -143,7 +153,7 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>
     /// <param name="imageEncoderPath">Path to the ONNX model for the image encoder.</param>
     /// <param name="textEncoderPath">Path to the ONNX model for the text encoder.</param>
-    /// <param name="tokenizer">The tokenizer for text processing. If null, a default CLIP tokenizer is created.</param>
+    /// <param name="tokenizer">The tokenizer for text processing. Required - use ClipTokenizerFactory to create one.</param>
     /// <param name="optimizer">The optimization algorithm. If null, Adam optimizer is used.</param>
     /// <param name="lossFunction">The loss function. If null, ContrastiveLoss is used.</param>
     /// <param name="embeddingDimension">The embedding dimension. Default is 512.</param>
@@ -196,14 +206,18 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         _embeddingDimension = embeddingDimension;
         _maxSequenceLength = maxSequenceLength;
         _imageSize = imageSize;
+        _imageEncoderPath = imageEncoderPath;
+        _textEncoderPath = textEncoderPath;
 
         // Load ONNX models
         _imageEncoder = new InferenceSession(imageEncoderPath);
         _textEncoder = new InferenceSession(textEncoderPath);
 
-        // Use provided tokenizer or create default
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
-            "Tokenizer is required. Use BpeTokenizer with CLIP vocabulary.");
+        // Tokenizer is required; validate argument
+        if (tokenizer is null)
+            throw new ArgumentNullException(nameof(tokenizer));
+
+        _tokenizer = tokenizer;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
@@ -255,12 +269,16 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         if (string.IsNullOrWhiteSpace(text))
             throw new ArgumentException("Text cannot be null or empty.", nameof(text));
 
-        // Tokenize text
+        // Tokenize text with CLIP-specific options
         var encodingOptions = new EncodingOptions
         {
             MaxLength = _maxSequenceLength,
             Truncation = true,
-            Padding = true
+            Padding = true,
+            PaddingSide = "right",
+            TruncationSide = "right",
+            AddSpecialTokens = true,
+            ReturnAttentionMask = true
         };
         var tokenResult = _tokenizer.Encode(text, encodingOptions);
 
@@ -296,12 +314,16 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         if (textList.Count == 0)
             return Enumerable.Empty<Vector<T>>();
 
-        // Tokenize all texts
+        // Tokenize all texts with CLIP-specific options
         var encodingOptions = new EncodingOptions
         {
             MaxLength = _maxSequenceLength,
             Truncation = true,
-            Padding = true
+            Padding = true,
+            PaddingSide = "right",
+            TruncationSide = "right",
+            AddSpecialTokens = true,
+            ReturnAttentionMask = true
         };
         var tokenResults = _tokenizer.EncodeBatch(textList, encodingOptions);
 
@@ -566,24 +588,56 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
     /// <summary>
     /// Deserializes CLIP-specific data from a binary reader.
     /// </summary>
+    /// <remarks>
+    /// The readonly fields (_embeddingDimension, _maxSequenceLength, _imageSize) are set
+    /// in the constructor and cannot be modified. This method validates that the deserialized
+    /// values match the current instance configuration.
+    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Read parameters (used when loading a saved model)
         int embeddingDim = reader.ReadInt32();
         int maxSeqLen = reader.ReadInt32();
         int imgSize = reader.ReadInt32();
         string optimizerType = reader.ReadString();
         string lossFunctionType = reader.ReadString();
+
+        // Validate that loaded values match current instance
+        if (embeddingDim != _embeddingDimension)
+        {
+            throw new InvalidOperationException(
+                $"Loaded embedding dimension ({embeddingDim}) doesn't match current ({_embeddingDimension}).");
+        }
+
+        if (maxSeqLen != _maxSequenceLength)
+        {
+            throw new InvalidOperationException(
+                $"Loaded max sequence length ({maxSeqLen}) doesn't match current ({_maxSequenceLength}).");
+        }
+
+        if (imgSize != _imageSize)
+        {
+            throw new InvalidOperationException(
+                $"Loaded image size ({imgSize}) doesn't match current ({_imageSize}).");
+        }
     }
 
     /// <summary>
     /// Creates a new instance of ClipNeuralNetwork with the same configuration.
     /// </summary>
+    /// <returns>A new ClipNeuralNetwork instance with the same configuration.</returns>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        throw new NotSupportedException(
-            "Creating a new CLIP instance requires the original ONNX model paths. " +
-            "Use the constructor directly with the required parameters.");
+        return new ClipNeuralNetwork<T>(
+            Architecture,
+            _imageEncoderPath,
+            _textEncoderPath,
+            _tokenizer,
+            _optimizer,
+            _lossFunction,
+            _embeddingDimension,
+            _maxSequenceLength,
+            _imageSize
+        );
     }
 
     /// <summary>

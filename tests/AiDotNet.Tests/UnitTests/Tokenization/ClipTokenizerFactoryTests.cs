@@ -124,11 +124,11 @@ public class ClipTokenizerFactoryTests
         var isCompatible = ClipTokenizerFactory.IsClipCompatible(tokenizer);
 
         // Assert - Simple tokenizer is CLIP-compatible if it has right special tokens and vocab >= 1000
-        // Note: CreateSimple creates a minimal tokenizer for testing, compatibility depends on trained vocab size
         Assert.NotNull(tokenizer);
-        // The tokenizer has correct special tokens
+        // The tokenizer has correct special tokens and is considered CLIP-compatible
         Assert.Equal("<|startoftext|>", tokenizer.SpecialTokens.BosToken);
         Assert.Equal("<|endoftext|>", tokenizer.SpecialTokens.EosToken);
+        Assert.True(isCompatible);
     }
 
     [Fact]
@@ -200,7 +200,7 @@ public class ClipTokenizerFactoryTests
     {
         // Arrange
         var tokenizer = ClipTokenizerFactory.CreateSimple();
-        var longText = string.Join(" ", new string[100].Select(_ => "word"));
+        var longText = string.Join(" ", Enumerable.Repeat("word", 100));
         var options = ClipTokenizerFactory.GetDefaultEncodingOptions();
 
         // Act
@@ -262,6 +262,6 @@ public class ClipTokenizerFactoryTests
 
         // Assert
         Assert.Equal(3, results.Count);
-        Assert.All(results, r => Assert.NotEmpty(r.TokenIds));
+        Assert.All(results, result => Assert.NotEmpty(result.TokenIds));
     }
 }

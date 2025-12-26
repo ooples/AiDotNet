@@ -188,6 +188,63 @@ public class ModelRepository : IModelRepository
         return _models.TryAdd(name, entry);
     }
 
+    /// <summary>
+    /// Loads a multimodal model and stores it with the given name.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used by the model.</typeparam>
+    /// <param name="name">The unique name for the model.</param>
+    /// <param name="model">The multimodal model instance.</param>
+    /// <param name="sourcePath">Optional source path where the model was loaded from.</param>
+    /// <returns>True if the model was loaded successfully, false if a model with that name already exists.</returns>
+    public bool LoadMultimodalModel<T>(string name, IServableMultimodalModel<T> model, string? sourcePath = null)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("Model name cannot be null or empty", nameof(name));
+        }
+
+        if (model == null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
+        var entry = new ModelEntry
+        {
+            Model = model,
+            NumericType = GetNumericType(typeof(T)),
+            LoadedAt = DateTime.UtcNow,
+            SourcePath = sourcePath,
+            IsMultimodal = true
+        };
+
+        return _models.TryAdd(name, entry);
+    }
+
+    /// <summary>
+    /// Retrieves a multimodal model by name and type.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used by the model.</typeparam>
+    /// <param name="name">The name of the model.</param>
+    /// <returns>The multimodal model if found and supports multimodal operations, null otherwise.</returns>
+    public IServableMultimodalModel<T>? GetMultimodalModel<T>(string name)
+    {
+        if (!_models.TryGetValue(name, out var entry))
+        {
+            return null;
+        }
+
+        // Verify the numeric type matches
+        var expectedType = GetNumericType(typeof(T));
+        if (entry.NumericType != expectedType)
+        {
+            throw new InvalidOperationException(
+                $"Model '{name}' uses numeric type '{entry.NumericType}' but was requested with type '{expectedType}'");
+        }
+
+        // Try to cast to multimodal model
+        return entry.Model as IServableMultimodalModel<T>;
+    }
+
     private static NumericType GetNumericType(Type type)
     {
         if (type == typeof(float))

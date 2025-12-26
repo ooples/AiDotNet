@@ -112,7 +112,7 @@ public static class ClipTokenizerFactory
             throw new InvalidOperationException("Failed to parse vocabulary file.");
 
         var vocabulary = new Vocabulary.Vocabulary("<|endoftext|>");
-        foreach (var kvp in vocabDict.OrderBy(x => x.Value))
+        foreach (var kvp in vocabDict)
         {
             vocabulary.AddToken(kvp.Key);
         }

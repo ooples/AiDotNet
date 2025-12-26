@@ -271,25 +271,76 @@ public class ClipImagePreprocessor<T>
     /// <summary>
     /// Extracts the first image from a batch.
     /// </summary>
+    /// <summary>
+    /// Extracts the first image from a batch and normalizes to channels-first [C, H, W].
+    /// Supports [N, C, H, W] and [N, H, W, C] batch formats.
+    /// </summary>
     private Tensor<T> ExtractFirstImage(Tensor<T> batch)
     {
-        // Assume [N, C, H, W] format
-        int channels = batch.Shape[1];
-        int height = batch.Shape[2];
-        int width = batch.Shape[3];
-
-        var result = new Tensor<T>(new[] { channels, height, width });
-        for (int c = 0; c < channels; c++)
+        if (batch.Shape.Length != 4)
         {
+            throw new ArgumentException("Batch tensor must have 4 dimensions.", nameof(batch));
+        }
+
+        int dim0 = batch.Shape[0];
+        int dim1 = batch.Shape[1];
+        int dim2 = batch.Shape[2];
+        int dim3 = batch.Shape[3];
+
+        if (dim0 < 1)
+        {
+            throw new ArgumentException("Batch dimension N must be at least 1.", nameof(batch));
+        }
+
+        Tensor<T> firstImage3D;
+
+        // Heuristic: if last dimension is 3 or 4, treat as [N, H, W, C], otherwise [N, C, H, W]
+        if (dim3 == 3 || dim3 == 4)
+        {
+            // [N, H, W, C] -> [H, W, C] for first image
+            int height = dim1;
+            int width = dim2;
+            int channels = dim3;
+
+            var hwc = new Tensor<T>(new[] { height, width, channels });
             for (int h = 0; h < height; h++)
             {
                 for (int w = 0; w < width; w++)
                 {
-                    result[c, h, w] = batch[0, c, h, w];
+                    for (int c = 0; c < channels; c++)
+                    {
+                        hwc[h, w, c] = batch[0, h, w, c];
+                    }
                 }
             }
+
+            // Normalize to [C, H, W] via NormalizeFormat
+            firstImage3D = NormalizeFormat(hwc);
         }
-        return result;
+        else
+        {
+            // [N, C, H, W] -> [C, H, W] for first image
+            int channels = dim1;
+            int height = dim2;
+            int width = dim3;
+
+            var chw = new Tensor<T>(new[] { channels, height, width });
+            for (int c = 0; c < channels; c++)
+            {
+                for (int h = 0; h < height; h++)
+                {
+                    for (int w = 0; w < width; w++)
+                    {
+                        chw[c, h, w] = batch[0, c, h, w];
+                    }
+                }
+            }
+
+            // Already in [C, H, W] format, but run through NormalizeFormat for RGB channel handling
+            firstImage3D = NormalizeFormat(chw);
+        }
+
+        return firstImage3D;
     }
 
     /// <summary>

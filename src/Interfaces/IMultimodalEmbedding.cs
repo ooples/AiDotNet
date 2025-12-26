@@ -176,12 +176,16 @@ public interface IMultimodalEmbedding<T>
     /// <returns>A similarity score, typically in the range [-1, 1] for normalized vectors.</returns>
     /// <remarks>
     /// <para>
-    /// For normalized embeddings, this is the cosine similarity (dot product).
+    /// For L2-normalized (unit length) vectors, cosine similarity equals the dot product.
+    /// Values range from -1 (opposite) to 1 (identical), with 0 being orthogonal.
     /// Higher values indicate greater semantic similarity between the text and image.
-    /// Typical values:
+    /// </para>
+    /// <para>
+    /// Approximate thresholds (may vary by CLIP model variant and domain):
     /// - > 0.3: Strong match (text accurately describes the image)
     /// - 0.2 - 0.3: Moderate match (related content)
     /// - &lt; 0.2: Weak or no match
+    /// These are guidelines; specific thresholds should be tuned for your use case.
     /// </para>
     /// <para><b>For Beginners:</b> This measures how well the text describes the image.
     ///

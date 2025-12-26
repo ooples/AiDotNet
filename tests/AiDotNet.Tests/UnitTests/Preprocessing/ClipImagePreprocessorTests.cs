@@ -285,11 +285,11 @@ public class ClipImagePreprocessorTests
 
         // Assert
         Assert.Equal(3, results.Count);
-        Assert.All(results, r =>
+        Assert.All(results, preprocessedImage =>
         {
-            Assert.Equal(3, r.Shape[0]);
-            Assert.Equal(224, r.Shape[1]);
-            Assert.Equal(224, r.Shape[2]);
+            Assert.Equal(3, preprocessedImage.Shape[0]);
+            Assert.Equal(224, preprocessedImage.Shape[1]);
+            Assert.Equal(224, preprocessedImage.Shape[2]);
         });
     }
 
