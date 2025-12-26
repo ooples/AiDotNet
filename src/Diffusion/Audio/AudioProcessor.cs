@@ -294,12 +294,12 @@ public class AudioProcessor<T>
     private Tensor<T> PowerToDb(Tensor<T> power)
     {
         var db = new Tensor<T>(power.Shape);
-        T epsilon = NumOps.FromDouble(1e-10);
+        const double epsilon = 1e-10;
 
         for (int i = 0; i < power.Data.Length; i++)
         {
             double powerVal = NumOps.ToDouble(power.Data[i]);
-            double dbVal = 10.0 * Math.Log10(powerVal + 1e-10);
+            double dbVal = 10.0 * Math.Log10(powerVal + epsilon);
             db.Data[i] = NumOps.FromDouble(dbVal);
         }
 
