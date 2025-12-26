@@ -291,22 +291,36 @@ public static class ClipModelLoader
         if (string.IsNullOrWhiteSpace(modelId))
             return false;
 
-        var config = GetModelConfig(modelId);
-        cacheDir ??= GetDefaultCacheDir();
-        var modelCacheDir = Path.Combine(cacheDir, modelId.Replace("/", "--"));
-
-        if (!Directory.Exists(modelCacheDir))
-            return false;
-
-        var requiredFiles = GetRequiredFiles(config);
-        foreach (var fileName in requiredFiles)
+        try
         {
-            var localPath = ValidateAndCombinePath(modelCacheDir, fileName);
-            if (!File.Exists(localPath))
-                return false;
-        }
+            var config = GetModelConfig(modelId);
+            cacheDir ??= GetDefaultCacheDir();
+            var sanitizedModelId = SanitizeModelIdForPath(modelId);
+            var modelCacheDir = ValidateAndCombinePath(cacheDir, sanitizedModelId);
 
-        return true;
+            if (!Directory.Exists(modelCacheDir))
+                return false;
+
+            var requiredFiles = GetRequiredFiles(config);
+            foreach (var fileName in requiredFiles)
+            {
+                var localPath = ValidateAndCombinePath(modelCacheDir, fileName);
+                if (!File.Exists(localPath))
+                    return false;
+            }
+
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            // Path traversal attempt or invalid path - model is not properly cached
+            return false;
+        }
+        catch (ArgumentException)
+        {
+            // Invalid model ID format - model is not properly cached
+            return false;
+        }
     }
 
     /// <summary>
