@@ -439,7 +439,21 @@ public class UniformEpisodicDataLoaderTests
         // With 10 total classes and selecting 5 per task, there are C(10,5)=252 possible class combinations
         // Probability of getting the same classes twice is 1/252, so we check if classes differ OR examples differ
         bool differentClasses = !task1Classes.SetEquals(task2Classes);
-        bool differentExamples = task1.SupportSetX[new[] { 0, 0 }] != task2.SupportSetX[new[] { 0, 0 }];
+
+        // Check if ANY support set values differ (more robust than just checking [0,0])
+        bool differentExamples = false;
+        int supportSize = task1.SupportSetX.Shape[0];
+        int numFeatures = task1.SupportSetX.Shape[1];
+        for (int i = 0; i < supportSize && !differentExamples; i++)
+        {
+            for (int j = 0; j < numFeatures && !differentExamples; j++)
+            {
+                if (task1.SupportSetX[new[] { i, j }] != task2.SupportSetX[new[] { i, j }])
+                {
+                    differentExamples = true;
+                }
+            }
+        }
 
         Assert.True(differentClasses || differentExamples,
             "Multiple calls to GetNextTask should produce different tasks (different classes or different examples)");
