@@ -126,7 +126,7 @@ public class NuSupportVectorClassifier<T> : SVMBase<T>
 
         _random = Options.RandomState.HasValue
             ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
-            : RandomHelper.CreateSeededRandom(42);
+            : RandomHelper.CreateSecureRandom();
 
         // Store training data
         _xTrain = new Matrix<T>(x.Rows, x.Columns);

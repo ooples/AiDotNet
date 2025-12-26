@@ -91,7 +91,7 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
 
         _random = Options.RandomState.HasValue
             ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
-            : RandomHelper.CreateSeededRandom(42);
+            : RandomHelper.CreateSecureRandom();
 
         int n = x.Rows;
         int numEstimators = Options.NumEstimators;
@@ -156,9 +156,11 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
     private (Matrix<T> data, int[] featureIndices) SampleFeaturesRandomly(Matrix<T> x, int numFeatures)
     {
         // Randomly select feature indices without replacement
+        // Sort the selected indices to maintain consistent ordering and avoid bias
         var featureIndices = Enumerable.Range(0, x.Columns)
             .OrderBy(_ => _random!.Next())
             .Take(numFeatures)
+            .OrderBy(i => i)
             .ToArray();
 
         var xSampled = new Matrix<T>(x.Rows, numFeatures);
@@ -233,7 +235,7 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
     /// <inheritdoc/>
     public override Matrix<T> PredictProbabilities(Matrix<T> input)
     {
-        if (_estimators is null)
+        if (_estimators is null || _featureIndicesPerEstimator is null)
         {
             throw new InvalidOperationException("Model has not been trained.");
         }
@@ -243,16 +245,27 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
         // Average probabilities from all estimators
         for (int e = 0; e < _estimators.Length; e++)
         {
+            // Extract features using the same indices used during training for this estimator
+            var featureIndices = _featureIndicesPerEstimator[e];
+            var filteredInput = new Matrix<T>(input.Rows, featureIndices.Length);
+            for (int i = 0; i < input.Rows; i++)
+            {
+                for (int j = 0; j < featureIndices.Length; j++)
+                {
+                    filteredInput[i, j] = input[i, featureIndices[j]];
+                }
+            }
+
             Matrix<T> estProbs;
 
             if (_estimators[e] is IProbabilisticClassifier<T> probClassifier)
             {
-                estProbs = probClassifier.PredictProbabilities(input);
+                estProbs = probClassifier.PredictProbabilities(filteredInput);
             }
             else
             {
                 // Use hard predictions
-                var preds = _estimators[e].Predict(input);
+                var preds = _estimators[e].Predict(filteredInput);
                 estProbs = new Matrix<T>(input.Rows, NumClasses);
 
                 for (int i = 0; i < input.Rows; i++)
@@ -362,6 +375,15 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
                 {
                     clone._estimators[e] = _estimators[e];
                 }
+            }
+        }
+
+        if (_featureIndicesPerEstimator is not null)
+        {
+            clone._featureIndicesPerEstimator = new int[_featureIndicesPerEstimator.Length][];
+            for (int e = 0; e < _featureIndicesPerEstimator.Length; e++)
+            {
+                clone._featureIndicesPerEstimator[e] = (int[])_featureIndicesPerEstimator[e].Clone();
             }
         }
 

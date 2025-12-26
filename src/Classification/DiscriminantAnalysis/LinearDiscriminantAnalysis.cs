@@ -226,12 +226,24 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
         }
 
         // Divide by (n - k) where k is number of classes
+        // When totalCount <= NumClasses, covariance may be rank-deficient
+        bool insufficientSamples = totalCount <= NumClasses;
         T denominator = NumOps.FromDouble(Math.Max(1, totalCount - NumClasses));
         for (int j = 0; j < NumFeatures; j++)
         {
             for (int k = 0; k < NumFeatures; k++)
             {
                 covariance[j, k] = NumOps.Divide(covariance[j, k], denominator);
+            }
+        }
+
+        // Add automatic regularization when samples are insufficient to ensure positive definiteness
+        if (insufficientSamples)
+        {
+            T autoReg = NumOps.FromDouble(1e-6);
+            for (int i = 0; i < NumFeatures; i++)
+            {
+                covariance[i, i] = NumOps.Add(covariance[i, i], autoReg);
             }
         }
 

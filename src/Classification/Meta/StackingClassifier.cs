@@ -228,7 +228,10 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
                 }
                 else
                 {
-                    foldEstimator = _estimators[e];
+                    throw new InvalidOperationException(
+                        $"Estimator at index {e} does not implement IFullModel and cannot be cloned. " +
+                        $"Cross-validation requires clonable estimators to avoid shared state corruption. " +
+                        $"Set CrossValidationFolds=1 or use clonable estimators.");
                 }
                 foldEstimator.Train(xTrain, yTrain);
 

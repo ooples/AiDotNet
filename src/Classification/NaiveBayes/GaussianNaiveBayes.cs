@@ -93,6 +93,19 @@ public class GaussianNaiveBayes<T> : NaiveBayesBase<T>
 
             int classCount = classIndices.Count;
 
+            // Check for empty class to prevent division by zero
+            if (classCount == 0)
+            {
+                // Use zero mean and minimum variance for classes with no samples
+                T minVar = NumOps.FromDouble(Options.MinVariance);
+                for (int f = 0; f < NumFeatures; f++)
+                {
+                    _means[c, f] = NumOps.Zero;
+                    _variances[c, f] = minVar;
+                }
+                continue;
+            }
+
             // Compute mean for each feature
             for (int f = 0; f < NumFeatures; f++)
             {

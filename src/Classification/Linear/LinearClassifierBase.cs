@@ -80,7 +80,7 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
 
         Random = Options.RandomState.HasValue
             ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
-            : RandomHelper.CreateSeededRandom(42);
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -327,14 +327,16 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
         }
 
         var gradients = new Vector<T>(NumFeatures);
-        var predictions = Predict(input);
+        // Use decision function scores (continuous) instead of discrete predictions
+        // for proper gradient computation
+        var scores = DecisionFunctionBatch(input);
 
         for (int j = 0; j < NumFeatures; j++)
         {
             T grad = NumOps.Zero;
             for (int i = 0; i < input.Rows; i++)
             {
-                T error = NumOps.Subtract(predictions[i], target[i]);
+                T error = NumOps.Subtract(scores[i], target[i]);
                 grad = NumOps.Add(grad, NumOps.Multiply(error, input[i, j]));
             }
             gradients[j] = NumOps.Divide(grad, NumOps.FromDouble(input.Rows));
