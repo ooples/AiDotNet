@@ -151,51 +151,51 @@ namespace AiDotNet.Autodiff
                 switch (layer)
                 {
                     case DenseLayer<T> dense:
+                    {
+                        var weights = dense.GetWeights();
+                        var biases = dense.GetBiases();
+                        if (weights == null || biases == null)
                         {
-                            var weights = dense.GetWeights();
-                            var biases = dense.GetBiases();
-                            if (weights == null || biases == null)
-                            {
-                                throw new InvalidOperationException("DenseLayer weights or biases are not initialized.");
-                            }
-
-                            ProcessDenseLayer(
-                                weights,
-                                biases,
-                                dense.ScalarActivation,
-                                dense.VectorActivation,
-                                numOps,
-                                activations,
-                                gradients,
-                                hessians,
-                                out activations,
-                                out gradients,
-                                out hessians);
+                            throw new InvalidOperationException("DenseLayer weights or biases are not initialized.");
                         }
-                        break;
+
+                        ProcessDenseLayer(
+                            weights,
+                            biases,
+                            dense.ScalarActivation,
+                            dense.VectorActivation,
+                            numOps,
+                            activations,
+                            gradients,
+                            hessians,
+                            out activations,
+                            out gradients,
+                            out hessians);
+                    }
+                    break;
                     case FullyConnectedLayer<T> fullyConnected:
+                    {
+                        var weights = fullyConnected.GetWeights();
+                        var biases = fullyConnected.GetBiases();
+                        if (weights == null || biases == null)
                         {
-                            var weights = fullyConnected.GetWeights();
-                            var biases = fullyConnected.GetBiases();
-                            if (weights == null || biases == null)
-                            {
-                                throw new InvalidOperationException("FullyConnectedLayer weights or biases are not initialized.");
-                            }
-
-                            ProcessDenseLayer(
-                                weights,
-                                biases,
-                                fullyConnected.ScalarActivation,
-                                fullyConnected.VectorActivation,
-                                numOps,
-                                activations,
-                                gradients,
-                                hessians,
-                                out activations,
-                                out gradients,
-                                out hessians);
+                            throw new InvalidOperationException("FullyConnectedLayer weights or biases are not initialized.");
                         }
-                        break;
+
+                        ProcessDenseLayer(
+                            weights,
+                            biases,
+                            fullyConnected.ScalarActivation,
+                            fullyConnected.VectorActivation,
+                            numOps,
+                            activations,
+                            gradients,
+                            hessians,
+                            out activations,
+                            out gradients,
+                            out hessians);
+                    }
+                    break;
                     case ActivationLayer<T> activation:
                         ProcessActivationLayer(
                             activation.ScalarActivation,

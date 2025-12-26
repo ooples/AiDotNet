@@ -45,7 +45,7 @@ public class PDEAnalyticalSolutionTests
         var outputs = new[] { u };
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { k * expFactor * Math.Cos(k * x), dudt } },
-            new[,,] { { { d2udx2, 0 }, { 0, 0 } } });
+            new[, ,] { { { d2udx2, 0 }, { 0, 0 } } });
 
         double residual = pde.ComputeResidual(inputs, outputs, derivatives);
 
@@ -89,7 +89,7 @@ public class PDEAnalyticalSolutionTests
         var outputs = new[] { u };
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { dudx, dudt } },
-            new[,,] { { { d2udx2, 0 }, { 0, d2udt2 } } });
+            new[, ,] { { { d2udx2, 0 }, { 0, d2udt2 } } });
 
         double residual = pde.ComputeResidual(inputs, outputs, derivatives);
 
@@ -121,7 +121,7 @@ public class PDEAnalyticalSolutionTests
         var outputs = new[] { u };
         var derivatives = CreateDerivatives(1, 1,
             new[,] { { dudx } },
-            new[,,] { { { d2udx2 } } });
+            new[, ,] { { { d2udx2 } } });
 
         double residual = pde.ComputeResidual(inputs, outputs, derivatives);
 
@@ -150,7 +150,7 @@ public class PDEAnalyticalSolutionTests
         var outputs = new[] { u };
         var derivatives = CreateDerivatives(1, 1,
             new[,] { { dudx } },
-            new[,,] { { { d2udx2 } } });
+            new[, ,] { { { d2udx2 } } });
 
         double residual = pde.ComputeResidual(inputs, outputs, derivatives);
 
@@ -182,7 +182,7 @@ public class PDEAnalyticalSolutionTests
         var outputs = new[] { u0 };
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.0, 0.0 } },
-            new[,,] { { { 0.0, 0.0 }, { 0.0, 0.0 } } });
+            new[, ,] { { { 0.0, 0.0 }, { 0.0, 0.0 } } });
 
         double residual = pde.ComputeResidual(inputs, outputs, derivatives);
 
@@ -214,7 +214,7 @@ public class PDEAnalyticalSolutionTests
         var outputs = new[] { u0 };
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.0, 0.0 } },
-            new[,,] { { { 0.0, 0.0 }, { 0.0, 0.0 } } });
+            new[, ,] { { { 0.0, 0.0 }, { 0.0, 0.0 } } });
 
         double residual = pde.ComputeResidual(inputs, outputs, derivatives);
 
@@ -568,7 +568,7 @@ public class PDEAnalyticalSolutionTests
         var outputs = new[] { 1.0 };
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.5, 0.3 } },
-            new[,,] { { { 0.2, 0.0 }, { 0.0, 0.0 } } });
+            new[, ,] { { { 0.2, 0.0 }, { 0.0, 0.0 } } });
 
         var gradient = pde.ComputeResidualGradient(inputs, outputs, derivatives);
 
@@ -592,7 +592,7 @@ public class PDEAnalyticalSolutionTests
         var outputs = new[] { 1.0 };
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.5, 0.3 } },
-            new[,,] { { { 0.2, 0.0 }, { 0.0, 0.1 } } });
+            new[, ,] { { { 0.2, 0.0 }, { 0.0, 0.1 } } });
 
         var gradient = pde.ComputeResidualGradient(inputs, outputs, derivatives);
 

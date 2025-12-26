@@ -10906,6 +10906,43 @@ public static class TensorOperations<T>
             throw new NotSupportedException($"Gradient reduction from shape [{string.Join(", ", gradient.Shape)}] to [{string.Join(", ", originalShape)}] is not yet implemented for this shape combination.");
         }
     }
+
+
+
+    /// <summary>
+    /// Creates sinusoidal time embeddings for diffusion models.
+    /// </summary>
+    /// <param name="timesteps">The timesteps to embed [batchSize] or [batchSize, 1].</param>
+    /// <param name="embeddingDim">The dimension of the output embeddings.</param>
+    /// <returns>A computation node with sinusoidal embeddings [batchSize, embeddingDim].</returns>
+    public static ComputationNode<T> SinusoidalTimeEmbedding(ComputationNode<T> timesteps, int embeddingDim)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var timestepsTensor = timesteps.Value;
+        int batchSize = timestepsTensor.Shape[0];
+        var result = new Tensor<T>(new int[] { batchSize, embeddingDim });
+        int halfDim = embeddingDim / 2;
+        double logTimescale = Math.Log(10000.0) / Math.Max(halfDim - 1, 1);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            double t = numOps.ToDouble(timestepsTensor.Rank == 1 ? timestepsTensor[b] : timestepsTensor[b, 0]);
+            for (int i = 0; i < halfDim; i++)
+            {
+                double freq = Math.Exp(-logTimescale * i);
+                double angle = t * freq;
+                result[b, i] = numOps.FromDouble(Math.Sin(angle));
+                if (i + halfDim < embeddingDim)
+                    result[b, i + halfDim] = numOps.FromDouble(Math.Cos(angle));
+            }
+        }
+
+        return new ComputationNode<T>(
+            value: result,
+            requiresGradient: false,
+            parents: new List<ComputationNode<T>> { timesteps },
+            backwardFunction: null,
+            name: "sinusoidal_time_embedding");
+    }
+
 }
-
-
