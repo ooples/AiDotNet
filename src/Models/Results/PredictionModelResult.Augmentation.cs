@@ -366,12 +366,10 @@ public partial class PredictionModelResult<T, TInput, TOutput>
 
         for (int i = 0; i < length; i++)
         {
-            double logSum = 0.0;
-            foreach (var vector in vectors)
-            {
-                double value = Math.Max(numOps.ToDouble(vector[i]), 1e-10);
-                logSum += Math.Log(value);
-            }
+            int index = i; // Capture for lambda
+            double logSum = vectors
+                .Select(vector => Math.Log(Math.Max(numOps.ToDouble(vector[index]), 1e-10)))
+                .Sum();
 
             double geoMean = Math.Exp(logSum / vectors.Count);
             result[i] = numOps.FromDouble(geoMean);
