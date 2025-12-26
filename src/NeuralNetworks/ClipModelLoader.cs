@@ -398,17 +398,14 @@ public static class ClipModelLoader
                 using var fileStream = new FileStream(localPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
                 await contentStream.CopyToAsync(fileStream, 81920, cancellationToken);
             }
-            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound &&
+                     fileName.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase))
             {
-                // File not found - this might be okay for optional files
-                // Only throw for required ONNX files
-                if (fileName.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new FileNotFoundException(
-                        $"Required model file not found on HuggingFace: {fileName}. " +
-                        $"The model '{modelId}' may not have ONNX exports available. " +
-                        "Please export the model to ONNX format or use a model with ONNX files.");
-                }
+                // Required ONNX file not found - throw for ONNX files only (optional files are ignored)
+                throw new FileNotFoundException(
+                    $"Required model file not found on HuggingFace: {fileName}. " +
+                    $"The model '{modelId}' may not have ONNX exports available. " +
+                    "Please export the model to ONNX format or use a model with ONNX files.");
             }
         }
         catch (HttpRequestException ex)

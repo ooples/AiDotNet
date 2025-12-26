@@ -773,15 +773,9 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         var data = tensor.Data.Select(v => NumOps.ToFloat(v)).ToArray();
 
         // Add batch dimension if needed
-        int[] shape;
-        if (tensor.Shape.Length == 3)
-        {
-            shape = new[] { 1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2] };
-        }
-        else
-        {
-            shape = tensor.Shape;
-        }
+        var shape = tensor.Shape.Length == 3
+            ? new[] { 1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2] }
+            : tensor.Shape;
 
         return new OnnxTensors.DenseTensor<float>(data, shape);
     }
