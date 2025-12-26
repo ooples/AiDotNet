@@ -71,6 +71,10 @@ public class AudioNoise<T> : AudioAugmenterBase<T>
         int samples = GetSampleCount(waveform);
         var result = waveform.Clone();
 
+        // Reset noise state for each audio clip to prevent bleed between clips
+        _pinkNoiseState = 0;
+        _brownNoiseState = 0;
+
         // Calculate signal power
         double signalPower = 0;
         for (int i = 0; i < samples; i++)

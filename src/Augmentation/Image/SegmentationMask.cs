@@ -478,10 +478,8 @@ public class SegmentationMask<T>
 
         var result = new T[Height, Width];
 
-        foreach (var polygon in Polygons)
+        foreach (var polygon in Polygons.Where(p => p.Count >= 3))
         {
-            if (polygon.Count < 3) continue;
-
             // Use scanline algorithm to fill polygon
             FillPolygon(result, polygon);
         }

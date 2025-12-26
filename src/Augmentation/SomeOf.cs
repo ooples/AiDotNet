@@ -182,13 +182,9 @@ public class SomeOf<T, TData> : IAugmentation<T, TData>, ISpatialAugmentation<T,
         var current = sample;
         foreach (var augmentation in selected)
         {
-            if (augmentation is ISpatialAugmentation<T, TData> spatial)
-            {
-                current = spatial.ApplyWithTargets(current, context);
-            }
-            else
-            {
-                current = new AugmentedSample<T, TData>(augmentation.Apply(current.Data, context))
+            current = augmentation is ISpatialAugmentation<T, TData> spatial
+                ? spatial.ApplyWithTargets(current, context)
+                : new AugmentedSample<T, TData>(augmentation.Apply(current.Data, context))
                 {
                     BoundingBoxes = current.BoundingBoxes,
                     Keypoints = current.Keypoints,
@@ -196,7 +192,6 @@ public class SomeOf<T, TData> : IAugmentation<T, TData>, ISpatialAugmentation<T,
                     Labels = current.Labels,
                     Metadata = current.Metadata
                 };
-            }
         }
 
         return current;

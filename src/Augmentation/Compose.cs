@@ -99,12 +99,9 @@ public class Compose<T, TData> : IAugmentation<T, TData>, ISpatialAugmentation<T
             return data;
 
         var current = data;
-        foreach (var augmentation in _augmentations)
+        foreach (var augmentation in _augmentations.Where(a => a.IsEnabled))
         {
-            if (augmentation.IsEnabled)
-            {
-                current = augmentation.Apply(current, context);
-            }
+            current = augmentation.Apply(current, context);
         }
 
         return current;
@@ -123,18 +120,11 @@ public class Compose<T, TData> : IAugmentation<T, TData>, ISpatialAugmentation<T
             return sample;
 
         var current = sample;
-        foreach (var augmentation in _augmentations)
+        foreach (var augmentation in _augmentations.Where(a => a.IsEnabled))
         {
-            if (!augmentation.IsEnabled)
-                continue;
-
-            if (augmentation is ISpatialAugmentation<T, TData> spatial)
-            {
-                current = spatial.ApplyWithTargets(current, context);
-            }
-            else
-            {
-                current = new AugmentedSample<T, TData>(augmentation.Apply(current.Data, context))
+            current = augmentation is ISpatialAugmentation<T, TData> spatial
+                ? spatial.ApplyWithTargets(current, context)
+                : new AugmentedSample<T, TData>(augmentation.Apply(current.Data, context))
                 {
                     BoundingBoxes = current.BoundingBoxes,
                     Keypoints = current.Keypoints,
@@ -142,7 +132,6 @@ public class Compose<T, TData> : IAugmentation<T, TData>, ISpatialAugmentation<T
                     Labels = current.Labels,
                     Metadata = current.Metadata
                 };
-            }
         }
 
         return current;
